@@ -1,0 +1,64 @@
+version: 2
+jobs:
+  lint:
+    docker:
+      - image: mhart/alpine-node
+    working_directory: ~/dd-trace-js
+    steps:
+      - run:
+          name: Versions
+          command: npm version
+      - run:
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Lint
+          command: npm run lint
+  build-node-base: &node-base
+    docker:
+      - image: mhart/alpine-node
+    working_directory: ~/dd-trace-js
+    steps:
+      - run:
+          name: Versions
+          command: npm version
+      - run:
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Test
+          command: npm test
+      - run:
+          name: Benchmark
+          command: npm run bench
+  build-node-0.10:
+    <<: *node-base
+    docker:
+      - image: mhart/alpine-node:0.10
+  build-node-0.12:
+    <<: *node-base
+    docker:
+      - image: mhart/alpine-node:0.12
+  build-node-4:
+    <<: *node-base
+    docker:
+      - image: mhart/alpine-node:4
+  build-node-6:
+    <<: *node-base
+    docker:
+      - image: mhart/alpine-node:6
+  build-node-8:
+    <<: *node-base
+    docker:
+      - image: mhart/alpine-node:8
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - lint
+      - build-node-0.10
+      - build-node-0.12
+      - build-node-4
+      - build-node-6
+      - build-node-8

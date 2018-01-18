@@ -1,2 +1,2 @@
-# dd-trace-javascript
+# dd-trace-js
 Experimental JavaScript tracer (APM)

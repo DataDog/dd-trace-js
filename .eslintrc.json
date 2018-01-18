@@ -1,0 +1,17 @@
+{
+  "parserOptions": {
+    "ecmaVersion": 5
+  },
+  "extends": [
+    "eslint:recommended",
+    "standard"
+  ],
+  "env": {
+    "node" : true
+  },
+  "rules": {
+    "max-len": [2, 120, 2],
+    "no-console": 2,
+    "object-curly-spacing": [2, "always"]
+  }
+}
