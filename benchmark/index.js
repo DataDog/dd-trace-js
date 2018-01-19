@@ -1,7 +1,7 @@
 'use strict'
 
 var Benchmark = require('benchmark')
-var DatadogTracer = require('./src/opentracing/tracer')
+var DatadogTracer = require('../src/opentracing/tracer')
 
 var suite = new Benchmark.Suite()
 var tracer = new DatadogTracer()
