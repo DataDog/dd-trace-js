@@ -41,7 +41,7 @@ $ npm run lint
 
 **Note:** ESLint only supports Node >= 4, so make sure you are using
 a compatible Node version before running this command. We also
-recommend using a plugin on your editor instead on constantly running
+recommend using a plugin on your editor instead of constantly running
 this command.
 
 ### Continuous Integration
