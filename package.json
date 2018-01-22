@@ -1,0 +1,43 @@
+{
+  "name": "dd-trace",
+  "version": "0.0.0",
+  "description": "Experimental JavaScript tracer (APM)",
+  "main": "index.js",
+  "scripts": {
+    "bench": "node benchmark",
+    "lint": "eslint .",
+    "tdd": "mocha --watch",
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DataDog/dd-trace-js.git"
+  },
+  "keywords": [
+    "datadog",
+    "trace",
+    "opentracing",
+    "apm"
+  ],
+  "author": "Datadog, Inc.",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/DataDog/dd-trace-js/issues"
+  },
+  "homepage": "https://github.com/DataDog/dd-trace-js#readme",
+  "dependencies": {
+    "inherits": "^2.0.3",
+    "opentracing": "^0.14.1"
+  },
+  "devDependencies": {
+    "benchmark": "^2.1.4",
+    "chai": "^3.4.1",
+    "eslint": "^4.15.0",
+    "eslint-config-standard": "^11.0.0-beta.0",
+    "eslint-plugin-import": "^2.8.0",
+    "eslint-plugin-node": "^5.2.1",
+    "eslint-plugin-promise": "^3.6.0",
+    "eslint-plugin-standard": "^3.0.1",
+    "mocha": "^2.4.5"
+  }
+}
