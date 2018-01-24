@@ -1,7 +1,8 @@
 'use strict'
 
-var DatadogTracer = require('./src/opentracing/tracer')
+var platform = require('./src/platform')
+var node = require('./src/platform/node')
 
-module.exports = {
-  Tracer: DatadogTracer
-}
+platform.use(node)
+
+module.exports = {}

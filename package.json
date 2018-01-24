@@ -7,7 +7,7 @@
     "bench": "node benchmark",
     "lint": "eslint .",
     "tdd": "mocha --watch",
-    "test": "mocha"
+    "test": "nyc mocha"
   },
   "repository": {
     "type": "git",
@@ -27,7 +27,9 @@
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "dependencies": {
     "inherits": "^2.0.3",
-    "opentracing": "^0.14.1"
+    "lodash.assign": "^4.2.0",
+    "opentracing": "^0.14.1",
+    "safe-buffer": "^5.1.1"
   },
   "devDependencies": {
     "benchmark": "^2.1.4",
@@ -38,6 +40,11 @@
     "eslint-plugin-node": "^5.2.1",
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
-    "mocha": "^2.4.5"
+    "mocha": "^2.4.5",
+    "nock": "^8.2.2",
+    "nyc": "^10.3.2",
+    "proxyquire": "^1.8.0",
+    "sinon": "^3.3.0",
+    "sinon-chai": "^2.14.0"
   }
 }
