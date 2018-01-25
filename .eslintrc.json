@@ -11,7 +11,9 @@
   },
   "rules": {
     "max-len": [2, 120, 2],
+    "no-var": 2,
     "no-console": 2,
+    "prefer-const": 2,
     "object-curly-spacing": [2, "always"]
   }
 }

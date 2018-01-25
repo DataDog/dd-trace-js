@@ -1,16 +1,16 @@
 'use strict'
 
-var Benchmark = require('benchmark')
-var DatadogTracer = require('../src/opentracing/tracer')
+const Benchmark = require('benchmark')
+const DatadogTracer = require('../src/opentracing/tracer')
 
-var suite = new Benchmark.Suite()
-var tracer = new DatadogTracer()
+const suite = new Benchmark.Suite()
+const tracer = new DatadogTracer()
 
 suite
-  .add('DatadogTracer#startSpan', function () {
+  .add('DatadogTracer#startSpan', () => {
     tracer.startSpan()
   })
-  .on('cycle', function (event) {
+  .on('cycle', event => {
     console.log(String(event.target)) // eslint-disable-line no-console
   })
   .run({ 'async': true })

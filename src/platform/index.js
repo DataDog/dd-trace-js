@@ -1,9 +1,7 @@
 'use strict'
 
-var assign = require('lodash.assign')
-
 module.exports = {
-  use: function (impl) {
-    assign(this, impl)
+  use (impl) {
+    Object.assign(this, impl)
   }
 }

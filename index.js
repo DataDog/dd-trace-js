@@ -1,7 +1,7 @@
 'use strict'
 
-var platform = require('./src/platform')
-var node = require('./src/platform/node')
+const platform = require('./src/platform')
+const node = require('./src/platform/node')
 
 platform.use(node)
 

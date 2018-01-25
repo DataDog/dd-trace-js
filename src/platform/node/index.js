@@ -1,42 +1,37 @@
 'use strict'
 
-var http = require('http')
-var assign = require('lodash.assign')
+const http = require('http')
 
 module.exports = {
-  request: function (options, callback) {
-    options = assign({
+  request (options, callback) {
+    options = Object.assign({
       headers: {},
-      timeout: 5000
+      timeout: 2000
     }, options)
 
     options.headers['Content-Length'] = byteLength(options.data)
 
-    var req = http.request(options, function (res) {
-      res.on('data', function (chunk) {})
+    return new Promise((resolve, reject) => {
+      const req = http.request(options, res => {
+        res.on('data', chunk => {})
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode <= 299) {
+            resolve()
+          } else {
+            const error = new Error(http.STATUS_CODES[res.statusCode])
+            error.status = res.statusCode
 
-      res.on('end', function () {
-        if (res.statusCode >= 200 && res.statusCode <= 299) {
-          callback(null)
-        } else {
-          var error = new Error(http.STATUS_CODES[res.statusCode])
-          error.status = res.statusCode
-
-          callback(error)
-        }
+            reject(error)
+          }
+        })
       })
-    })
 
-    req.setTimeout(options.timeout, function () {
-      req.abort()
-    })
+      req.setTimeout(options.timeout, req.abort)
+      req.on('error', reject)
 
-    req.on('error', function (e) {
-      callback(e)
+      req.write(options.data)
+      req.end()
     })
-
-    req.write(options.data)
-    req.end()
   }
 }
 
