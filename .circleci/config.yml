@@ -36,15 +36,15 @@ jobs:
   build-node-4:
     <<: *node-base
     docker:
-      - image: mhart/alpine-node:4
+      - image: node:4-alpine
   build-node-6:
     <<: *node-base
     docker:
-      - image: mhart/alpine-node:6
+      - image: node:6-alpine
   build-node-8:
     <<: *node-base
     docker:
-      - image: mhart/alpine-node:8
+      - image: node:8-alpine
   build-node-latest:
     <<: *node-base
 
