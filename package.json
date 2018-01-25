@@ -7,7 +7,7 @@
     "bench": "node benchmark",
     "lint": "eslint .",
     "tdd": "mocha --watch",
-    "test": "nyc mocha"
+    "test": "nyc --reporter text --reporter lcov mocha"
   },
   "repository": {
     "type": "git",
@@ -29,6 +29,8 @@
     "node": ">=4"
   },
   "dependencies": {
+    "int64-buffer": "^0.1.9",
+    "msgpack-lite": "^0.1.26",
     "opentracing": "^0.14.1",
     "safe-buffer": "^5.1.1"
   },

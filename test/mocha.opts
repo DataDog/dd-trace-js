@@ -1,2 +1,2 @@
---require test/setup.js
+test/setup.js
 test/**/*.spec.js
