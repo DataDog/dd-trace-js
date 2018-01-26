@@ -39,11 +39,6 @@ To run the linter, use:
 $ npm run lint
 ```
 
-**Note:** ESLint only supports Node >= 4, so make sure you are using
-a compatible Node version before running this command. We also
-recommend using a plugin on your editor instead of constantly running
-this command.
-
 ### Continuous Integration
 
 We rely on CircleCI 2.0 for our tests. If you want to test how the CI behaves
@@ -54,11 +49,10 @@ After installing the `circleci` CLI, simply run one of the following:
 
 ```sh
 $ circleci build --job lint
-$ circleci build --job build-node-0.10
-$ circleci build --job build-node-0.12
 $ circleci build --job build-node-4
 $ circleci build --job build-node-6
 $ circleci build --job build-node-8
+$ circleci build --job build-node-latest
 ```
 
 ### Benchmarks

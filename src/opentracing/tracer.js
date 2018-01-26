@@ -1,12 +1,7 @@
 'use strict'
 
-var inherits = require('inherits')
-var Tracer = require('opentracing').Tracer
+const Tracer = require('opentracing').Tracer
 
-inherits(DatadogTracer, Tracer)
-
-function DatadogTracer () {
-  Tracer.call(this)
-}
+class DatadogTracer extends Tracer {}
 
 module.exports = DatadogTracer

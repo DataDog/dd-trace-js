@@ -1,8 +1,6 @@
 'use strict'
 
-var apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default
-var DatadogTracer = require('../../src/opentracing/tracer')
+const apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default
+const DatadogTracer = require('../../src/opentracing/tracer')
 
-apiCompatibilityChecks(function () {
-  return new DatadogTracer({ service: 'test' })
-})
+apiCompatibilityChecks(() => new DatadogTracer({ service: 'test' }))
