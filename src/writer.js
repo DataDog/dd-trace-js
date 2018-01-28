@@ -20,8 +20,7 @@ class Writer {
 
   flush () {
     if (this._queue.length > 0) {
-      const prefix = platform.msgpackArrayPrefix(this._queue.length)
-      const data = [prefix].concat(this._queue)
+      const data = platform.msgpack.prefix(this._queue)
 
       platform.request({
         protocol: this._url.protocol,
