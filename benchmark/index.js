@@ -34,7 +34,7 @@ const trace = require('./stubs/trace')
 suite
   .add('DatadogTracer#startSpan', {
     onStart () {
-      tracer = new DatadogTracer()
+      tracer = new DatadogTracer({ service: 'benchmark' })
     },
     fn () {
       tracer.startSpan()
