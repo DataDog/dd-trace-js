@@ -1,6 +1,7 @@
 'use strict'
 
 const Benchmark = require('benchmark')
+const Buffer = require('safe-buffer').Buffer
 const proxyquire = require('proxyquire')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
@@ -12,10 +13,15 @@ const Writer = proxyquire('../src/writer', {
   './platform': { request: () => {} }
 })
 
+Benchmark.options.maxTime = 0
+Benchmark.options.minSamples = 5
+
 const suite = new Benchmark.Suite()
+
 let tracer
 let writer
 let queue
+let data
 
 const trace = require('./stubs/trace')
 
@@ -49,6 +55,39 @@ suite
     fn () {
       writer._queue = queue
       writer.flush()
+    }
+  })
+  .add('Platform#id (Node)', {
+    fn () {
+      platform.id()
+    }
+  })
+  .add('Platform#now (Node)', {
+    fn () {
+      platform.now()
+    }
+  })
+  .add('Platform#request (Node)', {
+    onStart () {
+      data = Buffer.alloc(1000000)
+    },
+    fn () {
+      platform.request({
+        protocol: 'http:',
+        hostname: 'test',
+        port: '8080',
+        path: '/v0.3/traces',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/msgpack'
+        },
+        data
+      })
+    }
+  })
+  .add('Platform.msgpack#prefix (Node)', {
+    fn () {
+      platform.msgpack.prefix(trace)
     }
   })
   .on('cycle', event => {
