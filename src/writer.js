@@ -5,9 +5,10 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 
 class Writer {
-  constructor (url) {
+  constructor (url, size) {
     this._queue = []
     this._url = url
+    this._size = size
   }
 
   get length () {
@@ -16,6 +17,10 @@ class Writer {
 
   append (trace) {
     this._queue.push(msgpack.encode(trace, { codec }))
+
+    if (this.length >= this._size) {
+      this.flush()
+    }
   }
 
   flush () {
