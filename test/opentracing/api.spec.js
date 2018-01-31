@@ -3,4 +3,11 @@
 const apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default
 const DatadogTracer = require('../../src/opentracing/tracer')
 
-apiCompatibilityChecks(() => new DatadogTracer({ service: 'test' }))
+apiCompatibilityChecks(() => {
+  const clock = sinon.useFakeTimers()
+  const tracer = new DatadogTracer({ service: 'test' })
+
+  clock.restore()
+
+  return tracer
+})
