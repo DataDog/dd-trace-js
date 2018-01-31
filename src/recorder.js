@@ -6,23 +6,17 @@ const Writer = require('./writer')
 // TODO: make calls to Writer#append asynchronous
 
 class Recorder {
-  constructor (tracer) {
-    this._writer = new Writer(tracer._url)
-    this._tracer = tracer
+  constructor (url, interval, size) {
+    this._writer = new Writer(url, size)
+    this._scheduler = new Scheduler(() => this._writer.flush(), interval)
+  }
+
+  init () {
+    this._scheduler.start()
   }
 
   record (trace) {
-    if (!this._scheduler) {
-      this._scheduler = new Scheduler(() => this._writer.flush(), this._tracer._flushDelay)
-      this._scheduler.start()
-    }
-
-    if (this._writer.length < this._tracer._bufferSize) {
-      this._writer.append(trace)
-    } else {
-      this._writer.flush()
-      this._scheduler.reset()
-    }
+    this._writer.append(trace)
   }
 }
 

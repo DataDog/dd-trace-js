@@ -4,16 +4,11 @@ describe('Recorder', () => {
   let Scheduler
   let scheduler
   let Recorder
-  let tracer
   let Writer
   let writer
   let recorder
 
   beforeEach(() => {
-    tracer = {
-      _flushDelay: 1000,
-      _bufferSize: 2
-    }
     scheduler = {
       start: sinon.spy(),
       reset: sinon.spy()
@@ -28,7 +23,19 @@ describe('Recorder', () => {
       './scheduler': Scheduler,
       './writer': Writer
     })
-    recorder = new Recorder(tracer)
+    recorder = new Recorder('http://test', 1000, 2)
+  })
+
+  describe('init', () => {
+    it('should schedule flushing after the configured interval', () => {
+      writer.length = 0
+
+      recorder.init()
+      Scheduler.firstCall.args[0]()
+
+      expect(scheduler.start).to.have.been.called
+      expect(writer.flush).to.have.been.called
+    })
   })
 
   describe('record', () => {
@@ -43,39 +50,6 @@ describe('Recorder', () => {
       recorder.record(trace)
 
       expect(writer.append).to.have.been.calledWith(trace)
-    })
-
-    it('should flush if the buffer size is reached', () => {
-      writer.length = 2
-      recorder.record(trace)
-
-      expect(writer.flush).to.have.been.called
-    })
-
-    it('should reset the scheduler if the buffer size is reached', () => {
-      writer.length = 2
-      recorder.record(trace)
-
-      expect(scheduler.reset).to.have.been.called
-    })
-
-    it('should schedule flushing after the configured interval', () => {
-      writer.length = 0
-
-      recorder.record(trace)
-      Scheduler.firstCall.args[0]()
-
-      expect(scheduler.start).to.have.been.called
-      expect(writer.flush).to.have.been.called
-    })
-
-    it('should not start multiple schedulers', () => {
-      writer.length = 0
-
-      recorder.record(trace)
-      recorder.record(trace)
-
-      expect(scheduler.start).to.have.been.calledOnce
     })
   })
 })

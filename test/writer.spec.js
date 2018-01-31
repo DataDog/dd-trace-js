@@ -22,16 +22,15 @@ describe('Writer', () => {
     Writer = proxyquire('../src/writer', {
       './platform': platform
     })
-    writer = new Writer(url)
+    writer = new Writer(url, 3)
   })
 
   describe('length', () => {
     it('should return the number of traces', () => {
       writer.append({})
       writer.append({})
-      writer.append({})
 
-      expect(writer.length).to.equal(3)
+      expect(writer.length).to.equal(2)
     })
   })
 
@@ -75,6 +74,15 @@ describe('Writer', () => {
       expect(payload.length).to.equal(2)
       expect(payload[0].foo).to.equal('foo')
       expect(payload[1].bar.toString()).to.equal(expected)
+    })
+
+    it('should flush automatically when full', () => {
+      writer.append({})
+      writer.append({})
+      writer.append({})
+
+      expect(writer.length).to.equal(0)
+      expect(platform.request).to.have.been.called
     })
   })
 })

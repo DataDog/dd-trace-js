@@ -3,14 +3,14 @@
 // TODO: flush on process exit
 
 class Scheduler {
-  constructor (callback, delay) {
+  constructor (callback, interval) {
     this._timer = null
     this._callback = callback
-    this._delay = delay
+    this._interval = interval
   }
 
   start () {
-    this._timer = setInterval(this._callback, this._delay)
+    this._timer = setInterval(this._callback, this._interval)
     this._timer.unref && this._timer.unref()
   }
 
