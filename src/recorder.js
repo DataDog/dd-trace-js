@@ -15,8 +15,8 @@ class Recorder {
     this._scheduler.start()
   }
 
-  record (trace) {
-    this._writer.append(trace)
+  record (span) {
+    this._writer.append(span)
   }
 }
 

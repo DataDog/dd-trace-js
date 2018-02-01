@@ -30,7 +30,7 @@ let writer
 let queue
 let data
 
-const trace = require('./stubs/trace')
+const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
 
 suite
@@ -71,18 +71,18 @@ suite
   })
   .add('Writer#append', {
     onStart () {
-      writer = new Writer({})
+      writer = new Writer({}, 1000000)
     },
     fn () {
-      writer.append(trace)
+      writer.append(spanStub)
     }
   })
   .add('Writer#flush (1000 items)', {
     onStart () {
-      writer = new Writer({})
+      writer = new Writer({}, 1001)
 
       for (let i = 0; i < 1000; i++) {
-        writer.append(trace)
+        writer.append(spanStub)
       }
 
       queue = writer._queue
@@ -127,7 +127,7 @@ suite
   })
   .add('platform.msgpack#prefix (Node)', {
     fn () {
-      platform.msgpack.prefix(trace)
+      platform.msgpack.prefix(traceStub)
     }
   })
   .on('cycle', event => {

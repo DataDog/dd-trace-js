@@ -39,17 +39,17 @@ describe('Recorder', () => {
   })
 
   describe('record', () => {
-    let trace
+    let span
 
     beforeEach(() => {
-      trace = {}
+      span = {}
     })
 
-    it('should record traces', () => {
+    it('should record a span', () => {
       writer.length = 0
-      recorder.record(trace)
+      recorder.record(span)
 
-      expect(writer.append).to.have.been.calledWith(trace)
+      expect(writer.append).to.have.been.calledWith(span)
     })
   })
 })

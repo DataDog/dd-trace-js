@@ -22,7 +22,7 @@ function formatSpan (span) {
   return {
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
-    parent_id: span._parentId,
+    parent_id: spanContext.parentId,
     name: span._operationName,
     service: tracer._service,
     error: 0,

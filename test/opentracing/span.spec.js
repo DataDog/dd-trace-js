@@ -9,7 +9,10 @@ describe('Span', () => {
   let platform
 
   beforeEach(() => {
-    platform = { id: sinon.stub().returns(new Uint64BE(123, 456)) }
+    platform = { id: sinon.stub() }
+    platform.id.onFirstCall().returns(new Uint64BE(123, 123))
+    platform.id.onSecondCall().returns(new Uint64BE(456, 456))
+
     tracer = {
       _record: sinon.stub(),
       _isSampled: sinon.stub().returns(true)
@@ -23,29 +26,34 @@ describe('Span', () => {
   it('should have a default context', () => {
     span = new Span(tracer, { operationName: 'operation' })
 
-    expect(span.context()).to.deep.equal({
-      traceId: new Uint64BE(123, 456),
-      spanId: new Uint64BE(123, 456),
-      sampled: true,
-      baggageItems: {}
-    })
+    expect(span.context().traceId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context().spanId).to.deep.equal(new Uint64BE(123, 123))
+  })
+
+  it('should add itself to the context trace started spans', () => {
+    span = new Span(tracer, { operationName: 'operation' })
+
+    expect(span.context().trace.started).to.deep.equal([span])
   })
 
   it('should use a parent context', () => {
     const parent = {
-      traceId: new Uint64BE(123, 456),
+      traceId: new Uint64BE(123, 123),
+      spanId: new Uint64BE(456, 456),
       sampled: false,
-      baggageItems: { foo: 'bar' }
+      baggageItems: { foo: 'bar' },
+      trace: {
+        started: ['span'],
+        finished: []
+      }
     }
 
     span = new Span(tracer, { operationName: 'operation', parent })
 
-    expect(span.context()).to.deep.equal({
-      traceId: new Uint64BE(123, 456),
-      spanId: new Uint64BE(123, 456),
-      sampled: false,
-      baggageItems: { foo: 'bar' }
-    })
+    expect(span.context().traceId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context().parentId).to.deep.equal(new Uint64BE(456, 456))
+    expect(span.context().baggageItems).to.deep.equal({ foo: 'bar' })
+    expect(span.context().trace.started).to.deep.equal(['span', span])
   })
 
   describe('tracer', () => {
@@ -109,6 +117,15 @@ describe('Span', () => {
   })
 
   describe('finish', () => {
+    it('should add itself to the context trace finished spans', () => {
+      tracer._record.returns(Promise.resolve())
+
+      span = new Span(tracer, { operationName: 'operation' })
+      span.finish()
+
+      expect(span.context().trace.finished).to.deep.equal([span])
+    })
+
     it('should record the span if sampled', () => {
       tracer._record.returns(Promise.resolve())
 

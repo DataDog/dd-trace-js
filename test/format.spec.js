@@ -17,13 +17,13 @@ describe('format', () => {
 
     spanContext = {
       traceId: id,
-      spanId: id
+      spanId: id,
+      parentId: id
     }
 
     span = {
       tracer: sinon.stub().returns(tracer),
       context: sinon.stub().returns(spanContext),
-      _parentId: id,
       _operationName: 'operation',
       _tags: {},
       _startTime: 1500000000000.123456,
@@ -40,7 +40,7 @@ describe('format', () => {
       expect(trace).to.deep.equal({
         trace_id: span.context().traceId,
         span_id: span.context().spanId,
-        parent_id: span._parentId,
+        parent_id: span.context().parentId,
         name: span._operationName,
         service: span.tracer()._service,
         meta: {},

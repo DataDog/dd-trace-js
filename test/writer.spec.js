@@ -1,34 +1,50 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 
 describe('Writer', () => {
   let Writer
   let writer
+  let trace
+  let span
   let platform
+  let format
   let url
 
   beforeEach(() => {
+    trace = {
+      started: [span],
+      finished: [span]
+    }
+
+    span = {
+      context: sinon.stub().returns({ trace })
+    }
+
     platform = {
       request: sinon.spy()
     }
+
+    format = sinon.stub().withArgs(span).returns('span')
+
     url = {
       protocol: 'http:',
       hostname: 'localhost',
       port: 8126
     }
+
     Writer = proxyquire('../src/writer', {
-      './platform': platform
+      './platform': platform,
+      './format': format
     })
     writer = new Writer(url, 3)
   })
 
   describe('length', () => {
     it('should return the number of traces', () => {
-      writer.append({})
-      writer.append({})
+      writer.append(span)
+      writer.append(span)
 
       expect(writer.length).to.equal(2)
     })
@@ -41,19 +57,24 @@ describe('Writer', () => {
       expect(platform.request).to.not.have.been.called
     })
 
+    it('should skip flushing if all spans of the trace are not finished', () => {
+      trace.finished = []
+      writer.append(span)
+      writer.flush()
+
+      expect(platform.request).to.not.have.been.called
+    })
+
     it('should empty the internal queue', () => {
-      writer.append({})
+      writer.append(span)
       writer.flush()
 
       expect(writer.length).to.equal(0)
     })
 
-    it('should flush its content to the agent', () => {
-      const uint64 = new Uint64BE(0x12345678, 0x90abcdef)
-      const expected = uint64.toString()
-
-      writer.append({ foo: 'foo' })
-      writer.append({ bar: uint64 })
+    it('should flush its traces to the agent', () => {
+      writer.append(span)
+      writer.append(span)
       writer.flush()
 
       expect(platform.request).to.have.been.calledWithMatch({
@@ -72,14 +93,22 @@ describe('Writer', () => {
 
       expect(payload).to.be.instanceof(Array)
       expect(payload.length).to.equal(2)
-      expect(payload[0].foo).to.equal('foo')
-      expect(payload[1].bar.toString()).to.equal(expected)
+    })
+
+    it('should flush traces with the correct format', () => {
+      writer.append(span)
+      writer.flush()
+
+      const data = platform.request.firstCall.args[0].data
+      const payload = msgpack.decode(Buffer.concat(data), { codec })
+
+      expect(payload[0][0]).to.equal('span')
     })
 
     it('should flush automatically when full', () => {
-      writer.append({})
-      writer.append({})
-      writer.append({})
+      writer.append(span)
+      writer.append(span)
+      writer.append(span)
 
       expect(writer.length).to.equal(0)
       expect(platform.request).to.have.been.called
