@@ -46,8 +46,8 @@ app.listen(3000)
 * **hostname**: hostname of the Datadog agent *(default: localhost)*
 * **port**: port of the Datadog agent *(default: 8126)*
 * **protocol**: protocol of the Datadog agent *(default: http)*
-* **flushInterval**: interval in milliseconds at which traces will be flushed to the agent *(default: 2000)
-* **bufferSize**: number of accumulated traces before they will be flushed to the agent  *(default: 1000)
+* **flushInterval**: interval in milliseconds at which traces will be flushed to the agent *(default: 2000)*
+* **bufferSize**: number of accumulated traces before they will be flushed to the agent  *(default: 1000)*
 
 ### OpenTracing
 
