@@ -2,6 +2,7 @@
 
 const Benchmark = require('benchmark')
 const Buffer = require('safe-buffer').Buffer
+const EventEmitter = require('events')
 const proxyquire = require('proxyquire')
 const Uint64BE = require('int64-buffer').Uint64BE
 const platform = require('../src/platform')
@@ -26,6 +27,8 @@ let spanContext
 let propagator
 let carrier
 let writer
+let context
+let emitter
 let queue
 let data
 
@@ -116,6 +119,32 @@ suite
         },
         data
       })
+    }
+  })
+  .add('Platform#context#run (Node, CLS)', {
+    onStart () {
+      context = platform.context()
+    },
+    fn () {
+      context.run(() => {})
+    }
+  })
+  .add('Platform#context#bind (Node, CLS)', {
+    onStart () {
+      context = platform.context()
+    },
+    fn () {
+      context.bind(() => {})
+    }
+  })
+  .add('Platform#context#bindEmitter (Node, CLS)', {
+    onStart () {
+      context = platform.context()
+      emitter = new EventEmitter()
+      emitter.on('benchmark', () => {})
+    },
+    fn () {
+      context.bindEmitter(emitter)
     }
   })
   .add('Platform.msgpack#prefix (Node)', {
