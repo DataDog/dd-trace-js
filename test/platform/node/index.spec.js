@@ -51,9 +51,15 @@ describe('Platform', () => {
 
     describe('request', () => {
       let request
+      let log
 
       beforeEach(() => {
-        request = require('../../../src/platform/node/request')
+        log = {
+          error: sinon.spy()
+        }
+        request = proxyquire('../src/platform/node/request', {
+          '../../log': log
+        })
       })
 
       it('should send an http request with a buffer', () => {
@@ -113,7 +119,7 @@ describe('Platform', () => {
         })
           .catch(err => {
             expect(err).to.be.instanceof(Error)
-            expect(err.status).to.equal(400)
+            expect(err.message).to.equal('Error from the agent: 400 Bad Request')
             done()
           })
       })
@@ -130,7 +136,7 @@ describe('Platform', () => {
         })
           .catch(err => {
             expect(err).to.be.instanceof(Error)
-            expect(err.code).to.equal('ECONNRESET')
+            expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
             done()
           })
       })
@@ -148,7 +154,7 @@ describe('Platform', () => {
         })
           .catch(err => {
             expect(err).to.be.instanceof(Error)
-            expect(err.code).to.equal('ECONNRESET')
+            expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
             done()
           })
       })

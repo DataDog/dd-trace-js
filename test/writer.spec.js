@@ -9,18 +9,26 @@ describe('Writer', () => {
   let writer
   let platform
   let url
+  let log
 
   beforeEach(() => {
     platform = {
-      request: sinon.spy()
+      request: sinon.stub().returns(Promise.resolve())
     }
+
     url = {
       protocol: 'http:',
       hostname: 'localhost',
       port: 8126
     }
+
+    log = {
+      error: sinon.spy()
+    }
+
     Writer = proxyquire('../src/writer', {
-      './platform': platform
+      './platform': platform,
+      './log': log
     })
     writer = new Writer(url, 3)
   })
@@ -83,6 +91,20 @@ describe('Writer', () => {
 
       expect(writer.length).to.equal(0)
       expect(platform.request).to.have.been.called
+    })
+
+    it('should log request errors', done => {
+      const error = new Error('boom')
+
+      platform.request.returns(Promise.reject(error))
+
+      writer.append({})
+      writer.flush()
+
+      setTimeout(() => {
+        expect(log.error).to.have.been.calledWith(error)
+        done()
+      })
     })
   })
 })

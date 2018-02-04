@@ -18,6 +18,7 @@ describe('Tracer', () => {
   let HttpPropagator
   let BinaryPropagator
   let propagator
+  let log
 
   beforeEach(() => {
     fields = {}
@@ -42,12 +43,17 @@ describe('Tracer', () => {
       extract: sinon.stub()
     }
 
+    log = {
+      use: sinon.spy()
+    }
+
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
       '../recorder': Recorder,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
-      './propagation/binary': BinaryPropagator
+      './propagation/binary': BinaryPropagator,
+      '../log': log
     })
   })
 
@@ -67,10 +73,12 @@ describe('Tracer', () => {
       port: 7777,
       protocol: 'https',
       flushInterval: 1000,
-      bufferSize: 5000
+      bufferSize: 5000,
+      logger: 'logger'
     })
 
-    expect(Recorder).to.have.been.calledWith(sinon.match(url.parse('https://test:7777'), 1000, 5000))
+    expect(Recorder).to.have.been.calledWith(sinon.match(url.parse('https://test:7777')), 1000, 5000)
+    expect(log.use).to.have.been.calledWith('logger')
   })
 
   describe('startSpan', () => {
