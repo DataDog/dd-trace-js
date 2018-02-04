@@ -2,6 +2,7 @@
 
 const Benchmark = require('benchmark')
 const Buffer = require('safe-buffer').Buffer
+const EventEmitter = require('events')
 const proxyquire = require('proxyquire')
 const Uint64BE = require('int64-buffer').Uint64BE
 const platform = require('../src/platform')
@@ -9,7 +10,7 @@ const node = require('../src/platform/node')
 
 platform.use(node)
 
-const DatadogTracer = require('../src/opentracing/tracer')
+const DatadogTracer = require('../src/tracer')
 const DatadogSpanContext = require('../src/opentracing/span_context')
 const TextMapPropagator = require('../src/opentracing/propagation/text_map')
 const Writer = proxyquire('../src/writer', {
@@ -30,6 +31,8 @@ let propagator
 let carrier
 let writer
 let sampler
+let context
+let emitter
 let queue
 let data
 
@@ -37,6 +40,14 @@ const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
 
 suite
+  .add('DatadogTracer#trace', {
+    onStart () {
+      tracer = new DatadogTracer({ service: 'benchmark' })
+    },
+    fn () {
+      tracer.trace('bench', () => {})
+    }
+  })
   .add('DatadogTracer#startSpan', {
     onStart () {
       tracer = new DatadogTracer({ service: 'benchmark' })
@@ -141,7 +152,32 @@ suite
       })
     }
   })
-  .add('platform.msgpack#prefix (Node)', {
+  .add('cls#run (Node)', {
+    onStart () {
+      context = platform.context()
+    },
+    fn () {
+      context.run(() => {})
+    }
+  })
+  .add('cls#bind (Node)', {
+    onStart () {
+      context = platform.context()
+    },
+    fn () {
+      context.bind(() => {})
+    }
+  })
+  .add('cls#bindEmitter (Node)', {
+    onStart () {
+      context = platform.context()
+      emitter = new EventEmitter()
+    },
+    fn () {
+      context.bindEmitter(emitter)
+    }
+  })
+  .add('msgpack#prefix (Node)', {
     fn () {
       platform.msgpack.prefix(traceStub)
     }

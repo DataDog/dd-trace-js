@@ -1,5 +1,6 @@
 'use strict'
 
+const EventEmitter = require('events')
 const Buffer = require('safe-buffer').Buffer
 
 describe('Platform', () => {
@@ -193,6 +194,91 @@ describe('Platform', () => {
 
           expect(prefixed.length).to.equal(length + 1)
           expect(prefixed[0]).to.deep.equal(Buffer.from([0xdd, 0x00, 0x01, 0x00, 0x00]))
+        })
+      })
+    })
+
+    describe('context', () => {
+      let context
+
+      beforeEach(() => {
+        context = require('../../../src/platform/node/context')()
+      })
+
+      describe('get/set', () => {
+        it('should store a value', done => {
+          context.run(() => {
+            context.set('foo', 'bar')
+            test()
+          })
+
+          function test () {
+            context.run(span => {
+              expect(context.get('foo')).to.equal('bar')
+              done()
+            })
+          }
+        })
+      })
+
+      describe('run', () => {
+        it('should not overwrite the parent context', done => {
+          const parentValue = 'parent'
+          const childValue = 'child'
+
+          context.run(() => {
+            context.set('foo', parentValue)
+
+            setImmediate(() => test())
+
+            context.run(() => {
+              context.set('foo', childValue)
+            })
+          })
+
+          function test () {
+            context.run(() => {
+              expect(context.get('foo')).to.equal('parent')
+              done()
+            })
+          }
+        })
+      })
+
+      describe('bind', () => {
+        it('should bind a function to the context', done => {
+          const bar = 'bar'
+
+          let test = () => {
+            expect(context.get('foo')).to.equal(bar)
+            done()
+          }
+
+          context.run(() => {
+            test = context.bind(test)
+            context.set('foo', bar)
+          })
+
+          test()
+        })
+      })
+
+      describe('bindEmitter', () => {
+        it('should bind an event emitter to the context', () => {
+          const bar = {}
+          const spy = sinon.spy()
+          const emitter = new EventEmitter()
+
+          context.run(() => {
+            context.bindEmitter(emitter)
+            context.set('foo', bar)
+
+            emitter.on('test', () => spy(context.get('foo')))
+          })
+
+          emitter.emit('test')
+
+          expect(spy).to.have.been.calledWith(bar)
         })
       })
     })
