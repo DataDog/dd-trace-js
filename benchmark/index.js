@@ -15,6 +15,7 @@ const TextMapPropagator = require('../src/opentracing/propagation/text_map')
 const Writer = proxyquire('../src/writer', {
   './platform': { request: () => {} }
 })
+const format = require('../src/format')
 
 Benchmark.options.maxTime = 0
 Benchmark.options.minSamples = 5
@@ -30,6 +31,7 @@ let queue
 let data
 
 const trace = require('./stubs/trace')
+const spanStub = require('./stubs/span')
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -90,17 +92,22 @@ suite
       writer.flush()
     }
   })
-  .add('Platform#id (Node)', {
+  .add('format', {
+    fn () {
+      format(spanStub)
+    }
+  })
+  .add('platform#id (Node)', {
     fn () {
       platform.id()
     }
   })
-  .add('Platform#now (Node)', {
+  .add('platform#now (Node)', {
     fn () {
       platform.now()
     }
   })
-  .add('Platform#request (Node)', {
+  .add('platform#request (Node)', {
     onStart () {
       data = Buffer.alloc(1000000)
     },
@@ -118,7 +125,7 @@ suite
       })
     }
   })
-  .add('Platform.msgpack#prefix (Node)', {
+  .add('platform.msgpack#prefix (Node)', {
     fn () {
       platform.msgpack.prefix(trace)
     }
