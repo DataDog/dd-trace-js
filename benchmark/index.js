@@ -15,6 +15,7 @@ const TextMapPropagator = require('../src/opentracing/propagation/text_map')
 const Writer = proxyquire('../src/writer', {
   './platform': { request: () => {} }
 })
+const Sampler = require('../src/sampler')
 const format = require('../src/format')
 
 Benchmark.options.maxTime = 0
@@ -27,6 +28,7 @@ let spanContext
 let propagator
 let carrier
 let writer
+let sampler
 let queue
 let data
 
@@ -90,6 +92,14 @@ suite
     fn () {
       writer._queue = queue
       writer.flush()
+    }
+  })
+  .add('Sampler#isSampled', {
+    onStart () {
+      sampler = new Sampler(0.5)
+    },
+    fn () {
+      sampler.isSampled()
     }
   })
   .add('format', {
