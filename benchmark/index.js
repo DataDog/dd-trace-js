@@ -16,6 +16,7 @@ const Writer = proxyquire('../src/writer', {
   './platform': { request: () => {} }
 })
 const format = require('../src/format')
+const encode = require('../src/encode')
 
 Benchmark.options.maxTime = 0
 Benchmark.options.minSamples = 5
@@ -95,6 +96,11 @@ suite
   .add('format', {
     fn () {
       format(spanStub)
+    }
+  })
+  .add('encode', {
+    fn () {
+      encode(traceStub)
     }
   })
   .add('platform#id (Node)', {

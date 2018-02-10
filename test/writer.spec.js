@@ -1,8 +1,5 @@
 'use strict'
 
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
-
 describe('Writer', () => {
   let Writer
   let writer
@@ -10,6 +7,7 @@ describe('Writer', () => {
   let span
   let platform
   let format
+  let encode
   let url
 
   beforeEach(() => {
@@ -23,10 +21,14 @@ describe('Writer', () => {
     }
 
     platform = {
-      request: sinon.spy()
+      request: sinon.spy(),
+      msgpack: {
+        prefix: sinon.stub()
+      }
     }
 
-    format = sinon.stub().withArgs(span).returns('span')
+    format = sinon.stub().withArgs(span).returns('formatted')
+    encode = sinon.stub().withArgs(['formatted']).returns('encoded')
 
     url = {
       protocol: 'http:',
@@ -36,7 +38,8 @@ describe('Writer', () => {
 
     Writer = proxyquire('../src/writer', {
       './platform': platform,
-      './format': format
+      './format': format,
+      './encode': encode
     })
     writer = new Writer(url, 3)
   })
@@ -50,16 +53,31 @@ describe('Writer', () => {
     })
   })
 
-  describe('flush', () => {
-    it('should skip flushing if empty', () => {
-      writer.flush()
+  describe('append', () => {
+    it('should append a trace', () => {
+      writer.append(span)
 
-      expect(platform.request).to.not.have.been.called
+      expect(writer._queue).to.deep.include('encoded')
     })
 
-    it('should skip flushing if all spans of the trace are not finished', () => {
+    it('should skip traces with unfinished spans', () => {
       trace.finished = []
       writer.append(span)
+
+      expect(writer._queue).to.be.empty
+    })
+
+    it('should replace a random trace when full', () => {
+      writer._queue = new Array(1000)
+      writer.append(span)
+
+      expect(writer.length).to.equal(1000)
+      expect(writer._queue).to.deep.include('encoded')
+    })
+  })
+
+  describe('flush', () => {
+    it('should skip flushing if empty', () => {
       writer.flush()
 
       expect(platform.request).to.not.have.been.called
@@ -73,6 +91,8 @@ describe('Writer', () => {
     })
 
     it('should flush its traces to the agent', () => {
+      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
+
       writer.append(span)
       writer.append(span)
       writer.flush()
@@ -85,33 +105,9 @@ describe('Writer', () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/msgpack'
-        }
+        },
+        data: 'prefixed'
       })
-
-      const data = platform.request.firstCall.args[0].data
-      const payload = msgpack.decode(Buffer.concat(data), { codec })
-
-      expect(payload).to.be.instanceof(Array)
-      expect(payload.length).to.equal(2)
-    })
-
-    it('should flush traces with the correct format', () => {
-      writer.append(span)
-      writer.flush()
-
-      const data = platform.request.firstCall.args[0].data
-      const payload = msgpack.decode(Buffer.concat(data), { codec })
-
-      expect(payload[0][0]).to.equal('span')
-    })
-
-    it('should flush automatically when full', () => {
-      writer.append(span)
-      writer.append(span)
-      writer.append(span)
-
-      expect(writer.length).to.equal(0)
-      expect(platform.request).to.have.been.called
     })
   })
 })
