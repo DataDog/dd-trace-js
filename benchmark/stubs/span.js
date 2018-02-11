@@ -18,9 +18,8 @@ const span = {
   }),
   _operationName: 'operation',
   _tags: {
-    resource: '/resource',
-    type: 'web',
-    error: true
+    'resource.name': '/resource',
+    'span.type': 'web'
   },
   _startTime: 1500000000000.123456,
   _duration: 100
