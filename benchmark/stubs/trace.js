@@ -13,8 +13,8 @@ const trace = [
     type: 'web',
     error: 0,
     meta: {},
-    start: new Uint64BE(0x00001000, 0),
-    duration: new Uint64BE(0, 100000000)
+    start: 1500000000000123600,
+    duration: 100000000
   },
   {
     trace_id: new Uint64BE(0x12345678, 0x9abcdef0),
@@ -26,8 +26,8 @@ const trace = [
     type: 'web',
     error: 0,
     meta: {},
-    start: new Uint64BE(0x00001000, 0),
-    duration: new Uint64BE(0, 100000000)
+    start: 1500000000000123600,
+    duration: 80000000
   }
 ]
 

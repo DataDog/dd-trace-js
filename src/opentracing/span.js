@@ -19,25 +19,33 @@ class DatadogSpan extends Span {
     this._tags = Object.assign({}, tags)
     this._startTime = startTime
 
+    this._spanContext = this._createContext(parent)
+  }
+
+  _createContext (parent) {
+    let spanContext
+
     if (parent) {
-      this._spanContext = new SpanContext({
+      spanContext = new SpanContext({
         traceId: parent.traceId,
         spanId: platform.id(),
+        parentId: parent.spanId,
         sampled: parent.sampled,
-        baggageItems: Object.assign({}, parent.baggageItems)
+        baggageItems: Object.assign({}, parent.baggageItems),
+        trace: parent.trace
       })
-
-      this._parentId = parent.spanId
     } else {
-      this._spanContext = new SpanContext({
-        traceId: platform.id(),
-        spanId: platform.id(),
-        sampled: this._parentTracer._isSampled(this),
-        baggageItems: {}
+      const spanId = platform.id()
+      spanContext = new SpanContext({
+        traceId: spanId,
+        spanId,
+        sampled: this._parentTracer._isSampled(this)
       })
-
-      this._parentId = null
     }
+
+    spanContext.trace.started.push(this)
+
+    return spanContext
   }
 
   _context () {
@@ -70,6 +78,7 @@ class DatadogSpan extends Span {
     finishTime = finishTime || platform.now()
 
     this._duration = finishTime - this._startTime
+    this._spanContext.trace.finished.push(this)
 
     if (this._spanContext.sampled) {
       this._parentTracer._record(this)

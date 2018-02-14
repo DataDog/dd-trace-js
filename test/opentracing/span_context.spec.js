@@ -11,8 +11,13 @@ describe('SpanContext', () => {
     const props = {
       traceId: '123',
       spanId: '456',
+      parentId: '789',
       sampled: false,
-      baggageItems: { foo: 'bar' }
+      baggageItems: { foo: 'bar' },
+      trace: {
+        started: ['span1', 'span2'],
+        finished: ['span1']
+      }
     }
     const spanContext = new SpanContext(props)
 
@@ -23,8 +28,13 @@ describe('SpanContext', () => {
     const expected = {
       traceId: '123',
       spanId: '456',
+      parentId: null,
       sampled: true,
-      baggageItems: {}
+      baggageItems: {},
+      trace: {
+        started: [],
+        finished: []
+      }
     }
 
     const spanContext = new SpanContext({

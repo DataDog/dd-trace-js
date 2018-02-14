@@ -1,8 +1,8 @@
 'use strict'
 
 const platform = require('./platform')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const format = require('./format')
+const encode = require('./encode')
 
 class Writer {
   constructor (url, size) {
@@ -15,11 +15,17 @@ class Writer {
     return this._queue.length
   }
 
-  append (trace) {
-    this._queue.push(msgpack.encode(trace, { codec }))
+  append (span) {
+    const trace = span.context().trace
 
-    if (this.length >= this._size) {
-      this.flush()
+    if (trace.started.length === trace.finished.length) {
+      const buffer = encode(trace.finished.map(format))
+
+      if (this.length < this._size) {
+        this._queue.push(buffer)
+      } else {
+        this._squeeze(buffer)
+      }
     }
   }
 
@@ -41,6 +47,11 @@ class Writer {
 
       this._queue = []
     }
+  }
+
+  _squeeze (buffer) {
+    const index = Math.floor(Math.random() * this.length)
+    this._queue[index] = buffer
   }
 }
 
