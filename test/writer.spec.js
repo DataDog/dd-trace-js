@@ -121,7 +121,7 @@ describe('Writer', () => {
 
       platform.request.returns(Promise.reject(error))
 
-      writer.append({})
+      writer.append(span)
       writer.flush()
 
       setTimeout(() => {

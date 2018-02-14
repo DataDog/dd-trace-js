@@ -2,8 +2,6 @@
 
 const platform = require('./platform')
 const log = require('./log')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
 const format = require('./format')
 const encode = require('./encode')
 
