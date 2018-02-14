@@ -28,7 +28,7 @@ class DatadogTracer extends Tracer {
     this._service = service
     this._recorder = new Recorder(agentUrl, flushInterval, bufferSize)
     this._recorder.init()
-    this._sampler = new Sampler()
+    this._sampler = new Sampler(1)
     this._propagators = {
       [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(),
       [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(),

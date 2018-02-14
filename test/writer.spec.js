@@ -1,20 +1,35 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
-
 describe('Writer', () => {
   let Writer
   let writer
+  let trace
+  let span
   let platform
+  let format
+  let encode
   let url
   let log
 
   beforeEach(() => {
-    platform = {
-      request: sinon.stub().returns(Promise.resolve())
+    trace = {
+      started: [span],
+      finished: [span]
     }
+
+    span = {
+      context: sinon.stub().returns({ trace })
+    }
+
+    platform = {
+      request: sinon.stub().returns(Promise.resolve()),
+      msgpack: {
+        prefix: sinon.stub()
+      }
+    }
+
+    format = sinon.stub().withArgs(span).returns('formatted')
+    encode = sinon.stub().withArgs(['formatted']).returns('encoded')
 
     url = {
       protocol: 'http:',
@@ -28,17 +43,42 @@ describe('Writer', () => {
 
     Writer = proxyquire('../src/writer', {
       './platform': platform,
-      './log': log
+      './log': log,
+      './format': format,
+      './encode': encode
     })
     writer = new Writer(url, 3)
   })
 
   describe('length', () => {
     it('should return the number of traces', () => {
-      writer.append({})
-      writer.append({})
+      writer.append(span)
+      writer.append(span)
 
       expect(writer.length).to.equal(2)
+    })
+  })
+
+  describe('append', () => {
+    it('should append a trace', () => {
+      writer.append(span)
+
+      expect(writer._queue).to.deep.include('encoded')
+    })
+
+    it('should skip traces with unfinished spans', () => {
+      trace.finished = []
+      writer.append(span)
+
+      expect(writer._queue).to.be.empty
+    })
+
+    it('should replace a random trace when full', () => {
+      writer._queue = new Array(1000)
+      writer.append(span)
+
+      expect(writer.length).to.equal(1000)
+      expect(writer._queue).to.deep.include('encoded')
     })
   })
 
@@ -50,18 +90,17 @@ describe('Writer', () => {
     })
 
     it('should empty the internal queue', () => {
-      writer.append({})
+      writer.append(span)
       writer.flush()
 
       expect(writer.length).to.equal(0)
     })
 
-    it('should flush its content to the agent', () => {
-      const uint64 = new Uint64BE(0x12345678, 0x90abcdef)
-      const expected = uint64.toString()
+    it('should flush its traces to the agent', () => {
+      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
 
-      writer.append({ foo: 'foo' })
-      writer.append({ bar: uint64 })
+      writer.append(span)
+      writer.append(span)
       writer.flush()
 
       expect(platform.request).to.have.been.calledWithMatch({
@@ -72,25 +111,9 @@ describe('Writer', () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/msgpack'
-        }
+        },
+        data: 'prefixed'
       })
-
-      const data = platform.request.firstCall.args[0].data
-      const payload = msgpack.decode(Buffer.concat(data), { codec })
-
-      expect(payload).to.be.instanceof(Array)
-      expect(payload.length).to.equal(2)
-      expect(payload[0].foo).to.equal('foo')
-      expect(payload[1].bar.toString()).to.equal(expected)
-    })
-
-    it('should flush automatically when full', () => {
-      writer.append({})
-      writer.append({})
-      writer.append({})
-
-      expect(writer.length).to.equal(0)
-      expect(platform.request).to.have.been.called
     })
 
     it('should log request errors', done => {
