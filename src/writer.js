@@ -1,6 +1,7 @@
 'use strict'
 
 const platform = require('./platform')
+const log = require('./log')
 const format = require('./format')
 const encode = require('./encode')
 
@@ -33,17 +34,19 @@ class Writer {
     if (this._queue.length > 0) {
       const data = platform.msgpack.prefix(this._queue)
 
-      platform.request({
-        protocol: this._url.protocol,
-        hostname: this._url.hostname,
-        port: this._url.port,
-        path: '/v0.3/traces',
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/msgpack'
-        },
-        data
-      })
+      platform
+        .request({
+          protocol: this._url.protocol,
+          hostname: this._url.hostname,
+          port: this._url.port,
+          path: '/v0.3/traces',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/msgpack'
+          },
+          data
+        })
+        .catch(e => log.error(e))
 
       this._queue = []
     }

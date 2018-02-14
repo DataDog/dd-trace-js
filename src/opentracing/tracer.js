@@ -9,10 +9,13 @@ const Sampler = require('../sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
+const log = require('../log')
 
 class DatadogTracer extends Tracer {
   constructor (config) {
     super()
+
+    log.use(config.logger)
 
     const service = config.service
     const hostname = config.hostname || 'localhost'

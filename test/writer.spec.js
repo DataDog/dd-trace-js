@@ -9,6 +9,7 @@ describe('Writer', () => {
   let format
   let encode
   let url
+  let log
 
   beforeEach(() => {
     trace = {
@@ -21,7 +22,7 @@ describe('Writer', () => {
     }
 
     platform = {
-      request: sinon.spy(),
+      request: sinon.stub().returns(Promise.resolve()),
       msgpack: {
         prefix: sinon.stub()
       }
@@ -36,8 +37,13 @@ describe('Writer', () => {
       port: 8126
     }
 
+    log = {
+      error: sinon.spy()
+    }
+
     Writer = proxyquire('../src/writer', {
       './platform': platform,
+      './log': log,
       './format': format,
       './encode': encode
     })
@@ -107,6 +113,20 @@ describe('Writer', () => {
           'Content-Type': 'application/msgpack'
         },
         data: 'prefixed'
+      })
+    })
+
+    it('should log request errors', done => {
+      const error = new Error('boom')
+
+      platform.request.returns(Promise.reject(error))
+
+      writer.append(span)
+      writer.flush()
+
+      setTimeout(() => {
+        expect(log.error).to.have.been.calledWith(error)
+        done()
       })
     })
   })

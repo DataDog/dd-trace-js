@@ -23,13 +23,13 @@ function request (options, callback) {
           const error = new Error(http.STATUS_CODES[res.statusCode])
           error.status = res.statusCode
 
-          reject(error)
+          reject(new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`))
         }
       })
     })
 
     req.setTimeout(options.timeout, req.abort)
-    req.on('error', reject)
+    req.on('error', e => reject(new Error(`Network error trying to reach the agent: ${e.message}`)))
 
     data.forEach(buffer => req.write(buffer))
 

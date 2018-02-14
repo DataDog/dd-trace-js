@@ -13,7 +13,7 @@ const DatadogTracer = require('../src/opentracing/tracer')
 const DatadogSpanContext = require('../src/opentracing/span_context')
 const TextMapPropagator = require('../src/opentracing/propagation/text_map')
 const Writer = proxyquire('../src/writer', {
-  './platform': { request: () => {} }
+  './platform': { request: () => Promise.resolve() }
 })
 const Sampler = require('../src/sampler')
 const format = require('../src/format')
