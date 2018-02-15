@@ -30,7 +30,6 @@
   },
   "dependencies": {
     "int64-buffer": "^0.1.9",
-    "msgpack-lite": "^0.1.26",
     "opentracing": "^0.14.1",
     "performance-now": "^2.1.0",
     "safe-buffer": "^5.1.1"
@@ -45,6 +44,7 @@
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
     "mocha": "^5.0.0",
+    "msgpack-lite": "^0.1.26",
     "nock": "^9.1.6",
     "nyc": "^11.4.1",
     "proxyquire": "^1.8.0",
