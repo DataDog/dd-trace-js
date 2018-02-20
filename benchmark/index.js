@@ -4,9 +4,11 @@ const Benchmark = require('benchmark')
 const Buffer = require('safe-buffer').Buffer
 const EventEmitter = require('events')
 const proxyquire = require('proxyquire')
+const semver = require('semver')
 const Uint64BE = require('int64-buffer').Uint64BE
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
+const cls = require('../src/platform/node/context/cls')
 
 platform.use(node)
 
@@ -33,7 +35,6 @@ let propagator
 let carrier
 let writer
 let sampler
-let context
 let emitter
 let queue
 let data
@@ -157,28 +158,21 @@ suite
     }
   })
   .add('cls#run (Node)', {
-    onStart () {
-      context = platform.context()
-    },
     fn () {
-      context.run(() => {})
+      cls.run(() => {})
     }
   })
   .add('cls#bind (Node)', {
-    onStart () {
-      context = platform.context()
-    },
     fn () {
-      context.bind(() => {})
+      cls.bind(() => {})
     }
   })
   .add('cls#bindEmitter (Node)', {
     onStart () {
-      context = platform.context()
       emitter = new EventEmitter()
     },
     fn () {
-      context.bindEmitter(emitter)
+      cls.bindEmitter(emitter)
     }
   })
   .add('msgpack#prefix (Node)', {
@@ -186,6 +180,32 @@ suite
       platform.msgpack.prefix(traceStub)
     }
   })
+
+if (semver.gte(semver.valid(process.version), '8.2.0')) {
+  const cls = require('../src/platform/node/context/cls_hooked')
+
+  suite
+    .add('clsHooked#run (Node)', {
+      fn () {
+        cls.run(() => {})
+      }
+    })
+    .add('clsHooked#bind (Node)', {
+      fn () {
+        cls.bind(() => {})
+      }
+    })
+    .add('clsHooked#bindEmitter (Node)', {
+      onStart () {
+        emitter = new EventEmitter()
+      },
+      fn () {
+        cls.bindEmitter(emitter)
+      }
+    })
+}
+
+suite
   .on('cycle', event => {
     console.log(String(event.target)) // eslint-disable-line no-console
   })

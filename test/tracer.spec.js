@@ -1,15 +1,18 @@
 'use strict'
 
 const Span = require('../src/opentracing/span')
+const Config = require('../src/config')
 const platform = require('../src/platform')
 
 describe('Tracer', () => {
   let Tracer
   let tracer
   let context
+  let config
 
   beforeEach(() => {
-    context = platform.context()
+    config = new Config({ service: 'service' })
+    context = platform.context(config)
     sinon.stub(context, 'bind')
     sinon.stub(context, 'bindEmitter')
 
@@ -23,7 +26,7 @@ describe('Tracer', () => {
 
   describe('trace', () => {
     it('should run the callback with the new span', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         expect(current).to.be.instanceof(Span)
@@ -32,7 +35,7 @@ describe('Tracer', () => {
     })
 
     it('should use the parent context', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('parent', parent => {
         tracer.trace('child', child => {
@@ -43,7 +46,7 @@ describe('Tracer', () => {
     })
 
     it('should set default tags', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         expect(current._tags).to.have.property('service.name', 'service')
@@ -53,7 +56,7 @@ describe('Tracer', () => {
     })
 
     it('should support service option', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', { service: 'test' }, current => {
         expect(current._tags).to.have.property('service.name', 'test')
@@ -62,7 +65,7 @@ describe('Tracer', () => {
     })
 
     it('should support resource option', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', { resource: 'test' }, current => {
         expect(current._tags).to.have.property('resource.name', 'test')
@@ -71,7 +74,7 @@ describe('Tracer', () => {
     })
 
     it('should support type option', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', { type: 'test' }, current => {
         expect(current._tags).to.have.property('span.type', 'test')
@@ -84,7 +87,7 @@ describe('Tracer', () => {
         'foo': 'bar'
       }
 
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', { tags }, current => {
         expect(current._tags).to.have.property('foo', 'bar')
@@ -95,7 +98,7 @@ describe('Tracer', () => {
 
   describe('currentSpan', () => {
     it('should return the current span', done => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         expect(tracer.currentSpan()).to.equal(current)
@@ -108,7 +111,7 @@ describe('Tracer', () => {
     it('should bind a function to the context', done => {
       const callback = () => {}
 
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         tracer.bind(callback)
@@ -122,7 +125,7 @@ describe('Tracer', () => {
     it('should bind an emitter to the context', done => {
       const emitter = 'emitter'
 
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         tracer.bindEmitter(emitter)

@@ -7,7 +7,7 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
-    this._context = platform.context()
+    this._context = platform.context(config)
   }
 
   trace (name, options, callback) {
