@@ -1,6 +1,79 @@
 # dd-trace-js
 Experimental JavaScript tracer (APM)
 
+## Installation
+
+### NodeJS
+
+```sh
+npm install --save @datadog/trace
+```
+
+*Node >= 4 is required.*
+
+## Usage
+
+### Example
+
+```js
+const tracer = require('@datadog/trace').init({
+  service: 'example'
+})
+
+const express = require('express')
+const app = express()
+
+app.get('/hello/:name', (req, res) => {
+  const options = {
+    resource: '/hello/:name',
+    type: 'web',
+    tags: {
+      'span.kind': 'server',
+      'http.method': 'GET',
+      'http.url': req.url,
+      'http.status_code': '200'
+    }
+  }
+
+  tracer.trace('say_hello', options, span => {
+    res.send(`Hello, ${req.params.name}!`)
+    span.finish()
+  })
+})
+
+app.listen(3000)
+```
+
+### Available Options
+
+Options can be configured as a parameter to the `init()` method
+or as environment variables.
+
+| Config        | Environment Variable         | Default   | Description |
+| ------------- | ---------------------------- | --------- | ----------- |
+| debug         | DATADOG_TRACE_DEBUG          | false     | Enable debug logging in the tracer. |
+| service       | DATADOG_SERVICE_NAME         |           | The service name to be used for this program. |
+| hostname      | DATADOG_TRACE_AGENT_HOSTNAME | localhost | The address of the trace agent that the tracer will submit to. |
+| port          | DATADOG_TRACE_AGENT_PORT     | 8126      | The port of the trace agent that the tracer will submit to. |
+| flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
+
+### OpenTracing
+
+This library is OpenTracing compliant, so once the tracer is initialized
+it can be used as a global tracer.
+
+```js
+const tracer = require('@datadog/trace').init()
+const opentracing = require('opentracing')
+
+opentracing.initGlobalTracer(tracer)
+```
+
+Then the tracer will be available with `opentracing.globalTracer()`.
+
+See the OpenTracing JavaScript [documentation](https://github.com/opentracing/opentracing-javascript)
+and [API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) for more details.
+
 ## Development
 
 ### Requirements
