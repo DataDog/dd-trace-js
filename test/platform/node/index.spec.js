@@ -50,6 +50,23 @@ describe('Platform', () => {
       })
     })
 
+    describe('env', () => {
+      let env
+
+      beforeEach(() => {
+        process.env.FOO = 'bar'
+        env = require('../../../src/platform/node/env')
+      })
+
+      afterEach(() => {
+        delete process.env.FOO
+      })
+
+      it('should return the value from the environment variables', () => {
+        expect(env('FOO')).to.equal('bar')
+      })
+    })
+
     describe('request', () => {
       let request
       let log
