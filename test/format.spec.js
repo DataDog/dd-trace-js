@@ -37,17 +37,16 @@ describe('format', () => {
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
-      expect(trace).to.deep.equal({
-        trace_id: span.context().traceId,
-        span_id: span.context().spanId,
-        parent_id: span.context().parentId,
-        name: span._operationName,
-        service: span.tracer()._service,
-        meta: {},
-        error: 0,
-        start: Math.round(span._startTime * 1e6),
-        duration: Math.round(span._duration * 1e6)
-      })
+      expect(trace.trace_id).to.equal(span.context().traceId)
+      expect(trace.span_id).to.equal(span.context().spanId)
+      expect(trace.parent_id).to.equal(span.context().parentId)
+      expect(trace.name).to.equal(span._operationName)
+      expect(trace.service).to.equal(span.tracer()._service)
+      expect(trace.error).to.equal(0)
+      expect(trace.start).to.be.instanceof(Uint64BE)
+      expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
+      expect(trace.duration).to.be.instanceof(Uint64BE)
+      expect(trace.duration.toNumber()).to.equal(span._duration * 1e6)
     })
 
     it('should extract Datadog specific tags', () => {

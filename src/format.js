@@ -1,5 +1,7 @@
 'use strict'
 
+const Uint64BE = require('int64-buffer').Uint64BE
+
 const map = {
   'service.name': 'service',
   'span.type': 'type',
@@ -27,8 +29,8 @@ function formatSpan (span) {
     service: tracer._service,
     error: 0,
     meta: {},
-    start: Math.round(span._startTime * 1e6),
-    duration: Math.round(span._duration * 1e6)
+    start: new Uint64BE(Math.round(span._startTime * 1e6)),
+    duration: new Uint64BE(Math.round(span._duration * 1e6))
   }
 }
 
