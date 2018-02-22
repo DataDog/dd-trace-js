@@ -23,7 +23,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.hostname', 'localhost')
     expect(config).to.have.nested.property('url.port', '8126')
     expect(config).to.have.property('flushInterval', 2000)
-    expect(config).to.have.property('bufferSize', 1000)
+    expect(config).to.have.property('bufferSize', 100000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.deep.property('tags', {})
   })
