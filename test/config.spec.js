@@ -4,12 +4,12 @@ describe('Config', () => {
   let Config
 
   beforeEach(() => {
-    delete process.env.DATADOG_TRACE_AGENT_HOSTNAME
-    delete process.env.DATADOG_TRACE_AGENT_PORT
-    delete process.env.DATADOG_TRACE_ENABLED
-    delete process.env.DATADOG_TRACE_DEBUG
-    delete process.env.DATADOG_SERVICE_NAME
-    delete process.env.DATADOG_ENV
+    delete process.env.DD_TRACE_AGENT_HOSTNAME
+    delete process.env.DD_TRACE_AGENT_PORT
+    delete process.env.DD_TRACE_ENABLED
+    delete process.env.DD_TRACE_DEBUG
+    delete process.env.DD_SERVICE_NAME
+    delete process.env.DD_ENV
 
     Config = require('../src/config')
   })
@@ -29,12 +29,12 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DATADOG_TRACE_AGENT_HOSTNAME = 'agent'
-    process.env.DATADOG_TRACE_AGENT_PORT = '6218'
-    process.env.DATADOG_TRACE_ENABLED = 'false'
-    process.env.DATADOG_TRACE_DEBUG = 'true'
-    process.env.DATADOG_SERVICE_NAME = 'service'
-    process.env.DATADOG_ENV = 'test'
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
+    process.env.DD_TRACE_AGENT_PORT = '6218'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_SERVICE_NAME = 'service'
+    process.env.DD_ENV = 'test'
 
     const config = new Config()
 
@@ -71,12 +71,12 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
-    process.env.DATADOG_TRACE_AGENT_HOSTNAME = 'agent'
-    process.env.DATADOG_TRACE_AGENT_PORT = '6218'
-    process.env.DATADOG_TRACE_ENABLED = 'false'
-    process.env.DATADOG_TRACE_DEBUG = 'true'
-    process.env.DATADOG_SERVICE_NAME = 'service'
-    process.env.DATADOG_ENV = 'test'
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
+    process.env.DD_TRACE_AGENT_PORT = '6218'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_SERVICE_NAME = 'service'
+    process.env.DD_ENV = 'test'
 
     const config = new Config({
       enabled: true,

@@ -51,10 +51,10 @@ or as environment variables.
 
 | Config        | Environment Variable         | Default   | Description |
 | ------------- | ---------------------------- | --------- | ----------- |
-| debug         | DATADOG_TRACE_DEBUG          | false     | Enable debug logging in the tracer. |
-| service       | DATADOG_SERVICE_NAME         |           | The service name to be used for this program. |
-| hostname      | DATADOG_TRACE_AGENT_HOSTNAME | localhost | The address of the trace agent that the tracer will submit to. |
-| port          | DATADOG_TRACE_AGENT_PORT     | 8126      | The port of the trace agent that the tracer will submit to. |
+| debug         | DD_TRACE_DEBUG               | false     | Enable debug logging in the tracer. |
+| service       | DD_SERVICE_NAME              |           | The service name to be used for this program. |
+| hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |
+| port          | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 
 ### OpenTracing
