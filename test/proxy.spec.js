@@ -7,6 +7,8 @@ describe('TracerProxy', () => {
   let tracer
   let NoopTracer
   let noop
+  let Config
+  let config
 
   beforeEach(() => {
     tracer = {
@@ -26,9 +28,13 @@ describe('TracerProxy', () => {
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
 
+    config = {}
+    Config = sinon.stub().returns(config)
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
-      './noop': NoopTracer
+      './noop': NoopTracer,
+      './config': Config
     })
 
     proxy = new Proxy()
@@ -40,11 +46,12 @@ describe('TracerProxy', () => {
         expect(proxy.init()).to.equal(proxy)
       })
 
-      it('should initialize an instance of DatadogTracer', () => {
-        const config = {}
+      it('should initialize and configure an instance of DatadogTracer', () => {
+        const options = {}
 
-        proxy.init(config)
+        proxy.init(options)
 
+        expect(Config).to.have.been.calledWith(options)
         expect(DatadogTracer).to.have.been.calledWith(config)
       })
 

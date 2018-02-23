@@ -1,7 +1,6 @@
 'use strict'
 
 const opentracing = require('opentracing')
-const url = require('url')
 const Tracer = opentracing.Tracer
 const Span = require('./span')
 const Recorder = require('../recorder')
@@ -17,16 +16,8 @@ class DatadogTracer extends Tracer {
 
     log.use(config.logger)
 
-    const service = config.service
-    const hostname = config.hostname || 'localhost'
-    const port = config.port || 8126
-    const protocol = config.protocol || 'http'
-    const agentUrl = url.parse(`${protocol}://${hostname}:${port}`)
-    const flushInterval = config.flushInterval || 2000
-    const bufferSize = config.bufferSize || 1000
-
-    this._service = service
-    this._recorder = new Recorder(agentUrl, flushInterval, bufferSize)
+    this._service = config.service
+    this._recorder = new Recorder(config.url, config.flushInterval, config.bufferSize)
     this._recorder.init()
     this._sampler = new Sampler(1)
     this._propagators = {

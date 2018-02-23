@@ -10,6 +10,7 @@ const node = require('../src/platform/node')
 
 platform.use(node)
 
+const Config = require('../src/config')
 const DatadogTracer = require('../src/tracer')
 const DatadogSpanContext = require('../src/opentracing/span_context')
 const TextMapPropagator = require('../src/opentracing/propagation/text_map')
@@ -19,6 +20,7 @@ const Writer = proxyquire('../src/writer', {
 const Sampler = require('../src/sampler')
 const format = require('../src/format')
 const encode = require('../src/encode')
+const config = new Config({ service: 'benchmark' })
 
 Benchmark.options.maxTime = 0
 Benchmark.options.minSamples = 5
@@ -42,7 +44,7 @@ const spanStub = require('./stubs/span')
 suite
   .add('DatadogTracer#trace', {
     onStart () {
-      tracer = new DatadogTracer({ service: 'benchmark' })
+      tracer = new DatadogTracer(config)
     },
     fn () {
       tracer.trace('bench', () => {})
@@ -50,7 +52,7 @@ suite
   })
   .add('DatadogTracer#startSpan', {
     onStart () {
-      tracer = new DatadogTracer({ service: 'benchmark' })
+      tracer = new DatadogTracer(config)
     },
     fn () {
       tracer.startSpan()
