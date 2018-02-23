@@ -141,17 +141,19 @@ suite
       data = Buffer.alloc(1000000)
     },
     fn () {
-      platform.request({
-        protocol: 'http:',
-        hostname: 'test',
-        port: '8080',
-        path: '/v0.3/traces',
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/msgpack'
-        },
-        data
-      })
+      platform
+        .request({
+          protocol: 'http:',
+          hostname: 'test',
+          port: '8080',
+          path: '/v0.3/traces',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/msgpack'
+          },
+          data
+        })
+        .catch(() => {})
     }
   })
   .add('cls#run (Node)', {

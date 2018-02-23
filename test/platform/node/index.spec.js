@@ -72,12 +72,19 @@ describe('Platform', () => {
       let log
 
       beforeEach(() => {
+        nock.disableNetConnect()
+
         log = {
           error: sinon.spy()
         }
         request = proxyquire('../src/platform/node/request', {
           '../../log': log
         })
+      })
+
+      afterEach(() => {
+        nock.cleanAll()
+        nock.enableNetConnect()
       })
 
       it('should send an http request with a buffer', () => {
