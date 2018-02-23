@@ -6,7 +6,7 @@ Experimental JavaScript tracer (APM)
 ### NodeJS
 
 ```sh
-npm install --save @datadog/trace
+npm install --save dd-trace
 ```
 
 *Node >= 4 is required.*
@@ -16,7 +16,7 @@ npm install --save @datadog/trace
 ### Example
 
 ```js
-const tracer = require('@datadog/trace').init({
+const tracer = require('dd-trace').init({
   service: 'example'
 })
 
@@ -63,7 +63,7 @@ This library is OpenTracing compliant, so once the tracer is initialized
 it can be used as a global tracer.
 
 ```js
-const tracer = require('@datadog/trace').init()
+const tracer = require('dd-trace').init()
 const opentracing = require('opentracing')
 
 opentracing.initGlobalTracer(tracer)
