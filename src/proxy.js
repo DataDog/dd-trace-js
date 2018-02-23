@@ -3,13 +3,15 @@
 const Tracer = require('opentracing').Tracer
 const NoopTracer = require('./noop')
 const DatadogTracer = require('./tracer')
+const Config = require('./config')
 
 const noop = new NoopTracer()
 let tracer = noop
 
 class TracerProxy extends Tracer {
-  init (config) {
+  init (options) {
     if (tracer === noop) {
+      const config = new Config(options)
       tracer = new DatadogTracer(config)
     }
 
