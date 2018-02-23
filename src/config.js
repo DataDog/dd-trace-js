@@ -21,7 +21,7 @@ class Config {
     this.url = new URL(`${protocol}://${hostname}:${port}`)
     this.tags = coalesce(options.tags, {})
     this.flushInterval = 2000
-    this.bufferSize = 1000
+    this.bufferSize = 100000
     this.sampleRate = 1
     this.logger = options.logger
   }
