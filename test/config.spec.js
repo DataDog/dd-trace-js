@@ -4,6 +4,10 @@ describe('Config', () => {
   let Config
 
   beforeEach(() => {
+    Config = require('../src/config')
+  })
+
+  afterEach(() => {
     delete process.env.DD_TRACE_AGENT_HOSTNAME
     delete process.env.DD_TRACE_AGENT_PORT
     delete process.env.DD_TRACE_ENABLED
@@ -57,7 +61,8 @@ describe('Config', () => {
       service: 'service',
       env: 'test',
       logger,
-      tags
+      tags,
+      flushInterval: 5000
     })
 
     expect(config).to.have.property('enabled', false)
@@ -68,6 +73,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('logger', logger)
     expect(config).to.have.deep.property('tags', tags)
+    expect(config).to.have.deep.property('flushInterval', 5000)
   })
 
   it('should give priority to the options', () => {

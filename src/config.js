@@ -20,7 +20,7 @@ class Config {
     this.env = coalesce(options.env, platform.env('DD_ENV'))
     this.url = new URL(`${protocol}://${hostname}:${port}`)
     this.tags = coalesce(options.tags, {})
-    this.flushInterval = 2000
+    this.flushInterval = coalesce(options.flushInterval, 2000)
     this.bufferSize = 100000
     this.sampleRate = 1
     this.logger = options.logger
