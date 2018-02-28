@@ -1,7 +1,7 @@
 {
   "name": "dd-trace",
   "version": "0.0.0",
-  "description": "Experimental JavaScript tracer (APM)",
+  "description": "Datadog APM tracing client for JavaScript (experimental)",
   "main": "index.js",
   "scripts": {
     "bench": "node benchmark",
@@ -16,6 +16,7 @@
   "keywords": [
     "datadog",
     "trace",
+    "tracing",
     "opentracing",
     "apm"
   ],
