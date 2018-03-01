@@ -56,6 +56,7 @@ or as environment variables.
 | hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |
 | port          | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
+| experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Available experimental features: `asyncHooks`.
 
 ### OpenTracing
 
