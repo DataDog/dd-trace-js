@@ -33,6 +33,18 @@ class TracerProxy extends Tracer {
   extract () {
     return tracer.extract.apply(tracer, arguments)
   }
+
+  currentSpan () {
+    return tracer.currentSpan.apply(tracer, arguments)
+  }
+
+  bind () {
+    return tracer.bind.apply(tracer, arguments)
+  }
+
+  bindEmitter () {
+    return tracer.bindEmitter.apply(tracer, arguments)
+  }
 }
 
 module.exports = TracerProxy
