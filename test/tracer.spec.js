@@ -102,6 +102,12 @@ describe('Tracer', () => {
         done()
       })
     })
+
+    it('should return null when there is no current span', () => {
+      tracer = new Tracer({ service: 'service' })
+
+      expect(tracer.currentSpan()).to.be.null
+    })
   })
 
   describe('bind', () => {

@@ -32,7 +32,7 @@ class DatadogTracer extends Tracer {
   }
 
   currentSpan () {
-    return this._context.get('current')
+    return this._context.get('current') || null
   }
 
   bind (callback) {
