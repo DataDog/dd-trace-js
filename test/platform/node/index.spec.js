@@ -2,6 +2,7 @@
 
 const EventEmitter = require('events')
 const Buffer = require('safe-buffer').Buffer
+const semver = require('semver')
 
 describe('Platform', () => {
   describe('Node', () => {
@@ -226,26 +227,44 @@ describe('Platform', () => {
       let context
       let namespace
       let cls
-      let clsHooked
 
       beforeEach(() => {
         context = require('../../../src/platform/node/context')
-        cls = require('../../../src/platform/node/context/cls')
-        clsHooked = require('../../../src/platform/node/context/cls_hooked')
       })
 
-      afterEach(() => {
-        delete require.cache[require.resolve('../../../src/platform/node/context/cls')]
-        delete require.cache[require.resolve('../../../src/platform/node/context/cls_hooked')]
+      describe('continuation-local-storage', () => {
+        beforeEach(() => {
+          cls = require('../../../src/platform/node/context/cls')
+        })
+
+        afterEach(() => {
+          delete require.cache[require.resolve('../../../src/platform/node/context/cls')]
+        })
+
+        it('should use the correct implementation from the experimental flag', () => {
+          expect(context({ experimental: { asyncHooks: false } })).to.equal(cls)
+        })
+
+        testContext({ experimental: { asyncHooks: false } })
       })
 
-      it('should use the correct implementation from the experimental flag', () => {
-        expect(context({ experimental: { asyncHooks: false } })).to.equal(cls)
-        expect(context({ experimental: { asyncHooks: true } })).to.equal(clsHooked)
-      })
+      if (semver.gte(semver.valid(process.version), '8.2.0')) {
+        beforeEach(() => {
+          cls = require('../../../src/platform/node/context/cls_hooked')
+        })
 
-      testContext({ experimental: { asyncHooks: false } })
-      testContext({ experimental: { asyncHooks: true } })
+        afterEach(() => {
+          delete require.cache[require.resolve('../../../src/platform/node/context/cls_hooked')]
+        })
+
+        describe('cls-hooked', () => {
+          it('should use the correct implementation from the experimental flag', () => {
+            expect(context({ experimental: { asyncHooks: true } })).to.equal(cls)
+          })
+
+          testContext({ experimental: { asyncHooks: true } })
+        })
+      }
 
       function testContext (config) {
         beforeEach(() => {
