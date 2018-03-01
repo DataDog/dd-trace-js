@@ -1,6 +1,5 @@
 'use strict'
 
-const tracer = require('../')
 const express = require('express')
 const bodyParser = require('body-parser')
 const getPort = require('get-port')
@@ -9,17 +8,20 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 
 describe('dd-trace', () => {
+  let tracer
   let agent
   let listener
 
   beforeEach(() => {
+    tracer = require('../')
+
     return getPort().then(port => {
       agent = express()
-      listener = agent.listen(port, 'localhost')
+      listener = agent.listen()
 
       tracer.init({
         service: 'test',
-        port,
+        port: listener.address().port,
         flushInterval: 10
       })
     })
@@ -27,6 +29,7 @@ describe('dd-trace', () => {
 
   afterEach(() => {
     listener.close()
+    delete require.cache[require.resolve('../')]
   })
 
   it('should record and send a trace to the agent', done => {

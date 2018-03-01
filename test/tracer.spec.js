@@ -1,6 +1,7 @@
 'use strict'
 
 const Span = require('../src/opentracing/span')
+const SpanContext = require('../src/opentracing/span_context')
 const Config = require('../src/config')
 const platform = require('../src/platform')
 
@@ -91,6 +92,21 @@ describe('Tracer', () => {
 
       tracer.trace('name', { tags }, current => {
         expect(current._tags).to.have.property('foo', 'bar')
+        done()
+      })
+    })
+
+    it('should support a custom parent span', done => {
+      const childOf = new SpanContext({
+        traceId: 1234,
+        spanId: 5678
+      })
+
+      tracer = new Tracer(config)
+
+      tracer.trace('name', { childOf }, current => {
+        expect(current.context().traceId).to.equal(childOf.traceId)
+        expect(current.context().parentId).to.equal(childOf.spanId)
         done()
       })
     })
