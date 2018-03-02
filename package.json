@@ -37,6 +37,7 @@
     "msgpack-lite": "^0.1.26",
     "opentracing": "^0.14.1",
     "performance-now": "^2.1.0",
+    "require-dir": "^1.0.0",
     "safe-buffer": "^5.1.1",
     "url-parse": "^1.2.0"
   },
