@@ -12,10 +12,29 @@ describe('NoopTracer', () => {
   })
 
   describe('trace', () => {
-    it('should return a noop span', () => {
-      const span = tracer.trace()
+    it('should return a noop span', done => {
+      tracer.trace('test', {}, span => {
+        expect(span).to.be.instanceof(Span)
+        done()
+      })
+    })
+  })
 
-      expect(span).to.be.instanceof(Span)
+  describe('currentSpan', () => {
+    it('should return null', () => {
+      expect(tracer.currentSpan()).to.be.null
+    })
+  })
+
+  describe('bind', () => {
+    it('should be a noop', () => {
+      expect(tracer.bind).to.not.throw()
+    })
+  })
+
+  describe('bindEmitter', () => {
+    it('should be a noop', () => {
+      expect(tracer.bindEmitter).to.not.throw()
     })
   })
 })
