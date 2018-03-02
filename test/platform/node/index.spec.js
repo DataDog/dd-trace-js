@@ -2,6 +2,7 @@
 
 const EventEmitter = require('events')
 const Buffer = require('safe-buffer').Buffer
+const semver = require('semver')
 
 describe('Platform', () => {
   describe('Node', () => {
@@ -224,87 +225,129 @@ describe('Platform', () => {
 
     describe('context', () => {
       let context
+      let namespace
+      let cls
 
       beforeEach(() => {
-        context = require('../../../src/platform/node/context')()
+        context = require('../../../src/platform/node/context')
       })
 
-      describe('get/set', () => {
-        it('should store a value', done => {
-          context.run(() => {
-            context.set('foo', 'bar')
-            test()
+      describe('continuation-local-storage', () => {
+        beforeEach(() => {
+          cls = require('../../../src/platform/node/context/cls')
+        })
+
+        afterEach(() => {
+          delete require.cache[require.resolve('../../../src/platform/node/context/cls')]
+        })
+
+        it('should use the correct implementation from the experimental flag', () => {
+          expect(context({ experimental: { asyncHooks: false } })).to.equal(cls)
+        })
+
+        testContext({ experimental: { asyncHooks: false } })
+      })
+
+      if (semver.gte(semver.valid(process.version), '8.2.0')) {
+        beforeEach(() => {
+          cls = require('../../../src/platform/node/context/cls_hooked')
+        })
+
+        afterEach(() => {
+          delete require.cache[require.resolve('../../../src/platform/node/context/cls_hooked')]
+        })
+
+        describe('cls-hooked', () => {
+          it('should use the correct implementation from the experimental flag', () => {
+            expect(context({ experimental: { asyncHooks: true } })).to.equal(cls)
           })
 
-          function test () {
-            context.run(span => {
-              expect(context.get('foo')).to.equal('bar')
-              done()
-            })
-          }
+          testContext({ experimental: { asyncHooks: true } })
         })
-      })
+      }
 
-      describe('run', () => {
-        it('should not overwrite the parent context', done => {
-          const parentValue = 'parent'
-          const childValue = 'child'
+      function testContext (config) {
+        beforeEach(() => {
+          namespace = context(config)
+        })
 
-          context.run(() => {
-            context.set('foo', parentValue)
+        describe('get/set', () => {
+          it('should store a value', done => {
+            namespace.run(() => {
+              namespace.set('foo', 'bar')
+              test()
+            })
+
+            function test () {
+              namespace.run(() => {
+                expect(namespace.get('foo')).to.equal('bar')
+                done()
+              })
+            }
+          })
+        })
+
+        describe('run', () => {
+          it('should not overwrite the parent context', done => {
+            const parentValue = 'parent'
+            const childValue = 'child'
+
+            namespace.run(() => {
+              namespace.set('foo', parentValue)
+
+              setImmediate(() => test())
+
+              namespace.run(() => {
+                namespace.set('foo', childValue)
+              })
+            })
+
+            function test () {
+              namespace.run(() => {
+                expect(namespace.get('foo')).to.equal('parent')
+                done()
+              })
+            }
+          })
+        })
+
+        describe('bind', () => {
+          it('should bind a function to the context', done => {
+            const bar = 'bar'
+
+            let test = () => {
+              expect(namespace.get('foo')).to.equal(bar)
+              done()
+            }
+
+            namespace.run(() => {
+              test = namespace.bind(test)
+              namespace.set('foo', bar)
+            })
 
             setImmediate(() => test())
+          })
+        })
 
-            context.run(() => {
-              context.set('foo', childValue)
+        describe('bindEmitter', () => {
+          it('should bind an event emitter to the context', () => {
+            const bar = {}
+            const spy = sinon.spy()
+            const emitter = new EventEmitter()
+
+            namespace.run(() => {
+              namespace.bindEmitter(emitter)
+              namespace.set('foo', bar)
+
+              emitter.on('test', () => spy(namespace.get('foo')))
             })
+
+            emitter.emit('test')
+
+            expect(spy).to.have.been.calledWith(bar)
           })
-
-          function test () {
-            context.run(() => {
-              expect(context.get('foo')).to.equal('parent')
-              done()
-            })
-          }
         })
-      })
-
-      describe('bind', () => {
-        it('should bind a function to the context', done => {
-          const bar = 'bar'
-
-          let test = () => {
-            expect(context.get('foo')).to.equal(bar)
-            done()
-          }
-
-          context.run(() => {
-            test = context.bind(test)
-            context.set('foo', bar)
-          })
-
-          test()
-        })
-      })
-
-      describe('bindEmitter', () => {
-        it('should bind an event emitter to the context', () => {
-          const bar = {}
-          const spy = sinon.spy()
-          const emitter = new EventEmitter()
-
-          context.run(() => {
-            context.bindEmitter(emitter)
-            context.set('foo', bar)
-
-            emitter.on('test', () => spy(context.get('foo')))
-          })
-
-          emitter.emit('test')
-
-          expect(spy).to.have.been.calledWith(bar)
-        })
-      })
+      }
     })
   })
 })

@@ -24,7 +24,14 @@ class Config {
     this.bufferSize = 100000
     this.sampleRate = 1
     this.logger = options.logger
+    this.experimental = {
+      asyncHooks: isFlagEnabled(options.experimental, 'asyncHooks')
+    }
   }
+}
+
+function isFlagEnabled (obj, prop) {
+  return obj === true || (typeof obj === 'object' && obj !== null && obj[prop])
 }
 
 module.exports = Config

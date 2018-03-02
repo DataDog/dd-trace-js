@@ -100,4 +100,26 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })
+
+  it('should support global experimental flag', () => {
+    const config = new Config({
+      experimental: true
+    })
+
+    expect(config).to.have.deep.property('experimental', {
+      asyncHooks: true
+    })
+  })
+
+  it('should support experimental asyncHooks flag', () => {
+    const config = new Config({
+      experimental: {
+        asyncHooks: true
+      }
+    })
+
+    expect(config).to.have.deep.property('experimental', {
+      asyncHooks: true
+    })
+  })
 })
