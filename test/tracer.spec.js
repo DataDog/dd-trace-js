@@ -107,7 +107,7 @@ describe('Tracer', () => {
     })
 
     it('should return null when there is no current span', () => {
-      tracer = new Tracer({ service: 'service' })
+      tracer = new Tracer(config)
 
       expect(tracer.currentSpan()).to.be.null
     })
