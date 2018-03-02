@@ -24,6 +24,7 @@ class Config {
     this.bufferSize = 100000
     this.sampleRate = 1
     this.logger = options.logger
+    this.plugins = coalesce(options.plugins, true)
     this.experimental = {
       asyncHooks: isFlagEnabled(options.experimental, 'asyncHooks')
     }
