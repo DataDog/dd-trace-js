@@ -15,14 +15,20 @@ describe('TracerProxy', () => {
       trace: sinon.stub().returns('span'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
-      extract: sinon.stub().returns('spanContext')
+      extract: sinon.stub().returns('spanContext'),
+      currentSpan: sinon.stub().returns('current'),
+      bind: sinon.stub().returns('callback'),
+      bindEmitter: sinon.stub()
     }
 
     noop = {
       trace: sinon.stub().returns('span'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
-      extract: sinon.stub().returns('spanContext')
+      extract: sinon.stub().returns('spanContext'),
+      currentSpan: sinon.stub().returns('current'),
+      bind: sinon.stub().returns('callback'),
+      bindEmitter: sinon.stub()
     }
 
     DatadogTracer = sinon.stub().returns(tracer)
@@ -98,6 +104,32 @@ describe('TracerProxy', () => {
         expect(returnValue).to.equal('spanContext')
       })
     })
+
+    describe('currentSpan', () => {
+      it('should call the underlying NoopTracer', () => {
+        const returnValue = proxy.currentSpan('a', 'b', 'c')
+
+        expect(noop.currentSpan).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('current')
+      })
+    })
+
+    describe('bind', () => {
+      it('should call the underlying NoopTracer', () => {
+        const returnValue = proxy.bind('a', 'b', 'c')
+
+        expect(noop.bind).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('callback')
+      })
+    })
+
+    describe('bindEmitter', () => {
+      it('should call the underlying NoopTracer', () => {
+        proxy.bindEmitter('a', 'b', 'c')
+
+        expect(noop.bindEmitter).to.have.been.calledWith('a', 'b', 'c')
+      })
+    })
   })
 
   describe('initialized', () => {
@@ -138,6 +170,32 @@ describe('TracerProxy', () => {
 
         expect(tracer.extract).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('spanContext')
+      })
+    })
+
+    describe('currentSpan', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.currentSpan('a', 'b', 'c')
+
+        expect(tracer.currentSpan).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('current')
+      })
+    })
+
+    describe('bind', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.bind('a', 'b', 'c')
+
+        expect(tracer.bind).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('callback')
+      })
+    })
+
+    describe('bindEmitter', () => {
+      it('should call the underlying DatadogTracer', () => {
+        proxy.bindEmitter('a', 'b', 'c')
+
+        expect(tracer.bindEmitter).to.have.been.calledWith('a', 'b', 'c')
       })
     })
   })
