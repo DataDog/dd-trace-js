@@ -95,6 +95,14 @@ $ npm install
 
 ### Testing
 
+Before running the tests, the data stores need to be running.
+The easiest way to start all of them is to use the provided
+docker-compose configuration:
+
+```sh
+$ docker-compose up -d
+```
+
 To run the unit tests, use:
 
 ```sh
