@@ -232,6 +232,12 @@ describe('Platform', () => {
         context = require('../../../src/platform/node/context')
       })
 
+      afterEach(() => {
+        delete require.cache[require.resolve('../../../src/platform/node/context')]
+        delete require.cache[require.resolve('bluebird')]
+        delete require.cache[require.resolve('cls-bluebird')]
+      })
+
       describe('continuation-local-storage', () => {
         beforeEach(() => {
           cls = require('../../../src/platform/node/context/cls')
@@ -345,6 +351,23 @@ describe('Platform', () => {
             emitter.emit('test')
 
             expect(spy).to.have.been.calledWith(bar)
+          })
+        })
+
+        it('should support bluebird', done => {
+          const Promise = require('bluebird')
+          const promise = new Promise((resolve, reject) => {
+            setTimeout(resolve)
+          })
+
+          namespace.run(() => {
+            namespace.set('foo', 'bar')
+            promise
+              .then(() => {
+                expect(namespace.get('foo')).to.equal('bar')
+                done()
+              })
+              .catch(done)
           })
         })
       }
