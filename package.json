@@ -30,6 +30,7 @@
     "node": ">=4"
   },
   "dependencies": {
+    "cls-bluebird": "^2.1.0",
     "cls-hooked": "^4.2.2",
     "continuation-local-storage": "^3.2.1",
     "int64-buffer": "^0.1.9",
@@ -37,11 +38,13 @@
     "msgpack-lite": "^0.1.26",
     "opentracing": "^0.14.1",
     "performance-now": "^2.1.0",
+    "require-dir": "^1.0.0",
     "safe-buffer": "^5.1.1",
     "url-parse": "^1.2.0"
   },
   "devDependencies": {
     "benchmark": "^2.1.4",
+    "bluebird": "^3.5.1",
     "body-parser": "^1.18.2",
     "chai": "^4.1.2",
     "eslint": "^4.15.0",

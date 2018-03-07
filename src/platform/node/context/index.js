@@ -1,9 +1,17 @@
 'use strict'
 
+const clsBluebird = require('cls-bluebird')
+
 module.exports = config => {
+  let namespace
+
   if (config.experimental.asyncHooks) {
-    return require('./cls_hooked')
+    namespace = require('./cls_hooked')
   } else {
-    return require('./cls')
+    namespace = require('./cls')
   }
+
+  clsBluebird(namespace)
+
+  return namespace
 }
