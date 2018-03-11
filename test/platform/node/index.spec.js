@@ -227,54 +227,54 @@ describe('Platform', () => {
       let context
       let namespace
       let cls
+      let clsBluebird
+      let config
 
       beforeEach(() => {
+        clsBluebird = sinon.spy(require('cls-bluebird'))
+        require.cache[require.resolve('cls-bluebird')].exports = clsBluebird
         context = require('../../../src/platform/node/context')
       })
 
       afterEach(() => {
-        delete require.cache[require.resolve('../../../src/platform/node/context')]
+        cls.destroyNamespace('dd-trace')
         delete require.cache[require.resolve('bluebird')]
         delete require.cache[require.resolve('cls-bluebird')]
       })
 
       describe('continuation-local-storage', () => {
         beforeEach(() => {
-          cls = require('../../../src/platform/node/context/cls')
+          cls = require('continuation-local-storage')
+          config = { experimental: { asyncHooks: false } }
+          namespace = context(config)
         })
 
         afterEach(() => {
           delete require.cache[require.resolve('../../../src/platform/node/context/cls')]
         })
 
-        it('should use the correct implementation from the experimental flag', () => {
-          expect(context({ experimental: { asyncHooks: false } })).to.equal(cls)
-        })
-
-        testContext({ experimental: { asyncHooks: false } })
+        testContext('../../../src/platform/node/context/cls')
       })
 
       if (semver.gte(semver.valid(process.version), '8.2.0')) {
-        beforeEach(() => {
-          cls = require('../../../src/platform/node/context/cls_hooked')
-        })
-
-        afterEach(() => {
-          delete require.cache[require.resolve('../../../src/platform/node/context/cls_hooked')]
-        })
-
         describe('cls-hooked', () => {
-          it('should use the correct implementation from the experimental flag', () => {
-            expect(context({ experimental: { asyncHooks: true } })).to.equal(cls)
+          beforeEach(() => {
+            cls = require('cls-hooked')
+            config = { experimental: { asyncHooks: true } }
+            namespace = context(config)
           })
 
-          testContext({ experimental: { asyncHooks: true } })
+          testContext('../../../src/platform/node/context/cls_hooked')
         })
       }
 
-      function testContext (config) {
-        beforeEach(() => {
-          namespace = context(config)
+      function testContext (modulePath) {
+        afterEach(() => {
+          delete require.cache[require.resolve(modulePath)]
+        })
+
+        it('should use the correct implementation from the experimental flag', () => {
+          expect(namespace).to.equal(require(modulePath))
         })
 
         describe('get/set', () => {
@@ -369,6 +369,11 @@ describe('Platform', () => {
               })
               .catch(done)
           })
+        })
+
+        it('should only patch bluebird once', () => {
+          context(config)
+          expect(clsBluebird).to.have.been.calledOnce
         })
       }
     })

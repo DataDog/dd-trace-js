@@ -1,7 +1,5 @@
 'use strict'
 
-const clsBluebird = require('cls-bluebird')
-
 module.exports = config => {
   let namespace
 
@@ -10,8 +8,6 @@ module.exports = config => {
   } else {
     namespace = require('./cls')
   }
-
-  clsBluebird(namespace)
 
   return namespace
 }
