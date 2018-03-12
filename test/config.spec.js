@@ -30,6 +30,7 @@ describe('Config', () => {
     expect(config).to.have.property('bufferSize', 100000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.deep.property('tags', {})
+    expect(config).to.have.property('plugins', true)
   })
 
   it('should initialize from environment variables', () => {
@@ -62,7 +63,8 @@ describe('Config', () => {
       env: 'test',
       logger,
       tags,
-      flushInterval: 5000
+      flushInterval: 5000,
+      plugins: false
     })
 
     expect(config).to.have.property('enabled', false)
@@ -73,7 +75,8 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('logger', logger)
     expect(config).to.have.deep.property('tags', tags)
-    expect(config).to.have.deep.property('flushInterval', 5000)
+    expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('plugins', false)
   })
 
   it('should give priority to the options', () => {
