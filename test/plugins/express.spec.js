@@ -37,7 +37,8 @@ describe('Plugin', () => {
         tracer.init({
           service: 'test',
           port,
-          flushInterval: 10
+          flushInterval: 10,
+          plugins: false
         })
       })
     })

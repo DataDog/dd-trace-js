@@ -3,19 +3,20 @@
 const requireDir = require('require-dir')
 
 class Instrumenter {
-  constructor (config) {
+  constructor (tracer, config) {
+    this._tracer = tracer
     this._plugins = loadPlugins(config)
   }
 
-  patch (tracer) {
+  patch () {
     this._plugins.forEach(plugin => {
-      plugin.patch(require(plugin.name), tracer)
+      plugin.patch(require(plugin.name), this._tracer)
     })
   }
 
-  unpatch (tracer) {
+  unpatch () {
     this._plugins.forEach(plugin => {
-      plugin.unpatch(require(plugin.name), tracer)
+      plugin.unpatch(require(plugin.name))
     })
   }
 }

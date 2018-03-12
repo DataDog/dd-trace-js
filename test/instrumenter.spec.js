@@ -6,12 +6,13 @@ describe('Instrumenter', () => {
   let Instrumenter
   let instrumenter
   let integrations
-  let config
+  let tracer
   let requireDir
   let foo
   let bar
 
   beforeEach(() => {
+    tracer = 'tracer'
     foo = 'foo'
     bar = 'bar'
 
@@ -40,44 +41,36 @@ describe('Instrumenter', () => {
 
   describe('when enabled', () => {
     beforeEach(() => {
-      config = { plugins: true }
-      instrumenter = new Instrumenter(config)
+      instrumenter = new Instrumenter(tracer, { plugins: true })
     })
 
     describe('patch', () => {
       it('should patch all modules', () => {
-        const tracer = 'tracer'
+        instrumenter.patch()
 
-        instrumenter.patch(tracer)
-
-        expect(integrations.foo.patch).to.have.been.calledWith(foo, tracer)
-        expect(integrations.bar.patch).to.have.been.calledWith(bar, tracer)
+        expect(integrations.foo.patch).to.have.been.calledWith(foo)
+        expect(integrations.bar.patch).to.have.been.calledWith(bar)
       })
     })
 
     describe('unpatch', () => {
       it('should unpatch all modules', () => {
-        const tracer = 'tracer'
+        instrumenter.unpatch()
 
-        instrumenter.unpatch(tracer)
-
-        expect(integrations.foo.unpatch).to.have.been.calledWith(foo, tracer)
-        expect(integrations.bar.unpatch).to.have.been.calledWith(bar, tracer)
+        expect(integrations.foo.unpatch).to.have.been.calledWith(foo)
+        expect(integrations.bar.unpatch).to.have.been.calledWith(bar)
       })
     })
   })
 
   describe('when disabled', () => {
     beforeEach(() => {
-      config = { plugins: false }
-      instrumenter = new Instrumenter(config)
+      instrumenter = new Instrumenter(tracer, { plugins: false })
     })
 
     describe('patch', () => {
       it('should not patch any module', () => {
-        const tracer = 'tracer'
-
-        instrumenter.patch(tracer)
+        instrumenter.patch()
 
         expect(integrations.foo.patch).to.not.have.been.called
         expect(integrations.bar.patch).to.not.have.been.called
@@ -86,9 +79,7 @@ describe('Instrumenter', () => {
 
     describe('unpatch', () => {
       it('should not unpatch any module', () => {
-        const tracer = 'tracer'
-
-        instrumenter.unpatch(tracer)
+        instrumenter.unpatch()
 
         expect(integrations.foo.unpatch).to.not.have.been.called
         expect(integrations.bar.unpatch).to.not.have.been.called
