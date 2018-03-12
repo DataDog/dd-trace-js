@@ -6,44 +6,48 @@ const DatadogTracer = require('./tracer')
 const Config = require('./config')
 
 const noop = new NoopTracer()
-let tracer = noop
 
 class TracerProxy extends Tracer {
+  constructor () {
+    super()
+    this._tracer = noop
+  }
+
   init (options) {
-    if (tracer === noop) {
+    if (this._tracer === noop) {
       const config = new Config(options)
-      tracer = new DatadogTracer(config)
+      this._tracer = new DatadogTracer(config)
     }
 
     return this
   }
 
   trace () {
-    return tracer.trace.apply(tracer, arguments)
+    return this._tracer.trace.apply(this._tracer, arguments)
   }
 
   startSpan () {
-    return tracer.startSpan.apply(tracer, arguments)
+    return this._tracer.startSpan.apply(this._tracer, arguments)
   }
 
   inject () {
-    return tracer.inject.apply(tracer, arguments)
+    return this._tracer.inject.apply(this._tracer, arguments)
   }
 
   extract () {
-    return tracer.extract.apply(tracer, arguments)
+    return this._tracer.extract.apply(this._tracer, arguments)
   }
 
   currentSpan () {
-    return tracer.currentSpan.apply(tracer, arguments)
+    return this._tracer.currentSpan.apply(this._tracer, arguments)
   }
 
   bind () {
-    return tracer.bind.apply(tracer, arguments)
+    return this._tracer.bind.apply(this._tracer, arguments)
   }
 
   bindEmitter () {
-    return tracer.bindEmitter.apply(tracer, arguments)
+    return this._tracer.bindEmitter.apply(this._tracer, arguments)
   }
 }
 

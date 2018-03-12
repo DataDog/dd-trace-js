@@ -17,7 +17,7 @@ class DatadogTracer extends Tracer {
     }
 
     this._context.run(() => {
-      const childOf = this._context.get('current')
+      const childOf = options.childOf || this._context.get('current')
       const tags = Object.assign({
         'service.name': options.service || this._service,
         'resource.name': options.resource || name,
