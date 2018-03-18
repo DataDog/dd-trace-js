@@ -57,3 +57,16 @@ workflows:
       - build-node-6
       - build-node-8
       - build-node-latest
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - build-node-4
+      - build-node-6
+      - build-node-8
+      - build-node-latest
