@@ -80,6 +80,12 @@ and [API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) 
 
 ## Development
 
+### NOTE
+
+Due to the experimental pre-beta nature of this repository, you should reach out before starting work on
+any major code changes. This will ensure we avoid duplicating work, or that your code can't be merged due
+to a rapidly changing base. If you have any questions, let us know!
+
 ### Requirements
 
 Since this project supports multiple Node versions, using a version
