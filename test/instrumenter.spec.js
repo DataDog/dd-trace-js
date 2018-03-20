@@ -6,23 +6,21 @@ describe('Instrumenter', () => {
   let Instrumenter
   let instrumenter
   let integrations
-  let config
+  let tracer
   let requireDir
-  let foo
-  let bar
 
   beforeEach(() => {
-    foo = 'foo'
-    bar = 'bar'
+    tracer = 'tracer'
 
     integrations = {
-      foo: {
-        name: 'foo',
+      http: {
+        name: 'http',
         patch: sinon.spy(),
         unpatch: sinon.spy()
       },
-      bar: {
-        name: 'bar',
+      express: {
+        name: 'express',
+        versions: ['4.x'],
         patch: sinon.spy(),
         unpatch: sinon.spy()
       }
@@ -32,66 +30,67 @@ describe('Instrumenter', () => {
     requireDir.withArgs('./plugins').returns(integrations)
 
     Instrumenter = proxyquire('../src/instrumenter', {
-      'require-dir': requireDir,
-      'foo': foo,
-      'bar': bar
+      'require-dir': requireDir
     })
   })
 
   describe('when enabled', () => {
     beforeEach(() => {
-      config = { plugins: true }
-      instrumenter = new Instrumenter(config)
+      instrumenter = new Instrumenter(tracer, { plugins: true })
     })
 
     describe('patch', () => {
-      it('should patch all modules', () => {
-        const tracer = 'tracer'
+      it('should patch modules from node_modules when they are loaded', () => {
+        instrumenter.patch()
 
-        instrumenter.patch(tracer)
+        const express = require('express')
 
-        expect(integrations.foo.patch).to.have.been.calledWith(foo, tracer)
-        expect(integrations.bar.patch).to.have.been.calledWith(bar, tracer)
+        expect(integrations.express.patch).to.have.been.calledWith(express, tracer)
+      })
+
+      it('should only patch a module if its version is supported by the plugin ', () => {
+        integrations.express.versions = ['^3.0.0']
+        instrumenter.patch()
+
+        const express = require('express')
+
+        expect(integrations.express.patch).to.not.have.been.calledWith(express, tracer)
+      })
+
+      it('should patch native modules when they are loaded', () => {
+        instrumenter.patch()
+
+        const http = require('http')
+
+        expect(integrations.http.patch).to.have.been.calledWith(http, tracer)
       })
     })
 
     describe('unpatch', () => {
-      it('should unpatch all modules', () => {
-        const tracer = 'tracer'
+      it('should unpatch patched modules', () => {
+        instrumenter.patch()
 
-        instrumenter.unpatch(tracer)
+        const express = require('express')
 
-        expect(integrations.foo.unpatch).to.have.been.calledWith(foo, tracer)
-        expect(integrations.bar.unpatch).to.have.been.calledWith(bar, tracer)
+        instrumenter.unpatch()
+
+        expect(integrations.express.unpatch).to.have.been.calledWith(express)
       })
     })
   })
 
   describe('when disabled', () => {
     beforeEach(() => {
-      config = { plugins: false }
-      instrumenter = new Instrumenter(config)
+      instrumenter = new Instrumenter(tracer, { plugins: false })
     })
 
     describe('patch', () => {
       it('should not patch any module', () => {
-        const tracer = 'tracer'
+        instrumenter.patch()
 
-        instrumenter.patch(tracer)
+        const express = require('express')
 
-        expect(integrations.foo.patch).to.not.have.been.called
-        expect(integrations.bar.patch).to.not.have.been.called
-      })
-    })
-
-    describe('unpatch', () => {
-      it('should not unpatch any module', () => {
-        const tracer = 'tracer'
-
-        instrumenter.unpatch(tracer)
-
-        expect(integrations.foo.unpatch).to.not.have.been.called
-        expect(integrations.bar.unpatch).to.not.have.been.called
+        expect(integrations.express.patch).to.not.have.been.calledWith(express, tracer)
       })
     })
   })
