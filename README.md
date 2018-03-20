@@ -1,5 +1,8 @@
 # dd-trace-js
-Experimental JavaScript tracer (APM)
+
+**Experimental JavaScript Tracer!**
+
+This project is **experimental** and under active development. Use it at your own risk.
 
 ## Installation
 
