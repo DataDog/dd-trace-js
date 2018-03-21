@@ -1,18 +1,13 @@
 'use strict'
 
 const axios = require('axios')
-const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
+const agent = require('./agent')
 
 describe('Plugin', () => {
   let plugin
   let context
   let express
-  let tracer
-  let agent
-  let agentListener
   let appListener
 
   describe('express', () => {
@@ -20,34 +15,13 @@ describe('Plugin', () => {
       plugin = require('../../src/plugins/express')
       express = require('express')
       context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
-      tracer = require('../..')
 
-      return getPort().then(port => {
-        agent = express()
-        agent.use(bodyParser.raw({ type: 'application/msgpack' }))
-        agent.use((req, res, next) => {
-          req.body = msgpack.decode(req.body, { codec })
-          next()
-        })
-
-        agentListener = agent.listen(port, 'localhost')
-
-        plugin.patch(express, tracer)
-
-        tracer.init({
-          service: 'test',
-          port,
-          flushInterval: 10,
-          plugins: false
-        })
-      })
+      return agent.load(plugin, express)
     })
 
     afterEach(() => {
-      agentListener.close()
+      agent.close()
       appListener.close()
-      plugin.unpatch(express)
-      delete require.cache[require.resolve('../..')]
     })
 
     it('should do automatic instrumentation', done => {
@@ -58,15 +32,13 @@ describe('Plugin', () => {
       })
 
       getPort().then(port => {
-        agent.put('/v0.3/traces', (req, res) => {
-          expect(req.body[0][0]).to.have.property('type', 'web')
-          expect(req.body[0][0]).to.have.property('resource', '/user')
-          expect(req.body[0][0].meta).to.have.property('span.kind', 'server')
-          expect(req.body[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-          expect(req.body[0][0].meta).to.have.property('http.method', 'GET')
-          expect(req.body[0][0].meta).to.have.property('http.status_code', '200')
-
-          res.status(200).send('OK')
+        agent.use(traces => {
+          expect(traces[0][0]).to.have.property('type', 'web')
+          expect(traces[0][0]).to.have.property('resource', '/user')
+          expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+          expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+          expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
 
           done()
         })
@@ -87,11 +59,9 @@ describe('Plugin', () => {
       })
 
       getPort().then(port => {
-        agent.put('/v0.3/traces', (req, res) => {
-          expect(req.body[0][0]).to.have.property('resource', 'express.request')
-          expect(req.body[0][0].meta).to.have.property('http.status_code', '200')
-
-          res.status(200).send('OK')
+        agent.use(traces => {
+          expect(traces[0][0]).to.have.property('resource', 'express.request')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
 
           done()
         })
@@ -141,11 +111,9 @@ describe('Plugin', () => {
       })
 
       getPort().then(port => {
-        agent.put('/v0.3/traces', (req, res) => {
-          expect(req.body[0][0].meta).to.have.property('http.status_code', '400')
-          expect(req.body[0][0].meta).to.have.property('error', 'true')
-
-          res.status(200).send('OK')
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('http.status_code', '400')
+          expect(traces[0][0].meta).to.have.property('error', 'true')
 
           done()
         })
@@ -164,16 +132,14 @@ describe('Plugin', () => {
       const app = express()
 
       app.get('/user', (req, res) => {
-        expect(tracer.currentSpan().context().baggageItems).to.have.property('foo', 'bar')
+        expect(agent.currentSpan().context().baggageItems).to.have.property('foo', 'bar')
         res.status(200).send()
       })
 
       getPort().then(port => {
-        agent.put('/v0.3/traces', (req, res) => {
-          expect(req.body[0][0].trace_id.toString()).to.equal('1234')
-          expect(req.body[0][0].parent_id.toString()).to.equal('5678')
-
-          res.status(200).send('OK')
+        agent.use(traces => {
+          expect(traces[0][0].trace_id.toString()).to.equal('1234')
+          expect(traces[0][0].parent_id.toString()).to.equal('5678')
 
           done()
         })
