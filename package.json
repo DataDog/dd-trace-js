@@ -20,7 +20,7 @@
     "opentracing",
     "apm"
   ],
-  "author": "Datadog, Inc.",
+  "author": "Datadog Inc. <info@datadoghq.com>",
   "license": "BSD-3-Clause",
   "bugs": {
     "url": "https://github.com/DataDog/dd-trace-js/issues"

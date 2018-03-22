@@ -1,0 +1,34 @@
+Component,Origin,License,Copyright
+require,cls-bluebird,BSD-2-Clause,Copyright Tim Beyer
+require,cls-hooked,BSD-2-Clause,Copyright 2013-2016 Forrest L Norvell
+require,continuation-local-storage,BSD-2-Clause,Copyright 2013-2016 Forrest L Norvell
+require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
+require,koalas,MIT,Copyright 2013-2017 Brian Woodward
+require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
+require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
+require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
+require,performance-now,MIT,Copyright 2013 Braveg1rl
+require,require-dir,MIT,Copyright 2012-2015 Aseem Kishore
+require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
+require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
+require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+dev,axios,MIT,Copyright 2014-present Matt Zabriskie
+dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
+dev,bluebird,MIT,Copyright 2013-2018 Petka Antonov
+dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
+dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
+dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
+dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
+dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
+dev,eslint-plugin-node,MIT,Copyright 2015 Toru Nagashima
+dev,eslint-plugin-promise,ISC,jden and other contributors
+dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
+dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
+dev,get-port,MIT,Copyright Sindre Sorhus
+dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
+dev,nyc,ISC,Copyright 2015 Contributors
+dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
+dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
+dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
+dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
