@@ -80,11 +80,7 @@ and [API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) 
 
 ## Development
 
-### NOTE
-
-Due to the experimental pre-beta nature of this repository, you should reach out before starting work on
-any major code changes. This will ensure we avoid duplicating work, or that your code can't be merged due
-to a rapidly changing base. If you have any questions, let us know!
+Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
 
 ### Requirements
 
