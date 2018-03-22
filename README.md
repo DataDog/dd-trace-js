@@ -1,5 +1,8 @@
 # dd-trace-js
-Experimental JavaScript tracer (APM)
+
+**Experimental JavaScript Tracer!**
+
+This project is **experimental** and under active development. Use it at your own risk.
 
 ## Installation
 
@@ -83,6 +86,8 @@ See the OpenTracing JavaScript [documentation](https://github.com/opentracing/op
 and [API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) for more details.
 
 ## Development
+
+Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
 
 ### Requirements
 
