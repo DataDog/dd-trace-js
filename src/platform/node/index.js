@@ -8,6 +8,9 @@ const context = require('./context')
 const msgpack = require('./msgpack')
 
 module.exports = {
+  name: () => 'nodejs',
+  version: () => process.version,
+  engine: () => process.jsEngine || 'v8',
   id,
   now,
   env,
