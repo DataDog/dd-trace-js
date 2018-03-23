@@ -28,6 +28,7 @@ dev,get-port,MIT,Copyright Sindre Sorhus
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
+dev,pg,MIT,Copyright 2010-2018 Brian Carlson
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
