@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "bench": "node benchmark",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "mocha --watch",
     "test": "nyc --reporter text --reporter lcov mocha"
   },
