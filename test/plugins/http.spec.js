@@ -61,7 +61,7 @@ describe('Plugin', () => {
 
       getPort().then(port => {
         agent.use(traces => {
-          expect(traces[0][0]).to.be.defined
+          expect(traces[0][0]).to.not.be.undefined
 
           done()
         })
@@ -121,7 +121,7 @@ describe('Plugin', () => {
 
       getPort().then(port => {
         agent.use(traces => {
-          expect(traces[0][0]).to.be.defined
+          expect(traces[0][0]).to.not.be.undefined
 
           done()
         })
