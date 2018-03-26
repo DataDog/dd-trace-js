@@ -7,7 +7,8 @@
     "bench": "node benchmark",
     "lint": "eslint .",
     "tdd": "mocha --watch",
-    "test": "nyc --reporter text --reporter lcov mocha"
+    "test": "nyc --reporter text --reporter lcov mocha",
+    "version": "genversion lib/version.js"
   },
   "repository": {
     "type": "git",
@@ -59,6 +60,7 @@
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.16.2",
+    "genversion": "^2.0.1",
     "get-port": "^3.2.0",
     "mocha": "^5.0.0",
     "nock": "^9.1.6",

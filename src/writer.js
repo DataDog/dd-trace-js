@@ -4,6 +4,7 @@ const platform = require('./platform')
 const log = require('./log')
 const format = require('./format')
 const encode = require('./encode')
+const tracerVersion = require('../lib/version')
 
 class Writer {
   constructor (url, size) {
@@ -42,7 +43,12 @@ class Writer {
           path: '/v0.3/traces',
           method: 'PUT',
           headers: {
-            'Content-Type': 'application/msgpack'
+            'Content-Type': 'application/msgpack',
+            'Datadog-Meta-Lang': platform.name(),
+            'Datadog-Meta-Lang-Version': platform.version(),
+            'Datadog-Meta-Lang-Interpreter': platform.engine(),
+            'Datadog-Meta-Tracer-Version': tracerVersion,
+            'X-Datadog-Trace-Count': String(this._queue.length)
           },
           data
         })
