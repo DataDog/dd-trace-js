@@ -22,6 +22,9 @@ describe('Writer', () => {
     }
 
     platform = {
+      name: sinon.stub(),
+      version: sinon.stub(),
+      engine: sinon.stub(),
       request: sinon.stub().returns(Promise.resolve()),
       msgpack: {
         prefix: sinon.stub()
@@ -45,7 +48,8 @@ describe('Writer', () => {
       './platform': platform,
       './log': log,
       './format': format,
-      './encode': encode
+      './encode': encode,
+      '../lib/version': 'tracerVersion'
     })
     writer = new Writer(url, 3)
   })
@@ -98,6 +102,9 @@ describe('Writer', () => {
 
     it('should flush its traces to the agent', () => {
       platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
+      platform.name.returns('lang')
+      platform.version.returns('version')
+      platform.engine.returns('interpreter')
 
       writer.append(span)
       writer.append(span)
@@ -110,7 +117,12 @@ describe('Writer', () => {
         path: '/v0.3/traces',
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/msgpack'
+          'Content-Type': 'application/msgpack',
+          'Datadog-Meta-Lang': 'lang',
+          'Datadog-Meta-Lang-Version': 'version',
+          'Datadog-Meta-Lang-Interpreter': 'interpreter',
+          'Datadog-Meta-Tracer-Version': 'tracerVersion',
+          'X-Datadog-Trace-Count': '2'
         },
         data: 'prefixed'
       })

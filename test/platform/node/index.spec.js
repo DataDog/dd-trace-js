@@ -6,6 +6,56 @@ const semver = require('semver')
 
 describe('Platform', () => {
   describe('Node', () => {
+    let platform
+
+    describe('name', () => {
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
+      })
+
+      it('should return nodejs', () => {
+        expect(platform.name()).to.equal('nodejs')
+      })
+    })
+
+    describe('version', () => {
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
+      })
+
+      it('should return the process version', () => {
+        const version = platform.version()
+
+        expect(version).to.be.a('string')
+        expect(semver.eq(version, semver.valid(version))).to.be.true
+      })
+    })
+
+    describe('engine', () => {
+      let realEngine
+
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
+        realEngine = process.jsEngine
+      })
+
+      afterEach(() => {
+        process.jsEngine = realEngine
+      })
+
+      it('should return the correct engine for Chakra', () => {
+        process.jsEngine = 'chakracore'
+
+        expect(platform.engine()).to.equal('chakracore')
+      })
+
+      it('should return the correct engine for V8', () => {
+        delete process.jsEngine
+
+        expect(platform.engine()).to.equal('v8')
+      })
+    })
+
     describe('id', () => {
       let id
       let randomBytes
