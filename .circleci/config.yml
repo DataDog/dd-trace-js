@@ -18,6 +18,7 @@ jobs:
   build-node-base: &node-base
     docker:
       - image: node:alpine
+      - image: postgres:9.5
     working_directory: ~/dd-trace-js
     steps:
       - checkout
@@ -37,14 +38,17 @@ jobs:
     <<: *node-base
     docker:
       - image: node:4-alpine
+      - image: postgres:9.5
   build-node-6:
     <<: *node-base
     docker:
       - image: node:6-alpine
+      - image: postgres:9.5
   build-node-8:
     <<: *node-base
     docker:
       - image: node:8-alpine
+      - image: postgres:9.5
   build-node-latest:
     <<: *node-base
 
