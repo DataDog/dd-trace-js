@@ -38,10 +38,6 @@ function patch (express, tracer) {
         span.setTag('span.type', 'web')
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
 
-        if (res.statusCode >= 400) {
-          span.setTag(Tags.ERROR, true)
-        }
-
         span.finish()
 
         return returned

@@ -99,35 +99,6 @@ describe('Plugin', () => {
       })
     })
 
-    it('should handle errors', done => {
-      const app = express()
-
-      app.use((req, res, next) => {
-        next()
-      })
-
-      app.get('/user', (req, res) => {
-        res.status(400).send()
-      })
-
-      getPort().then(port => {
-        agent.use(traces => {
-          expect(traces[0][0].meta).to.have.property('http.status_code', '400')
-          expect(traces[0][0].meta).to.have.property('error', 'true')
-
-          done()
-        })
-
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/user`, {
-              validateStatus: status => status === 400
-            })
-            .catch(done)
-        })
-      })
-    })
-
     it('should extract its parent span from the headers', done => {
       const app = express()
 
