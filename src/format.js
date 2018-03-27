@@ -11,8 +11,8 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
-  extractTags(formatted, span._tags)
   extractError(formatted, span._error)
+  extractTags(formatted, span._tags)
 
   return formatted
 }
@@ -42,6 +42,12 @@ function extractTags (trace, tags) {
       case 'resource.name':
         trace[map[tag]] = tags[tag]
         break
+      case 'error.type':
+      case 'error.msg':
+      case 'error.stack':
+        trace.error = 1
+        trace.meta[tag] = tags[tag]
+        break
       default:
         trace.meta[tag] = tags[tag]
     }
@@ -50,7 +56,6 @@ function extractTags (trace, tags) {
 
 function extractError (trace, error) {
   if (error) {
-    trace.error = 1
     trace.meta['error.msg'] = error.message
     trace.meta['error.type'] = error.name
     trace.meta['error.stack'] = error.stack

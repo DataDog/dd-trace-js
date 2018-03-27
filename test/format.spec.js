@@ -84,5 +84,15 @@ describe('format', () => {
       expect(trace.meta['error.type']).to.equal('Error')
       expect(trace.meta['error.stack']).to.equal(span._error.stack)
     })
+
+    it('should set the error flag when there is an error tag', () => {
+      span._tags['error.type'] = 'Error'
+      span._tags['error.msg'] = 'boom'
+      span._tags['error.stack'] = ''
+
+      trace = format(span)
+
+      expect(trace.error).to.equal(1)
+    })
   })
 })
