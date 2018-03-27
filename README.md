@@ -59,7 +59,14 @@ or as environment variables.
 | hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |
 | port          | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Available experimental features: `asyncHooks`.
+| experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Available experimental features: `asyncHooks`. |
+| plugins       |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
+
+### Automatic Instrumentation
+
+The following libraries are instrumented automatically by default:
+
+* [Express](https://expressjs.com/) (version 4) 
 
 ### OpenTracing
 

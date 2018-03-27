@@ -10,6 +10,8 @@ describe('Tracer', () => {
   let tracer
   let context
   let config
+  let instrumenter
+  let Instrumenter
 
   beforeEach(() => {
     config = new Config({ service: 'service' })
@@ -17,12 +19,26 @@ describe('Tracer', () => {
     sinon.stub(context, 'bind')
     sinon.stub(context, 'bindEmitter')
 
-    Tracer = require('../src/tracer')
+    instrumenter = {
+      patch: sinon.spy()
+    }
+    Instrumenter = sinon.stub().returns(instrumenter)
+
+    Tracer = proxyquire('../src/tracer', {
+      './instrumenter': Instrumenter
+    })
   })
 
   afterEach(() => {
     context.bind.restore()
     context.bindEmitter.restore()
+  })
+
+  it('should setup automatic instrumentation', () => {
+    tracer = new Tracer(config)
+
+    expect(Instrumenter).to.have.been.calledWith(tracer)
+    expect(instrumenter.patch).to.have.been.called
   })
 
   describe('trace', () => {
