@@ -35,7 +35,7 @@ function patch (http, tracer) {
         options.headers = options.headers || {}
 
         span.addTags({
-          'service.name': 'http_client',
+          'service.name': 'http-client',
           'span.type': 'web',
           'resource.name': options.pathname
         })
