@@ -2,25 +2,24 @@
 
 describe('Config', () => {
   let Config
+  let platform
 
   beforeEach(() => {
-    Config = require('../src/config')
-  })
+    platform = {
+      env: sinon.stub(),
+      service: sinon.stub()
+    }
+    platform.service.returns('test')
 
-  afterEach(() => {
-    delete process.env.DD_TRACE_AGENT_HOSTNAME
-    delete process.env.DD_TRACE_AGENT_PORT
-    delete process.env.DD_TRACE_ENABLED
-    delete process.env.DD_TRACE_DEBUG
-    delete process.env.DD_SERVICE_NAME
-    delete process.env.DD_ENV
-
-    Config = require('../src/config')
+    Config = proxyquire('../src/config', {
+      './platform': platform
+    })
   })
 
   it('should initialize with the correct defaults', () => {
     const config = new Config()
 
+    expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
     expect(config).to.have.nested.property('url.protocol', 'http:')
@@ -34,12 +33,12 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
-    process.env.DD_TRACE_AGENT_PORT = '6218'
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_TRACE_DEBUG = 'true'
-    process.env.DD_SERVICE_NAME = 'service'
-    process.env.DD_ENV = 'test'
+    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
+    platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
+    platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
+    platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
+    platform.env.withArgs('DD_SERVICE_NAME').returns('service')
+    platform.env.withArgs('DD_ENV').returns('test')
 
     const config = new Config()
 
@@ -80,12 +79,12 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
-    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
-    process.env.DD_TRACE_AGENT_PORT = '6218'
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_TRACE_DEBUG = 'true'
-    process.env.DD_SERVICE_NAME = 'service'
-    process.env.DD_ENV = 'test'
+    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
+    platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
+    platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
+    platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
+    platform.env.withArgs('DD_SERVICE_NAME').returns('service')
+    platform.env.withArgs('DD_ENV').returns('test')
 
     const config = new Config({
       enabled: true,

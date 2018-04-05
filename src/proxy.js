@@ -4,6 +4,7 @@ const Tracer = require('opentracing').Tracer
 const NoopTracer = require('./noop')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
+const platform = require('./platform')
 
 const noop = new NoopTracer()
 
@@ -15,6 +16,8 @@ class TracerProxy extends Tracer {
 
   init (options) {
     if (this._tracer === noop) {
+      platform.load()
+
       const config = new Config(options)
       this._tracer = new DatadogTracer(config)
     }

@@ -9,6 +9,7 @@ describe('TracerProxy', () => {
   let noop
   let Config
   let config
+  let platform
 
   beforeEach(() => {
     tracer = {
@@ -37,10 +38,15 @@ describe('TracerProxy', () => {
     config = {}
     Config = sinon.stub().returns(config)
 
+    platform = {
+      load: sinon.spy()
+    }
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop': NoopTracer,
-      './config': Config
+      './config': Config,
+      './platform': platform
     })
 
     proxy = new Proxy()
@@ -59,6 +65,14 @@ describe('TracerProxy', () => {
 
         expect(Config).to.have.been.calledWith(options)
         expect(DatadogTracer).to.have.been.calledWith(config)
+      })
+
+      it('should load the platform', () => {
+        const options = {}
+
+        proxy.init(options)
+
+        expect(platform.load).to.have.been.called
       })
 
       it('should not initialize twice', () => {
