@@ -20,6 +20,7 @@ function patch (pg, tracer) {
             [Tags.DB_TYPE]: 'postgres'
           }
         }, span => {
+          span.setTag('service.name', 'postgres')
           span.setTag('resource.name', statement)
           span.setTag('db.name', params.database)
           span.setTag('db.user', params.user)

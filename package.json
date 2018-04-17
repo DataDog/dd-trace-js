@@ -38,7 +38,7 @@
     "koalas": "^1.0.2",
     "methods": "^1.1.2",
     "msgpack-lite": "^0.1.26",
-    "opentracing": "^0.14.1",
+    "opentracing": "0.14.1",
     "performance-now": "^2.1.0",
     "require-dir": "^1.0.0",
     "require-in-the-middle": "^2.2.1",
@@ -67,6 +67,7 @@
     "nyc": "^11.4.1",
     "pg": "^6.4.2",
     "proxyquire": "^1.8.0",
+    "retry": "^0.10.1",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0"
   }
