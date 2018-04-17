@@ -66,7 +66,9 @@ or as environment variables.
 
 The following libraries are instrumented automatically by default:
 
-* [Express](https://expressjs.com/) (version 4) 
+* [http](https://nodejs.org/api/http.html)
+* [express](https://expressjs.com/) (version 4)
+* [pg](https://node-postgres.com/) (version 6)
 
 ### OpenTracing
 
