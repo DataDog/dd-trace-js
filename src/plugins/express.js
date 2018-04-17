@@ -35,6 +35,7 @@ function patch (express, tracer) {
           span.setTag('resource.name', req.route.path)
         }
 
+        span.setTag('service.name', tracer._service)
         span.setTag('span.type', 'web')
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
 
