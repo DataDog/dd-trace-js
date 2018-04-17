@@ -53,7 +53,9 @@ describe('Plugin', () => {
 
     it('should handle errors', done => {
       agent.use(traces => {
-        expect(traces[0][0].meta).to.have.property('error', 'true')
+        expect(traces[0][0].meta).to.have.property('error.type', 'error')
+        expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
+        expect(traces[0][0].meta).to.have.property('error.stack')
 
         done()
       })

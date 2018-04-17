@@ -29,7 +29,11 @@ function patch (pg, tracer) {
           span.setTag('span.type', 'db')
 
           if (err) {
-            span.setTag(Tags.ERROR, true)
+            span.addTags({
+              'error.type': err.name,
+              'error.msg': err.message,
+              'error.stack': err.stack
+            })
           }
 
           span.finish()
