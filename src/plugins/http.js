@@ -16,7 +16,7 @@ function patch (http, tracer) {
       const uri = extractUrl(options)
       const method = options.method || 'GET'
 
-      if (uri === `${tracer._tracer._url.href}/v0.3/traces`) {
+      if (uri === `${tracer._url.href}/v0.3/traces`) {
         return request.apply(this, [options, callback])
       }
 
@@ -35,6 +35,7 @@ function patch (http, tracer) {
         options.headers = options.headers || {}
 
         span.addTags({
+          'service.name': 'http-client',
           'span.type': 'web',
           'resource.name': options.pathname
         })

@@ -33,6 +33,7 @@ describe('Plugin', () => {
 
       getPort().then(port => {
         agent.use(traces => {
+          expect(traces[0][0]).to.have.property('service', 'test')
           expect(traces[0][0]).to.have.property('type', 'web')
           expect(traces[0][0]).to.have.property('resource', '/user')
           expect(traces[0][0].meta).to.have.property('span.kind', 'server')
@@ -93,35 +94,6 @@ describe('Plugin', () => {
               expect(res.status).to.equal(200)
               expect(res.data).to.equal('bar')
               done()
-            })
-            .catch(done)
-        })
-      })
-    })
-
-    it('should handle errors', done => {
-      const app = express()
-
-      app.use((req, res, next) => {
-        next()
-      })
-
-      app.get('/user', (req, res) => {
-        res.status(400).send()
-      })
-
-      getPort().then(port => {
-        agent.use(traces => {
-          expect(traces[0][0].meta).to.have.property('http.status_code', '400')
-          expect(traces[0][0].meta).to.have.property('error', 'true')
-
-          done()
-        })
-
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/user`, {
-              validateStatus: status => status === 400
             })
             .catch(done)
         })

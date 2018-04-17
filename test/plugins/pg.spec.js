@@ -20,6 +20,7 @@ describe('Plugin', () => {
 
     it('should do automatic instrumentation when using callbacks', done => {
       agent.use(traces => {
+        expect(traces[0][0]).to.have.property('service', 'postgres')
         expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
         expect(traces[0][0]).to.have.property('type', 'db')
         expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
@@ -52,7 +53,9 @@ describe('Plugin', () => {
 
     it('should handle errors', done => {
       agent.use(traces => {
-        expect(traces[0][0].meta).to.have.property('error', 'true')
+        expect(traces[0][0].meta).to.have.property('error.type', 'error')
+        expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
+        expect(traces[0][0].meta).to.have.property('error.stack')
 
         done()
       })

@@ -29,14 +29,14 @@ module.exports = {
 
         server.on('close', () => plugin.unpatch(moduleToPatch))
 
-        plugin.patch(moduleToPatch, tracer)
-
         tracer.init({
           service: 'test',
           port,
           flushInterval: 10,
           plugins: false
         })
+
+        plugin.patch(moduleToPatch, tracer._tracer)
       })
     })
   },
