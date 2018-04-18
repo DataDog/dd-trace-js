@@ -16,7 +16,7 @@ class Config {
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
-    this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'))
+    this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), platform.service())
     this.env = coalesce(options.env, platform.env('DD_ENV'))
     this.url = new URL(`${protocol}://${hostname}:${port}`)
     this.tags = coalesce(options.tags, {})

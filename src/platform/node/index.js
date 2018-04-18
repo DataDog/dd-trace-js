@@ -3,6 +3,8 @@
 const id = require('./id')
 const now = require('./now')
 const env = require('./env')
+const load = require('./load')
+const service = require('./service')
 const request = require('./request')
 const context = require('./context')
 const msgpack = require('./msgpack')
@@ -14,6 +16,8 @@ module.exports = {
   id,
   now,
   env,
+  load,
+  service,
   request,
   context,
   msgpack

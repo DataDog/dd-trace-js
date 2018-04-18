@@ -118,6 +118,31 @@ describe('Platform', () => {
       })
     })
 
+    describe('load', () => {
+      let service
+
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
+        service = platform._service
+      })
+
+      afterEach(() => {
+        platform._service = service
+      })
+
+      it('should load the service name from the user module', () => {
+        require('./load/direct')
+
+        expect(platform._service).to.equal('foo')
+      })
+
+      it('should work even in subfolders', () => {
+        require('./load/indirect')
+
+        expect(platform._service).to.have.equal('foo')
+      })
+    })
+
     describe('request', () => {
       let request
       let log
