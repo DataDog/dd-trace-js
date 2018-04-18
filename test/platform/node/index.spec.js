@@ -313,8 +313,6 @@ describe('Platform', () => {
 
       afterEach(() => {
         cls.destroyNamespace('dd-trace')
-        delete require.cache[require.resolve('bluebird')]
-        delete require.cache[require.resolve('cls-bluebird')]
       })
 
       describe('continuation-local-storage', () => {
@@ -322,10 +320,6 @@ describe('Platform', () => {
           cls = require('continuation-local-storage')
           config = { experimental: { asyncHooks: false } }
           namespace = context(config)
-        })
-
-        afterEach(() => {
-          delete require.cache[require.resolve('../../../src/platform/node/context/cls')]
         })
 
         testContext('../../../src/platform/node/context/cls')
@@ -448,7 +442,15 @@ describe('Platform', () => {
 
         it('should only patch bluebird once', () => {
           context(config)
-          expect(clsBluebird).to.have.been.calledOnce
+          expect(clsBluebird).to.not.have.been.called
+        })
+
+        it('should skip patching bluebird on error', () => {
+          clsBluebird = proxyquire('../src/platform/node/context/cls_bluebird', {
+            'cls-bluebird': () => { throw new Error() }
+          })
+
+          expect(() => clsBluebird(namespace)).to.not.throw()
         })
       }
     })

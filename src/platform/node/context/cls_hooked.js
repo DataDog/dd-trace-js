@@ -1,7 +1,7 @@
 'use strict'
 
 const cls = require('cls-hooked')
-const clsBluebird = require('cls-bluebird')
+const clsBluebird = require('./cls_bluebird')
 const namespace = cls.createNamespace('dd-trace')
 
 clsBluebird(namespace)
