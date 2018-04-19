@@ -118,6 +118,31 @@ describe('Platform', () => {
       })
     })
 
+    describe('load', () => {
+      let service
+
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
+        service = platform._service
+      })
+
+      afterEach(() => {
+        platform._service = service
+      })
+
+      it('should load the service name from the user module', () => {
+        require('./load/direct')
+
+        expect(platform._service).to.equal('foo')
+      })
+
+      it('should work even in subfolders', () => {
+        require('./load/indirect')
+
+        expect(platform._service).to.have.equal('foo')
+      })
+    })
+
     describe('request', () => {
       let request
       let log
@@ -288,8 +313,6 @@ describe('Platform', () => {
 
       afterEach(() => {
         cls.destroyNamespace('dd-trace')
-        delete require.cache[require.resolve('bluebird')]
-        delete require.cache[require.resolve('cls-bluebird')]
       })
 
       describe('continuation-local-storage', () => {
@@ -297,10 +320,6 @@ describe('Platform', () => {
           cls = require('continuation-local-storage')
           config = { experimental: { asyncHooks: false } }
           namespace = context(config)
-        })
-
-        afterEach(() => {
-          delete require.cache[require.resolve('../../../src/platform/node/context/cls')]
         })
 
         testContext('../../../src/platform/node/context/cls')
@@ -423,7 +442,15 @@ describe('Platform', () => {
 
         it('should only patch bluebird once', () => {
           context(config)
-          expect(clsBluebird).to.have.been.calledOnce
+          expect(clsBluebird).to.not.have.been.called
+        })
+
+        it('should skip patching bluebird on error', () => {
+          clsBluebird = proxyquire('../src/platform/node/context/cls_bluebird', {
+            'cls-bluebird': () => { throw new Error() }
+          })
+
+          expect(() => clsBluebird(namespace)).to.not.throw()
         })
       }
     })
