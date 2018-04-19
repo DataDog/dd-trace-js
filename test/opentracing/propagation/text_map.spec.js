@@ -69,5 +69,12 @@ describe('TextMapPropagator', () => {
         baggageItems
       }))
     })
+
+    it('should return null if the carrier does not contain a trace', () => {
+      const carrier = {}
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.equal(null)
+    })
   })
 })

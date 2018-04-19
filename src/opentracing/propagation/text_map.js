@@ -19,6 +19,10 @@ class TextMapPropagator {
   }
 
   extract (carrier) {
+    if (!carrier[traceKey] || !carrier[spanKey]) {
+      return null
+    }
+
     const baggageItems = {}
 
     Object.keys(carrier).forEach(key => {
