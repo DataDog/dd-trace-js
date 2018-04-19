@@ -8,7 +8,7 @@
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "mocha --watch",
     "test": "nyc --reporter text --reporter lcov mocha",
-    "preversion": "genversion lib/version.js"
+    "version": "genversion lib/version.js && git add lib/version.js"
   },
   "repository": {
     "type": "git",
