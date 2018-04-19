@@ -1,5 +1,8 @@
 # dd-trace-js
 
+[![npm](https://img.shields.io/npm/v/dd-trace.svg)](https://www.npmjs.com/package/dd-trace)
+[![CircleCI](https://img.shields.io/circleci/project/github/DataDog/dd-trace-js.svg)](https://circleci.com/gh/DataDog/dd-trace-js/tree/master)
+
 **Experimental JavaScript Tracer!**
 
 This project is **experimental** and under active development. Use it at your own risk.
