@@ -90,6 +90,18 @@ describe('TracerProxy', () => {
         expect(noop.trace).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('span')
       })
+
+      it('should return a promise if a callback is not provided', () => {
+        const promise = proxy.trace('a', 'b')
+
+        expect(noop.trace).to.have.been.calledWith('a', 'b')
+
+        noop.trace.firstCall.args[2]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
+      })
     })
 
     describe('startSpan', () => {
@@ -157,6 +169,18 @@ describe('TracerProxy', () => {
 
         expect(tracer.trace).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('span')
+      })
+
+      it('should return a promise if a callback is not provided', () => {
+        const promise = proxy.trace('a', 'b')
+
+        expect(tracer.trace).to.have.been.calledWith('a', 'b')
+
+        tracer.trace.firstCall.args[2]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
       })
     })
 
