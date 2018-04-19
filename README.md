@@ -19,35 +19,13 @@ npm install --save dd-trace
 
 ## Usage
 
-### Example
+Simply require and initialize the tracer and all supported
+[libraries](#automatic-instrumentation) will automatically
+be instrumented.
 
 ```js
-const tracer = require('dd-trace').init({
-  service: 'example'
-})
-
-const express = require('express')
-const app = express()
-
-app.get('/hello/:name', (req, res) => {
-  const options = {
-    resource: '/hello/:name',
-    type: 'web',
-    tags: {
-      'span.kind': 'server',
-      'http.method': 'GET',
-      'http.url': req.url,
-      'http.status_code': '200'
-    }
-  }
-
-  tracer.trace('say_hello', options, span => {
-    res.send(`Hello, ${req.params.name}!`)
-    span.finish()
-  })
-})
-
-app.listen(3000)
+// The tracer must be initialized before other libraries
+const tracer = require('dd-trace').init()
 ```
 
 ### Available Options
@@ -89,6 +67,43 @@ Then the tracer will be available with `opentracing.globalTracer()`.
 
 See the OpenTracing JavaScript [documentation](https://github.com/opentracing/opentracing-javascript)
 and [API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) for more details.
+
+**NOTE: When using OpenTracing, context propagation is not handled
+automatically.**
+
+## Advanced Usage
+
+In some cases you may want to do manual instrumentation. For example
+if there is no built-in plugin covering a library you are using or if you want more control on how instrumentation is done.
+
+### Manual instrumentation
+
+```js
+const tracer = require('dd-trace').init()
+const http = require('http')
+
+const server = http.createServer((req, res) => {
+  const options = {
+    resource: '/hello/:name',
+    type: 'web',
+    tags: {
+      'span.kind': 'server',
+      'http.method': 'GET',
+      'http.url': req.url,
+      'http.status_code': '200'
+    }
+  }
+
+  tracer.trace('say_hello', options, span => {
+    res.write('Hello, World!')
+    span.finish()
+  })
+
+  res.end()
+})
+
+server.listen(8000)
+```
 
 ## Development
 
