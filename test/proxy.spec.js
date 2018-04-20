@@ -13,6 +13,7 @@ describe('TracerProxy', () => {
 
   beforeEach(() => {
     tracer = {
+      use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('span'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
@@ -23,6 +24,7 @@ describe('TracerProxy', () => {
     }
 
     noop = {
+      use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('span'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
@@ -80,6 +82,15 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
+      })
+    })
+
+    describe('use', () => {
+      it('should call the underlying NoopTracer', () => {
+        const returnValue = proxy.use('a', 'b', 'c')
+
+        expect(noop.use).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('tracer')
       })
     })
 
@@ -149,6 +160,15 @@ describe('TracerProxy', () => {
   describe('initialized', () => {
     beforeEach(() => {
       proxy.init()
+    })
+
+    describe('use', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.use('a', 'b', 'c')
+
+        expect(tracer.use).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('tracer')
+      })
     })
 
     describe('trace', () => {

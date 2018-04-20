@@ -13,6 +13,11 @@ class DatadogTracer extends Tracer {
     this._instrumenter.patch()
   }
 
+  use (plugin, config) {
+    this._instrumenter.use(plugin, config)
+    return this
+  }
+
   trace (name, options, callback) {
     if (!callback) {
       callback = options

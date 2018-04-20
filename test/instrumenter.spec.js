@@ -39,6 +39,28 @@ describe('Instrumenter', () => {
       instrumenter = new Instrumenter(tracer, { plugins: true })
     })
 
+    describe('use', () => {
+      it('should allow configuring a plugin', () => {
+        const config = { foo: 'bar' }
+
+        instrumenter.use('express', config)
+        instrumenter.patch()
+
+        const express = require('express')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, tracer, config)
+      })
+
+      it('should default to an empty plugin configuration', () => {
+        instrumenter.use('express')
+        instrumenter.patch()
+
+        const express = require('express')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, tracer, {})
+      })
+    })
+
     describe('patch', () => {
       it('should patch modules from node_modules when they are loaded', () => {
         instrumenter.patch()
@@ -62,6 +84,7 @@ describe('Instrumenter', () => {
 
         const http = require('http')
 
+        expect(integrations.http.patch).to.have.been.called
         expect(integrations.http.patch).to.have.been.calledWith(http, tracer)
       })
     })

@@ -25,6 +25,10 @@ class TracerProxy extends Tracer {
     return this
   }
 
+  use () {
+    return this._tracer.use.apply(this._tracer, arguments)
+  }
+
   trace () {
     return this._tracer.trace.apply(this._tracer, arguments)
   }
