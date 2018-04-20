@@ -12,7 +12,7 @@ let listener = null
 let tracer = null
 
 module.exports = {
-  load (plugin, moduleToPatch) {
+  load (plugin, moduleToPatch, config) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
@@ -36,7 +36,7 @@ module.exports = {
           plugins: false
         })
 
-        plugin.patch(moduleToPatch, tracer._tracer)
+        plugin.patch(moduleToPatch, tracer._tracer, config || {})
       })
     })
   },

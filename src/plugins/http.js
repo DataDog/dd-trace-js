@@ -7,7 +7,7 @@ const shimmer = require('shimmer')
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 
-function patch (http, tracer) {
+function patch (http, tracer, config) {
   shimmer.wrap(http, 'request', request => makeRequestTrace(request))
   shimmer.wrap(http, 'get', get => makeRequestTrace(get))
 
@@ -35,7 +35,7 @@ function patch (http, tracer) {
         options.headers = options.headers || {}
 
         span.addTags({
-          'service.name': 'http-client',
+          'service.name': config.service || 'http-client',
           'span.type': 'web',
           'resource.name': options.pathname
         })

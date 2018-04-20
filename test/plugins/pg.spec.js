@@ -10,40 +10,93 @@ describe('Plugin', () => {
     beforeEach(() => {
       pg = require('pg')
       plugin = proxyquire('../src/plugins/pg', { 'pg': pg })
-
-      return agent.load(plugin, pg)
     })
 
     afterEach(() => {
       agent.close()
     })
 
-    it('should do automatic instrumentation when using callbacks', done => {
-      agent.use(traces => {
-        expect(traces[0][0]).to.have.property('service', 'postgres')
-        expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-        expect(traces[0][0]).to.have.property('type', 'db')
-        expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-        expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
-        expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-        expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-
-        done()
+    describe('without configuration', () => {
+      beforeEach(() => {
+        return agent.load(plugin, pg)
       })
 
-      const client = new pg.Client({
-        user: 'postgres',
-        password: 'postgres',
-        database: 'postgres',
-        application_name: 'test'
-      })
+      it('should do automatic instrumentation when using callbacks', done => {
+        agent.use(traces => {
+          expect(traces[0][0]).to.have.property('service', 'postgres')
+          expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+          expect(traces[0][0]).to.have.property('type', 'db')
+          expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+          expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
+          expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+          expect(traces[0][0].meta).to.have.property('span.kind', 'client')
 
-      client.connect((err) => {
-        if (err) throw err
+          done()
+        })
 
-        client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+        const client = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres',
+          application_name: 'test'
+        })
+
+        client.connect((err) => {
           if (err) throw err
 
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) throw err
+
+            client.end((err) => {
+              if (err) throw err
+            })
+          })
+        })
+      })
+
+      it('should handle errors', done => {
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('error.type', 'error')
+          expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
+          expect(traces[0][0].meta).to.have.property('error.stack')
+
+          done()
+        })
+
+        const client = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres'
+        })
+
+        client.connect((err) => {
+          if (err) throw err
+
+          client.query('INVALID', (err, result) => {
+            expect(err).to.be.an('error')
+
+            client.end((err) => {
+              if (err) throw err
+            })
+          })
+        })
+      })
+
+      it('should work without a callback', done => {
+        agent.use(traces => {
+          done()
+        })
+
+        const client = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres'
+        })
+
+        client.connect((err) => {
+          if (err) throw err
+
+          client.query('SELECT $1::text as message', ['Hello World!'])
           client.end((err) => {
             if (err) throw err
           })
@@ -51,51 +104,40 @@ describe('Plugin', () => {
       })
     })
 
-    it('should handle errors', done => {
-      agent.use(traces => {
-        expect(traces[0][0].meta).to.have.property('error.type', 'error')
-        expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
-        expect(traces[0][0].meta).to.have.property('error.stack')
+    describe('with configuration', () => {
+      let config
 
-        done()
+      beforeEach(() => {
+        config = {
+          service: 'custom'
+        }
+
+        return agent.load(plugin, pg, config)
       })
 
-      const client = new pg.Client({
-        user: 'postgres',
-        password: 'postgres',
-        database: 'postgres'
-      })
+      it('should be configured with the correct values', done => {
+        agent.use(traces => {
+          expect(traces[0][0]).to.have.property('service', 'custom')
 
-      client.connect((err) => {
-        if (err) throw err
-
-        client.query('INVALID', (err, result) => {
-          expect(err).to.be.an('error')
-
-          client.end((err) => {
-            if (err) throw err
-          })
+          done()
         })
-      })
-    })
 
-    it('should work without a callback', done => {
-      agent.use(traces => {
-        done()
-      })
+        const client = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres'
+        })
 
-      const client = new pg.Client({
-        user: 'postgres',
-        password: 'postgres',
-        database: 'postgres'
-      })
-
-      client.connect((err) => {
-        if (err) throw err
-
-        client.query('SELECT $1::text as message', ['Hello World!'])
-        client.end((err) => {
+        client.connect((err) => {
           if (err) throw err
+
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) throw err
+
+            client.end((err) => {
+              if (err) throw err
+            })
+          })
         })
       })
     })
