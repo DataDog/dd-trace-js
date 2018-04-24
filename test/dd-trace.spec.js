@@ -22,7 +22,7 @@ describe('dd-trace', () => {
       tracer.init({
         service: 'test',
         port: listener.address().port,
-        flushInterval: 10,
+        flushInterval: 0,
         plugins: false
       })
     })

@@ -301,23 +301,21 @@ describe('Platform', () => {
     describe('context', () => {
       let context
       let namespace
-      let cls
       let clsBluebird
       let config
 
       beforeEach(() => {
-        clsBluebird = sinon.spy(require('cls-bluebird'))
-        require.cache[require.resolve('cls-bluebird')].exports = clsBluebird
+        require('cls-bluebird')
+        clsBluebird = sinon.spy(require.cache[require.resolve('cls-bluebird')], 'exports')
         context = require('../../../src/platform/node/context')
       })
 
       afterEach(() => {
-        cls.destroyNamespace('dd-trace')
+        require.cache[require.resolve('cls-bluebird')].exports.restore()
       })
 
       describe('continuation-local-storage', () => {
         beforeEach(() => {
-          cls = require('continuation-local-storage')
           config = { experimental: { asyncHooks: false } }
           namespace = context(config)
         })
@@ -328,7 +326,6 @@ describe('Platform', () => {
       if (semver.gte(semver.valid(process.version), '8.2.0')) {
         describe('cls-hooked', () => {
           beforeEach(() => {
-            cls = require('cls-hooked')
             config = { experimental: { asyncHooks: true } }
             namespace = context(config)
           })
@@ -338,10 +335,6 @@ describe('Platform', () => {
       }
 
       function testContext (modulePath) {
-        afterEach(() => {
-          delete require.cache[require.resolve(modulePath)]
-        })
-
         it('should use the correct implementation from the experimental flag', () => {
           expect(namespace).to.equal(require(modulePath))
         })
@@ -370,11 +363,11 @@ describe('Platform', () => {
             namespace.run(() => {
               namespace.set('foo', parentValue)
 
-              setImmediate(() => test())
-
               namespace.run(() => {
                 namespace.set('foo', childValue)
               })
+
+              test()
             })
 
             function test () {

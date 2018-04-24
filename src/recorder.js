@@ -8,15 +8,22 @@ const Writer = require('./writer')
 class Recorder {
   constructor (url, interval, size) {
     this._writer = new Writer(url, size)
-    this._scheduler = new Scheduler(() => this._writer.flush(), interval)
+
+    if (interval > 0) {
+      this._scheduler = new Scheduler(() => this._writer.flush(), interval)
+    }
   }
 
   init () {
-    this._scheduler.start()
+    this._scheduler && this._scheduler.start()
   }
 
   record (span) {
     this._writer.append(span)
+
+    if (!this._scheduler) {
+      this._writer.flush()
+    }
   }
 }
 
