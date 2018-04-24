@@ -32,7 +32,7 @@ module.exports = {
         tracer.init({
           service: 'test',
           port,
-          flushInterval: 10,
+          flushInterval: 0,
           plugins: false
         })
 
