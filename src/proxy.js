@@ -29,8 +29,16 @@ class TracerProxy extends Tracer {
     return this._tracer.use.apply(this._tracer, arguments)
   }
 
-  trace () {
-    return this._tracer.trace.apply(this._tracer, arguments)
+  trace (operationName, options, callback) {
+    if (callback) {
+      return this._tracer.trace.apply(this._tracer, arguments)
+    } else {
+      return new Promise((resolve, reject) => {
+        this._tracer.trace(operationName, options, span => {
+          resolve(span)
+        })
+      })
+    }
   }
 
   startSpan () {
