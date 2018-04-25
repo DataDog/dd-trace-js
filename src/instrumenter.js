@@ -36,6 +36,9 @@ class Instrumenter {
       .filter(plugin => plugin.name === moduleName)
       .filter(plugin => matchVersion(moduleVersion, plugin.versions))
       .forEach(plugin => {
+        if (plugin.file) {
+          moduleExports = require(path.join(moduleBaseDir, plugin.file))
+        }
         plugin.patch(moduleExports, this._tracer, this._plugins.get(plugin))
         this._instrumented.set(moduleExports, plugin)
       })
@@ -53,9 +56,12 @@ function loadPlugins (config) {
 
   const integrations = requireDir('./plugins')
 
-  Object.keys(integrations).forEach(key => {
-    plugins.set(integrations[key], {})
-  })
+  Object.keys(integrations)
+    .map(key => integrations[key])
+    .reduce((previous, current) => previous.concat(current), [])
+    .forEach(integration => {
+      plugins.set(integration, {})
+    })
 
   return plugins
 }
