@@ -20,6 +20,7 @@ describe('Tracer', () => {
     sinon.stub(context, 'bindEmitter')
 
     instrumenter = {
+      use: sinon.spy(),
       patch: sinon.spy()
     }
     Instrumenter = sinon.stub().returns(instrumenter)
@@ -39,6 +40,15 @@ describe('Tracer', () => {
 
     expect(Instrumenter).to.have.been.calledWith(tracer)
     expect(instrumenter.patch).to.have.been.called
+  })
+
+  describe('use', () => {
+    it('should configure a plugin with the instrumenter', () => {
+      tracer = new Tracer(config)
+      tracer.use('plugin', 'config')
+
+      expect(instrumenter.use).to.have.been.calledWith('plugin', 'config')
+    })
   })
 
   describe('trace', () => {

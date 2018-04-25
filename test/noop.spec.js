@@ -11,6 +11,12 @@ describe('NoopTracer', () => {
     tracer = new NoopTracer()
   })
 
+  describe('use', () => {
+    it('should return itself', () => {
+      expect(tracer.use()).to.equal(tracer)
+    })
+  })
+
   describe('trace', () => {
     it('should return a noop span', done => {
       tracer.trace('test', {}, span => {

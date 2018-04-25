@@ -12,8 +12,14 @@ class Instrumenter {
     this._instrumented = new Map()
   }
 
+  use (name, config) {
+    Array.from(this._plugins.keys())
+      .filter(plugin => plugin.name === name)
+      .forEach(plugin => this._plugins.set(plugin, config || {}))
+  }
+
   patch () {
-    const instrumentedModules = this._plugins.map(plugin => plugin.name)
+    const instrumentedModules = Array.from(this._plugins.keys()).map(plugin => plugin.name)
     hook(instrumentedModules, this.hookModule.bind(this))
   }
 
@@ -26,11 +32,11 @@ class Instrumenter {
   hookModule (moduleExports, moduleName, moduleBaseDir) {
     const moduleVersion = getVersion(moduleBaseDir)
 
-    this._plugins
+    Array.from(this._plugins.keys())
       .filter(plugin => plugin.name === moduleName)
       .filter(plugin => matchVersion(moduleVersion, plugin.versions))
       .forEach(plugin => {
-        plugin.patch(moduleExports, this._tracer)
+        plugin.patch(moduleExports, this._tracer, this._plugins.get(plugin))
         this._instrumented.set(moduleExports, plugin)
       })
 
@@ -39,15 +45,16 @@ class Instrumenter {
 }
 
 function loadPlugins (config) {
+  const plugins = new Map()
+
   if (config.plugins === false) {
-    return []
+    return plugins
   }
 
-  const plugins = []
   const integrations = requireDir('./plugins')
 
   Object.keys(integrations).forEach(key => {
-    plugins.push(integrations[key])
+    plugins.set(integrations[key], {})
   })
 
   return plugins
