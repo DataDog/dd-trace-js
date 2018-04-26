@@ -5,28 +5,51 @@ const path = require('path')
 const semver = require('semver')
 const hook = require('require-in-the-middle')
 
+// TODO: lazy load built-in plugins
+
 class Instrumenter {
-  constructor (tracer, config) {
+  constructor (tracer) {
     this._tracer = tracer
-    this._plugins = loadPlugins(config)
+    this._integrations = loadIntegrations()
+    this._plugins = new Map()
     this._instrumented = new Map()
   }
 
   use (name, config) {
-    Array.from(this._plugins.keys())
-      .filter(plugin => plugin.name === name)
-      .forEach(plugin => this._plugins.set(plugin, config || {}))
+    config = config || {}
+
+    if (typeof name === 'string') {
+      this._integrations
+        .filter(plugin => plugin === name || plugin.name === name)
+        .forEach(plugin => this._plugins.set(plugin, config))
+    } else {
+      this._plugins.set(name, config)
+    }
+
+    this.reload()
   }
 
-  patch () {
-    const instrumentedModules = Array.from(this._plugins.keys()).map(plugin => plugin.name)
-    hook(instrumentedModules, this.hookModule.bind(this))
+  patch (config) {
+    config = config || {}
+
+    if (config.plugins !== false) {
+      loadIntegrations().forEach(integration => {
+        this._plugins.has(integration) || this._plugins.set(integration)
+      })
+    }
+
+    this.reload()
   }
 
   unpatch () {
     this._instrumented.forEach((instrumentation, moduleExports) => {
       instrumentation.unpatch(moduleExports)
     })
+  }
+
+  reload () {
+    const instrumentedModules = Array.from(this._plugins.keys()).map(plugin => plugin.name)
+    hook(instrumentedModules, this.hookModule.bind(this))
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
@@ -36,28 +59,24 @@ class Instrumenter {
       .filter(plugin => plugin.name === moduleName)
       .filter(plugin => matchVersion(moduleVersion, plugin.versions))
       .forEach(plugin => {
-        plugin.patch(moduleExports, this._tracer, this._plugins.get(plugin))
-        this._instrumented.set(moduleExports, plugin)
+        let moduleToPatch = moduleExports
+        if (plugin.file) {
+          moduleToPatch = require(path.join(moduleBaseDir, plugin.file))
+        }
+        plugin.patch(moduleToPatch, this._tracer._tracer, this._plugins.get(plugin))
+        this._instrumented.set(moduleToPatch, plugin)
       })
 
     return moduleExports
   }
 }
 
-function loadPlugins (config) {
-  const plugins = new Map()
-
-  if (config.plugins === false) {
-    return plugins
-  }
-
+function loadIntegrations () {
   const integrations = requireDir('./plugins')
 
-  Object.keys(integrations).forEach(key => {
-    plugins.set(integrations[key], {})
-  })
-
-  return plugins
+  return Object.keys(integrations)
+    .map(key => integrations[key])
+    .reduce((previous, current) => previous.concat(current), [])
 }
 
 function matchVersion (version, ranges) {
