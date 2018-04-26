@@ -7,6 +7,8 @@ describe('TracerProxy', () => {
   let tracer
   let NoopTracer
   let noop
+  let Instrumenter
+  let instrumenter
   let Config
   let config
   let platform
@@ -34,8 +36,14 @@ describe('TracerProxy', () => {
       bindEmitter: sinon.stub()
     }
 
+    instrumenter = {
+      patch: sinon.spy(),
+      use: sinon.spy()
+    }
+
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
+    Instrumenter = sinon.stub().returns(instrumenter)
 
     config = {}
     Config = sinon.stub().returns(config)
@@ -47,11 +55,21 @@ describe('TracerProxy', () => {
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop': NoopTracer,
+      './instrumenter': Instrumenter,
       './config': Config,
       './platform': platform
     })
 
     proxy = new Proxy()
+  })
+
+  describe('use', () => {
+    it('should call the underlying instrumenter', () => {
+      const returnValue = proxy.use('a', 'b', 'c')
+
+      expect(instrumenter.use).to.have.been.calledWith('a', 'b', 'c')
+      expect(returnValue).to.equal(proxy)
+    })
   })
 
   describe('uninitialized', () => {
@@ -82,15 +100,6 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
-      })
-    })
-
-    describe('use', () => {
-      it('should call the underlying NoopTracer', () => {
-        const returnValue = proxy.use('a', 'b', 'c')
-
-        expect(noop.use).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('tracer')
       })
     })
 
@@ -174,12 +183,17 @@ describe('TracerProxy', () => {
       proxy.init()
     })
 
+    // it('should setup automatic instrumentation', () => {
+    //   expect(Instrumenter).to.have.been.calledWith(tracer)
+    //   expect(instrumenter.patch).to.have.been.called
+    // })
+
     describe('use', () => {
-      it('should call the underlying DatadogTracer', () => {
+      it('should call the underlying Instrumenter', () => {
         const returnValue = proxy.use('a', 'b', 'c')
 
-        expect(tracer.use).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('tracer')
+        expect(instrumenter.use).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal(proxy)
       })
     })
 

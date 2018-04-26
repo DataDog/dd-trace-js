@@ -35,22 +35,6 @@ describe('Tracer', () => {
     context.bindEmitter.restore()
   })
 
-  it('should setup automatic instrumentation', () => {
-    tracer = new Tracer(config)
-
-    expect(Instrumenter).to.have.been.calledWith(tracer)
-    expect(instrumenter.patch).to.have.been.called
-  })
-
-  describe('use', () => {
-    it('should configure a plugin with the instrumenter', () => {
-      tracer = new Tracer(config)
-      tracer.use('plugin', 'config')
-
-      expect(instrumenter.use).to.have.been.calledWith('plugin', 'config')
-    })
-  })
-
   describe('trace', () => {
     it('should run the callback with the new span', done => {
       tracer = new Tracer(config)

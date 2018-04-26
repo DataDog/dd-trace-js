@@ -2,20 +2,12 @@
 
 const platform = require('./platform')
 const Tracer = require('./opentracing/tracer')
-const Instrumenter = require('./instrumenter')
 
 class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
     this._context = platform.context(config)
-    this._instrumenter = new Instrumenter(this, config)
-    this._instrumenter.patch()
-  }
-
-  use (plugin, config) {
-    this._instrumenter.use(plugin, config)
-    return this
   }
 
   trace (name, options, callback) {

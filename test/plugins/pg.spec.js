@@ -18,7 +18,7 @@ describe('Plugin', () => {
 
     describe('without configuration', () => {
       beforeEach(() => {
-        return agent.load(plugin, pg)
+        return agent.load(plugin, 'pg')
       })
 
       it('should do automatic instrumentation when using callbacks', done => {
@@ -112,7 +112,7 @@ describe('Plugin', () => {
           service: 'custom'
         }
 
-        return agent.load(plugin, pg, config)
+        return agent.load(plugin, 'pg', config)
       })
 
       it('should be configured with the correct values', done => {

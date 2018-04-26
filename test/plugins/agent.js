@@ -27,7 +27,10 @@ module.exports = {
 
         listener = server.listen(port, 'localhost', resolve)
 
-        server.on('close', () => plugin.unpatch(moduleToPatch))
+        server.on('close', () => {
+          tracer._instrumenter.unpatch()
+          tracer = null
+        })
 
         tracer.init({
           service: 'test',
@@ -36,7 +39,9 @@ module.exports = {
           plugins: false
         })
 
-        plugin.patch(moduleToPatch, tracer._tracer, config || {})
+        tracer.use(plugin, config)
+
+        require(moduleToPatch)
       })
     })
   },
@@ -56,7 +61,6 @@ module.exports = {
     listener.close()
     listener = null
     agent = null
-    tracer = null
     delete require.cache[require.resolve('../..')]
   }
 }
