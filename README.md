@@ -166,6 +166,7 @@ $ circleci build --job lint
 $ circleci build --job build-node-4
 $ circleci build --job build-node-6
 $ circleci build --job build-node-8
+$ circleci build --job build-node-10
 $ circleci build --job build-node-latest
 ```
 
