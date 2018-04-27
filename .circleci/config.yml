@@ -19,6 +19,12 @@ jobs:
     docker:
       - image: node:alpine
       - image: postgres:9.5
+      - image: mysql:5.7
+        environment:
+          - MYSQL_ROOT_PASSWORD=rootpass
+          - MYSQL_PASSWORD=userpass
+          - MYSQL_USER=user
+          - MYSQL_DATABASE=db
     working_directory: ~/dd-trace-js
     steps:
       - checkout
