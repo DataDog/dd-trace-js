@@ -16,9 +16,11 @@ jobs:
           name: Lint
           command: npm run lint
   build-node-base: &node-base
-    docker: &node-docker
-      - image: postgres:9.5
-      - image: mysql:5.7
+    docker:
+      - &postgres
+        image: postgres:9.5
+      - &mysql
+        image: mysql:5.7
         environment:
           - MYSQL_ROOT_PASSWORD=rootpass
           - MYSQL_PASSWORD=userpass
@@ -42,28 +44,33 @@ jobs:
   build-node-4:
     <<: *node-base
     docker:
-      <<: *node-base
       - image: node:4-alpine
+      - *postgres
+      - *mysql
   build-node-6:
     <<: *node-base
     docker:
-      <<: *node-docker
       - image: node:6-alpine
+      - *postgres
+      - *mysql
   build-node-8:
     <<: *node-base
     docker:
-      <<: *node-docker
       - image: node:8-alpine
+      - *postgres
+      - *mysql
   build-node-10:
     <<: *node-base
     docker:
-      <<: *node-docker
       - image: node:10-alpine
+      - *postgres
+      - *mysql
   build-node-latest:
     <<: *node-base
     docker:
-      <<: *node-docker
       - image: node:alpine
+      - *postgres
+      - *mysql
 
 workflows:
   version: 2
@@ -73,6 +80,7 @@ workflows:
       - build-node-4
       - build-node-6
       - build-node-8
+      - build-node-10
       - build-node-latest
   nightly:
     triggers:
@@ -86,4 +94,5 @@ workflows:
       - build-node-4
       - build-node-6
       - build-node-8
+      - build-node-10
       - build-node-latest
