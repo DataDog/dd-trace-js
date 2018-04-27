@@ -20,10 +20,11 @@ class Instrumenter {
 
     if (typeof name === 'string') {
       this._integrations
-        .filter(plugin => plugin === name || plugin.name === name)
+        .filter(plugin => plugin.name === name)
         .forEach(plugin => this._plugins.set(plugin, config))
     } else {
-      this._plugins.set(name, config)
+      [].concat(name)
+        .forEach(plugin => this._plugins.set(plugin, config))
     }
 
     this.reload()
