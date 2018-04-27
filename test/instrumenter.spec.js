@@ -11,6 +11,7 @@ describe('Instrumenter', () => {
   let requireDir
   let Connection
   let Pool
+  let plugins
 
   beforeEach(() => {
     tracer = {
@@ -47,6 +48,15 @@ describe('Instrumenter', () => {
       ]
     }
 
+    plugins = {
+      other: {
+        name: 'other',
+        versions: ['1.x'],
+        patch: sinon.spy(),
+        unpatch: sinon.spy()
+      }
+    }
+
     const mysqlDir = path.normalize(path.join(__dirname, 'node_modules', 'mysql-mock'))
     const connectionPath = path.join(mysqlDir, 'lib', 'Connection.js')
     const poolPath = path.join(mysqlDir, 'lib', 'Pool.js')
@@ -66,12 +76,23 @@ describe('Instrumenter', () => {
     instrumenter = new Instrumenter(tracer)
   })
 
-  describe('when enabled', () => {
+  describe('with integrations enabled', () => {
     describe('use', () => {
-      it('should allow configuring a plugin', () => {
+      it('should allow configuring a plugin by name', () => {
         const config = { foo: 'bar' }
 
         instrumenter.use('express-mock', config)
+        instrumenter.patch()
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', config)
+      })
+
+      it('should allow configuring a plugin by instance', () => {
+        const config = { foo: 'bar' }
+
+        instrumenter.use(integrations.express, config)
         instrumenter.patch()
 
         const express = require('express-mock')
@@ -107,6 +128,15 @@ describe('Instrumenter', () => {
         require('express-mock')
 
         expect(integrations.express.patch).to.have.been.called
+      })
+
+      it('should support third party plugins', () => {
+        instrumenter.use(plugins.other)
+        instrumenter.patch()
+
+        const other = require('other')
+
+        expect(plugins.other.patch).to.have.been.calledWith(other, 'tracer')
       })
     })
 
@@ -161,7 +191,28 @@ describe('Instrumenter', () => {
     })
   })
 
-  describe('when disabled', () => {
+  describe('with integrations disabled', () => {
+    describe('use', () => {
+      it('should still allow adding plugins manually by name', () => {
+        instrumenter.use('express-mock')
+        instrumenter.patch({ plugins: false })
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer')
+      })
+    })
+
+    it('should support an array of plugins', () => {
+      instrumenter.use(integrations.mysql)
+      instrumenter.patch({ plugins: false })
+
+      require('mysql-mock')
+
+      expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer')
+      expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer')
+    })
+
     describe('patch', () => {
       it('should not patch any module', () => {
         instrumenter.patch({ plugins: false })
