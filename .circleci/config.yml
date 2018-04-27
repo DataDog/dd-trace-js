@@ -59,12 +59,6 @@ jobs:
       - image: node:8-alpine
       - *postgres
       - *mysql
-  build-node-10:
-    <<: *node-base
-    docker:
-      - image: node:10-alpine
-      - *postgres
-      - *mysql
   build-node-latest:
     <<: *node-base
     docker:
@@ -80,7 +74,6 @@ workflows:
       - build-node-4
       - build-node-6
       - build-node-8
-      - build-node-10
       - build-node-latest
   nightly:
     triggers:
@@ -94,5 +87,4 @@ workflows:
       - build-node-4
       - build-node-6
       - build-node-8
-      - build-node-10
       - build-node-latest
