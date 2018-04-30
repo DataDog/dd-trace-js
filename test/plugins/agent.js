@@ -10,6 +10,7 @@ const express = require('express')
 let agent = null
 let listener = null
 let tracer = null
+let handlers = []
 
 module.exports = {
   load (plugin, moduleToPatch, config) {
@@ -19,6 +20,15 @@ module.exports = {
     agent.use((req, res, next) => {
       req.body = msgpack.decode(req.body, { codec })
       next()
+    })
+
+    agent.put('/v0.3/traces', (req, res) => {
+      res.status(200).send('OK')
+
+      if (handlers[0]) {
+        handlers[0](req.body)
+        handlers.shift()
+      }
     })
 
     return getPort().then(port => {
@@ -47,9 +57,15 @@ module.exports = {
   },
 
   use (callback) {
-    agent.put('/v0.3/traces', (req, res) => {
-      res.status(200).send('OK')
-      callback(req.body)
+    return new Promise((resolve, reject) => {
+      handlers.push(function () {
+        try {
+          callback.apply(null, arguments)
+          resolve()
+        } catch (e) {
+          reject(e)
+        }
+      })
     })
   },
 
@@ -61,6 +77,7 @@ module.exports = {
     listener.close()
     listener = null
     agent = null
+    handlers = []
     delete require.cache[require.resolve('../..')]
   }
 }
