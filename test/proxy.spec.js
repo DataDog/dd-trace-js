@@ -7,12 +7,15 @@ describe('TracerProxy', () => {
   let tracer
   let NoopTracer
   let noop
+  let Instrumenter
+  let instrumenter
   let Config
   let config
   let platform
 
   beforeEach(() => {
     tracer = {
+      use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('span'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
@@ -23,6 +26,7 @@ describe('TracerProxy', () => {
     }
 
     noop = {
+      use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('span'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
@@ -32,8 +36,14 @@ describe('TracerProxy', () => {
       bindEmitter: sinon.stub()
     }
 
+    instrumenter = {
+      patch: sinon.spy(),
+      use: sinon.spy()
+    }
+
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
+    Instrumenter = sinon.stub().returns(instrumenter)
 
     config = {}
     Config = sinon.stub().returns(config)
@@ -45,11 +55,21 @@ describe('TracerProxy', () => {
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop': NoopTracer,
+      './instrumenter': Instrumenter,
       './config': Config,
       './platform': platform
     })
 
     proxy = new Proxy()
+  })
+
+  describe('use', () => {
+    it('should call the underlying instrumenter', () => {
+      const returnValue = proxy.use('a', 'b', 'c')
+
+      expect(instrumenter.use).to.have.been.calledWith('a', 'b', 'c')
+      expect(returnValue).to.equal(proxy)
+    })
   })
 
   describe('uninitialized', () => {
@@ -89,6 +109,18 @@ describe('TracerProxy', () => {
 
         expect(noop.trace).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('span')
+      })
+
+      it('should return a promise if a callback is not provided', () => {
+        const promise = proxy.trace('a', 'b')
+
+        expect(noop.trace).to.have.been.calledWith('a', 'b')
+
+        noop.trace.firstCall.args[2]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
       })
     })
 
@@ -151,12 +183,38 @@ describe('TracerProxy', () => {
       proxy.init()
     })
 
+    // it('should setup automatic instrumentation', () => {
+    //   expect(Instrumenter).to.have.been.calledWith(tracer)
+    //   expect(instrumenter.patch).to.have.been.called
+    // })
+
+    describe('use', () => {
+      it('should call the underlying Instrumenter', () => {
+        const returnValue = proxy.use('a', 'b', 'c')
+
+        expect(instrumenter.use).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal(proxy)
+      })
+    })
+
     describe('trace', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.trace('a', 'b', 'c')
 
         expect(tracer.trace).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('span')
+      })
+
+      it('should return a promise if a callback is not provided', () => {
+        const promise = proxy.trace('a', 'b')
+
+        expect(tracer.trace).to.have.been.calledWith('a', 'b')
+
+        tracer.trace.firstCall.args[2]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
       })
     })
 

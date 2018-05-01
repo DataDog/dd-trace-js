@@ -20,6 +20,7 @@ describe('Tracer', () => {
     sinon.stub(context, 'bindEmitter')
 
     instrumenter = {
+      use: sinon.spy(),
       patch: sinon.spy()
     }
     Instrumenter = sinon.stub().returns(instrumenter)
@@ -32,13 +33,6 @@ describe('Tracer', () => {
   afterEach(() => {
     context.bind.restore()
     context.bindEmitter.restore()
-  })
-
-  it('should setup automatic instrumentation', () => {
-    tracer = new Tracer(config)
-
-    expect(Instrumenter).to.have.been.calledWith(tracer)
-    expect(instrumenter.patch).to.have.been.called
   })
 
   describe('trace', () => {

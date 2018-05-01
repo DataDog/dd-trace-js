@@ -8,7 +8,7 @@ const METHODS = require('methods').concat('use', 'route', 'param', 'all')
 
 const OPERATION_NAME = 'express.request'
 
-function patch (express, tracer) {
+function patch (express, tracer, config) {
   METHODS.forEach((method) => {
     shimmer.wrap(express.application, method, wrapper)
   })
@@ -35,7 +35,7 @@ function patch (express, tracer) {
           span.setTag('resource.name', req.route.path)
         }
 
-        span.setTag('service.name', tracer._service)
+        span.setTag('service.name', config.service || tracer._service)
         span.setTag('span.type', 'web')
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
 

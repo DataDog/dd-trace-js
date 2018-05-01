@@ -5,7 +5,7 @@ const shimmer = require('shimmer')
 
 const OPERATION_NAME = 'pg.query'
 
-function patch (pg, tracer) {
+function patch (pg, tracer, config) {
   function queryWrap (query) {
     return function queryTrace () {
       const pgQuery = query.apply(this, arguments)
@@ -20,7 +20,7 @@ function patch (pg, tracer) {
             [Tags.DB_TYPE]: 'postgres'
           }
         }, span => {
-          span.setTag('service.name', 'postgres')
+          span.setTag('service.name', config.service || 'postgres')
           span.setTag('resource.name', statement)
           span.setTag('db.name', params.database)
           span.setTag('db.user', params.user)
