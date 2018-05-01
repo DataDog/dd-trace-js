@@ -7,7 +7,7 @@ const parentModule = require('parent-module')
 function load () {
   const callerPath = parentModule()
   const parentPath = parentModule(callerPath)
-  const pkg = readPkgUp.sync({ cwd: path.dirname(parentPath) }).pkg
+  const pkg = readPkgUp.sync({ cwd: path.dirname(parentPath) }).pkg || {}
 
   this._service = pkg.name
 }
