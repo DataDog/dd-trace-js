@@ -30,30 +30,30 @@ describe('Recorder', () => {
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
       recorder = new Recorder('http://test', 1000, 2)
+    })
 
-      describe('init', () => {
-        it('should schedule flushing after the configured interval', () => {
-          writer.length = 0
+    describe('init', () => {
+      it('should schedule flushing after the configured interval', () => {
+        writer.length = 0
 
-          recorder.init()
-          Scheduler.firstCall.args[0]()
+        recorder.init()
+        Scheduler.firstCall.args[0]()
 
-          expect(scheduler.start).to.have.been.called
-          expect(writer.flush).to.have.been.called
-        })
+        expect(scheduler.start).to.have.been.called
+        expect(writer.flush).to.have.been.called
+      })
+    })
+
+    describe('record', () => {
+      beforeEach(() => {
+        span = {}
       })
 
-      describe('record', () => {
-        beforeEach(() => {
-          span = {}
-        })
+      it('should record a span', () => {
+        writer.length = 0
+        recorder.record(span)
 
-        it('should record a span', () => {
-          writer.length = 0
-          recorder.record(span)
-
-          expect(writer.append).to.have.been.calledWith(span)
-        })
+        expect(writer.append).to.have.been.calledWith(span)
       })
     })
   })
