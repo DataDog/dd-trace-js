@@ -29,6 +29,8 @@ jobs:
           - MYSQL_DATABASE=db
       - &redis
         image: redis:4.0-alpine
+      - &mongo
+        image: mongo:3.6
     working_directory: ~/dd-trace-js
     steps:
       - checkout
@@ -51,6 +53,7 @@ jobs:
       - *postgres
       - *mysql
       - *redis
+      - *mongo
   build-node-6:
     <<: *node-base
     docker:
@@ -58,6 +61,7 @@ jobs:
       - *postgres
       - *mysql
       - *redis
+      - *mongo
   build-node-8:
     <<: *node-base
     docker:
@@ -65,6 +69,7 @@ jobs:
       - *postgres
       - *mysql
       - *redis
+      - *mongo
   build-node-latest:
     <<: *node-base
     docker:
@@ -72,6 +77,7 @@ jobs:
       - *postgres
       - *mysql
       - *redis
+      - *mongo
 
 workflows:
   version: 2
