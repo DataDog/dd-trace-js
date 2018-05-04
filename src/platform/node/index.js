@@ -8,6 +8,7 @@ const service = require('./service')
 const request = require('./request')
 const context = require('./context')
 const msgpack = require('./msgpack')
+const instrumenter = require('./instrumenter')
 
 module.exports = {
   name: () => 'nodejs',
@@ -20,5 +21,6 @@ module.exports = {
   service,
   request,
   context,
-  msgpack
+  msgpack,
+  instrumenter
 }

@@ -9,7 +9,7 @@ describe('Plugin', () => {
   describe('pg', () => {
     beforeEach(() => {
       pg = require('pg')
-      plugin = proxyquire('../src/plugins/pg', { 'pg': pg })
+      plugin = proxyquire('../src/platform/node/plugins/pg', { 'pg': pg })
     })
 
     afterEach(() => {

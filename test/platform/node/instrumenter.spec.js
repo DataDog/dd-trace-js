@@ -3,8 +3,7 @@
 const path = require('path')
 const proxyquire = require('proxyquire').noCallThru()
 
-describe('Instrumenter', () => {
-  let Instrumenter
+describe('Platform (node): instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
@@ -67,13 +66,13 @@ describe('Instrumenter', () => {
     requireDir = sinon.stub()
     requireDir.withArgs('./plugins').returns(integrations)
 
-    Instrumenter = proxyquire('../src/instrumenter', {
+    const instrumenterFactory = proxyquire('../../../src/platform/node/instrumenter', {
       'require-dir': requireDir,
       [connectionPath]: Connection,
       [poolPath]: Pool
     })
 
-    instrumenter = new Instrumenter(tracer)
+    instrumenter = instrumenterFactory(tracer)
   })
 
   describe('with integrations enabled', () => {

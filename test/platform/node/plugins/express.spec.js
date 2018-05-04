@@ -12,9 +12,9 @@ describe('Plugin', () => {
 
   describe('express', () => {
     beforeEach(() => {
-      plugin = require('../../src/plugins/express')
+      plugin = require('../../../../src/platform/node/plugins/express')
       express = require('express')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      context = require('../../../../src/platform').context({ experimental: { asyncHooks: false } })
     })
 
     afterEach(() => {

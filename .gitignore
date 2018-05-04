@@ -102,4 +102,4 @@ typings/
 
 package-lock.json
 yarn.lock
-!test/node_modules
+!test/platform/node/node_modules

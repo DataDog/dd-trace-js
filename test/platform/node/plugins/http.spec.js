@@ -11,7 +11,7 @@ describe('Plugin', () => {
 
   describe('http', () => {
     beforeEach(() => {
-      plugin = require('../../src/plugins/http')
+      plugin = require('../../../../src/platform/node/plugins/http')
       express = require('express')
       http = require('http')
     })

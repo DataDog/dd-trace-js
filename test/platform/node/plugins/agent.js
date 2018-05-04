@@ -14,7 +14,7 @@ let handlers = []
 
 module.exports = {
   load (plugin, moduleToPatch, config) {
-    tracer = require('../..')
+    tracer = require('../../../..')
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
     agent.use((req, res, next) => {
@@ -78,6 +78,6 @@ module.exports = {
     listener = null
     agent = null
     handlers = []
-    delete require.cache[require.resolve('../..')]
+    delete require.cache[require.resolve('../../../..')]
   }
 }
