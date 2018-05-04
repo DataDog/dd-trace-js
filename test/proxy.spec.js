@@ -123,12 +123,24 @@ describe('TracerProxy', () => {
         })
       })
 
-      it('should work without options', () => {
+      it('should work without options for callbacks', () => {
         const callback = () => {}
         const returnValue = proxy.trace('a', callback)
 
         expect(noop.trace).to.have.been.calledWith('a', callback)
         expect(returnValue).to.equal('span')
+      })
+
+      it('should work without options for promises', () => {
+        const promise = proxy.trace('a')
+
+        expect(noop.trace).to.have.been.calledWith('a')
+
+        noop.trace.firstCall.args[1]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
       })
     })
 
@@ -226,6 +238,18 @@ describe('TracerProxy', () => {
 
         expect(tracer.trace).to.have.been.calledWith('a', callback)
         expect(returnValue).to.equal('span')
+      })
+
+      it('should work without options for promises', () => {
+        const promise = proxy.trace('a')
+
+        expect(tracer.trace).to.have.been.calledWith('a')
+
+        tracer.trace.firstCall.args[1]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
       })
     })
 
