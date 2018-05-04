@@ -36,7 +36,9 @@ class TracerProxy extends Tracer {
 
   trace (operationName, options, callback) {
     if (callback) {
-      return this._tracer.trace.apply(this._tracer, arguments)
+      return this._tracer.trace(operationName, options, callback)
+    } else if (options instanceof Function) {
+      return this._tracer.trace(operationName, options)
     } else {
       return new Promise((resolve, reject) => {
         this._tracer.trace(operationName, options, span => {

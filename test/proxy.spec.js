@@ -122,6 +122,14 @@ describe('TracerProxy', () => {
           expect(span).to.equal('span')
         })
       })
+
+      it('should work without options', () => {
+        const callback = () => {}
+        const returnValue = proxy.trace('a', callback)
+
+        expect(noop.trace).to.have.been.calledWith('a', callback)
+        expect(returnValue).to.equal('span')
+      })
     })
 
     describe('startSpan', () => {
@@ -183,11 +191,6 @@ describe('TracerProxy', () => {
       proxy.init()
     })
 
-    // it('should setup automatic instrumentation', () => {
-    //   expect(Instrumenter).to.have.been.calledWith(tracer)
-    //   expect(instrumenter.patch).to.have.been.called
-    // })
-
     describe('use', () => {
       it('should call the underlying Instrumenter', () => {
         const returnValue = proxy.use('a', 'b', 'c')
@@ -215,6 +218,14 @@ describe('TracerProxy', () => {
         return promise.then(span => {
           expect(span).to.equal('span')
         })
+      })
+
+      it('should work without options', () => {
+        const callback = () => {}
+        const returnValue = proxy.trace('a', callback)
+
+        expect(tracer.trace).to.have.been.calledWith('a', callback)
+        expect(returnValue).to.equal('span')
       })
     })
 
