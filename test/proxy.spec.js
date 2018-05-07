@@ -122,6 +122,26 @@ describe('TracerProxy', () => {
           expect(span).to.equal('span')
         })
       })
+
+      it('should work without options for callbacks', () => {
+        const callback = () => {}
+        const returnValue = proxy.trace('a', callback)
+
+        expect(noop.trace).to.have.been.calledWith('a', callback)
+        expect(returnValue).to.equal('span')
+      })
+
+      it('should work without options for promises', () => {
+        const promise = proxy.trace('a')
+
+        expect(noop.trace).to.have.been.calledWith('a')
+
+        noop.trace.firstCall.args[1]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
+      })
     })
 
     describe('startSpan', () => {
@@ -183,11 +203,6 @@ describe('TracerProxy', () => {
       proxy.init()
     })
 
-    // it('should setup automatic instrumentation', () => {
-    //   expect(Instrumenter).to.have.been.calledWith(tracer)
-    //   expect(instrumenter.patch).to.have.been.called
-    // })
-
     describe('use', () => {
       it('should call the underlying Instrumenter', () => {
         const returnValue = proxy.use('a', 'b', 'c')
@@ -211,6 +226,26 @@ describe('TracerProxy', () => {
         expect(tracer.trace).to.have.been.calledWith('a', 'b')
 
         tracer.trace.firstCall.args[2]('span')
+
+        return promise.then(span => {
+          expect(span).to.equal('span')
+        })
+      })
+
+      it('should work without options', () => {
+        const callback = () => {}
+        const returnValue = proxy.trace('a', callback)
+
+        expect(tracer.trace).to.have.been.calledWith('a', callback)
+        expect(returnValue).to.equal('span')
+      })
+
+      it('should work without options for promises', () => {
+        const promise = proxy.trace('a')
+
+        expect(tracer.trace).to.have.been.calledWith('a')
+
+        tracer.trace.firstCall.args[1]('span')
 
         return promise.then(span => {
           expect(span).to.equal('span')
