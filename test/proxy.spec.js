@@ -101,6 +101,18 @@ describe('TracerProxy', () => {
 
         expect(DatadogTracer).to.have.been.calledOnce
       })
+
+      it('should set up automatic instrumentation', () => {
+        proxy.init()
+
+        expect(instrumenter.patch).to.have.been.called
+      })
+
+      it('should update the delegate before setting up instrumentation', () => {
+        proxy.init()
+
+        expect(instrumenter.patch).to.have.been.calledAfter(DatadogTracer)
+      })
     })
 
     describe('trace', () => {

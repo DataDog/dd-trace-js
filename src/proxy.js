@@ -22,8 +22,8 @@ class TracerProxy extends Tracer {
 
       const config = new Config(options)
 
-      this._instrumenter.patch(config)
       this._tracer = new DatadogTracer(config)
+      this._instrumenter.patch(config)
     }
 
     return this
