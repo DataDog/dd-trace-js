@@ -9,11 +9,11 @@ const pkg = require('../package.json')
 const increment = getIncrement()
 const version = semver.inc(pkg.version, increment)
 
-pkg.version = `v${version}`
+pkg.version = version
 
 exec(`git checkout master`)
 exec(`git checkout -b v${version}`)
-write('package.json', JSON.stringify(pkg, 2) + '\n')
+write('package.json', JSON.stringify(pkg, null, 2) + '\n')
 write('lib/version.js', `module.exports = '${version}'\n`)
 add('package.json')
 add('lib/version.js')
