@@ -34,8 +34,8 @@ class Instrumenter {
     config = config || {}
 
     if (config.plugins !== false) {
-      loadIntegrations().forEach(integration => {
-        this._plugins.has(integration) || this._plugins.set(integration)
+      this._integrations.forEach(integration => {
+        this._plugins.has(integration) || this._plugins.set(integration, {})
       })
     }
 
