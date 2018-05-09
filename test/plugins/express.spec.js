@@ -69,11 +69,36 @@ describe('Plugin', () => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('service', 'test')
             expect(traces[0][0]).to.have.property('type', 'web')
-            expect(traces[0][0]).to.have.property('resource', '/app -> /user/:id')
+            expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
             expect(traces[0][0].meta).to.have.property('span.kind', 'server')
             expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
             expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+
+            done()
+          })
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
+          })
+        })
+      })
+
+      it('should surround matchers based on regular expressions', done => {
+        const app = express()
+        const router = express.Router()
+
+        router.get(/^\/user\/(\d)$/, (req, res) => {
+          res.status(200).send()
+        })
+
+        app.use('/app', router)
+
+        getPort().then(port => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', '/app(/^\\/user\\/(\\d)$/)')
 
             done()
           })
@@ -98,7 +123,7 @@ describe('Plugin', () => {
 
         getPort().then(port => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('resource', '/app -> /user/:id')
+            expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
 
             done()
           })

@@ -30,7 +30,7 @@ function createWrapMethod (tracer, config) {
         const paths = tracer._context.get('express.paths')
 
         if (paths) {
-          span.setTag('resource.name', paths.join(' -> '))
+          span.setTag('resource.name', paths.join(''))
         }
 
         span.setTag('service.name', config.service || tracer._service)
@@ -110,7 +110,7 @@ function extractMatchers (fn) {
   }
 
   return arg.map(pattern => ({
-    path: pattern.toString(),
+    path: pattern instanceof RegExp ? `(${pattern})` : pattern,
     test: path => pathToRegExp(pattern).test(path)
   }))
 }
