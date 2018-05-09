@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Datadog APM tracing client for JavaScript (experimental)",
   "main": "index.js",
   "scripts": {
