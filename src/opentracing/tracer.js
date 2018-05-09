@@ -18,6 +18,8 @@ class DatadogTracer extends Tracer {
 
     this._service = config.service
     this._url = config.url
+    this._env = config.env
+    this._tags = config.tags
     this._recorder = new Recorder(config.url, config.flushInterval, config.bufferSize)
     this._recorder.init()
     this._sampler = new Sampler(1)
@@ -29,10 +31,16 @@ class DatadogTracer extends Tracer {
   }
 
   _startSpan (name, fields) {
+    const tags = {}
+
+    if (this._env) {
+      tags.env = this._env
+    }
+
     return new Span(this, {
       operationName: fields.operationName || name,
       parent: getParent(fields.references),
-      tags: fields.tags,
+      tags: Object.assign(tags, this._tags, fields.tags),
       startTime: fields.startTime
     })
   }
