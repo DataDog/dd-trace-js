@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "bench": "node benchmark",
+    "jsdoc": "gulp jsdoc",
+    "jsdoc:watch": "gulp jsdoc:watch",
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "mocha --watch",
     "test": "nyc --reporter text --reporter lcov mocha"
@@ -63,6 +65,9 @@
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.16.2",
     "get-port": "^3.2.0",
+    "gulp": "^3.9.1",
+    "gulp-jsdoc3": "^2.0.0",
+    "jsdoc": "^3.5.5",
     "mocha": "^5.0.0",
     "mysql": "^2.15.0",
     "mysql2": "^1.5.3",

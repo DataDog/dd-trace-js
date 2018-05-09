@@ -29,6 +29,9 @@ dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
+dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
+dev,gulp-jsdoc3,Apache-2.0,Copyright Marc Udoff
+dev,jsdoc,Apache-2.0,Copyright 2011-present Michael Mathews and the contributors to JSDoc
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,mysql,MIT,Copyright 2012 Felix Geisendörfer and contributors
 dev,mysql2,MIT,Copyright 2016 Andrey Sidorov and contributors

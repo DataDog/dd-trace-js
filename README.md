@@ -7,103 +7,13 @@
 
 This project is **experimental** and under active development. Use it at your own risk.
 
-## Installation
+## Getting Started
 
-### NodeJS
+For a basic product overview, check out our [setup documentation](https://docs.datadoghq.com/tracing/setup/javascript/).
 
-```sh
-npm install --save dd-trace
-```
+For installation, configuration, and details about using the API, check out our [API documentation](https://datadog.github.io/dd-trace-js).
 
-*Node >= 4 is required.*
-
-## Usage
-
-Simply require and initialize the tracer and all supported
-[libraries](#automatic-instrumentation) will automatically
-be instrumented.
-
-```js
-// The tracer must be initialized before other libraries
-const tracer = require('dd-trace').init()
-```
-
-### Available Options
-
-Options can be configured as a parameter to the `init()` method
-or as environment variables.
-
-| Config        | Environment Variable         | Default   | Description |
-| ------------- | ---------------------------- | --------- | ----------- |
-| debug         | DD_TRACE_DEBUG               | false     | Enable debug logging in the tracer. |
-| service       | DD_SERVICE_NAME              |           | The service name to be used for this program. |
-| hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |
-| port          | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
-| flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Available experimental features: `asyncHooks`. |
-| plugins       |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
-
-### Automatic Instrumentation
-
-The following libraries are instrumented automatically by default:
-
-* [http](https://nodejs.org/api/http.html)
-* [express](https://expressjs.com/) (version 4)
-* [pg](https://node-postgres.com/) (version 6)
-
-### OpenTracing
-
-This library is OpenTracing compliant, so once the tracer is initialized
-it can be used as a global tracer.
-
-```js
-const tracer = require('dd-trace').init()
-const opentracing = require('opentracing')
-
-opentracing.initGlobalTracer(tracer)
-```
-
-Then the tracer will be available with `opentracing.globalTracer()`.
-
-See the OpenTracing JavaScript [documentation](https://github.com/opentracing/opentracing-javascript)
-and [API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) for more details.
-
-**NOTE: When using OpenTracing, context propagation is not handled
-automatically.**
-
-## Advanced Usage
-
-In some cases you may want to do manual instrumentation. For example
-if there is no built-in plugin covering a library you are using or if you want more control on how instrumentation is done.
-
-### Manual instrumentation
-
-```js
-const tracer = require('dd-trace').init()
-const http = require('http')
-
-const server = http.createServer((req, res) => {
-  const options = {
-    resource: '/hello/:name',
-    type: 'web',
-    tags: {
-      'span.kind': 'server',
-      'http.method': 'GET',
-      'http.url': req.url,
-      'http.status_code': '200'
-    }
-  }
-
-  tracer.trace('say_hello', options, span => {
-    res.write('Hello, World!')
-    span.finish()
-  })
-
-  res.end()
-})
-
-server.listen(8000)
-```
+For descriptions of terminology used in APM, take a look at the [official documentation](https://docs.datadoghq.com/tracing/visualization/).
 
 ## Development
 
