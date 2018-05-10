@@ -13,3 +13,7 @@ services:
       - MYSQL_DATABASE=db
     ports:
       - "127.0.0.1:3306:3306"
+  redis:
+    image: redis:4.0-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
