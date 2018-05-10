@@ -15,6 +15,7 @@ class DatadogTracer extends Tracer {
     super()
 
     log.use(config.logger)
+    log.toggle(config.debug)
 
     this._service = config.service
     this._url = config.url
