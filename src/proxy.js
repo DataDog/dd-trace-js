@@ -22,8 +22,8 @@ class TracerProxy extends Tracer {
 
       const config = new Config(options)
 
-      this._instrumenter.patch(config)
       this._tracer = new DatadogTracer(config)
+      this._instrumenter.patch(config)
     }
 
     return this
@@ -36,12 +36,16 @@ class TracerProxy extends Tracer {
 
   trace (operationName, options, callback) {
     if (callback) {
-      return this._tracer.trace.apply(this._tracer, arguments)
+      return this._tracer.trace(operationName, options, callback)
+    } else if (options instanceof Function) {
+      return this._tracer.trace(operationName, options)
+    } else if (options) {
+      return new Promise((resolve, reject) => {
+        this._tracer.trace(operationName, options, span => resolve(span))
+      })
     } else {
       return new Promise((resolve, reject) => {
-        this._tracer.trace(operationName, options, span => {
-          resolve(span)
-        })
+        this._tracer.trace(operationName, span => resolve(span))
       })
     }
   }

@@ -1,14 +1,13 @@
 {
   "name": "dd-trace",
-  "version": "0.1.3",
+  "version": "0.1.6",
   "description": "Datadog APM tracing client for JavaScript (experimental)",
   "main": "index.js",
   "scripts": {
     "bench": "node benchmark",
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "mocha --watch",
-    "test": "nyc --reporter text --reporter lcov mocha",
-    "version": "genversion lib/version.js && git add lib/version.js"
+    "test": "nyc --reporter text --reporter lcov mocha"
   },
   "repository": {
     "type": "git",
@@ -40,6 +39,7 @@
     "msgpack-lite": "^0.1.26",
     "opentracing": "0.14.1",
     "parent-module": "^0.1.0",
+    "path-to-regexp": "^2.2.1",
     "performance-now": "^2.1.0",
     "read-pkg-up": "^3.0.0",
     "require-dir": "^1.0.0",
@@ -62,7 +62,6 @@
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.16.2",
-    "genversion": "^2.0.1",
     "get-port": "^3.2.0",
     "mocha": "^5.0.0",
     "mysql": "^2.15.0",

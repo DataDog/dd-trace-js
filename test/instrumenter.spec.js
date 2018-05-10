@@ -117,7 +117,7 @@ describe('Instrumenter', () => {
 
         require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer')
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
       })
 
       it('should reapply the require hook when called multiple times', () => {
@@ -136,7 +136,7 @@ describe('Instrumenter', () => {
 
         const other = require('other')
 
-        expect(plugins.other.patch).to.have.been.calledWith(other, 'tracer')
+        expect(plugins.other.patch).to.have.been.calledWith(other, 'tracer', {})
       })
     })
 
@@ -146,7 +146,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer')
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
       })
 
       it('should only patch a module if its version is supported by the plugin ', () => {
@@ -155,7 +155,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer')
+        expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer', {})
       })
 
       it('should patch native modules when they are loaded', () => {
@@ -164,7 +164,7 @@ describe('Instrumenter', () => {
         const http = require('http')
 
         expect(integrations.http.patch).to.have.been.called
-        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer')
+        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', {})
       })
 
       it('should support patching multiple files', () => {
@@ -173,8 +173,8 @@ describe('Instrumenter', () => {
         const mysql = require('mysql-mock')
 
         expect(mysql).to.deep.equal({ foo: 'bar' })
-        expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer')
-        expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer')
+        expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer', {})
+        expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer', {})
       })
     })
 
@@ -199,7 +199,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer')
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
       })
     })
 
@@ -209,8 +209,8 @@ describe('Instrumenter', () => {
 
       require('mysql-mock')
 
-      expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer')
-      expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer')
+      expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer', {})
+      expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer', {})
     })
 
     describe('patch', () => {
@@ -219,7 +219,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer')
+        expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer', {})
       })
     })
   })

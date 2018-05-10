@@ -120,9 +120,19 @@ describe('Platform', () => {
 
     describe('load', () => {
       let service
+      let load
+      let readPkgUp
 
       beforeEach(() => {
+        readPkgUp = {
+          sync: sinon.stub()
+        }
+
         platform = require('../../../src/platform/node')
+        load = proxyquire('../src/platform/node/load', {
+          'read-pkg-up': readPkgUp
+        })
+
         service = platform._service
       })
 
@@ -134,6 +144,14 @@ describe('Platform', () => {
         require('./load/direct')
 
         expect(platform._service).to.equal('foo')
+      })
+
+      it('should not load the service name if the module information is unavailable', () => {
+        readPkgUp.sync.returns({ pkg: undefined })
+
+        load.call(platform)
+
+        expect(platform._service).to.be.undefined
       })
 
       it('should work even in subfolders', () => {
