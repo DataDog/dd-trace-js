@@ -2,7 +2,9 @@
 
 const opentracing = require('opentracing')
 const Tracer = opentracing.Tracer
+const Reference = opentracing.Reference
 const Span = require('./span')
+const SpanContext = require('./span_context')
 const Recorder = require('../recorder')
 const Sampler = require('../sampler')
 const TextMapPropagator = require('./propagation/text_map')
@@ -42,12 +44,22 @@ class DatadogTracer extends Tracer {
   }
 
   _inject (spanContext, format, carrier) {
-    this._propagators[format].inject(spanContext, carrier)
+    try {
+      this._propagators[format].inject(spanContext, carrier)
+    } catch (e) {
+      log.error(e)
+    }
+
     return this
   }
 
   _extract (format, carrier) {
-    return this._propagators[format].extract(carrier)
+    try {
+      return this._propagators[format].extract(carrier)
+    } catch (e) {
+      log.error(e)
+      return null
+    }
   }
 
   _isSampled (span) {
@@ -61,6 +73,19 @@ function getParent (references) {
   if (references) {
     for (let i = 0; i < references.length; i++) {
       const ref = references[i]
+
+      if (!(ref instanceof Reference)) {
+        log.error(new Error(`Expected ${ref} to be an instance of opentracing.Reference`))
+        break
+      }
+
+      const spanContext = ref.referencedContext()
+
+      if (!(spanContext instanceof SpanContext)) {
+        log.error(new Error(`Expected ${spanContext} to be an instance of SpanContext`))
+        break
+      }
+
       if (ref.type() === opentracing.REFERENCE_CHILD_OF) {
         parent = ref.referencedContext()
         break
