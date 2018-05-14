@@ -15,8 +15,8 @@ const node = require('../src/platform/node')
 const retryOptions = {
   retries: 10,
   factor: 1,
-  minTimeout: 1000,
-  maxTimeout: 1000,
+  minTimeout: 3000,
+  maxTimeout: 3000,
   randomize: false
 }
 
