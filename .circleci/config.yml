@@ -18,7 +18,17 @@ jobs:
   build-node-base: &node-base
     docker:
       - image: node:alpine
-      - image: postgres:9.5
+      - &postgres
+        image: postgres:9.5
+      - &mysql
+        image: mysql:5.7
+        environment:
+          - MYSQL_ROOT_PASSWORD=rootpass
+          - MYSQL_PASSWORD=userpass
+          - MYSQL_USER=user
+          - MYSQL_DATABASE=db
+      - &redis
+        image: redis:4.0-alpine
     working_directory: ~/dd-trace-js
     steps:
       - checkout
@@ -38,19 +48,30 @@ jobs:
     <<: *node-base
     docker:
       - image: node:4-alpine
-      - image: postgres:9.5
+      - *postgres
+      - *mysql
+      - *redis
   build-node-6:
     <<: *node-base
     docker:
       - image: node:6-alpine
-      - image: postgres:9.5
+      - *postgres
+      - *mysql
+      - *redis
   build-node-8:
     <<: *node-base
     docker:
       - image: node:8-alpine
-      - image: postgres:9.5
+      - *postgres
+      - *mysql
+      - *redis
   build-node-latest:
     <<: *node-base
+    docker:
+      - image: node:alpine
+      - *postgres
+      - *mysql
+      - *redis
 
 workflows:
   version: 2
