@@ -87,13 +87,13 @@ module.exports = [
   {
     name: 'mysql2',
     file: 'lib/connection.js',
-    versions: ['1.x'],
+    versions: ['^1.5'],
     patch: patchConnection,
     unpatch: unpatchConnection
   },
   {
     name: 'mysql2',
-    versions: ['1.x'],
+    versions: ['^1.5'],
     patch: patch,
     unpatch: unpatch
   }
