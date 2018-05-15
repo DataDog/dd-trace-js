@@ -30,6 +30,7 @@ class Tracer extends BaseTracer {
    * @param {string} [options.service] The service name to be used for this program.
    * @param {string} [options.hostname=localhost] The address of the trace agent that the tracer will submit to.
    * @param {number|string} [options.port=8126] The port of the trace agent that the tracer will submit to.
+   * @param {number} [options.sampleRate=1] Percentage of spans to sample as a float between 0 and 1.
    * @param {number} [options.flushInterval=2000] Interval in milliseconds at which the tracer
    * will submit traces to the agent.
    * @param {Object|boolean} [options.experimental={}] Experimental features can be enabled all at once
