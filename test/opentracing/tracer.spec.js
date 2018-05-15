@@ -49,11 +49,13 @@ describe('Tracer', () => {
       flushInterval: 2000,
       bufferSize: 1000,
       logger: 'logger',
-      tags: {}
+      tags: {},
+      debug: false
     }
 
     log = {
-      use: sinon.spy()
+      use: sinon.spy(),
+      toggle: sinon.spy()
     }
 
     Tracer = proxyquire('../src/opentracing/tracer', {
@@ -75,10 +77,11 @@ describe('Tracer', () => {
     expect(recorder.record).to.have.been.calledWith('span')
   })
 
-  it('should be support logging', () => {
+  it('should support logging', () => {
     tracer = new Tracer(config)
 
     expect(log.use).to.have.been.calledWith(config.logger)
+    expect(log.toggle).to.have.been.calledWith(config.debug)
   })
 
   describe('startSpan', () => {
