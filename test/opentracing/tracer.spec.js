@@ -48,7 +48,8 @@ describe('Tracer', () => {
       url: 'http://test:7777',
       flushInterval: 2000,
       bufferSize: 1000,
-      logger: 'logger'
+      logger: 'logger',
+      tags: {}
     }
 
     log = {
@@ -158,6 +159,42 @@ describe('Tracer', () => {
       expect(Span).to.have.been.calledWithMatch(tracer, {
         operationName: 'name',
         parent: null
+      })
+    })
+
+    it('should merge default tracer tags with span tags', () => {
+      config.tags = {
+        'foo': 'tracer',
+        'bar': 'tracer'
+      }
+
+      fields.tags = {
+        'bar': 'span',
+        'baz': 'span'
+      }
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWithMatch(tracer, {
+        tags: {
+          'foo': 'tracer',
+          'bar': 'span',
+          'baz': 'span'
+        }
+      })
+    })
+
+    it('should add the env tag from the env option', () => {
+      config.env = 'test'
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWithMatch(tracer, {
+        tags: {
+          'env': 'test'
+        }
       })
     })
   })
