@@ -15,8 +15,8 @@ const node = require('../src/platform/node')
 const retryOptions = {
   retries: 10,
   factor: 1,
-  minTimeout: 1000,
-  maxTimeout: 1000,
+  minTimeout: 3000,
+  maxTimeout: 3000,
   randomize: false
 }
 
@@ -77,20 +77,23 @@ function waitForPostgres () {
 
 function waitForMysql () {
   return new Promise((resolve, reject) => {
-    const connection = mysql.createConnection({
-      host: 'localhost',
-      user: 'user',
-      password: 'userpass',
-      database: 'db'
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      const connection = mysql.createConnection({
+        host: 'localhost',
+        user: 'user',
+        password: 'userpass',
+        database: 'db'
+      })
+
+      connection.connect(err => {
+        if (operation.retry(err)) return
+        if (err) reject(err)
+
+        connection.end(() => resolve())
+      })
     })
-
-    connection.connect()
-
-    connection.query('SELECT 1 + 1 AS solution', (error, results, fields) => {
-      if (error) throw error
-    })
-
-    connection.end(() => resolve())
   })
 }
 
