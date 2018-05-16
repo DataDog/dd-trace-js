@@ -15,10 +15,12 @@ function request (options, callback) {
 
   return new Promise((resolve, reject) => {
     const req = http.request(options, res => {
-      res.on('data', chunk => {})
+      let data = ''
+
+      res.on('data', chunk => { data += chunk })
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode <= 299) {
-          resolve()
+          resolve(data)
         } else {
           const error = new Error(http.STATUS_CODES[res.statusCode])
           error.status = res.statusCode
