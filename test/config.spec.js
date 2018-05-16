@@ -60,6 +60,7 @@ describe('Config', () => {
       port: 6218,
       service: 'service',
       env: 'test',
+      sampleRate: 0.5,
       logger,
       tags,
       flushInterval: 5000,
@@ -72,6 +73,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
     expect(config).to.have.deep.property('tags', tags)
     expect(config).to.have.property('flushInterval', 5000)
@@ -123,5 +125,11 @@ describe('Config', () => {
     expect(config).to.have.deep.property('experimental', {
       asyncHooks: true
     })
+  })
+
+  it('should sanitize the sample rate to be between 0 and 1', () => {
+    expect(new Config({ sampleRate: -1 })).to.have.property('sampleRate', 0)
+    expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
+    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', 1)
   })
 })
