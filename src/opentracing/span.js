@@ -4,6 +4,7 @@ const opentracing = require('opentracing')
 const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const platform = require('../platform')
+const log = require('../log')
 
 class DatadogSpan extends Span {
   constructor (tracer, fields) {
@@ -69,13 +70,17 @@ class DatadogSpan extends Span {
   }
 
   _addTags (keyValuePairs) {
-    Object.keys(keyValuePairs).forEach(key => {
-      this._tags[key] = String(keyValuePairs[key])
-    })
+    try {
+      Object.keys(keyValuePairs).forEach(key => {
+        this._tags[key] = String(keyValuePairs[key])
+      })
+    } catch (e) {
+      log.error(e)
+    }
   }
 
   _finish (finishTime) {
-    finishTime = finishTime || platform.now()
+    finishTime = parseInt(finishTime, 10) || platform.now()
 
     this._duration = finishTime - this._startTime
     this._spanContext.trace.finished.push(this)

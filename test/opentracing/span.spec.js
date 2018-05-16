@@ -114,6 +114,12 @@ describe('Span', () => {
 
       expect(span._tags).to.have.property('foo', '123')
     })
+
+    it('should handle errors', () => {
+      span = new Span(tracer, { operationName: 'operation' })
+
+      expect(() => span.addTags()).not.to.throw()
+    })
   })
 
   describe('finish', () => {
