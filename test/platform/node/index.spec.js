@@ -189,7 +189,7 @@ describe('Platform', () => {
           }
         })
           .put('/path', { foo: 'bar' })
-          .reply(200)
+          .reply(200, 'OK')
 
         return request({
           protocol: 'http:',
@@ -201,6 +201,8 @@ describe('Platform', () => {
             'Content-Type': 'application/octet-stream'
           },
           data: Buffer.from(JSON.stringify({ foo: 'bar' }))
+        }).then(res => {
+          expect(res).to.equal('OK')
         })
       })
 
@@ -212,7 +214,7 @@ describe('Platform', () => {
           }
         })
           .put('/path', 'fizzbuzz')
-          .reply(200)
+          .reply(200, 'OK')
 
         return request({
           protocol: 'http:',
@@ -224,6 +226,8 @@ describe('Platform', () => {
             'Content-Type': 'application/octet-stream'
           },
           data: [Buffer.from('fizz', 'utf-8'), Buffer.from('buzz', 'utf-8')]
+        }).then(res => {
+          expect(res).to.equal('OK')
         })
       })
 

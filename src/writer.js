@@ -40,24 +40,27 @@ class Writer {
   flush () {
     if (this._queue.length > 0) {
       const data = platform.msgpack.prefix(this._queue)
+      const options = {
+        protocol: this._url.protocol,
+        hostname: this._url.hostname,
+        port: this._url.port,
+        path: '/v0.3/traces',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/msgpack',
+          'Datadog-Meta-Lang': platform.name(),
+          'Datadog-Meta-Lang-Version': platform.version(),
+          'Datadog-Meta-Lang-Interpreter': platform.engine(),
+          'Datadog-Meta-Tracer-Version': tracerVersion,
+          'X-Datadog-Trace-Count': String(this._queue.length)
+        }
+      }
+
+      log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
       platform
-        .request({
-          protocol: this._url.protocol,
-          hostname: this._url.hostname,
-          port: this._url.port,
-          path: '/v0.3/traces',
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/msgpack',
-            'Datadog-Meta-Lang': platform.name(),
-            'Datadog-Meta-Lang-Version': platform.version(),
-            'Datadog-Meta-Lang-Interpreter': platform.engine(),
-            'Datadog-Meta-Tracer-Version': tracerVersion,
-            'X-Datadog-Trace-Count': String(this._queue.length)
-          },
-          data
-        })
+        .request(Object.assign({ data }, options))
+        .then(res => log.debug(`Response from the agent: ${res}`))
         .catch(e => log.error(e))
 
       this._queue = []
