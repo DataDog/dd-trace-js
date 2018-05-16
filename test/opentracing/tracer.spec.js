@@ -10,6 +10,7 @@ describe('Tracer', () => {
   let span
   let Recorder
   let recorder
+  let SpanContext
   let spanContext
   let fields
   let carrier
@@ -22,6 +23,8 @@ describe('Tracer', () => {
 
   beforeEach(() => {
     fields = {}
+
+    SpanContext = sinon.spy()
 
     span = {}
     Span = sinon.stub().returns(span)
@@ -49,15 +52,18 @@ describe('Tracer', () => {
       flushInterval: 2000,
       bufferSize: 1000,
       logger: 'logger',
-      tags: {}
+      tags: {},
+      debug: false
     }
 
     log = {
-      use: sinon.spy()
+      use: sinon.spy(),
+      toggle: sinon.spy()
     }
 
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
+      './span_context': SpanContext,
       '../recorder': Recorder,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
@@ -75,10 +81,11 @@ describe('Tracer', () => {
     expect(recorder.record).to.have.been.calledWith('span')
   })
 
-  it('should be support logging', () => {
+  it('should support logging', () => {
     tracer = new Tracer(config)
 
     expect(log.use).to.have.been.calledWith(config.logger)
+    expect(log.toggle).to.have.been.calledWith(config.debug)
   })
 
   describe('startSpan', () => {
@@ -100,7 +107,7 @@ describe('Tracer', () => {
     })
 
     it('should start a span that is the child of a span', () => {
-      const parent = {}
+      const parent = new SpanContext()
 
       fields.references = [
         new Reference(opentracing.REFERENCE_CHILD_OF, parent)
@@ -116,7 +123,7 @@ describe('Tracer', () => {
     })
 
     it('should start a span that follows from a span', () => {
-      const parent = {}
+      const parent = new SpanContext()
 
       fields.references = [
         new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent)
@@ -132,11 +139,11 @@ describe('Tracer', () => {
     })
 
     it('should ignore additional follow references', () => {
-      const parent = {}
+      const parent = new SpanContext()
 
       fields.references = [
         new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent),
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, {})
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext())
       ]
 
       tracer = new Tracer(config)
@@ -149,8 +156,36 @@ describe('Tracer', () => {
     })
 
     it('should ignore unknown references', () => {
+      const parent = new SpanContext()
+
       fields.references = [
-        new Reference('test', {})
+        new Reference('test', parent)
+      ]
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWithMatch(tracer, {
+        operationName: 'name',
+        parent: null
+      })
+    })
+
+    it('should ignore references that are not references', () => {
+      fields.references = [{}]
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWithMatch(tracer, {
+        operationName: 'name',
+        parent: null
+      })
+    })
+
+    it('should ignore references to objects other than span contexts', () => {
+      fields.references = [
+        new Reference(opentracing.REFERENCE_CHILD_OF, {})
       ]
 
       tracer = new Tracer(config)
@@ -226,6 +261,12 @@ describe('Tracer', () => {
 
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
+
+    it('should handle errors', () => {
+      tracer = new Tracer(config)
+
+      expect(() => tracer.inject()).not.to.throw()
+    })
   })
 
   describe('extract', () => {
@@ -257,6 +298,12 @@ describe('Tracer', () => {
       const spanContext = tracer.extract(opentracing.FORMAT_BINARY, carrier)
 
       expect(spanContext).to.equal('spanContext')
+    })
+
+    it('should handle errors', () => {
+      tracer = new Tracer(config)
+
+      expect(() => tracer.extract()).not.to.throw()
     })
   })
 })
