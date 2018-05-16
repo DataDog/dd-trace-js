@@ -31,13 +31,21 @@ module.exports = {
   },
 
   debug (message) {
-    _enabled && _logger.debug(message)
+    if (_enabled) {
+      _logger.debug(message instanceof Function ? message() : message)
+    }
 
     return this
   },
 
   error (err) {
-    _enabled && _logger.error(err)
+    if (_enabled) {
+      if (err instanceof Function) {
+        err = err()
+      }
+
+      _logger.error(typeof err === 'string' ? new Error(err) : err)
+    }
 
     return this
   }

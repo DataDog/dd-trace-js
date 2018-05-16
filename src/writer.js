@@ -21,7 +21,13 @@ class Writer {
     const trace = span.context().trace
 
     if (trace.started.length === trace.finished.length) {
-      const buffer = encode(trace.finished.map(format))
+      const formattedTrace = trace.finished.map(format)
+
+      log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
+
+      const buffer = encode(formattedTrace)
+
+      log.debug(() => `Adding encoded trace to buffer: ${buffer}`)
 
       if (this.length < this._size) {
         this._queue.push(buffer)

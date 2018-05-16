@@ -84,14 +84,14 @@ function getParent (references) {
       const ref = references[i]
 
       if (!(ref instanceof Reference)) {
-        log.error(new Error(`Expected ${ref} to be an instance of opentracing.Reference`))
+        log.error(() => `Expected ${ref} to be an instance of opentracing.Reference`)
         break
       }
 
       const spanContext = ref.referencedContext()
 
       if (!(spanContext instanceof SpanContext)) {
-        log.error(new Error(`Expected ${spanContext} to be an instance of SpanContext`))
+        log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
         break
       }
 
