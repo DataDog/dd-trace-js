@@ -15,6 +15,7 @@ class Config {
     const protocol = 'http'
     const hostname = coalesce(options.hostname, platform.env('DD_TRACE_AGENT_HOSTNAME'), 'localhost')
     const port = coalesce(options.port, platform.env('DD_TRACE_AGENT_PORT'), 8126)
+    const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     const plugins = coalesce(options.plugins, true)
 
@@ -26,7 +27,7 @@ class Config {
     this.tags = Object.assign({}, options.tags)
     this.flushInterval = flushInterval
     this.bufferSize = 100000
-    this.sampleRate = 1
+    this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
     this.experimental = {
