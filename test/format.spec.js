@@ -94,5 +94,23 @@ describe('format', () => {
 
       expect(trace.error).to.equal(1)
     })
+
+    it('should sanitize the input', () => {
+      tracer._service = null
+      span._operationName = null
+      span._tags = {
+        'foo.bar': null
+      }
+      span._startTime = NaN
+      span._duration = NaN
+
+      trace = format(span)
+
+      expect(trace.name).to.equal('null')
+      expect(trace.service).to.equal('null')
+      expect(trace.meta['foo.bar']).to.equal('null')
+      expect(trace.start).to.be.instanceof(Uint64BE)
+      expect(trace.duration).to.be.instanceof(Uint64BE)
+    })
   })
 })

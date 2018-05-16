@@ -138,6 +138,10 @@ describe('Instrumenter', () => {
 
         expect(plugins.other.patch).to.have.been.calledWith(other, 'tracer', {})
       })
+
+      it('should handle errors', () => {
+        expect(() => instrumenter.use()).not.to.throw()
+      })
     })
 
     describe('patch', () => {

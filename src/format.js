@@ -25,8 +25,8 @@ function formatSpan (span) {
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
     parent_id: spanContext.parentId,
-    name: span._operationName,
-    service: tracer._service,
+    name: String(span._operationName),
+    service: String(tracer._service),
     error: 0,
     meta: {},
     start: new Uint64BE(Math.round(span._startTime * 1e6)),
@@ -40,16 +40,16 @@ function extractTags (trace, tags) {
       case 'service.name':
       case 'span.type':
       case 'resource.name':
-        trace[map[tag]] = tags[tag]
+        trace[map[tag]] = String(tags[tag])
         break
       case 'error.type':
       case 'error.msg':
       case 'error.stack':
         trace.error = 1
-        trace.meta[tag] = tags[tag]
+        trace.meta[tag] = String(tags[tag])
         break
       default:
-        trace.meta[tag] = tags[tag]
+        trace.meta[tag] = String(tags[tag])
     }
   })
 }
