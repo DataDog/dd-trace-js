@@ -4,6 +4,7 @@ const requireDir = require('require-dir')
 const path = require('path')
 const semver = require('semver')
 const hook = require('require-in-the-middle')
+const log = require('./log')
 
 // TODO: lazy load built-in plugins
 
@@ -49,8 +50,12 @@ class Instrumenter {
   }
 
   reload () {
-    const instrumentedModules = Array.from(this._plugins.keys()).map(plugin => plugin.name)
-    hook(instrumentedModules, this.hookModule.bind(this))
+    try {
+      const instrumentedModules = Array.from(this._plugins.keys()).map(plugin => plugin.name)
+      hook(instrumentedModules, this.hookModule.bind(this))
+    } catch (e) {
+      log.error(e)
+    }
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
