@@ -127,6 +127,23 @@ Each integration can be configured individually. See below for more information 
 |------------------|------------------|----------------------------------------|
 | service          | http-client      | The service name for this integration. |
 
+<h3 id="mongodb-core">mongodb-core</h3>
+
+<h5 id="mongodb-core-tags">Tags</h5>
+
+| Tag                  | Description                                           |
+|----------------------|-------------------------------------------------------|
+| db.name              | The qualified name of the queried collection.         |
+| out.host             | The host of the MongoDB server.                       |
+| out.port             | The port of the MongoDB server.                       |
+| mongodb.cursor.index | When using a cursor, the current index of the cursor. |
+
+<h5 id="mongodb-core-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | mongodb          | The service name for this integration. |
+
 <h3 id="mysql">mysql</h3>
 
 <h5 id="mysql-tags">Tags</h5>
