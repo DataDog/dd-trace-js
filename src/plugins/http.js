@@ -14,7 +14,7 @@ function patch (http, tracer, config) {
   function makeRequestTrace (request) {
     return function requestTrace (options, callback) {
       const uri = extractUrl(options)
-      const method = options.method || 'GET'
+      const method = (options.method || 'GET').toUpperCase()
 
       if (uri === `${tracer._url.href}/v0.3/traces`) {
         return request.apply(this, [options, callback])
@@ -37,7 +37,7 @@ function patch (http, tracer, config) {
         span.addTags({
           'service.name': config.service || 'http-client',
           'span.type': 'web',
-          'resource.name': options.pathname
+          'resource.name': method
         })
 
         tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
