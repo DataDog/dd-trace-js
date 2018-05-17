@@ -37,7 +37,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('service', 'http-client')
             expect(traces[0][0]).to.have.property('type', 'web')
-            expect(traces[0][0]).to.have.property('resource', '/user')
+            expect(traces[0][0]).to.have.property('resource', 'GET')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
