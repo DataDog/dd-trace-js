@@ -7,7 +7,7 @@
     "bench": "node benchmark",
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "mocha --watch",
-    "test": "nyc --reporter text --reporter lcov mocha"
+    "test": "nyc --reporter text --reporter lcov mocha 'test/**/*.spec.js'"
   },
   "repository": {
     "type": "git",
