@@ -14,10 +14,10 @@ const platform = require('../src/platform')
 const node = require('../src/platform/node')
 
 const retryOptions = {
-  retries: 10,
+  retries: 60,
   factor: 1,
-  minTimeout: 3000,
-  maxTimeout: 3000,
+  minTimeout: 5000,
+  maxTimeout: 5000,
   randomize: false
 }
 
