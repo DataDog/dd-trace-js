@@ -223,6 +223,7 @@ describe('Plugin', () => {
         })
 
         app.get('/user', (req, res) => {
+          expect(context.get('current')).to.not.be.undefined
           res.status(200).send(context.get('foo'))
         })
 

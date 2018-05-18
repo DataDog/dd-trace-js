@@ -83,25 +83,7 @@ function createWrapProcessParams (tracer, config) {
   }
 }
 
-function createWrapRouterHandle (tracer, config) {
-  const context = tracer._context
-
-  return function wrapRouterHandle (handle) {
-    return function handleWithTrace (req, res, out) {
-      let returnValue
-
-      context.run(() => {
-        returnValue = handle.call(this, req, res, context.bind(out))
-      })
-
-      return returnValue
-    }
-  }
-}
-
 function createWrapRouterMethod (tracer) {
-  const context = tracer._context
-
   return function wrapRouterMethod (original) {
     return function methodWithTrace (fn) {
       const offset = this.stack.length
@@ -112,7 +94,7 @@ function createWrapRouterMethod (tracer) {
         const handle = layer.handle_request
 
         layer.handle_request = (req, res, next) => {
-          return handle.call(layer, req, res, context.bind(next))
+          return handle.call(layer, req, res, next)
         }
 
         layer._datadog_matchers = matchers
@@ -145,7 +127,6 @@ function patch (express, tracer, config) {
     shimmer.wrap(express.application, method, createWrapMethod(tracer, config))
   })
   shimmer.wrap(express.Router, 'process_params', createWrapProcessParams(tracer, config))
-  shimmer.wrap(express.Router, 'handle', createWrapRouterHandle(tracer, config))
   shimmer.wrap(express.Router, 'use', createWrapRouterMethod(tracer, config))
   shimmer.wrap(express.Router, 'route', createWrapRouterMethod(tracer, config))
 }
@@ -153,7 +134,6 @@ function patch (express, tracer, config) {
 function unpatch (express) {
   METHODS.forEach(method => shimmer.unwrap(express.application, method))
   shimmer.unwrap(express.Router, 'process_params')
-  shimmer.unwrap(express.Router, 'handle')
   shimmer.unwrap(express.Router, 'use')
   shimmer.unwrap(express.Router, 'route')
 }
