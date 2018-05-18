@@ -21,8 +21,8 @@ class Config {
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
-    this.service = String(service)
-    this.env = String(env)
+    this.service = service
+    this.env = env
     this.url = new URL(`${protocol}://${hostname}:${port}`)
     this.tags = Object.assign({}, options.tags)
     this.flushInterval = flushInterval
