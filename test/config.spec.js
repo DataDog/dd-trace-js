@@ -30,6 +30,7 @@ describe('Config', () => {
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.deep.property('tags', {})
     expect(config).to.have.property('plugins', true)
+    expect(config).to.have.property('env', undefined)
   })
 
   it('should initialize from environment variables', () => {
