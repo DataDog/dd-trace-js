@@ -9,14 +9,15 @@ const retry = require('retry')
 const pg = require('pg')
 const mysql = require('mysql')
 const redis = require('redis')
+const mongo = require('mongodb-core')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 
 const retryOptions = {
-  retries: 10,
+  retries: 60,
   factor: 1,
-  minTimeout: 3000,
-  maxTimeout: 3000,
+  minTimeout: 5000,
+  maxTimeout: 5000,
   randomize: false
 }
 
@@ -39,7 +40,8 @@ function waitForServices () {
   return Promise.all([
     waitForPostgres(),
     waitForMysql(),
-    waitForRedis()
+    waitForRedis(),
+    waitForMongo()
   ])
 }
 
@@ -112,6 +114,33 @@ function waitForRedis () {
     client.on('connect', () => {
       client.quit()
       resolve()
+    })
+  })
+}
+
+function waitForMongo () {
+  return new Promise((resolve, reject) => {
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      const server = new mongo.Server({
+        host: 'localhost',
+        port: 27017,
+        reconnect: false
+      })
+
+      server.on('connect', server => {
+        server.destroy()
+        resolve()
+      })
+
+      server.on('error', err => {
+        if (!operation.retry(err)) {
+          reject(err)
+        }
+      })
+
+      server.connect()
     })
   })
 }

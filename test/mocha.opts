@@ -1,3 +1,2 @@
 --delay
 test/setup.js
-test/**/*.spec.js

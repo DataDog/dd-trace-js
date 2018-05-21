@@ -33,6 +33,7 @@ dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contr
 dev,gulp-jsdoc3,Apache-2.0,Copyright Marc Udoff
 dev,jsdoc,Apache-2.0,Copyright 2011-present Michael Mathews and the contributors to JSDoc
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,mongodb-core,Apache-2.0,Copyright Christian Kvalheim
 dev,mysql,MIT,Copyright 2012 Felix Geisendörfer and contributors
 dev,mysql2,MIT,Copyright 2016 Andrey Sidorov and contributors
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
