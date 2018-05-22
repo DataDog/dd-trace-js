@@ -242,7 +242,7 @@ For example:
 const bunyan = require('bunyan')
 const logger = bunyan.createLogger({
   name: 'dd-trace',
-  level: 'debug'
+  level: 'trace'
 })
 
 const tracer = require('dd-trace').init({
