@@ -240,6 +240,67 @@ describe('Plugin', () => {
         })
       })
 
+      it('should bind the next callback to the current context', done => {
+        const app = express()
+
+        app.use((req, res, next) => {
+          context.run(() => {
+            context.set('foo', 'bar')
+            next()
+          })
+        })
+
+        app.get('/user', (req, res) => {
+          res.status(200).send(context.get('foo'))
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .then(res => {
+                expect(res.status).to.equal(200)
+                expect(res.data).to.be.empty
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
+      it('should only include paths for routes that matched', done => {
+        const app = express()
+        const router = express.Router()
+
+        router.use('/baz', (req, res, next) => next())
+        router.get('/user/:id', (req, res) => {
+          res.status(200).send()
+        })
+        router.use('/qux', (req, res, next) => next())
+
+        app.use('/foo', (req, res, next) => next())
+        app.use('/app', router)
+        app.use('/bar', (req, res, next) => next())
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/app/user/123`)
+              .then(res => {
+                expect(res.status).to.equal(200)
+                expect(res.data).to.be.empty
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
       it('should extract its parent span from the headers', done => {
         const app = express()
 
