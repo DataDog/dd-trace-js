@@ -42,6 +42,8 @@ function createWrapMethod (tracer, config) {
         return returned
       }
 
+      req._datadog_trace_patched = true
+
       return next()
     })
   }
@@ -84,6 +86,8 @@ function createWrapProcessParams (tracer, config) {
 }
 
 function createWrapRouterMethod (tracer) {
+  const context = tracer._context
+
   return function wrapRouterMethod (original) {
     return function methodWithTrace (fn) {
       const offset = this.stack.length
@@ -94,6 +98,10 @@ function createWrapRouterMethod (tracer) {
         const handle = layer.handle_request
 
         layer.handle_request = (req, res, next) => {
+          if (req._datadog_trace_patched) {
+            next = context.bind(next)
+          }
+
           return handle.call(layer, req, res, next)
         }
 
