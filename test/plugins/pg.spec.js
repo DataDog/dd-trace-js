@@ -5,11 +5,14 @@ const agent = require('./agent')
 describe('Plugin', () => {
   let plugin
   let pg
+  let client
+  let context
 
   describe('pg', () => {
     beforeEach(() => {
       pg = require('pg')
       plugin = proxyquire('../src/plugins/pg', { 'pg': pg })
+      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
     })
 
     afterEach(() => {
@@ -17,8 +20,19 @@ describe('Plugin', () => {
     })
 
     describe('without configuration', () => {
-      beforeEach(() => {
-        return agent.load(plugin, 'pg')
+      beforeEach(done => {
+        agent.load(plugin, 'pg')
+          .then(() => {
+            client = new pg.Client({
+              user: 'postgres',
+              password: 'postgres',
+              database: 'postgres',
+              application_name: 'test'
+            })
+
+            client.connect(err => done(err))
+          })
+          .catch(done)
       })
 
       it('should do automatic instrumentation when using callbacks', done => {
@@ -34,22 +48,11 @@ describe('Plugin', () => {
           done()
         })
 
-        const client = new pg.Client({
-          user: 'postgres',
-          password: 'postgres',
-          database: 'postgres',
-          application_name: 'test'
-        })
-
-        client.connect((err) => {
+        client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
           if (err) throw err
 
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          client.end((err) => {
             if (err) throw err
-
-            client.end((err) => {
-              if (err) throw err
-            })
           })
         })
       })
@@ -63,22 +66,23 @@ describe('Plugin', () => {
           done()
         })
 
-        const client = new pg.Client({
-          user: 'postgres',
-          password: 'postgres',
-          database: 'postgres'
+        client.query('INVALID', (err, result) => {
+          expect(err).to.be.an('error')
+
+          client.end((err) => {
+            if (err) throw err
+          })
+        })
+      })
+
+      it('should run the callback in the parent context', done => {
+        client.query('SELECT $1::text as message', ['Hello World!'], () => {
+          expect(context.get('current')).to.be.undefined
+          done()
         })
 
-        client.connect((err) => {
+        client.end((err) => {
           if (err) throw err
-
-          client.query('INVALID', (err, result) => {
-            expect(err).to.be.an('error')
-
-            client.end((err) => {
-              if (err) throw err
-            })
-          })
         })
       })
 
@@ -87,19 +91,9 @@ describe('Plugin', () => {
           done()
         })
 
-        const client = new pg.Client({
-          user: 'postgres',
-          password: 'postgres',
-          database: 'postgres'
-        })
-
-        client.connect((err) => {
+        client.query('SELECT $1::text as message', ['Hello World!'])
+        client.end((err) => {
           if (err) throw err
-
-          client.query('SELECT $1::text as message', ['Hello World!'])
-          client.end((err) => {
-            if (err) throw err
-          })
         })
       })
     })
@@ -107,12 +101,22 @@ describe('Plugin', () => {
     describe('with configuration', () => {
       let config
 
-      beforeEach(() => {
+      beforeEach(done => {
         config = {
           service: 'custom'
         }
 
-        return agent.load(plugin, 'pg', config)
+        agent.load(plugin, 'pg', config)
+          .then(() => {
+            client = new pg.Client({
+              user: 'postgres',
+              password: 'postgres',
+              database: 'postgres'
+            })
+
+            client.connect(err => done(err))
+          })
+          .catch(done)
       })
 
       it('should be configured with the correct values', done => {
@@ -122,21 +126,11 @@ describe('Plugin', () => {
           done()
         })
 
-        const client = new pg.Client({
-          user: 'postgres',
-          password: 'postgres',
-          database: 'postgres'
-        })
-
-        client.connect((err) => {
+        client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
           if (err) throw err
 
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          client.end((err) => {
             if (err) throw err
-
-            client.end((err) => {
-              if (err) throw err
-            })
           })
         })
       })
