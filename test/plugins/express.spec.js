@@ -299,6 +299,37 @@ describe('Plugin', () => {
         })
       })
 
+      it('should bind the next callback to the current context on error', done => {
+        const app = express()
+
+        app.use((req, res, next) => {
+          next(new Error('boom'))
+        })
+
+        app.use((e, req, res, next) => {
+          context.run(() => {
+            context.set('foo', 'bar')
+            next()
+          })
+        })
+
+        app.use((req, res, next) => {
+          res.status(200).send(context.get('foo'))
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .then(res => {
+                expect(res.status).to.equal(200)
+                expect(res.data).to.be.empty
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
       it('should only include paths for routes that matched', done => {
         const app = express()
         const router = express.Router()
