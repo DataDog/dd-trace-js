@@ -97,11 +97,11 @@ function createWrapRouterMethod (tracer) {
         const handleError = layer.handle_error
 
         layer.handle_request = (req, res, next) => {
-          return handleRequest.call(layer, req, res, wrapNext(tracer, req, next))
+          return handleRequest.call(layer, req, res, wrapNext(tracer, layer, req, next))
         }
 
         layer.handle_error = (error, req, res, next) => {
-          return handleError.call(layer, error, req, res, wrapNext(tracer, req, next))
+          return handleError.call(layer, error, req, res, wrapNext(tracer, layer, req, next))
         }
 
         layer._datadog_matchers = matchers
@@ -112,8 +112,21 @@ function createWrapRouterMethod (tracer) {
   }
 }
 
-function wrapNext (tracer, req, next) {
+function wrapNext (tracer, layer, req, next) {
   if (req._datadog_trace_patched) {
+    const context = tracer._context
+    const originalNext = next
+
+    next = context.bind(function () {
+      const paths = context.get('express.paths')
+
+      if (paths && layer.path && !layer.regexp.fast_star) {
+        paths.pop()
+      }
+
+      originalNext.apply(null, arguments)
+    })
+
     return tracer._context.bind(next)
   }
 
