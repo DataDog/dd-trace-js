@@ -104,7 +104,7 @@ function createWrapRouterMethod (tracer) {
             next = context.bind(function () {
               const paths = context.get('express.paths')
 
-              if (paths && layer.path) {
+              if (paths && layer.path && !layer.regexp.fast_star) {
                 paths.pop()
               }
 

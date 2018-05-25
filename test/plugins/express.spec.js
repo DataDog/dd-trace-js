@@ -144,16 +144,17 @@ describe('Plugin', () => {
         const app = express()
         const router = express.Router()
 
+        router.use('/', (req, res, next) => next())
+        router.use('*', (req, res, next) => next())
         router.use('/bar', (req, res, next) => next())
+        router.use('/bar', (req, res, next) => {
+          res.status(200).send()
+        })
 
         app.use('/', (req, res, next) => next())
         app.use('*', (req, res, next) => next())
-        app.use('/*', (req, res, next) => next())
         app.use('/foo/bar', (req, res, next) => next())
         app.use('/foo', router)
-        app.use('/foo/bar', (req, res, next) => {
-          res.status(200).send()
-        })
 
         getPort().then(port => {
           agent
