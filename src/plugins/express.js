@@ -86,8 +86,6 @@ function createWrapProcessParams (tracer, config) {
 }
 
 function createWrapRouterMethod (tracer) {
-  const context = tracer._context
-
   return function wrapRouterMethod (original) {
     return function methodWithTrace (fn) {
       const offset = this.stack.length
@@ -95,14 +93,15 @@ function createWrapRouterMethod (tracer) {
       const matchers = extractMatchers(fn)
 
       this.stack.slice(offset).forEach(layer => {
-        const handle = layer.handle_request
+        const handleRequest = layer.handle_request
+        const handleError = layer.handle_error
 
         layer.handle_request = (req, res, next) => {
-          if (req._datadog_trace_patched) {
-            next = context.bind(next)
-          }
+          return handleRequest.call(layer, req, res, wrapNext(tracer, req, next))
+        }
 
-          return handle.call(layer, req, res, next)
+        layer.handle_error = (error, req, res, next) => {
+          return handleError.call(layer, error, req, res, wrapNext(tracer, req, next))
         }
 
         layer._datadog_matchers = matchers
@@ -111,6 +110,14 @@ function createWrapRouterMethod (tracer) {
       return router
     }
   }
+}
+
+function wrapNext (tracer, req, next) {
+  if (req._datadog_trace_patched) {
+    return tracer._context.bind(next)
+  }
+
+  return next
 }
 
 function extractMatchers (fn) {
