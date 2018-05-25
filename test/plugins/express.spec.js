@@ -140,6 +140,37 @@ describe('Plugin', () => {
         })
       })
 
+      it('should only keep the last matching path of a middleware stack', done => {
+        const app = express()
+        const router = express.Router()
+
+        router.use('/bar', (req, res, next) => next())
+
+        app.use('/', (req, res, next) => next())
+        app.use('*', (req, res, next) => next())
+        app.use('/*', (req, res, next) => next())
+        app.use('/foo/bar', (req, res, next) => next())
+        app.use('/foo', router)
+        app.use('/foo/bar', (req, res, next) => {
+          res.status(200).send()
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', '/foo/bar')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should support asynchronous routers', done => {
         const app = express()
         const router = express.Router()

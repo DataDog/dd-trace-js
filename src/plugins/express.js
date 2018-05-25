@@ -99,7 +99,17 @@ function createWrapRouterMethod (tracer) {
 
         layer.handle_request = (req, res, next) => {
           if (req._datadog_trace_patched) {
-            next = context.bind(next)
+            const originalNext = next
+
+            next = context.bind(function () {
+              const paths = context.get('express.paths')
+
+              if (paths && layer.path) {
+                paths.pop()
+              }
+
+              originalNext.apply(null, arguments)
+            })
           }
 
           return handle.call(layer, req, res, next)
