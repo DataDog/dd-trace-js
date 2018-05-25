@@ -24,10 +24,9 @@ function createWrapMethod (tracer, config) {
     }, span => {
       const originalEnd = res.end
 
-      res.end = function () {
-        res.end = originalEnd
-        const returned = res.end.apply(this, arguments)
-        const paths = tracer._context.get('express.paths')
+      res.end = tracer.bind(function () {
+        const returned = originalEnd.apply(this, arguments)
+        const paths = tracer.currentSpan().context()._express_paths
 
         if (paths) {
           span.setTag('resource.name', paths.join(''))
@@ -40,11 +39,11 @@ function createWrapMethod (tracer, config) {
         span.finish()
 
         return returned
-      }
+      })
 
       req._datadog_trace_patched = true
 
-      return next()
+      next()
     })
   }
 
@@ -65,15 +64,15 @@ function createWrapProcessParams (tracer, config) {
   return function wrapProcessParams (processParams) {
     return function processParamsWithTrace (layer, called, req, res, done) {
       const matchers = layer._datadog_matchers
-      let paths = context.get('express.paths') || []
+      const span = context.get('current')
 
-      if (matchers) {
+      if (matchers && span) {
+        const paths = span.context()._express_paths || []
+
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            paths = paths.concat(matchers[i].path)
-
-            context.set('express.paths', paths)
+            span.context()._express_paths = paths.concat(matchers[i].path)
 
             break
           }

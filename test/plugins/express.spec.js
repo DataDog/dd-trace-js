@@ -272,6 +272,32 @@ describe('Plugin', () => {
         })
       })
 
+      it('should bind the response to the current context', done => {
+        const app = express()
+
+        context.run(() => {
+          const send = context.bind(res => res.status(200).send())
+
+          app.get('/user', (req, res) => {
+            send(res)
+          })
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', '/user')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should bind the next callback to the current context', done => {
         const app = express()
 
