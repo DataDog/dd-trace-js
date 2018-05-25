@@ -113,11 +113,11 @@ function createWrapRouterMethod (tracer) {
 
 function wrapNext (tracer, layer, req, next) {
   if (req._datadog_trace_patched) {
-    const context = tracer._context
     const originalNext = next
 
-    next = context.bind(function () {
-      const paths = context.get('express.paths')
+    return tracer.bind(function () {
+      const span = tracer.currentSpan()
+      const paths = span && span.context()._express_paths
 
       if (paths && layer.path && !layer.regexp.fast_star) {
         paths.pop()
@@ -125,8 +125,6 @@ function wrapNext (tracer, layer, req, next) {
 
       originalNext.apply(null, arguments)
     })
-
-    return tracer._context.bind(next)
   }
 
   return next
