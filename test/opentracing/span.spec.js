@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const Int64BE = require('int64-buffer').Int64BE
 
 describe('Span', () => {
   let Span
@@ -10,8 +10,8 @@ describe('Span', () => {
 
   beforeEach(() => {
     platform = { id: sinon.stub() }
-    platform.id.onFirstCall().returns(new Uint64BE(123, 123))
-    platform.id.onSecondCall().returns(new Uint64BE(456, 456))
+    platform.id.onFirstCall().returns(new Int64BE(123, 123))
+    platform.id.onSecondCall().returns(new Int64BE(456, 456))
 
     tracer = {
       _record: sinon.stub(),
@@ -26,8 +26,8 @@ describe('Span', () => {
   it('should have a default context', () => {
     span = new Span(tracer, { operationName: 'operation' })
 
-    expect(span.context().traceId).to.deep.equal(new Uint64BE(123, 123))
-    expect(span.context().spanId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context().traceId).to.deep.equal(new Int64BE(123, 123))
+    expect(span.context().spanId).to.deep.equal(new Int64BE(123, 123))
   })
 
   it('should add itself to the context trace started spans', () => {
@@ -38,8 +38,8 @@ describe('Span', () => {
 
   it('should use a parent context', () => {
     const parent = {
-      traceId: new Uint64BE(123, 123),
-      spanId: new Uint64BE(456, 456),
+      traceId: new Int64BE(123, 123),
+      spanId: new Int64BE(456, 456),
       sampled: false,
       baggageItems: { foo: 'bar' },
       trace: {
@@ -50,8 +50,8 @@ describe('Span', () => {
 
     span = new Span(tracer, { operationName: 'operation', parent })
 
-    expect(span.context().traceId).to.deep.equal(new Uint64BE(123, 123))
-    expect(span.context().parentId).to.deep.equal(new Uint64BE(456, 456))
+    expect(span.context().traceId).to.deep.equal(new Int64BE(123, 123))
+    expect(span.context().parentId).to.deep.equal(new Int64BE(456, 456))
     expect(span.context().baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context().trace.started).to.deep.equal(['span', span])
   })
