@@ -29,7 +29,7 @@ function createWrapMethod (tracer, config) {
         const paths = tracer.currentSpan().context()._express_paths
 
         if (paths) {
-          span.setTag('resource.name', paths.join(''))
+          span.setTag('resource.name', `${req.method} ${paths.join('')}`)
         }
 
         span.setTag('service.name', config.service || tracer._service)
