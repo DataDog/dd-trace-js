@@ -95,6 +95,44 @@ tracer.use('pg', {
 
 Each integration can be configured individually. See below for more information for every integration.
 
+<h3 id="amqplib">amqplib</h3>
+
+<h5 id="amqplib-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| out.host         | The host of the AMQP server.                              |
+| out.port         | The port of the AMQP server.                              |
+| span.kind        | Set to either `producer` or `consumer` where it applies.  |
+| amqp.queue       | The queue targeted by the command (when available).       |
+| amqp.exchange    | The exchange targeted by the command (when available).    |
+| amqp.routingKey  | The routing key targeted by the command (when available). |
+| amqp.consumerTag | The consumer tag (when available).                        |
+| amqp.source      | The source exchange of the binding (when available).      |
+| amqp.destination | The destination exchange of the binding (when available). |
+
+<h5 id="amqplib-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+
+<h5 id="amqplib-limitations">Known Limitations</h5>
+
+When consuming messages, the current span will be immediately finished. This means that if any asynchronous operation is started in the message handler callback, its duration will be excluded from the span duration.
+
+For example:
+
+```js
+channel.consume('queue', msg => {
+  setTimeout(() => {
+    // The message span will not include the 1 second from this operation.
+  }, 1000)
+}, {}, () => {})
+```
+
+This limitation doesn't apply to other commands. We are working on improving this behavior in a future version.
+
 <h3 id="elasticsearch">elasticsearch</h3>
 
 <h5 id="elasticsearch-tags">Tags</h5>
