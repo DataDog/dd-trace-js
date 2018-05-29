@@ -1,7 +1,7 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
-const id = new Uint64BE(0x12345678, 0x12345678)
+const Int64BE = require('int64-buffer').Int64BE
+const id = new Int64BE(0x12345678, 0x12345678)
 
 describe('format', () => {
   let format
@@ -43,9 +43,9 @@ describe('format', () => {
       expect(trace.name).to.equal(span._operationName)
       expect(trace.service).to.equal(span.tracer()._service)
       expect(trace.error).to.equal(0)
-      expect(trace.start).to.be.instanceof(Uint64BE)
+      expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.be.instanceof(Uint64BE)
+      expect(trace.duration).to.be.instanceof(Int64BE)
       expect(trace.duration.toNumber()).to.equal(span._duration * 1e6)
     })
 
@@ -109,8 +109,8 @@ describe('format', () => {
       expect(trace.name).to.equal('null')
       expect(trace.service).to.equal('null')
       expect(trace.meta['foo.bar']).to.equal('null')
-      expect(trace.start).to.be.instanceof(Uint64BE)
-      expect(trace.duration).to.be.instanceof(Uint64BE)
+      expect(trace.start).to.be.instanceof(Int64BE)
+      expect(trace.duration).to.be.instanceof(Int64BE)
     })
   })
 })

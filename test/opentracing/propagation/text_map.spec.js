@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const Int64BE = require('int64-buffer').Int64BE
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('TextMapPropagator', () => {
@@ -26,8 +26,8 @@ describe('TextMapPropagator', () => {
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(0, 456),
+        traceId: new Int64BE(0, 123),
+        spanId: new Int64BE(0, 456),
         baggageItems
       })
 
@@ -39,8 +39,8 @@ describe('TextMapPropagator', () => {
     it('should handle non-string values', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(0, 456),
+        traceId: new Int64BE(0, 123),
+        spanId: new Int64BE(0, 456),
         baggageItems: {
           number: 1.23,
           bool: true,
@@ -64,8 +64,8 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(0, 456),
+        traceId: new Int64BE(0, 123),
+        spanId: new Int64BE(0, 456),
         baggageItems
       }))
     })
