@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const Int64BE = require('int64-buffer').Int64BE
 const DatadogSpanContext = require('../span_context')
 
 const traceKey = 'x-datadog-trace-id'
@@ -34,8 +34,8 @@ class TextMapPropagator {
     })
 
     return new DatadogSpanContext({
-      traceId: new Uint64BE(carrier[traceKey], 10),
-      spanId: new Uint64BE(carrier[spanKey], 10),
+      traceId: new Int64BE(carrier[traceKey], 10),
+      spanId: new Int64BE(carrier[spanKey], 10),
       baggageItems
     })
   }

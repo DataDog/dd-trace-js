@@ -1,7 +1,7 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
-const id = new Uint64BE(0x12345678, 0x12345678)
+const Int64BE = require('int64-buffer').Int64BE
+const id = new Int64BE(0x12345678, 0x12345678)
 
 const span = {
   tracer: () => ({
