@@ -27,7 +27,7 @@ class Writer {
 
       const buffer = encode(formattedTrace)
 
-      log.debug(() => `Adding encoded trace to buffer: ${buffer}`)
+      log.debug(() => `Adding encoded trace to buffer: ${buffer.inspect()}`)
 
       if (this.length < this._size) {
         this._queue.push(buffer)
