@@ -161,6 +161,13 @@ describe('Plugin', () => {
           }
         })
 
+        it('should run the callback in the parent context', done => {
+          server.insert(`test.${collection}`, [{ a: 1 }], {}, () => {
+            expect(context.get('current')).to.be.undefined
+            done()
+          })
+        })
+
         it('should handle errors', done => {
           let error
 
@@ -272,6 +279,18 @@ describe('Plugin', () => {
             expect(context.get('foo')).to.equal('bar')
             done()
           }
+        })
+
+        it('should run the callback in the parent context', done => {
+          const cursor = server.cursor(`test.${collection}`, {
+            find: `test.${collection}`,
+            query: { a: 1 }
+          })
+
+          cursor.next(() => {
+            expect(context.get('current')).to.be.undefined
+            done()
+          })
         })
 
         it('should handle errors', done => {

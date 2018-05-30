@@ -190,9 +190,10 @@ function createWrapOperation (tracer, config, operationName) {
     return function operationWithTrace (ns, ops, options, callback) {
       const resource = getResource(ns, ops, operationName)
 
-      let result
+      let span
 
-      tracer.trace('mongodb.query', span => {
+      tracer.trace('mongodb.query', child => {
+        span = child
         span.addTags({
           'service.name': config.service || 'mongodb',
           'resource.name': resource,
@@ -201,15 +202,13 @@ function createWrapOperation (tracer, config, operationName) {
           'out.host': this.s.options.host,
           'out.port': this.s.options.port
         })
-
-        if (typeof options === 'function') {
-          result = operation.call(this, ns, ops, wrapCallback(tracer, span, options))
-        } else {
-          result = operation.call(this, ns, ops, options, wrapCallback(tracer, span, callback))
-        }
       })
 
-      return result
+      if (typeof options === 'function') {
+        return operation.call(this, ns, ops, wrapCallback(tracer, span, options))
+      } else {
+        return operation.call(this, ns, ops, options, wrapCallback(tracer, span, callback))
+      }
     }
   }
 }
@@ -219,7 +218,10 @@ function createWrapNext (tracer, config) {
     return function nextWithTrace (cb) {
       const resource = getResource(this.ns, this.cmd)
 
-      tracer.trace('mongodb.query', span => {
+      let span
+
+      tracer.trace('mongodb.query', child => {
+        span = child
         span.addTags({
           'service.name': config.service || 'mongodb',
           'resource.name': resource,
@@ -229,9 +231,9 @@ function createWrapNext (tracer, config) {
           'out.port': this.topology.s.options.port,
           'mongodb.cursor.index': this.cursorState.cursorIndex
         })
-
-        next.call(this, wrapCallback(tracer, span, cb))
       })
+
+      next.call(this, wrapCallback(tracer, span, cb))
     }
   }
 }

@@ -20,7 +20,8 @@ function patch (http, tracer, config) {
         return request.apply(this, [options, callback])
       }
 
-      let req
+      let span
+      let isFinish = false
 
       tracer.trace('http.request', {
         tags: {
@@ -28,8 +29,8 @@ function patch (http, tracer, config) {
           [Tags.HTTP_URL]: uri,
           [Tags.HTTP_METHOD]: method
         }
-      }, span => {
-        let isFinish = false
+      }, child => {
+        span = child
 
         options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
         options.headers = options.headers || {}
@@ -41,34 +42,34 @@ function patch (http, tracer, config) {
         })
 
         tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
-
-        function finish () {
-          if (!isFinish) {
-            isFinish = true
-            span.finish()
-          }
-        }
-
-        req = request.call(this, options, res => {
-          span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
-          res.on('end', finish)
-          callback && callback(res)
-        })
-
-        req.on('socket', socket => {
-          socket.on('close', finish)
-        })
-
-        req.on('error', err => {
-          span.addTags({
-            'error.type': err.name,
-            'error.msg': err.message,
-            'error.stack': err.stack
-          })
-
-          span.finish()
-        })
       })
+
+      const req = request.call(this, options, res => {
+        span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+        res.on('end', finish)
+        callback && callback(res)
+      })
+
+      req.on('socket', socket => {
+        socket.on('close', finish)
+      })
+
+      req.on('error', err => {
+        span.addTags({
+          'error.type': err.name,
+          'error.msg': err.message,
+          'error.stack': err.stack
+        })
+
+        span.finish()
+      })
+
+      function finish () {
+        if (!isFinish) {
+          isFinish = true
+          span.finish()
+        }
+      }
 
       return req
     }

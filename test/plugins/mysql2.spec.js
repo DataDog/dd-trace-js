@@ -50,6 +50,13 @@ describe('Plugin', () => {
         }
       })
 
+      it('should run the callback in the parent context', done => {
+        connection.query('SELECT 1 + 1 AS solution', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
+      })
+
       it('should propagate context to events', done => {
         let query
 
@@ -63,6 +70,15 @@ describe('Plugin', () => {
           expect(context.get('foo')).to.equal('bar')
           done()
         }
+      })
+
+      it('should run event listeners in the parent context', done => {
+        const query = connection.query('SELECT 1 + 1 AS solution')
+
+        query.on('result', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
       })
 
       it('should do automatic instrumentation', done => {
@@ -193,6 +209,13 @@ describe('Plugin', () => {
           expect(context.get('foo')).to.equal('bar')
           done()
         }
+      })
+
+      it('should run the callback in the parent context', done => {
+        pool.query('SELECT 1 + 1 AS solution', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
       })
     })
   })
