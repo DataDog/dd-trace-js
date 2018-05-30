@@ -65,7 +65,7 @@ describe('Instrumenter', () => {
     Pool = 'Pool'
 
     requireDir = sinon.stub()
-    requireDir.withArgs(path.join(__dirname, '../src', './plugins')).returns(integrations)
+    requireDir.withArgs(path.join(__dirname, '../src/plugins')).returns(integrations)
 
     Instrumenter = proxyquire('../src/instrumenter', {
       'require-dir': requireDir,
