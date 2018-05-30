@@ -93,7 +93,7 @@ tracer.use('pg', {
 })
 ```
 
-Each integration can be configured individually. See below for more information for every integration.
+Each integration also has its own list of default tags. These tags get automatically added to the span created by the integration.
 
 <h3 id="express">express</h3>
 
