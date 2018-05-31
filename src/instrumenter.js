@@ -78,7 +78,7 @@ class Instrumenter {
 }
 
 function loadIntegrations () {
-  const integrations = requireDir('./plugins')
+  const integrations = requireDir(path.join(__dirname, './plugins'))
 
   return Object.keys(integrations)
     .map(key => integrations[key])
