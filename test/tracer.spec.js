@@ -73,6 +73,7 @@ describe('Tracer', () => {
       tracer.trace('name', current => {
         expect(current._tags).to.have.property('service.name', 'service')
         expect(current._tags).to.have.property('resource.name', 'name')
+        expect(current._tags).to.not.have.property('span.type')
         done()
       })
     })
