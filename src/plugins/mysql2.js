@@ -45,14 +45,6 @@ function createWrapQuery (tracer, config) {
   }
 }
 
-function createWrapGetConnection (tracer) {
-  return function wrapGetConnection (getConnection) {
-    return function getConnectionWithTrace (cb) {
-      return getConnection.call(this, tracer.bind(cb))
-    }
-  }
-}
-
 function wrapCallback (tracer, span, done) {
   return tracer.bind((err, res) => {
     if (err) {
@@ -77,14 +69,6 @@ function unpatchConnection (Connection) {
   shimmer.unwrap(Connection.prototype, 'query')
 }
 
-function patch (mysql2, tracer, config) {
-  shimmer.wrap(mysql2.Pool.prototype, 'getConnection', createWrapGetConnection(tracer, config))
-}
-
-function unpatch (mysql2) {
-  shimmer.unwrap(mysql2.Pool.prototype, 'getConnection')
-}
-
 module.exports = [
   {
     name: 'mysql2',
@@ -92,11 +76,5 @@ module.exports = [
     versions: ['^1.5'],
     patch: patchConnection,
     unpatch: unpatchConnection
-  },
-  {
-    name: 'mysql2',
-    versions: ['^1.5'],
-    patch: patch,
-    unpatch: unpatch
   }
 ]

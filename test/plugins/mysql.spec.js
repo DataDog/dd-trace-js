@@ -22,16 +22,19 @@ describe('Plugin', () => {
       let connection
 
       beforeEach(() => {
-        connection = mysql.createConnection({
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass',
-          database: 'db'
-        })
-
-        connection.connect()
-
         return agent.load(plugin, 'mysql')
+          .then(() => {
+            mysql = require('mysql')
+
+            connection = mysql.createConnection({
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass',
+              database: 'db'
+            })
+
+            connection.connect()
+          })
       })
 
       afterEach(done => {
@@ -134,16 +137,19 @@ describe('Plugin', () => {
           service: 'custom'
         }
 
-        connection = mysql.createConnection({
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass',
-          database: 'db'
-        })
-
-        connection.connect()
-
         return agent.load(plugin, 'mysql', config)
+          .then(() => {
+            mysql = require('mysql')
+
+            connection = mysql.createConnection({
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass',
+              database: 'db'
+            })
+
+            connection.connect()
+          })
       })
 
       afterEach(done => {
@@ -164,14 +170,17 @@ describe('Plugin', () => {
       let pool
 
       beforeEach(() => {
-        pool = mysql.createPool({
-          connectionLimit: 10,
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass'
-        })
-
         return agent.load(plugin, 'mysql')
+          .then(() => {
+            mysql = require('mysql')
+
+            pool = mysql.createPool({
+              connectionLimit: 10,
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass'
+            })
+          })
       })
 
       afterEach(done => {
