@@ -44,7 +44,8 @@ describe('Span', () => {
       baggageItems: { foo: 'bar' },
       trace: {
         started: ['span'],
-        finished: []
+        finished: [],
+        pending: 1
       }
     }
 
@@ -54,6 +55,26 @@ describe('Span', () => {
     expect(span.context().parentId).to.deep.equal(new Int64BE(456, 456))
     expect(span.context().baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context().trace.started).to.deep.equal(['span', span])
+  })
+
+  it('should not use a parent context when the parent trace is finished', () => {
+    const parent = {
+      traceId: new Int64BE(123, 123),
+      spanId: new Int64BE(456, 456),
+      sampled: false,
+      baggageItems: { foo: 'bar' },
+      trace: {
+        started: ['span'],
+        finished: ['span'],
+        pending: 0
+      }
+    }
+
+    span = new Span(tracer, { operationName: 'operation', parent })
+
+    expect(span.context().traceId).to.deep.equal(new Int64BE(123, 123))
+    expect(span.context().parentId).to.be.null
+    expect(span.context().trace.started).to.deep.equal([span])
   })
 
   describe('tracer', () => {
