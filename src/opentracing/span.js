@@ -26,7 +26,7 @@ class DatadogSpan extends Span {
   _createContext (parent) {
     let spanContext
 
-    if (parent) {
+    if (parent && parent.trace.pending > 0) {
       spanContext = new SpanContext({
         traceId: parent.traceId,
         spanId: platform.id(),
@@ -45,6 +45,7 @@ class DatadogSpan extends Span {
     }
 
     spanContext.trace.started.push(this)
+    spanContext.trace.pending++
 
     return spanContext
   }
@@ -84,6 +85,7 @@ class DatadogSpan extends Span {
 
     this._duration = finishTime - this._startTime
     this._spanContext.trace.finished.push(this)
+    this._spanContext.trace.pending--
 
     if (this._spanContext.sampled) {
       this._parentTracer._record(this)

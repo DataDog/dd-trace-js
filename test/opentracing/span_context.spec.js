@@ -16,7 +16,8 @@ describe('SpanContext', () => {
       baggageItems: { foo: 'bar' },
       trace: {
         started: ['span1', 'span2'],
-        finished: ['span1']
+        finished: ['span1'],
+        pending: 1
       }
     }
     const spanContext = new SpanContext(props)
@@ -33,7 +34,8 @@ describe('SpanContext', () => {
       baggageItems: {},
       trace: {
         started: [],
-        finished: []
+        finished: [],
+        pending: 0
       }
     }
 
