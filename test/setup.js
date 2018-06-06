@@ -10,6 +10,7 @@ const pg = require('pg')
 const mysql = require('mysql')
 const redis = require('redis')
 const mongo = require('mongodb-core')
+const elasticsearch = require('elasticsearch')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 
@@ -41,7 +42,8 @@ function waitForServices () {
     waitForPostgres(),
     waitForMysql(),
     waitForRedis(),
-    waitForMongo()
+    waitForMongo(),
+    waitForElasticsearch()
   ])
 }
 
@@ -141,6 +143,25 @@ function waitForMongo () {
       })
 
       server.connect()
+    })
+  })
+}
+
+function waitForElasticsearch () {
+  return new Promise((resolve, reject) => {
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      const client = new elasticsearch.Client({
+        host: 'localhost:9200'
+      })
+
+      client.ping((err) => {
+        if (operation.retry(err)) return
+        if (err) reject(err)
+
+        resolve()
+      })
     })
   })
 }

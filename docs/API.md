@@ -95,6 +95,27 @@ tracer.use('pg', {
 
 Each integration can be configured individually. See below for more information for every integration.
 
+<h3 id="elasticsearch">elasticsearch</h3>
+
+<h5 id="elasticsearch-tags">Tags</h5>
+
+| Tag                  | Description                                           |
+|----------------------|-------------------------------------------------------|
+| db.type              | Always set to `elasticsearch`.                        |
+| out.host             | The host of the Elasticsearch server.                 |
+| out.port             | The port of the Elasticsearch server.                 |
+| span.kind            | Always set to `client`.                               |
+| elasticsearch.method | The underlying HTTP request verb.                     |
+| elasticsearch.url    | The underlying HTTP request URL path.                 |
+| elasticsearch.body   | The body of the query.                                |
+| elasticsearch.params | The parameters of the query.                          |
+
+<h5 id="elasticsearch-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | elasticsearch    | The service name for this integration. |
+
 <h3 id="express">express</h3>
 
 <h5 id="express-tags">Tags</h5>
