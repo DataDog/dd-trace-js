@@ -170,6 +170,32 @@ This limitation doesn't apply to other commands. We are working on improving thi
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
 
+<h3 id="graphql">graphql</h3>
+
+The `graphql` integration uses the operation name as the span resource name. If no operation name is set, the resource name will always be just `query` or `mutation`.
+
+For example:
+
+```graphql
+# good, the resource name will be `query HelloWorld`
+query HelloWorld {
+  hello
+  world
+}
+
+# bad, the resource name will be `query`
+{
+  hello
+  world
+}
+```
+
+<h5 id="graphql-config">Configuration Options</h5>
+
+| Option  | Default                                          | Description                            |
+|---------|--------------------------------------------------|----------------------------------------|
+| service | *Service name of the app suffixed with -graphql* | The service name for this integration. |
+
 <h3 id="http">http / https</h3>
 
 <h5 id="http-tags">Tags</h5>
