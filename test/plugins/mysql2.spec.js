@@ -9,7 +9,6 @@ describe('Plugin', () => {
 
   describe('mysql2', () => {
     beforeEach(() => {
-      mysql2 = require('mysql2')
       plugin = require('../../src/plugins/mysql2')
       context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
     })
@@ -22,16 +21,19 @@ describe('Plugin', () => {
       let connection
 
       beforeEach(() => {
-        connection = mysql2.createConnection({
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass',
-          database: 'db'
-        })
-
-        connection.connect()
-
         return agent.load(plugin, 'mysql2')
+          .then(() => {
+            mysql2 = require('mysql2')
+
+            connection = mysql2.createConnection({
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass',
+              database: 'db'
+            })
+
+            connection.connect()
+          })
       })
 
       afterEach(done => {
@@ -137,16 +139,19 @@ describe('Plugin', () => {
           service: 'custom'
         }
 
-        connection = mysql2.createConnection({
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass',
-          database: 'db'
-        })
-
-        connection.connect()
-
         return agent.load(plugin, 'mysql2', config)
+          .then(() => {
+            mysql2 = require('mysql2')
+
+            connection = mysql2.createConnection({
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass',
+              database: 'db'
+            })
+
+            connection.connect()
+          })
       })
 
       afterEach(done => {
@@ -169,14 +174,17 @@ describe('Plugin', () => {
       let pool
 
       beforeEach(() => {
-        pool = mysql2.createPool({
-          connectionLimit: 10,
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass'
-        })
-
         return agent.load(plugin, 'mysql2')
+          .then(() => {
+            mysql2 = require('mysql2')
+
+            pool = mysql2.createPool({
+              connectionLimit: 10,
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass'
+            })
+          })
       })
 
       afterEach(done => {
