@@ -5,7 +5,7 @@ const Buffer = require('safe-buffer').Buffer
 const EventEmitter = require('events')
 const proxyquire = require('proxyquire')
 const semver = require('semver')
-const Int64BE = require('int64-buffer').Int64BE
+const Uint64BE = require('int64-buffer').Uint64BE
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 const cls = require('../src/platform/node/context/cls')
@@ -64,8 +64,8 @@ suite
       propagator = new TextMapPropagator()
       carrier = {}
       spanContext = new DatadogSpanContext({
-        traceId: new Int64BE(0x12345678, 0x12345678),
-        spanId: new Int64BE(0x12345678, 0x12345678),
+        traceId: new Uint64BE(0x12345678, 0x12345678),
+        spanId: new Uint64BE(0x12345678, 0x12345678),
         baggageItems: { foo: 'bar' }
       })
     },

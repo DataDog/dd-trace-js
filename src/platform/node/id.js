@@ -1,6 +1,6 @@
 'use strict'
 
-const Int64BE = require('int64-buffer').Int64BE
+const Uint64BE = require('int64-buffer').Uint64BE
 const randomBytes = require('crypto').randomBytes
 
-module.exports = () => new Int64BE(randomBytes(8))
+module.exports = () => new Uint64BE(randomBytes(8))

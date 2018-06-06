@@ -1,11 +1,11 @@
 'use strict'
 
-const Int64BE = require('int64-buffer').Int64BE
+const Uint64BE = require('int64-buffer').Uint64BE
 
 const trace = [
   {
-    trace_id: new Int64BE(0x12345678, 0x9abcdef0),
-    span_id: new Int64BE(0x12345678, 0x12345678),
+    trace_id: new Uint64BE(0x12345678, 0x9abcdef0),
+    span_id: new Uint64BE(0x12345678, 0x12345678),
     parent_id: null,
     name: 'root',
     resource: '/',
@@ -17,9 +17,9 @@ const trace = [
     duration: 100000000
   },
   {
-    trace_id: new Int64BE(0x12345678, 0x9abcdef0),
-    span_id: new Int64BE(0x9abcdef0, 0x9abcdef0),
-    parent_id: new Int64BE(0x12345678, 0x12345678),
+    trace_id: new Uint64BE(0x12345678, 0x9abcdef0),
+    span_id: new Uint64BE(0x9abcdef0, 0x9abcdef0),
+    parent_id: new Uint64BE(0x12345678, 0x12345678),
     name: 'child',
     resource: '/',
     service: 'benchmark',
