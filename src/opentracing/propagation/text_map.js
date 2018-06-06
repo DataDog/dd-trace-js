@@ -1,5 +1,6 @@
 'use strict'
 
+const Uint64BE = require('int64-buffer').Uint64BE
 const Int64BE = require('int64-buffer').Int64BE
 const DatadogSpanContext = require('../span_context')
 
@@ -10,8 +11,8 @@ const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
-    carrier[traceKey] = spanContext.traceId.toString()
-    carrier[spanKey] = spanContext.spanId.toString()
+    carrier[traceKey] = new Int64BE(spanContext.traceId.toBuffer()).toString()
+    carrier[spanKey] = new Int64BE(spanContext.spanId.toBuffer()).toString()
 
     spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
@@ -34,8 +35,8 @@ class TextMapPropagator {
     })
 
     return new DatadogSpanContext({
-      traceId: new Int64BE(carrier[traceKey], 10),
-      spanId: new Int64BE(carrier[spanKey], 10),
+      traceId: new Uint64BE(carrier[traceKey], 10),
+      spanId: new Uint64BE(carrier[spanKey], 10),
       baggageItems
     })
   }

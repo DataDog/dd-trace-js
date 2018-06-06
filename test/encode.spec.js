@@ -2,7 +2,7 @@
 
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const Int64BE = require('int64-buffer').Int64BE
+const Uint64BE = require('int64-buffer').Uint64BE
 
 describe('encode', () => {
   let encode
@@ -13,7 +13,7 @@ describe('encode', () => {
 
   it('should encode to msgpack', () => {
     const data = [{
-      id: new Int64BE(0x12345678, 0x12345678),
+      id: new Uint64BE(0x12345678, 0x12345678),
       name: 'test'
     }]
 

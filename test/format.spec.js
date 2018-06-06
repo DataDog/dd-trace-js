@@ -1,7 +1,7 @@
 'use strict'
 
 const Int64BE = require('int64-buffer').Int64BE
-const id = new Int64BE(0x12345678, 0x12345678)
+const id = new Int64BE(0x02345678, 0x12345678)
 
 describe('format', () => {
   let format

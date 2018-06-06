@@ -3,6 +3,7 @@
 const express = require('express')
 const bodyParser = require('body-parser')
 const getPort = require('get-port')
+const Uint64BE = require('int64-buffer').Uint64BE
 const Int64BE = require('int64-buffer').Int64BE
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
@@ -43,9 +44,9 @@ describe('dd-trace', () => {
     agent.put('/v0.3/traces', (req, res) => {
       const payload = msgpack.decode(req.body, { codec })
 
-      expect(payload[0][0].trace_id).to.be.instanceof(Int64BE)
+      expect(payload[0][0].trace_id).to.be.instanceof(Uint64BE)
       expect(payload[0][0].trace_id.toString()).to.equal(span.context().traceId.toString())
-      expect(payload[0][0].span_id).to.be.instanceof(Int64BE)
+      expect(payload[0][0].span_id).to.be.instanceof(Uint64BE)
       expect(payload[0][0].span_id.toString()).to.equal(span.context().spanId.toString())
       expect(payload[0][0].service).to.equal('test')
       expect(payload[0][0].name).to.equal('hello')
