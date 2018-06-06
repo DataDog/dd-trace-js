@@ -41,6 +41,7 @@ describe('format', () => {
       expect(trace.span_id).to.equal(span.context().spanId)
       expect(trace.parent_id).to.equal(span.context().parentId)
       expect(trace.name).to.equal(span._operationName)
+      expect(trace.resource).to.equal(span._operationName)
       expect(trace.service).to.equal(span.tracer()._service)
       expect(trace.error).to.equal(0)
       expect(trace.start).to.be.instanceof(Int64BE)
@@ -108,6 +109,7 @@ describe('format', () => {
 
       expect(trace.name).to.equal('null')
       expect(trace.service).to.equal('null')
+      expect(trace.resource).to.equal('null')
       expect(trace.meta['foo.bar']).to.equal('null')
       expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.duration).to.be.instanceof(Int64BE)
