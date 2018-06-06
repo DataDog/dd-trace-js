@@ -26,6 +26,7 @@ function formatSpan (span) {
     span_id: spanContext.spanId,
     parent_id: spanContext.parentId,
     name: String(span._operationName),
+    resource: String(span._operationName),
     service: String(tracer._service),
     error: 0,
     meta: {},
