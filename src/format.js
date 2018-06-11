@@ -43,6 +43,11 @@ function extractTags (trace, tags) {
       case 'resource.name':
         trace[map[tag]] = String(tags[tag])
         break
+      case 'error':
+        if (tags[tag]) {
+          trace.error = 1
+        }
+        break
       case 'error.type':
       case 'error.msg':
       case 'error.stack':

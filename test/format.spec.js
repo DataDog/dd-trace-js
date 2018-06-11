@@ -86,7 +86,33 @@ describe('format', () => {
       expect(trace.meta['error.stack']).to.equal(span._error.stack)
     })
 
-    it('should set the error flag when there is an error tag', () => {
+    describe('when there is an `error` tag ', () => {
+      it('should set the error flag when error tag is true', () => {
+        span._tags['error'] = true
+
+        trace = format(span)
+
+        expect(trace.error).to.equal(1)
+      })
+
+      it('should not set the error flag when error is false', () => {
+        span._tags['error'] = false
+
+        trace = format(span)
+
+        expect(trace.error).to.equal(0)
+      })
+
+      it('should not extract error to meta', () => {
+        span._tags['error'] = true
+
+        trace = format(span)
+
+        expect(trace.meta['error']).to.be.undefined
+      })
+    })
+
+    it('should set the error flag when there is an error-related tag', () => {
       span._tags['error.type'] = 'Error'
       span._tags['error.msg'] = 'boom'
       span._tags['error.stack'] = ''
