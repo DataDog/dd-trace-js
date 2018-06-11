@@ -4,6 +4,7 @@ require,cls-hooked,BSD-2-Clause,Copyright 2013-2016 Forrest L Norvell
 require,continuation-local-storage,BSD-2-Clause,Copyright 2013-2016 Forrest L Norvell
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
+require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
@@ -16,6 +17,7 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+dev,amqplib,MIT,Copyright 2013-2014 Michael Bridgen
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,bluebird,MIT,Copyright 2013-2018 Petka Antonov

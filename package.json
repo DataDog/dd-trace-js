@@ -37,6 +37,7 @@
     "continuation-local-storage": "^3.2.1",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
+    "lodash.kebabcase": "^4.1.1",
     "methods": "^1.1.2",
     "msgpack-lite": "^0.1.26",
     "opentracing": "0.14.1",
@@ -52,6 +53,7 @@
     "url-parse": "^1.2.0"
   },
   "devDependencies": {
+    "amqplib": "^0.5.2",
     "axios": "^0.18.0",
     "benchmark": "^2.1.4",
     "bluebird": "^3.5.1",

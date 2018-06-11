@@ -33,6 +33,8 @@ jobs:
         image: mongo:3.6
       - &elasticsearch
         image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
+      - &rabbitmq
+        image: rabbitmq:3.6-alpine
     working_directory: ~/dd-trace-js
     steps:
       - checkout
@@ -57,6 +59,7 @@ jobs:
       - *redis
       - *mongo
       - *elasticsearch
+      - *rabbitmq
   build-node-6:
     <<: *node-base
     docker:
@@ -66,6 +69,7 @@ jobs:
       - *redis
       - *mongo
       - *elasticsearch
+      - *rabbitmq
   build-node-8:
     <<: *node-base
     docker:
@@ -75,6 +79,7 @@ jobs:
       - *redis
       - *mongo
       - *elasticsearch
+      - *rabbitmq
   build-node-latest:
     <<: *node-base
     docker:
@@ -84,6 +89,7 @@ jobs:
       - *redis
       - *mongo
       - *elasticsearch
+      - *rabbitmq
 
 workflows:
   version: 2

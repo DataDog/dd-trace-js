@@ -11,6 +11,7 @@ const mysql = require('mysql')
 const redis = require('redis')
 const mongo = require('mongodb-core')
 const elasticsearch = require('elasticsearch')
+const amqplib = require('amqplib/callback_api')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 
@@ -43,7 +44,8 @@ function waitForServices () {
     waitForMysql(),
     waitForRedis(),
     waitForMongo(),
-    waitForElasticsearch()
+    waitForElasticsearch(),
+    waitForRabbitMQ()
   ])
 }
 
@@ -162,6 +164,22 @@ function waitForElasticsearch () {
 
         resolve()
       })
+    })
+  })
+}
+
+function waitForRabbitMQ () {
+  return new Promise((resolve, reject) => {
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      amqplib
+        .connect((err, conn) => {
+          if (operation.retry(err)) return
+          if (err) reject(err)
+
+          conn.close(() => resolve())
+        })
     })
   })
 }
