@@ -62,6 +62,43 @@ describe('Plugin', () => {
         return agent.load(plugin, 'graphql')
       })
 
+      it('should instrument operations', done => {
+        const source = `query MyQuery { hello(name: "world") }`
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+
+            expect(spans).to.have.length(3)
+            expect(spans[0]).to.have.property('service', 'test-graphql')
+            expect(spans[0]).to.have.property('name', 'graphql.query')
+            expect(spans[0]).to.have.property('resource', 'query MyQuery')
+            expect(spans[0].meta).to.have.property('graphql.source', source)
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.graphql(schema, source).catch(done)
+      })
+
+      it('should instrument fields', done => {
+        const source = `{ hello(name: "world") }`
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+
+            expect(spans).to.have.length(3)
+            expect(spans[1]).to.have.property('service', 'test-graphql')
+            expect(spans[1]).to.have.property('name', 'graphql.field')
+            expect(spans[1]).to.have.property('resource', 'hello')
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.graphql(schema, source).catch(done)
+      })
+
       it('should instrument schema resolvers', done => {
         const source = `{ hello(name: "world") }`
 
@@ -71,6 +108,7 @@ describe('Plugin', () => {
 
             expect(spans).to.have.length(3)
             expect(spans[2]).to.have.property('service', 'test-graphql')
+            expect(spans[2]).to.have.property('name', 'graphql.resolve')
             expect(spans[2]).to.have.property('resource', 'hello')
           })
           .then(done)
@@ -167,22 +205,6 @@ describe('Plugin', () => {
           .catch(done)
 
         graphql.graphql({ schema, source, rootValue, fieldResolver }).catch(done)
-      })
-
-      it('should use the operation name for the query resource', done => {
-        const source = `query MyQuery { hello(name: "world") }`
-
-        agent
-          .use(traces => {
-            const spans = sort(traces[0])
-
-            expect(spans).to.have.length(3)
-            expect(spans[0]).to.have.property('resource', 'query MyQuery')
-          })
-          .then(done)
-          .catch(done)
-
-        graphql.graphql(schema, source).catch(done)
       })
 
       it('should not instrument schema resolvers multiple times', done => {
