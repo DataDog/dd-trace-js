@@ -17,15 +17,13 @@ class Instrumenter {
   }
 
   use (name, config) {
-    config = config || {}
-
     if (typeof name === 'string') {
       this._integrations
         .filter(plugin => plugin.name === name)
-        .forEach(plugin => this._plugins.set(plugin, config))
-    } else {
+        .forEach(plugin => this._set(plugin, config))
+    } else if (name) {
       [].concat(name)
-        .forEach(plugin => this._plugins.set(plugin, config))
+        .forEach(plugin => this._set(plugin, config))
     }
 
     this.reload()
@@ -36,7 +34,7 @@ class Instrumenter {
 
     if (config.plugins !== false) {
       this._integrations.forEach(integration => {
-        this._plugins.has(integration) || this._plugins.set(integration, {})
+        this._plugins.has(integration) || this._set(integration, {})
       })
     }
 
@@ -74,6 +72,19 @@ class Instrumenter {
       })
 
     return moduleExports
+  }
+
+  _set (plugin, config) {
+    config = config || {}
+
+    this._plugins.set(plugin, config)
+
+    if (require.cache[plugin.name]) {
+      log.debug([
+        `Instrumented module "${plugin.name}" was imported before calling tracer.init().`,
+        `Please make sure to initialize the tracer before importing any instrumented module.`
+      ].join(' '))
+    }
   }
 }
 
