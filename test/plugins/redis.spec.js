@@ -2,6 +2,8 @@
 
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let redis
@@ -12,7 +14,7 @@ describe('Plugin', () => {
     beforeEach(() => {
       redis = require('redis')
       plugin = require('../../src/plugins/redis')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      context = require('../../src/platform').context()
     })
 
     afterEach(() => {

@@ -2,6 +2,8 @@
 
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let mysql2
@@ -10,7 +12,7 @@ describe('Plugin', () => {
   describe('mysql2', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/mysql2')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      context = require('../../src/platform').context()
     })
 
     afterEach(() => {
@@ -116,7 +118,6 @@ describe('Plugin', () => {
 
         connection.query('INVALID', (err, results, fields) => {
           error = err
-          expect(error).to.be.an('error')
         })
       })
 

@@ -35,7 +35,6 @@ class Tracer extends BaseTracer {
    * will submit traces to the agent.
    * @param {Object|boolean} [options.experimental={}] Experimental features can be enabled all at once
    * using boolean `true` or individually using key/value pairs.
-   * @param {boolean} [options.experimental.asyncHooks=false] Whether to use Node's experimental async hooks.
    * @param {boolean} [options.plugins=true] Whether to load all built-in plugins.
    * @returns {Tracer} Self
    */
@@ -44,6 +43,8 @@ class Tracer extends BaseTracer {
       platform.load()
 
       const config = new Config(options)
+
+      platform.configure(config)
 
       this._tracer = new DatadogTracer(config)
       this._instrumenter.patch(config)

@@ -3,6 +3,8 @@
 const getPort = require('get-port')
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let express

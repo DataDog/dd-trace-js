@@ -2,6 +2,8 @@
 
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let elasticsearch
