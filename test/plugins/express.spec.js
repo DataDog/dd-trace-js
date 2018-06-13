@@ -39,7 +39,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('resource', '/user')
+              expect(traces[0][0]).to.have.property('resource', 'GET /user')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               expect(traces[0][0].meta).to.have.property('http.method', 'GET')
@@ -71,7 +71,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
+              expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
               expect(traces[0][0].meta).to.have.property('http.method', 'GET')
@@ -101,7 +101,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', '/app(/^\\/user\\/(\\d)$/)')
+              expect(traces[0][0]).to.have.property('resource', 'GET /app(/^\\/user\\/(\\d)$/)')
             })
             .then(done)
             .catch(done)
@@ -127,7 +127,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
+              expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
             })
             .then(done)
             .catch(done)
@@ -135,6 +135,38 @@ describe('Plugin', () => {
           appListener = app.listen(port, 'localhost', () => {
             axios
               .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
+          })
+        })
+      })
+
+      it('should only keep the last matching path of a middleware stack', done => {
+        const app = express()
+        const router = express.Router()
+
+        router.use('/', (req, res, next) => next())
+        router.use('*', (req, res, next) => next())
+        router.use('/bar', (req, res, next) => next())
+        router.use('/bar', (req, res, next) => {
+          res.status(200).send()
+        })
+
+        app.use('/', (req, res, next) => next())
+        app.use('*', (req, res, next) => next())
+        app.use('/foo/bar', (req, res, next) => next())
+        app.use('/foo', router)
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'GET /foo/bar')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
         })
@@ -153,7 +185,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
+              expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
             })
             .then(done)
             .catch(done)
@@ -180,7 +212,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', '/app/user/:id')
+              expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
             })
             .then(done)
             .catch(done)
@@ -233,6 +265,124 @@ describe('Plugin', () => {
               .then(res => {
                 expect(res.status).to.equal(200)
                 expect(res.data).to.equal('bar')
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
+      it('should bind the response to the current context', done => {
+        const app = express()
+
+        context.run(() => {
+          const send = context.bind(res => res.status(200).send())
+
+          app.get('/user', (req, res) => {
+            send(res)
+          })
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'GET /user')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+      })
+
+      it('should bind the next callback to the current context', done => {
+        const app = express()
+
+        app.use((req, res, next) => {
+          context.run(() => {
+            context.set('foo', 'bar')
+            next()
+          })
+        })
+
+        app.get('/user', (req, res) => {
+          res.status(200).send(context.get('foo'))
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .then(res => {
+                expect(res.status).to.equal(200)
+                expect(res.data).to.be.empty
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
+      it('should bind the next callback to the current context on error', done => {
+        const app = express()
+
+        app.use((req, res, next) => {
+          next(new Error('boom'))
+        })
+
+        app.use((e, req, res, next) => {
+          context.run(() => {
+            context.set('foo', 'bar')
+            next()
+          })
+        })
+
+        app.use((req, res, next) => {
+          res.status(200).send(context.get('foo'))
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .then(res => {
+                expect(res.status).to.equal(200)
+                expect(res.data).to.be.empty
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
+      it('should only include paths for routes that matched', done => {
+        const app = express()
+        const router = express.Router()
+
+        router.use('/baz', (req, res, next) => next())
+        router.get('/user/:id', (req, res) => {
+          res.status(200).send()
+        })
+        router.use('/qux', (req, res, next) => next())
+
+        app.use('/foo', (req, res, next) => next())
+        app.use('/app', router)
+        app.use('/bar', (req, res, next) => next())
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/app/user/123`)
+              .then(res => {
+                expect(res.status).to.equal(200)
+                expect(res.data).to.be.empty
                 done()
               })
               .catch(done)

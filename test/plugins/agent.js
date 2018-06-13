@@ -12,6 +12,7 @@ let listener = null
 let tracer = null
 let handlers = []
 let promise
+let skip = []
 
 module.exports = {
   load (plugin, moduleToPatch, config) {
@@ -26,7 +27,10 @@ module.exports = {
     agent.put('/v0.3/traces', (req, res) => {
       res.status(200).send('OK')
 
-      if (handlers[0]) {
+      if (skip[0]) {
+        skip[0].resolve()
+        skip.shift()
+      } else if (handlers[0]) {
         handlers[0](req.body)
         handlers.shift()
       }
@@ -77,15 +81,37 @@ module.exports = {
     return promise
   },
 
+  skip (count) {
+    for (let i = 0; i < count; i++) {
+      const defer = {}
+
+      defer.promise = new Promise((resolve, reject) => {
+        defer.resolve = resolve
+        defer.reject = reject
+      })
+
+      skip.push(defer)
+    }
+  },
+
   currentSpan () {
     return tracer.currentSpan()
   },
 
   close () {
-    listener.close()
-    listener = null
-    agent = null
-    handlers = []
-    delete require.cache[require.resolve('../..')]
+    const timeout = setTimeout(() => {
+      skip.forEach(defer => defer.resolve())
+    }, 1000)
+
+    return Promise.all(skip.map(defer => defer.promise))
+      .then(() => {
+        clearTimeout(timeout)
+        listener.close()
+        listener = null
+        agent = null
+        handlers = []
+        skip = []
+        delete require.cache[require.resolve('../..')]
+      })
   }
 }

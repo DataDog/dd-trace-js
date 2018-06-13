@@ -62,6 +62,15 @@ describe('Plugin', () => {
         }
       })
 
+      it('should run the callback in the parent context', done => {
+        client.on('error', done)
+
+        client.get('foo', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
+      })
+
       it('should propagate context to client emitters', done => {
         client.on('error', done)
 
@@ -74,6 +83,15 @@ describe('Plugin', () => {
           expect(context.get('foo')).to.equal('bar')
           done()
         }
+      })
+
+      it('should run client emitter listeners in the parent context', done => {
+        client.on('error', done)
+
+        client.on('ready', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
       })
 
       it('should propagate context to stream emitters', done => {
@@ -90,6 +108,17 @@ describe('Plugin', () => {
           expect(context.get('foo')).to.equal('bar')
           done()
         }
+      })
+
+      it('should run stream emitter listeners in the parent context', done => {
+        client.on('error', done)
+
+        client.stream.on('close', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
+
+        client.stream.destroy()
       })
 
       it('should handle errors', done => {

@@ -25,12 +25,15 @@ function createWrapCreateStream (tracer) {
 function createWrapInternalSendCommand (tracer, config) {
   return function wrapInternalSendCommand (internalSendCommand) {
     return function internalSendCommandWithTrace (options) {
+      let span
+
       tracer.trace(`redis.command`, {
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           [Tags.DB_TYPE]: 'redis'
         }
-      }, span => {
+      }, child => {
+        span = child
         span.addTags({
           'service.name': config.service || 'redis',
           'resource.name': options.command,
@@ -39,9 +42,9 @@ function createWrapInternalSendCommand (tracer, config) {
           'out.host': String(this.connection_options.host),
           'out.port': String(this.connection_options.port)
         })
-
-        options.callback = wrapCallback(tracer, span, options.callback)
       })
+
+      options.callback = wrapCallback(tracer, span, options.callback)
 
       return internalSendCommand.call(this, options)
     }

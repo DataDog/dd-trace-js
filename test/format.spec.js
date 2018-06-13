@@ -1,7 +1,7 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
-const id = new Uint64BE(0x12345678, 0x12345678)
+const Int64BE = require('int64-buffer').Int64BE
+const id = new Int64BE(0x02345678, 0x12345678)
 
 describe('format', () => {
   let format
@@ -41,11 +41,12 @@ describe('format', () => {
       expect(trace.span_id).to.equal(span.context().spanId)
       expect(trace.parent_id).to.equal(span.context().parentId)
       expect(trace.name).to.equal(span._operationName)
+      expect(trace.resource).to.equal(span._operationName)
       expect(trace.service).to.equal(span.tracer()._service)
       expect(trace.error).to.equal(0)
-      expect(trace.start).to.be.instanceof(Uint64BE)
+      expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.be.instanceof(Uint64BE)
+      expect(trace.duration).to.be.instanceof(Int64BE)
       expect(trace.duration.toNumber()).to.equal(span._duration * 1e6)
     })
 
@@ -85,7 +86,33 @@ describe('format', () => {
       expect(trace.meta['error.stack']).to.equal(span._error.stack)
     })
 
-    it('should set the error flag when there is an error tag', () => {
+    describe('when there is an `error` tag ', () => {
+      it('should set the error flag when error tag is true', () => {
+        span._tags['error'] = true
+
+        trace = format(span)
+
+        expect(trace.error).to.equal(1)
+      })
+
+      it('should not set the error flag when error is false', () => {
+        span._tags['error'] = false
+
+        trace = format(span)
+
+        expect(trace.error).to.equal(0)
+      })
+
+      it('should not extract error to meta', () => {
+        span._tags['error'] = true
+
+        trace = format(span)
+
+        expect(trace.meta['error']).to.be.undefined
+      })
+    })
+
+    it('should set the error flag when there is an error-related tag', () => {
       span._tags['error.type'] = 'Error'
       span._tags['error.msg'] = 'boom'
       span._tags['error.stack'] = ''
@@ -108,9 +135,10 @@ describe('format', () => {
 
       expect(trace.name).to.equal('null')
       expect(trace.service).to.equal('null')
+      expect(trace.resource).to.equal('null')
       expect(trace.meta['foo.bar']).to.equal('null')
-      expect(trace.start).to.be.instanceof(Uint64BE)
-      expect(trace.duration).to.be.instanceof(Uint64BE)
+      expect(trace.start).to.be.instanceof(Int64BE)
+      expect(trace.duration).to.be.instanceof(Int64BE)
     })
   })
 })

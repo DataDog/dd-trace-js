@@ -14,7 +14,7 @@ describe('TextMapPropagator', () => {
     propagator = new TextMapPropagator()
     textMap = {
       'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '456',
+      'x-datadog-parent-id': '-456',
       'ot-baggage-foo': 'bar'
     }
     baggageItems = {
@@ -27,7 +27,7 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(0, 456),
+        spanId: new Uint64BE(-456),
         baggageItems
       })
 
@@ -65,7 +65,7 @@ describe('TextMapPropagator', () => {
 
       expect(spanContext).to.deep.equal(new SpanContext({
         traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(0, 456),
+        spanId: new Uint64BE(-456),
         baggageItems
       }))
     })

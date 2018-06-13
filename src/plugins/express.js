@@ -24,13 +24,12 @@ function createWrapMethod (tracer, config) {
     }, span => {
       const originalEnd = res.end
 
-      res.end = function () {
-        res.end = originalEnd
-        const returned = res.end.apply(this, arguments)
-        const paths = tracer._context.get('express.paths')
+      res.end = tracer.bind(function () {
+        const returned = originalEnd.apply(this, arguments)
+        const paths = tracer.currentSpan().context()._express_paths
 
         if (paths) {
-          span.setTag('resource.name', paths.join(''))
+          span.setTag('resource.name', `${req.method} ${paths.join('')}`)
         }
 
         span.setTag('service.name', config.service || tracer._service)
@@ -40,9 +39,11 @@ function createWrapMethod (tracer, config) {
         span.finish()
 
         return returned
-      }
+      })
 
-      return next()
+      req._datadog_trace_patched = true
+
+      next()
     })
   }
 
@@ -63,15 +64,15 @@ function createWrapProcessParams (tracer, config) {
   return function wrapProcessParams (processParams) {
     return function processParamsWithTrace (layer, called, req, res, done) {
       const matchers = layer._datadog_matchers
-      let paths = context.get('express.paths') || []
+      const span = context.get('current')
 
-      if (matchers) {
+      if (matchers && span) {
+        const paths = span.context()._express_paths || []
+
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            paths = paths.concat(matchers[i].path)
-
-            context.set('express.paths', paths)
+            span.context()._express_paths = paths.concat(matchers[i].path)
 
             break
           }
@@ -91,10 +92,15 @@ function createWrapRouterMethod (tracer) {
       const matchers = extractMatchers(fn)
 
       this.stack.slice(offset).forEach(layer => {
-        const handle = layer.handle_request
+        const handleRequest = layer.handle_request
+        const handleError = layer.handle_error
 
         layer.handle_request = (req, res, next) => {
-          return handle.call(layer, req, res, next)
+          return handleRequest.call(layer, req, res, wrapNext(tracer, layer, req, next))
+        }
+
+        layer.handle_error = (error, req, res, next) => {
+          return handleError.call(layer, error, req, res, wrapNext(tracer, layer, req, next))
         }
 
         layer._datadog_matchers = matchers
@@ -103,6 +109,25 @@ function createWrapRouterMethod (tracer) {
       return router
     }
   }
+}
+
+function wrapNext (tracer, layer, req, next) {
+  if (req._datadog_trace_patched) {
+    const originalNext = next
+
+    return tracer.bind(function () {
+      const span = tracer.currentSpan()
+      const paths = span && span.context()._express_paths
+
+      if (paths && layer.path && !layer.regexp.fast_star) {
+        paths.pop()
+      }
+
+      originalNext.apply(null, arguments)
+    })
+  }
+
+  return next
 }
 
 function extractMatchers (fn) {

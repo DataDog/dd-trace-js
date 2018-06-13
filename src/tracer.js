@@ -17,14 +17,19 @@ class DatadogTracer extends Tracer {
     }
 
     this._context.run(() => {
-      const childOf = options.childOf || this._context.get('current')
-      const tags = Object.assign({
+      const childOf = options.childOf !== undefined ? options.childOf : this._context.get('current')
+      const defaultTags = {
         'service.name': options.service || this._service,
-        'resource.name': options.resource || name,
-        'span.type': options.type
-      }, options.tags)
+        'resource.name': options.resource || name
+      }
 
+      if (options.type) {
+        defaultTags['span.type'] = options.type
+      }
+
+      const tags = Object.assign(defaultTags, options.tags)
       const span = this.startSpan(name, { childOf, tags })
+
       this._context.set('current', span)
 
       callback(span)

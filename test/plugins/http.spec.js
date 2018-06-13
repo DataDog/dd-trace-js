@@ -8,17 +8,19 @@ describe('Plugin', () => {
   let express
   let http
   let appListener
+  let context
 
   describe('http', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/http')
       express = require('express')
       http = require('http')
+      context = require('../../src/platform').context({ experimental: {} })
     })
 
     afterEach(() => {
-      agent.close()
       appListener.close()
+      return agent.close()
     })
 
     describe('without configuration', () => {
@@ -34,17 +36,18 @@ describe('Plugin', () => {
         })
 
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'http-client')
-            expect(traces[0][0]).to.have.property('type', 'web')
-            expect(traces[0][0]).to.have.property('resource', 'GET')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-            expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('service', 'http-client')
+              expect(traces[0][0]).to.have.property('type', 'web')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            })
+            .then(done)
+            .catch(done)
 
           appListener = app.listen(port, 'localhost', () => {
             const req = http.request(`http://localhost:${port}/user`, res => {
@@ -64,11 +67,12 @@ describe('Plugin', () => {
         })
 
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.not.be.undefined
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.not.be.undefined
+            })
+            .then(done)
+            .catch(done)
 
           appListener = app.listen(port, 'localhost', () => {
             const req = http.get(`http://localhost:${port}/user`, res => {
@@ -82,11 +86,12 @@ describe('Plugin', () => {
 
       it('should support configuration as an URL object', done => {
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+            })
+            .then(done)
+            .catch(done)
 
           const uri = {
             hostname: 'localhost',
@@ -102,11 +107,12 @@ describe('Plugin', () => {
 
       it('should use the correct defaults when not specified', done => {
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/`)
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/`)
+            })
+            .then(done)
+            .catch(done)
 
           const req = http.request({
             port
@@ -124,11 +130,12 @@ describe('Plugin', () => {
         })
 
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.not.be.undefined
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.not.be.undefined
+            })
+            .then(done)
+            .catch(done)
 
           appListener = app.listen(port, 'localhost', () => {
             const req = http.request(`http://localhost:${port}/user`)
@@ -149,11 +156,12 @@ describe('Plugin', () => {
         })
 
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            })
+            .then(done)
+            .catch(done)
 
           appListener = app.listen(port, 'localhost', () => {
             const req = http.request(`http://localhost:${port}/user`)
@@ -163,15 +171,57 @@ describe('Plugin', () => {
         })
       })
 
+      it('should run the callback in the parent context', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send('OK')
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            const req = http.request(`http://localhost:${port}/user`, res => {
+              expect(context.get('current')).to.be.undefined
+              done()
+            })
+
+            req.end()
+          })
+        })
+      })
+
+      it('should run the event listeners in the parent context', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send('OK')
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            const req = http.request(`http://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+              res.on('end', () => {
+                expect(context.get('current')).to.be.undefined
+                done()
+              })
+            })
+
+            req.end()
+          })
+        })
+      })
+
       it('should handle errors', done => {
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-            expect(traces[0][0].meta).to.have.property('error.msg', `connect ECONNREFUSED 127.0.0.1:${port}`)
-            expect(traces[0][0].meta).to.have.property('error.stack')
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta).to.have.property('error.msg', `connect ECONNREFUSED 127.0.0.1:${port}`)
+              expect(traces[0][0].meta).to.have.property('error.stack')
+            })
+            .then(done)
+            .catch(done)
 
           const req = http.request(`http://localhost:${port}/user`)
 
@@ -199,11 +249,12 @@ describe('Plugin', () => {
         })
 
         getPort().then(port => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom')
-
-            done()
-          })
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('service', 'custom')
+            })
+            .then(done)
+            .catch(done)
 
           appListener = app.listen(port, 'localhost', () => {
             const req = http.request(`http://localhost:${port}/user`, res => {

@@ -56,12 +56,24 @@ describe('Tracer', () => {
       })
     })
 
+    it('should support explicitly creating a root span', done => {
+      tracer = new Tracer(config)
+
+      tracer.trace('parent', parent => {
+        tracer.trace('child', { childOf: null }, child => {
+          expect(child.context()).to.have.property('parentId', null)
+          done()
+        })
+      })
+    })
+
     it('should set default tags', done => {
       tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         expect(current._tags).to.have.property('service.name', 'service')
         expect(current._tags).to.have.property('resource.name', 'name')
+        expect(current._tags).to.not.have.property('span.type')
         done()
       })
     })

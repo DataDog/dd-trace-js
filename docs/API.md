@@ -93,7 +93,7 @@ tracer.use('pg', {
 })
 ```
 
-Each integration can be configured individually. See below for more information for every integration.
+Each integration also has its own list of default tags. These tags get automatically added to the span created by the integration.
 
 <h3 id="amqplib">amqplib</h3>
 
@@ -301,7 +301,7 @@ For example:
 const bunyan = require('bunyan')
 const logger = bunyan.createLogger({
   name: 'dd-trace',
-  level: 'debug'
+  level: 'trace'
 })
 
 const tracer = require('dd-trace').init({

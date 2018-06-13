@@ -37,11 +37,11 @@ function patch (pg, tracer, config) {
           }
 
           span.finish()
-
-          if (originalCallback) {
-            originalCallback(err, res)
-          }
         })
+
+        if (originalCallback) {
+          originalCallback(err, res)
+        }
       }
 
       return pgQuery

@@ -22,16 +22,19 @@ describe('Plugin', () => {
       let connection
 
       beforeEach(() => {
-        connection = mysql.createConnection({
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass',
-          database: 'db'
-        })
-
-        connection.connect()
-
         return agent.load(plugin, 'mysql')
+          .then(() => {
+            mysql = require('mysql')
+
+            connection = mysql.createConnection({
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass',
+              database: 'db'
+            })
+
+            connection.connect()
+          })
       })
 
       afterEach(done => {
@@ -50,6 +53,13 @@ describe('Plugin', () => {
         }
       })
 
+      it('should run the callback in the parent context', done => {
+        connection.query('SELECT 1 + 1 AS solution', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
+      })
+
       it('should propagate context to events', done => {
         let query
 
@@ -63,6 +73,15 @@ describe('Plugin', () => {
           expect(context.get('foo')).to.equal('bar')
           done()
         }
+      })
+
+      it('should run event listeners in the parent context', done => {
+        const query = connection.query('SELECT 1 + 1 AS solution')
+
+        query.on('result', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
       })
 
       it('should do automatic instrumentation', done => {
@@ -118,16 +137,19 @@ describe('Plugin', () => {
           service: 'custom'
         }
 
-        connection = mysql.createConnection({
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass',
-          database: 'db'
-        })
-
-        connection.connect()
-
         return agent.load(plugin, 'mysql', config)
+          .then(() => {
+            mysql = require('mysql')
+
+            connection = mysql.createConnection({
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass',
+              database: 'db'
+            })
+
+            connection.connect()
+          })
       })
 
       afterEach(done => {
@@ -148,14 +170,17 @@ describe('Plugin', () => {
       let pool
 
       beforeEach(() => {
-        pool = mysql.createPool({
-          connectionLimit: 10,
-          host: 'localhost',
-          user: 'user',
-          password: 'userpass'
-        })
-
         return agent.load(plugin, 'mysql')
+          .then(() => {
+            mysql = require('mysql')
+
+            pool = mysql.createPool({
+              connectionLimit: 10,
+              host: 'localhost',
+              user: 'user',
+              password: 'userpass'
+            })
+          })
       })
 
       afterEach(done => {
@@ -187,6 +212,13 @@ describe('Plugin', () => {
           expect(context.get('foo')).to.equal('bar')
           done()
         }
+      })
+
+      it('should run the callback in the parent context', done => {
+        pool.query('SELECT 1 + 1 AS solution', () => {
+          expect(context.get('current')).to.be.undefined
+          done()
+        })
       })
     })
   })
