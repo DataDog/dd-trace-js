@@ -83,7 +83,7 @@ function unpatch (redis) {
 
 module.exports = {
   name: 'redis',
-  versions: ['>=2.6'],
+  versions: ['^2.6'],
   patch,
   unpatch
 }
