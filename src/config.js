@@ -19,6 +19,9 @@ class Config {
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     const plugins = coalesce(options.plugins, true)
 
+    // Temporary safety net. Do not disable without contacting support.
+    const asyncHooks = coalesce(options.asyncHooks, true)
+
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
     this.service = service
@@ -30,18 +33,8 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
-    this.experimental = {
-      asyncHooks: isFlagEnabled(options.experimental, 'asyncHooks')
-    }
+    this.asyncHooks = !!asyncHooks
   }
-}
-
-function isFlagEnabled (obj, prop) {
-  return obj === true || (isObject(obj) && !!obj[prop])
-}
-
-function isObject (value) {
-  return typeof value === 'object' && value !== null
 }
 
 module.exports = Config

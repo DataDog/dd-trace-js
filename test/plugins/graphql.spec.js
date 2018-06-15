@@ -2,6 +2,8 @@
 
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let context
@@ -13,7 +15,7 @@ describe('Plugin', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/graphql')
       graphql = require('graphql')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      context = require('../../src/platform').context()
 
       schema = new graphql.GraphQLSchema({
         query: new graphql.GraphQLObjectType({

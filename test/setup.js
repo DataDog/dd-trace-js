@@ -29,6 +29,7 @@ global.sinon = sinon
 global.expect = chai.expect
 global.proxyquire = proxyquire
 global.nock = nock
+global.wrapIt = wrapIt
 
 platform.use(node)
 
@@ -182,4 +183,46 @@ function waitForRabbitMQ () {
         })
     })
   })
+}
+
+function wrapIt () {
+  const it = global.it
+
+  global.it = function (title, fn) {
+    if (fn.length > 0) {
+      return it.call(this, title, function (done) {
+        const context = platform.context()
+
+        arguments[0] = context.bind(done)
+
+        return fn.apply(this, arguments)
+      })
+    } else {
+      return it.call(this, title, function () {
+        const context = platform.context()
+        const defer = {}
+
+        defer.promise = new Promise((resolve, reject) => {
+          defer.resolve = context.bind(resolve)
+          defer.reject = context.bind(reject)
+        })
+
+        const result = fn.apply(this, arguments)
+
+        if (result && result.then) {
+          return result
+            .then(function () {
+              defer.resolve.apply(defer, arguments)
+              return defer.promise
+            })
+            .catch(function () {
+              defer.reject.apply(defer, arguments)
+              return defer.promise
+            })
+        }
+
+        return result
+      })
+    }
+  }
 }

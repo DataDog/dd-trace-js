@@ -4,6 +4,8 @@ const EventEmitter = require('events')
 const Buffer = require('safe-buffer').Buffer
 const semver = require('semver')
 
+wrapIt()
+
 describe('Platform', () => {
   describe('Node', () => {
     let platform
@@ -321,7 +323,6 @@ describe('Platform', () => {
     })
 
     describe('context', () => {
-      let context
       let namespace
       let clsBluebird
       let config
@@ -329,7 +330,6 @@ describe('Platform', () => {
       beforeEach(() => {
         require('cls-bluebird')
         clsBluebird = sinon.spy(require.cache[require.resolve('cls-bluebird')], 'exports')
-        context = require('../../../src/platform/node/context')
       })
 
       afterEach(() => {
@@ -338,23 +338,21 @@ describe('Platform', () => {
 
       describe('continuation-local-storage', () => {
         beforeEach(() => {
-          config = { experimental: { asyncHooks: false } }
-          namespace = context(config)
+          platform.configure({ asyncHooks: false })
+          namespace = platform.context()
         })
 
         testContext('../../../src/platform/node/context/cls')
       })
 
-      if (semver.gte(semver.valid(process.version), '8.2.0')) {
-        describe('cls-hooked', () => {
-          beforeEach(() => {
-            config = { experimental: { asyncHooks: true } }
-            namespace = context(config)
-          })
-
-          testContext('../../../src/platform/node/context/cls_hooked')
+      describe('cls-hooked', () => {
+        beforeEach(() => {
+          platform.configure({ asyncHooks: true })
+          namespace = platform.context(config)
         })
-      }
+
+        testContext('../../../src/platform/node/context/cls_hooked')
+      })
 
       function testContext (modulePath) {
         it('should use the correct implementation from the experimental flag', () => {
@@ -456,7 +454,7 @@ describe('Platform', () => {
         })
 
         it('should only patch bluebird once', () => {
-          context(config)
+          platform.context()
           expect(clsBluebird).to.not.have.been.called
         })
 

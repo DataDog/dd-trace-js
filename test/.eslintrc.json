@@ -9,7 +9,8 @@
     "expect": true,
     "sinon": true,
     "proxyquire": true,
-    "nock": true
+    "nock": true,
+    "wrapIt": true
   },
   "rules": {
     "no-unused-expressions": 0

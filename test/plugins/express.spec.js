@@ -4,6 +4,8 @@ const axios = require('axios')
 const getPort = require('get-port')
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let context
@@ -14,7 +16,7 @@ describe('Plugin', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/express')
       express = require('express')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      context = require('../../src/platform').context()
     })
 
     afterEach(() => {

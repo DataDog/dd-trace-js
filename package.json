@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=4"
+    "node": ">=4.7"
   },
   "dependencies": {
     "cls-bluebird": "^2.1.0",
