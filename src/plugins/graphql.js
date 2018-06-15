@@ -147,7 +147,7 @@ function createOperationSpan (tracer, config, contextValue, info) {
       'service.name': getService(tracer, config),
       'resource.name': [type, name].filter(val => val).join(' '),
       'span.type': 'custom',
-      'graphql.source': contextValue._datadog_source
+      'graphql.document': contextValue._datadog_source
     })
   })
 

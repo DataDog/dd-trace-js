@@ -73,7 +73,7 @@ describe('Plugin', () => {
             expect(spans[0]).to.have.property('service', 'test-graphql')
             expect(spans[0]).to.have.property('name', 'graphql.query')
             expect(spans[0]).to.have.property('resource', 'query MyQuery')
-            expect(spans[0].meta).to.have.property('graphql.source', source)
+            expect(spans[0].meta).to.have.property('graphql.document', source)
           })
           .then(done)
           .catch(done)

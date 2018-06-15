@@ -192,9 +192,9 @@ query HelloWorld {
 
 <h5 id="graphql-tags">Tags</h5>
 
-| Tag            | Description                                                 |
-|----------------|-------------------------------------------------------------|
-| graphql.source | The original source of the operation in GraphQL syntax.     |
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| graphql.document | The original GraphQL document.                            |
 
 <h5 id="graphql-config">Configuration Options</h5>
 
