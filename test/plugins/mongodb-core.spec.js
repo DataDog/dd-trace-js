@@ -2,6 +2,8 @@
 
 const agent = require('./agent')
 
+wrapIt()
+
 describe('Plugin', () => {
   let plugin
   let mongo
@@ -44,7 +46,7 @@ describe('Plugin', () => {
       mongo = require('mongodb-core')
       plugin = require('../../src/plugins/mongodb-core')
       platform = require('../../src/platform')
-      context = platform.context({ experimental: { asyncHooks: false } })
+      context = platform.context()
 
       collection = platform.id().toString()
 

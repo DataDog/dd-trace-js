@@ -11,6 +11,7 @@ let agent = null
 let listener = null
 let tracer = null
 let handlers = []
+let promise
 let skip = []
 
 module.exports = {
@@ -60,17 +61,24 @@ module.exports = {
     })
   },
 
-  use (callback) {
-    return new Promise((resolve, reject) => {
-      handlers.push(function () {
-        try {
-          callback.apply(null, arguments)
-          resolve()
-        } catch (e) {
-          reject(e)
-        }
-      })
-    })
+  use (callback, count) {
+    count = count || 1
+    promise = Promise.reject(new Error('No request was expected.'))
+
+    for (let i = 0; i < count; i++) {
+      promise = promise.catch(() => new Promise((resolve, reject) => {
+        handlers.push(function () {
+          try {
+            callback.apply(null, arguments)
+            resolve()
+          } catch (e) {
+            reject(e)
+          }
+        })
+      }))
+    }
+
+    return promise
   },
 
   skip (count) {

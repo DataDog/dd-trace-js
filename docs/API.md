@@ -101,6 +101,65 @@ tracer.use('pg', {
 
 Each integration also has its own list of default tags. These tags get automatically added to the span created by the integration.
 
+<h3 id="amqplib">amqplib</h3>
+
+<h5 id="amqplib-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| out.host         | The host of the AMQP server.                              |
+| out.port         | The port of the AMQP server.                              |
+| span.kind        | Set to either `producer` or `consumer` where it applies.  |
+| amqp.queue       | The queue targeted by the command (when available).       |
+| amqp.exchange    | The exchange targeted by the command (when available).    |
+| amqp.routingKey  | The routing key targeted by the command (when available). |
+| amqp.consumerTag | The consumer tag (when available).                        |
+| amqp.source      | The source exchange of the binding (when available).      |
+| amqp.destination | The destination exchange of the binding (when available). |
+
+<h5 id="amqplib-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+
+<h5 id="amqplib-limitations">Known Limitations</h5>
+
+When consuming messages, the current span will be immediately finished. This means that if any asynchronous operation is started in the message handler callback, its duration will be excluded from the span duration.
+
+For example:
+
+```js
+channel.consume('queue', msg => {
+  setTimeout(() => {
+    // The message span will not include the 1 second from this operation.
+  }, 1000)
+}, {}, () => {})
+```
+
+This limitation doesn't apply to other commands. We are working on improving this behavior in a future version.
+
+<h3 id="elasticsearch">elasticsearch</h3>
+
+<h5 id="elasticsearch-tags">Tags</h5>
+
+| Tag                  | Description                                           |
+|----------------------|-------------------------------------------------------|
+| db.type              | Always set to `elasticsearch`.                        |
+| out.host             | The host of the Elasticsearch server.                 |
+| out.port             | The port of the Elasticsearch server.                 |
+| span.kind            | Always set to `client`.                               |
+| elasticsearch.method | The underlying HTTP request verb.                     |
+| elasticsearch.url    | The underlying HTTP request URL path.                 |
+| elasticsearch.body   | The body of the query.                                |
+| elasticsearch.params | The parameters of the query.                          |
+
+<h5 id="elasticsearch-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | elasticsearch    | The service name for this integration. |
+
 <h3 id="express">express</h3>
 
 <h5 id="express-tags">Tags</h5>
@@ -116,6 +175,38 @@ Each integration also has its own list of default tags. These tags get automatic
 | Option           | Default                   | Description                            |
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
+
+<h3 id="graphql">graphql</h3>
+
+The `graphql` integration uses the operation name as the span resource name. If no operation name is set, the resource name will always be just `query` or `mutation`.
+
+For example:
+
+```graphql
+# good, the resource name will be `query HelloWorld`
+query HelloWorld {
+  hello
+  world
+}
+
+# bad, the resource name will be `query`
+{
+  hello
+  world
+}
+```
+
+<h5 id="graphql-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| graphql.document | The original GraphQL document.                            |
+
+<h5 id="graphql-config">Configuration Options</h5>
+
+| Option  | Default                                          | Description                            |
+|---------|--------------------------------------------------|----------------------------------------|
+| service | *Service name of the app suffixed with -graphql* | The service name for this integration. |
 
 <h3 id="http">http / https</h3>
 
@@ -233,7 +324,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 | tags          |                              | {}        | Set global tags that should be applied to all spans. |
 | sampleRate    |                              | 1         | Percentage of spans to sample as a float between 0 and 1. |
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Available experimental features: `asyncHooks`. |
+| experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
 | plugins       |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 
 <h3 id="custom-logging">Custom Logging</h3>

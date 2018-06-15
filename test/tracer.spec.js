@@ -1,9 +1,12 @@
 'use strict'
 
+const EventEmitter = require('events')
 const Span = require('../src/opentracing/span')
 const SpanContext = require('../src/opentracing/span_context')
 const Config = require('../src/config')
 const platform = require('../src/platform')
+
+wrapIt()
 
 describe('Tracer', () => {
   let Tracer
@@ -16,8 +19,8 @@ describe('Tracer', () => {
   beforeEach(() => {
     config = new Config({ service: 'service' })
     context = platform.context(config)
-    sinon.stub(context, 'bind')
-    sinon.stub(context, 'bindEmitter')
+    sinon.spy(context, 'bind')
+    sinon.spy(context, 'bindEmitter')
 
     instrumenter = {
       use: sinon.spy(),
@@ -28,6 +31,8 @@ describe('Tracer', () => {
     Tracer = proxyquire('../src/tracer', {
       './instrumenter': Instrumenter
     })
+
+    tracer = new Tracer(config)
   })
 
   afterEach(() => {
@@ -37,8 +42,6 @@ describe('Tracer', () => {
 
   describe('trace', () => {
     it('should run the callback with the new span', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('name', current => {
         expect(current).to.be.instanceof(Span)
         done()
@@ -46,8 +49,6 @@ describe('Tracer', () => {
     })
 
     it('should use the parent context', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('parent', parent => {
         tracer.trace('child', child => {
           expect(child.context()).to.have.property('parentId', parent.context().spanId)
@@ -57,8 +58,6 @@ describe('Tracer', () => {
     })
 
     it('should support explicitly creating a root span', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('parent', parent => {
         tracer.trace('child', { childOf: null }, child => {
           expect(child.context()).to.have.property('parentId', null)
@@ -68,8 +67,6 @@ describe('Tracer', () => {
     })
 
     it('should set default tags', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('name', current => {
         expect(current._tags).to.have.property('service.name', 'service')
         expect(current._tags).to.have.property('resource.name', 'name')
@@ -79,8 +76,6 @@ describe('Tracer', () => {
     })
 
     it('should support service option', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('name', { service: 'test' }, current => {
         expect(current._tags).to.have.property('service.name', 'test')
         done()
@@ -88,8 +83,6 @@ describe('Tracer', () => {
     })
 
     it('should support resource option', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('name', { resource: 'test' }, current => {
         expect(current._tags).to.have.property('resource.name', 'test')
         done()
@@ -97,8 +90,6 @@ describe('Tracer', () => {
     })
 
     it('should support type option', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('name', { type: 'test' }, current => {
         expect(current._tags).to.have.property('span.type', 'test')
         done()
@@ -109,8 +100,6 @@ describe('Tracer', () => {
       const tags = {
         'foo': 'bar'
       }
-
-      tracer = new Tracer(config)
 
       tracer.trace('name', { tags }, current => {
         expect(current._tags).to.have.property('foo', 'bar')
@@ -124,8 +113,6 @@ describe('Tracer', () => {
         spanId: 5678
       })
 
-      tracer = new Tracer(config)
-
       tracer.trace('name', { childOf }, current => {
         expect(current.context().traceId).to.equal(childOf.traceId)
         expect(current.context().parentId).to.equal(childOf.spanId)
@@ -136,8 +123,6 @@ describe('Tracer', () => {
 
   describe('currentSpan', () => {
     it('should return the current span', done => {
-      tracer = new Tracer(config)
-
       tracer.trace('name', current => {
         expect(tracer.currentSpan()).to.equal(current)
         done()
@@ -145,8 +130,6 @@ describe('Tracer', () => {
     })
 
     it('should return null when there is no current span', () => {
-      tracer = new Tracer(config)
-
       expect(tracer.currentSpan()).to.be.null
     })
   })
@@ -154,8 +137,6 @@ describe('Tracer', () => {
   describe('bind', () => {
     it('should bind a function to the context', done => {
       const callback = () => {}
-
-      tracer = new Tracer(config)
 
       tracer.trace('name', current => {
         tracer.bind(callback)
@@ -166,11 +147,13 @@ describe('Tracer', () => {
   })
 
   describe('bindEmitter', () => {
+    let emitter
+
+    beforeEach(() => {
+      emitter = new EventEmitter()
+    })
+
     it('should bind an emitter to the context', done => {
-      const emitter = 'emitter'
-
-      tracer = new Tracer(config)
-
       tracer.trace('name', current => {
         tracer.bindEmitter(emitter)
         expect(context.bindEmitter).to.have.been.calledWith(emitter)

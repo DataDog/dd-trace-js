@@ -10,6 +10,8 @@ const pg = require('pg')
 const mysql = require('mysql')
 const redis = require('redis')
 const mongo = require('mongodb-core')
+const elasticsearch = require('elasticsearch')
+const amqplib = require('amqplib/callback_api')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 
@@ -27,6 +29,7 @@ global.sinon = sinon
 global.expect = chai.expect
 global.proxyquire = proxyquire
 global.nock = nock
+global.wrapIt = wrapIt
 
 platform.use(node)
 
@@ -41,7 +44,9 @@ function waitForServices () {
     waitForPostgres(),
     waitForMysql(),
     waitForRedis(),
-    waitForMongo()
+    waitForMongo(),
+    waitForElasticsearch(),
+    waitForRabbitMQ()
   ])
 }
 
@@ -143,4 +148,81 @@ function waitForMongo () {
       server.connect()
     })
   })
+}
+
+function waitForElasticsearch () {
+  return new Promise((resolve, reject) => {
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      const client = new elasticsearch.Client({
+        host: 'localhost:9200'
+      })
+
+      client.ping((err) => {
+        if (operation.retry(err)) return
+        if (err) reject(err)
+
+        resolve()
+      })
+    })
+  })
+}
+
+function waitForRabbitMQ () {
+  return new Promise((resolve, reject) => {
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      amqplib
+        .connect((err, conn) => {
+          if (operation.retry(err)) return
+          if (err) reject(err)
+
+          conn.close(() => resolve())
+        })
+    })
+  })
+}
+
+function wrapIt () {
+  const it = global.it
+
+  global.it = function (title, fn) {
+    if (fn.length > 0) {
+      return it.call(this, title, function (done) {
+        const context = platform.context()
+
+        arguments[0] = context.bind(done)
+
+        return fn.apply(this, arguments)
+      })
+    } else {
+      return it.call(this, title, function () {
+        const context = platform.context()
+        const defer = {}
+
+        defer.promise = new Promise((resolve, reject) => {
+          defer.resolve = context.bind(resolve)
+          defer.reject = context.bind(reject)
+        })
+
+        const result = fn.apply(this, arguments)
+
+        if (result && result.then) {
+          return result
+            .then(function () {
+              defer.resolve.apply(defer, arguments)
+              return defer.promise
+            })
+            .catch(function () {
+              defer.reject.apply(defer, arguments)
+              return defer.promise
+            })
+        }
+
+        return result
+      })
+    }
+  }
 }

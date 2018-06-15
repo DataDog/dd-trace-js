@@ -1,9 +1,9 @@
 'use strict'
 
-module.exports = config => {
+module.exports = function () {
   let namespace
 
-  if (config.experimental.asyncHooks) {
+  if (this._config.asyncHooks) {
     namespace = require('./cls_hooked')
   } else {
     namespace = require('./cls')

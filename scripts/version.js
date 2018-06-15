@@ -3,7 +3,10 @@
 const path = require('path')
 const fs = require('fs')
 const semver = require('semver')
-const exec = require('child_process').execSync
+const exec = require('./helpers/exec')
+const title = require('./helpers/title')
+
+title('Pulling latest changes from master')
 
 exec(`git checkout master`)
 exec(`git pull`)
@@ -11,6 +14,8 @@ exec(`git pull`)
 const pkg = require('../package.json')
 const increment = getIncrement()
 const version = semver.inc(pkg.version, increment)
+
+title(`Bumping version to v${version} in a new branch`)
 
 pkg.version = version
 

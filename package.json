@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Datadog APM tracing client for JavaScript (experimental)",
   "main": "index.js",
   "scripts": {
@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=4"
+    "node": ">=4.7"
   },
   "dependencies": {
     "cls-bluebird": "^2.1.0",
@@ -37,6 +37,7 @@
     "continuation-local-storage": "^3.2.1",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
+    "lodash.kebabcase": "^4.1.1",
     "methods": "^1.1.2",
     "msgpack-lite": "^0.1.26",
     "opentracing": "0.14.1",
@@ -52,11 +53,13 @@
     "url-parse": "^1.2.0"
   },
   "devDependencies": {
+    "amqplib": "^0.5.2",
     "axios": "^0.18.0",
     "benchmark": "^2.1.4",
     "bluebird": "^3.5.1",
     "body-parser": "^1.18.2",
     "chai": "^4.1.2",
+    "elasticsearch": "^15.0.0",
     "eslint": "^4.15.0",
     "eslint-config-standard": "^11.0.0-beta.0",
     "eslint-plugin-import": "^2.8.0",
@@ -65,6 +68,7 @@
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.16.2",
     "get-port": "^3.2.0",
+    "graphql": "^0.13.2",
     "gulp": "^3.9.1",
     "gulp-jsdoc3": "^2.0.0",
     "jsdoc": "^3.5.5",
