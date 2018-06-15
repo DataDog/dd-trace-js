@@ -72,6 +72,12 @@ const opentracing = require('opentracing')
 opentracing.initGlobalTracer(tracer)
 ```
 
+The following tags are available to override Datadog specific options:
+
+* `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
+* `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
+* `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
+
 **NOTE: When using OpenTracing, context propagation is not handled
 automatically.**
 
