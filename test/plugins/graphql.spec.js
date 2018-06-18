@@ -289,6 +289,26 @@ describe('Plugin', () => {
           })
       })
 
+      it('should handle calling low level APIs directly', done => {
+        const source = `query MyQuery { hello(name: "world") }`
+        const document = graphql.parse(source)
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+
+            expect(spans).to.have.length(3)
+            expect(spans[0]).to.have.property('service', 'test-graphql')
+            expect(spans[0]).to.have.property('name', 'graphql.query')
+            expect(spans[0]).to.have.property('resource', 'query MyQuery')
+            expect(spans[0].meta).to.have.property('graphql.document', source)
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.execute(schema, document)
+      })
+
       it('should handle exceptions', done => {
         const error = new Error('test')
 
