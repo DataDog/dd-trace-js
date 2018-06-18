@@ -189,6 +189,10 @@ function wrapIt () {
   const it = global.it
 
   global.it = function (title, fn) {
+    if (!fn) {
+      return it.apply(this, arguments)
+    }
+
     if (fn.length > 0) {
       return it.call(this, title, function (done) {
         const context = platform.context()
