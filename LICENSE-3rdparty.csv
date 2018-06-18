@@ -12,7 +12,6 @@ require,parent-module,MIT,Copyright Sindre Sorhus
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
 require,read-pkg-up,MIT,Copyright Sindre Sorhus
-require,require-dir,MIT,Copyright 2012-2015 Aseem Kishore
 require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell

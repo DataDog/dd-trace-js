@@ -1,6 +1,5 @@
 'use strict'
 
-const path = require('path')
 const proxyquire = require('proxyquire').noCallThru()
 
 describe('Instrumenter', () => {
@@ -8,10 +7,7 @@ describe('Instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
-  let requireDir
-  let Connection
-  let Pool
-  let plugins
+  let shimmer
 
   beforeEach(() => {
     tracer = {
@@ -34,46 +30,41 @@ describe('Instrumenter', () => {
         {
           name: 'mysql-mock',
           versions: ['2.x'],
-          file: 'lib/Connection.js',
+          file: 'lib/connection.js',
           patch: sinon.spy(),
           unpatch: sinon.spy()
         },
         {
           name: 'mysql-mock',
           versions: ['2.x'],
-          file: 'lib/Pool.js',
+          file: 'lib/pool.js',
           patch: sinon.spy(),
           unpatch: sinon.spy()
         }
       ]
     }
 
-    plugins = {
-      other: {
-        name: 'other',
-        versions: ['1.x'],
-        patch: sinon.spy(),
-        unpatch: sinon.spy()
-      }
-    }
-
-    const mysqlDir = path.normalize(path.join(__dirname, 'node_modules', 'mysql-mock'))
-    const connectionPath = path.join(mysqlDir, 'lib', 'Connection.js')
-    const poolPath = path.join(mysqlDir, 'lib', 'Pool.js')
-
-    Connection = 'Connection'
-    Pool = 'Pool'
-
-    requireDir = sinon.stub()
-    requireDir.withArgs(path.join(__dirname, '../src/plugins')).returns(integrations)
+    shimmer = sinon.spy()
+    shimmer.wrap = sinon.spy()
+    shimmer.unwrap = sinon.spy()
 
     Instrumenter = proxyquire('../src/instrumenter', {
-      'require-dir': requireDir,
-      [connectionPath]: Connection,
-      [poolPath]: Pool
+      'shimmer': shimmer,
+      './plugins': {
+        'http': integrations.http,
+        'express-mock': integrations.express,
+        'mysql-mock': integrations.mysql
+      },
+      './plugins/http': integrations.http,
+      './plugins/express-mock': integrations.express,
+      './plugins/mysql-mock': integrations.mysql
     })
 
     instrumenter = new Instrumenter(tracer)
+  })
+
+  afterEach(() => {
+    delete require.cache[require.resolve('mysql-mock')]
   })
 
   describe('with integrations enabled', () => {
@@ -82,17 +73,6 @@ describe('Instrumenter', () => {
         const config = { foo: 'bar' }
 
         instrumenter.use('express-mock', config)
-        instrumenter.patch()
-
-        const express = require('express-mock')
-
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', config)
-      })
-
-      it('should allow configuring a plugin by instance', () => {
-        const config = { foo: 'bar' }
-
-        instrumenter.use(integrations.express, config)
         instrumenter.patch()
 
         const express = require('express-mock')
@@ -109,17 +89,6 @@ describe('Instrumenter', () => {
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
       })
 
-      it('should support a plugin instance', () => {
-        const express = require('express-mock')
-
-        instrumenter.use(express)
-        instrumenter.patch()
-
-        require('express-mock')
-
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
-      })
-
       it('should reapply the require hook when called multiple times', () => {
         instrumenter.use('mysql-mock')
         instrumenter.use('express-mock')
@@ -130,17 +99,41 @@ describe('Instrumenter', () => {
         expect(integrations.express.patch).to.have.been.called
       })
 
-      it('should support third party plugins', () => {
-        instrumenter.use(plugins.other)
-        instrumenter.patch()
-
-        const other = require('other')
-
-        expect(plugins.other.patch).to.have.been.calledWith(other, 'tracer', {})
-      })
-
       it('should handle errors', () => {
         expect(() => instrumenter.use()).not.to.throw()
+      })
+
+      it('should not patch modules with the wrong API', () => {
+        integrations.express.patch = sinon.stub().throws(new Error())
+
+        instrumenter.use('express-mock')
+
+        const express = require('express-mock')
+
+        expect(integrations.express.unpatch).to.have.been.calledWith(express)
+      })
+
+      it('should not patch modules with invalid files', () => {
+        integrations.mysql[0].file = 'invalid.js'
+
+        instrumenter.use('mysql-mock')
+
+        require('mysql-mock')
+
+        expect(integrations.mysql[0].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.not.have.been.called
+      })
+
+      it('should handle errors when unpatching', () => {
+        integrations.mysql[1].unpatch = sinon.stub().throws(new Error())
+        integrations.mysql[1].file = 'invalid.js'
+
+        instrumenter.use('mysql-mock')
+
+        require('mysql-mock')
+
+        expect(integrations.mysql[0].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.not.have.been.called
       })
     })
 
@@ -172,11 +165,15 @@ describe('Instrumenter', () => {
       })
 
       it('should support patching multiple files', () => {
+        const Connection = require('mysql-mock/lib/connection')
+        const Pool = require('mysql-mock/lib/pool')
+
         instrumenter.patch()
 
         const mysql = require('mysql-mock')
 
-        expect(mysql).to.deep.equal({ foo: 'bar' })
+        expect(mysql).to.deep.equal({ name: 'mysql' })
+
         expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer', {})
         expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer', {})
       })
@@ -192,6 +189,53 @@ describe('Instrumenter', () => {
 
         expect(integrations.express.unpatch).to.have.been.calledWith(express)
       })
+
+      it('should remove the require hooks', () => {
+        instrumenter.patch()
+        instrumenter.unpatch()
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.not.have.been.called
+      })
+
+      it('should handle errors', () => {
+        integrations.mysql[0].unpatch = sinon.stub().throws(new Error())
+        instrumenter.patch()
+
+        require('mysql-mock')
+
+        expect(() => instrumenter.unpatch()).to.not.throw()
+        expect(integrations.mysql[1].unpatch).to.have.been.called
+      })
+    })
+
+    describe('wrap', () => {
+      it('should wrap the method on the object', () => {
+        const obj = { method: () => {} }
+        const wrapper = () => {}
+
+        instrumenter.wrap(obj, 'method', wrapper)
+
+        expect(shimmer.wrap).to.have.been.calledWith(obj, 'method', wrapper)
+      })
+
+      it('should throw if the method does not exist', () => {
+        const obj = {}
+        const wrapper = () => {}
+
+        expect(() => instrumenter.wrap(obj, 'method', wrapper)).to.throw()
+      })
+    })
+
+    describe('unwrap', () => {
+      it('should wrap the method on the object', () => {
+        const obj = { method: () => {} }
+
+        instrumenter.unwrap(obj, 'method')
+
+        expect(shimmer.unwrap).to.have.been.calledWith(obj, 'method')
+      })
     })
   })
 
@@ -205,16 +249,6 @@ describe('Instrumenter', () => {
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
       })
-    })
-
-    it('should support an array of plugins', () => {
-      instrumenter.use(integrations.mysql)
-      instrumenter.patch({ plugins: false })
-
-      require('mysql-mock')
-
-      expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer', {})
-      expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer', {})
     })
 
     describe('patch', () => {

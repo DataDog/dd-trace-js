@@ -2,8 +2,6 @@
 
 // TODO: remove sanitization when implemented by the agent
 
-const shimmer = require('shimmer')
-
 // Reference https://docs.mongodb.com/v3.6/reference/command/
 const DATABASE_COMMANDS = [
   // Aggregation Commands
@@ -194,14 +192,8 @@ function createWrapOperation (tracer, config, operationName) {
 
       tracer.trace('mongodb.query', child => {
         span = child
-        span.addTags({
-          'service.name': config.service || 'mongodb',
-          'resource.name': resource,
-          'span.type': 'db',
-          'db.name': ns,
-          'out.host': this.s.options.host,
-          'out.port': this.s.options.port
-        })
+
+        addTags(span, config, resource, ns, this)
       })
 
       if (typeof options === 'function') {
@@ -222,19 +214,34 @@ function createWrapNext (tracer, config) {
 
       tracer.trace('mongodb.query', child => {
         span = child
-        span.addTags({
-          'service.name': config.service || 'mongodb',
-          'resource.name': resource,
-          'span.type': 'db',
-          'db.name': this.ns,
-          'out.host': this.topology.s.options.host,
-          'out.port': this.topology.s.options.port,
-          'mongodb.cursor.index': this.cursorState.cursorIndex
-        })
+
+        addTags(span, config, resource, this.ns, this.topology)
+
+        if (this.cursorState) {
+          span.addTags({
+            'mongodb.cursor.index': this.cursorState.cursorIndex
+          })
+        }
       })
 
       next.call(this, wrapCallback(tracer, span, cb))
     }
+  }
+}
+
+function addTags (span, config, resource, ns, topology) {
+  span.addTags({
+    'service.name': config.service || 'mongodb',
+    'resource.name': resource,
+    'span.type': 'db',
+    'db.name': ns
+  })
+
+  if (topology.s && topology.s.options) {
+    span.addTags({
+      'out.host': topology.s.options.host,
+      'out.port': topology.s.options.port
+    })
   }
 }
 
@@ -293,18 +300,18 @@ module.exports = [
     name: 'mongodb-core',
     versions: ['3.x'],
     patch (mongo, tracer, config) {
-      shimmer.wrap(mongo.Server.prototype, 'command', createWrapOperation(tracer, config))
-      shimmer.wrap(mongo.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))
-      shimmer.wrap(mongo.Server.prototype, 'update', createWrapOperation(tracer, config, 'update'))
-      shimmer.wrap(mongo.Server.prototype, 'remove', createWrapOperation(tracer, config, 'remove'))
-      shimmer.wrap(mongo.Cursor.prototype, 'next', createWrapNext(tracer, config))
+      this.wrap(mongo.Server.prototype, 'command', createWrapOperation(tracer, config))
+      this.wrap(mongo.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))
+      this.wrap(mongo.Server.prototype, 'update', createWrapOperation(tracer, config, 'update'))
+      this.wrap(mongo.Server.prototype, 'remove', createWrapOperation(tracer, config, 'remove'))
+      this.wrap(mongo.Cursor.prototype, 'next', createWrapNext(tracer, config))
     },
     unpatch (mongo) {
-      shimmer.unwrap(mongo.Server.prototype, 'command')
-      shimmer.unwrap(mongo.Server.prototype, 'insert')
-      shimmer.unwrap(mongo.Server.prototype, 'update')
-      shimmer.unwrap(mongo.Server.prototype, 'remove')
-      shimmer.unwrap(mongo.Cursor.prototype, 'next')
+      this.unwrap(mongo.Server.prototype, 'command')
+      this.unwrap(mongo.Server.prototype, 'insert')
+      this.unwrap(mongo.Server.prototype, 'update')
+      this.unwrap(mongo.Server.prototype, 'remove')
+      this.unwrap(mongo.Cursor.prototype, 'next')
     }
   }
 ]

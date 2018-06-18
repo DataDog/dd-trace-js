@@ -6,6 +6,7 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
 const express = require('express')
+const path = require('path')
 
 let agent = null
 let listener = null
@@ -15,7 +16,11 @@ let promise
 let skip = []
 
 module.exports = {
-  load (plugin, moduleToPatch, config) {
+  load (plugin, pluginName, config) {
+    [].concat(plugin).forEach(instrumentation => {
+      this.wipe(instrumentation.name)
+    })
+
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
@@ -54,9 +59,7 @@ module.exports = {
           plugins: false
         })
 
-        tracer.use(plugin, config)
-
-        require(moduleToPatch)
+        tracer.use(pluginName, config)
       })
     })
   },
@@ -112,6 +115,16 @@ module.exports = {
         handlers = []
         skip = []
         delete require.cache[require.resolve('../..')]
+      })
+  },
+
+  wipe (moduleName) {
+    const basedir = path.join(__dirname, '..', '..', 'node_modules', moduleName)
+
+    Object.keys(require.cache)
+      .filter(name => name.indexOf(basedir) !== -1)
+      .forEach(name => {
+        delete require.cache[name]
       })
   }
 }

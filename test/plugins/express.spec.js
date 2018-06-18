@@ -15,7 +15,6 @@ describe('Plugin', () => {
   describe('express', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/express')
-      express = require('express')
       context = require('../../src/platform').context()
     })
 
@@ -27,6 +26,9 @@ describe('Plugin', () => {
     describe('without configuration', () => {
       beforeEach(() => {
         return agent.load(plugin, 'express')
+          .then(() => {
+            express = require('express')
+          })
       })
 
       it('should do automatic instrumentation on app routes', done => {
@@ -431,6 +433,9 @@ describe('Plugin', () => {
         }
 
         return agent.load(plugin, 'express', config)
+          .then(() => {
+            express = require('express')
+          })
       })
 
       it('should be configured with the correct values', done => {

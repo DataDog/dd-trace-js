@@ -1,7 +1,6 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
-const shimmer = require('shimmer')
 
 const OPERATION_NAME = 'pg.query'
 
@@ -22,11 +21,14 @@ function patch (pg, tracer, config) {
         }, span => {
           span.setTag('service.name', config.service || 'postgres')
           span.setTag('resource.name', statement)
-          span.setTag('db.name', params.database)
-          span.setTag('db.user', params.user)
-          span.setTag('out.host', params.host)
-          span.setTag('out.port', String(params.port))
           span.setTag('span.type', 'db')
+
+          if (params) {
+            span.setTag('db.name', params.database)
+            span.setTag('db.user', params.user)
+            span.setTag('out.host', params.host)
+            span.setTag('out.port', String(params.port))
+          }
 
           if (err) {
             span.addTags({
@@ -48,11 +50,11 @@ function patch (pg, tracer, config) {
     }
   }
 
-  shimmer.wrap(pg.Client.prototype, 'query', queryWrap)
+  this.wrap(pg.Client.prototype, 'query', queryWrap)
 }
 
 function unpatch (pg) {
-  shimmer.unwrap(pg.Client.prototype, 'query')
+  this.unwrap(pg.Client.prototype, 'query')
 }
 
 module.exports = {

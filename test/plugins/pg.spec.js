@@ -12,8 +12,7 @@ describe('Plugin', () => {
 
   describe('pg', () => {
     beforeEach(() => {
-      pg = require('pg')
-      plugin = proxyquire('../src/plugins/pg', { 'pg': pg })
+      plugin = require('../../src/plugins/pg')
       context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
     })
 
@@ -25,6 +24,8 @@ describe('Plugin', () => {
       beforeEach(done => {
         agent.load(plugin, 'pg')
           .then(() => {
+            pg = require('pg')
+
             client = new pg.Client({
               user: 'postgres',
               password: 'postgres',
@@ -110,6 +111,8 @@ describe('Plugin', () => {
 
         agent.load(plugin, 'pg', config)
           .then(() => {
+            pg = require('pg')
+
             client = new pg.Client({
               user: 'postgres',
               password: 'postgres',

@@ -11,7 +11,6 @@ describe('Plugin', () => {
 
   describe('mysql', () => {
     beforeEach(() => {
-      mysql = require('mysql')
       plugin = require('../../src/plugins/mysql')
       context = require('../../src/platform').context()
     })

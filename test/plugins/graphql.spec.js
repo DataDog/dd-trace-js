@@ -11,46 +11,47 @@ describe('Plugin', () => {
   let schema
   let sort
 
+  function buildSchema () {
+    schema = new graphql.GraphQLSchema({
+      query: new graphql.GraphQLObjectType({
+        name: 'RootQueryType',
+        fields: {
+          hello: {
+            type: graphql.GraphQLString,
+            args: {
+              name: {
+                type: graphql.GraphQLString
+              }
+            },
+            resolve (obj, args) {
+              return args.name
+            }
+          },
+          human: {
+            type: new graphql.GraphQLObjectType({
+              name: 'Human',
+              fields: {
+                name: {
+                  type: graphql.GraphQLString,
+                  resolve (obj, args) {
+                    return obj
+                  }
+                }
+              }
+            }),
+            resolve (obj, args) {
+              return Promise.resolve('test')
+            }
+          }
+        }
+      })
+    })
+  }
+
   describe('graphql', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/graphql')
-      graphql = require('graphql')
       context = require('../../src/platform').context()
-
-      schema = new graphql.GraphQLSchema({
-        query: new graphql.GraphQLObjectType({
-          name: 'RootQueryType',
-          fields: {
-            hello: {
-              type: graphql.GraphQLString,
-              args: {
-                name: {
-                  type: graphql.GraphQLString
-                }
-              },
-              resolve (obj, args) {
-                return args.name
-              }
-            },
-            human: {
-              type: new graphql.GraphQLObjectType({
-                name: 'Human',
-                fields: {
-                  name: {
-                    type: graphql.GraphQLString,
-                    resolve (obj, args) {
-                      return obj
-                    }
-                  }
-                }
-              }),
-              resolve (obj, args) {
-                return Promise.resolve('test')
-              }
-            }
-          }
-        })
-      })
 
       sort = spans => spans.sort((a, b) => a.start.toString() > b.start.toString() ? 1 : -1)
     })
@@ -62,6 +63,10 @@ describe('Plugin', () => {
     describe('without configuration', () => {
       beforeEach(() => {
         return agent.load(plugin, 'graphql')
+          .then(() => {
+            graphql = require('graphql')
+            buildSchema()
+          })
       })
 
       it('should instrument operations', done => {
@@ -375,6 +380,10 @@ describe('Plugin', () => {
     describe('with configuration', () => {
       beforeEach(() => {
         return agent.load(plugin, 'graphql', { service: 'test' })
+          .then(() => {
+            graphql = require('graphql')
+            buildSchema()
+          })
       })
 
       it('should be configured with the correct values', done => {

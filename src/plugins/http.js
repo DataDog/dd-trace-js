@@ -2,14 +2,13 @@
 
 const url = require('url')
 const opentracing = require('opentracing')
-const shimmer = require('shimmer')
 
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 
 function patch (http, tracer, config) {
-  shimmer.wrap(http, 'request', request => makeRequestTrace(request))
-  shimmer.wrap(http, 'get', get => makeRequestTrace(get))
+  this.wrap(http, 'request', request => makeRequestTrace(request))
+  this.wrap(http, 'get', get => makeRequestTrace(get))
 
   function makeRequestTrace (request) {
     return function requestTrace (options, callback) {
@@ -89,8 +88,8 @@ function patch (http, tracer, config) {
 }
 
 function unpatch (http) {
-  shimmer.unwrap(http, 'request')
-  shimmer.unwrap(http, 'get')
+  this.unwrap(http, 'request')
+  this.unwrap(http, 'get')
 }
 
 module.exports = {

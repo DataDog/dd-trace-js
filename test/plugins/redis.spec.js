@@ -12,7 +12,6 @@ describe('Plugin', () => {
 
   describe('redis', () => {
     beforeEach(() => {
-      redis = require('redis')
       plugin = require('../../src/plugins/redis')
       context = require('../../src/platform').context()
     })
@@ -26,6 +25,7 @@ describe('Plugin', () => {
       beforeEach(() => {
         return agent.load(plugin, 'redis')
           .then(() => {
+            redis = require('redis')
             client = redis.createClient()
           })
       })
@@ -155,6 +155,7 @@ describe('Plugin', () => {
 
         return agent.load(plugin, 'redis', config)
           .then(() => {
+            redis = require('redis')
             client = redis.createClient()
           })
       })

@@ -3,7 +3,6 @@
 const opentracing = require('opentracing')
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
-const shimmer = require('shimmer')
 const METHODS = require('methods').concat('use', 'route', 'param', 'all')
 const pathToRegExp = require('path-to-regexp')
 
@@ -149,18 +148,18 @@ function flatten (arr) {
 
 function patch (express, tracer, config) {
   METHODS.forEach(method => {
-    shimmer.wrap(express.application, method, createWrapMethod(tracer, config))
+    this.wrap(express.application, method, createWrapMethod(tracer, config))
   })
-  shimmer.wrap(express.Router, 'process_params', createWrapProcessParams(tracer, config))
-  shimmer.wrap(express.Router, 'use', createWrapRouterMethod(tracer, config))
-  shimmer.wrap(express.Router, 'route', createWrapRouterMethod(tracer, config))
+  this.wrap(express.Router, 'process_params', createWrapProcessParams(tracer, config))
+  this.wrap(express.Router, 'use', createWrapRouterMethod(tracer, config))
+  this.wrap(express.Router, 'route', createWrapRouterMethod(tracer, config))
 }
 
 function unpatch (express) {
-  METHODS.forEach(method => shimmer.unwrap(express.application, method))
-  shimmer.unwrap(express.Router, 'process_params')
-  shimmer.unwrap(express.Router, 'use')
-  shimmer.unwrap(express.Router, 'route')
+  METHODS.forEach(method => this.unwrap(express.application, method))
+  this.unwrap(express.Router, 'process_params')
+  this.unwrap(express.Router, 'use')
+  this.unwrap(express.Router, 'route')
 }
 
 module.exports = {

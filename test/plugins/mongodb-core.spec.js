@@ -12,45 +12,13 @@ describe('Plugin', () => {
   let context
   let collection
 
-  function setupMongo () {
-    return new Promise((resolve, reject) => {
-      server = new mongo.Server({
-        host: 'localhost',
-        port: 27017,
-        reconnect: false
-      })
-
-      server.on('connect', server => {
-        server.command('test', {
-          create: collection
-        }, {}, (err, result) => {
-          server.destroy()
-          server = null
-
-          if (err) {
-            reject(err)
-          } else {
-            resolve()
-          }
-        })
-      })
-
-      server.on('error', reject)
-
-      server.connect()
-    })
-  }
-
   describe('mongodb-core', () => {
     beforeEach(() => {
-      mongo = require('mongodb-core')
       plugin = require('../../src/plugins/mongodb-core')
       platform = require('../../src/platform')
       context = platform.context()
 
       collection = platform.id().toString()
-
-      return setupMongo()
     })
 
     afterEach(() => {
@@ -62,6 +30,8 @@ describe('Plugin', () => {
       beforeEach(done => {
         agent.load(plugin, 'mongodb-core')
           .then(() => {
+            mongo = require('mongodb-core')
+
             server = new mongo.Server({
               host: 'localhost',
               port: 27017,
@@ -329,6 +299,8 @@ describe('Plugin', () => {
 
         agent.load(plugin, 'mongodb-core', config)
           .then(() => {
+            mongo = require('mongodb-core')
+
             server = new mongo.Server({
               host: 'localhost',
               port: 27017,

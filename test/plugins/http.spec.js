@@ -15,8 +15,6 @@ describe('Plugin', () => {
   describe('http', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/http')
-      express = require('express')
-      http = require('http')
       context = require('../../src/platform').context({ experimental: {} })
     })
 
@@ -28,6 +26,10 @@ describe('Plugin', () => {
     describe('without configuration', () => {
       beforeEach(() => {
         return agent.load(plugin, 'http')
+          .then(() => {
+            http = require('http')
+            express = require('express')
+          })
       })
 
       it('should do automatic instrumentation', done => {
@@ -241,6 +243,10 @@ describe('Plugin', () => {
         }
 
         return agent.load(plugin, 'http', config)
+          .then(() => {
+            http = require('http')
+            express = require('express')
+          })
       })
 
       it('should be configured with the correct values', done => {

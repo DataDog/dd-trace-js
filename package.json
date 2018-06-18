@@ -45,7 +45,6 @@
     "path-to-regexp": "^2.2.1",
     "performance-now": "^2.1.0",
     "read-pkg-up": "^3.0.0",
-    "require-dir": "^1.0.0",
     "require-in-the-middle": "^2.2.2",
     "safe-buffer": "^5.1.1",
     "semver": "^5.5.0",
