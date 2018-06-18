@@ -3,46 +3,48 @@
 const shimmer = require('shimmer')
 const platform = require('../platform')
 
-function createWrapGraphql (tracer, config, defaultFieldResolver) {
-  return function wrapGraphql (graphql) {
-    return function graphqlWithTrace () {
-      const source = arguments[1] || arguments[0].source
-      const contextValue = arguments[3] || arguments[0].contextValue || {}
+function createWrapExecute (tracer, config, defaultFieldResolver) {
+  return function wrapExecute (execute) {
+    return function executeWithTrace () {
+      const args = normalizeArgs(arguments)
+      const schema = args.schema
+      const document = args.document
+      const contextValue = args.contextValue || {}
+      const fieldResolver = args.fieldResolver || defaultFieldResolver
 
-      if (arguments.length === 1) {
-        arguments[0].contextValue = contextValue
-      } else {
-        arguments[3] = contextValue
-        arguments.length = Math.max(arguments.length, 4)
+      if (!schema || !document || typeof fieldResolver !== 'function') {
+        return execute.apply(this, arguments)
       }
+
+      args.fieldResolver = wrapResolve(fieldResolver, tracer, config)
+      args.contextValue = contextValue
 
       Object.defineProperties(contextValue, {
         _datadog_operation: { value: {} },
         _datadog_fields: { value: {} },
-        _datadog_source: { value: source }
+        _datadog_source: { value: document._datadog_source }
       })
-
-      return graphql.apply(this, arguments)
-    }
-  }
-}
-
-function createWrapExecute (tracer, config, defaultFieldResolver) {
-  return function wrapExecute (execute) {
-    return function executeWithTrace () {
-      const schema = arguments[0]
-      const contextValue = arguments[3]
-      const fieldResolver = arguments[6] || defaultFieldResolver
-
-      arguments[6] = wrapResolve(fieldResolver, tracer, config)
-      arguments[3] = contextValue
 
       if (!schema._datadog_patched) {
         wrapFields(schema._queryType._fields, tracer, config, [])
         schema._datadog_patched = true
       }
 
-      return call(execute, this, arguments, defer(tracer), () => finishOperation(contextValue))
+      return call(execute, this, [args], defer(tracer), () => finishOperation(contextValue))
+    }
+  }
+}
+
+function createWrapParse () {
+  return function wrapParse (parse) {
+    return function parseWithTrace (source) {
+      const document = parse.apply(this, arguments)
+
+      Object.defineProperties(document, {
+        _datadog_source: { value: source }
+      })
+
+      return document
     }
   }
 }
@@ -135,6 +137,22 @@ function getFieldParent (tracer, config, contextValue, info, path) {
   return contextValue._datadog_fields[path.slice(0, -1).join('.')].span
 }
 
+function normalizeArgs (args) {
+  if (args.length === 1) {
+    return args
+  }
+
+  return {
+    schema: args[0],
+    document: args[1],
+    rootValue: args[2],
+    contextValue: args[3],
+    variableValues: args[4],
+    operationName: args[5],
+    fieldResolver: args[6]
+  }
+}
+
 function createOperationSpan (tracer, config, contextValue, info) {
   const type = info.operation.operation
   const name = info.operation.name && info.operation.name.value
@@ -218,17 +236,6 @@ function addError (span, error) {
 module.exports = [
   {
     name: 'graphql',
-    file: 'graphql.js',
-    versions: ['0.13.x'],
-    patch (graphql, tracer, config) {
-      shimmer.wrap(graphql, 'graphql', createWrapGraphql(tracer, config))
-    },
-    unpatch (graphql) {
-      shimmer.unwrap(graphql, 'graphql')
-    }
-  },
-  {
-    name: 'graphql',
     file: 'execution/execute.js',
     versions: ['0.13.x'],
     patch (execute, tracer, config) {
@@ -236,6 +243,17 @@ module.exports = [
     },
     unpatch (execute) {
       shimmer.unwrap(execute, 'execute')
+    }
+  },
+  {
+    name: 'graphql',
+    file: 'language/parser.js',
+    versions: ['0.13.x'],
+    patch (parser, tracer, config) {
+      shimmer.wrap(parser, 'parse', createWrapParse(tracer, config))
+    },
+    unpatch (parser) {
+      shimmer.unwrap(parser, 'parse')
     }
   }
 ]
