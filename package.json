@@ -38,6 +38,7 @@
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",
+    "lodash.uniq": "^4.5.0",
     "methods": "^1.1.2",
     "msgpack-lite": "^0.1.26",
     "opentracing": "0.14.1",

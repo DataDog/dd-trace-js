@@ -3,6 +3,7 @@
 const semver = require('semver')
 const hook = require('require-in-the-middle')
 const shimmer = require('shimmer')
+const uniq = require('lodash.uniq')
 const log = require('./log')
 
 shimmer({ logger: () => {} })
@@ -10,6 +11,7 @@ shimmer({ logger: () => {} })
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
+    this._names = []
     this._plugins = new Map()
     this._instrumented = new Map()
   }
@@ -50,9 +52,14 @@ class Instrumenter {
   }
 
   reload () {
-    const instrumentedModules = Array.from(this._plugins.keys())
+    const instrumentations = Array.from(this._plugins.keys())
       .reduce((prev, current) => prev.concat(current), [])
-      .map(instrumentation => instrumentation.name)
+
+    const instrumentedModules = uniq(instrumentations
+      .map(instrumentation => instrumentation.name))
+
+    this._names = instrumentations
+      .map(instrumentation => filename(instrumentation))
 
     hook(instrumentedModules, { internals: true }, this.hookModule.bind(this))
   }
@@ -70,6 +77,10 @@ class Instrumenter {
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
+    if (this._names.indexOf(moduleName) === -1) {
+      return moduleExports
+    }
+
     const moduleVersion = getVersion(moduleBaseDir)
 
     Array.from(this._plugins.keys())
