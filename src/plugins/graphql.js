@@ -1,6 +1,5 @@
 'use strict'
 
-const shimmer = require('shimmer')
 const platform = require('../platform')
 
 function createWrapExecute (tracer, config, defaultFieldResolver) {
@@ -239,10 +238,10 @@ module.exports = [
     file: 'execution/execute.js',
     versions: ['0.13.x'],
     patch (execute, tracer, config) {
-      shimmer.wrap(execute, 'execute', createWrapExecute(tracer, config, execute.defaultFieldResolver))
+      this.wrap(execute, 'execute', createWrapExecute(tracer, config, execute.defaultFieldResolver))
     },
     unpatch (execute) {
-      shimmer.unwrap(execute, 'execute')
+      this.unwrap(execute, 'execute')
     }
   },
   {
@@ -250,10 +249,10 @@ module.exports = [
     file: 'language/parser.js',
     versions: ['0.13.x'],
     patch (parser, tracer, config) {
-      shimmer.wrap(parser, 'parse', createWrapParse(tracer, config))
+      this.wrap(parser, 'parse', createWrapParse(tracer, config))
     },
     unpatch (parser) {
-      shimmer.unwrap(parser, 'parse')
+      this.unwrap(parser, 'parse')
     }
   }
 ]

@@ -1,7 +1,6 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
-const shimmer = require('shimmer')
 
 function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
@@ -62,11 +61,11 @@ function wrapCallback (tracer, span, done) {
 }
 
 function patchConnection (Connection, tracer, config) {
-  shimmer.wrap(Connection.prototype, 'query', createWrapQuery(tracer, config))
+  this.wrap(Connection.prototype, 'query', createWrapQuery(tracer, config))
 }
 
 function unpatchConnection (Connection) {
-  shimmer.unwrap(Connection.prototype, 'query')
+  this.unwrap(Connection.prototype, 'query')
 }
 
 module.exports = [

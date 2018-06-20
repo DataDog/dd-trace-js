@@ -1,29 +1,28 @@
 'use strict'
 
-const requireDir = require('require-dir')
-const path = require('path')
 const semver = require('semver')
 const hook = require('require-in-the-middle')
+const shimmer = require('shimmer')
+const uniq = require('lodash.uniq')
 const log = require('./log')
 
-// TODO: lazy load built-in plugins
+shimmer({ logger: () => {} })
 
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
-    this._integrations = loadIntegrations()
+    this._names = []
     this._plugins = new Map()
     this._instrumented = new Map()
   }
 
   use (name, config) {
-    if (typeof name === 'string') {
-      this._integrations
-        .filter(plugin => plugin.name === name)
-        .forEach(plugin => this._set(plugin, config))
-    } else if (name) {
-      [].concat(name)
-        .forEach(plugin => this._set(plugin, config))
+    config = config || {}
+
+    try {
+      this._set(require(`./plugins/${name}`), { name, config })
+    } catch (e) {
+      log.debug(`Could not find a plugin named "${name}".`)
     }
 
     this.reload()
@@ -33,67 +32,127 @@ class Instrumenter {
     config = config || {}
 
     if (config.plugins !== false) {
-      this._integrations.forEach(integration => {
-        this._plugins.has(integration) || this._set(integration, {})
-      })
+      const plugins = require('./plugins')
+
+      Object.keys(plugins)
+        .forEach(name => {
+          this._plugins.has(plugins[name]) || this._set(plugins[name], { name, config: {} })
+        })
     }
 
     this.reload()
   }
 
   unpatch () {
-    this._instrumented.forEach((instrumentation, moduleExports) => {
-      instrumentation.unpatch(moduleExports)
+    this._instrumented.forEach((moduleExports, instrumentation) => {
+      this._unpatch(instrumentation)
     })
+
+    this._plugins.clear()
   }
 
   reload () {
-    try {
-      const instrumentedModules = Array.from(this._plugins.keys()).map(plugin => plugin.name)
-      hook(instrumentedModules, this.hookModule.bind(this))
-    } catch (e) {
-      log.error(e)
+    const instrumentations = Array.from(this._plugins.keys())
+      .reduce((prev, current) => prev.concat(current), [])
+
+    const instrumentedModules = uniq(instrumentations
+      .map(instrumentation => instrumentation.name))
+
+    this._names = instrumentations
+      .map(instrumentation => filename(instrumentation))
+
+    hook(instrumentedModules, { internals: true }, this.hookModule.bind(this))
+  }
+
+  wrap (nodule, name) {
+    if (typeof nodule[name] !== 'function') {
+      throw new Error(`Expected object ${nodule} to contain method ${name}.`)
     }
+
+    return shimmer.wrap.apply(this, arguments)
+  }
+
+  unwrap () {
+    return shimmer.unwrap.apply(this, arguments)
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
+    if (this._names.indexOf(moduleName) === -1) {
+      return moduleExports
+    }
+
     const moduleVersion = getVersion(moduleBaseDir)
 
     Array.from(this._plugins.keys())
-      .filter(plugin => plugin.name === moduleName)
-      .filter(plugin => matchVersion(moduleVersion, plugin.versions))
-      .forEach(plugin => {
-        let moduleToPatch = moduleExports
-        if (plugin.file) {
-          moduleToPatch = require(path.join(moduleBaseDir, plugin.file))
+      .filter(plugin => [].concat(plugin).some(instrumentation => filename(instrumentation) === moduleName))
+      .forEach(plugin => this._validate(plugin, moduleBaseDir))
+
+    this._plugins
+      .forEach((meta, plugin) => {
+        try {
+          [].concat(plugin)
+            .filter(instrumentation => moduleName === filename(instrumentation))
+            .filter(instrumentation => matchVersion(moduleVersion, instrumentation.versions))
+            .forEach(instrumentation => {
+              const modulePath = [moduleBaseDir, instrumentation.file].filter(val => val).join('/')
+
+              if (require.cache[modulePath]) {
+                log.debug([
+                  `Instrumented module "${moduleName}" was imported before calling tracer.init().`,
+                  `Please make sure to initialize the tracer before importing any instrumented module.`
+                ].join(' '))
+              }
+
+              this._instrumented.set(instrumentation, moduleExports)
+              instrumentation.patch.call(this, moduleExports, this._tracer._tracer, this._plugins.get(plugin).config)
+            })
+        } catch (e) {
+          log.error(e)
+          this._fail(plugin)
+          log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
         }
-        plugin.patch(moduleToPatch, this._tracer._tracer, this._plugins.get(plugin))
-        this._instrumented.set(moduleToPatch, plugin)
       })
 
     return moduleExports
   }
 
-  _set (plugin, config) {
-    config = config || {}
+  _set (plugin, meta) {
+    this._plugins.set(plugin, Object.assign({ config: {} }, meta))
+  }
 
-    this._plugins.set(plugin, config)
+  _validate (plugin, moduleBaseDir) {
+    const meta = this._plugins.get(plugin)
+    const instrumentations = [].concat(plugin)
 
-    if (require.cache[plugin.name]) {
-      log.debug([
-        `Instrumented module "${plugin.name}" was imported before calling tracer.init().`,
-        `Please make sure to initialize the tracer before importing any instrumented module.`
-      ].join(' '))
+    for (let i = 0; i < instrumentations.length; i++) {
+      if (instrumentations[i].file && !exists(moduleBaseDir, instrumentations[i].file)) {
+        this._fail(plugin)
+        log.debug([
+          `Plugin "${meta.name}" requires "${instrumentations[i].file}" which was not found.`,
+          `The plugin was disabled.`
+        ].join(' '))
+        break
+      }
     }
   }
-}
 
-function loadIntegrations () {
-  const integrations = requireDir(path.join(__dirname, './plugins'))
+  _fail (plugin) {
+    [].concat(plugin)
+      .forEach(instrumentation => {
+        this._unpatch(instrumentation)
+        this._instrumented.delete(instrumentation)
+      })
 
-  return Object.keys(integrations)
-    .map(key => integrations[key])
-    .reduce((previous, current) => previous.concat(current), [])
+    this._plugins.delete(plugin)
+  }
+
+  _unpatch (instrumentation) {
+    try {
+      instrumentation.unpatch.call(this, this._instrumented.get(instrumentation))
+    } catch (e) {
+      log.error(e)
+    }
+  }
 }
 
 function matchVersion (version, ranges) {
@@ -102,8 +161,21 @@ function matchVersion (version, ranges) {
 
 function getVersion (moduleBaseDir) {
   if (moduleBaseDir) {
-    const packageJSON = path.join(moduleBaseDir, 'package.json')
+    const packageJSON = `${moduleBaseDir}/package.json`
     return require(packageJSON).version
+  }
+}
+
+function filename (plugin) {
+  return [plugin.name, plugin.file].filter(val => val).join('/')
+}
+
+function exists (basedir, file) {
+  try {
+    require.resolve(`${basedir}/${file}`)
+    return true
+  } catch (e) {
+    return false
   }
 }
 

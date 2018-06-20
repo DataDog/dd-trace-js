@@ -11,7 +11,6 @@ describe('Plugin', () => {
 
   describe('elasticsearch', () => {
     beforeEach(() => {
-      elasticsearch = require('elasticsearch')
       plugin = require('../../src/plugins/elasticsearch')
       tracer = require('../..')
     })
@@ -24,11 +23,13 @@ describe('Plugin', () => {
       let client
 
       beforeEach(() => {
-        client = new elasticsearch.Client({
-          host: 'localhost:9200'
-        })
-
         return agent.load(plugin, 'elasticsearch')
+          .then(() => {
+            elasticsearch = require('elasticsearch')
+            client = new elasticsearch.Client({
+              host: 'localhost:9200'
+            })
+          })
       })
 
       it('should work without any living connection', done => {
@@ -230,11 +231,13 @@ describe('Plugin', () => {
       let client
 
       beforeEach(() => {
-        client = new elasticsearch.Client({
-          host: 'localhost:9200'
-        })
-
         return agent.load(plugin, 'elasticsearch', { service: 'test' })
+          .then(() => {
+            elasticsearch = require('elasticsearch')
+            client = new elasticsearch.Client({
+              host: 'localhost:9200'
+            })
+          })
       })
 
       it('should be configured with the correct values', done => {

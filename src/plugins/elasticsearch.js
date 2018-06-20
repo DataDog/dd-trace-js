@@ -1,7 +1,6 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
-const shimmer = require('shimmer')
 
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
@@ -110,10 +109,10 @@ module.exports = [
     file: 'src/lib/connection_pool.js',
     versions: ['15.x'],
     patch (ConnectionPool, tracer, config) {
-      shimmer.wrap(ConnectionPool.prototype, 'select', createWrapSelect(tracer, config))
+      this.wrap(ConnectionPool.prototype, 'select', createWrapSelect(tracer, config))
     },
     unpatch (ConnectionPool) {
-      shimmer.unwrap(ConnectionPool.prototype, 'select')
+      this.unwrap(ConnectionPool.prototype, 'select')
     }
   },
   {
@@ -121,10 +120,10 @@ module.exports = [
     file: 'src/lib/transport.js',
     versions: ['15.x'],
     patch (Transport, tracer, config) {
-      shimmer.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
+      this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
     },
     unpatch (Transport) {
-      shimmer.unwrap(Transport.prototype, 'request')
+      this.unwrap(Transport.prototype, 'request')
     }
   }
 ]

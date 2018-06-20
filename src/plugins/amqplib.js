@@ -1,6 +1,5 @@
 'use strict'
 
-const shimmer = require('shimmer')
 const kebabCase = require('lodash.kebabcase')
 
 let methods = {}
@@ -110,10 +109,15 @@ function addTags (channel, config, span, method, fields) {
   span.addTags({
     'service.name': config.service || 'amqp',
     'resource.name': getResourceName(method, fields),
-    'span.type': 'worker',
-    'out.host': channel.connection.stream._host,
-    'out.port': channel.connection.stream.remotePort
+    'span.type': 'worker'
   })
+
+  if (channel.connection && channel.connection.stream) {
+    span.addTags({
+      'out.host': channel.connection.stream._host,
+      'out.port': channel.connection.stream.remotePort
+    })
+  }
 
   switch (method) {
     case 'basic.publish':
@@ -151,16 +155,16 @@ module.exports = [
     file: 'lib/channel.js',
     versions: ['0.5.x'],
     patch (channel, tracer, config) {
-      shimmer.wrap(channel.Channel.prototype, 'sendOrEnqueue', createWrapSendOrEnqueue(tracer, config))
-      shimmer.wrap(channel.Channel.prototype, 'sendImmediately', createWrapSendImmediately(tracer, config))
-      shimmer.wrap(channel.Channel.prototype, 'sendMessage', createWrapSendMessage(tracer, config))
-      shimmer.wrap(channel.BaseChannel.prototype, 'dispatchMessage', createWrapDispatchMessage(tracer, config))
+      this.wrap(channel.Channel.prototype, 'sendOrEnqueue', createWrapSendOrEnqueue(tracer, config))
+      this.wrap(channel.Channel.prototype, 'sendImmediately', createWrapSendImmediately(tracer, config))
+      this.wrap(channel.Channel.prototype, 'sendMessage', createWrapSendMessage(tracer, config))
+      this.wrap(channel.BaseChannel.prototype, 'dispatchMessage', createWrapDispatchMessage(tracer, config))
     },
     unpatch (channel) {
-      shimmer.unwrap(channel.Channel.prototype, 'sendOrEnqueue')
-      shimmer.unwrap(channel.Channel.prototype, 'sendImmediately')
-      shimmer.unwrap(channel.Channel.prototype, 'sendMessage')
-      shimmer.unwrap(channel.BaseChannel.prototype, 'dispatchMessage')
+      this.unwrap(channel.Channel.prototype, 'sendOrEnqueue')
+      this.unwrap(channel.Channel.prototype, 'sendImmediately')
+      this.unwrap(channel.Channel.prototype, 'sendMessage')
+      this.unwrap(channel.BaseChannel.prototype, 'dispatchMessage')
     }
   }
 ]

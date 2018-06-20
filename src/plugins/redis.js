@@ -1,7 +1,6 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
-const shimmer = require('shimmer')
 
 function createWrapCreateClient (tracer) {
   return function wrapCreateClient (createClient) {
@@ -16,8 +15,9 @@ function createWrapCreateClient (tracer) {
 function createWrapCreateStream (tracer) {
   return function wrapCreateStream (createStream) {
     return function createStreamWithTrace () {
-      createStream.apply(this, arguments)
+      const returnValue = createStream.apply(this, arguments)
       tracer.bindEmitter(this.stream)
+      return returnValue
     }
   }
 }
@@ -38,10 +38,15 @@ function createWrapInternalSendCommand (tracer, config) {
           'service.name': config.service || 'redis',
           'resource.name': options.command,
           'span.type': 'db',
-          'db.name': this.selected_db || '0',
-          'out.host': String(this.connection_options.host),
-          'out.port': String(this.connection_options.port)
+          'db.name': this.selected_db || '0'
         })
+
+        if (this.connection_options) {
+          span.addTags({
+            'out.host': String(this.connection_options.host),
+            'out.port': String(this.connection_options.port)
+          })
+        }
       })
 
       options.callback = wrapCallback(tracer, span, options.callback)
@@ -70,15 +75,15 @@ function wrapCallback (tracer, span, done) {
 }
 
 function patch (redis, tracer, config) {
-  shimmer.wrap(redis.RedisClient.prototype, 'internal_send_command', createWrapInternalSendCommand(tracer, config))
-  shimmer.wrap(redis, 'createClient', createWrapCreateClient(tracer, config))
-  shimmer.wrap(redis.RedisClient.prototype, 'create_stream', createWrapCreateStream(tracer, config))
+  this.wrap(redis.RedisClient.prototype, 'internal_send_command', createWrapInternalSendCommand(tracer, config))
+  this.wrap(redis, 'createClient', createWrapCreateClient(tracer, config))
+  this.wrap(redis.RedisClient.prototype, 'create_stream', createWrapCreateStream(tracer, config))
 }
 
 function unpatch (redis) {
-  shimmer.unwrap(redis.RedisClient.prototype, 'internal_send_command')
-  shimmer.unwrap(redis, 'createClient')
-  shimmer.unwrap(redis.RedisClient.prototype, 'create_stream')
+  this.unwrap(redis.RedisClient.prototype, 'internal_send_command')
+  this.unwrap(redis, 'createClient')
+  this.unwrap(redis.RedisClient.prototype, 'create_stream')
 }
 
 module.exports = {
