@@ -7,12 +7,12 @@ wrapIt()
 describe('Plugin', () => {
   let plugin
   let mysql2
-  let context
+  let tracer
 
   describe('mysql2', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/mysql2')
-      context = require('../../src/platform').context()
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -43,44 +43,31 @@ describe('Plugin', () => {
       })
 
       it('should propagate context to callbacks', done => {
-        context.run(() => {
-          context.set('foo', 'bar')
-          connection.query('SELECT 1 + 1 AS solution', callback)
-        })
+        const span = tracer.startSpan('test')
+        const scope = tracer.scopeManager().activate(span)
 
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
+        connection.query('SELECT 1 + 1 AS solution', () => {
+          const active = tracer.scopeManager().active()
+          scope.close()
+          expect(active).to.equal(scope)
           done()
-        }
+        })
       })
 
       it('should run the callback in the parent context', done => {
         connection.query('SELECT 1 + 1 AS solution', () => {
-          expect(context.get('current')).to.be.undefined
+          const active = tracer.scopeManager().active()
+          expect(active).to.be.null
           done()
         })
-      })
-
-      it('should propagate context to events', done => {
-        let query
-
-        context.run(() => {
-          context.set('foo', 'bar')
-          query = connection.query('SELECT 1 + 1 AS solution')
-          query.on('result', callback)
-        })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
       })
 
       it('should run event listeners in the parent context', done => {
         const query = connection.query('SELECT 1 + 1 AS solution')
 
         query.on('result', () => {
-          expect(context.get('current')).to.be.undefined
+          const active = tracer.scopeManager().active()
+          expect(active).to.be.null
           done()
         })
       })
@@ -208,21 +195,10 @@ describe('Plugin', () => {
         pool.query('SELECT 1 + 1 AS solution')
       })
 
-      it('should propagate context', done => {
-        context.run(() => {
-          context.set('foo', 'bar')
-          pool.query('SELECT 1 + 1 AS solution', callback)
-        })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
-      })
-
       it('should run the callback in the parent context', done => {
         pool.query('SELECT 1 + 1 AS solution', () => {
-          expect(context.get('current')).to.be.undefined
+          const active = tracer.scopeManager().active()
+          expect(active).to.be.null
           done()
         })
       })

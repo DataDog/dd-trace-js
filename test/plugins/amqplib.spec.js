@@ -6,14 +6,14 @@ wrapIt()
 
 describe('Plugin', () => {
   let plugin
-  let context
+  let tracer
   let connection
   let channel
 
   describe('amqplib', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/amqplib')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -184,17 +184,12 @@ describe('Plugin', () => {
           })
 
           it('should run the command callback in the parent context', done => {
-            context.run(() => {
-              context.set('foo', 'bar')
+            channel.assertQueue('', {}, (err, ok) => {
+              if (err) return done(err)
 
-              channel.assertQueue('', {}, (err, ok) => {
-                if (err) return done(err)
-
-                channel.consume(ok.queue, () => {}, {}, () => {
-                  expect(context.get('current')).to.be.undefined
-                  expect(context.get('foo')).to.equal('bar')
-                  done()
-                })
+              channel.consume(ok.queue, () => {}, {}, () => {
+                expect(tracer.scopeManager().active()).to.be.null
+                done()
               })
             })
           })
@@ -205,7 +200,7 @@ describe('Plugin', () => {
 
               channel.sendToQueue(ok.queue, Buffer.from('content'))
               channel.consume(ok.queue, () => {
-                expect(context.get('current')).to.not.be.undefined
+                expect(tracer.scopeManager().active()).to.not.be.null
                 done()
               }, {}, err => err && done(err))
             })
@@ -223,17 +218,12 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
-          context.run(() => {
-            context.set('foo', 'bar')
-
-            channel.assertQueue('test', {})
-              .then(() => {
-                expect(context.get('current')).to.be.undefined
-                expect(context.get('foo')).to.equal('bar')
-                done()
-              })
-              .catch(done)
-          })
+          channel.assertQueue('test', {})
+            .then(() => {
+              expect(tracer.scopeManager().active()).to.be.null
+              done()
+            })
+            .catch(done)
         })
       })
     })

@@ -1,13 +1,13 @@
 'use strict'
 
-const platform = require('./platform')
 const Tracer = require('./opentracing/tracer')
+const ScopeManager = require('./scope/scope_manager')
 
 class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
-    this._context = platform.context(config)
+    this._scopeManager = new ScopeManager()
   }
 
   trace (name, options, callback) {
@@ -16,36 +16,32 @@ class DatadogTracer extends Tracer {
       options = {}
     }
 
-    this._context.run(() => {
-      const childOf = options.childOf !== undefined ? options.childOf : this._context.get('current')
-      const defaultTags = {
-        'service.name': options.service || this._service,
-        'resource.name': options.resource || name
-      }
+    const childOf = options.childOf !== undefined ? options.childOf : this.currentSpan()
+    const defaultTags = {
+      'service.name': options.service || this._service,
+      'resource.name': options.resource || name
+    }
 
-      if (options.type) {
-        defaultTags['span.type'] = options.type
-      }
+    if (options.type) {
+      defaultTags['span.type'] = options.type
+    }
 
-      const tags = Object.assign(defaultTags, options.tags)
-      const span = this.startSpan(name, { childOf, tags })
+    const tags = Object.assign(defaultTags, options.tags)
+    const span = this.startSpan(name, { childOf, tags })
 
-      this._context.set('current', span)
-
+    setImmediate(() => {
+      this._scopeManager.activate(span, true)
       callback(span)
     })
   }
 
+  scopeManager () {
+    return this._scopeManager
+  }
+
   currentSpan () {
-    return this._context.get('current') || null
-  }
-
-  bind (callback) {
-    return this._context.bind(callback)
-  }
-
-  bindEmitter (emitter) {
-    this._context.bindEmitter(emitter)
+    const scope = this._scopeManager.active()
+    return scope ? scope.span() : null
   }
 }
 

@@ -35,7 +35,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         _datadog_fields: { value: {} }
       })
 
-      return call(execute, this, [args], defer(tracer), err => finishOperation(contextValue, err))
+      return call(execute, this, [args], err => finishOperation(contextValue, err))
     }
   }
 }
@@ -88,22 +88,18 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
     const fieldParent = getFieldParent(contextValue, path)
 
     const childOf = createSpan('graphql.field', tracer, config, fieldParent, path)
-    const deferred = defer(tracer)
-
-    let result
 
     contextValue._datadog_fields[path.join('.')] = {
       span: childOf,
       parent: fieldParent
     }
 
-    tracer.trace('graphql.resolve', { childOf }, span => {
-      addTags(span, tracer, config, path)
+    const span = tracer.startSpan('graphql.resolve', { childOf })
+    const scope = tracer.scopeManager().activate(span)
 
-      result = call(resolve, this, arguments, deferred, err => finish(span, contextValue, path, err))
-    })
+    addTags(span, tracer, config, path)
 
-    return result
+    return call(resolve, this, arguments, err => finish(scope, contextValue, path, err))
   }
 
   resolveWithTrace._datadog_patched = true
@@ -121,7 +117,7 @@ function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) 
   }
 }
 
-function call (fn, thisContext, args, deferred, callback) {
+function call (fn, thisContext, args, callback) {
   try {
     let result = fn.apply(thisContext, args)
 
@@ -129,13 +125,11 @@ function call (fn, thisContext, args, deferred, callback) {
       result = result
         .then(value => {
           callback(null, value)
-          deferred.resolve(value)
-          return deferred.promise
+          return value
         })
         .catch(err => {
           callback(err)
-          deferred.reject(err)
-          return deferred.promise
+          return Promise.reject(err)
         })
     } else {
       callback(null, result)
@@ -146,17 +140,6 @@ function call (fn, thisContext, args, deferred, callback) {
     callback(e)
     throw e
   }
-}
-
-function defer (tracer) {
-  const deferred = {}
-
-  deferred.promise = new Promise((resolve, reject) => {
-    deferred.resolve = tracer.bind(resolve)
-    deferred.reject = tracer.bind(reject)
-  })
-
-  return deferred
 }
 
 function getFieldParent (contextValue, path) {
@@ -191,27 +174,23 @@ function createOperationSpan (tracer, config, operation, source) {
   const type = operation.operation
   const name = operation.name && operation.name.value
 
-  let span
-
-  tracer.trace(`graphql.${operation.operation}`, parent => {
-    span = parent
-    span.addTags({
+  const parentScope = tracer.scopeManager().active()
+  const span = tracer.startSpan(`graphql.${operation.operation}`, {
+    childOf: parentScope && parentScope.span(),
+    tags: {
       'service.name': getService(tracer, config),
       'resource.name': [type, name].filter(val => val).join(' '),
       'graphql.document': source
-    })
+    }
   })
 
   return span
 }
 
 function createSpan (name, tracer, config, childOf, path) {
-  let span
+  const span = tracer.startSpan(name, { childOf })
 
-  tracer.trace(name, { childOf }, parent => {
-    span = parent
-    addTags(span, tracer, config, path)
-  })
+  addTags(span, tracer, config, path)
 
   return span
 }
@@ -223,10 +202,13 @@ function addTags (span, tracer, config, path) {
   })
 }
 
-function finish (span, contextValue, path, error) {
+function finish (scope, contextValue, path, error) {
+  const span = scope.span()
+
   addError(span, error)
 
   span.finish()
+  scope.close()
 
   for (let i = path.length; i > 0; i--) {
     const field = getField(contextValue, path.slice(0, i))

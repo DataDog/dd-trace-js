@@ -12,34 +12,37 @@ function patch (pg, tracer, config) {
       const statement = pgQuery.text
       const params = this.connectionParameters
 
-      pgQuery.callback = (err, res) => {
-        tracer.trace(OPERATION_NAME, {
-          tags: {
-            [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-            [Tags.DB_TYPE]: 'postgres'
-          }
-        }, span => {
-          span.setTag('service.name', config.service || 'postgres')
-          span.setTag('resource.name', statement)
-          span.setTag('span.type', 'sql')
+      const parentScope = tracer.scopeManager().active()
+      const span = tracer.startSpan(OPERATION_NAME, {
+        childOf: parentScope && parentScope.span(),
+        tags: {
+          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
+          'service.name': config.service || 'postgres',
+          'resource.name': statement,
+          'span.type': 'sql',
+          'db.type': 'postgres'
+        }
+      })
 
-          if (params) {
-            span.setTag('db.name', params.database)
-            span.setTag('db.user', params.user)
-            span.setTag('out.host', params.host)
-            span.setTag('out.port', String(params.port))
-          }
-
-          if (err) {
-            span.addTags({
-              'error.type': err.name,
-              'error.msg': err.message,
-              'error.stack': err.stack
-            })
-          }
-
-          span.finish()
+      if (params) {
+        span.addTags({
+          'db.name': params.database,
+          'db.user': params.user,
+          'out.host': params.host,
+          'out.port': params.port
         })
+      }
+
+      pgQuery.callback = (err, res) => {
+        if (err) {
+          span.addTags({
+            'error.type': err.name,
+            'error.msg': err.message,
+            'error.stack': err.stack
+          })
+        }
+
+        span.finish()
 
         if (originalCallback) {
           originalCallback(err, res)

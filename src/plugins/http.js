@@ -19,29 +19,25 @@ function patch (http, tracer, config) {
         return request.apply(this, [options, callback])
       }
 
-      let span
       let isFinish = false
 
-      tracer.trace('http.request', {
+      const parentScope = tracer.scopeManager().active()
+      const span = tracer.startSpan('http.request', {
+        childOf: parentScope && parentScope.span(),
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          [Tags.HTTP_URL]: uri,
-          [Tags.HTTP_METHOD]: method
-        }
-      }, child => {
-        span = child
-
-        options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
-        options.headers = options.headers || {}
-
-        span.addTags({
           'service.name': config.service || 'http-client',
+          'resource.name': method,
           'span.type': 'web',
-          'resource.name': method
-        })
-
-        tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
+          'http.method': method,
+          'http.url': uri
+        }
       })
+
+      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
+      options.headers = options.headers || {}
+
+      tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
 
       const req = request.call(this, options, res => {
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)

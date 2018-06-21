@@ -5,77 +5,45 @@ const Tags = require('opentracing').Tags
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (params, cb) {
-      let returnValue
-
-      tracer._context.run(() => {
-        let defer
-
-        if (typeof cb === 'function') {
-          cb = tracer.bind(cb)
-        } else {
-          defer = this.defer()
-
-          cb = tracer.bind((err, parsedBody, status) => {
-            if (err) {
-              err.body = parsedBody
-              err.status = status
-              defer.reject(err)
-            } else {
-              defer.resolve(parsedBody)
-            }
-          })
+      const scope = tracer.scopeManager().active()
+      const span = tracer.startSpan('elasticsearch.query', {
+        childOf: scope && scope.span(),
+        tags: {
+          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
+          [Tags.DB_TYPE]: 'elasticsearch',
+          'service.name': config.service || 'elasticsearch',
+          'resource.name': `${params.method} ${quantizePath(params.path)}`,
+          'span.type': 'db',
+          'elasticsearch.url': params.path,
+          'elasticsearch.method': params.method,
+          'elasticsearch.params': JSON.stringify(params.query)
         }
+      })
 
-        tracer.trace('elasticsearch.query', {
-          tags: {
-            [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-            [Tags.DB_TYPE]: 'elasticsearch'
-          }
-        }, span => {
-          span.addTags({
-            'service.name': config.service || 'elasticsearch',
-            'resource.name': `${params.method} ${quantizePath(params.path)}`,
-            'span.type': 'db',
-            'elasticsearch.url': params.path,
-            'elasticsearch.method': params.method,
-            'elasticsearch.params': JSON.stringify(params.query)
-          })
+      if (JSON.stringify(params.body)) {
+        span.setTag('elasticsearch.body', JSON.stringify(params.body))
+      }
 
-          if (JSON.stringify(params.body)) {
-            span.setTag('elasticsearch.body', JSON.stringify(params.body))
-          }
-
-          if (!defer) {
-            returnValue = request.call(this, params, wrapCallback(tracer, span, cb))
-          } else {
-            const ret = request.call(this, params, wrapCallback(tracer, span, cb))
-
-            returnValue = defer.promise
-            returnValue.abort = ret.abort
-          }
+      if (typeof cb === 'function') {
+        return request.call(this, params, wrapCallback(tracer, span, cb))
+      } else {
+        const result = request.apply(this, arguments)
+        const promise = new Promise((resolve, reject) => {
+          result
+            .then(function () {
+              finish(span)
+              resolve.apply(this, arguments)
+            })
+            .catch(function (e) {
+              finish(span, e)
+              reject.apply(this, arguments)
+            })
         })
-      })
 
-      return returnValue
-    }
-  }
-}
+        promise.abort = result.abort
 
-function createWrapSelect (tracer, config) {
-  return function wrapSelect (select) {
-    return function selectWithTrace (cb) {
-      const span = tracer.currentSpan()
-
-      return select.call(this, function (_, conn) {
-        if (conn && conn.host) {
-          span.addTags({
-            'out.host': conn.host.host,
-            'out.port': conn.host.port
-          })
-        }
-
-        return cb.apply(null, arguments)
-      })
+        return promise
+      }
     }
   }
 }
@@ -104,17 +72,6 @@ function quantizePath (path) {
 }
 
 module.exports = [
-  {
-    name: 'elasticsearch',
-    file: 'src/lib/connection_pool.js',
-    versions: ['15.x'],
-    patch (ConnectionPool, tracer, config) {
-      this.wrap(ConnectionPool.prototype, 'select', createWrapSelect(tracer, config))
-    },
-    unpatch (ConnectionPool) {
-      this.unwrap(ConnectionPool.prototype, 'select')
-    }
-  },
   {
     name: 'elasticsearch',
     file: 'src/lib/transport.js',

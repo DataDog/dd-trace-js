@@ -17,43 +17,46 @@ function createWrapMethod (tracer, config) {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`
     const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
 
-    tracer.trace(OPERATION_NAME, {
+    const span = tracer.startSpan(OPERATION_NAME, {
       childOf,
       tags: {
         [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_SERVER,
         [Tags.HTTP_URL]: url,
         [Tags.HTTP_METHOD]: req.method
       }
-    }, span => {
-      const originalEnd = res.end
-
-      res.end = tracer.bind(function () {
-        const returned = originalEnd.apply(this, arguments)
-        const paths = tracer.currentSpan().context()._express_paths
-
-        if (paths) {
-          span.setTag('resource.name', `${req.method} ${paths.join('')}`)
-        } else {
-          span.setTag('resource.name', req.method)
-        }
-
-        span.setTag('service.name', config.service || tracer._service)
-        span.setTag('span.type', 'web')
-        span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
-
-        if (!validateStatus(res.statusCode)) {
-          span.setTag(Tags.ERROR, true)
-        }
-
-        span.finish()
-
-        return returned
-      })
-
-      req._datadog_trace_patched = true
-
-      next()
     })
+
+    const scope = tracer.scopeManager().activate(span)
+
+    const originalEnd = res.end
+
+    res.end = function () {
+      const returned = originalEnd.apply(this, arguments)
+      const paths = scope.span().context()._express_paths
+
+      if (paths) {
+        span.setTag('resource.name', `${req.method} ${paths.join('')}`)
+      } else {
+        span.setTag('resource.name', req.method)
+      }
+
+      span.setTag('service.name', config.service || tracer._service)
+      span.setTag('span.type', 'web')
+      span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+
+      if (!validateStatus(res.statusCode)) {
+        span.setTag(Tags.ERROR, true)
+      }
+
+      span.finish()
+      scope.close()
+
+      return returned
+    }
+
+    req._datadog_trace_patched = true
+
+    next()
   }
 
   return function wrapMethod (original) {
@@ -68,20 +71,19 @@ function createWrapMethod (tracer, config) {
 }
 
 function createWrapProcessParams (tracer, config) {
-  const context = tracer._context
-
   return function wrapProcessParams (processParams) {
     return function processParamsWithTrace (layer, called, req, res, done) {
       const matchers = layer._datadog_matchers
-      const span = context.get('current')
+      const scope = tracer.scopeManager().active()
 
-      if (matchers && span) {
-        const paths = span.context()._express_paths || []
+      if (matchers && scope) {
+        const context = scope.span().context()
+        const paths = context._express_paths || []
 
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            span.context()._express_paths = paths.concat(matchers[i].path)
+            context._express_paths = paths.concat(matchers[i].path)
 
             break
           }
@@ -124,16 +126,19 @@ function wrapNext (tracer, layer, req, next) {
   if (req._datadog_trace_patched) {
     const originalNext = next
 
-    return tracer.bind(function () {
-      const span = tracer.currentSpan()
-      const paths = span && span.context()._express_paths
+    return function () {
+      const scope = tracer.scopeManager().active()
 
-      if (paths && layer.path && !layer.regexp.fast_star) {
-        paths.pop()
+      if (scope) {
+        const paths = scope.span().context()._express_paths
+
+        if (paths && layer.path && !layer.regexp.fast_star) {
+          paths.pop()
+        }
       }
 
       originalNext.apply(null, arguments)
-    })
+    }
   }
 
   return next

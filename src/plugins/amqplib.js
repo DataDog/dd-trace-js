@@ -4,14 +4,6 @@ const kebabCase = require('lodash.kebabcase')
 
 let methods = {}
 
-function createWrapSendOrEnqueue (tracer, config) {
-  return function wrapSendOrEnqueue (sendOrEnqueue) {
-    return function sendOrEnqueueWithTrace (method, fields, reply) {
-      return sendOrEnqueue.call(this, method, fields, tracer.bind(reply))
-    }
-  }
-}
-
 function createWrapSendImmediately (tracer, config) {
   return function wrapSendImmediately (sendImmediately) {
     return function sendImmediatelyWithTrace (method, fields) {
@@ -31,33 +23,25 @@ function createWrapSendMessage (tracer, config) {
 function createWrapDispatchMessage (tracer, config) {
   return function wrapDispatchMessage (dispatchMessage) {
     return function dispatchMessageWithTrace (fields, message) {
-      let returnValue
+      const span = tracer.startSpan('amqp.command')
 
-      tracer.trace('amqp.command', span => {
-        addTags(this, config, span, 'basic.deliver', fields)
+      tracer.scopeManager().activate(span, true)
 
-        try {
-          returnValue = dispatchMessage.apply(this, arguments)
-        } catch (e) {
-          throw addError(span, e)
-        } finally {
-          // Do not use this without contacting support first
-          if (config.consumerAutoFinish !== false) {
-            span.finish()
-          }
-        }
-      })
+      addTags(this, config, span, 'basic.deliver', fields)
 
-      return returnValue
+      try {
+        return dispatchMessage.apply(this, arguments)
+      } catch (e) {
+        throw addError(span, e)
+      }
     }
   }
 }
 
 function sendWithTrace (send, channel, args, tracer, config, method, fields) {
-  let span
-
-  tracer.trace('amqp.command', child => {
-    span = child
+  const parentScope = tracer.scopeManager().active()
+  const span = tracer.startSpan('amqp.command', {
+    childOf: parentScope && parentScope.span()
   })
 
   addTags(channel, config, span, method, fields)
@@ -155,13 +139,11 @@ module.exports = [
     file: 'lib/channel.js',
     versions: ['0.5.x'],
     patch (channel, tracer, config) {
-      this.wrap(channel.Channel.prototype, 'sendOrEnqueue', createWrapSendOrEnqueue(tracer, config))
       this.wrap(channel.Channel.prototype, 'sendImmediately', createWrapSendImmediately(tracer, config))
       this.wrap(channel.Channel.prototype, 'sendMessage', createWrapSendMessage(tracer, config))
       this.wrap(channel.BaseChannel.prototype, 'dispatchMessage', createWrapDispatchMessage(tracer, config))
     },
     unpatch (channel) {
-      this.unwrap(channel.Channel.prototype, 'sendOrEnqueue')
       this.unwrap(channel.Channel.prototype, 'sendImmediately')
       this.unwrap(channel.Channel.prototype, 'sendMessage')
       this.unwrap(channel.BaseChannel.prototype, 'dispatchMessage')

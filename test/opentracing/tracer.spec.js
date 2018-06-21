@@ -99,7 +99,11 @@ describe('Tracer', () => {
       expect(Span).to.have.been.calledWith(tracer, {
         operationName: 'name',
         parent: null,
-        tags: fields.tags,
+        tags: {
+          'foo': 'bar',
+          'service.name': 'service',
+          'resource.name': 'name'
+        },
         startTime: fields.startTime
       })
 

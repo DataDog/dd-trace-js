@@ -6,7 +6,7 @@ wrapIt()
 
 describe('Plugin', () => {
   let plugin
-  let context
+  let tracer
   let graphql
   let schema
   let sort
@@ -137,7 +137,7 @@ describe('Plugin', () => {
   describe('graphql', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/graphql')
-      context = require('../../src/platform').context()
+      tracer = require('../..')
 
       sort = spans => spans.sort((a, b) => a.start.toString() > b.start.toString() ? 1 : -1)
     })
@@ -456,7 +456,7 @@ describe('Plugin', () => {
 
         const rootValue = {
           hello () {
-            expect(context.get('current')).to.not.be.undefined
+            expect(tracer.scopeManager().active()).to.not.be.null
             done()
           }
         }
@@ -479,10 +479,13 @@ describe('Plugin', () => {
           }
         }
 
+        const span = tracer.startSpan('test')
+        const scope = tracer.scopeManager().activate(span)
+
         return graphql.graphql({ schema, source, rootValue })
           .then(value => {
             expect(value).to.have.nested.property('data.hello', 'test')
-            expect(context.get('current')).to.be.undefined
+            expect(tracer.scopeManager().active()).to.equal(scope)
           })
       })
 

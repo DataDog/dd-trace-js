@@ -1,26 +1,20 @@
 'use strict'
 
-const EventEmitter = require('events')
 const Span = require('../src/opentracing/span')
 const SpanContext = require('../src/opentracing/span_context')
 const Config = require('../src/config')
-const platform = require('../src/platform')
 
 wrapIt()
 
 describe('Tracer', () => {
   let Tracer
   let tracer
-  let context
   let config
   let instrumenter
   let Instrumenter
 
   beforeEach(() => {
     config = new Config({ service: 'service' })
-    context = platform.context(config)
-    sinon.spy(context, 'bind')
-    sinon.spy(context, 'bindEmitter')
 
     instrumenter = {
       use: sinon.spy(),
@@ -36,8 +30,7 @@ describe('Tracer', () => {
   })
 
   afterEach(() => {
-    context.bind.restore()
-    context.bindEmitter.restore()
+    tracer.scopeManager()._disable()
   })
 
   describe('trace', () => {
@@ -131,34 +124,6 @@ describe('Tracer', () => {
 
     it('should return null when there is no current span', () => {
       expect(tracer.currentSpan()).to.be.null
-    })
-  })
-
-  describe('bind', () => {
-    it('should bind a function to the context', done => {
-      const callback = () => {}
-
-      tracer.trace('name', current => {
-        tracer.bind(callback)
-        expect(context.bind).to.have.been.calledWith(callback)
-        done()
-      })
-    })
-  })
-
-  describe('bindEmitter', () => {
-    let emitter
-
-    beforeEach(() => {
-      emitter = new EventEmitter()
-    })
-
-    it('should bind an emitter to the context', done => {
-      tracer.trace('name', current => {
-        tracer.bindEmitter(emitter)
-        expect(context.bindEmitter).to.have.been.calledWith(emitter)
-        done()
-      })
     })
   })
 })

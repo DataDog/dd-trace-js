@@ -5,34 +5,30 @@ const Tags = require('opentracing').Tags
 function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
     return function queryWithTrace (sql, values, cb) {
-      let span
-
-      tracer.trace('mysql.query', {
+      const parentScope = tracer.scopeManager().active()
+      const span = tracer.startSpan('mysql.query', {
+        childOf: parentScope && parentScope.span(),
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          [Tags.DB_TYPE]: 'mysql'
+          'service.name': config.service || 'mysql',
+          'span.type': 'sql',
+          'db.type': 'mysql',
+          'db.user': this.config.user,
+          'out.host': this.config.host,
+          'out.port': this.config.port
         }
-      }, child => {
-        span = child
       })
-
-      const sequence = query.call(this, sql, values, cb)
-
-      span.setTag('service.name', config.service || 'mysql')
-      span.setTag('resource.name', sequence.sql)
-      span.setTag('out.host', this.config.host)
-      span.setTag('out.port', String(this.config.port))
-      span.setTag('span.type', 'sql')
-      span.setTag('db.user', this.config.user)
 
       if (this.config.database) {
         span.setTag('db.name', this.config.database)
       }
 
-      tracer.bindEmitter(sequence)
+      const sequence = query.call(this, sql, values, cb)
+
+      span.setTag('resource.name', sequence.sql)
 
       if (sequence.onResult) {
-        sequence.onResult = wrapCallback(tracer, span, sequence.onResult)
+        sequence.onResult = wrapCallback(span, sequence.onResult)
       } else {
         sequence.on('end', () => {
           span.finish()
@@ -44,8 +40,8 @@ function createWrapQuery (tracer, config) {
   }
 }
 
-function wrapCallback (tracer, span, done) {
-  return tracer.bind((err, res) => {
+function wrapCallback (span, done) {
+  return (err, res) => {
     if (err) {
       span.addTags({
         'error.type': err.name,
@@ -57,7 +53,7 @@ function wrapCallback (tracer, span, done) {
     span.finish()
 
     done(err, res)
-  })
+  }
 }
 
 function patchConnection (Connection, tracer, config) {
