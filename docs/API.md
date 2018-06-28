@@ -175,6 +175,7 @@ This limitation doesn't apply to other commands. We are working on improving thi
 | Option           | Default                   | Description                            |
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
+| validateStatus   | code => code < 500        | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
 
 <h3 id="graphql">graphql</h3>
 
