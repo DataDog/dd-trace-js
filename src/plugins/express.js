@@ -9,6 +9,10 @@ const pathToRegExp = require('path-to-regexp')
 const OPERATION_NAME = 'express.request'
 
 function createWrapMethod (tracer, config) {
+  const validateStatus = typeof config.validateStatus === 'function'
+    ? config.validateStatus
+    : code => code < 500
+
   function middleware (req, res, next) {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`
     const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
@@ -29,11 +33,17 @@ function createWrapMethod (tracer, config) {
 
         if (paths) {
           span.setTag('resource.name', `${req.method} ${paths.join('')}`)
+        } else {
+          span.setTag('resource.name', req.method)
         }
 
         span.setTag('service.name', config.service || tracer._service)
         span.setTag('span.type', 'web')
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+
+        if (!validateStatus(res.statusCode)) {
+          span.setTag(Tags.ERROR, true)
+        }
 
         span.finish()
 

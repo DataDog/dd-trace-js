@@ -229,7 +229,7 @@ describe('Plugin', () => {
         })
       })
 
-      it('should fallback to the default resource name if a path pattern could not be found', done => {
+      it('should fallback to the the verb if a path pattern could not be found', done => {
         const app = express()
 
         app.use((req, res, next) => res.status(200).send())
@@ -237,7 +237,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'express.request')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
             })
             .then(done)
             .catch(done)
@@ -422,6 +422,36 @@ describe('Plugin', () => {
           })
         })
       })
+
+      it('should handle errors', done => {
+        const app = express()
+
+        app.use((req, res, next) => {
+          next()
+        })
+
+        app.get('/user', (req, res) => {
+          res.status(500).send()
+        })
+
+        getPort().then(port => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('error', 1)
+            expect(traces[0][0]).to.have.property('resource', 'GET /user')
+            expect(traces[0][0].meta).to.have.property('http.status_code', '500')
+
+            done()
+          })
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
+          })
+        })
+      })
     })
 
     describe('with configuration', () => {
@@ -429,7 +459,8 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         config = {
-          service: 'custom'
+          service: 'custom',
+          validateStatus: code => code < 400
         }
 
         return agent.load(plugin, 'express', config)
@@ -438,7 +469,7 @@ describe('Plugin', () => {
           })
       })
 
-      it('should be configured with the correct values', done => {
+      it('should be configured with the correct service name', done => {
         const app = express()
 
         app.get('/user', (req, res) => {
@@ -456,6 +487,31 @@ describe('Plugin', () => {
           appListener = app.listen(port, 'localhost', () => {
             axios
               .get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+      })
+
+      it('should be configured with the correct status code validator', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(400).send()
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 400
+              })
               .catch(done)
           })
         })
