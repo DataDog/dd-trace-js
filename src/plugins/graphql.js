@@ -2,7 +2,7 @@
 
 const platform = require('../platform')
 
-function createWrapExecute (tracer, config, defaultFieldResolver) {
+function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
   return function wrapExecute (execute) {
     return function executeWithTrace () {
       const args = normalizeArgs(arguments)
@@ -10,26 +10,30 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       const document = args.document
       const contextValue = args.contextValue || {}
       const fieldResolver = args.fieldResolver || defaultFieldResolver
+      const operation = getOperation(document)
 
-      if (!schema || !document || typeof fieldResolver !== 'function') {
+      if (!schema || !operation || typeof fieldResolver !== 'function') {
         return execute.apply(this, arguments)
       }
 
-      args.fieldResolver = wrapResolve(fieldResolver, tracer, config)
+      args.fieldResolver = wrapResolve(fieldResolver, tracer, config, responsePathAsArray)
       args.contextValue = contextValue
 
-      Object.defineProperties(contextValue, {
-        _datadog_operation: { value: {} },
-        _datadog_fields: { value: {} },
-        _datadog_source: { value: document._datadog_source }
-      })
-
       if (!schema._datadog_patched) {
-        wrapFields(schema._queryType._fields, tracer, config, [])
+        wrapFields(schema._queryType._fields, tracer, config, responsePathAsArray)
         schema._datadog_patched = true
       }
 
-      return call(execute, this, [args], defer(tracer), () => finishOperation(contextValue))
+      Object.defineProperties(contextValue, {
+        _datadog_operation: {
+          value: {
+            span: createOperationSpan(tracer, config, operation, document._datadog_source)
+          }
+        },
+        _datadog_fields: { value: {} }
+      })
+
+      return call(execute, this, [args], defer(tracer), err => finishOperation(contextValue, err))
     }
   }
 }
@@ -40,7 +44,7 @@ function createWrapParse () {
       const document = parse.apply(this, arguments)
 
       Object.defineProperties(document, {
-        _datadog_source: { value: source }
+        _datadog_source: { value: source.body || source }
       })
 
       return document
@@ -48,30 +52,30 @@ function createWrapParse () {
   }
 }
 
-function wrapFields (fields, tracer, config) {
+function wrapFields (fields, tracer, config, responsePathAsArray) {
   Object.keys(fields).forEach(key => {
     const field = fields[key]
 
     if (typeof field.resolve === 'function') {
-      field.resolve = wrapResolve(field.resolve, tracer, config)
+      field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
     if (field.type && field.type._fields) {
-      wrapFields(field.type._fields, tracer, config)
+      wrapFields(field.type._fields, tracer, config, responsePathAsArray)
     }
   })
 }
 
-function wrapResolve (resolve, tracer, config) {
+function wrapResolve (resolve, tracer, config, responsePathAsArray) {
   return function resolveWithTrace (source, args, contextValue, info) {
-    const path = getPath(info.path)
-    const fieldParent = getFieldParent(tracer, config, contextValue, info, path)
+    const path = responsePathAsArray(info.path)
+    const fieldParent = getFieldParent(contextValue, path)
     const childOf = createSpan('graphql.field', tracer, config, fieldParent, path)
     const deferred = defer(tracer)
 
     let result
 
-    contextValue._datadog_fields[path] = {
+    contextValue._datadog_fields[path.join('.')] = {
       span: childOf,
       parent: fieldParent
     }
@@ -124,11 +128,7 @@ function defer (tracer) {
   return deferred
 }
 
-function getFieldParent (tracer, config, contextValue, info, path) {
-  if (!contextValue._datadog_operation.span) {
-    contextValue._datadog_operation.span = createOperationSpan(tracer, config, contextValue, info)
-  }
-
+function getFieldParent (contextValue, path) {
   if (path.length === 1) {
     return contextValue._datadog_operation.span
   }
@@ -152,19 +152,18 @@ function normalizeArgs (args) {
   }
 }
 
-function createOperationSpan (tracer, config, contextValue, info) {
-  const type = info.operation.operation
-  const name = info.operation.name && info.operation.name.value
+function createOperationSpan (tracer, config, operation, source) {
+  const type = operation.operation
+  const name = operation.name && operation.name.value
 
   let span
 
-  tracer.trace(`graphql.${info.operation.operation}`, parent => {
+  tracer.trace(`graphql.${operation.operation}`, parent => {
     span = parent
     span.addTags({
       'service.name': getService(tracer, config),
       'resource.name': [type, name].filter(val => val).join(' '),
-      'span.type': 'custom',
-      'graphql.document': contextValue._datadog_source
+      'graphql.document': source
     })
   })
 
@@ -185,8 +184,7 @@ function createSpan (name, tracer, config, childOf, path) {
 function addTags (span, tracer, config, path) {
   span.addTags({
     'service.name': getService(tracer, config),
-    'resource.name': path.join('.'),
-    'span.type': 'custom'
+    'resource.name': path.join('.')
   })
 }
 
@@ -195,15 +193,17 @@ function finish (span, contextValue, path, error) {
 
   span.finish()
 
-  for (let i = path.length - 2; i >= 0; i--) {
-    contextValue._datadog_fields[path[i]].finishTime = platform.now()
+  for (let i = path.length; i > 0; i--) {
+    contextValue._datadog_fields[path.slice(0, i).join('.')].finishTime = platform.now()
   }
 }
 
-function finishOperation (contextValue) {
+function finishOperation (contextValue, error) {
   for (const key in contextValue._datadog_fields) {
     contextValue._datadog_fields[key].span.finish(contextValue._datadog_fields[key].finishTime)
   }
+
+  addError(contextValue._datadog_operation.span, error)
 
   contextValue._datadog_operation.span.finish()
 }
@@ -212,12 +212,15 @@ function getService (tracer, config) {
   return config.service || `${tracer._service}-graphql`
 }
 
-function getPath (path) {
-  if (path.prev) {
-    return getPath(path.prev).concat(path.key)
-  } else {
-    return [path.key]
+function getOperation (document) {
+  if (!document || !Array.isArray(document.definitions)) {
+    return
   }
+
+  const types = ['query', 'mutations']
+  const definition = document.definitions.find(def => types.indexOf(def.operation) !== -1)
+
+  return definition
 }
 
 function addError (span, error) {
@@ -238,7 +241,12 @@ module.exports = [
     file: 'execution/execute.js',
     versions: ['0.13.x'],
     patch (execute, tracer, config) {
-      this.wrap(execute, 'execute', createWrapExecute(tracer, config, execute.defaultFieldResolver))
+      this.wrap(execute, 'execute', createWrapExecute(
+        tracer,
+        config,
+        execute.defaultFieldResolver,
+        execute.responsePathAsArray
+      ))
     },
     unpatch (execute) {
       this.unwrap(execute, 'execute')
