@@ -1,0 +1,90 @@
+'use strict'
+
+const tracer = require('..').init()
+const benchmark = require('./benchmark')
+
+const suite = benchmark('dd-trace')
+
+let operation
+
+const str = generateString(2000)
+
+suite
+  .add('1 span (no tags)', {
+    onStart () {
+      operation = () => {
+        tracer.trace('bench', span => {
+          span.finish()
+        })
+      }
+    },
+    fn () {
+      operation()
+    }
+  })
+  .add('1 span (large tags)', {
+    onStart () {
+      operation = () => {
+        tracer.trace('bench', span => {
+          span.addTags({
+            'tag1': str + generateString(10),
+            'tag2': str + str + generateString(10),
+            'tag3': str + str + str + generateString(10)
+          })
+          span.finish()
+        })
+      }
+    },
+    fn () {
+      operation()
+    }
+  })
+  .add('3 spans (small tags)', {
+    onStart () {
+      operation = () => {
+        tracer.trace('bench', span => {
+          tracer.trace('bench', span => {
+            tracer.trace('bench', span => {
+              span.addTags({
+                'tag1': generateString(20),
+                'tag2': generateString(20),
+                'tag3': generateString(20)
+              })
+              span.finish()
+            })
+
+            span.addTags({
+              'tag1': generateString(20),
+              'tag2': generateString(20),
+              'tag3': generateString(20)
+            })
+            span.finish()
+          })
+
+          span.addTags({
+            'tag1': generateString(20),
+            'tag2': generateString(20),
+            'tag3': generateString(20)
+          })
+          span.finish()
+        })
+      }
+    },
+    fn () {
+      operation()
+    }
+  })
+
+suite.run()
+
+function generateString (charCount) {
+  const chars = 'abcdef0123456789'
+
+  let result = ''
+
+  for (let i = 0; i < charCount; i++) {
+    result += chars[Math.floor(Math.random() * 15) + 1]
+  }
+
+  return result
+}
