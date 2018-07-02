@@ -90,7 +90,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0]).to.have.property('service', 'mysql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            expect(traces[0][0]).to.have.property('type', 'db')
+            expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('db.name', 'db')
             expect(traces[0][0].meta).to.have.property('db.user', 'user')
             expect(traces[0][0].meta).to.have.property('db.type', 'mysql')
@@ -197,7 +197,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0]).to.have.property('service', 'mysql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            expect(traces[0][0]).to.have.property('type', 'db')
+            expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('db.user', 'user')
             expect(traces[0][0].meta).to.have.property('db.type', 'mysql')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')

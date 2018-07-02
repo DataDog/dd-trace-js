@@ -21,7 +21,7 @@ function patch (pg, tracer, config) {
         }, span => {
           span.setTag('service.name', config.service || 'postgres')
           span.setTag('resource.name', statement)
-          span.setTag('span.type', 'db')
+          span.setTag('span.type', 'sql')
 
           if (params) {
             span.setTag('db.name', params.database)
