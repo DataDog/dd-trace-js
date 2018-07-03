@@ -22,7 +22,7 @@ function createWrapQuery (tracer, config) {
       span.setTag('resource.name', sequence.sql)
       span.setTag('out.host', this.config.host)
       span.setTag('out.port', String(this.config.port))
-      span.setTag('span.type', 'db')
+      span.setTag('span.type', 'sql')
       span.setTag('db.user', this.config.user)
 
       if (this.config.database) {
