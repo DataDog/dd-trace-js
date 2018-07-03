@@ -80,7 +80,7 @@ class DatadogSpan extends Span {
   }
 
   _finish (finishTime) {
-    finishTime = parseInt(finishTime, 10) || platform.now()
+    finishTime = parseFloat(finishTime) || platform.now()
 
     this._duration = finishTime - this._startTime
     this._spanContext.trace.finished.push(this)

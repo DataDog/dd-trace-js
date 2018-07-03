@@ -12,6 +12,36 @@ describe('Plugin', () => {
   let sort
 
   function buildSchema () {
+    const Human = new graphql.GraphQLObjectType({
+      name: 'Human',
+      fields: {
+        name: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            return 'test'
+          }
+        },
+        address: {
+          type: new graphql.GraphQLObjectType({
+            name: 'Address',
+            fields: {
+              civicNumber: {
+                type: graphql.GraphQLString,
+                resolve: () => 123
+              },
+              street: {
+                type: graphql.GraphQLString,
+                resolve: () => 'foo street'
+              }
+            }
+          }),
+          resolve (obj, args) {
+            return {}
+          }
+        }
+      }
+    })
+
     schema = new graphql.GraphQLSchema({
       query: new graphql.GraphQLObjectType({
         name: 'RootQueryType',
@@ -28,31 +58,15 @@ describe('Plugin', () => {
             }
           },
           human: {
-            type: new graphql.GraphQLObjectType({
-              name: 'Human',
-              fields: {
-                name: {
-                  type: graphql.GraphQLString,
-                  resolve (obj, args) {
-                    return 'test'
-                  }
-                },
-                address: {
-                  type: new graphql.GraphQLObjectType({
-                    name: 'Address',
-                    fields: {
-                      civicNumber: { type: graphql.GraphQLString },
-                      street: { type: graphql.GraphQLString }
-                    }
-                  }),
-                  resolve (obj, args) {
-                    return {}
-                  }
-                }
-              }
-            }),
+            type: Human,
             resolve (obj, args) {
               return Promise.resolve({})
+            }
+          },
+          friends: {
+            type: new graphql.GraphQLList(Human),
+            resolve () {
+              return [ { name: 'alice' }, { name: 'bob' } ]
             }
           }
         }
@@ -173,10 +187,12 @@ describe('Plugin', () => {
             expect(humanField).to.have.property('name', 'graphql.field')
             expect(humanField).to.have.property('resource', 'human')
             expect(humanField.parent_id.toString()).to.equal(query.span_id.toString())
+            expect(humanField.duration.toNumber()).to.be.lte(query.duration.toNumber())
 
             expect(humanResolve).to.have.property('name', 'graphql.resolve')
             expect(humanResolve).to.have.property('resource', 'human')
             expect(humanResolve.parent_id.toString()).to.equal(humanField.span_id.toString())
+            expect(humanResolve.duration.toNumber()).to.be.lte(humanField.duration.toNumber())
 
             expect(humanNameField).to.have.property('name', 'graphql.field')
             expect(humanNameField).to.have.property('resource', 'human.name')
@@ -189,26 +205,32 @@ describe('Plugin', () => {
             expect(addressField).to.have.property('name', 'graphql.field')
             expect(addressField).to.have.property('resource', 'human.address')
             expect(addressField.parent_id.toString()).to.equal(humanField.span_id.toString())
+            expect(addressField.duration.toNumber()).to.be.lte(humanField.duration.toNumber())
 
             expect(addressResolve).to.have.property('name', 'graphql.resolve')
             expect(addressResolve).to.have.property('resource', 'human.address')
             expect(addressResolve.parent_id.toString()).to.equal(addressField.span_id.toString())
+            expect(addressResolve.duration.toNumber()).to.be.lte(addressField.duration.toNumber())
 
             expect(addressCivicNumberField).to.have.property('name', 'graphql.field')
             expect(addressCivicNumberField).to.have.property('resource', 'human.address.civicNumber')
             expect(addressCivicNumberField.parent_id.toString()).to.equal(addressField.span_id.toString())
+            expect(addressCivicNumberField.duration.toNumber()).to.be.lte(addressField.duration.toNumber())
 
             expect(addressCivicNumberResolve).to.have.property('name', 'graphql.resolve')
             expect(addressCivicNumberResolve).to.have.property('resource', 'human.address.civicNumber')
             expect(addressCivicNumberResolve.parent_id.toString()).to.equal(addressCivicNumberField.span_id.toString())
+            expect(addressCivicNumberResolve.duration.toNumber()).to.be.lte(addressCivicNumberField.duration.toNumber())
 
             expect(addressStreetField).to.have.property('name', 'graphql.field')
             expect(addressStreetField).to.have.property('resource', 'human.address.street')
             expect(addressStreetField.parent_id.toString()).to.equal(addressField.span_id.toString())
+            expect(addressStreetField.duration.toNumber()).to.be.lte(addressField.duration.toNumber())
 
             expect(addressStreetResolve).to.have.property('name', 'graphql.resolve')
             expect(addressStreetResolve).to.have.property('resource', 'human.address.street')
             expect(addressStreetResolve.parent_id.toString()).to.equal(addressStreetField.span_id.toString())
+            expect(addressStreetResolve.duration.toNumber()).to.be.lte(addressStreetField.duration.toNumber())
           })
           .then(done)
           .catch(done)
@@ -216,7 +238,57 @@ describe('Plugin', () => {
         graphql.graphql(schema, source).catch(done)
       })
 
-      it('should instrument the default field resolver', done => {
+      it('should instrument list field resolvers', done => {
+        const source = `{ friends { name } }`
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+
+            expect(spans).to.have.length(7)
+
+            const query = spans[0]
+            const friendsField = spans[1]
+            const friendsResolve = spans[2]
+            const friend0NameField = spans[3]
+            const friend0NameResolve = spans[4]
+            const friend1NameField = spans[5]
+            const friend1NameResolve = spans[6]
+
+            expect(query).to.have.property('name', 'graphql.query')
+            expect(query).to.have.property('resource', 'query')
+
+            expect(friendsField).to.have.property('name', 'graphql.field')
+            expect(friendsField).to.have.property('resource', 'friends')
+            expect(friendsField.parent_id.toString()).to.equal(query.span_id.toString())
+
+            expect(friendsResolve).to.have.property('name', 'graphql.resolve')
+            expect(friendsResolve).to.have.property('resource', 'friends')
+            expect(friendsResolve.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+            expect(friend0NameField).to.have.property('name', 'graphql.field')
+            expect(friend0NameField).to.have.property('resource', 'friends.0.name')
+            expect(friend0NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+            expect(friend0NameResolve).to.have.property('name', 'graphql.resolve')
+            expect(friend0NameResolve).to.have.property('resource', 'friends.0.name')
+            expect(friend0NameResolve.parent_id.toString()).to.equal(friend0NameField.span_id.toString())
+
+            expect(friend1NameField).to.have.property('name', 'graphql.field')
+            expect(friend1NameField).to.have.property('resource', 'friends.1.name')
+            expect(friend1NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+            expect(friend1NameResolve).to.have.property('name', 'graphql.resolve')
+            expect(friend1NameResolve).to.have.property('resource', 'friends.1.name')
+            expect(friend1NameResolve.parent_id.toString()).to.equal(friend1NameField.span_id.toString())
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.graphql(schema, source).catch(done)
+      })
+
+      it('should ignore the default field resolver', done => {
         const schema = graphql.buildSchema(`
           type Query {
             hello: String
@@ -229,8 +301,8 @@ describe('Plugin', () => {
           .use(traces => {
             const spans = sort(traces[0])
 
-            expect(spans).to.have.length(3)
-            expect(spans[2]).to.have.property('resource', 'hello')
+            expect(spans).to.have.length(1)
+            expect(spans[0]).to.have.property('resource', 'query')
           })
           .then(done)
           .catch(done)
@@ -238,7 +310,7 @@ describe('Plugin', () => {
         graphql.graphql(schema, source, { hello: 'world' }).catch(done)
       })
 
-      it('should instrument a custom field resolver', done => {
+      it('should ignore the execution field resolver without a rootValue resolver', done => {
         const schema = graphql.buildSchema(`
           type Query {
             hello: String
@@ -257,8 +329,8 @@ describe('Plugin', () => {
           .use(traces => {
             const spans = sort(traces[0])
 
-            expect(spans).to.have.length(3)
-            expect(spans[2]).to.have.property('resource', 'hello')
+            expect(spans).to.have.length(1)
+            expect(spans[0]).to.have.property('resource', 'query')
           })
           .then(done)
           .catch(done)
@@ -285,27 +357,7 @@ describe('Plugin', () => {
         graphql.graphql(schema, source).catch(done)
       })
 
-      it('should run the field resolver in the trace context', done => {
-        const schema = graphql.buildSchema(`
-          type Query {
-            hello: String
-          }
-        `)
-
-        const source = `{ hello }`
-
-        const rootValue = { hello: 'world' }
-
-        const fieldResolver = (source, args, contextValue, info) => {
-          expect(context.get('current')).to.not.be.undefined
-          done()
-          return source[info.fieldName]
-        }
-
-        graphql.graphql({ schema, source, rootValue, fieldResolver }).catch(done)
-      })
-
-      it('should run resolvers in the current context', done => {
+      it('should run rootValue resolvers in the current context', done => {
         const schema = graphql.buildSchema(`
           type Query {
             hello: String
@@ -363,7 +415,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        graphql.execute(schema, document)
+        graphql.execute({ schema, document })
       })
 
       it('should handle Source objects', done => {
@@ -436,8 +488,10 @@ describe('Plugin', () => {
 
         const source = `{ hello }`
 
-        const fieldResolver = (source, args, contextValue, info) => {
-          throw error
+        const rootValue = {
+          hello: () => {
+            throw error
+          }
         }
 
         agent
@@ -453,7 +507,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        graphql.graphql({ schema, source, fieldResolver }).catch(done)
+        graphql.graphql({ schema, source, rootValue }).catch(done)
       })
 
       it('should handle rejected promises', done => {
@@ -467,8 +521,10 @@ describe('Plugin', () => {
 
         const source = `{ hello }`
 
-        const fieldResolver = (source, args, contextValue, info) => {
-          return Promise.reject(error)
+        const rootValue = {
+          hello: () => {
+            return Promise.reject(error)
+          }
         }
 
         agent
@@ -484,7 +540,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        graphql.graphql({ schema, source, fieldResolver }).catch(done)
+        graphql.graphql({ schema, source, rootValue }).catch(done)
       })
     })
 

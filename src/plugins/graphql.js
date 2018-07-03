@@ -16,7 +16,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         return execute.apply(this, arguments)
       }
 
-      args.fieldResolver = wrapResolve(fieldResolver, tracer, config, responsePathAsArray)
+      args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
       args.contextValue = contextValue
 
       if (!schema._datadog_patched) {
@@ -90,6 +90,16 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
   }
 }
 
+function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) {
+  return function fieldResolverWithTrace (source, args, contextValue, info) {
+    if (source && typeof source[info.fieldName] === 'function') {
+      return wrapResolve(fieldResolver, tracer, config, responsePathAsArray).apply(this, arguments)
+    }
+
+    return fieldResolver.apply(this, arguments)
+  }
+}
+
 function call (fn, thisContext, args, deferred, callback) {
   try {
     let result = fn.apply(thisContext, args)
@@ -129,16 +139,20 @@ function defer (tracer) {
 }
 
 function getFieldParent (contextValue, path) {
-  if (path.length === 1) {
-    return contextValue._datadog_operation.span
+  for (let i = path.length - 1; i > 0; i--) {
+    const field = getField(contextValue, path.slice(0, i))
+
+    if (field) {
+      return field.span
+    }
   }
 
-  return contextValue._datadog_fields[path.slice(0, -1).join('.')].span
+  return contextValue._datadog_operation.span
 }
 
 function normalizeArgs (args) {
   if (args.length === 1) {
-    return args
+    return args[0]
   }
 
   return {
@@ -194,7 +208,11 @@ function finish (span, contextValue, path, error) {
   span.finish()
 
   for (let i = path.length; i > 0; i--) {
-    contextValue._datadog_fields[path.slice(0, i).join('.')].finishTime = platform.now()
+    const field = getField(contextValue, path.slice(0, i))
+
+    if (field) {
+      field.finishTime = platform.now()
+    }
   }
 }
 
@@ -206,6 +224,10 @@ function finishOperation (contextValue, error) {
   addError(contextValue._datadog_operation.span, error)
 
   contextValue._datadog_operation.span.finish()
+}
+
+function getField (contextValue, path) {
+  return contextValue._datadog_fields[path.join('.')]
 }
 
 function getService (tracer, config) {
