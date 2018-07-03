@@ -42,7 +42,7 @@ describe('Plugin', () => {
         agent.use(traces => {
           expect(traces[0][0]).to.have.property('service', 'postgres')
           expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-          expect(traces[0][0]).to.have.property('type', 'db')
+          expect(traces[0][0]).to.have.property('type', 'sql')
           expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
           expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
           expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
