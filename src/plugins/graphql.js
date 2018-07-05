@@ -56,7 +56,7 @@ function wrapFields (fields, tracer, config, responsePathAsArray) {
   Object.keys(fields).forEach(key => {
     const field = fields[key]
 
-    if (typeof field.resolve === 'function') {
+    if (typeof field.resolve === 'function' && !field.resolve._datadog_patched) {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
@@ -67,26 +67,34 @@ function wrapFields (fields, tracer, config, responsePathAsArray) {
 }
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
-  return function resolveWithTrace (source, args, contextValue, info) {
-    const path = responsePathAsArray(info.path)
-    const fieldParent = getFieldParent(contextValue, path)
-    const childOf = createSpan('graphql.field', tracer, config, fieldParent, path)
-    const deferred = defer(tracer)
+  if (resolve._datadog_patched) {
+    return resolve
+  } else {
+    const resolveWithTrace = function resolveWithTrace (source, args, contextValue, info) {
+      const path = responsePathAsArray(info.path)
+      const fieldParent = getFieldParent(contextValue, path)
+      const childOf = createSpan('graphql.field', tracer, config, fieldParent, path)
+      const deferred = defer(tracer)
 
-    let result
+      let result
 
-    contextValue._datadog_fields[path.join('.')] = {
-      span: childOf,
-      parent: fieldParent
+      contextValue._datadog_fields[path.join('.')] = {
+        span: childOf,
+        parent: fieldParent
+      }
+
+      tracer.trace('graphql.resolve', { childOf }, span => {
+        addTags(span, tracer, config, path)
+
+        result = call(resolve, this, arguments, deferred, err => finish(span, contextValue, path, err))
+      })
+
+      return result
     }
 
-    tracer.trace('graphql.resolve', { childOf }, span => {
-      addTags(span, tracer, config, path)
+    resolveWithTrace._datadog_patched = true
 
-      result = call(resolve, this, arguments, deferred, err => finish(span, contextValue, path, err))
-    })
-
-    return result
+    return resolveWithTrace
   }
 }
 
