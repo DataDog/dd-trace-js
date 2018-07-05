@@ -20,7 +20,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       args.contextValue = contextValue
 
       if (!schema._datadog_patched) {
-        wrapFields(schema._queryType._fields, tracer, config, responsePathAsArray)
+        wrapFields(schema._queryType, tracer, config, responsePathAsArray)
         schema._datadog_patched = true
       }
 
@@ -52,19 +52,27 @@ function createWrapParse () {
   }
 }
 
-function wrapFields (fields, tracer, config, responsePathAsArray) {
-  Object.keys(fields).forEach(key => {
-    const field = fields[key]
+function wrapFields (type, tracer, config, responsePathAsArray) {
+
+  if (type._datadog_patched) {
+    return
+  }
+
+  type._datadog_patched = true
+
+  Object.keys(type._fields).forEach(key => {
+    const field = type._fields[key]
 
     if (typeof field.resolve === 'function' && !field.resolve._datadog_patched) {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
-    if (field.type) {
+
+    if (field.type && !field.type._datadog_patched) {
       if (field.type._fields) {
-        wrapFields(field.type._fields, tracer, config, responsePathAsArray)
+        wrapFields(field.type, tracer, config, responsePathAsArray)
       } else if (field.type.ofType && field.type.ofType._fields) {
-        wrapFields(field.type.ofType._fields, tracer, config, responsePathAsArray)
+        wrapFields(field.type.ofType, tracer, config, responsePathAsArray)
       }
     }
   })

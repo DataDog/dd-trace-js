@@ -42,7 +42,7 @@ describe('Plugin', () => {
         pets: {
           type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
             name: 'Pet',
-            fields: {
+            fields: () => ({
               type: {
                 type: graphql.GraphQLString,
                 resolve: () => 'dog'
@@ -50,6 +50,10 @@ describe('Plugin', () => {
               name: {
                 type: graphql.GraphQLString,
                 resolve: () => 'foo bar'
+              },
+              owner: {
+                type: Human,
+                resolve: () => {}
               },
               colours: {
                 type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
@@ -65,7 +69,7 @@ describe('Plugin', () => {
                   return [{}, {}]
                 }
               }
-            }
+            })
           })),
           resolve (obj, args) {
             return [{}, {}, {}]
