@@ -38,6 +38,38 @@ describe('Plugin', () => {
           resolve (obj, args) {
             return {}
           }
+        },
+        pets: {
+          type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
+            name: 'Pet',
+            fields: {
+              type: {
+                type: graphql.GraphQLString,
+                resolve: () => 'dog'
+              },
+              name: {
+                type: graphql.GraphQLString,
+                resolve: () => 'foo bar'
+              },
+              colours: {
+                type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
+                  name: 'Colour',
+                  fields: {
+                    code: {
+                      type: graphql.GraphQLString,
+                      resolve: () => '#ffffff'
+                    }
+                  }
+                })),
+                resolve (obj, args) {
+                  return [{}, {}]
+                }
+              }
+            }
+          })),
+          resolve (obj, args) {
+            return [{}, {}, {}]
+          }
         }
       }
     })
@@ -286,6 +318,21 @@ describe('Plugin', () => {
           .catch(done)
 
         graphql.graphql(schema, source).catch(done)
+      })
+
+      it('should instrument nested lists', done => {
+        const source = `{ friends { name pets { name colours { code } } } }`
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+            expect(spans.filter(span => span.name === 'graphql.field').map(span => span.resource)).to.have.length(29)
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.graphql(schema, source)
+          .catch(done)
       })
 
       it('should ignore the default field resolver', done => {

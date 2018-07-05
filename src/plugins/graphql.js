@@ -56,20 +56,25 @@ function wrapFields (fields, tracer, config, responsePathAsArray) {
   Object.keys(fields).forEach(key => {
     const field = fields[key]
 
-    if (typeof field.resolve === 'function') {
+    if (typeof field.resolve === 'function' && !field.resolve._datadog_patched) {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
-    if (field.type && field.type._fields) {
-      wrapFields(field.type._fields, tracer, config, responsePathAsArray)
+    if (field.type) {
+      if (field.type._fields) {
+        wrapFields(field.type._fields, tracer, config, responsePathAsArray)
+      } else if (field.type.ofType && field.type.ofType._fields) {
+        wrapFields(field.type.ofType._fields, tracer, config, responsePathAsArray)
+      }
     }
   })
 }
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
-  return function resolveWithTrace (source, args, contextValue, info) {
+  function resolveWithTrace (source, args, contextValue, info) {
     const path = responsePathAsArray(info.path)
     const fieldParent = getFieldParent(contextValue, path)
+
     const childOf = createSpan('graphql.field', tracer, config, fieldParent, path)
     const deferred = defer(tracer)
 
@@ -88,6 +93,10 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
 
     return result
   }
+
+  resolveWithTrace._datadog_patched = true
+
+  return resolveWithTrace
 }
 
 function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) {
