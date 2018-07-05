@@ -63,6 +63,9 @@ describe('Plugin', () => {
               return Promise.resolve({})
             }
           },
+          person: {
+            type: Human
+          },
           friends: {
             type: new graphql.GraphQLList(Human),
             resolve () {
