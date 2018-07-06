@@ -53,7 +53,6 @@ function createWrapParse () {
 }
 
 function wrapFields (type, tracer, config, responsePathAsArray) {
-
   if (type._datadog_patched) {
     return
   }
@@ -67,8 +66,7 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
-
-    if (field.type && !field.type._datadog_patched) {
+    if (field.type) {
       if (field.type._fields) {
         wrapFields(field.type, tracer, config, responsePathAsArray)
       } else if (field.type.ofType && field.type.ofType._fields) {
