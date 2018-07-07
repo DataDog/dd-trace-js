@@ -10,6 +10,44 @@ describe('Plugin', () => {
   let graphql
   let schema
   let sort
+  let circularSchema
+
+  function buildCircularSchema () {
+    const human = { name: 'Ryce' }
+    const dog = { name: 'Beethoven' }
+
+    const Human = new graphql.GraphQLObjectType({
+      name: 'Human',
+      fields: () => ({
+        name: { type: graphql.GraphQLString },
+        dog: { type: Dog, resolve: () => dog }
+      })
+    })
+
+    const Dog = new graphql.GraphQLObjectType({
+      name: 'Dog',
+      fields: () => ({
+        name: { type: graphql.GraphQLString },
+        human: { type: Human, resolve: () => human }
+      })
+    })
+
+    circularSchema = new graphql.GraphQLSchema({
+      query: new graphql.GraphQLObjectType({
+        name: 'RootQueryType',
+        fields: {
+          human: {
+            type: Human,
+            resolve: () => human
+          },
+          dog: {
+            type: Dog,
+            resolve: () => dog
+          }
+        }
+      })
+    })
+  }
 
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
@@ -92,7 +130,16 @@ describe('Plugin', () => {
           .then(() => {
             graphql = require('graphql')
             buildSchema()
+            buildCircularSchema()
           })
+      })
+
+      it('should work with circular schema', done => {
+        const source = `query MyQuery { human { name }}`
+        graphql.graphql(circularSchema, source).then(result => {
+          expect(result.data.human.name).to.equal('Ryce')
+          done()
+        })
       })
 
       it('should instrument operations', done => {
