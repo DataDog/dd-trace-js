@@ -38,6 +38,42 @@ describe('Plugin', () => {
           resolve (obj, args) {
             return {}
           }
+        },
+        pets: {
+          type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
+            name: 'Pet',
+            fields: () => ({
+              type: {
+                type: graphql.GraphQLString,
+                resolve: () => 'dog'
+              },
+              name: {
+                type: graphql.GraphQLString,
+                resolve: () => 'foo bar'
+              },
+              owner: {
+                type: Human,
+                resolve: () => ({})
+              },
+              colours: {
+                type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
+                  name: 'Colour',
+                  fields: {
+                    code: {
+                      type: graphql.GraphQLString,
+                      resolve: () => '#ffffff'
+                    }
+                  }
+                })),
+                resolve (obj, args) {
+                  return [{}, {}]
+                }
+              }
+            })
+          })),
+          resolve (obj, args) {
+            return [{}, {}, {}]
+          }
         }
       }
     })
@@ -286,6 +322,18 @@ describe('Plugin', () => {
           .catch(done)
 
         graphql.graphql(schema, source).catch(done)
+      })
+
+      it('should handle a circular schema', done => {
+        const source = `{ human { pets { owner { name } } } }`
+
+        graphql.graphql(schema, source)
+          .then((result) => {
+            expect(result.data.human.pets[0].owner.name).to.equal('test')
+
+            done()
+          })
+          .catch(done)
       })
 
       it('should ignore the default field resolver', done => {
