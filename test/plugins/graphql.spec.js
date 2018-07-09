@@ -53,7 +53,7 @@ describe('Plugin', () => {
               },
               owner: {
                 type: Human,
-                resolve: () => {}
+                resolve: () => ({})
               },
               colours: {
                 type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
@@ -324,18 +324,15 @@ describe('Plugin', () => {
         graphql.graphql(schema, source).catch(done)
       })
 
-      it('should instrument nested lists', done => {
-        const source = `{ friends { name pets { name colours { code } } } }`
-
-        agent
-          .use(traces => {
-            const spans = sort(traces[0])
-            expect(spans.filter(span => span.name === 'graphql.field').map(span => span.resource)).to.have.length(29)
-          })
-          .then(done)
-          .catch(done)
+      it('should handle a circular schema', done => {
+        const source = `{ human { pets { owner { name } } } }`
 
         graphql.graphql(schema, source)
+          .then((result) => {
+            expect(result.data.human.pets[0].owner.name).to.equal('test')
+
+            done()
+          })
           .catch(done)
       })
 
