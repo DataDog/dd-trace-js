@@ -44,6 +44,18 @@ function createWrapQuery (tracer, config) {
   }
 }
 
+function createWrapEnqueue (tracer, config) {
+  return function wrapGetEnqueue (enqueue) {
+    return function enqueueWithTrace (sequence) {
+      if (sequence._callback) {
+        sequence._callback = tracer.bind(sequence._callback)
+      }
+
+      return enqueue.apply(this, arguments)
+    }
+  }
+}
+
 function wrapCallback (tracer, span, done) {
   return tracer.bind((err, res) => {
     if (err) {
@@ -68,6 +80,14 @@ function unpatchConnection (Connection) {
   this.unwrap(Connection.prototype, 'query')
 }
 
+function patchProtocol (Protocol, tracer, config) {
+  this.wrap(Protocol.prototype, '_enqueue', createWrapEnqueue(tracer, config))
+}
+
+function unpatchProtocol (Protocol) {
+  this.unwrap(Protocol.prototype, '_enqueue')
+}
+
 module.exports = [
   {
     name: 'mysql',
@@ -75,5 +95,12 @@ module.exports = [
     versions: ['2.x'],
     patch: patchConnection,
     unpatch: unpatchConnection
+  },
+  {
+    name: 'mysql',
+    file: 'lib/protocol/Protocol.js',
+    versions: ['2.x'],
+    patch: patchProtocol,
+    unpatch: unpatchProtocol
   }
 ]
