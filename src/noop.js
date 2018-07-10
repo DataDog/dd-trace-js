@@ -11,7 +11,9 @@ class NoopTracer extends Tracer {
     return null
   }
 
-  bind (callback) {}
+  bind (callback) {
+    return callback
+  }
 
   bindEmitter (emitter) {}
 }
