@@ -79,6 +79,18 @@ describe('Plugin', () => {
     })
 
     schema = new graphql.GraphQLSchema({
+      mutation: new graphql.GraphQLObjectType({
+        name: 'CreateNewHuman',
+        fields: {
+          human: {
+            type: Human,
+            description: 'Create a new human',
+            resolve () {
+              return Promise.resolve({ name: 'human name' })
+            }
+          }
+        }
+      }),
       query: new graphql.GraphQLObjectType({
         name: 'RootQueryType',
         fields: {
@@ -129,6 +141,19 @@ describe('Plugin', () => {
             graphql = require('graphql')
             buildSchema()
           })
+      })
+
+      it('should not break', async () => {
+        const query = `query MyQuery { hello(name: "world") }`
+        const mutation = `mutation CreateNewHuman { human { name } } `
+
+        const d1 = await graphql.graphql(schema, mutation) // schema._datadog_patched === undefined
+        const d2 = await graphql.graphql(schema, query)    // schema._datadog_patched === true
+        const d3 = await graphql.graphql(schema, mutation) // schema._datadog_patched === true
+
+        expect(d1).to.not.have.property('errors')
+        expect(d2).to.not.have.property('errors')
+        expect(d3).to.not.have.property('errors') // assertion fails because d3 errored: Cannot read property '_datadog_fields' of undefined
       })
 
       it('should instrument operations', done => {
