@@ -21,6 +21,8 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
 
       if (!schema._datadog_patched) {
         wrapFields(schema._queryType, tracer, config, responsePathAsArray)
+        wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+
         schema._datadog_patched = true
       }
 
@@ -53,7 +55,7 @@ function createWrapParse () {
 }
 
 function wrapFields (type, tracer, config, responsePathAsArray) {
-  if (type._datadog_patched) {
+  if (!type || type._datadog_patched) {
     return
   }
 
@@ -78,6 +80,10 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
   function resolveWithTrace (source, args, contextValue, info) {
+    if (!contextValue || !contextValue._datadog_fields) {
+      return resolve.apply(arguments)
+    }
+
     const path = responsePathAsArray(info.path)
     const fieldParent = getFieldParent(contextValue, path)
 
@@ -254,7 +260,7 @@ function getOperation (document) {
     return
   }
 
-  const types = ['query', 'mutations']
+  const types = ['query', 'mutation']
   const definition = document.definitions.find(def => types.indexOf(def.operation) !== -1)
 
   return definition

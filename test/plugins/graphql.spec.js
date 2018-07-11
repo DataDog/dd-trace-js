@@ -106,6 +106,30 @@ describe('Plugin', () => {
             }
           }
         }
+      }),
+
+      mutation: new graphql.GraphQLObjectType({
+        name: 'RootMutationType',
+        fields: {
+          human: {
+            type: Human,
+            resolve () {
+              return Promise.resolve({ name: 'human name' })
+            }
+          }
+        }
+      }),
+
+      subscription: new graphql.GraphQLObjectType({
+        name: 'RootSubscriptionType',
+        fields: {
+          human: {
+            type: Human,
+            resolve () {
+              return Promise.resolve({ name: 'human name' })
+            }
+          }
+        }
       })
     })
   }
@@ -324,6 +348,22 @@ describe('Plugin', () => {
         graphql.graphql(schema, source).catch(done)
       })
 
+      it('should instrument mutations', done => {
+        const source = `mutation { human { name } }`
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+
+            expect(spans).to.have.length(5)
+            expect(spans[0]).to.have.property('name', 'graphql.mutation')
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.graphql(schema, source).catch(done)
+      })
+
       it('should handle a circular schema', done => {
         const source = `{ human { pets { owner { name } } } }`
 
@@ -443,6 +483,17 @@ describe('Plugin', () => {
           .then(value => {
             expect(value).to.have.nested.property('data.hello', 'test')
             expect(context.get('current')).to.be.undefined
+          })
+      })
+
+      it('should handle unsupported operations', () => {
+        const query = `query MyQuery { hello(name: "world") }`
+        const subscription = `subscription { human { name } }`
+
+        return graphql.graphql(schema, query)
+          .then(() => graphql.graphql(schema, subscription))
+          .then(result => {
+            expect(result).to.not.have.property('errors')
           })
       })
 
