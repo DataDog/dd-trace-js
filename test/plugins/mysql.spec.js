@@ -7,12 +7,12 @@ wrapIt()
 describe('Plugin', () => {
   let plugin
   let mysql
-  let context
+  let tracer
 
   describe('mysql', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/mysql')
-      context = require('../../src/platform').context()
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -43,20 +43,17 @@ describe('Plugin', () => {
       })
 
       it('should propagate context to callbacks', done => {
-        context.run(() => {
-          context.set('foo', 'bar')
-          connection.query('SELECT 1 + 1 AS solution', callback)
+        tracer.trace('test', span => {
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            expect(tracer.currentSpan()).to.equal(span)
+            done()
+          })
         })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
       })
 
       it('should run the callback in the parent context', done => {
         connection.query('SELECT 1 + 1 AS solution', () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.currentSpan()).to.be.null
           done()
         })
       })
@@ -64,23 +61,20 @@ describe('Plugin', () => {
       it('should propagate context to events', done => {
         let query
 
-        context.run(() => {
-          context.set('foo', 'bar')
+        tracer.trace('test', span => {
           query = connection.query('SELECT 1 + 1 AS solution')
-          query.on('result', callback)
+          query.on('result', () => {
+            expect(tracer.currentSpan()).to.equal(span)
+            done()
+          })
         })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
       })
 
       it('should run event listeners in the parent context', done => {
         const query = connection.query('SELECT 1 + 1 AS solution')
 
         query.on('result', () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.currentSpan()).to.be.null
           done()
         })
       })
@@ -203,20 +197,17 @@ describe('Plugin', () => {
       })
 
       it('should propagate context', done => {
-        context.run(() => {
-          context.set('foo', 'bar')
-          pool.query('SELECT 1 + 1 AS solution', callback)
+        tracer.trace('test', span => {
+          pool.query('SELECT 1 + 1 AS solution', () => {
+            expect(tracer.currentSpan()).to.equal(span)
+            done()
+          })
         })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
       })
 
       it('should run the callback in the parent context', done => {
         pool.query('SELECT 1 + 1 AS solution', () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.currentSpan()).to.be.null
           done()
         })
       })
