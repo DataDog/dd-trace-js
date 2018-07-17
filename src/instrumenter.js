@@ -94,15 +94,6 @@ class Instrumenter {
             .filter(instrumentation => moduleName === filename(instrumentation))
             .filter(instrumentation => matchVersion(moduleVersion, instrumentation.versions))
             .forEach(instrumentation => {
-              const modulePath = [moduleBaseDir, instrumentation.file].filter(val => val).join('/')
-
-              if (require.cache[modulePath]) {
-                log.debug([
-                  `Instrumented module "${moduleName}" was imported before calling tracer.init().`,
-                  `Please make sure to initialize the tracer before importing any instrumented module.`
-                ].join(' '))
-              }
-
               this._instrumented.set(instrumentation, moduleExports)
               instrumentation.patch.call(this, moduleExports, this._tracer._tracer, this._plugins.get(plugin).config)
             })
