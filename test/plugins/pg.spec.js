@@ -8,12 +8,12 @@ describe('Plugin', () => {
   let plugin
   let pg
   let client
-  let context
+  let tracer
 
   describe('pg', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/pg')
-      context = require('../../src/platform').context({ experimental: { asyncHooks: false } })
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -80,7 +80,7 @@ describe('Plugin', () => {
 
       it('should run the callback in the parent context', done => {
         client.query('SELECT $1::text as message', ['Hello World!'], () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.scopeManager().active()).to.be.null
           done()
         })
 

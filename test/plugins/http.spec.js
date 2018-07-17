@@ -10,12 +10,12 @@ describe('Plugin', () => {
   let express
   let http
   let appListener
-  let context
+  let tracer
 
   describe('http', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/http')
-      context = require('../../src/platform').context({ experimental: {} })
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -185,7 +185,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           appListener = app.listen(port, 'localhost', () => {
             const req = http.request(`http://localhost:${port}/user`, res => {
-              expect(context.get('current')).to.be.undefined
+              expect(tracer.scopeManager().active()).to.be.null
               done()
             })
 
@@ -206,7 +206,7 @@ describe('Plugin', () => {
             const req = http.request(`http://localhost:${port}/user`, res => {
               res.on('data', () => {})
               res.on('end', () => {
-                expect(context.get('current')).to.be.undefined
+                expect(tracer.scopeManager().active()).to.be.null
                 done()
               })
             })

@@ -19,9 +19,6 @@ class Config {
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     const plugins = coalesce(options.plugins, true)
 
-    // Temporary safety net. Do not disable without contacting support.
-    const asyncHooks = coalesce(options.asyncHooks, true)
-
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
     this.service = service
@@ -33,7 +30,6 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
-    this.asyncHooks = !!asyncHooks
   }
 }
 

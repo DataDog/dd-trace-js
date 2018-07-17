@@ -5,31 +5,27 @@ const Tags = require('opentracing').Tags
 function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
     return function queryWithTrace (sql, values, cb) {
-      let span
-
-      tracer.trace('mysql.query', {
+      const parentScope = tracer.scopeManager().active()
+      const span = tracer.startSpan('mysql.query', {
+        childOf: parentScope && parentScope.span(),
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          [Tags.DB_TYPE]: 'mysql'
+          'service.name': config.service || 'mysql',
+          'span.type': 'sql',
+          'db.type': 'mysql',
+          'db.user': this.config.user,
+          'out.host': this.config.host,
+          'out.port': this.config.port
         }
-      }, child => {
-        span = child
       })
-
-      const sequence = query.call(this, sql, values, cb)
-
-      span.setTag('service.name', config.service || 'mysql')
-      span.setTag('resource.name', sequence.sql)
-      span.setTag('out.host', this.config.host)
-      span.setTag('out.port', String(this.config.port))
-      span.setTag('span.type', 'sql')
-      span.setTag('db.user', this.config.user)
 
       if (this.config.database) {
         span.setTag('db.name', this.config.database)
       }
 
-      tracer.bindEmitter(sequence)
+      const sequence = query.call(this, sql, values, cb)
+
+      span.setTag('resource.name', sequence.sql)
 
       if (sequence._callback) {
         sequence._callback = wrapCallback(tracer, span, sequence._callback)
@@ -44,20 +40,8 @@ function createWrapQuery (tracer, config) {
   }
 }
 
-function createWrapEnqueue (tracer, config) {
-  return function wrapGetEnqueue (enqueue) {
-    return function enqueueWithTrace (sequence) {
-      if (sequence._callback) {
-        sequence._callback = tracer.bind(sequence._callback)
-      }
-
-      return enqueue.apply(this, arguments)
-    }
-  }
-}
-
 function wrapCallback (tracer, span, done) {
-  return tracer.bind((err, res) => {
+  return (err, res) => {
     if (err) {
       span.addTags({
         'error.type': err.name,
@@ -69,7 +53,7 @@ function wrapCallback (tracer, span, done) {
     span.finish()
 
     done(err, res)
-  })
+  }
 }
 
 function patchConnection (Connection, tracer, config) {
@@ -80,14 +64,6 @@ function unpatchConnection (Connection) {
   this.unwrap(Connection.prototype, 'query')
 }
 
-function patchProtocol (Protocol, tracer, config) {
-  this.wrap(Protocol.prototype, '_enqueue', createWrapEnqueue(tracer, config))
-}
-
-function unpatchProtocol (Protocol) {
-  this.unwrap(Protocol.prototype, '_enqueue')
-}
-
 module.exports = [
   {
     name: 'mysql',
@@ -95,12 +71,5 @@ module.exports = [
     versions: ['2.x'],
     patch: patchConnection,
     unpatch: unpatchConnection
-  },
-  {
-    name: 'mysql',
-    file: 'lib/protocol/Protocol.js',
-    versions: ['2.x'],
-    patch: patchProtocol,
-    unpatch: unpatchProtocol
   }
 ]

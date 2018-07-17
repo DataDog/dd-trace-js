@@ -13,9 +13,7 @@ suite
   .add('1 span (no tags)', {
     onStart () {
       operation = () => {
-        tracer.trace('bench', span => {
-          span.finish()
-        })
+        tracer.startSpan('bench').finish()
       }
     },
     fn () {
@@ -25,14 +23,13 @@ suite
   .add('1 span (large tags)', {
     onStart () {
       operation = () => {
-        tracer.trace('bench', span => {
-          span.addTags({
-            'tag1': str + generateString(10),
-            'tag2': str + str + generateString(10),
-            'tag3': str + str + str + generateString(10)
-          })
-          span.finish()
+        const span = tracer.startSpan('bench')
+        span.addTags({
+          'tag1': str + generateString(10),
+          'tag2': str + str + generateString(10),
+          'tag3': str + str + str + generateString(10)
         })
+        span.finish()
       }
     },
     fn () {
@@ -42,32 +39,30 @@ suite
   .add('3 spans (small tags)', {
     onStart () {
       operation = () => {
-        tracer.trace('bench', span => {
-          tracer.trace('bench', span => {
-            tracer.trace('bench', span => {
-              span.addTags({
-                'tag1': generateString(20),
-                'tag2': generateString(20),
-                'tag3': generateString(20)
-              })
-              span.finish()
-            })
-
-            span.addTags({
-              'tag1': generateString(20),
-              'tag2': generateString(20),
-              'tag3': generateString(20)
-            })
-            span.finish()
-          })
-
-          span.addTags({
-            'tag1': generateString(20),
-            'tag2': generateString(20),
-            'tag3': generateString(20)
-          })
-          span.finish()
+        const rootSpan = tracer.startSpan('root')
+        rootSpan.addTags({
+          'tag1': generateString(20),
+          'tag2': generateString(20),
+          'tag3': generateString(20)
         })
+
+        const parentSpan = tracer.startSpan('parent', { childOf: rootSpan })
+        parentSpan.addTags({
+          'tag1': generateString(20),
+          'tag2': generateString(20),
+          'tag3': generateString(20)
+        })
+
+        const childSpan = tracer.startSpan('child', { childOf: parentSpan })
+        childSpan.addTags({
+          'tag1': generateString(20),
+          'tag2': generateString(20),
+          'tag3': generateString(20)
+        })
+
+        childSpan.finish()
+        parentSpan.finish()
+        rootSpan.finish()
       }
     },
     fn () {

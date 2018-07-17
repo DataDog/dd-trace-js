@@ -1,11 +1,13 @@
 'use strict'
 
 const BaseTracer = require('opentracing').Tracer
+const memoize = require('lodash.memoize')
 const NoopTracer = require('./noop')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
+const log = require('./log')
 
 const noop = new NoopTracer()
 
@@ -20,6 +22,11 @@ class Tracer extends BaseTracer {
     super()
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
+    this._deprecate = memoize(method => log.debug([
+      `tracer.${method}() is deprecated.`,
+      'Please use tracer.startSpan() and tracer.scopeManager() instead.',
+      'See: https://datadog.github.io/dd-trace-js/#manual-instrumentation.'
+    ]))
   }
 
   /**
@@ -40,14 +47,18 @@ class Tracer extends BaseTracer {
    */
   init (options) {
     if (this._tracer === noop) {
-      platform.load()
+      try {
+        platform.load()
 
-      const config = new Config(options)
+        const config = new Config(options)
 
-      platform.configure(config)
+        platform.configure(config)
 
-      this._tracer = new DatadogTracer(config)
-      this._instrumenter.patch(config)
+        this._tracer = new DatadogTracer(config)
+        this._instrumenter.patch(config)
+      } catch (e) {
+        log.error(e)
+      }
     }
 
     return this
@@ -66,24 +77,9 @@ class Tracer extends BaseTracer {
     return this
   }
 
-  /**
-   * Initiate a trace and creates a new span.
-   *
-   * @param {string} name The operation name to be used for this span.
-   * @param {Object} [options] Configuration options. These will take precedence over environment variables.
-   * @param {string} [options.service] The service name to be used for this span.
-   * The service name from the tracer will be used if this is not provided.
-   * @param {string} [options.resource] The resource name to be used for this span.
-   * The operation name will be used if this is not provided.
-   * @param {string} [options.type] The span type to be used for this span.
-   * @param {?external:"opentracing.Span"|external:"opentracing.SpanContext"} [options.childOf]
-   * The parent span or span context for the new span. Generally this is not needed as it will be
-   * fetched from the current context.
-   * @param {string} [options.tags={}] Global tags that should be assigned to every span.
-   * @param {traceCallback} [callback] Optional callback. A promise will be returned instead if not set.
-   * @returns {Promise<external:"opentracing.Span">|undefined}
-   */
   trace (operationName, options, callback) {
+    this._deprecate('trace')
+
     if (callback) {
       return this._tracer.trace(operationName, options, callback)
     } else if (options instanceof Function) {
@@ -112,31 +108,26 @@ class Tracer extends BaseTracer {
   }
 
   /**
-   * Get the span from the current context.
+   * Get the scope manager to manager context propagation for the tracer.
    *
-   * @returns {?external:"opentracing.Span"} The current span or null if outside a trace context.
+   * @returns {ScopeManager} The scope manager.
    */
+  scopeManager () {
+    return this._tracer.scopeManager.apply(this._tracer, arguments)
+  }
+
   currentSpan () {
+    this._deprecate('currentSpan')
     return this._tracer.currentSpan.apply(this._tracer, arguments)
   }
 
-  /**
-   * Bind a function to the current trace context.
-   *
-   * @param {Function} callback The function to bind.
-   * @returns {Function} The callback wrapped up in a context closure.
-   */
-  bind () {
-    return this._tracer.bind.apply(this._tracer, arguments)
+  bind (callback) {
+    this._deprecate('bind')
+    return callback
   }
 
-  /**
-   * Bind an EventEmitter to the current trace context.
-   *
-   * @param {Function} callback The function to bind.
-   */
   bindEmitter () {
-    this._tracer.bindEmitter.apply(this._tracer, arguments)
+    this._deprecate('bindEmitter')
   }
 }
 

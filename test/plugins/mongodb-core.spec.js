@@ -9,14 +9,14 @@ describe('Plugin', () => {
   let mongo
   let server
   let platform
-  let context
+  let tracer
   let collection
 
   describe('mongodb-core', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/mongodb-core')
       platform = require('../../src/platform')
-      context = platform.context()
+      tracer = require('../..')
 
       collection = platform.id().toString()
     })
@@ -121,21 +121,9 @@ describe('Plugin', () => {
           }, () => {})
         })
 
-        it('should propagate context', done => {
-          context.run(() => {
-            context.set('foo', 'bar')
-            server.insert(`test.${collection}`, [{ a: 1 }], {}, callback)
-          })
-
-          function callback () {
-            expect(context.get('foo')).to.equal('bar')
-            done()
-          }
-        })
-
         it('should run the callback in the parent context', done => {
           server.insert(`test.${collection}`, [{ a: 1 }], {}, () => {
-            expect(context.get('current')).to.be.undefined
+            expect(tracer.scopeManager().active()).to.be.null
             done()
           })
         })
@@ -236,23 +224,6 @@ describe('Plugin', () => {
           cursor.next()
         })
 
-        it('should propagate context', done => {
-          const cursor = server.cursor(`test.${collection}`, {
-            find: `test.${collection}`,
-            query: { a: 1 }
-          })
-
-          context.run(() => {
-            context.set('foo', 'bar')
-            cursor.next(callback)
-          })
-
-          function callback () {
-            expect(context.get('foo')).to.equal('bar')
-            done()
-          }
-        })
-
         it('should run the callback in the parent context', done => {
           const cursor = server.cursor(`test.${collection}`, {
             find: `test.${collection}`,
@@ -260,7 +231,7 @@ describe('Plugin', () => {
           })
 
           cursor.next(() => {
-            expect(context.get('current')).to.be.undefined
+            expect(tracer.scopeManager().active()).to.be.null
             done()
           })
         })

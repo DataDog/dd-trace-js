@@ -34,14 +34,6 @@ const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
 
 suite
-  .add('DatadogTracer#trace', {
-    onStart () {
-      tracer = new DatadogTracer(config)
-    },
-    fn () {
-      tracer.trace('bench', () => {})
-    }
-  })
   .add('DatadogTracer#startSpan', {
     onStart () {
       tracer = new DatadogTracer(config)

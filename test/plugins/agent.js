@@ -49,6 +49,7 @@ module.exports = {
 
         server.on('close', () => {
           tracer._instrumenter.unpatch()
+          tracer.scopeManager()._disable()
           tracer = null
         })
 
@@ -98,7 +99,8 @@ module.exports = {
   },
 
   currentSpan () {
-    return tracer.currentSpan()
+    const scope = tracer.scopeManager().active()
+    return scope ? scope.span() : null
   },
 
   close () {
