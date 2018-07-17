@@ -25,7 +25,7 @@ class DatadogTracer extends Tracer {
     this._tags = config.tags
     this._recorder = new Recorder(config.url, config.flushInterval, config.bufferSize)
     this._recorder.init()
-    this._sampler = new Sampler(1)
+    this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
       [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(),
       [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(),

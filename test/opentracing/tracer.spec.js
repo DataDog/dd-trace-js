@@ -10,6 +10,8 @@ describe('Tracer', () => {
   let span
   let Recorder
   let recorder
+  let Sampler
+  let sampler
   let SpanContext
   let spanContext
   let fields
@@ -35,6 +37,11 @@ describe('Tracer', () => {
     }
     Recorder = sinon.stub().returns(recorder)
 
+    sampler = {
+      isSampled: sinon.stub().returns(true)
+    }
+    Sampler = sinon.stub().returns(sampler)
+
     spanContext = {}
     carrier = {}
 
@@ -51,6 +58,7 @@ describe('Tracer', () => {
       url: 'http://test:7777',
       flushInterval: 2000,
       bufferSize: 1000,
+      sampleRate: 0.5,
       logger: 'logger',
       tags: {},
       debug: false
@@ -65,6 +73,7 @@ describe('Tracer', () => {
       './span': Span,
       './span_context': SpanContext,
       '../recorder': Recorder,
+      '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
@@ -79,6 +88,12 @@ describe('Tracer', () => {
     expect(Recorder).to.have.been.calledWith(config.url, config.flushInterval, config.bufferSize)
     expect(recorder.init).to.have.been.called
     expect(recorder.record).to.have.been.calledWith('span')
+  })
+
+  it('should support sampling', () => {
+    tracer = new Tracer(config)
+
+    expect(Sampler).to.have.been.calledWith(config.sampleRate)
   })
 
   it('should support logging', () => {
