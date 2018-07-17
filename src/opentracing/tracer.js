@@ -34,7 +34,13 @@ class DatadogTracer extends Tracer {
   }
 
   _startSpan (name, fields) {
-    const tags = {}
+    const tags = {
+      'resource.name': name
+    }
+
+    if (this._service) {
+      tags['service.name'] = this._service
+    }
 
     if (this._env) {
       tags.env = this._env

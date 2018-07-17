@@ -21,8 +21,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
-      bind: sinon.stub().returns('callback'),
-      bindEmitter: sinon.stub()
+      scopeManager: sinon.stub().returns('scopeManager')
     }
 
     noop = {
@@ -32,8 +31,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
-      bind: sinon.stub().returns('callback'),
-      bindEmitter: sinon.stub()
+      scopeManager: sinon.stub().returns('scopeManager')
     }
 
     instrumenter = {
@@ -192,20 +190,12 @@ describe('TracerProxy', () => {
       })
     })
 
-    describe('bind', () => {
+    describe('scopeManager', () => {
       it('should call the underlying NoopTracer', () => {
-        const returnValue = proxy.bind('a', 'b', 'c')
+        const returnValue = proxy.scopeManager()
 
-        expect(noop.bind).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('callback')
-      })
-    })
-
-    describe('bindEmitter', () => {
-      it('should call the underlying NoopTracer', () => {
-        proxy.bindEmitter('a', 'b', 'c')
-
-        expect(noop.bindEmitter).to.have.been.calledWith('a', 'b', 'c')
+        expect(noop.scopeManager).to.have.been.called
+        expect(returnValue).to.equal('scopeManager')
       })
     })
   })
@@ -301,20 +291,12 @@ describe('TracerProxy', () => {
       })
     })
 
-    describe('bind', () => {
+    describe('scopeManager', () => {
       it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.bind('a', 'b', 'c')
+        const returnValue = proxy.scopeManager()
 
-        expect(tracer.bind).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('callback')
-      })
-    })
-
-    describe('bindEmitter', () => {
-      it('should call the underlying DatadogTracer', () => {
-        proxy.bindEmitter('a', 'b', 'c')
-
-        expect(tracer.bindEmitter).to.have.been.calledWith('a', 'b', 'c')
+        expect(tracer.scopeManager).to.have.been.called
+        expect(returnValue).to.equal('scopeManager')
       })
     })
   })

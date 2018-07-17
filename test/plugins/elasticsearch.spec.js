@@ -32,23 +32,6 @@ describe('Plugin', () => {
           })
       })
 
-      it('should work without any living connection', done => {
-        agent
-          .use(traces => {
-            expect(traces[0][0].meta).to.not.have.property('out.host')
-            expect(traces[0][0].meta).to.not.have.property('out.port')
-          })
-          .then(done)
-          .catch(done)
-
-        client = new elasticsearch.Client({
-          hosts: [],
-          log: 'error'
-        })
-
-        client.ping(() => {})
-      })
-
       it('should sanitize the resource name', done => {
         agent
           .use(traces => {
@@ -64,8 +47,6 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
-            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-            expect(traces[0][0].meta).to.have.property('out.port', '9200')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
             expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
@@ -128,7 +109,7 @@ describe('Plugin', () => {
 
         it('should run the callback in the parent context', done => {
           client.ping(error => {
-            expect(tracer.currentSpan()).to.be.null
+            expect(tracer.scopeManager().active()).to.be.null
             done(error)
           })
         })
@@ -190,14 +171,14 @@ describe('Plugin', () => {
         it('should run resolved promises in the parent context', () => {
           return client.ping()
             .then(() => {
-              expect(tracer.currentSpan()).to.be.null
+              expect(tracer.scopeManager().active()).to.be.null
             })
         })
 
         it('should run rejected promises in the parent context', done => {
           client.search({ index: 'invalid' })
             .catch(() => {
-              expect(tracer.currentSpan()).to.be.null
+              expect(tracer.scopeManager().active()).to.be.null
               done()
             })
         })

@@ -8,14 +8,14 @@ wrapIt()
 
 describe('Plugin', () => {
   let plugin
-  let context
+  let tracer
   let express
   let appListener
 
   describe('express', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/express')
-      context = require('../../src/platform').context()
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -252,109 +252,24 @@ describe('Plugin', () => {
 
       it('should support context propagation', done => {
         const app = express()
+        const span = tracer.startSpan('test')
+
+        let scope
 
         app.use((req, res, next) => {
-          context.set('foo', 'bar')
+          scope = tracer.scopeManager().activate(span)
           next()
         })
 
         app.get('/user', (req, res) => {
-          expect(context.get('current')).to.not.be.undefined
-          res.status(200).send(context.get('foo'))
+          res.status(200).send()
+          expect(tracer.scopeManager().active()).to.equal(scope)
+          done()
         })
 
         getPort().then(port => {
           appListener = app.listen(port, 'localhost', () => {
             axios.get(`http://localhost:${port}/user`)
-              .then(res => {
-                expect(res.status).to.equal(200)
-                expect(res.data).to.equal('bar')
-                done()
-              })
-              .catch(done)
-          })
-        })
-      })
-
-      it('should bind the response to the current context', done => {
-        const app = express()
-
-        context.run(() => {
-          const send = context.bind(res => res.status(200).send())
-
-          app.get('/user', (req, res) => {
-            send(res)
-          })
-        })
-
-        getPort().then(port => {
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'GET /user')
-            })
-            .then(done)
-            .catch(done)
-
-          appListener = app.listen(port, 'localhost', () => {
-            axios.get(`http://localhost:${port}/user`)
-              .catch(done)
-          })
-        })
-      })
-
-      it('should bind the next callback to the current context', done => {
-        const app = express()
-
-        app.use((req, res, next) => {
-          context.run(() => {
-            context.set('foo', 'bar')
-            next()
-          })
-        })
-
-        app.get('/user', (req, res) => {
-          res.status(200).send(context.get('foo'))
-        })
-
-        getPort().then(port => {
-          appListener = app.listen(port, 'localhost', () => {
-            axios.get(`http://localhost:${port}/user`)
-              .then(res => {
-                expect(res.status).to.equal(200)
-                expect(res.data).to.be.empty
-                done()
-              })
-              .catch(done)
-          })
-        })
-      })
-
-      it('should bind the next callback to the current context on error', done => {
-        const app = express()
-
-        app.use((req, res, next) => {
-          next(new Error('boom'))
-        })
-
-        app.use((e, req, res, next) => {
-          context.run(() => {
-            context.set('foo', 'bar')
-            next()
-          })
-        })
-
-        app.use((req, res, next) => {
-          res.status(200).send(context.get('foo'))
-        })
-
-        getPort().then(port => {
-          appListener = app.listen(port, 'localhost', () => {
-            axios.get(`http://localhost:${port}/user`)
-              .then(res => {
-                expect(res.status).to.equal(200)
-                expect(res.data).to.be.empty
-                done()
-              })
               .catch(done)
           })
         })

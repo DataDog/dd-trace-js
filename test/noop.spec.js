@@ -25,22 +25,4 @@ describe('NoopTracer', () => {
       expect(tracer.currentSpan()).to.be.null
     })
   })
-
-  describe('bind', () => {
-    it('should be a noop', () => {
-      expect(tracer.bind).to.not.throw()
-    })
-
-    it('should return the callback', () => {
-      const callback = () => {}
-
-      expect(tracer.bind(callback)).to.equal(callback)
-    })
-  })
-
-  describe('bindEmitter', () => {
-    it('should be a noop', () => {
-      expect(tracer.bindEmitter).to.not.throw()
-    })
-  })
 })

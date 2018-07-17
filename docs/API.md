@@ -10,56 +10,7 @@ The module exported by this library is an instance of the [Tracer](./Tracer.html
 
 If you aren’t using supported library instrumentation (see [Compatibility](#compatibility)), you may want to manually instrument your code.
 
-This can be done using either the [Trace API](#trace-api) or [OpenTracing](#opentracing-api).
-
-<h3 id="trace-api">Trace API</h3>
-
-The following example initializes a Datadog Tracer and creates a Span called `web.request`:
-
-```javascript
-const tracer = require('dd-trace').init()
-
-tracer
-  .trace('web.request', {
-    service: 'my_service'
-  })
-  .then(span => {
-    span.setTag('my_tag', 'my_value')
-    span.finish()
-  })
-```
-
-An important aspect of the Tracer API is that it will automatically propagate context internally. In other words, there is no need to explicitly pass the parent in a child tracer.
-
-For example:
-
-```javascript
-const tracer = require('dd-trace').init()
-
-tracer
-  .trace('web.request', {
-    service: 'user-service'
-  })
-  .then(span => {
-    getUsers()
-      .then(() => span.finish())
-  })
-
-function getUsers () {
-  // The span created here is automatically a child of the `web.request` span above.
-  return tracer
-    .trace('db.query', {
-      service: 'user-db'
-    })
-    .then(span => {
-      return User.findAll()
-        .then(users => {
-          span.finish()
-          return users
-        })
-    })
-}
-```
+This can be done using the [OpenTracing API](#opentracing-api) and the [Scope Manager](#scope-manager).
 
 <h3 id="opentracing-api">OpenTracing API</h3>
 
@@ -78,8 +29,40 @@ The following tags are available to override Datadog specific options:
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
 * `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
-**NOTE: When using OpenTracing, context propagation is not handled
-automatically.**
+<h3 id="scope-manager">Scope Manager</h3>
+
+In order to provide context propagation, this library includes a scope manager. A scope is basically a wrapper around a span that can cross both synchronous and asynchronous contexts.
+
+For example:
+
+```javascript
+const tracer = require('dd-trace').init({ plugins: false })
+const express = require('express')
+const app = express()
+
+app.use((req, res, next) => {
+  const span = tracer.startSpan('web.request')
+  const scope = tracer.scopeManager().activate(span)
+
+  next()
+})
+
+app.get('/hello', (req, res, next) => {
+  setTimeout(() => {
+    const scope = tracer.scopeManager().active() // the scope activated earlier
+    const span = scope.span() // the span wrapped by the scope
+
+    span.finish()
+    scope.close() // optional as the scope is automatically closed at the end of the current asynchronous context.
+
+    res.status(200).send()
+  }, 100)
+})
+
+app.listen(3000)
+```
+
+See the [API documentation](./ScopeManager.html) for usage.
 
 <h2 id="integrations">Integrations</h2>
 
@@ -122,22 +105,6 @@ Each integration also has its own list of default tags. These tags get automatic
 | Option           | Default                   | Description                            |
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
-
-<h5 id="amqplib-limitations">Known Limitations</h5>
-
-When consuming messages, the current span will be immediately finished. This means that if any asynchronous operation is started in the message handler callback, its duration will be excluded from the span duration.
-
-For example:
-
-```js
-channel.consume('queue', msg => {
-  setTimeout(() => {
-    // The message span will not include the 1 second from this operation.
-  }, 1000)
-}, {}, () => {})
-```
-
-This limitation doesn't apply to other commands. We are working on improving this behavior in a future version.
 
 <h3 id="elasticsearch">elasticsearch</h3>
 

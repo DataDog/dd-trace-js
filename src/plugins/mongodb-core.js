@@ -188,13 +188,12 @@ function createWrapOperation (tracer, config, operationName) {
     return function operationWithTrace (ns, ops, options, callback) {
       const resource = getResource(ns, ops, operationName)
 
-      let span
-
-      tracer.trace('mongodb.query', child => {
-        span = child
-
-        addTags(span, config, resource, ns, this)
+      const parentScope = tracer.scopeManager().active()
+      const span = tracer.startSpan('mongodb.query', {
+        childOf: parentScope && parentScope.span()
       })
+
+      addTags(span, config, resource, ns, this)
 
       if (typeof options === 'function') {
         return operation.call(this, ns, ops, wrapCallback(tracer, span, options))
@@ -210,19 +209,18 @@ function createWrapNext (tracer, config) {
     return function nextWithTrace (cb) {
       const resource = getResource(this.ns, this.cmd)
 
-      let span
-
-      tracer.trace('mongodb.query', child => {
-        span = child
-
-        addTags(span, config, resource, this.ns, this.topology)
-
-        if (this.cursorState) {
-          span.addTags({
-            'mongodb.cursor.index': this.cursorState.cursorIndex
-          })
-        }
+      const parentScope = tracer.scopeManager().active()
+      const span = tracer.startSpan('mongodb.query', {
+        childOf: parentScope && parentScope.span()
       })
+
+      addTags(span, config, resource, this.ns, this.topology)
+
+      if (this.cursorState) {
+        span.addTags({
+          'mongodb.cursor.index': this.cursorState.cursorIndex
+        })
+      }
 
       next.call(this, wrapCallback(tracer, span, cb))
     }
@@ -246,7 +244,7 @@ function addTags (span, config, resource, ns, topology) {
 }
 
 function wrapCallback (tracer, span, done) {
-  return tracer.bind((err, res) => {
+  return (err, res) => {
     if (err) {
       span.addTags({
         'error.type': err.name,
@@ -260,7 +258,7 @@ function wrapCallback (tracer, span, done) {
     if (done) {
       done(err, res)
     }
-  })
+  }
 }
 
 function getResource (ns, cmd, operationName) {

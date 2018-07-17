@@ -7,13 +7,13 @@ wrapIt()
 describe('Plugin', () => {
   let plugin
   let redis
-  let context
+  let tracer
   let client
 
   describe('redis', () => {
     beforeEach(() => {
       plugin = require('../../src/plugins/redis')
-      context = require('../../src/platform').context()
+      tracer = require('../..')
     })
 
     afterEach(() => {
@@ -50,73 +50,29 @@ describe('Plugin', () => {
           .catch(done)
       })
 
-      it('should propagate context to callbacks', done => {
-        client.on('error', done)
-
-        context.run(() => {
-          context.set('foo', 'bar')
-          client.get('foo', callback)
-        })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
-      })
-
       it('should run the callback in the parent context', done => {
         client.on('error', done)
 
         client.get('foo', () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.scopeManager().active()).to.be.null
           done()
         })
-      })
-
-      it('should propagate context to client emitters', done => {
-        client.on('error', done)
-
-        context.run(() => {
-          context.set('foo', 'bar')
-          client.on('ready', callback)
-        })
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
       })
 
       it('should run client emitter listeners in the parent context', done => {
         client.on('error', done)
 
         client.on('ready', () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.scopeManager().active()).to.be.null
           done()
         })
-      })
-
-      it('should propagate context to stream emitters', done => {
-        client.on('error', done)
-
-        context.run(() => {
-          context.set('foo', 'bar')
-          client.stream.on('close', callback)
-        })
-
-        client.stream.destroy()
-
-        function callback () {
-          expect(context.get('foo')).to.equal('bar')
-          done()
-        }
       })
 
       it('should run stream emitter listeners in the parent context', done => {
         client.on('error', done)
 
         client.stream.on('close', () => {
-          expect(context.get('current')).to.be.undefined
+          expect(tracer.scopeManager().active()).to.be.null
           done()
         })
 

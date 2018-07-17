@@ -43,30 +43,22 @@ describe('Plugin', () => {
       })
 
       it('should propagate context to callbacks', done => {
-        tracer.trace('test', span => {
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.currentSpan()).to.equal(span)
-            done()
-          })
+        const span = tracer.startSpan('test')
+        const scope = tracer.scopeManager().activate(span)
+
+        connection.query('SELECT 1 + 1 AS solution', () => {
+          const active = tracer.scopeManager().active()
+          scope.close()
+          expect(active).to.equal(scope)
+          done()
         })
       })
 
       it('should run the callback in the parent context', done => {
         connection.query('SELECT 1 + 1 AS solution', () => {
-          expect(tracer.currentSpan()).to.be.null
+          const active = tracer.scopeManager().active()
+          expect(active).to.be.null
           done()
-        })
-      })
-
-      it('should propagate context to events', done => {
-        let query
-
-        tracer.trace('test', span => {
-          query = connection.query('SELECT 1 + 1 AS solution')
-          query.on('result', () => {
-            expect(tracer.currentSpan()).to.equal(span)
-            done()
-          })
         })
       })
 
@@ -74,7 +66,8 @@ describe('Plugin', () => {
         const query = connection.query('SELECT 1 + 1 AS solution')
 
         query.on('result', () => {
-          expect(tracer.currentSpan()).to.be.null
+          const active = tracer.scopeManager().active()
+          expect(active).to.be.null
           done()
         })
       })
@@ -196,18 +189,10 @@ describe('Plugin', () => {
         pool.query('SELECT 1 + 1 AS solution')
       })
 
-      it('should propagate context', done => {
-        tracer.trace('test', span => {
-          pool.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.currentSpan()).to.equal(span)
-            done()
-          })
-        })
-      })
-
       it('should run the callback in the parent context', done => {
         pool.query('SELECT 1 + 1 AS solution', () => {
-          expect(tracer.currentSpan()).to.be.null
+          const active = tracer.scopeManager().active()
+          expect(active).to.be.null
           done()
         })
       })
