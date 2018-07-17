@@ -25,15 +25,17 @@ function createWrapDispatchMessage (tracer, config) {
     return function dispatchMessageWithTrace (fields, message) {
       const span = tracer.startSpan('amqp.command')
 
-      tracer.scopeManager().activate(span, true)
-
       addTags(this, config, span, 'basic.deliver', fields)
 
-      try {
-        return dispatchMessage.apply(this, arguments)
-      } catch (e) {
-        throw addError(span, e)
-      }
+      setImmediate(() => {
+        tracer.scopeManager().activate(span, true)
+
+        try {
+          dispatchMessage.apply(this, arguments)
+        } catch (e) {
+          throw addError(span, e)
+        }
+      })
     }
   }
 }
