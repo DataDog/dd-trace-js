@@ -6,8 +6,9 @@ function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
     return function queryWithTrace (sql, values, cb) {
       const parentScope = tracer.scopeManager().active()
+      const parent = parentScope && parentScope.span()
       const span = tracer.startSpan('mysql.query', {
-        childOf: parentScope && parentScope.span(),
+        childOf: parent,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': config.service || 'mysql',
@@ -28,7 +29,7 @@ function createWrapQuery (tracer, config) {
       span.setTag('resource.name', sequence.sql)
 
       if (sequence.onResult) {
-        sequence.onResult = wrapCallback(span, sequence.onResult)
+        sequence.onResult = wrapCallback(tracer, span, parent, sequence.onResult)
       } else {
         sequence.on('end', () => {
           span.finish()
@@ -40,7 +41,7 @@ function createWrapQuery (tracer, config) {
   }
 }
 
-function wrapCallback (span, done) {
+function wrapCallback (tracer, span, parent, done) {
   return (err, res) => {
     if (err) {
       span.addTags({
@@ -51,6 +52,10 @@ function wrapCallback (span, done) {
     }
 
     span.finish()
+
+    if (parent) {
+      tracer.scopeManager().activate(parent)
+    }
 
     done(err, res)
   }
