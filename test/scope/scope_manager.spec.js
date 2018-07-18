@@ -31,8 +31,8 @@ describe('ScopeManager', () => {
     scopeManager = new ScopeManager()
   })
 
-  afterEach(() => {
-    scopeManager._disable()
+  it('should be a singleton', () => {
+    expect(new ScopeManager()).to.equal(scopeManager)
   })
 
   it('should enable its hooks', () => {

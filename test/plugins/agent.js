@@ -49,7 +49,6 @@ module.exports = {
 
         server.on('close', () => {
           tracer._instrumenter.unpatch()
-          tracer.scopeManager()._disable()
           tracer = null
         })
 

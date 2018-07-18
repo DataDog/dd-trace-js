@@ -14,6 +14,9 @@ const elasticsearch = require('elasticsearch')
 const amqplib = require('amqplib/callback_api')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
+const ScopeManager = require('../src/scope/scope_manager')
+
+const scopeManager = new ScopeManager()
 
 const retryOptions = {
   retries: 60,
@@ -32,6 +35,10 @@ global.nock = nock
 global.wrapIt = wrapIt
 
 platform.use(node)
+
+after(() => {
+  scopeManager._disable()
+})
 
 waitForServices()
   .then(run)
@@ -185,6 +192,44 @@ function waitForRabbitMQ () {
   })
 }
 
+function withoutScope (fn) {
+  return function () {
+    let active
+
+    while ((active = scopeManager.active())) {
+      active.close()
+    }
+
+    return fn.apply(this, arguments)
+  }
+}
+
 function wrapIt () {
-  // placeholder
+  const it = global.it
+
+  global.it = function (title, fn) {
+    if (!fn) {
+      return it.apply(this, arguments)
+    }
+
+    if (fn.length > 0) {
+      return it.call(this, title, function (done) {
+        arguments[0] = withoutScope(done)
+
+        return fn.apply(this, arguments)
+      })
+    } else {
+      return it.call(this, title, function () {
+        const result = fn.apply(this, arguments)
+
+        if (result && result.then) {
+          return result
+            .then(withoutScope(res => res))
+            .catch(withoutScope(err => Promise.reject(err)))
+        }
+
+        return result
+      })
+    }
+  }
 }

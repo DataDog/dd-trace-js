@@ -29,10 +29,6 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
   })
 
-  afterEach(() => {
-    tracer.scopeManager()._disable()
-  })
-
   describe('trace', () => {
     it('should run the callback with the new span', done => {
       tracer.trace('name', current => {

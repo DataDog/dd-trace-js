@@ -5,7 +5,7 @@ const Scope = require('./scope')
 const Context = require('./context')
 const ContextExecution = require('./context_execution')
 
-const singleton = null
+let singleton = null
 
 /**
  * The Datadog Scope Manager. This is used for context propagation.
@@ -17,6 +17,8 @@ class ScopeManager {
     if (singleton) {
       return singleton
     }
+
+    singleton = this
 
     const id = -1
     const execution = new ContextExecution()
