@@ -6,7 +6,6 @@ class ContextExecution {
     this._children = new Set()
     this._active = null
     this._count = 0
-    this._exited = false
     this._set = []
 
     if (context) {
