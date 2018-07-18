@@ -13,8 +13,9 @@ function patch (pg, tracer, config) {
       const params = this.connectionParameters
 
       const parentScope = tracer.scopeManager().active()
+      const parent = parentScope && parentScope.span()
       const span = tracer.startSpan(OPERATION_NAME, {
-        childOf: parentScope && parentScope.span(),
+        childOf: parent,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': config.service || 'postgres',
@@ -45,6 +46,10 @@ function patch (pg, tracer, config) {
         span.finish()
 
         if (originalCallback) {
+          if (parent) {
+            tracer.scopeManager().activate(parent)
+          }
+
           originalCallback(err, res)
         }
       }
