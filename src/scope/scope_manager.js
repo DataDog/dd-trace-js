@@ -20,13 +20,12 @@ class ScopeManager {
 
     singleton = this
 
-    const id = -1
     const execution = new ContextExecution()
 
     this._active = execution
     this._stack = []
     this._contexts = new Map()
-    this._executions = new Map([[ id, execution ]])
+    this._executions = new Map()
 
     this._hook = asyncHooks.createHook({
       init: this._init.bind(this),
