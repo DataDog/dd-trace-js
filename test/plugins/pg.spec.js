@@ -120,9 +120,16 @@ describe('Plugin', () => {
               application_name: 'test'
             })
 
-            pool.connect(err => done(err))
+            pool.connect((err, c) => {
+              client = c
+              done(err)
+            })
           })
           .catch(done)
+      })
+
+      afterEach(() => {
+        client && client.release()
       })
 
       it('should run the callback in the parent context', done => {
