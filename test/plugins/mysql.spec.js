@@ -48,8 +48,7 @@ describe('Plugin', () => {
 
         connection.query('SELECT 1 + 1 AS solution', () => {
           const active = tracer.scopeManager().active()
-          scope.close()
-          expect(active).to.equal(scope)
+          expect(active.span()).to.equal(scope.span())
           done()
         })
       })
