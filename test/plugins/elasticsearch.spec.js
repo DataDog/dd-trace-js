@@ -83,9 +83,9 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'elasticsearch')
+              expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-              expect(traces[0][0]).to.have.property('type', 'db')
+              expect(traces[0][0]).to.have.property('type', 'elasticsearch')
             })
             .then(done)
             .catch(done)
@@ -142,9 +142,9 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'elasticsearch')
+              expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-              expect(traces[0][0]).to.have.property('type', 'db')
+              expect(traces[0][0]).to.have.property('type', 'elasticsearch')
             })
             .then(done)
             .catch(done)

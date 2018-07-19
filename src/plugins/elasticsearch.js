@@ -11,9 +11,9 @@ function createWrapRequest (tracer, config) {
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           [Tags.DB_TYPE]: 'elasticsearch',
-          'service.name': config.service || 'elasticsearch',
+          'service.name': config.service || `${tracer._service}-elasticsearch`,
           'resource.name': `${params.method} ${quantizePath(params.path)}`,
-          'span.type': 'db',
+          'span.type': 'elasticsearch',
           'elasticsearch.url': params.path,
           'elasticsearch.method': params.method,
           'elasticsearch.params': JSON.stringify(params.query)

@@ -42,7 +42,7 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0]).to.have.property('type', 'web')
+              expect(traces[0][0]).to.have.property('type', 'http')
               expect(traces[0][0]).to.have.property('resource', 'GET /user')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
@@ -74,7 +74,7 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0]).to.have.property('type', 'web')
+              expect(traces[0][0]).to.have.property('type', 'http')
               expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
