@@ -20,7 +20,7 @@ describe('Plugin', () => {
       agent.close()
     })
 
-    describe('without configuration', () => {
+    describe('when using a client', () => {
       beforeEach(done => {
         agent.load(plugin, 'pg')
           .then(() => {
@@ -79,8 +79,12 @@ describe('Plugin', () => {
       })
 
       it('should run the callback in the parent context', done => {
+        const span = {}
+        const scope = tracer.scopeManager().activate(span)
+
         client.query('SELECT $1::text as message', ['Hello World!'], () => {
-          expect(tracer.scopeManager().active()).to.be.null
+          const active = tracer.scopeManager().active()
+          expect(active.span()).to.equal(scope.span())
           done()
         })
 
@@ -96,6 +100,49 @@ describe('Plugin', () => {
 
         client.query('SELECT $1::text as message', ['Hello World!'])
         client.end((err) => {
+          if (err) throw err
+        })
+      })
+    })
+
+    describe('when using a pool', () => {
+      let pool
+
+      beforeEach(done => {
+        agent.load(plugin, 'pg')
+          .then(() => {
+            pg = require('pg')
+
+            pool = new pg.Pool({
+              user: 'postgres',
+              password: 'postgres',
+              database: 'postgres',
+              application_name: 'test'
+            })
+
+            pool.connect((err, c) => {
+              client = c
+              done(err)
+            })
+          })
+          .catch(done)
+      })
+
+      afterEach(() => {
+        client && client.release()
+      })
+
+      it('should run the callback in the parent context', done => {
+        const span = {}
+        const scope = tracer.scopeManager().activate(span)
+
+        pool.query('SELECT $1::text as message', ['Hello World!'], () => {
+          const active = tracer.scopeManager().active()
+          expect(active.span()).to.equal(scope.span())
+          done()
+        })
+
+        pool.end((err) => {
           if (err) throw err
         })
       })
