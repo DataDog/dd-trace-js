@@ -41,7 +41,7 @@ function createWrapMethod (tracer, config) {
       }
 
       span.setTag('service.name', config.service || tracer._service)
-      span.setTag('span.type', 'web')
+      span.setTag('span.type', 'http')
       span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
 
       if (!validateStatus(res.statusCode)) {

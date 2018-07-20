@@ -18,7 +18,7 @@ function patch (pg, tracer, config) {
         childOf: parent,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          'service.name': config.service || 'postgres',
+          'service.name': config.service || `${tracer._service}-postgres`,
           'resource.name': statement,
           'span.type': 'sql',
           'db.type': 'postgres'

@@ -21,21 +21,22 @@ function patch (http, tracer, config) {
 
       let isFinish = false
 
+      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
+      options.headers = options.headers || {}
+
       const parentScope = tracer.scopeManager().active()
+      const parent = parentScope && parentScope.span()
       const span = tracer.startSpan('http.request', {
-        childOf: parentScope && parentScope.span(),
+        childOf: parent,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          'service.name': config.service || 'http-client',
+          'service.name': getServiceName(tracer, config, options),
           'resource.name': method,
           'span.type': 'web',
           'http.method': method,
           'http.url': uri
         }
       })
-
-      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
-      options.headers = options.headers || {}
 
       tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
 
@@ -83,13 +84,41 @@ function patch (http, tracer, config) {
   }
 }
 
+function getHost (options) {
+  if (typeof options === 'string') {
+    return url.parse(options).host
+  }
+
+  const hostname = options.hostname || options.host || 'localhost'
+  const port = options.port
+
+  return [hostname, port].filter(val => val).join(':')
+}
+
+function getServiceName (tracer, config, options) {
+  if (config.splitByDomain) {
+    return getHost(options)
+  } else if (config.service) {
+    return config.service
+  }
+
+  return `${tracer._service}-http-client`
+}
+
 function unpatch (http) {
   this.unwrap(http, 'request')
   this.unwrap(http, 'get')
 }
 
-module.exports = {
-  name: 'http',
-  patch,
-  unpatch
-}
+module.exports = [
+  {
+    name: 'http',
+    patch,
+    unpatch
+  },
+  {
+    name: 'https',
+    patch,
+    unpatch
+  }
+]

@@ -25,7 +25,7 @@ function createWrapDispatchMessage (tracer, config) {
     return function dispatchMessageWithTrace (fields, message) {
       const span = tracer.startSpan('amqp.command')
 
-      addTags(this, config, span, 'basic.deliver', fields)
+      addTags(this, tracer, config, span, 'basic.deliver', fields)
 
       setImmediate(() => {
         tracer.scopeManager().activate(span, true)
@@ -46,7 +46,7 @@ function sendWithTrace (send, channel, args, tracer, config, method, fields) {
     childOf: parentScope && parentScope.span()
   })
 
-  addTags(channel, config, span, method, fields)
+  addTags(channel, tracer, config, span, method, fields)
 
   try {
     return send.apply(channel, args)
@@ -82,7 +82,7 @@ function addError (span, error) {
   return error
 }
 
-function addTags (channel, config, span, method, fields) {
+function addTags (channel, tracer, config, span, method, fields) {
   const fieldNames = [
     'queue',
     'exchange',
@@ -93,7 +93,7 @@ function addTags (channel, config, span, method, fields) {
   ]
 
   span.addTags({
-    'service.name': config.service || 'amqp',
+    'service.name': config.service || `${tracer._service}-amqp`,
     'resource.name': getResourceName(method, fields),
     'span.type': 'worker'
   })

@@ -11,7 +11,7 @@ function createWrapQuery (tracer, config) {
         childOf: parent,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          'service.name': config.service || 'mysql',
+          'service.name': config.service || `${tracer._service}-mysql`,
           'span.type': 'sql',
           'db.type': 'mysql',
           'db.user': this.config.user,

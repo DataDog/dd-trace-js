@@ -42,7 +42,7 @@ describe('Plugin', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'http-client')
+              expect(traces[0][0]).to.have.property('service', 'test-http-client')
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('resource', 'GET')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -234,7 +234,7 @@ describe('Plugin', () => {
       })
     })
 
-    describe('with configuration', () => {
+    describe('with service configuration', () => {
       let config
 
       beforeEach(() => {
@@ -260,6 +260,47 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            const req = http.request(`http://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+
+            req.end()
+          })
+        })
+      })
+    })
+
+    describe('with splitByDomain configuration', () => {
+      let config
+
+      beforeEach(() => {
+        config = {
+          splitByDomain: true
+        }
+
+        return agent.load(plugin, 'http', config)
+          .then(() => {
+            http = require('http')
+            express = require('express')
+          })
+      })
+
+      it('should use the remote endpoint as the service name', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
             })
             .then(done)
             .catch(done)
