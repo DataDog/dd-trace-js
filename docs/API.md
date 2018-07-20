@@ -191,6 +191,7 @@ query HelloWorld {
 | Option           | Default          | Description                            |
 |------------------|------------------|----------------------------------------|
 | service          | http-client      | The service name for this integration. |
+| splitByDomain    | false            | Use the remote endpoint host as the service name instead of the default. |
 
 <h3 id="mongodb-core">mongodb-core</h3>
 
