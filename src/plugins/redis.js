@@ -11,9 +11,9 @@ function createWrapInternalSendCommand (tracer, config) {
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           [Tags.DB_TYPE]: 'redis',
-          'service.name': config.service || 'redis',
+          'service.name': config.service || `${tracer._service}-redis`,
           'resource.name': options.command,
-          'span.type': 'db',
+          'span.type': 'redis',
           'db.name': this.selected_db || '0'
         }
       })

@@ -10,7 +10,7 @@ class Config {
 
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
-    const service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), platform.service())
+    const service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), platform.service(), 'node')
     const env = coalesce(options.env, platform.env('DD_ENV'))
     const protocol = 'http'
     const hostname = coalesce(options.hostname, platform.env('DD_TRACE_AGENT_HOSTNAME'), 'localhost')

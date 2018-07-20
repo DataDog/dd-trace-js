@@ -74,7 +74,7 @@ describe('Plugin', () => {
       it('should do automatic instrumentation', done => {
         agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'mysql')
+            expect(traces[0][0]).to.have.property('service', 'test-mysql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('db.name', 'db')
@@ -181,7 +181,7 @@ describe('Plugin', () => {
       it('should do automatic instrumentation', done => {
         agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'mysql')
+            expect(traces[0][0]).to.have.property('service', 'test-mysql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('db.user', 'user')

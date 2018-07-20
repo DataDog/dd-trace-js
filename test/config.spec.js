@@ -9,7 +9,6 @@ describe('Config', () => {
       env: sinon.stub(),
       service: sinon.stub()
     }
-    platform.service.returns('test')
 
     Config = proxyquire('../src/config', {
       './platform': platform
@@ -19,7 +18,7 @@ describe('Config', () => {
   it('should initialize with the correct defaults', () => {
     const config = new Config()
 
-    expect(config).to.have.property('service', 'test')
+    expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
     expect(config).to.have.nested.property('url.protocol', 'http:')
@@ -31,6 +30,14 @@ describe('Config', () => {
     expect(config).to.have.deep.property('tags', {})
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
+  })
+
+  it('should initialize from the platform', () => {
+    platform.service.returns('test')
+
+    const config = new Config()
+
+    expect(config).to.have.property('service', 'test')
   })
 
   it('should initialize from environment variables', () => {

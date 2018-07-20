@@ -54,9 +54,9 @@ describe('Plugin', () => {
               const resource = `insert test.${collection}`
 
               expect(span).to.have.property('name', 'mongodb.query')
-              expect(span).to.have.property('service', 'mongodb')
+              expect(span).to.have.property('service', 'test-mongodb')
               expect(span).to.have.property('resource', resource)
-              expect(span).to.have.property('type', 'db')
+              expect(span).to.have.property('type', 'mongodb')
               expect(span.meta).to.have.property('db.name', `test.${collection}`)
               expect(span.meta).to.have.property('out.host', 'localhost')
             })
@@ -154,8 +154,8 @@ describe('Plugin', () => {
               const span = traces[0][0]
 
               expect(span).to.have.property('name', 'mongodb.query')
-              expect(span).to.have.property('service', 'mongodb')
-              expect(span).to.have.property('type', 'db')
+              expect(span).to.have.property('service', 'test-mongodb')
+              expect(span).to.have.property('type', 'mongodb')
               expect(span.meta).to.have.property('db.name', `test.${collection}`)
               expect(span.meta).to.have.property('out.host', 'localhost')
               expect(span.meta).to.have.property('out.port', '27017')

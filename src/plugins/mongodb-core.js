@@ -193,7 +193,7 @@ function createWrapOperation (tracer, config, operationName) {
         childOf: parentScope && parentScope.span()
       })
 
-      addTags(span, config, resource, ns, this)
+      addTags(span, tracer, config, resource, ns, this)
 
       if (typeof options === 'function') {
         return operation.call(this, ns, ops, wrapCallback(tracer, span, options))
@@ -214,7 +214,7 @@ function createWrapNext (tracer, config) {
         childOf: parentScope && parentScope.span()
       })
 
-      addTags(span, config, resource, this.ns, this.topology)
+      addTags(span, tracer, config, resource, this.ns, this.topology)
 
       if (this.cursorState) {
         span.addTags({
@@ -227,11 +227,11 @@ function createWrapNext (tracer, config) {
   }
 }
 
-function addTags (span, config, resource, ns, topology) {
+function addTags (span, tracer, config, resource, ns, topology) {
   span.addTags({
-    'service.name': config.service || 'mongodb',
+    'service.name': config.service || `${tracer._service}-mongodb`,
     'resource.name': resource,
-    'span.type': 'db',
+    'span.type': 'mongodb',
     'db.name': ns
   })
 
