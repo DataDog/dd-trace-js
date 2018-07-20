@@ -18,7 +18,7 @@ function load () {
 
   const callerPath = parentModule()
   const parentPath = parentModule(callerPath)
-  const cwd = parentPath || callerPath;
+  const cwd = path.dirname(parentPath || callerPath)
   const pkg = readPkgUp.sync({ cwd }).pkg || {}
 
   this._service = pkg.name
