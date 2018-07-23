@@ -32,7 +32,7 @@ function createWrapMethod (tracer, config) {
 
     res.end = function () {
       const returned = originalEnd.apply(this, arguments)
-      const paths = scope.span().context()._express_paths
+      const paths = req._datadog_paths
 
       if (paths) {
         span.setTag('resource.name', `${req.method} ${paths.join('')}`)
@@ -77,13 +77,12 @@ function createWrapProcessParams (tracer, config) {
       const scope = tracer.scopeManager().active()
 
       if (matchers && scope) {
-        const context = scope.span().context()
-        const paths = context._express_paths || []
+        const paths = req._datadog_paths || []
 
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            context._express_paths = paths.concat(matchers[i].path)
+            req._datadog_paths = paths.concat(matchers[i].path)
 
             break
           }
@@ -130,7 +129,7 @@ function wrapNext (tracer, layer, req, next) {
       const scope = tracer.scopeManager().active()
 
       if (scope) {
-        const paths = scope.span().context()._express_paths
+        const paths = req._datadog_paths
 
         if (paths && layer.path && !layer.regexp.fast_star) {
           paths.pop()

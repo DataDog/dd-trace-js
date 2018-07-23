@@ -229,6 +229,45 @@ describe('Plugin', () => {
         })
       })
 
+      it('should not lose the current path when changing scope', done => {
+        const app = express()
+        const router = express.Router()
+
+        router.use((req, res, next) => {
+          const scope = tracer.scopeManager().active()
+          const child = tracer.startSpan('child', {
+            childOf: scope.span()
+          })
+
+          tracer.scopeManager().activate(child)
+
+          child.finish()
+
+          next()
+        })
+
+        router.get('/user/:id', (req, res) => {
+          res.status(200).send()
+        })
+
+        app.use('/app', router)
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][1]).to.have.property('resource', 'GET /app/user/:id')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/app/user/123`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should fallback to the the verb if a path pattern could not be found', done => {
         const app = express()
 
