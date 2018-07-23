@@ -3,9 +3,9 @@
 [![npm](https://img.shields.io/npm/v/dd-trace.svg)](https://www.npmjs.com/package/dd-trace)
 [![CircleCI](https://img.shields.io/circleci/project/github/DataDog/dd-trace-js.svg)](https://circleci.com/gh/DataDog/dd-trace-js/tree/master)
 
-**JavaScript APM Tracer (beta)**
+**JavaScript APM Tracer**
 
-This project is in open beta and under active development. Please contact [Datadog support](https://docs.datadoghq.com/help) with any questions.
+Datadog APM tracing client for JavaScript.
 
 ## Getting Started
 
