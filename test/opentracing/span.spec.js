@@ -150,5 +150,15 @@ describe('Span', () => {
 
       expect(tracer._record).to.not.have.been.called
     })
+
+    it('should not record the span if already finished', () => {
+      tracer._record.returns(Promise.resolve())
+
+      span = new Span(tracer, { operationName: 'operation' })
+      span.finish()
+      span.finish()
+
+      expect(tracer._record).to.have.been.calledOnce
+    })
   })
 })

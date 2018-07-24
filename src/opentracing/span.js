@@ -80,6 +80,10 @@ class DatadogSpan extends Span {
   }
 
   _finish (finishTime) {
+    if (this._duration !== undefined) {
+      return
+    }
+
     finishTime = parseFloat(finishTime) || platform.now()
 
     this._duration = finishTime - this._startTime
