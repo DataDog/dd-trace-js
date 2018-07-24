@@ -6,7 +6,6 @@ module.exports = {
   'express': require('./express'),
   'graphql': require('./graphql'),
   'http': require('./http'),
-  'https': require('./https'),
   'mongodb-core': require('./mongodb-core'),
   'mysql': require('./mysql'),
   'mysql2': require('./mysql2'),
