@@ -99,10 +99,9 @@ class ScopeManager {
   }
 
   _after (asyncId) {
-    const context = this._contexts.get(asyncId)
     const execution = this._executions.get(asyncId)
 
-    if (context && execution) {
+    if (execution) {
       execution.exit()
       execution.release()
 
