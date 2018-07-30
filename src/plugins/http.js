@@ -38,7 +38,9 @@ function patch (http, tracer, config) {
         }
       })
 
-      tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
+      if (!hasAmazonSignature(options)) {
+        tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
+      }
 
       const req = request.call(this, options, res => {
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
@@ -103,6 +105,26 @@ function getServiceName (tracer, config, options) {
   }
 
   return `${tracer._service}-http-client`
+}
+
+function hasAmazonSignature (options) {
+  if (!options) {
+    return false
+  }
+
+  if (options.headers) {
+    const headers = Object.keys(options.headers)
+      .reduce((prev, next) => Object.assign(prev, {
+        [next.toLowerCase()]: options.headers[next]
+      }), {})
+
+    if (headers['x-amz-signature'] ||
+      (headers['authorization'] && headers['authorization'].startsWith('AWS4-HMAC-SHA256'))) {
+      return true
+    }
+  }
+
+  return options.path && options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
 }
 
 function unpatch (http) {
