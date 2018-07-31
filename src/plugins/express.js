@@ -31,6 +31,8 @@ function createWrapMethod (tracer, config) {
     const originalEnd = res.end
 
     res.end = function () {
+      req._datadog_stack.forEach(span => span.finish())
+
       const returned = originalEnd.apply(this, arguments)
       const paths = req._datadog_paths
 
@@ -55,6 +57,7 @@ function createWrapMethod (tracer, config) {
     }
 
     req._datadog_trace_patched = true
+    req._datadog_stack = []
 
     next()
   }
@@ -94,7 +97,7 @@ function createWrapProcessParams (tracer, config) {
   }
 }
 
-function createWrapRouterMethod (tracer) {
+function createWrapRouterMethod (tracer, config) {
   return function wrapRouterMethod (original) {
     return function methodWithTrace (fn) {
       const offset = this.stack.length
@@ -106,11 +109,11 @@ function createWrapRouterMethod (tracer) {
         const handleError = layer.handle_error
 
         layer.handle_request = (req, res, next) => {
-          return handleRequest.call(layer, req, res, wrapNext(tracer, layer, req, next))
+          return handleRequest.call(layer, req, res, wrapNext(tracer, config, layer, req, next))
         }
 
         layer.handle_error = (error, req, res, next) => {
-          return handleError.call(layer, error, req, res, wrapNext(tracer, layer, req, next))
+          return handleError.call(layer, error, req, res, wrapNext(tracer, config, layer, req, next))
         }
 
         layer._datadog_matchers = matchers
@@ -121,12 +124,35 @@ function createWrapRouterMethod (tracer) {
   }
 }
 
-function wrapNext (tracer, layer, req, next) {
+function createMiddlewareSpan (tracer, config, layer) {
+  const parentScope = tracer.scopeManager().active()
+  const childOf = parentScope && parentScope.span()
+
+  const span = tracer.startSpan('express.middleware', {
+    childOf
+  })
+
+  const name = layer.handle.name || '<anonymous>'
+
+  span.setTag('resource.name', name)
+  span.setTag('service.name', config.service || tracer._service)
+
+  return span
+}
+
+function wrapNext (tracer, config, layer, req, next) {
   if (req._datadog_trace_patched) {
     const originalNext = next
+    const span = createMiddlewareSpan(tracer, config, layer)
+    const scope = tracer.scopeManager().activate(span)
+
+    req._datadog_stack.unshift(span)
 
     return function () {
-      const scope = tracer.scopeManager().active()
+      req._datadog_stack.shift()
+
+      span.finish()
+      scope.close()
 
       if (scope) {
         const paths = req._datadog_paths
