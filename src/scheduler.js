@@ -1,6 +1,6 @@
 'use strict'
 
-// TODO: flush on process exit
+const platform = require('./platform')
 
 class Scheduler {
   constructor (callback, interval) {
@@ -12,10 +12,14 @@ class Scheduler {
   start () {
     this._timer = setInterval(this._callback, this._interval)
     this._timer.unref && this._timer.unref()
+
+    platform.on('exit', this._callback)
   }
 
   stop () {
     clearInterval(this._timer)
+
+    platform.off('exit', this._callback)
   }
 
   reset () {
