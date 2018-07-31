@@ -33,6 +33,7 @@ class Tracer extends BaseTracer {
    * Initializes the tracer. This should be called before importing other libraries.
    *
    * @param {Object} [options] Configuration options.
+   * @param {boolean} [options.enabled=true] Whether to enable the tracer.
    * @param {boolean} [options.debug=false] Enable debug logging in the tracer.
    * @param {string} [options.service] The service name to be used for this program.
    * @param {string} [options.hostname=localhost] The address of the trace agent that the tracer will submit to.
@@ -48,14 +49,14 @@ class Tracer extends BaseTracer {
   init (options) {
     if (this._tracer === noop) {
       try {
-        platform.load()
-
         const config = new Config(options)
 
-        platform.configure(config)
+        if (config.enabled) {
+          platform.configure(config)
 
-        this._tracer = new DatadogTracer(config)
-        this._instrumenter.patch(config)
+          this._tracer = new DatadogTracer(config)
+          this._instrumenter.patch(config)
+        }
       } catch (e) {
         log.error(e)
       }

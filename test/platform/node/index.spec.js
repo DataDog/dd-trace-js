@@ -119,9 +119,9 @@ describe('Platform', () => {
       })
     })
 
-    describe('load', () => {
+    describe('service', () => {
+      let current
       let service
-      let load
       let readPkgUp
 
       beforeEach(() => {
@@ -130,35 +130,35 @@ describe('Platform', () => {
         }
 
         platform = require('../../../src/platform/node')
-        load = proxyquire('../src/platform/node/load', {
+        service = proxyquire('../src/platform/node/service', {
           'read-pkg-up': readPkgUp
         })
 
-        service = platform._service
+        current = platform._service
       })
 
       afterEach(() => {
-        platform._service = service
+        platform._service = current
       })
 
       it('should load the service name from the user module', () => {
-        require('./load/direct')
+        const name = require('./load/direct')
 
-        expect(platform._service).to.equal('foo')
+        expect(name).to.equal('foo')
       })
 
       it('should not load the service name if the module information is unavailable', () => {
         readPkgUp.sync.returns({ pkg: undefined })
 
-        load.call(platform)
+        service.call(platform)
 
         expect(platform._service).to.be.undefined
       })
 
       it('should work even in subfolders', () => {
-        require('./load/indirect')
+        const name = require('./load/indirect')
 
-        expect(platform._service).to.have.equal('foo')
+        expect(name).to.equal('foo')
       })
     })
 
