@@ -47,9 +47,9 @@ function patch (http, tracer, config) {
 
         res.on('end', () => span.finish())
 
-        // abort when no other listener exists to consume the data
+        // empty the data stream when no other listener exists to consume it
         if (req.listenerCount('response') === 1) {
-          req.abort()
+          res.resume()
         }
       })
 
