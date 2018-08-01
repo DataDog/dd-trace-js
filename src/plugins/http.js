@@ -19,8 +19,6 @@ function patch (http, tracer, config) {
         return request.apply(this, [options, callback])
       }
 
-      let isFinish = false
-
       options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
       options.headers = options.headers || {}
 
@@ -42,14 +40,17 @@ function patch (http, tracer, config) {
         tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
       }
 
-      const req = request.call(this, options, res => {
-        span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
-        res.on('end', finish)
-        callback && callback(res)
-      })
+      const req = request.call(this, options, callback)
 
-      req.on('socket', socket => {
-        socket.on('close', finish)
+      req.on('response', res => {
+        span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+
+        res.on('end', () => span.finish())
+
+        // abort when no other listener exists to consume the data
+        if (req.listenerCount('response') === 1) {
+          req.abort()
+        }
       })
 
       req.on('error', err => {
@@ -61,13 +62,6 @@ function patch (http, tracer, config) {
 
         span.finish()
       })
-
-      function finish () {
-        if (!isFinish) {
-          isFinish = true
-          span.finish()
-        }
-      }
 
       return req
     }
