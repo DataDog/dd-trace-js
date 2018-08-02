@@ -74,9 +74,8 @@ function createWrapProcessParams (tracer, config) {
   return function wrapProcessParams (processParams) {
     return function processParamsWithTrace (layer, called, req, res, done) {
       const matchers = layer._datadog_matchers
-      const scope = tracer.scopeManager().active()
 
-      if (matchers && scope) {
+      if (matchers) {
         const paths = req._datadog_paths || []
 
         // Try to guess which path actually matched
@@ -126,14 +125,10 @@ function wrapNext (tracer, layer, req, next) {
     const originalNext = next
 
     return function () {
-      const scope = tracer.scopeManager().active()
+      const paths = req._datadog_paths
 
-      if (scope) {
-        const paths = req._datadog_paths
-
-        if (paths && layer.path && !layer.regexp.fast_star) {
-          paths.pop()
-        }
+      if (paths && layer.path && !layer.regexp.fast_star) {
+        paths.pop()
       }
 
       originalNext.apply(null, arguments)
