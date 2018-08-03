@@ -2,7 +2,7 @@ version: 2
 jobs:
   lint:
     docker:
-      - image: node:alpine
+      - image: node
     working_directory: ~/dd-trace-js
     steps:
       - checkout
@@ -15,9 +15,24 @@ jobs:
       - run:
           name: Lint
           command: npm run lint
+  test-memory-leaks:
+    docker:
+      - image: node:8
+    working_directory: ~/dd-trace-js
+    steps:
+      - checkout
+      - run:
+          name: Versions
+          command: npm version
+      - run:
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Test
+          command: npm run leak
   build-node-base: &node-base
     docker:
-      - image: node:alpine
+      - image: node
       - &postgres
         image: postgres:9.5
       - &mysql
@@ -53,7 +68,7 @@ jobs:
   build-node-4:
     <<: *node-base
     docker:
-      - image: node:4-alpine
+      - image: node:4
       - *postgres
       - *mysql
       - *redis
@@ -63,7 +78,7 @@ jobs:
   build-node-6:
     <<: *node-base
     docker:
-      - image: node:6-alpine
+      - image: node:6
       - *postgres
       - *mysql
       - *redis
@@ -73,7 +88,7 @@ jobs:
   build-node-8:
     <<: *node-base
     docker:
-      - image: node:8-alpine
+      - image: node:8
       - *postgres
       - *mysql
       - *redis
@@ -83,7 +98,7 @@ jobs:
   build-node-latest:
     <<: *node-base
     docker:
-      - image: node:alpine
+      - image: node
       - *postgres
       - *mysql
       - *redis
@@ -96,6 +111,7 @@ workflows:
   build:
     jobs:
       - lint
+      - test-memory-leaks
       - build-node-4
       - build-node-6
       - build-node-8
