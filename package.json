@@ -33,9 +33,6 @@
   },
   "dependencies": {
     "async-hook-jl": "^1.7.6",
-    "cls-bluebird": "^2.1.0",
-    "cls-hooked": "^4.2.2",
-    "continuation-local-storage": "^3.2.1",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",
