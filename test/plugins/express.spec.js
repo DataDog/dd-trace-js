@@ -348,6 +348,41 @@ describe('Plugin', () => {
         })
       })
 
+      it('should reactivate the span when the active scope is closed', done => {
+        const app = express()
+
+        let span
+        let scope
+
+        app.use((req, res, next) => {
+          scope = tracer.scopeManager().active()
+          span = scope.span()
+          scope.close()
+          next()
+        })
+
+        app.get('/user', (req, res) => {
+          const scope = tracer.scopeManager().active()
+
+          res.status(200).send()
+
+          try {
+            expect(scope).to.not.be.null
+            expect(scope.span()).to.equal(span)
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should only include paths for routes that matched', done => {
         const app = express()
         const router = express.Router()
