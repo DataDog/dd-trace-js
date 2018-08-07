@@ -27,5 +27,4 @@ class DatadogSpanContext extends SpanContext {
   }
 }
 
-
 module.exports = DatadogSpanContext
