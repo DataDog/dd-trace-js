@@ -470,6 +470,35 @@ describe('Plugin', () => {
           })
         })
       })
+
+      it('should work with the render method', done => {
+        const app = express()
+
+        app.get('/index/:user', (req, res) => {
+          res.locals.datadog = {
+            resource: 'GET UserIndex'
+          }
+
+          res.status(200).send()
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'GET UserIndex')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/index/25`, {
+                validateStatus: status => status === 200
+              })
+              .catch(done)
+          })
+        })
+      })
     })
   })
 })

@@ -30,11 +30,14 @@ function createWrapMethod (tracer, config) {
 
     const originalEnd = res.end
 
+    res.locals.span = span;
     res.end = function () {
       const returned = originalEnd.apply(this, arguments)
       const paths = req._datadog_paths
 
-      if (paths) {
+      if (res.locals.datadog && res.locals.datadog.resource) {
+        span.setTag('resource.name', res.locals.datadog.resource)
+      } else if (paths) {
         span.setTag('resource.name', `${req.method} ${paths.join('')}`)
       } else {
         span.setTag('resource.name', req.method)
