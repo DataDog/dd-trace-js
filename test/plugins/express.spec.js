@@ -471,7 +471,7 @@ describe('Plugin', () => {
         })
       })
 
-      it('should work with the render method', done => {
+      it('should override resource.name with res.locals.datadog.resource', done => {
         const app = express()
 
         app.get('/index/:user', (req, res) => {
