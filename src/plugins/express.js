@@ -30,7 +30,6 @@ function createWrapMethod (tracer, config) {
 
     const originalEnd = res.end
 
-    res.locals.span = span;
     res.end = function () {
       const returned = originalEnd.apply(this, arguments)
       const paths = req._datadog_paths
