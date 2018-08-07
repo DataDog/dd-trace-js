@@ -6,6 +6,7 @@ const DatadogSpanContext = require('../span_context')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
+const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
@@ -13,6 +14,9 @@ class TextMapPropagator {
   inject (spanContext, carrier) {
     carrier[traceKey] = new Int64BE(spanContext.traceId.toBuffer()).toString()
     carrier[spanKey] = new Int64BE(spanContext.spanId.toBuffer()).toString()
+    if (spanContext.samplingPriority) {
+      carrier[samplingKey] = spanContext.samplingPriority.toString()
+    }
 
     spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
@@ -37,6 +41,7 @@ class TextMapPropagator {
     return new DatadogSpanContext({
       traceId: new Uint64BE(carrier[traceKey], 10),
       spanId: new Uint64BE(carrier[spanKey], 10),
+      samplingPriority: carrier[samplingKey] && parseInt(carrier[samplingKey], 10),
       baggageItems
     })
   }

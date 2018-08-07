@@ -56,6 +56,21 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-array']).to.equal('foo,bar')
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
     })
+
+    it('should inject the sampling priority', () => {
+      const carrier = {}
+      const spanContext = new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        samplingPriority: 2,
+        baggageItems
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      textMap['x-datadog-sampling-priority'] = '2'
+      expect(carrier).to.deep.equal(textMap)
+    })
   })
 
   describe('extract', () => {
@@ -66,6 +81,7 @@ describe('TextMapPropagator', () => {
       expect(spanContext).to.deep.equal(new SpanContext({
         traceId: new Uint64BE(0, 123),
         spanId: new Uint64BE(-456),
+        sampled: true,
         baggageItems
       }))
     })
@@ -75,6 +91,48 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.equal(null)
+    })
+
+    it('should extract a span context with a sampling priority of 0', () => {
+      textMap['x-datadog-sampling-priority'] = '0'
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        samplingPriority: 0,
+        sampled: false,
+        baggageItems
+      }))
+    })
+
+    it('should extract a span context with a sampling priority of 1', () => {
+      textMap['x-datadog-sampling-priority'] = '1'
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        samplingPriority: 1,
+        sampled: true,
+        baggageItems
+      }))
+    })
+
+    it('should extract a span context with a sampling priority of 2', () => {
+      textMap['x-datadog-sampling-priority'] = '2'
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        samplingPriority: 2,
+        sampled: true,
+        baggageItems
+      }))
     })
   })
 })

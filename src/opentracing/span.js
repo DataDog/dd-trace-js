@@ -30,6 +30,7 @@ class DatadogSpan extends Span {
       spanContext = new SpanContext({
         traceId: parent.traceId,
         spanId: platform.id(),
+        samplingPriority: parent.samplingPriority,
         parentId: parent.spanId,
         sampled: parent.sampled,
         baggageItems: Object.assign({}, parent.baggageItems),
