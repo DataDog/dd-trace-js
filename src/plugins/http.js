@@ -112,13 +112,20 @@ function hasAmazonSignature (options) {
         [next.toLowerCase()]: options.headers[next]
       }), {})
 
-    if (headers['x-amz-signature'] ||
-      (headers['authorization'] && headers['authorization'].startsWith('AWS4-HMAC-SHA256'))) {
+    if (headers['x-amz-signature']) {
+      return true
+    }
+
+    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
       return true
     }
   }
 
   return options.path && options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
+}
+
+function startsWith (searchString) {
+  return value => String(value).startsWith(searchString)
 }
 
 function unpatch (http) {
