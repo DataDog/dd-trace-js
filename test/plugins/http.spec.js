@@ -205,6 +205,36 @@ describe('Plugin', () => {
         })
       })
 
+      it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
+        const app = express()
+
+        app.get('/', (req, res) => {
+          try {
+            expect(req.get('x-datadog-trace-id')).to.be.undefined
+            expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+            res.status(200).send()
+
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            const req = http.request({
+              port,
+              headers: {
+                Authorization: ['AWS4-HMAC-SHA256 ...']
+              }
+            })
+
+            req.end()
+          })
+        })
+      })
+
       it('should skip injecting if the X-Amz-Signature header is set', done => {
         const app = express()
 
