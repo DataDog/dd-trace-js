@@ -21,6 +21,11 @@ function formatSpan (span) {
   const tracer = span.tracer()
   const spanContext = span.context()
 
+  const metrics = {}
+  if (spanContext.samplingPriority) {
+    metrics['_sampling_priority_v1'] = spanContext.samplingPriority
+  }
+
   return {
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
@@ -30,6 +35,7 @@ function formatSpan (span) {
     service: String(tracer._service),
     error: 0,
     meta: {},
+    metrics,
     start: new Int64BE(Math.round(span._startTime * 1e6)),
     duration: new Int64BE(Math.round(span._duration * 1e6))
   }
