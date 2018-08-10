@@ -8,6 +8,7 @@ const pkg = require(path.join(__dirname, '..', '/package.json'))
 const filePath = path.join(__dirname, '..', '/LICENSE-3rdparty.csv')
 const deps = Object.keys(pkg.dependencies)
   .concat(Object.keys(pkg.devDependencies))
+  .concat(Object.keys(pkg.optionalDependencies))
   .sort()
 
 let index = 0
