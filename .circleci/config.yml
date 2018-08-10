@@ -1,25 +1,42 @@
 version: 2
+docker-base: &docker-base
+  docker:
+    - image: node:8
+    - &postgres
+      image: postgres:9.5
+    - &mysql
+      image: mysql:5.7
+      environment:
+        - MYSQL_ROOT_PASSWORD=rootpass
+        - MYSQL_PASSWORD=userpass
+        - MYSQL_USER=user
+        - MYSQL_DATABASE=db
+    - &redis
+      image: redis:4.0-alpine
+    - &mongo
+      image: mongo:3.6
+    - &elasticsearch
+      image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
+    - &rabbitmq
+      image: rabbitmq:3.6-alpine
+build-node-base: &node-base
+  <<: *docker-base
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - run:
+        name: Versions
+        command: npm version
+    - run:
+        name: Install dependencies
+        command: npm install
+    - run:
+        name: Test
+        command: npm test
+    - run:
+        name: Benchmark
+        command: npm run bench
 jobs:
-  docker-base: &docker-base
-    docker:
-      - image: node:8
-      - &postgres
-        image: postgres:9.5
-      - &mysql
-        image: mysql:5.7
-        environment:
-          - MYSQL_ROOT_PASSWORD=rootpass
-          - MYSQL_PASSWORD=userpass
-          - MYSQL_USER=user
-          - MYSQL_DATABASE=db
-      - &redis
-        image: redis:4.0-alpine
-      - &mongo
-        image: mongo:3.6
-      - &elasticsearch
-        image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
-      - &rabbitmq
-        image: rabbitmq:3.6-alpine
   lint:
     docker:
       - image: node
@@ -49,23 +66,6 @@ jobs:
       - run:
           name: Test
           command: npm run leak
-  build-node-base: &node-base
-    <<: *docker-base
-    working_directory: ~/dd-trace-js
-    steps:
-      - checkout
-      - run:
-          name: Versions
-          command: npm version
-      - run:
-          name: Install dependencies
-          command: npm install
-      - run:
-          name: Test
-          command: npm test
-      - run:
-          name: Benchmark
-          command: npm run bench
   build-node-4:
     <<: *node-base
     docker:
