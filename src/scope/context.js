@@ -23,9 +23,12 @@ class Context {
   }
 
   link (parent) {
-    this.unlink()
+    const oldParent = this._parent
+
     this._parent = parent
     this._parent.attach(this)
+
+    oldParent && oldParent.detach(this)
   }
 
   unlink () {
