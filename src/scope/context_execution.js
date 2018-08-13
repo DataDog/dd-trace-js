@@ -7,6 +7,7 @@ class ContextExecution {
     this._active = null
     this._count = 0
     this._set = []
+    this._executed = false
 
     if (context) {
       context.retain()
@@ -43,12 +44,15 @@ class ContextExecution {
 
     this._set.splice(index, 1)
     this._active = this._set[this._set.length - 1] || null
+
+    if (this._executed) {
+      this._bypass()
+    }
   }
 
   exit () {
-    if (this._context && !this._active) {
-      this._bypass()
-    }
+    this._executed = true
+    this._bypass()
   }
 
   attach (child) {
@@ -76,7 +80,9 @@ class ContextExecution {
   }
 
   _bypass () {
-    this._children.forEach(child => child.link(this._context.parent()))
+    if (this._context && !this._active) {
+      this._children.forEach(child => child.link(this._context.parent()))
+    }
   }
 }
 
