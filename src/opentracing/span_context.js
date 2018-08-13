@@ -12,13 +12,7 @@ class DatadogSpanContext extends SpanContext {
     if (props.samplingPriority !== undefined) {
       this.samplingPriority = props.samplingPriority
     }
-    if (props.sampled !== undefined) {
-      this.sampled = props.sampled
-    } else if (this.samplingPriority !== undefined) {
-      this.sampled = this.samplingPriority > 0
-    } else {
-      this.sampled = true
-    }
+    this.sampled = props.sampled === undefined || props.sampled
     this.baggageItems = props.baggageItems || {}
     this.trace = props.trace || {
       started: [],

@@ -22,7 +22,7 @@ function formatSpan (span) {
   const spanContext = span.context()
 
   const metrics = {}
-  if (spanContext.samplingPriority) {
+  if (spanContext.samplingPriority !== undefined) {
     metrics['_sampling_priority_v1'] = spanContext.samplingPriority
   }
 

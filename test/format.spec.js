@@ -142,11 +142,12 @@ describe('format', () => {
     })
 
     it('should include the sampling priority', () => {
-      spanContext.samplingPriority = 2
-
-      trace = format(span)
-
-      expect(trace.metrics._sampling_priority_v1).to.equal(2)
+      const priorities = [-1, 0, 1, 2]
+      priorities.forEach(p => {
+        spanContext.samplingPriority = p
+        trace = format(span)
+        expect(trace.metrics._sampling_priority_v1).to.equal(p)
+      })
     })
   })
 })

@@ -14,7 +14,7 @@ class TextMapPropagator {
   inject (spanContext, carrier) {
     carrier[traceKey] = new Int64BE(spanContext.traceId.toBuffer()).toString()
     carrier[spanKey] = new Int64BE(spanContext.spanId.toBuffer()).toString()
-    if (spanContext.samplingPriority) {
+    if (spanContext.samplingPriority !== undefined) {
       carrier[samplingKey] = spanContext.samplingPriority.toString()
     }
 
