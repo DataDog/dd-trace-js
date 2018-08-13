@@ -29,8 +29,8 @@ describe('SpanContext', () => {
       traceId: '123',
       spanId: '456',
       parentId: null,
-      baggageItems: {},
       sampled: true,
+      baggageItems: {},
       trace: {
         started: [],
         finished: []
