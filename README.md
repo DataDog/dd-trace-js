@@ -40,6 +40,8 @@ docker-compose configuration:
 $ docker-compose up -d
 ```
 
+#### Unit Tests
+
 To run the unit tests, use:
 
 ```sh
@@ -51,6 +53,16 @@ To run the unit tests continuously in watch mode while developing, use:
 ```sh
 $ npm run tdd
 ```
+
+#### Memory Leaks
+
+To run the memory leak tests, use:
+
+```sh
+$ npm run leak
+```
+
+Please note that memory leak tests only run on Node `>=8`.
 
 ### Linting
 
@@ -73,6 +85,7 @@ After installing the `circleci` CLI, simply run one of the following:
 
 ```sh
 $ circleci build --job lint
+$ circleci build --job test-memory-leaks
 $ circleci build --job build-node-4
 $ circleci build --job build-node-6
 $ circleci build --job build-node-8

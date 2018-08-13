@@ -9,7 +9,8 @@
     "jsdoc:watch": "gulp jsdoc:watch",
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "mocha --watch",
-    "test": "nyc --reporter text --reporter lcov mocha 'test/**/*.spec.js'"
+    "test": "nyc --reporter text --reporter lcov mocha 'test/**/*.spec.js'",
+    "leak": "node --no-warnings ./node_modules/.bin/tape 'test/leak/**/*.js'"
   },
   "repository": {
     "type": "git",
@@ -83,6 +84,10 @@
     "redis": "^2.8.0",
     "retry": "^0.10.1",
     "sinon": "^4.2.1",
-    "sinon-chai": "^2.14.0"
+    "sinon-chai": "^2.14.0",
+    "tape": "^4.9.1"
+  },
+  "optionalDependencies": {
+    "@airbnb/node-memwatch": "^1.0.2"
   }
 }
