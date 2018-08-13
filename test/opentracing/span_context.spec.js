@@ -46,20 +46,22 @@ describe('SpanContext', () => {
   })
 
   it('should recognize sampling priority', () => {
-    const props = {
-      traceId: '123',
-      spanId: '456',
-      parentId: '789',
-      samplingPriority: 0,
-      sampled: false,
-      baggageItems: { foo: 'bar' },
-      trace: {
-        started: ['span1', 'span2'],
-        finished: ['span1']
+    const priorities = [-1, 0, 1, 2];
+    priorities.forEach(p => {
+      const props = {
+        traceId: '123',
+        spanId: '456',
+        parentId: '789',
+        samplingPriority: p,
+        sampled: true,
+        baggageItems: { foo: 'bar' },
+        trace: {
+          started: ['span1', 'span2'],
+          finished: ['span1']
+        }
       }
-    }
-    const spanContext = new SpanContext(props)
-
-    expect(spanContext).to.deep.equal(props)
+      const spanContext = new SpanContext(props)
+      expect(spanContext).to.deep.equal(props)
+    })
   })
 })
