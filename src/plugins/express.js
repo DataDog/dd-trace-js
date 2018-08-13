@@ -26,20 +26,14 @@ function createWrapMethod (tracer, config) {
       }
     })
 
-    const scope = tracer.scopeManager().activate(span)
-
     const originalEnd = res.end
 
     res.end = function () {
       const returned = originalEnd.apply(this, arguments)
-      const paths = req._datadog_paths
+      const path = req._datadog_paths.join('')
+      const resource = [req.method].concat(path).filter(val => val).join(' ')
 
-      if (paths) {
-        span.setTag('resource.name', `${req.method} ${paths.join('')}`)
-      } else {
-        span.setTag('resource.name', req.method)
-      }
-
+      span.setTag('resource.name', resource)
       span.setTag('service.name', config.service || tracer._service)
       span.setTag('span.type', 'http')
       span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
@@ -49,12 +43,15 @@ function createWrapMethod (tracer, config) {
       }
 
       span.finish()
-      scope.close()
 
       return returned
     }
 
-    req._datadog_trace_patched = true
+    Object.defineProperties(req, {
+      _datadog_trace_patched: { value: true },
+      _datadog_span: { value: span },
+      _datadog_paths: { value: [] }
+    })
 
     next()
   }
@@ -76,12 +73,10 @@ function createWrapProcessParams (tracer, config) {
       const matchers = layer._datadog_matchers
 
       if (matchers) {
-        const paths = req._datadog_paths || []
-
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            req._datadog_paths = paths.concat(matchers[i].path)
+            req._datadog_paths.push(matchers[i].path)
 
             break
           }
@@ -122,19 +117,15 @@ function createWrapRouterMethod (tracer) {
 
 function wrapNext (tracer, layer, req, next) {
   if (req._datadog_trace_patched) {
-    const scope = tracer.scopeManager().active()
+    const scope = tracer.scopeManager().activate(req._datadog_span)
     const originalNext = next
 
     return function () {
-      const paths = req._datadog_paths
-
-      if (paths && layer.path && !layer.regexp.fast_star) {
-        paths.pop()
+      if (layer.path && !layer.regexp.fast_star) {
+        req._datadog_paths.pop()
       }
 
-      if (!tracer.scopeManager().active() && scope) {
-        tracer.scopeManager().activate(scope.span())
-      }
+      scope.close()
 
       originalNext.apply(null, arguments)
     }
