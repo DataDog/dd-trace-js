@@ -323,31 +323,6 @@ describe('Plugin', () => {
         })
       })
 
-      it('should support context propagation', done => {
-        const app = express()
-        const span = tracer.startSpan('test')
-
-        let scope
-
-        app.use((req, res, next) => {
-          scope = tracer.scopeManager().activate(span)
-          next()
-        })
-
-        app.get('/user', (req, res) => {
-          res.status(200).send()
-          expect(tracer.scopeManager().active()).to.equal(scope)
-          done()
-        })
-
-        getPort().then(port => {
-          appListener = app.listen(port, 'localhost', () => {
-            axios.get(`http://localhost:${port}/user`)
-              .catch(done)
-          })
-        })
-      })
-
       it('should reactivate the span when the active scope is closed', done => {
         const app = express()
 
