@@ -30,7 +30,7 @@ function createWrapMethod (tracer, config) {
 
     res.end = function () {
       const returned = originalEnd.apply(this, arguments)
-      const path = req._datadog_paths.join('')
+      const path = req._datadog.paths.join('')
       const resource = [req.method].concat(path).filter(val => val).join(' ')
 
       span.setTag('resource.name', resource)
@@ -44,13 +44,17 @@ function createWrapMethod (tracer, config) {
 
       span.finish()
 
+      req._datadog.scope && req._datadog.scope.close()
+
       return returned
     }
 
-    Object.defineProperties(req, {
-      _datadog_trace_patched: { value: true },
-      _datadog_span: { value: span },
-      _datadog_paths: { value: [] }
+    Object.defineProperty(req, '_datadog', {
+      value: {
+        span,
+        paths: [],
+        scope: null
+      }
     })
 
     next()
@@ -76,7 +80,7 @@ function createWrapProcessParams (tracer, config) {
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            req._datadog_paths.push(matchers[i].path)
+            req._datadog.paths.push(matchers[i].path)
 
             break
           }
@@ -116,22 +120,24 @@ function createWrapRouterMethod (tracer) {
 }
 
 function wrapNext (tracer, layer, req, next) {
-  if (req._datadog_trace_patched) {
-    const scope = tracer.scopeManager().activate(req._datadog_span)
-    const originalNext = next
-
-    return function () {
-      if (layer.path && !layer.regexp.fast_star) {
-        req._datadog_paths.pop()
-      }
-
-      scope.close()
-
-      originalNext.apply(null, arguments)
-    }
+  if (!req._datadog) {
+    return next
   }
 
-  return next
+  const originalNext = next
+
+  req._datadog.scope && req._datadog.scope.close()
+  req._datadog.scope = tracer.scopeManager().activate(req._datadog.span)
+
+  return function () {
+    if (layer.path && !layer.regexp.fast_star) {
+      req._datadog.paths.pop()
+    }
+
+    process.nextTick(() => {
+      originalNext.apply(null, arguments)
+    })
+  }
 }
 
 function extractMatchers (fn) {
