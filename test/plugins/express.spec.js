@@ -302,6 +302,40 @@ describe('Plugin', () => {
         })
       })
 
+      it('should not leak the current scope to other requests when using a task queue', done => {
+        const app = express()
+
+        let handler
+
+        const interval = setInterval(() => {
+          if (handler) {
+            handler()
+
+            clearInterval(interval)
+
+            expect(tracer.scopeManager().active()).to.be.null
+
+            done()
+          }
+        })
+
+        app.use((req, res, next) => {
+          handler = next
+        })
+
+        app.get('/app', (req, res) => {
+          res.status(200).send()
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should fallback to the the verb if a path pattern could not be found', done => {
         const app = express()
 
