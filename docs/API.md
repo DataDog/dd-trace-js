@@ -166,15 +166,17 @@ query HelloWorld {
 
 <h5 id="graphql-tags">Tags</h5>
 
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| graphql.document | The original GraphQL document.                            |
+| Tag               | Description                                               |
+|-------------------|-----------------------------------------------------------|
+| graphql.document  | The original GraphQL document.                            |
+| graphql.variables | The variables applied to the document.                    |
 
 <h5 id="graphql-config">Configuration Options</h5>
 
-| Option  | Default                                          | Description                            |
-|---------|--------------------------------------------------|----------------------------------------|
-| service | *Service name of the app suffixed with -graphql* | The service name for this integration. |
+| Option          | Default                                          | Description                                                      |
+|-----------------|--------------------------------------------------|------------------------------------------------------------------|
+| service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                           |
+| filterVariables | `variables => variables`                         | A callback that allows filtering of variables before submission. |
 
 <h3 id="http">http / https</h3>
 
