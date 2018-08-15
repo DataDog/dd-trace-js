@@ -87,6 +87,10 @@ describe('Plugin', () => {
             args: {
               name: {
                 type: graphql.GraphQLString
+              },
+              title: {
+                type: graphql.GraphQLString,
+                defaultValue: null
               }
             },
             resolve (obj, args) {
@@ -157,7 +161,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument operations', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = `query MyQuery($who: String!) { hello(name: $who) }`
 
           agent
             .use(traces => {
@@ -168,6 +172,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('name', 'graphql.query')
               expect(spans[0]).to.have.property('resource', 'query MyQuery')
               expect(spans[0].meta).to.have.property('graphql.document', source)
+              expect(spans[0].meta).to.have.property('graphql.variables', JSON.stringify({ who: 'world' }))
             })
             .then(done)
             .catch(done)
@@ -688,11 +693,13 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'graphql', { service: 'test' })
-            .then(() => {
-              graphql = require(`./versions/graphql@${version}`).get()
-              buildSchema()
-            })
+          return agent.load(plugin, 'graphql', {
+            service: 'test',
+            filterVariables: variables => Object.assign({}, variables, { who: 'REDACTED' })
+          }).then(() => {
+            graphql = require(`./versions/graphql@${version}`).get()
+            buildSchema()
+          })
         })
 
         it('should be configured with the correct values', done => {
@@ -709,6 +716,28 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql(schema, source).catch(done)
+        })
+
+        it('should apply the filter callback to the variables', done => {
+          const source = `
+            query MyQuery($title: String!, $who: String!) {
+              hello(title: $title, name: $who)
+            }
+          `
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0].meta).to.have.property(
+                'graphql.variables',
+                JSON.stringify({ title: 'planet', who: 'REDACTED' })
+              )
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source, null, null, { title: 'planet', who: 'world' }).catch(done)
         })
       })
 
