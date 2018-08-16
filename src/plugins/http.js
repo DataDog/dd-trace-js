@@ -49,7 +49,10 @@ function patch (http, tracer, config) {
 
         // empty the data stream when no other listener exists to consume it
         if (req.listenerCount('response') === 1) {
-          res.resume()
+          // unless aws-sdk is waiting to checksum a dynamodb payload
+          if (!('x-amz-crc32' in res.headers)) {
+            res.resume()
+          }
         }
       })
 
