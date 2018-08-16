@@ -11,14 +11,15 @@ describe('Plugin', () => {
   let channel
 
   describe('amqplib', () => {
-    withVersions(plugin, 'elasticsearch', version => {
+    withVersions(plugin, 'amqplib', version => {
       beforeEach(() => {
         tracer = require('../..')
       })
 
       afterEach(() => {
-        agent.close()
         connection.close()
+        agent.close()
+        agent.wipe()
       })
 
       describe('without configuration', () => {
@@ -211,7 +212,7 @@ describe('Plugin', () => {
         describe('when using a promise', () => {
           beforeEach(() => {
             return agent.load(plugin, 'amqplib')
-              .then(() => require(`./versions/amqplib@{version}`).get().connect())
+              .then(() => require(`./versions/amqplib@${version}`).get().connect())
               .then(conn => (connection = conn))
               .then(conn => conn.createChannel())
               .then(ch => (channel = ch))
@@ -232,7 +233,7 @@ describe('Plugin', () => {
         beforeEach(done => {
           agent.load(plugin, 'amqplib', { service: 'test' })
             .then(() => {
-              require(`./versions/amqplib@{version}`).get('amqplib/callback_api')
+              require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
                 .connect((err, conn) => {
                   connection = conn
 

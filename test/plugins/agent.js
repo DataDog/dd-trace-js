@@ -17,10 +17,6 @@ let skip = []
 
 module.exports = {
   load (plugin, pluginName, config) {
-    [].concat(plugin).forEach(instrumentation => {
-      this.wipe(instrumentation.name)
-    })
-
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))

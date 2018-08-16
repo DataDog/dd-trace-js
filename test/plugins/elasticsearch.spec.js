@@ -17,6 +17,7 @@ describe('Plugin', () => {
 
       afterEach(() => {
         agent.close()
+        agent.wipe()
       })
 
       describe('without configuration', () => {
