@@ -7,9 +7,7 @@ docker-base: &docker-base
     - &mysql
       image: mysql:5.7
       environment:
-        - MYSQL_ROOT_PASSWORD=rootpass
-        - MYSQL_PASSWORD=userpass
-        - MYSQL_USER=user
+        - MYSQL_ALLOW_EMPTY_PASSWORD=yes
         - MYSQL_DATABASE=db
     - &redis
       image: redis:4.0-alpine
@@ -26,16 +24,16 @@ build-node-base: &node-base
     - checkout
     - run:
         name: Versions
-        command: npm version
+        command: yarn versions
     - run:
         name: Install dependencies
-        command: npm install
+        command: yarn install
     - run:
         name: Test
-        command: npm test
+        command: yarn test
     - run:
         name: Benchmark
-        command: npm run bench
+        command: yarn bench
 jobs:
   lint:
     docker:
@@ -45,13 +43,13 @@ jobs:
       - checkout
       - run:
           name: Versions
-          command: npm version
+          command: yarn versions
       - run:
           name: Install dependencies
-          command: npm install
+          command: yarn install
       - run:
           name: Lint
-          command: npm run lint
+          command: yarn lint
   test-memory-leaks:
     <<: *docker-base
     working_directory: ~/dd-trace-js
@@ -59,13 +57,13 @@ jobs:
       - checkout
       - run:
           name: Versions
-          command: npm version
+          command: yarn versions
       - run:
           name: Install dependencies
-          command: npm install
+          command: yarn install
       - run:
           name: Test
-          command: npm run leak
+          command: yarn leak
   build-node-4:
     <<: *node-base
     docker:

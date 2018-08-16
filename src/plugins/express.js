@@ -84,6 +84,8 @@ function createWrapProcessParams (tracer, config) {
     return function processParamsWithTrace (layer, called, req, res, done) {
       const matchers = layer._datadog_matchers
 
+      req = done ? req : called
+
       if (matchers) {
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
@@ -108,15 +110,16 @@ function createWrapRouterMethod (tracer) {
       const matchers = extractMatchers(fn)
 
       this.stack.slice(offset).forEach(layer => {
-        const handleRequest = layer.handle_request
-        const handleError = layer.handle_error
+        const handle = layer.handle
 
-        layer.handle_request = (req, res, next) => {
-          return handleRequest.call(layer, req, res, wrapNext(tracer, layer, req, next))
-        }
-
-        layer.handle_error = (error, req, res, next) => {
-          return handleError.call(layer, error, req, res, wrapNext(tracer, layer, req, next))
+        if (handle.length === 4) {
+          layer.handle = (error, req, res, next) => {
+            return handle.call(layer, error, req, res, wrapNext(tracer, layer, req, next))
+          }
+        } else {
+          layer.handle = (req, res, next) => {
+            return handle.call(layer, req, res, wrapNext(tracer, layer, req, next))
+          }
         }
 
         layer._datadog_matchers = matchers
@@ -138,7 +141,7 @@ function wrapNext (tracer, layer, req, next) {
   req._datadog.scope = tracer.scopeManager().activate(req._datadog.span)
 
   return function (error) {
-    if (!error && layer.path && !layer.regexp.fast_star) {
+    if (!error && layer.path && !isFastStar(layer)) {
       req._datadog.paths.pop()
     }
 
@@ -159,6 +162,14 @@ function extractMatchers (fn) {
     path: pattern instanceof RegExp ? `(${pattern})` : pattern,
     test: path => pathToRegExp(pattern).test(path)
   }))
+}
+
+function isFastStar (layer) {
+  if (layer.regexp.fast_star !== undefined) {
+    return layer.regexp.fast_star
+  }
+
+  return layer._datadog_matchers.some(matcher => matcher.path === '*')
 }
 
 function flatten (arr) {

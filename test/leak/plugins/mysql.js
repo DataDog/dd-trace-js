@@ -11,8 +11,7 @@ const profile = require('../../profile')
 test('mysql plugin should not leak', t => {
   const connection = mysql.createConnection({
     host: 'localhost',
-    user: 'user',
-    password: 'userpass',
+    user: 'root',
     database: 'db'
   })
 

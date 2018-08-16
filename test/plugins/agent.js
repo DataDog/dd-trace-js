@@ -119,8 +119,8 @@ module.exports = {
       })
   },
 
-  wipe (moduleName) {
-    const basedir = path.join(__dirname, '..', '..', 'node_modules', moduleName)
+  wipe () {
+    const basedir = path.join(__dirname, 'versions')
 
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
