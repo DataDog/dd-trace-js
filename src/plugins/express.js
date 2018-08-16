@@ -137,8 +137,8 @@ function wrapNext (tracer, layer, req, next) {
   req._datadog.scope && req._datadog.scope.close()
   req._datadog.scope = tracer.scopeManager().activate(req._datadog.span)
 
-  return function () {
-    if (layer.path && !layer.regexp.fast_star) {
+  return function (error) {
+    if (!error && layer.path && !layer.regexp.fast_star) {
       req._datadog.paths.pop()
     }
 

@@ -329,6 +329,33 @@ describe('Plugin', () => {
         })
       })
 
+      it('should not lose the current path on error', done => {
+        const app = express()
+
+        app.get('/app', (req, res, next) => {
+          next(new Error())
+        })
+
+        app.use((error, req, res, next) => {
+          res.status(200).send(error.message)
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'GET /app')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should not leak the current scope to other requests when using a task queue', done => {
         const app = express()
 
