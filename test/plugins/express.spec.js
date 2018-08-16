@@ -229,6 +229,33 @@ describe('Plugin', () => {
         })
       })
 
+      it('should support nested applications', done => {
+        const app = express()
+        const childApp = express()
+
+        childApp.use('/child', (req, res) => {
+          res.status(200).send()
+        })
+
+        app.use('/parent', childApp)
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0]).to.have.length(1)
+              expect(traces[0][0]).to.have.property('resource', 'GET /parent/child')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/parent/child`)
+              .catch(done)
+          })
+        })
+      })
+
       it('should not lose the current path when changing scope', done => {
         const app = express()
         const router = express.Router()

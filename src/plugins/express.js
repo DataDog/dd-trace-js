@@ -13,7 +13,7 @@ function createWrapMethod (tracer, config) {
     ? config.validateStatus
     : code => code < 500
 
-  function middleware (req, res, next) {
+  function ddTrace (req, res, next) {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`
     const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
 
@@ -49,13 +49,7 @@ function createWrapMethod (tracer, config) {
       return returned
     }
 
-    Object.defineProperty(req, '_datadog', {
-      value: {
-        span,
-        paths: [],
-        scope: null
-      }
-    })
+    req._datadog.span = span
 
     next()
   }
@@ -64,9 +58,23 @@ function createWrapMethod (tracer, config) {
     return function methodWithTrace () {
       if (!this._datadog_trace_patched && !this._router) {
         this._datadog_trace_patched = true
-        this.use(middleware)
+        this.use(ddTrace)
       }
       return original.apply(this, arguments)
+    }
+  }
+}
+
+function createWrapHandle (tracer, config) {
+  return function wrapHandle (handle) {
+    return function handleWithTracer (req) {
+      if (!req._datadog) {
+        Object.defineProperty(req, '_datadog', {
+          value: { paths: [] }
+        })
+      }
+
+      return handle.apply(this, arguments)
     }
   }
 }
@@ -120,7 +128,7 @@ function createWrapRouterMethod (tracer) {
 }
 
 function wrapNext (tracer, layer, req, next) {
-  if (!req._datadog) {
+  if (!req._datadog.span) {
     return next
   }
 
@@ -161,6 +169,7 @@ function patch (express, tracer, config) {
   METHODS.forEach(method => {
     this.wrap(express.application, method, createWrapMethod(tracer, config))
   })
+  this.wrap(express.Router, 'handle', createWrapHandle(tracer, config))
   this.wrap(express.Router, 'process_params', createWrapProcessParams(tracer, config))
   this.wrap(express.Router, 'use', createWrapRouterMethod(tracer, config))
   this.wrap(express.Router, 'route', createWrapRouterMethod(tracer, config))
@@ -168,6 +177,7 @@ function patch (express, tracer, config) {
 
 function unpatch (express) {
   METHODS.forEach(method => this.unwrap(express.application, method))
+  this.unwrap(express.Router, 'handle')
   this.unwrap(express.Router, 'process_params')
   this.unwrap(express.Router, 'use')
   this.unwrap(express.Router, 'route')
