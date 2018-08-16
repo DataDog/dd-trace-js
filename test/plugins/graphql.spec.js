@@ -644,6 +644,43 @@ describe('Plugin', () => {
 
         graphql.graphql({ schema, source, rootValue }).catch(done)
       })
+
+      it('should support multiple executions with the same contextValue', done => {
+        const error = new Error('test')
+
+        const schema = graphql.buildSchema(`
+          type Query {
+            hello: String
+          }
+        `)
+
+        const source = `{ hello }`
+
+        const rootValue = {
+          hello: () => {
+            return Promise.reject(error)
+          }
+        }
+
+        const contextValue = {}
+
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+
+            expect(spans).to.have.length(3)
+            expect(spans[2]).to.have.property('error', 1)
+            expect(spans[2].meta).to.have.property('error.type', error.name)
+            expect(spans[2].meta).to.have.property('error.msg', error.message)
+            expect(spans[2].meta).to.have.property('error.stack', error.stack)
+          })
+          .then(done)
+          .catch(done)
+
+        graphql.graphql({ schema, source, rootValue, contextValue })
+          .then(() => graphql.graphql({ schema, source, rootValue, contextValue }))
+          .catch(done)
+      })
     })
 
     describe('with configuration', () => {

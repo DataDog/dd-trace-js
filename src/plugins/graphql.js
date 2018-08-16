@@ -26,14 +26,16 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         schema._datadog_patched = true
       }
 
-      Object.defineProperties(contextValue, {
-        _datadog_operation: {
-          value: {
-            span: createOperationSpan(tracer, config, operation, document._datadog_source)
-          }
-        },
-        _datadog_fields: { value: {} }
-      })
+      if (!contextValue._datadog_operation) {
+        Object.defineProperties(contextValue, {
+          _datadog_operation: {
+            value: {
+              span: createOperationSpan(tracer, config, operation, document._datadog_source)
+            }
+          },
+          _datadog_fields: { value: {} }
+        })
+      }
 
       return call(execute, this, [args], err => finishOperation(contextValue, err))
     }
