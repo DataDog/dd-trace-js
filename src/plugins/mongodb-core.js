@@ -1,5 +1,7 @@
 'use strict'
 
+const Buffer = require('safe-buffer').Buffer
+
 // TODO: remove sanitization when implemented by the agent
 
 // Reference https://docs.mongodb.com/v3.6/reference/command/
@@ -279,7 +281,7 @@ function sanitize (input) {
   const output = {}
 
   for (const key in input) {
-    if (isObject(input[key])) {
+    if (isObject(input[key]) && !Buffer.isBuffer(input[key])) {
       output[key] = sanitize(input[key])
     } else {
       output[key] = '?'

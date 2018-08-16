@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('./agent')
+const Buffer = require('safe-buffer').Buffer
 
 wrapIt()
 
@@ -117,6 +118,25 @@ describe('Plugin', () => {
               bar: {
                 baz: [1, 2, 3]
               }
+            }
+          }, () => {})
+        })
+
+        it('should sanitize buffers as values and not as objects', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collection} {"_id":"?"}`
+
+              expect(span).to.have.property('resource', resource)
+            })
+            .then(done)
+            .catch(done)
+
+          server.command(`test.${collection}`, {
+            find: `test.${collection}`,
+            query: {
+              _id: Buffer.from('1234')
             }
           }, () => {})
         })
