@@ -644,6 +644,27 @@ describe('Plugin', () => {
 
         graphql.graphql({ schema, source, rootValue }).catch(done)
       })
+
+      it('should support multiple executions with the same contextValue', done => {
+        const schema = graphql.buildSchema(`
+          type Query {
+            hello: String
+          }
+        `)
+
+        const source = `{ hello }`
+
+        const rootValue = {
+          hello: () => 'world'
+        }
+
+        const contextValue = {}
+
+        graphql.graphql({ schema, source, rootValue, contextValue })
+          .then(() => graphql.graphql({ schema, source, rootValue, contextValue }))
+          .then(() => done())
+          .catch(done)
+      })
     })
 
     describe('with configuration', () => {
