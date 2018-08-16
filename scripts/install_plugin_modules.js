@@ -1,6 +1,6 @@
 'use strict'
 
-const fs = require('fs-extra')
+const fs = require('fs')
 const path = require('path')
 const requireDir = require('require-dir')
 const crypto = require('crypto')
@@ -39,7 +39,13 @@ function assertModules (name, version) {
 }
 
 function assertFolder (name, version) {
-  fs.ensureDirSync(folder(name, version))
+  if (!fs.existsSync(folder())) {
+    fs.mkdirSync(folder())
+  }
+
+  if (!fs.existsSync(folder(name, version))) {
+    fs.mkdirSync(folder(name, version))
+  }
 }
 
 function assertPackage (name, version) {

@@ -32,7 +32,6 @@ dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
 dev,eventemitter3,MIT,Copyright 2014 Arnout Kazemier
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
-dev,fs-extra,MIT,Copyright 2011-2017 JP Richardson
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,graphql,MIT,Copyright 2015-present Facebook Inc.
 dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
