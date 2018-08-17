@@ -2,6 +2,43 @@
 
 const platform = require('../platform')
 
+// Because we want to use the parsed operation name as the span's resource name, we can't really start the span just
+// yet. Instead we store the actual start time now and use that at the time of creating the operation span.
+function createWrapGraphQL (tracer, config) {
+  return function wrapGraphQL (graphql) {
+    return function graphqlWithTrace (
+      argsOrSchema,
+      source,
+      rootValue,
+      contextValue,
+      variableValues,
+      operationName,
+      fieldResolver
+    ) {
+      if (arguments.length === 1) {
+        source = argsOrSchema.source
+        rootValue = argsOrSchema.rootValue
+        contextValue = argsOrSchema.contextValue
+        variableValues = argsOrSchema.variableValues
+        operationName = argsOrSchema.operationName
+        fieldResolver = argsOrSchema.fieldResolver
+        argsOrSchema = argsOrSchema.schema
+      }
+      if (!contextValue) {
+        contextValue = {}
+      }
+      if (!contextValue._datadog_operation_start_time) {
+        Object.defineProperties(contextValue, {
+          _datadog_operation_start_time: {
+            value: platform.now()
+          }
+        })
+      }
+      return graphql(argsOrSchema, source, rootValue, contextValue, variableValues, operationName, fieldResolver)
+    }
+  }
+}
+
 function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
   if (typeof config.depth !== 'number') {
     config.depth = -1
@@ -34,12 +71,26 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         }
       }
 
+      const span = createOperationSpan(
+        tracer,
+        config,
+        operation,
+        document._datadog_source,
+        variableValues,
+        contextValue._datadog_operation_start_time
+      )
+
+      if (document._datadog_parse_time) {
+        createFinishedSpan(tracer, config, 'parse-document', document._datadog_parse_time, span)
+      }
+      if (document._datadog_validate_time) {
+        createFinishedSpan(tracer, config, 'validate-document', document._datadog_validate_time, span)
+      }
+
       if (!contextValue._datadog_operation) {
         Object.defineProperties(contextValue, {
           _datadog_operation: {
-            value: {
-              span: createOperationSpan(tracer, config, operation, document._datadog_source, variableValues)
-            }
+            value: { span }
           },
           _datadog_fields: { value: {} }
         })
@@ -53,13 +104,38 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
 function createWrapParse () {
   return function wrapParse (parse) {
     return function parseWithTrace (source) {
+      const start = platform.now()
       const document = parse.apply(this, arguments)
+      const end = platform.now()
 
       Object.defineProperties(document, {
-        _datadog_source: { value: source.body || source }
+        _datadog_source: {
+          value: source.body || source
+        },
+        _datadog_parse_time: {
+          value: { start, end }
+        }
       })
 
       return document
+    }
+  }
+}
+
+function createWrapValidate (tracer, config) {
+  return function wrapValidate (validate) {
+    return function validateWithTrace (schema, document, rules, typeInfo) {
+      const start = platform.now()
+      const errors = validate(schema, document, rules, typeInfo)
+      const end = platform.now()
+
+      Object.defineProperties(document, {
+        _datadog_validate_time: {
+          value: { start, end }
+        }
+      })
+
+      return errors
     }
   }
 }
@@ -186,12 +262,13 @@ function normalizeArgs (args) {
   }
 }
 
-function createOperationSpan (tracer, config, operation, source, variableValues) {
+function createOperationSpan (tracer, config, operation, source, variableValues, startTime) {
   const type = operation.operation
   const name = operation.name && operation.name.value
 
   const parentScope = tracer.scopeManager().active()
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
+    startTime,
     childOf: parentScope && parentScope.span(),
     tags: {
       'service.name': getService(tracer, config),
@@ -202,6 +279,18 @@ function createOperationSpan (tracer, config, operation, source, variableValues)
     }
   })
 
+  return span
+}
+
+function createFinishedSpan (tracer, config, name, time, childOf) {
+  const span = tracer.startSpan(`graphql.${name}`, {
+    childOf,
+    startTime: time.start,
+    tags: {
+      'service.name': getService(tracer, config)
+    }
+  })
+  span.finish(time.end)
   return span
 }
 
@@ -285,6 +374,17 @@ function addError (span, error) {
 module.exports = [
   {
     name: 'graphql',
+    file: 'graphql.js',
+    versions: ['0.13.x'],
+    patch (graphql, tracer, config) {
+      this.wrap(graphql, 'graphql', createWrapGraphQL(tracer, config))
+    },
+    unpatch (graphql) {
+      this.unwrap(graphql, 'graphql')
+    }
+  },
+  {
+    name: 'graphql',
     file: 'execution/execute.js',
     versions: ['0.13.x'],
     patch (execute, tracer, config) {
@@ -308,6 +408,17 @@ module.exports = [
     },
     unpatch (parser) {
       this.unwrap(parser, 'parse')
+    }
+  },
+  {
+    name: 'graphql',
+    file: 'validation/validate.js',
+    versions: ['0.13.x'],
+    patch (validate, tracer, config) {
+      this.wrap(validate, 'validate', createWrapValidate(tracer, config))
+    },
+    unpatch (validate) {
+      this.unwrap(validate, 'validate')
     }
   }
 ]
