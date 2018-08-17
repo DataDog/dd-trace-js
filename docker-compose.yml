@@ -7,9 +7,7 @@ services:
   mysql:
     image: mysql:5.7
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpass
-      - MYSQL_PASSWORD=userpass
-      - MYSQL_USER=user
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
       - MYSQL_DATABASE=db
     ports:
       - "127.0.0.1:3306:3306"

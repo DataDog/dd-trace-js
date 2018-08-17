@@ -10,7 +10,8 @@
     "sinon": true,
     "proxyquire": true,
     "nock": true,
-    "wrapIt": true
+    "wrapIt": true,
+    "withVersions": true
   },
   "rules": {
     "no-unused-expressions": 0

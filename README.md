@@ -24,10 +24,12 @@ Before contributing to this open source project, read our [CONTRIBUTING.md](http
 Since this project supports multiple Node versions, using a version
 manager such as [nvm](https://github.com/creationix/nvm) is recommended.
 
-To get started once you have a Node version installed, run:
+We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
+
+To get started once you have Node and yarn installed, run:
 
 ```sh
-$ npm install
+$ yarn
 ```
 
 ### Testing
@@ -45,13 +47,13 @@ $ docker-compose up -d
 To run the unit tests, use:
 
 ```sh
-$ npm test
+$ yarn test
 ```
 
 To run the unit tests continuously in watch mode while developing, use:
 
 ```sh
-$ npm run tdd
+$ yarn tdd
 ```
 
 #### Memory Leaks
@@ -59,7 +61,7 @@ $ npm run tdd
 To run the memory leak tests, use:
 
 ```sh
-$ npm run leak
+$ yarn leak
 ```
 
 Please note that memory leak tests only run on Node `>=8`.
@@ -72,7 +74,7 @@ conform to our coding standards.
 To run the linter, use:
 
 ```sh
-$ npm run lint
+$ yarn lint
 ```
 
 ### Continuous Integration
@@ -99,5 +101,5 @@ in the `benchmark/index.js` module so that we can keep track of the
 most efficient algorithm. To run your benchmark, just:
 
 ```sh
-$ npm run bench
+$ yarn bench
 ```

@@ -103,4 +103,5 @@ typings/
 package-lock.json
 yarn.lock
 out
+test/plugins/versions
 !test/node_modules
