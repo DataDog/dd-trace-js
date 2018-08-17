@@ -10,6 +10,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const document = args.document
       const contextValue = args.contextValue || {}
       const fieldResolver = args.fieldResolver || defaultFieldResolver
+      const variableValues = args.variableValues
       const operation = getOperation(document)
 
       if (!schema || !operation || typeof fieldResolver !== 'function') {
@@ -30,7 +31,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         Object.defineProperties(contextValue, {
           _datadog_operation: {
             value: {
-              span: createOperationSpan(tracer, config, operation, document._datadog_source)
+              span: createOperationSpan(tracer, config, operation, document._datadog_source, variableValues)
             }
           },
           _datadog_fields: { value: {} }
@@ -172,7 +173,7 @@ function normalizeArgs (args) {
   }
 }
 
-function createOperationSpan (tracer, config, operation, source) {
+function createOperationSpan (tracer, config, operation, source, variableValues) {
   const type = operation.operation
   const name = operation.name && operation.name.value
 
@@ -182,7 +183,9 @@ function createOperationSpan (tracer, config, operation, source) {
     tags: {
       'service.name': getService(tracer, config),
       'resource.name': [type, name].filter(val => val).join(' '),
-      'graphql.document': source
+      'graphql.document': source,
+      'graphql.variables': variableValues &&
+        JSON.stringify(config.filterVariables ? config.filterVariables(variableValues) : variableValues)
     }
   })
 
