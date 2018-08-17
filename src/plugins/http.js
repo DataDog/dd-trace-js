@@ -42,15 +42,17 @@ function patch (http, tracer, config) {
 
       const req = request.call(this, options, callback)
 
+      req.on('socket', () => {
+        // empty the data stream when no other listener exists to consume it
+        if (req.listenerCount('response') === 1) {
+          req.on('response', res => res.resume())
+        }
+      })
+
       req.on('response', res => {
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
 
         res.on('end', () => span.finish())
-
-        // empty the data stream when no other listener exists to consume it
-        if (req.listenerCount('response') === 1) {
-          res.resume()
-        }
       })
 
       req.on('error', err => {

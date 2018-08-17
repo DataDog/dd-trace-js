@@ -149,6 +149,26 @@ describe('Plugin', () => {
         })
       })
 
+      it('should wait for other listeners before resuming the response stream', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send('OK')
+        })
+
+        getPort().then(port => {
+          appListener = app.listen(port, 'localhost', () => {
+            const req = http.request(`http://localhost:${port}/user`, res => {
+              setTimeout(() => {
+                res.on('data', () => done())
+              })
+            })
+
+            req.end()
+          })
+        })
+      })
+
       it('should inject its parent span in the headers', done => {
         const app = express()
 
