@@ -43,7 +43,7 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
     Instrumenter = sinon.stub().returns(instrumenter)
 
-    config = {}
+    config = { enabled: true }
     Config = sinon.stub().returns(config)
 
     platform = {
@@ -85,19 +85,19 @@ describe('TracerProxy', () => {
         expect(DatadogTracer).to.have.been.calledWith(config)
       })
 
-      it('should load the platform', () => {
-        const options = {}
-
-        proxy.init(options)
-
-        expect(platform.load).to.have.been.called
-      })
-
       it('should not initialize twice', () => {
         proxy.init()
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
+      })
+
+      it('should not initialize when disabled', () => {
+        config.enabled = false
+
+        proxy.init()
+
+        expect(DatadogTracer).to.not.have.been.called
       })
 
       it('should set up automatic instrumentation', () => {

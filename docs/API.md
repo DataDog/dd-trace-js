@@ -285,6 +285,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 
 | Config        | Environment Variable         | Default   | Description |
 | ------------- | ---------------------------- | --------- | ----------- |
+| enabled       | DD_TRACE_ENABLED             | true      | Whether to enable the tracer. |
 | debug         | DD_TRACE_DEBUG               | false     | Enable debug logging in the tracer. |
 | service       | DD_SERVICE_NAME              |           | The service name to be used for this program. |
 | hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |

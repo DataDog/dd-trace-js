@@ -10,7 +10,6 @@ class Config {
 
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
-    const service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), platform.service(), 'node')
     const env = coalesce(options.env, platform.env('DD_ENV'))
     const protocol = 'http'
     const hostname = coalesce(options.hostname, platform.env('DD_TRACE_AGENT_HOSTNAME'), 'localhost')
@@ -21,7 +20,6 @@ class Config {
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
-    this.service = service
     this.env = env
     this.url = new URL(`${protocol}://${hostname}:${port}`)
     this.tags = Object.assign({}, options.tags)
@@ -30,6 +28,18 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
+
+    Object.defineProperty(this, 'service', {
+      get () {
+        const service = coalesce(options.service, platform.env('DD_SERVICE_NAME'))
+
+        if (service) {
+          return service
+        }
+
+        return platform.service() || 'node'
+      }
+    })
   }
 }
 
