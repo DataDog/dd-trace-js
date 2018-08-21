@@ -39,7 +39,7 @@ The easiest way to start all of them is to use the provided
 docker-compose configuration:
 
 ```sh
-$ docker-compose up -d
+$ docker-compose up -d -V --remove-orphans --force-recreate
 ```
 
 #### Unit Tests
