@@ -120,7 +120,7 @@ function waitForRedis () {
         if (options.attempt > retryOptions.retries) {
           return reject(options.error)
         } else {
-          logAttempt('redis', options.attempt, 'failed to connect')
+          logAttempt('redis', 'failed to connect')
         }
 
         return retryOptions.maxTimeout
@@ -277,14 +277,12 @@ function createOperation (service) {
 function retryOperation (operation, err) {
   const shouldRetry = operation.retry(err)
   if (shouldRetry) {
-    logAttempt(operation._options.service, operation._attempts, err.message)
+    logAttempt(operation._options.service, err.message)
   }
   return shouldRetry
 }
 
-function logAttempt (service, attempts, message) {
-  if (attempts > 2) {
-    // eslint-disable-next-line no-console
-    console.error(`[Retrying connection to ${service}] ${message}`)
-  }
+function logAttempt (service, message) {
+  // eslint-disable-next-line no-console
+  console.error(`[Retrying connection to ${service}] ${message}`)
 }
