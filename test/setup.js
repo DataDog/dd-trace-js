@@ -13,6 +13,7 @@ const redis = require('redis')
 const mongo = require('mongodb-core')
 const elasticsearch = require('elasticsearch')
 const amqplib = require('amqplib/callback_api')
+const amqp = require('amqp10')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 const ScopeManager = require('../src/scope/scope_manager')
@@ -55,7 +56,8 @@ function waitForServices () {
     waitForRedis(),
     waitForMongo(),
     waitForElasticsearch(),
-    waitForRabbitMQ()
+    waitForRabbitMQ(),
+    waitForQpid()
   ])
 }
 
@@ -104,7 +106,7 @@ function waitForMysql () {
 
       connection.connect(err => {
         if (operation.retry(err)) return
-        if (err) reject(err)
+        if (err) return reject(err)
 
         connection.end(() => resolve())
       })
@@ -169,7 +171,7 @@ function waitForElasticsearch () {
 
       client.ping((err) => {
         if (operation.retry(err)) return
-        if (err) reject(err)
+        if (err) return reject(err)
 
         resolve()
       })
@@ -185,9 +187,29 @@ function waitForRabbitMQ () {
       amqplib
         .connect((err, conn) => {
           if (operation.retry(err)) return
-          if (err) reject(err)
+          if (err) return reject(err)
 
           conn.close(() => resolve())
+        })
+    })
+  })
+}
+
+function waitForQpid () {
+  return new Promise((resolve, reject) => {
+    const operation = retry.operation(retryOptions)
+
+    operation.attempt(currentAttempt => {
+      const client = new amqp.Client(amqp.Policy.merge({
+        reconnect: null
+      }))
+
+      client.connect('amqp://admin:admin@localhost:5673')
+        .then(() => client.disconnect())
+        .then(() => resolve())
+        .catch(err => {
+          if (operation.retry(err)) return
+          reject(err)
         })
     })
   })
@@ -248,7 +270,6 @@ function withVersions (plugin, moduleName, range, cb) {
     .filter(instrumentation => instrumentation.name === moduleName)
     .forEach(instrumentation => {
       instrumentation.versions
-        .filter(version => !range || semver.satisfies(version, range))
         .forEach(version => {
           const min = semver.coerce(version).version
           const max = require(`./plugins/versions/${moduleName}@${version}`).version()
@@ -259,6 +280,7 @@ function withVersions (plugin, moduleName, range, cb) {
     })
 
   Array.from(testVersions)
+    .filter(v => !range || semver.satisfies(v[0], range))
     .sort(v => v[0].localeCompare(v[0]))
     .map(v => Object.assign({}, v[1], { version: v[0] }))
     .forEach(v => {
