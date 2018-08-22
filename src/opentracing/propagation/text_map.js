@@ -11,6 +11,11 @@ const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
 class TextMapPropagator {
+
+  constructor (tracer) {
+    this._tracer = tracer;
+  }
+
   inject (spanContext, carrier) {
     carrier[traceKey] = new Int64BE(spanContext.traceId.toBuffer()).toString()
     carrier[spanKey] = new Int64BE(spanContext.spanId.toBuffer()).toString()
@@ -38,10 +43,19 @@ class TextMapPropagator {
       }
     })
 
+    const samplingPriority = carrier[samplingKey] && parseInt(carrier[samplingKey], 10);
+    let sampled;
+    if (samplingPriority !== undefined) {
+      sampled = samplingPriority > 0;
+    } else {
+      sampled = this._tracer._isSampled();
+    }
+
     return new DatadogSpanContext({
       traceId: new Uint64BE(carrier[traceKey], 10),
       spanId: new Uint64BE(carrier[spanKey], 10),
-      samplingPriority: carrier[samplingKey] && parseInt(carrier[samplingKey], 10),
+      samplingPriority: samplingPriority,
+      sampled: sampled,
       baggageItems
     })
   }

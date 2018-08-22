@@ -4,14 +4,19 @@ const Uint64BE = require('int64-buffer').Uint64BE
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('TextMapPropagator', () => {
+  let tracer
   let TextMapPropagator
   let propagator
   let textMap
   let baggageItems
 
   beforeEach(() => {
+    tracer = {
+      _isSampled: sinon.stub().returns(true)
+    }
+
     TextMapPropagator = require('../../../src/opentracing/propagation/text_map')
-    propagator = new TextMapPropagator()
+    propagator = new TextMapPropagator(tracer)
     textMap = {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '-456',
@@ -88,6 +93,25 @@ describe('TextMapPropagator', () => {
       }))
     })
 
+    it('should extract a span context from the carrier and re-sample', () => {
+      // if there is no incoming priority header (which is tested below), make sure we
+      // ask the sampler whether the new context should be sampled (otherwise the
+      // default SpanContext constructor behavior is to sample everything).
+      const sampleDecisions = [true, false];
+      sampleDecisions.forEach(sampled => {
+        tracer._isSampled = sinon.stub().returns(sampled)
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: new Uint64BE(0, 123),
+          spanId: new Uint64BE(-456),
+          sampled: sampled,
+          baggageItems
+        }))
+      })
+    })
+
     it('should return null if the carrier does not contain a trace', () => {
       const carrier = {}
       const spanContext = propagator.extract(carrier)
@@ -106,6 +130,7 @@ describe('TextMapPropagator', () => {
           traceId: new Uint64BE(0, 123),
           spanId: new Uint64BE(-456),
           samplingPriority: p,
+          sampled: p > 0,
           baggageItems
         }))
       })
