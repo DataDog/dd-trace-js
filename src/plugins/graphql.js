@@ -244,7 +244,7 @@ function getOperation (document) {
     return
   }
 
-  const types = ['query', 'mutation']
+  const types = ['query', 'mutation', 'subscription']
   const definition = document.definitions.find(def => types.indexOf(def.operation) !== -1)
 
   return definition
