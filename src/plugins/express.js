@@ -14,6 +14,8 @@ function createWrapMethod (tracer, config) {
     : code => code < 500
 
   function ddTrace (req, res, next) {
+    if (req._datadog.span) return next()
+
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`
     const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
 
@@ -29,6 +31,8 @@ function createWrapMethod (tracer, config) {
     const originalEnd = res.end
 
     res.end = function () {
+      if (req._datadog.finished) return originalEnd.apply(this, arguments)
+
       const returned = originalEnd.apply(this, arguments)
       const path = req._datadog.paths.join('')
       const resource = [req.method].concat(path).filter(val => val).join(' ')
@@ -45,6 +49,7 @@ function createWrapMethod (tracer, config) {
       span.finish()
 
       req._datadog.scope && req._datadog.scope.close()
+      req._datadog.finished = true
 
       return returned
     }
