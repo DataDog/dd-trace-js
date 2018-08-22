@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  'amqp10': require('./amqp10'),
   'amqplib': require('./amqplib'),
   'elasticsearch': require('./elasticsearch'),
   'express': require('./express'),
