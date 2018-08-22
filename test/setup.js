@@ -7,6 +7,7 @@ const proxyquire = require('proxyquire')
 const nock = require('nock')
 const semver = require('semver')
 const retry = require('retry')
+const RetryOperation = require('retry/lib/retry_operation')
 const pg = require('pg')
 const mysql = require('mysql')
 const redis = require('redis')
@@ -63,7 +64,7 @@ function waitForServices () {
 
 function waitForPostgres () {
   return new Promise((resolve, reject) => {
-    const operation = retry.operation(retryOptions)
+    const operation = createOperation('postgres')
 
     operation.attempt(currentAttempt => {
       const client = new pg.Client({
@@ -74,15 +75,15 @@ function waitForPostgres () {
       })
 
       client.connect((err) => {
-        if (operation.retry(err)) return
+        if (retryOperation(operation, err)) return
         if (err) return reject(err)
 
         client.query('SELECT version()', (err, result) => {
-          if (operation.retry(err)) return
+          if (retryOperation(operation, err)) return
           if (err) return reject(err)
 
           client.end((err) => {
-            if (operation.retry(err)) return
+            if (retryOperation(operation, err)) return
             if (err) return reject(err)
 
             resolve()
@@ -95,7 +96,7 @@ function waitForPostgres () {
 
 function waitForMysql () {
   return new Promise((resolve, reject) => {
-    const operation = retry.operation(retryOptions)
+    const operation = createOperation('mysql')
 
     operation.attempt(currentAttempt => {
       const connection = mysql.createConnection({
@@ -105,7 +106,7 @@ function waitForMysql () {
       })
 
       connection.connect(err => {
-        if (operation.retry(err)) return
+        if (retryOperation(operation, err)) return
         if (err) return reject(err)
 
         connection.end(() => resolve())
@@ -120,6 +121,8 @@ function waitForRedis () {
       retry_strategy: function (options) {
         if (options.attempt > retryOptions.retries) {
           return reject(options.error)
+        } else {
+          logAttempt('redis', 'failed to connect')
         }
 
         return retryOptions.maxTimeout
@@ -135,7 +138,7 @@ function waitForRedis () {
 
 function waitForMongo () {
   return new Promise((resolve, reject) => {
-    const operation = retry.operation(retryOptions)
+    const operation = createOperation('mongo')
 
     operation.attempt(currentAttempt => {
       const server = new mongo.Server({
@@ -150,7 +153,7 @@ function waitForMongo () {
       })
 
       server.on('error', err => {
-        if (!operation.retry(err)) {
+        if (!retryOperation(operation, err)) {
           reject(err)
         }
       })
@@ -162,7 +165,7 @@ function waitForMongo () {
 
 function waitForElasticsearch () {
   return new Promise((resolve, reject) => {
-    const operation = retry.operation(retryOptions)
+    const operation = createOperation('elasticsearch')
 
     operation.attempt(currentAttempt => {
       const client = new elasticsearch.Client({
@@ -170,7 +173,7 @@ function waitForElasticsearch () {
       })
 
       client.ping((err) => {
-        if (operation.retry(err)) return
+        if (retryOperation(operation, err)) return
         if (err) return reject(err)
 
         resolve()
@@ -181,12 +184,12 @@ function waitForElasticsearch () {
 
 function waitForRabbitMQ () {
   return new Promise((resolve, reject) => {
-    const operation = retry.operation(retryOptions)
+    const operation = createOperation('rabbitmq')
 
     operation.attempt(currentAttempt => {
       amqplib
         .connect((err, conn) => {
-          if (operation.retry(err)) return
+          if (retryOperation(operation, err)) return
           if (err) return reject(err)
 
           conn.close(() => resolve())
@@ -286,4 +289,22 @@ function withVersions (plugin, moduleName, range, cb) {
     .forEach(v => {
       describe(`with ${moduleName} ${v.range} (${v.version})`, () => cb(v.test))
     })
+}
+
+function createOperation (service) {
+  const timeouts = retry.timeouts(retryOptions)
+  return new RetryOperation(timeouts, Object.assign({ service }, retryOptions))
+}
+
+function retryOperation (operation, err) {
+  const shouldRetry = operation.retry(err)
+  if (shouldRetry) {
+    logAttempt(operation._options.service, err.message)
+  }
+  return shouldRetry
+}
+
+function logAttempt (service, message) {
+  // eslint-disable-next-line no-console
+  console.error(`[Retrying connection to ${service}] ${message}`)
 }

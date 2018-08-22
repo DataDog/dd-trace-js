@@ -367,6 +367,22 @@ describe('Plugin', () => {
           graphql.graphql(schema, source).catch(done)
         })
 
+        it('should instrument subscriptions', done => {
+          const source = `subscription { human { name } }`
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(3)
+              expect(spans[0]).to.have.property('name', 'graphql.subscription')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
+        })
+
         it('should handle a circular schema', done => {
           const source = `{ human { pets { owner { name } } } }`
 
