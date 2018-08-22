@@ -53,6 +53,7 @@
     "url-parse": "^1.2.0"
   },
   "devDependencies": {
+    "amqp10": "^3.6.0",
     "amqplib": "^0.5.2",
     "axios": "^0.18.0",
     "benchmark": "^2.1.4",

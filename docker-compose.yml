@@ -27,3 +27,11 @@ services:
     image: rabbitmq:3.6-alpine
     ports:
       - "127.0.0.1:5672:5672"
+  qpid:
+    image: scholzj/qpid-cpp:1.38.0
+    command: -p 5673
+    environment:
+      - QPIDD_ADMIN_USERNAME=admin
+      - QPIDD_ADMIN_PASSWORD=admin
+    ports:
+      - "127.0.0.1:5673:5673"
