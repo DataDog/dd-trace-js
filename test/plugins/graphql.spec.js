@@ -161,7 +161,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument operations', done => {
-          const source = `query MyQuery($who: String!) { hello(name: $who) }`
+          const source = `query MyQuery { hello(name: "world") }`
 
           agent
             .use(traces => {
@@ -172,7 +172,20 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('name', 'graphql.query')
               expect(spans[0]).to.have.property('resource', 'query MyQuery')
               expect(spans[0].meta).to.have.property('graphql.document', source)
-              expect(spans[0].meta).to.have.property('graphql.variables', JSON.stringify({ who: 'world' }))
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source, null, null, { who: 'world' }).catch(done)
+        })
+
+        it('should not include variables by default', done => {
+          const source = `query MyQuery($who: String!) { hello(name: $who) }`
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+              expect(spans[0].meta).to.not.have.property('graphql.variables')
             })
             .then(done)
             .catch(done)

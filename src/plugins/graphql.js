@@ -265,18 +265,19 @@ function normalizeArgs (args) {
 function createOperationSpan (tracer, config, operation, source, variableValues, startTime) {
   const type = operation.operation
   const name = operation.name && operation.name.value
-
   const parentScope = tracer.scopeManager().active()
+  const tags = {
+    'service.name': getService(tracer, config),
+    'resource.name': [type, name].filter(val => val).join(' '),
+    'graphql.document': source
+  }
+  if (variableValues && config.filterVariables) {
+    tags['graphql.variables'] = JSON.stringify(config.filterVariables(variableValues))
+  }
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
+    tags,
     startTime,
-    childOf: parentScope && parentScope.span(),
-    tags: {
-      'service.name': getService(tracer, config),
-      'resource.name': [type, name].filter(val => val).join(' '),
-      'graphql.document': source,
-      'graphql.variables': variableValues &&
-        JSON.stringify(config.filterVariables ? config.filterVariables(variableValues) : variableValues)
-    }
+    childOf: parentScope && parentScope.span()
   })
 
   return span
