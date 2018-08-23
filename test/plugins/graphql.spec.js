@@ -239,7 +239,7 @@ describe('Plugin', () => {
               const query = spans[0]
               const parse = spans[1]
               expect(parse).to.have.property('service', 'test-graphql')
-              expect(parse).to.have.property('name', 'graphql.parse-document')
+              expect(parse).to.have.property('name', 'graphql.parse')
               expect(parse.parent_id.toString()).to.equal(query.span_id.toString())
               expect(parse.start.toNumber()).to.be.gte(query.start.toNumber())
               expect(parse.duration.toNumber()).to.be.lte(query.duration.toNumber())
@@ -261,7 +261,7 @@ describe('Plugin', () => {
               const parse = spans[1]
               const validate = spans[2]
               expect(validate).to.have.property('service', 'test-graphql')
-              expect(validate).to.have.property('name', 'graphql.validate-document')
+              expect(validate).to.have.property('name', 'graphql.validate')
 
               expect(validate.parent_id.toString()).to.equal(query.span_id.toString())
               expect(validate.start.toNumber()).to.be.gte(parse.start.toNumber())

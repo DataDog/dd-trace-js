@@ -81,10 +81,10 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       )
 
       if (document._datadog_parse_time) {
-        createFinishedSpan(tracer, config, 'parse-document', document._datadog_parse_time, span)
+        createFinishedSpan(tracer, config, 'parse', document._datadog_parse_time, span)
       }
       if (document._datadog_validate_time) {
-        createFinishedSpan(tracer, config, 'validate-document', document._datadog_validate_time, span)
+        createFinishedSpan(tracer, config, 'validate', document._datadog_validate_time, span)
       }
 
       if (!contextValue._datadog_operation) {
