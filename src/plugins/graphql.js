@@ -3,6 +3,10 @@
 const platform = require('../platform')
 
 function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
+  if (typeof config.depth !== 'number') {
+    config.depth = -1
+  }
+
   return function wrapExecute (execute) {
     return function executeWithTrace () {
       const args = normalizeArgs(arguments)
@@ -16,14 +20,17 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         return execute.apply(this, arguments)
       }
 
-      args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
       args.contextValue = contextValue
 
-      if (!schema._datadog_patched) {
-        wrapFields(schema._queryType, tracer, config, responsePathAsArray)
-        wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+      if (config.depth !== 0) {
+        args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
 
-        schema._datadog_patched = true
+        if (!schema._datadog_patched) {
+          wrapFields(schema._queryType, tracer, config, responsePathAsArray)
+          wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+
+          schema._datadog_patched = true
+        }
       }
 
       if (!contextValue._datadog_operation) {
@@ -87,6 +94,12 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
     }
 
     const path = responsePathAsArray(info.path)
+    const depth = path.filter(item => typeof item === 'string').length
+
+    if (config.depth > 0 && config.depth < depth) {
+      return call(resolve, this, arguments, err => updateFinishTime(scope, contextValue, path, err))
+    }
+
     const fieldParent = getFieldParent(contextValue, path)
 
     const childOf = createSpan('graphql.field', tracer, config, fieldParent, path)
@@ -212,6 +225,10 @@ function finish (scope, contextValue, path, error) {
   span.finish()
   scope.close()
 
+  updateFinishTime(contextValue, path)
+}
+
+function updateFinishTime (contextValue, path) {
   for (let i = path.length; i > 0; i--) {
     const field = getField(contextValue, path.slice(0, i))
 

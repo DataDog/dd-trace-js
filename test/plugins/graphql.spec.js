@@ -711,6 +711,88 @@ describe('Plugin', () => {
           graphql.graphql(schema, source).catch(done)
         })
       })
+
+      describe('with a depth of 0', () => {
+        beforeEach(() => {
+          return agent.load(plugin, 'graphql', { depth: 0 })
+            .then(() => {
+              graphql = require(`./versions/graphql@${version}`).get()
+              buildSchema()
+            })
+        })
+
+        it('should only instrument the operation', done => {
+          const source = `
+            {
+              human {
+                name
+                address {
+                  civicNumber
+                  street
+                }
+              }
+            }
+          `
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(1)
+              expect(spans[0]).to.have.property('name', 'graphql.query')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
+        })
+      })
+
+      describe('with a depth >=1', () => {
+        beforeEach(() => {
+          return agent.load(plugin, 'graphql', { depth: 2 })
+            .then(() => {
+              graphql = require(`./versions/graphql@${version}`).get()
+              buildSchema()
+            })
+        })
+
+        it('should only instrument up to the specified depth', done => {
+          const source = `
+            {
+              human {
+                name
+                address {
+                  civicNumber
+                  street
+                }
+              }
+              friends {
+                name
+              }
+            }
+          `
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+              const ignored = spans.filter(span => {
+                return [
+                  'human.address.civicNumber',
+                  'human.address.civicNumber',
+                  'human.address.street'
+                ].indexOf(span.resource) !== -1
+              })
+
+              expect(spans).to.have.length(13)
+              expect(ignored).to.have.length(0)
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
+        })
+      })
     })
   })
 })
