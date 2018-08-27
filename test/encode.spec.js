@@ -29,7 +29,8 @@ describe('encode', () => {
   })
 
   it('should encode to msgpack', () => {
-    const buffer = concat(encode(trace))
+    const encoded = encode(trace)
+    const buffer = concat(encoded)
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded).to.be.instanceof(Array)

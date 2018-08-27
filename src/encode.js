@@ -48,8 +48,10 @@ function encode (trace) {
     writeString(buffers, 'service')
     writeString(buffers, span.service)
 
-    writeString(buffers, 'type')
-    writeString(buffers, span.type)
+    if (span.type) {
+      writeString(buffers, 'type')
+      writeString(buffers, span.type)
+    }
 
     writeString(buffers, 'error')
     buffers.push(prefixes.int[span.error])
@@ -77,7 +79,7 @@ function string (value) {
 
 function writeId (buffers, value) {
   buffers.push(types.uint64)
-  buffers.push(value.buffer)
+  buffers.push(value.toBuffer())
 }
 
 function writeInt (buffers, value) {

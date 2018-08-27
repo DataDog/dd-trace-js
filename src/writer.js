@@ -5,6 +5,7 @@ const log = require('./log')
 const format = require('./format')
 const encode = require('./encode')
 const tracerVersion = require('../lib/version')
+const msgpack = require('msgpack-lite')
 
 class Writer {
   constructor (url, size) {
@@ -40,6 +41,8 @@ class Writer {
   flush () {
     if (this._queue.length > 0) {
       const data = platform.msgpack.prefix(this._queue)
+        .reduce((prev, next) => prev.concat(next), [])
+
       const options = {
         protocol: this._url.protocol,
         hostname: this._url.hostname,
