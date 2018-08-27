@@ -5,7 +5,6 @@ const log = require('./log')
 const format = require('./format')
 const encode = require('./encode')
 const tracerVersion = require('../lib/version')
-const msgpack = require('msgpack-lite')
 
 class Writer {
   constructor (url, size) {
