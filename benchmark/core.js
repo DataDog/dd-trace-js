@@ -75,6 +75,7 @@ suite
     },
     fn () {
       writer.append(spanStub)
+      writer._offset = 0
     }
   })
   .add('Writer#flush (1000 items)', {

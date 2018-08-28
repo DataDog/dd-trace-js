@@ -18,7 +18,7 @@ const span = {
   }),
   _operationName: 'operation',
   _tags: {
-    'resource.name': '/resource',
+    'resource.name': '/resource /resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource',
     'span.type': 'web'
   },
   _startTime: 1500000000000.123456,

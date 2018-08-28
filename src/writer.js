@@ -8,13 +8,14 @@ const tracerVersion = require('../lib/version')
 
 class Writer {
   constructor (url, size) {
-    this._queue = []
     this._url = url
     this._size = size
+
+    this._reset()
   }
 
   get length () {
-    return this._queue.length
+    return this._count
   }
 
   append (span) {
@@ -23,24 +24,26 @@ class Writer {
     if (trace.started.length === trace.finished.length) {
       const formattedTrace = trace.finished.map(format)
 
-      log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
+      this._offset = encode(this._buffer, this._offset, formattedTrace)
+      this._count++
 
-      const buffer = encode(formattedTrace)
+      // log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
 
-      log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
+      // const buffer = encode(formattedTrace)
 
-      if (this.length < this._size) {
-        this._queue.push(buffer)
-      } else {
-        this._squeeze(buffer)
-      }
+      // log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
+
+      // if (this.length < this._size) {
+      //   this._queue.push(buffer)
+      // } else {
+      //   this._squeeze(buffer)
+      // }
     }
   }
 
   flush () {
-    if (this._queue.length > 0) {
-      const data = platform.msgpack.prefix(this._queue)
-        .reduce((prev, next) => prev.concat(next), [])
+    if (this._count > 0) {
+      const data = [].concat(platform.msgpack.getPrefix(this._count), this._buffer)
 
       const options = {
         protocol: this._url.protocol,
@@ -54,7 +57,7 @@ class Writer {
           'Datadog-Meta-Lang-Version': platform.version(),
           'Datadog-Meta-Lang-Interpreter': platform.engine(),
           'Datadog-Meta-Tracer-Version': tracerVersion,
-          'X-Datadog-Trace-Count': String(this._queue.length)
+          'X-Datadog-Trace-Count': String(this._count)
         }
       }
 
@@ -65,13 +68,19 @@ class Writer {
         .then(res => log.debug(`Response from the agent: ${res}`))
         .catch(e => log.error(e))
 
-      this._queue = []
+      this._reset()
     }
   }
 
   _squeeze (buffer) {
     const index = Math.floor(Math.random() * this.length)
     this._queue[index] = buffer
+  }
+
+  _reset () {
+    this._offset = 0
+    this._count = 0
+    this._buffer = Buffer.allocUnsafe(8 * 1024 * 1024)
   }
 }
 
