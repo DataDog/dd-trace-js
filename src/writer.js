@@ -74,7 +74,7 @@ class Writer {
       this._offset = encode(this._buffer, this._offset, trace)
       this._count++
     } catch (e) {
-      if (e.name === 'RangeError') {
+      if (e.name.startsWith('RangeError')) {
         if (offset === 0) {
           return log.error('Dropping trace because its payload is too large.')
         }
