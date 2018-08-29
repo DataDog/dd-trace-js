@@ -32,7 +32,7 @@ describe('Writer', () => {
     }
 
     format = sinon.stub().withArgs(span).returns('formatted')
-    encode = sinon.stub().withArgs(['formatted']).returns('encoded')
+    encode = (buffer, offset, trace) => buffer.write('encoded', offset)
 
     url = {
       protocol: 'http:',
@@ -67,22 +67,34 @@ describe('Writer', () => {
     it('should append a trace', () => {
       writer.append(span)
 
-      expect(writer._queue).to.deep.include('encoded')
+      expect(writer._count).to.equal(1)
     })
 
     it('should skip traces with unfinished spans', () => {
       trace.finished = []
       writer.append(span)
 
-      expect(writer._queue).to.be.empty
+      expect(writer._count).to.equal(0)
     })
 
-    it('should replace a random trace when full', () => {
-      writer._queue = new Array(1000)
+    it('should flush when the size limit is reached', () => {
+      sinon.spy(writer, 'flush')
+
+      writer._count = 1000
       writer.append(span)
 
-      expect(writer.length).to.equal(1000)
-      expect(writer._queue).to.deep.include('encoded')
+      expect(writer.flush).to.have.been.called
+      expect(writer._count).to.equal(1)
+    })
+
+    it('should flush when the buffer is full', () => {
+      sinon.spy(writer, 'flush')
+
+      writer._offset = writer._buffer.length + 1
+      writer.append(span)
+
+      expect(writer.flush).to.have.been.called
+      expect(writer._count).to.equal(1)
     })
   })
 
@@ -101,13 +113,16 @@ describe('Writer', () => {
     })
 
     it('should flush its traces to the agent', () => {
-      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
+      platform.msgpack.prefix.withArgs(2).returns('prefixed')
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
 
       writer.append(span)
       writer.append(span)
+
+      const buffer = writer._buffer.slice(0, writer._offset)
+
       writer.flush()
 
       expect(platform.request).to.have.been.calledWithMatch({
@@ -124,7 +139,7 @@ describe('Writer', () => {
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
           'X-Datadog-Trace-Count': '2'
         },
-        data: 'prefixed'
+        data: ['prefixed', buffer]
       })
     })
 

@@ -1,7 +1,9 @@
 'use strict'
 
 const Uint64BE = require('int64-buffer').Uint64BE
-const id = new Uint64BE(0x12345678, 0x12345678)
+const Buffer = require('safe-buffer').Buffer
+const buffer = Buffer.alloc(8)
+const id = new Uint64BE(buffer, 0, 0x12345678, 0x12345678)
 
 const span = {
   tracer: () => ({
@@ -18,7 +20,7 @@ const span = {
   }),
   _operationName: 'operation',
   _tags: {
-    'resource.name': '/resource /resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource/resource',
+    'resource.name': '/resource',
     'span.type': 'web'
   },
   _startTime: 1500000000000.123456,

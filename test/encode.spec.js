@@ -5,11 +5,10 @@ const codec = msgpack.createCodec({ int64: true })
 const Uint64BE = require('int64-buffer').Uint64BE
 const Buffer = require('safe-buffer').Buffer
 
-const concat = buffers => Buffer.concat(buffers.map(Buffer.from))
-
 describe('encode', () => {
   let encode
   let trace
+  let buffer
 
   beforeEach(() => {
     trace = [{
@@ -25,19 +24,20 @@ describe('encode', () => {
       start: 1500000000000123600,
       duration: 100000000
     }]
+
+    buffer = Buffer.alloc(8 * 1024 * 1024)
     encode = require('../src/encode')
   })
 
   it('should encode to msgpack', () => {
-    const encoded = encode(trace)
-    const buffer = concat(encoded)
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded).to.be.instanceof(Array)
     expect(decoded[0]).to.be.instanceof(Object)
     expect(decoded[0].trace_id.toString()).to.equal(trace[0].trace_id.toString())
     expect(decoded[0].span_id.toString()).to.equal(trace[0].span_id.toString())
-    expect(decoded[0].parent_id).to.equal(trace[0].parent_id)
     expect(decoded[0].name).to.equal(trace[0].name)
     expect(decoded[0].resource).to.equal(trace[0].resource)
     expect(decoded[0].service).to.equal(trace[0].service)
@@ -51,7 +51,8 @@ describe('encode', () => {
   it('should encode the parent ID', () => {
     trace[0].parent_id = new Uint64BE(Buffer.alloc(8, 0x03))
 
-    const buffer = concat(encode(trace))
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded[0].parent_id.toString()).to.deep.equal(trace[0].parent_id.toString())
@@ -66,7 +67,8 @@ describe('encode', () => {
 
     trace[0].meta.foo = str
 
-    const buffer = concat(encode(trace))
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded[0].meta).to.deep.equal(trace[0].meta)
@@ -81,7 +83,8 @@ describe('encode', () => {
 
     trace[0].meta.foo = str
 
-    const buffer = concat(encode(trace))
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded[0].meta).to.deep.equal(trace[0].meta)
@@ -96,54 +99,11 @@ describe('encode', () => {
 
     trace[0].meta.foo = str
 
-    const buffer = concat(encode(trace))
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded[0].meta).to.deep.equal(trace[0].meta)
-  })
-
-  it('should encode int8', () => {
-    trace[0].start = 128
-    trace[0].duration = 128
-
-    const buffer = concat(encode(trace))
-    const decoded = msgpack.decode(buffer, { codec })
-
-    expect(decoded[0].start).to.deep.equal(trace[0].start)
-    expect(decoded[0].duration).to.deep.equal(trace[0].duration)
-  })
-
-  it('should encode int16', () => {
-    trace[0].start = 256
-    trace[0].duration = 256
-
-    const buffer = concat(encode(trace))
-    const decoded = msgpack.decode(buffer, { codec })
-
-    expect(decoded[0].start).to.deep.equal(trace[0].start)
-    expect(decoded[0].duration).to.deep.equal(trace[0].duration)
-  })
-
-  it('should encode int32', () => {
-    trace[0].start = 65536
-    trace[0].duration = 65536
-
-    const buffer = concat(encode(trace))
-    const decoded = msgpack.decode(buffer, { codec })
-
-    expect(decoded[0].start).to.deep.equal(trace[0].start)
-    expect(decoded[0].duration).to.deep.equal(trace[0].duration)
-  })
-
-  it('should encode int64', () => {
-    trace[0].start = 4294967296
-    trace[0].duration = 4294967296
-
-    const buffer = concat(encode(trace))
-    const decoded = msgpack.decode(buffer, { codec })
-
-    expect(decoded[0].start.toString()).to.deep.equal(trace[0].start.toString())
-    expect(decoded[0].duration.toString()).to.deep.equal(trace[0].duration.toString())
   })
 
   it('should encode array16', () => {
@@ -151,16 +111,26 @@ describe('encode', () => {
       trace.push(trace[0])
     }
 
-    const buffer = concat(encode(trace))
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded).to.have.length(256)
   })
 
+  it('should encode array32', () => {
+    encode(buffer, 0, new Array(65537))
+
+    const decoded = msgpack.decode(buffer, { codec })
+
+    expect(decoded).to.have.length(65537)
+  })
+
   it('should encode utf-8 strings', () => {
     trace[0].meta['ƒơơ'] = 'ƃăř'
 
-    const buffer = concat(encode(trace))
+    encode(buffer, 0, trace)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded[0].meta).to.have.property('ƒơơ', trace[0].meta['ƒơơ'])

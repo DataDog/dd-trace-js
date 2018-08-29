@@ -22,28 +22,23 @@ class Writer {
     const trace = span.context().trace
 
     if (trace.started.length === trace.finished.length) {
+      if (this._count >= this._size) {
+        this.flush()
+      }
+
       const formattedTrace = trace.finished.map(format)
 
-      this._offset = encode(this._buffer, this._offset, formattedTrace)
-      this._count++
+      log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
 
-      // log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
-
-      // const buffer = encode(formattedTrace)
-
-      // log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
-
-      // if (this.length < this._size) {
-      //   this._queue.push(buffer)
-      // } else {
-      //   this._squeeze(buffer)
-      // }
+      this._encode(formattedTrace)
     }
   }
 
   flush () {
     if (this._count > 0) {
-      const data = [].concat(platform.msgpack.getPrefix(this._count), this._buffer)
+      const prefix = platform.msgpack.prefix(this._count)
+      const buffer = Buffer.from(this._buffer.buffer, 0, this._offset)
+      const data = [].concat(prefix, buffer)
 
       const options = {
         protocol: this._url.protocol,
@@ -67,14 +62,38 @@ class Writer {
         .request(Object.assign({ data }, options))
         .then(res => log.debug(`Response from the agent: ${res}`))
         .catch(e => log.error(e))
-
-      this._reset()
     }
+
+    this._reset()
   }
 
-  _squeeze (buffer) {
-    const index = Math.floor(Math.random() * this.length)
-    this._queue[index] = buffer
+  _encode (trace) {
+    const offset = this._offset
+
+    try {
+      this._offset = encode(this._buffer, this._offset, trace)
+      this._count++
+    } catch (e) {
+      if (e.name === 'RangeError') {
+        if (offset === 0) {
+          return log.error('Dropping trace because its payload is too large.')
+        }
+
+        this._offset = offset
+
+        this.flush()
+        this._encode(trace)
+      } else {
+        log.error(e)
+      }
+
+      return
+    }
+
+    log.debug(() => [
+      'Added encoded trace to buffer:',
+      this._buffer.slice(offset, this._offset).toString('hex').match(/../g).join(' ')
+    ].join(' '))
   }
 
   _reset () {

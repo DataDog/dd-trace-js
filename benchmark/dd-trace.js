@@ -7,7 +7,8 @@ const suite = benchmark('dd-trace')
 
 let operation
 
-const str = generateString(2000)
+const small = generateString(20)
+const large = generateString(2000)
 
 suite
   .add('1 span (no tags)', {
@@ -25,9 +26,9 @@ suite
       operation = () => {
         const span = tracer.startSpan('bench')
         span.addTags({
-          'tag1': str + generateString(10),
-          'tag2': str + str + generateString(10),
-          'tag3': str + str + str + generateString(10)
+          'tag1': large,
+          'tag2': large + large,
+          'tag3': large + large + large
         })
         span.finish()
       }
@@ -41,23 +42,23 @@ suite
       operation = () => {
         const rootSpan = tracer.startSpan('root')
         rootSpan.addTags({
-          'tag1': generateString(20),
-          'tag2': generateString(20),
-          'tag3': generateString(20)
+          'tag1': small,
+          'tag2': small,
+          'tag3': small
         })
 
         const parentSpan = tracer.startSpan('parent', { childOf: rootSpan })
         parentSpan.addTags({
-          'tag1': generateString(20),
-          'tag2': generateString(20),
-          'tag3': generateString(20)
+          'tag1': small,
+          'tag2': small,
+          'tag3': small
         })
 
         const childSpan = tracer.startSpan('child', { childOf: parentSpan })
         childSpan.addTags({
-          'tag1': generateString(20),
-          'tag2': generateString(20),
-          'tag3': generateString(20)
+          'tag1': small,
+          'tag2': small,
+          'tag3': small
         })
 
         childSpan.finish()

@@ -19,6 +19,7 @@ const Sampler = require('../src/sampler')
 const format = require('../src/format')
 const encode = require('../src/encode')
 const config = new Config({ service: 'benchmark' })
+const buffer = Buffer.alloc(8 * 1024 * 1024)
 
 const suite = benchmark('core')
 
@@ -108,7 +109,7 @@ suite
   })
   .add('encode', {
     fn () {
-      encode(traceStub)
+      encode(buffer, 0, traceStub)
     }
   })
 

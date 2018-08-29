@@ -44,10 +44,8 @@ describe('format', () => {
       expect(trace.resource).to.equal(span._operationName)
       expect(trace.service).to.equal(span.tracer()._service)
       expect(trace.error).to.equal(0)
-      expect(trace.start).to.be.instanceof(Int64BE)
-      expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.be.instanceof(Int64BE)
-      expect(trace.duration.toNumber()).to.equal(span._duration * 1e6)
+      expect(trace.start).to.equal(span._startTime * 1e6)
+      expect(trace.duration).to.equal(span._duration * 1e6)
     })
 
     it('should extract Datadog specific tags', () => {
@@ -137,8 +135,6 @@ describe('format', () => {
       expect(trace.service).to.equal('null')
       expect(trace.resource).to.equal('null')
       expect(trace.meta['foo.bar']).to.equal('null')
-      expect(trace.start).to.be.instanceof(Int64BE)
-      expect(trace.duration).to.be.instanceof(Int64BE)
     })
   })
 })
