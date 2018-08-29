@@ -5,8 +5,6 @@ const Buffer = require('safe-buffer').Buffer
 const util = require('./util')
 const tokens = require('./tokens')
 const cache = require('./cache')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
 
 const values = {}
 const fields = getFields()

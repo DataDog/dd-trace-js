@@ -6,7 +6,6 @@ require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
 require,lodash.memoize,MIT,Copyright JS Foundation and other contributors
 require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
-require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,parent-module,MIT,Copyright Sindre Sorhus
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
@@ -15,6 +14,7 @@ require,read-pkg-up,MIT,Copyright Sindre Sorhus
 require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
+require,tiny-lru,BSD-3-Clause,Copyright 2018 Jason Mulligan
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 dev,@airbnb/node-memwatch,WTFPL,Copyright Lloyd Hilaiel
 dev,amqplib,MIT,Copyright 2013-2014 Michael Bridgen
@@ -37,6 +37,7 @@ dev,graphql,MIT,Copyright 2015-present Facebook Inc.
 dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
 dev,gulp-jsdoc3,Apache-2.0,Copyright Marc Udoff
 dev,jsdoc,Apache-2.0,Copyright 2011-present Michael Mathews and the contributors to JSDoc
+dev,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,mongodb-core,Apache-2.0,Copyright Christian Kvalheim
 dev,mysql,MIT,Copyright 2012 Felix Geisendörfer and contributors

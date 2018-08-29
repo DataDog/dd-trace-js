@@ -1,6 +1,6 @@
 'use strict'
 
-const tracer = require('..').init()
+const tracer = require('..').init({ flushInterval: 30000 })
 const benchmark = require('./benchmark')
 
 const suite = benchmark('dd-trace')
@@ -19,6 +19,7 @@ suite
     },
     fn () {
       operation()
+      tracer._tracer._recorder._writer._offset = 0 // ignore flushing
     }
   })
   .add('1 span (large tags)', {
@@ -35,6 +36,7 @@ suite
     },
     fn () {
       operation()
+      tracer._tracer._recorder._writer._offset = 0 // ignore flushing
     }
   })
   .add('3 spans (small tags)', {
@@ -68,6 +70,7 @@ suite
     },
     fn () {
       operation()
+      tracer._tracer._recorder._writer._offset = 0 // ignore flushing
     }
   })
 
