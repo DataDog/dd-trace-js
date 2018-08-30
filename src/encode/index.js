@@ -4,7 +4,8 @@ const Uint64BE = require('int64-buffer').Uint64BE
 const Buffer = require('safe-buffer').Buffer
 const util = require('./util')
 const tokens = require('./tokens')
-const temp = Buffer.alloc(8 * 1024 * 1024)
+
+const fields = getFields()
 
 function encode (buffer, offset, trace) {
   offset = writeArrayPrefix(buffer, offset, trace)
@@ -17,46 +18,46 @@ function encode (buffer, offset, trace) {
 
     offset += copy(buffer, offset, tokens.map[fieldCount])
 
-    offset += writeAscii(buffer, offset, 'trace_id')
+    offset += copy(buffer, offset, fields.trace_id)
     offset += copy(buffer, offset, tokens.uint64)
     offset += copy(buffer, offset, span.trace_id.buffer)
 
-    offset += writeAscii(buffer, offset, 'span_id')
+    offset += copy(buffer, offset, fields.span_id)
     offset += copy(buffer, offset, tokens.uint64)
     offset += copy(buffer, offset, span.span_id.buffer)
 
     if (span.parent_id) {
-      offset += write(buffer, offset, 'parent_id')
+      offset += copy(buffer, offset, fields.parent_id)
       offset += copy(buffer, offset, tokens.uint64)
       offset += copy(buffer, offset, span.parent_id.buffer)
     }
 
-    offset += writeAscii(buffer, offset, 'name')
+    offset += copy(buffer, offset, fields.name)
     offset += write(buffer, offset, span.name)
 
-    offset += writeAscii(buffer, offset, 'resource')
+    offset += copy(buffer, offset, fields.resource)
     offset += write(buffer, offset, span.resource)
 
-    offset += writeAscii(buffer, offset, 'service')
+    offset += copy(buffer, offset, fields.service)
     offset += write(buffer, offset, span.service)
 
     if (span.type) {
-      offset += writeAscii(buffer, offset, 'type')
+      offset += copy(buffer, offset, fields.type)
       offset += write(buffer, offset, span.type)
     }
 
-    offset += writeAscii(buffer, offset, 'error')
+    offset += copy(buffer, offset, fields.error)
     offset += copy(buffer, offset, tokens.int[span.error])
 
-    offset += writeAscii(buffer, offset, 'meta')
+    offset += copy(buffer, offset, fields.meta)
     offset = writeMap(buffer, offset, span.meta)
 
-    offset += writeAscii(buffer, offset, 'start')
+    offset += copy(buffer, offset, fields.start)
     offset += copy(buffer, offset, tokens.uint64)
     new Uint64BE(buffer, offset, span.start) // eslint-disable-line no-new
     offset = offset + 8
 
-    offset += writeAscii(buffer, offset, 'duration')
+    offset += copy(buffer, offset, fields.duration)
     offset += copy(buffer, offset, tokens.uint64)
     new Uint64BE(buffer, offset, span.duration) // eslint-disable-line no-new
     offset = offset + 8
@@ -67,33 +68,11 @@ function encode (buffer, offset, trace) {
   return offset
 }
 
-function writeAscii (buffer, offset, str) {
-  const length = str.length
-  const written = writeStringPrefix(buffer, offset, length)
-
-  offset += written
-
-  for (let i = 0; i < length; i++) {
-    buffer[offset + i] = str.charCodeAt(i)
-  }
-
-  return length + written
-}
-
 function write (buffer, offset, str) {
   const tokenLength = writeStringPrefix(buffer, offset, Buffer.byteLength(str))
   const length = util.write(buffer, str, offset + tokenLength)
 
-  // copy(buffer, offset + tokenLength, temp, 0, length)
-
   return length + tokenLength
-
-  // const length = util.write(temp, str)
-  // const tokenLength = writeStringPrefix(buffer, offset, length)
-
-  // copy(buffer, offset + tokenLength, temp, 0, length)
-
-  // return length + tokenLength
 }
 
 function copy (buffer, offset, source, sourceStart, sourceEnd) {
@@ -136,6 +115,25 @@ function writeStringPrefix (buffer, offset, length) {
 
 function writeArrayPrefix (buffer, offset, array) {
   return offset + writePrefix(buffer, offset, array.length, tokens.array, 0xdc)
+}
+
+function getFields () {
+  return [
+    'trace_id',
+    'span_id',
+    'parent_id',
+    'service',
+    'resource',
+    'name',
+    'type',
+    'error',
+    'meta',
+    'start',
+    'duration'
+  ].reduce((prev, next) => {
+    prev[next] = Buffer.concat([tokens.str[next.length], Buffer.from(next)])
+    return prev
+  }, {})
 }
 
 module.exports = encode
