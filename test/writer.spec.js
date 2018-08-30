@@ -90,7 +90,7 @@ describe('Writer', () => {
     it('should flush when the buffer is full', () => {
       sinon.spy(writer, 'flush')
 
-      writer._offset = writer._buffer.length + 1
+      writer._encoder._offset = writer._buffer.length + 1
       writer.append(span)
 
       expect(writer.flush).to.have.been.called
@@ -121,7 +121,7 @@ describe('Writer', () => {
       writer.append(span)
       writer.append(span)
 
-      const buffer = writer._buffer.slice(0, writer._offset)
+      const buffer = writer._buffer.slice(0, writer._encoder.offset())
 
       writer.flush()
 
