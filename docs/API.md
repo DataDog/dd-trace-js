@@ -136,6 +136,7 @@ Each integration also has its own list of default tags. These tags get automatic
 | http.url         | The complete URL of the request.                          |
 | http.method      | The HTTP method of the request.                           |
 | http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
 
 <h5 id="express-config">Configuration Options</h5>
 
@@ -143,6 +144,7 @@ Each integration also has its own list of default tags. These tags get automatic
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
 | validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| recordHeaders    | `[]`                      | An array of headers to include in the span metadata. |
 
 <h3 id="graphql">graphql</h3>
 

@@ -9,6 +9,8 @@ const pathToRegExp = require('path-to-regexp')
 const OPERATION_NAME = 'express.request'
 
 function createWrapMethod (tracer, config) {
+  const recordHeaders = config.recordHeaders ? config.recordHeaders.map(key => key.toLowerCase()) : []
+
   const validateStatus = typeof config.validateStatus === 'function'
     ? config.validateStatus
     : code => code < 500
@@ -45,6 +47,13 @@ function createWrapMethod (tracer, config) {
       if (!validateStatus(res.statusCode)) {
         span.setTag(Tags.ERROR, true)
       }
+
+      recordHeaders.forEach(key => {
+        const value = req.headers[key]
+        if (value) {
+          span.setTag(`http.headers.${key}`, value)
+        }
+      })
 
       span.finish()
 

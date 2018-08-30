@@ -546,7 +546,8 @@ describe('Plugin', () => {
         beforeEach(() => {
           config = {
             service: 'custom',
-            validateStatus: code => code < 400
+            validateStatus: code => code < 400,
+            recordHeaders: ['User-Agent']
           }
 
           return agent.load(plugin, 'express', config)
@@ -597,6 +598,31 @@ describe('Plugin', () => {
               axios
                 .get(`http://localhost:${port}/user`, {
                   validateStatus: status => status === 400
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should include specified headers in metadata', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.headers.user-agent', 'test')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  headers: { 'User-Agent': 'test' }
                 })
                 .catch(done)
             })
