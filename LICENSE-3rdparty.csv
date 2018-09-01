@@ -48,6 +48,7 @@ dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,redis,MIT,Copyright 2016 NodeRedis
 dev,require-dir,MIT,2012-2015 Aseem Kishore
 dev,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
+dev,selfsigned,MIT,Paolo Fragomeni and Charles Bushong
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
