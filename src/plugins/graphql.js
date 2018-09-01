@@ -34,30 +34,30 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         }
       }
 
-      const parseTime = document._datadog_parse_time
-      const validateTime = document._datadog_validate_time
-
-      const operationSpan = createOperationSpan(
-        tracer,
-        config,
-        operation,
-        document._datadog_source,
-        variableValues,
-        (parseTime && parseTime.start) || (validateTime && validateTime.start)
-      )
-
-      if (parseTime) {
-        const span = createSpan(tracer, config, 'parse', operationSpan, parseTime.start)
-        span.finish(parseTime.end)
-      }
-      if (validateTime) {
-        const span = createSpan(tracer, config, 'validate', operationSpan, validateTime.start)
-        span.finish(validateTime.end)
-      }
-
-      const executeSpan = createSpan(tracer, config, 'execute', operationSpan)
-
       if (!contextValue._datadog_spans) {
+        const parseTime = document._datadog_parse_time
+        const validateTime = document._datadog_validate_time
+
+        const operationSpan = createOperationSpan(
+          tracer,
+          config,
+          operation,
+          document._datadog_source,
+          variableValues,
+          (parseTime && parseTime.start) || (validateTime && validateTime.start)
+        )
+
+        if (parseTime) {
+          const span = createSpan(tracer, config, 'parse', operationSpan, parseTime.start)
+          span.finish(parseTime.end)
+        }
+        if (validateTime) {
+          const span = createSpan(tracer, config, 'validate', operationSpan, validateTime.start)
+          span.finish(validateTime.end)
+        }
+
+        const executeSpan = createSpan(tracer, config, 'execute', operationSpan)
+
         Object.defineProperties(contextValue, {
           _datadog_spans: {
             value: { executeSpan, operationSpan }
@@ -239,8 +239,8 @@ function createOperationSpan (tracer, config, operation, source, variableValues,
     'resource.name': [type, name].filter(val => val).join(' '),
     'graphql.document': source
   }
-  if (variableValues && config.filterVariables) {
-    tags['graphql.variables'] = JSON.stringify(config.filterVariables(variableValues))
+  if (variableValues && config.variables) {
+    tags['graphql.variables'] = JSON.stringify(config.variables(variableValues))
   }
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
     tags,

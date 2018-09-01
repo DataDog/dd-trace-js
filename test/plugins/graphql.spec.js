@@ -775,7 +775,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load(plugin, 'graphql', {
             service: 'test',
-            filterVariables: variables => Object.assign({}, variables, { who: 'REDACTED' })
+            variables: variables => Object.assign({}, variables, { who: 'REDACTED' })
           }).then(() => {
             graphql = require(`./versions/graphql@${version}`).get()
             buildSchema()
