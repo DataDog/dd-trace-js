@@ -457,7 +457,7 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(3)
+              expect(spans).to.have.length(6)
               expect(spans[0]).to.have.property('name', 'graphql.subscription')
             })
             .then(done)
