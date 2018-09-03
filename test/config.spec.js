@@ -47,6 +47,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_ENV').returns('test')
+    platform.env.withArgs('DD_TRACE_SAMPLE_RATE').returns('0.01')
 
     const config = new Config()
 
@@ -56,6 +57,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.property('sampleRate', '0.01')
   })
 
   it('should initialize from the options', () => {
@@ -95,6 +97,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_ENV').returns('test')
+    platform.env.withArgs('DD_TRACE_SAMPLE_RATE').returns('0.01')
 
     const config = new Config({
       enabled: true,
@@ -102,7 +105,8 @@ describe('Config', () => {
       hostname: 'server',
       port: 7777,
       service: 'test',
-      env: 'development'
+      env: 'development',
+      sampleRate: '0.05'
     })
 
     expect(config).to.have.property('enabled', true)
@@ -111,6 +115,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '7777')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
+    expect(config).to.have.property('sampleRate', '0.05')
   })
 
   it('should sanitize the sample rate to be between 0 and 1', () => {
