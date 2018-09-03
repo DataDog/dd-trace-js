@@ -166,10 +166,10 @@ query HelloWorld {
 
 <h5 id="graphql-tags">Tags</h5>
 
-| Tag               | Description                                               |
-|-------------------|-----------------------------------------------------------|
-| graphql.document  | The original GraphQL document.                            |
-| graphql.variables | The variables applied to the document.                    |
+| Tag                 | Description                                               |
+|---------------------|-----------------------------------------------------------|
+| graphql.document    | The original GraphQL document.                            |
+| graphql.variables.* | The variables applied to the document.                    |
 
 <h5 id="graphql-config">Configuration Options</h5>
 

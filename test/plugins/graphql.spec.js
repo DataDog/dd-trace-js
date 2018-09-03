@@ -809,10 +809,8 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].meta).to.have.property(
-                'graphql.variables',
-                JSON.stringify({ title: 'planet', who: 'REDACTED' })
-              )
+              expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
+              expect(spans[0].meta).to.have.property('graphql.variables.who', 'REDACTED')
             })
             .then(done)
             .catch(done)

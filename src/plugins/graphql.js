@@ -240,7 +240,10 @@ function createOperationSpan (tracer, config, operation, source, variableValues,
     'graphql.document': source
   }
   if (variableValues && config.variables) {
-    tags['graphql.variables'] = JSON.stringify(config.variables(variableValues))
+    const variables = config.variables(variableValues)
+    for (const param in variables) {
+      tags[`graphql.variables.${param}`] = variables[param]
+    }
   }
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
     tags,
