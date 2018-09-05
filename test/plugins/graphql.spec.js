@@ -845,8 +845,11 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
+              expect(spans).to.have.length(4)
               expect(spans[0]).to.have.property('name', 'graphql.query')
+              expect(spans[1]).to.have.property('name', 'graphql.parse')
+              expect(spans[2]).to.have.property('name', 'graphql.validate')
+              expect(spans[3]).to.have.property('name', 'graphql.execute')
             })
             .then(done)
             .catch(done)
@@ -891,7 +894,7 @@ describe('Plugin', () => {
                 ].indexOf(span.resource) !== -1
               })
 
-              expect(spans).to.have.length(13)
+              expect(spans).to.have.length(16)
               expect(ignored).to.have.length(0)
             })
             .then(done)
