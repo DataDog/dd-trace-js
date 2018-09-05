@@ -168,16 +168,18 @@ query HelloWorld {
 
 <h5 id="graphql-tags">Tags</h5>
 
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| graphql.document | The original GraphQL document.                            |
+| Tag                 | Description                                               |
+|---------------------|-----------------------------------------------------------|
+| graphql.document    | The original GraphQL document.                            |
+| graphql.variables.* | The variables applied to the document.                    |
 
 <h5 id="graphql-config">Configuration Options</h5>
 
-| Option  | Default                                          | Description                            |
-|---------|--------------------------------------------------|----------------------------------------|
-| service | *Service name of the app suffixed with -graphql* | The service name for this integration. |
-| depth   | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
+| Option          | Default                                          | Description                                                            |
+|-----------------|--------------------------------------------------|------------------------------------------------------------------------|
+| service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                                 |
+| variables       | `undefined`                                      | A callback to enable recording of variables. By default, no variables are recorded. For example, using `variables => variables` would record all variables. |
+| depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
 
 <h3 id="http">http / https</h3>
 
