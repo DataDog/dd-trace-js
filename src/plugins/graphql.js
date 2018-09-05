@@ -1,12 +1,9 @@
 'use strict'
 
 const platform = require('../platform')
+const log = require('../log')
 
 function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
-  if (typeof config.depth !== 'number') {
-    config.depth = -1
-  }
-
   return function wrapExecute (execute) {
     return function executeWithTrace () {
       const args = normalizeArgs(arguments)
@@ -338,6 +335,31 @@ function addError (span, error) {
   return error
 }
 
+function validateConfig (config) {
+  return Object.assign({}, config, {
+    depth: getDepth(config),
+    variables: getVariablesFilter(config)
+  })
+}
+
+function getDepth (config) {
+  if (typeof config.depth === 'number') {
+    return config.depth
+  } else if (config.hasOwnProperty('depth')) {
+    log.error('Expected `depth` to be a integer.')
+  }
+  return -1
+}
+
+function getVariablesFilter (config) {
+  if (typeof config.variables === 'function') {
+    return config.variables
+  } else if (config.hasOwnProperty('variables')) {
+    log.error('Expected `variables` to be a function.')
+  }
+  return null
+}
+
 module.exports = [
   {
     name: 'graphql',
@@ -346,7 +368,7 @@ module.exports = [
     patch (execute, tracer, config) {
       this.wrap(execute, 'execute', createWrapExecute(
         tracer,
-        config,
+        validateConfig(config),
         execute.defaultFieldResolver,
         execute.responsePathAsArray
       ))
@@ -360,7 +382,7 @@ module.exports = [
     file: 'language/parser.js',
     versions: ['0.13.x'],
     patch (parser, tracer, config) {
-      this.wrap(parser, 'parse', createWrapParse(tracer, config))
+      this.wrap(parser, 'parse', createWrapParse(tracer, validateConfig(config)))
     },
     unpatch (parser) {
       this.unwrap(parser, 'parse')
@@ -371,7 +393,7 @@ module.exports = [
     file: 'validation/validate.js',
     versions: ['0.13.x'],
     patch (validate, tracer, config) {
-      this.wrap(validate, 'validate', createWrapValidate(tracer, config))
+      this.wrap(validate, 'validate', createWrapValidate(tracer, validateConfig(config)))
     },
     unpatch (validate) {
       this.unwrap(validate, 'validate')
