@@ -547,7 +547,7 @@ describe('Plugin', () => {
           config = {
             service: 'custom',
             validateStatus: code => code < 400,
-            recordHeaders: ['User-Agent']
+            headers: ['User-Agent']
           }
 
           return agent.load(plugin, 'express', config)

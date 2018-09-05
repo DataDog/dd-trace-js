@@ -5,15 +5,13 @@ const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 const METHODS = require('methods').concat('use', 'route', 'param', 'all')
 const pathToRegExp = require('path-to-regexp')
+const log = require('../log')
 
 const OPERATION_NAME = 'express.request'
 
 function createWrapMethod (tracer, config) {
-  const recordHeaders = config.recordHeaders ? config.recordHeaders.map(key => key.toLowerCase()) : []
-
-  const validateStatus = typeof config.validateStatus === 'function'
-    ? config.validateStatus
-    : code => code < 500
+  const headersToRecord = getHeadersToRecord(config)
+  const validateStatus = getStatusValidator(config)
 
   function ddTrace (req, res, next) {
     if (req._datadog.span) return next()
@@ -48,7 +46,7 @@ function createWrapMethod (tracer, config) {
         span.setTag(Tags.ERROR, true)
       }
 
-      recordHeaders.forEach(key => {
+      headersToRecord.forEach(key => {
         const value = req.headers[key]
         if (value) {
           span.setTag(`http.headers.${key}`, value)
@@ -163,6 +161,28 @@ function wrapNext (tracer, layer, req, next) {
       originalNext.apply(null, arguments)
     })
   }
+}
+
+function getHeadersToRecord (config) {
+  if (Array.isArray(config.headers)) {
+    try {
+      return config.headers.map(key => key.toLowerCase())
+    } catch (err) {
+      log.error(err)
+    }
+  } else if (config.hasOwnProperty('headers')) {
+    log.error('Expected `headers` to be an array of strings.')
+  }
+  return []
+}
+
+function getStatusValidator (config) {
+  if (typeof config.validateStatus === 'function') {
+    return config.validateStatus
+  } else if (config.hasOwnProperty('validateStatus')) {
+    log.error('Expected `validateStatus` to be a function.')
+  }
+  return code => code < 500
 }
 
 function extractMatchers (fn) {

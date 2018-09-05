@@ -144,7 +144,7 @@ Each integration also has its own list of default tags. These tags get automatic
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
 | validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
-| recordHeaders    | `[]`                      | An array of headers to include in the span metadata. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
 
 <h3 id="graphql">graphql</h3>
 
