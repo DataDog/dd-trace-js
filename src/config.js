@@ -17,6 +17,7 @@ class Config {
     const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     const plugins = coalesce(options.plugins, true)
+    const processors = coalesce(options.processors, [])
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -27,6 +28,7 @@ class Config {
     this.bufferSize = 100000
     this.sampleRate = sampleRate
     this.logger = options.logger
+    this.processors = processors
     this.plugins = !!plugins
 
     Object.defineProperty(this, 'service', {

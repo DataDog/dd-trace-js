@@ -32,7 +32,7 @@ describe('Writer', () => {
     }
 
     format = sinon.stub().withArgs(span).returns('formatted')
-    encode = sinon.stub().withArgs(['formatted']).returns('encoded')
+    encode = sinon.stub().withArgs(['processed']).returns('encoded')
 
     url = {
       protocol: 'http:',
@@ -51,10 +51,11 @@ describe('Writer', () => {
       './encode': encode,
       '../lib/version': 'tracerVersion'
     })
-    writer = new Writer(url, 3)
   })
 
   describe('length', () => {
+    beforeEach(() => { writer = new Writer(url, 3, []) })
+
     it('should return the number of traces', () => {
       writer.append(span)
       writer.append(span)
@@ -63,14 +64,79 @@ describe('Writer', () => {
     })
   })
 
+  describe('applyProcessors', () => {
+    describe('with no processors configured', () => {
+      it('returns the trace', () => {
+        writer = new Writer(url, 3, [])
+        const formattedTrace = trace.finished.map(format)
+        expect(writer.applyProcessors(formattedTrace)).to.eq(formattedTrace)
+      })
+    })
+
+    describe('with processors configured', () => {
+      it('passes the trace through the processors and then returns it', () => {
+        const processors = [
+          sinon.stub().withArgs(['formatted']).returns(['partly-processed']),
+          sinon.stub().withArgs(['partly-processed']).returns(['processed'])
+        ]
+
+        writer = new Writer(url, 3, processors)
+        const formattedTrace = trace.finished.map(format)
+        expect(writer.applyProcessors(formattedTrace)).to.deep.eq(['processed'])
+      })
+
+      describe('when a processor skips the trace', () => {
+        it('returns undefined, and does not call the other processors', () => {
+          const neverCalledProcessor = sinon.spy()
+
+          const processors = [
+            sinon.stub().withArgs('formatted').returns(undefined),
+            neverCalledProcessor
+          ]
+
+          writer = new Writer(url, 3, processors)
+          const formattedTrace = trace.finished.map(format)
+          expect(writer.applyProcessors(formattedTrace)).to.be.undefined
+          expect(neverCalledProcessor).to.not.have.been.called
+        })
+      })
+    })
+  })
+
   describe('append', () => {
     it('should append a trace', () => {
+      writer = new Writer(url, 3, [])
       writer.append(span)
 
       expect(writer._queue).to.deep.include('encoded')
     })
 
+    it('should run traces through any processors', () => {
+      const firstAlteringProcessor = sinon.stub().withArgs(['formatted']).returns(['partly-processed'])
+      const secondAlteringProcessor = sinon.stub().withArgs(['partly-processed']).returns(['processed'])
+      const processors = [firstAlteringProcessor, secondAlteringProcessor]
+      writer = new Writer(url, 3, processors)
+
+      writer.append(span)
+
+      expect(encode).to.have.been.called
+      expect(writer._queue).to.deep.include('encoded')
+    })
+
+    describe('when a processor skips the trace', () => {
+      it('does not add the trace to the queue', () => {
+        const processors = [
+          sinon.stub().withArgs(['formatted']).returns(undefined)
+        ]
+
+        writer = new Writer(url, 3, processors)
+        writer.append(span)
+        expect(writer._queue).to.be.empty
+      })
+    })
+
     it('should skip traces with unfinished spans', () => {
+      writer = new Writer(url, 3, [])
       trace.finished = []
       writer.append(span)
 
@@ -78,6 +144,7 @@ describe('Writer', () => {
     })
 
     it('should replace a random trace when full', () => {
+      writer = new Writer(url, 3, [])
       writer._queue = new Array(1000)
       writer.append(span)
 
@@ -87,6 +154,8 @@ describe('Writer', () => {
   })
 
   describe('flush', () => {
+    beforeEach(() => { writer = new Writer(url, 3, []) })
+
     it('should skip flushing if empty', () => {
       writer.flush()
 

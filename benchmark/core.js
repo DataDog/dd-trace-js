@@ -71,7 +71,7 @@ suite
   })
   .add('Writer#append', {
     onStart () {
-      writer = new Writer({}, 1000000)
+      writer = new Writer({}, 1000000, [])
     },
     fn () {
       writer.append(spanStub)
@@ -79,7 +79,7 @@ suite
   })
   .add('Writer#flush (1000 items)', {
     onStart () {
-      writer = new Writer({}, 1001)
+      writer = new Writer({}, 1001, [])
 
       for (let i = 0; i < 1000; i++) {
         writer.append(spanStub)
