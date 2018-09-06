@@ -56,6 +56,23 @@ describe('Span', () => {
     expect(span.context().trace.started).to.deep.equal(['span', span])
   })
 
+  it('should start a new trace if the parent trace is finished', () => {
+    const parent = {
+      traceId: new Uint64BE(123, 123),
+      spanId: new Uint64BE(456, 456),
+      sampled: false,
+      baggageItems: { foo: 'bar' },
+      trace: {
+        started: ['span'],
+        finished: ['span']
+      }
+    }
+
+    span = new Span(tracer, { operationName: 'operation', parent })
+
+    expect(span.context().trace.started).to.deep.equal([span])
+  })
+
   describe('tracer', () => {
     it('should return its parent tracer', () => {
       span = new Span(tracer, { operationName: 'operation' })
