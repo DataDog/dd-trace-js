@@ -57,7 +57,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
-    expect(config).to.have.property('sampleRate', '0.01')
+    expect(config).to.have.property('sampleRate', 0.01)
   })
 
   it('should initialize from the options', () => {
@@ -106,7 +106,7 @@ describe('Config', () => {
       port: 7777,
       service: 'test',
       env: 'development',
-      sampleRate: '0.05'
+      sampleRate: 0.05
     })
 
     expect(config).to.have.property('enabled', true)
@@ -115,7 +115,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '7777')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
-    expect(config).to.have.property('sampleRate', '0.05')
+    expect(config).to.have.property('sampleRate', 0.05)
   })
 
   it('should sanitize the sample rate to be between 0 and 1', () => {
