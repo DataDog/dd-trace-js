@@ -95,6 +95,8 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('parent_id')
@@ -109,6 +111,8 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
             client.ping(error => {
               expect(tracer.scopeManager().active()).to.be.null
               done(error)
@@ -154,6 +158,8 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('parent_id')
@@ -170,6 +176,8 @@ describe('Plugin', () => {
           })
 
           it('should run resolved promises in the parent context', () => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
             return client.ping()
               .then(() => {
                 expect(tracer.scopeManager().active()).to.be.null
@@ -177,6 +185,8 @@ describe('Plugin', () => {
           })
 
           it('should run rejected promises in the parent context', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
             client.search({ index: 'invalid' })
               .catch(() => {
                 expect(tracer.scopeManager().active()).to.be.null

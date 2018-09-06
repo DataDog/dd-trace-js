@@ -51,6 +51,8 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           client.on('error', done)
 
           client.get('foo', () => {
@@ -60,6 +62,8 @@ describe('Plugin', () => {
         })
 
         it('should run client emitter listeners in the parent context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           client.on('error', done)
 
           client.on('ready', () => {
@@ -69,6 +73,8 @@ describe('Plugin', () => {
         })
 
         it('should run stream emitter listeners in the parent context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           client.on('error', done)
 
           client.stream.on('close', () => {
