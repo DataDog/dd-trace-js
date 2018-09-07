@@ -144,6 +144,8 @@ describe('Plugin', () => {
           })
 
           it('should run the message event listener in the AMQP span scope', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
             const parent = tracer.scopeManager().active()
 
             receiver.on('message', message => {
