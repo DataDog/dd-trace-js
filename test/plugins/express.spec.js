@@ -257,6 +257,8 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path when changing scope', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           const app = express()
           const router = express.Router()
 
@@ -296,6 +298,8 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path without a scope', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           const app = express()
           const router = express.Router()
 
@@ -412,6 +416,8 @@ describe('Plugin', () => {
         })
 
         it('should reactivate the span when the active scope is closed', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           const app = express()
 
           let span

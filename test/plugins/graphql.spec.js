@@ -548,6 +548,8 @@ describe('Plugin', () => {
         })
 
         it('should run rootValue resolvers in the current context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -567,6 +569,8 @@ describe('Plugin', () => {
         })
 
         it('should run returned promise in the parent context', () => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
           const schema = graphql.buildSchema(`
             type Query {
               hello: String

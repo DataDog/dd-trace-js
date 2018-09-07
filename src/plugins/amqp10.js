@@ -27,8 +27,15 @@ function createWrapMessageReceived (tracer, config) {
       const span = startReceiveSpan(tracer, config, this)
 
       process.nextTick(() => {
-        tracer.scopeManager().activate(span, true)
-        messageReceived.apply(this, arguments)
+        const scope = tracer.scopeManager().activate(span, true)
+
+        try {
+          messageReceived.apply(this, arguments)
+        } finally {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
+            scope.close()
+          }
+        }
       })
     }
   }

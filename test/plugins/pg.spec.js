@@ -97,6 +97,8 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           const span = {}
           const scope = tracer.scopeManager().activate(span)
 
@@ -140,6 +142,8 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
           const span = {}
           const scope = tracer.scopeManager().activate(span)
 
