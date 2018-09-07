@@ -7,17 +7,22 @@ const platform = require('../platform')
 const log = require('../log')
 
 class DatadogSpan extends Span {
-  constructor (tracer, fields) {
+  constructor (tracer, sampler, fields) {
     super()
 
     const startTime = fields.startTime || platform.now()
     const operationName = fields.operationName
     const parent = fields.parent || null
     const tags = fields.tags || {}
+    const metrics = {
+      _sample_rate: sampler.rate()
+    }
 
     this._parentTracer = tracer
+    this._sampler = sampler
     this._operationName = operationName
     this._tags = Object.assign({}, tags)
+    this._metrics = metrics
     this._startTime = startTime
 
     this._spanContext = this._createContext(parent)
@@ -40,7 +45,7 @@ class DatadogSpan extends Span {
       spanContext = new SpanContext({
         traceId: spanId,
         spanId,
-        sampled: this._parentTracer._isSampled(this)
+        sampled: this._sampler.isSampled(this)
       })
     }
 
