@@ -13,6 +13,14 @@ describe('Sampler', () => {
     Math.random.restore()
   })
 
+  describe('rate', () => {
+    it('should return the sample rate', () => {
+      sampler = new Sampler(0.5)
+
+      expect(sampler.rate()).to.equal(0.5)
+    })
+  })
+
   describe('isSampled', () => {
     it('should always sample when rate is 1', () => {
       sampler = new Sampler(1)
