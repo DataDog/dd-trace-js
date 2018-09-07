@@ -5,6 +5,9 @@ const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const platform = require('../platform')
 const log = require('../log')
+const constants = require('../constants')
+
+const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 class DatadogSpan extends Span {
   constructor (tracer, sampler, fields) {
@@ -15,7 +18,7 @@ class DatadogSpan extends Span {
     const parent = fields.parent || null
     const tags = fields.tags || {}
     const metrics = {
-      _sample_rate: sampler.rate()
+      [SAMPLE_RATE_METRIC_KEY]: sampler.rate()
     }
 
     this._parentTracer = tracer

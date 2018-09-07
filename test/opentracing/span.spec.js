@@ -1,6 +1,9 @@
 'use strict'
 
 const Uint64BE = require('int64-buffer').Uint64BE
+const constants = require('../../src/constants')
+
+const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 describe('Span', () => {
   let Span
@@ -62,7 +65,7 @@ describe('Span', () => {
   })
 
   it('should set the sample rate metric from the sampler', () => {
-    expect(span._metrics).to.have.property('_sample_rate', 1)
+    expect(span._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
   describe('tracer', () => {
