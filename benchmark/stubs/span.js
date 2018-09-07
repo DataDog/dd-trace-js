@@ -22,6 +22,9 @@ const span = {
     type: 'web',
     error: true
   },
+  _metrics: {
+    _sample_rate: 1
+  },
   _startTime: 1500000000000.123456,
   _duration: 100
 }
