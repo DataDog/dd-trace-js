@@ -3,9 +3,12 @@
 describe('Writer', () => {
   let Writer
   let writer
+  let prioritySampler
   let trace
   let span
   let platform
+  let request
+  let response
   let format
   let encode
   let url
@@ -21,11 +24,19 @@ describe('Writer', () => {
       context: sinon.stub().returns({ trace })
     }
 
+    response = JSON.stringify({
+      rate_by_service: {
+        'service:hello,env:test': 1
+      }
+    })
+
+    request = Promise.resolve(response)
+
     platform = {
       name: sinon.stub(),
       version: sinon.stub(),
       engine: sinon.stub(),
-      request: sinon.stub().returns(Promise.resolve()),
+      request: sinon.stub().returns(request),
       msgpack: {
         prefix: sinon.stub()
       }
@@ -44,6 +55,10 @@ describe('Writer', () => {
       error: sinon.spy()
     }
 
+    prioritySampler = {
+      update: sinon.stub()
+    }
+
     Writer = proxyquire('../src/writer', {
       './platform': platform,
       './log': log,
@@ -51,7 +66,13 @@ describe('Writer', () => {
       './encode': encode,
       '../lib/version': 'tracerVersion'
     })
-    writer = new Writer(url, 3)
+    writer = new Writer(prioritySampler, url, 3)
+  })
+
+  it('should get the priority sampling rates on initialization', () => {
+    return request.then(() => {
+      expect(prioritySampler.update).to.have.been.calledWithMatch(JSON.parse(response).rate_by_service)
+    })
   })
 
   describe('length', () => {
@@ -90,7 +111,7 @@ describe('Writer', () => {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(platform.request).to.not.have.been.called
+      expect(platform.request).to.have.been.calledOnce
     })
 
     it('should empty the internal queue', () => {
@@ -114,7 +135,7 @@ describe('Writer', () => {
         protocol: url.protocol,
         hostname: url.hostname,
         port: url.port,
-        path: '/v0.3/traces',
+        path: '/v0.4/traces',
         method: 'PUT',
         headers: {
           'Content-Type': 'application/msgpack',

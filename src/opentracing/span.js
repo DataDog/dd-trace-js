@@ -7,32 +7,34 @@ const platform = require('../platform')
 const log = require('../log')
 
 class DatadogSpan extends Span {
-  constructor (tracer, fields) {
+  constructor (tracer, recorder, prioritySampler, fields) {
     super()
 
     const startTime = fields.startTime || platform.now()
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = fields.tags || {}
+    const tags = Object.assign({}, fields.tags)
 
     this._parentTracer = tracer
+    this._recorder = recorder
+    this._prioritySampler = prioritySampler
     this._operationName = operationName
-    this._tags = Object.assign({}, tags)
     this._startTime = startTime
 
-    this._spanContext = this._createContext(parent)
+    this._spanContext = this._createContext(parent, tags)
   }
 
-  _createContext (parent) {
+  _createContext (parent, tags) {
     let spanContext
 
     if (parent) {
       spanContext = new SpanContext({
         traceId: parent.traceId,
         spanId: platform.id(),
-        samplingPriority: parent.samplingPriority,
         parentId: parent.spanId,
         sampled: parent.sampled,
+        sampling: parent.sampling,
+        tags,
         baggageItems: Object.assign({}, parent.baggageItems),
         trace: parent.trace
       })
@@ -41,7 +43,8 @@ class DatadogSpan extends Span {
       spanContext = new SpanContext({
         traceId: spanId,
         spanId,
-        sampled: this._parentTracer._isSampled(this)
+        sampled: this._parentTracer._isSampled(this),
+        tags
       })
     }
 
@@ -73,7 +76,7 @@ class DatadogSpan extends Span {
   _addTags (keyValuePairs) {
     try {
       Object.keys(keyValuePairs).forEach(key => {
-        this._tags[key] = String(keyValuePairs[key])
+        this._spanContext.tags[key] = String(keyValuePairs[key])
       })
     } catch (e) {
       log.error(e)
@@ -89,9 +92,10 @@ class DatadogSpan extends Span {
 
     this._duration = finishTime - this._startTime
     this._spanContext.trace.finished.push(this)
+    this._prioritySampler.sample(this)
 
     if (this._spanContext.sampled) {
-      this._parentTracer._record(this)
+      this._recorder.record(this)
     }
   }
 }

@@ -8,6 +8,10 @@ describe('Tracer', () => {
   let tracer
   let Span
   let span
+  let PrioritySampler
+  let prioritySampler
+  let Writer
+  let writer
   let Recorder
   let recorder
   let Sampler
@@ -30,6 +34,12 @@ describe('Tracer', () => {
 
     span = {}
     Span = sinon.stub().returns(span)
+
+    prioritySampler = {}
+    PrioritySampler = sinon.stub().returns(prioritySampler)
+
+    writer = {}
+    Writer = sinon.stub().returns(writer)
 
     recorder = {
       init: sinon.spy(),
@@ -72,6 +82,8 @@ describe('Tracer', () => {
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
+      '../priority_sampler': PrioritySampler,
+      '../writer': Writer,
       '../recorder': Recorder,
       '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,
@@ -83,11 +95,11 @@ describe('Tracer', () => {
 
   it('should support recording', () => {
     tracer = new Tracer(config)
-    tracer._record('span')
 
-    expect(Recorder).to.have.been.calledWith(config.url, config.flushInterval, config.bufferSize)
+    expect(Writer).to.have.been.called
+    expect(Writer).to.have.been.calledWith(prioritySampler, config.url, config.bufferSize)
+    expect(Recorder).to.have.been.calledWith(writer, config.flushInterval)
     expect(recorder.init).to.have.been.called
-    expect(recorder.record).to.have.been.calledWith('span')
   })
 
   it('should support sampling', () => {
@@ -111,7 +123,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, {
+      expect(Span).to.have.been.calledWith(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -135,7 +147,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -151,7 +163,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -168,7 +180,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -184,7 +196,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -196,7 +208,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -210,7 +222,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -230,7 +242,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         tags: {
           'foo': 'tracer',
           'bar': 'span',
@@ -245,7 +257,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
         tags: {
           'env': 'test'
         }

@@ -5,8 +5,10 @@ const Tracer = opentracing.Tracer
 const Reference = opentracing.Reference
 const Span = require('./span')
 const SpanContext = require('./span_context')
+const Writer = require('../writer')
 const Recorder = require('../recorder')
 const Sampler = require('../sampler')
+const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
@@ -23,13 +25,15 @@ class DatadogTracer extends Tracer {
     this._url = config.url
     this._env = config.env
     this._tags = config.tags
-    this._recorder = new Recorder(config.url, config.flushInterval, config.bufferSize)
+    this._prioritySampler = new PrioritySampler(config.env)
+    this._writer = new Writer(this._prioritySampler, config.url, config.bufferSize)
+    this._recorder = new Recorder(this._writer, config.flushInterval)
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
-      [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(this),
-      [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(this),
-      [opentracing.FORMAT_BINARY]: new BinaryPropagator()
+      [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(this._prioritySampler),
+      [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(this._prioritySampler),
+      [opentracing.FORMAT_BINARY]: new BinaryPropagator(this._prioritySampler)
     }
   }
 
@@ -38,24 +42,18 @@ class DatadogTracer extends Tracer {
       'resource.name': name
     }
 
-    if (this._service) {
-      tags['service.name'] = this._service
-    }
+    tags['service.name'] = this._service
 
     if (this._env) {
       tags.env = this._env
     }
 
-    return new Span(this, {
+    return new Span(this, this._recorder, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent: getParent(fields.references),
       tags: Object.assign(tags, this._tags, fields.tags),
       startTime: fields.startTime
     })
-  }
-
-  _record (span) {
-    this._recorder.record(span)
   }
 
   _inject (spanContext, format, carrier) {

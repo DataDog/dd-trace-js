@@ -57,30 +57,30 @@ describe('Tracer', () => {
 
     it('should set default tags', done => {
       tracer.trace('name', current => {
-        expect(current._tags).to.have.property('service.name', 'service')
-        expect(current._tags).to.have.property('resource.name', 'name')
-        expect(current._tags).to.not.have.property('span.type')
+        expect(current.context().tags).to.have.property('service.name', 'service')
+        expect(current.context().tags).to.have.property('resource.name', 'name')
+        expect(current.context().tags).to.not.have.property('span.type')
         done()
       })
     })
 
     it('should support service option', done => {
       tracer.trace('name', { service: 'test' }, current => {
-        expect(current._tags).to.have.property('service.name', 'test')
+        expect(current.context().tags).to.have.property('service.name', 'test')
         done()
       })
     })
 
     it('should support resource option', done => {
       tracer.trace('name', { resource: 'test' }, current => {
-        expect(current._tags).to.have.property('resource.name', 'test')
+        expect(current.context().tags).to.have.property('resource.name', 'test')
         done()
       })
     })
 
     it('should support type option', done => {
       tracer.trace('name', { type: 'test' }, current => {
-        expect(current._tags).to.have.property('span.type', 'test')
+        expect(current.context().tags).to.have.property('span.type', 'test')
         done()
       })
     })
@@ -91,7 +91,7 @@ describe('Tracer', () => {
       }
 
       tracer.trace('name', { tags }, current => {
-        expect(current._tags).to.have.property('foo', 'bar')
+        expect(current.context().tags).to.have.property('foo', 'bar')
         done()
       })
     })

@@ -11,8 +11,9 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
-  extractError(formatted, span._error)
-  extractTags(formatted, span._tags)
+  extractError(formatted, span)
+  extractTags(formatted, span)
+  extractMetrics(formatted, span)
 
   return formatted
 }
@@ -20,11 +21,6 @@ function format (span) {
 function formatSpan (span) {
   const tracer = span.tracer()
   const spanContext = span.context()
-
-  const metrics = {}
-  if (spanContext.samplingPriority !== undefined) {
-    metrics['_sampling_priority_v1'] = spanContext.samplingPriority
-  }
 
   return {
     trace_id: spanContext.traceId,
@@ -35,13 +31,15 @@ function formatSpan (span) {
     service: String(tracer._service),
     error: 0,
     meta: {},
-    metrics,
+    metrics: {},
     start: new Int64BE(Math.round(span._startTime * 1e6)),
     duration: new Int64BE(Math.round(span._duration * 1e6))
   }
 }
 
-function extractTags (trace, tags) {
+function extractTags (trace, span) {
+  const tags = span.context().tags
+
   Object.keys(tags).forEach(tag => {
     switch (tag) {
       case 'service.name':
@@ -66,11 +64,21 @@ function extractTags (trace, tags) {
   })
 }
 
-function extractError (trace, error) {
+function extractError (trace, span) {
+  const error = span._error
+
   if (error) {
     trace.meta['error.msg'] = error.message
     trace.meta['error.type'] = error.name
     trace.meta['error.stack'] = error.stack
+  }
+}
+
+function extractMetrics (trace, span) {
+  const spanContext = span.context()
+
+  if (spanContext.sampling.priority !== undefined) {
+    trace.metrics['_sampling_priority_v1'] = spanContext.sampling.priority
   }
 }
 

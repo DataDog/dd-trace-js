@@ -18,14 +18,15 @@ describe('format', () => {
     spanContext = {
       traceId: id,
       spanId: id,
-      parentId: id
+      parentId: id,
+      tags: {},
+      sampling: {}
     }
 
     span = {
       tracer: sinon.stub().returns(tracer),
       context: sinon.stub().returns(spanContext),
       _operationName: 'operation',
-      _tags: {},
       _startTime: 1500000000000.123456,
       _duration: 100
     }
@@ -51,9 +52,9 @@ describe('format', () => {
     })
 
     it('should extract Datadog specific tags', () => {
-      span._tags['service.name'] = 'service'
-      span._tags['span.type'] = 'type'
-      span._tags['resource.name'] = 'resource'
+      spanContext.tags['service.name'] = 'service'
+      spanContext.tags['span.type'] = 'type'
+      spanContext.tags['resource.name'] = 'resource'
 
       trace = format(span)
 
@@ -63,10 +64,10 @@ describe('format', () => {
     })
 
     it('should only extract tags that are not Datadog specific to meta', () => {
-      span._tags['service.name'] = 'service'
-      span._tags['span.type'] = 'type'
-      span._tags['resource.name'] = 'resource'
-      span._tags['foo.bar'] = 'foobar'
+      spanContext.tags['service.name'] = 'service'
+      spanContext.tags['span.type'] = 'type'
+      spanContext.tags['resource.name'] = 'resource'
+      spanContext.tags['foo.bar'] = 'foobar'
 
       trace = format(span)
 
@@ -88,7 +89,7 @@ describe('format', () => {
 
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
-        span._tags['error'] = true
+        spanContext.tags['error'] = true
 
         trace = format(span)
 
@@ -96,7 +97,7 @@ describe('format', () => {
       })
 
       it('should not set the error flag when error is false', () => {
-        span._tags['error'] = false
+        spanContext.tags['error'] = false
 
         trace = format(span)
 
@@ -104,7 +105,7 @@ describe('format', () => {
       })
 
       it('should not extract error to meta', () => {
-        span._tags['error'] = true
+        spanContext.tags['error'] = true
 
         trace = format(span)
 
@@ -113,9 +114,9 @@ describe('format', () => {
     })
 
     it('should set the error flag when there is an error-related tag', () => {
-      span._tags['error.type'] = 'Error'
-      span._tags['error.msg'] = 'boom'
-      span._tags['error.stack'] = ''
+      spanContext.tags['error.type'] = 'Error'
+      spanContext.tags['error.msg'] = 'boom'
+      spanContext.tags['error.stack'] = ''
 
       trace = format(span)
 
@@ -125,7 +126,7 @@ describe('format', () => {
     it('should sanitize the input', () => {
       tracer._service = null
       span._operationName = null
-      span._tags = {
+      spanContext.tags = {
         'foo.bar': null
       }
       span._startTime = NaN
@@ -144,7 +145,7 @@ describe('format', () => {
     it('should include the sampling priority', () => {
       const priorities = [-1, 0, 1, 2]
       priorities.forEach(p => {
-        spanContext.samplingPriority = p
+        spanContext.sampling.priority = p
         trace = format(span)
         expect(trace.metrics._sampling_priority_v1).to.equal(p)
       })

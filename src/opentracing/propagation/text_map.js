@@ -11,21 +11,16 @@ const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
 class TextMapPropagator {
-
-  constructor (tracer) {
-    this._tracer = tracer;
+  constructor (prioritySampler) {
+    this._prioritySampler = prioritySampler
   }
 
   inject (spanContext, carrier) {
     carrier[traceKey] = new Int64BE(spanContext.traceId.toBuffer()).toString()
     carrier[spanKey] = new Int64BE(spanContext.spanId.toBuffer()).toString()
-    if (spanContext.samplingPriority !== undefined) {
-      carrier[samplingKey] = spanContext.samplingPriority.toString()
-    }
 
-    spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
-      carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
-    })
+    this._injectSamplingPriority(spanContext, carrier)
+    this._injectBaggageItems(spanContext, carrier)
   }
 
   extract (carrier) {
@@ -33,31 +28,45 @@ class TextMapPropagator {
       return null
     }
 
-    const baggageItems = {}
+    const spanContext = new DatadogSpanContext({
+      traceId: new Uint64BE(carrier[traceKey], 10),
+      spanId: new Uint64BE(carrier[spanKey], 10)
+    })
 
+    this._extractBaggageItems(carrier, spanContext)
+    this._extractSamplingPriority(carrier, spanContext)
+
+    return spanContext
+  }
+
+  _injectSamplingPriority (spanContext, carrier) {
+    this._prioritySampler.sample(spanContext)
+
+    carrier[samplingKey] = spanContext.sampling.priority.toString()
+  }
+
+  _injectBaggageItems (spanContext, carrier) {
+    spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
+      carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
+    })
+  }
+
+  _extractBaggageItems (carrier, spanContext) {
     Object.keys(carrier).forEach(key => {
       const match = key.match(baggageExpr)
 
       if (match) {
-        baggageItems[match[1]] = carrier[key]
+        spanContext.baggageItems[match[1]] = carrier[key]
       }
     })
+  }
 
-    const samplingPriority = carrier[samplingKey] && parseInt(carrier[samplingKey], 10);
-    let sampled;
-    if (samplingPriority !== undefined) {
-      sampled = samplingPriority > 0;
-    } else {
-      sampled = this._tracer._isSampled();
+  _extractSamplingPriority (carrier, spanContext) {
+    const priority = parseInt(carrier[samplingKey], 10)
+
+    if (this._prioritySampler.validate(priority)) {
+      spanContext.sampling.priority = priority
     }
-
-    return new DatadogSpanContext({
-      traceId: new Uint64BE(carrier[traceKey], 10),
-      spanId: new Uint64BE(carrier[spanKey], 10),
-      samplingPriority: samplingPriority,
-      sampled: sampled,
-      baggageItems
-    })
   }
 }
 

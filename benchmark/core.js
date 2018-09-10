@@ -16,6 +16,7 @@ const Writer = proxyquire('../src/writer', {
   './platform': { request: () => Promise.resolve() }
 })
 const Sampler = require('../src/sampler')
+const PrioritySampler = require('../src/priority_sampler')
 const format = require('../src/format')
 const encode = require('../src/encode')
 const config = new Config({ service: 'benchmark' })
@@ -30,6 +31,7 @@ let writer
 let sampler
 let queue
 
+const prioritySampler = new PrioritySampler('bench')
 const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
 
@@ -44,7 +46,7 @@ suite
   })
   .add('TextMapPropagator#inject', {
     onStart () {
-      propagator = new TextMapPropagator()
+      propagator = new TextMapPropagator(prioritySampler)
       carrier = {}
       spanContext = new DatadogSpanContext({
         traceId: new Uint64BE(0x12345678, 0x12345678),
@@ -58,7 +60,7 @@ suite
   })
   .add('TextMapPropagator#extract', {
     onStart () {
-      propagator = new TextMapPropagator()
+      propagator = new TextMapPropagator(prioritySampler)
       carrier = {
         'x-datadog-trace-id': '1234567891234567',
         'x-datadog-parent-id': '1234567891234567',
