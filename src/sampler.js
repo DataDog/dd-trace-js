@@ -5,6 +5,10 @@ class Sampler {
     this._rate = rate
   }
 
+  rate () {
+    return this._rate
+  }
+
   isSampled (span) {
     return this._rate === 1 || Math.random() < this._rate
   }

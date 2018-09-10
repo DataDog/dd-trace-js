@@ -13,6 +13,7 @@ const trace = [
     type: 'web',
     error: 0,
     meta: {},
+    metrics: {},
     start: 1500000000000123600,
     duration: 100000000
   },
@@ -26,6 +27,7 @@ const trace = [
     type: 'web',
     error: 0,
     meta: {},
+    metrics: {},
     start: 1500000000000123600,
     duration: 80000000
   }
