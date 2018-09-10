@@ -301,6 +301,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
 | plugins       |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
+| processors    |                              | []        | Array of functions which can filter out or alter a trace before it is sent to the Agent. See the ["Custom Processors"](#custom-processors) section below for more details. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 
@@ -323,5 +324,47 @@ const tracer = require('dd-trace').init({
     error: err => logger.error(err)
   },
   debug: true
+})
+```
+
+<h3 id="custom-processors">Custom Processors</h3>
+
+Some applications might require that traces be altered or filtered out before they are sent upstream. You can do this by specifying one or more processor functions with the `processors` option when initializing the tracer.
+
+Before traces are flushed (sent to the Agent), they will be run through any processors you have defined.
+
+A processor is a function which is passed a trace, and is expected to return a trace (which may be the original trace passed in, or an altered copy) or `undefined` (to filter out the trace entirely).
+
+If a processor returns `undefined`, the trace will be ignored and subsequent processors will not be invoked.
+
+For example:
+
+```javascript
+// You can return a modified trace, for example redacting a sensitive URL
+const redactPasswords = (trace) => {
+  return trace.map((span) => {
+    // If the span's resource is /super-secret-endpoint, change it /redacted
+    if (span.resource === '/super-secret-endpoint') {
+      return Object.assign(span, { resource: '/redacted' })
+    else {
+      return span
+    }
+  })
+}
+
+// ...or you could even skip certain traces entirely
+const onlyKeepSlowTraces = (trace) => {
+  // Only keep a trace if one of the spans was slow, taking more than 2 seconds
+  if (trace.some((span) => span.duration >= 2 * 1e6))
+    return trace
+  } else {
+    return
+  }
+}
+
+const tracer = require('dd-trace').init({
+  // If a trace is filtered out by the first processor (i.e. it returns `undefined`),
+  // subsequent processors will not be invoked
+  processors: [onlyKeepSlowTraces, redactPasswords]
 })
 ```

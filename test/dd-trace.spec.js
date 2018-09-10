@@ -43,7 +43,6 @@ describe('dd-trace', () => {
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
     agent.put('/v0.3/traces', (req, res) => {
       const payload = msgpack.decode(req.body, { codec })
-
       expect(payload[0][0].trace_id).to.be.instanceof(Uint64BE)
       expect(payload[0][0].trace_id.toString()).to.equal(span.context().traceId.toString())
       expect(payload[0][0].span_id).to.be.instanceof(Uint64BE)

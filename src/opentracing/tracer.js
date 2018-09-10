@@ -23,7 +23,7 @@ class DatadogTracer extends Tracer {
     this._url = config.url
     this._env = config.env
     this._tags = config.tags
-    this._recorder = new Recorder(config.url, config.flushInterval, config.bufferSize)
+    this._recorder = new Recorder(config.url, config.flushInterval, config.bufferSize, config.processors)
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
