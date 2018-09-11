@@ -1,11 +1,22 @@
 'use strict'
 
 const Sampler = require('./sampler')
+const ext = require('../ext')
 
-// TODO: replace these with global constants
-const SERVICE_NAME = 'service.name'
-const SAMPLING_PRIORITY = 'sampling.priority'
+const SERVICE_NAME = ext.tags.SERVICE_NAME
+const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
+const USER_REJECT = ext.priority.USER_REJECT
+const AUTO_REJECT = ext.priority.AUTO_REJECT
+const AUTO_KEEP = ext.priority.AUTO_KEEP
+const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
+
+const priorities = [
+  USER_REJECT,
+  AUTO_REJECT,
+  AUTO_KEEP,
+  USER_KEEP
+]
 
 class PrioritySampler {
   constructor (env) {
@@ -33,7 +44,7 @@ class PrioritySampler {
       return
     }
 
-    context.sampling.priority = this.isSampled(span) ? 1 : 0
+    context.sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
   }
 
   update (rates) {
@@ -46,13 +57,13 @@ class PrioritySampler {
       samplers[key] = sampler
     }
 
-    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || new Sampler(1)
+    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || new Sampler(AUTO_KEEP)
 
     this._samplers = samplers
   }
 
   validate (samplingPriority) {
-    return [-1, 0, 1, 2].indexOf(samplingPriority) !== -1
+    return priorities.indexOf(samplingPriority) !== -1
   }
 
   _getContext (span) {

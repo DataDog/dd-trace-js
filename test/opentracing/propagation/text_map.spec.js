@@ -80,28 +80,26 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier['x-datadog-sampling-priority']).to.equal('2')
-      expect(spanContext.sampling.priority).to.equal(2)
+      expect(carrier).to.have.property('x-datadog-sampling-priority', '2')
+      expect(spanContext.sampling).to.have.property('priority', 2)
     })
 
     it('should inject an existing sampling priority', () => {
       prioritySampler.sample = () => {}
 
-      const priorities = [-1, 0, 1, 2]
-      priorities.forEach(priority => {
-        const carrier = {}
-        const spanContext = new SpanContext({
-          traceId: new Uint64BE(0, 123),
-          spanId: new Uint64BE(-456),
-          sampling: { priority },
-          baggageItems
-        })
-
-        propagator.inject(spanContext, carrier)
-
-        textMap['x-datadog-sampling-priority'] = priority.toString()
-        expect(carrier).to.deep.equal(textMap)
+      const carrier = {}
+      const spanContext = new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        sampling: {
+          priority: 0
+        },
+        baggageItems
       })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-datadog-sampling-priority', '0')
     })
   })
 
