@@ -123,7 +123,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -147,7 +147,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -163,7 +163,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -180,7 +180,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -196,7 +196,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -208,7 +208,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -222,7 +222,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -242,7 +242,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         tags: {
           'foo': 'tracer',
           'bar': 'span',
@@ -257,7 +257,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         tags: {
           'env': 'test'
         }

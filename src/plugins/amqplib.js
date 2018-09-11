@@ -28,12 +28,16 @@ function createWrapDispatchMessage (tracer, config) {
       addTags(this, tracer, config, span, 'basic.deliver', fields)
 
       setImmediate(() => {
-        tracer.scopeManager().activate(span, true)
+        const scope = tracer.scopeManager().activate(span, true)
 
         try {
           dispatchMessage.apply(this, arguments)
         } catch (e) {
           throw addError(span, e)
+        } finally {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
+            scope.close()
+          }
         }
       })
     }

@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.5.6",
+  "version": "0.6.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "scripts": {
@@ -50,9 +50,10 @@
     "safe-buffer": "^5.1.1",
     "semver": "^5.5.0",
     "shimmer": "^1.2.0",
-    "url-parse": "^1.2.0"
+    "url-parse": "^1.4.3"
   },
   "devDependencies": {
+    "amqp10": "^3.6.0",
     "amqplib": "^0.5.2",
     "axios": "^0.18.0",
     "benchmark": "^2.1.4",

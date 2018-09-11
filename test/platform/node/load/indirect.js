@@ -2,4 +2,4 @@
 
 const foo = require('./module')
 
-foo()
+module.exports = foo()

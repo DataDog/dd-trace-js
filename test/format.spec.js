@@ -77,6 +77,22 @@ describe('format', () => {
       expect(trace.meta['foo.bar']).to.equal('foobar')
     })
 
+    it('should extract metrics', () => {
+      const metrics = { metric: 50 }
+
+      span._metrics = metrics
+      trace = format(span)
+
+      expect(trace.metrics).to.deep.equal(metrics)
+    })
+
+    it('should ignore metrics with invalid values', () => {
+      span._metrics = { metric: 'test' }
+      trace = format(span)
+
+      expect(trace.metrics).to.deep.equal({})
+    })
+
     it('should extract errors', () => {
       span._error = new Error('boom')
 

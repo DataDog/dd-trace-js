@@ -5,20 +5,29 @@ const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const platform = require('../platform')
 const log = require('../log')
+const constants = require('../constants')
+
+const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 class DatadogSpan extends Span {
-  constructor (tracer, recorder, prioritySampler, fields) {
+  constructor (tracer, recorder, sampler, prioritySampler, fields) {
     super()
 
     const startTime = fields.startTime || platform.now()
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = Object.assign({}, fields.tags)
+    const tags = fields.tags || {}
+    const metrics = {
+      [SAMPLE_RATE_METRIC_KEY]: sampler.rate()
+    }
 
     this._parentTracer = tracer
+    this._sampler = sampler
     this._recorder = recorder
     this._prioritySampler = prioritySampler
     this._operationName = operationName
+    this._tags = Object.assign({}, tags)
+    this._metrics = metrics
     this._startTime = startTime
 
     this._spanContext = this._createContext(parent, tags)
@@ -36,14 +45,14 @@ class DatadogSpan extends Span {
         sampling: parent.sampling,
         tags,
         baggageItems: Object.assign({}, parent.baggageItems),
-        trace: parent.trace
+        trace: parent.trace.started.length !== parent.trace.finished.length ? parent.trace : null
       })
     } else {
       const spanId = platform.id()
       spanContext = new SpanContext({
         traceId: spanId,
         spanId,
-        sampled: this._parentTracer._isSampled(this),
+        sampled: this._sampler.isSampled(this),
         tags
       })
     }

@@ -77,6 +77,12 @@ function extractError (trace, span) {
 function extractMetrics (trace, span) {
   const spanContext = span.context()
 
+  Object.keys(spanContext.metrics).forEach(metric => {
+    if (typeof spanContext.metrics[metric] === 'number') {
+      trace.metrics[metric] = spanContext.metrics[metric]
+    }
+  })
+
   if (spanContext.sampling.priority !== undefined) {
     trace.metrics['_sampling_priority_v1'] = spanContext.sampling.priority
   }

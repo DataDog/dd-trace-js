@@ -136,6 +136,7 @@ Each integration also has its own list of default tags. These tags get automatic
 | http.url         | The complete URL of the request.                          |
 | http.method      | The HTTP method of the request.                           |
 | http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
 
 <h5 id="express-config">Configuration Options</h5>
 
@@ -143,6 +144,7 @@ Each integration also has its own list of default tags. These tags get automatic
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
 | validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
 
 <h3 id="graphql">graphql</h3>
 
@@ -166,15 +168,18 @@ query HelloWorld {
 
 <h5 id="graphql-tags">Tags</h5>
 
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| graphql.document | The original GraphQL document.                            |
+| Tag                 | Description                                               |
+|---------------------|-----------------------------------------------------------|
+| graphql.document    | The original GraphQL document.                            |
+| graphql.variables.* | The variables applied to the document.                    |
 
 <h5 id="graphql-config">Configuration Options</h5>
 
-| Option  | Default                                          | Description                            |
-|---------|--------------------------------------------------|----------------------------------------|
-| service | *Service name of the app suffixed with -graphql* | The service name for this integration. |
+| Option          | Default                                          | Description                                                            |
+|-----------------|--------------------------------------------------|------------------------------------------------------------------------|
+| service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                                 |
+| variables       | `undefined`                                      | A callback to enable recording of variables. By default, no variables are recorded. For example, using `variables => variables` would record all variables. |
+| depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
 
 <h3 id="http">http / https</h3>
 
@@ -285,6 +290,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 
 | Config        | Environment Variable         | Default   | Description |
 | ------------- | ---------------------------- | --------- | ----------- |
+| enabled       | DD_TRACE_ENABLED             | true      | Whether to enable the tracer. |
 | debug         | DD_TRACE_DEBUG               | false     | Enable debug logging in the tracer. |
 | service       | DD_SERVICE_NAME              |           | The service name to be used for this program. |
 | hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |
