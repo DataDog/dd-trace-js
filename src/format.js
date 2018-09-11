@@ -13,6 +13,7 @@ function format (span) {
 
   extractError(formatted, span._error)
   extractTags(formatted, span._tags)
+  extractMetrics(formatted, span._metrics)
 
   return formatted
 }
@@ -30,6 +31,7 @@ function formatSpan (span) {
     service: String(tracer._service),
     error: 0,
     meta: {},
+    metrics: {},
     start: new Int64BE(Math.round(span._startTime * 1e6)),
     duration: new Int64BE(Math.round(span._duration * 1e6))
   }
@@ -56,6 +58,14 @@ function extractTags (trace, tags) {
         break
       default:
         trace.meta[tag] = String(tags[tag])
+    }
+  })
+}
+
+function extractMetrics (trace, metrics) {
+  Object.keys(metrics).forEach(metric => {
+    if (typeof metrics[metric] === 'number') {
+      trace.metrics[metric] = metrics[metric]
     }
   })
 }

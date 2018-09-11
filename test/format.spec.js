@@ -26,6 +26,7 @@ describe('format', () => {
       context: sinon.stub().returns(spanContext),
       _operationName: 'operation',
       _tags: {},
+      _metrics: {},
       _startTime: 1500000000000.123456,
       _duration: 100
     }
@@ -74,6 +75,22 @@ describe('format', () => {
       expect(trace.meta['span.type']).to.be.undefined
       expect(trace.meta['resource.name']).to.be.undefined
       expect(trace.meta['foo.bar']).to.equal('foobar')
+    })
+
+    it('should extract metrics', () => {
+      const metrics = { metric: 50 }
+
+      span._metrics = metrics
+      trace = format(span)
+
+      expect(trace.metrics).to.deep.equal(metrics)
+    })
+
+    it('should ignore metrics with invalid values', () => {
+      span._metrics = { metric: 'test' }
+      trace = format(span)
+
+      expect(trace.metrics).to.deep.equal({})
     })
 
     it('should extract errors', () => {
