@@ -19,9 +19,7 @@ describe('Span', () => {
     platform.id.onFirstCall().returns(new Uint64BE(123, 123))
     platform.id.onSecondCall().returns(new Uint64BE(456, 456))
 
-    tracer = {
-      _record: sinon.stub()
-    }
+    tracer = {}
 
     sampler = {
       rate: sinon.stub().returns(1),
@@ -86,13 +84,13 @@ describe('Span', () => {
       }
     }
 
-    span = new Span(tracer, sampler, { operationName: 'operation', parent })
+    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
 
     expect(span.context().trace.started).to.deep.equal([span])
   })
 
   it('should set the sample rate metric from the sampler', () => {
-    expect(span._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
+    expect(span.context().metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
   describe('tracer', () => {
@@ -182,7 +180,7 @@ describe('Span', () => {
 
     it('should not record the span if not sampled', () => {
       recorder.record.returns(Promise.resolve())
-      tracer._isSampled.returns(false)
+      sampler.isSampled.returns(false)
 
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
       span.finish()

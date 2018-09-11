@@ -20,6 +20,7 @@ describe('format', () => {
       spanId: id,
       parentId: id,
       tags: {},
+      metrics: {},
       sampling: {}
     }
 
@@ -78,19 +79,19 @@ describe('format', () => {
     })
 
     it('should extract metrics', () => {
-      const metrics = { metric: 50 }
+      spanContext.metrics = { metric: 50 }
 
-      span._metrics = metrics
       trace = format(span)
 
-      expect(trace.metrics).to.deep.equal(metrics)
+      expect(trace.metrics).to.have.property('metric', 50)
     })
 
     it('should ignore metrics with invalid values', () => {
-      span._metrics = { metric: 'test' }
+      spanContext.metrics = { metric: 'test' }
+
       trace = format(span)
 
-      expect(trace.metrics).to.deep.equal({})
+      expect(trace.metrics).to.not.have.property('metric')
     })
 
     it('should extract errors', () => {

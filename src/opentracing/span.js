@@ -16,7 +16,7 @@ class DatadogSpan extends Span {
     const startTime = fields.startTime || platform.now()
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = fields.tags || {}
+    const tags = Object.assign({}, fields.tags)
     const metrics = {
       [SAMPLE_RATE_METRIC_KEY]: sampler.rate()
     }
@@ -26,11 +26,11 @@ class DatadogSpan extends Span {
     this._recorder = recorder
     this._prioritySampler = prioritySampler
     this._operationName = operationName
-    this._tags = Object.assign({}, tags)
-    this._metrics = metrics
     this._startTime = startTime
 
-    this._spanContext = this._createContext(parent, tags)
+    this._spanContext = this._createContext(parent)
+    this._spanContext.tags = tags
+    this._spanContext.metrics = metrics
   }
 
   _createContext (parent, tags) {
@@ -43,7 +43,6 @@ class DatadogSpan extends Span {
         parentId: parent.spanId,
         sampled: parent.sampled,
         sampling: parent.sampling,
-        tags,
         baggageItems: Object.assign({}, parent.baggageItems),
         trace: parent.trace.started.length !== parent.trace.finished.length ? parent.trace : null
       })
@@ -52,8 +51,7 @@ class DatadogSpan extends Span {
       spanContext = new SpanContext({
         traceId: spanId,
         spanId,
-        sampled: this._sampler.isSampled(this),
-        tags
+        sampled: this._sampler.isSampled(this)
       })
     }
 

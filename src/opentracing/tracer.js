@@ -48,7 +48,7 @@ class DatadogTracer extends Tracer {
       tags.env = this._env
     }
 
-    return new Span(this, this._recorder, this.sampler, this._prioritySampler, {
+    return new Span(this, this._recorder, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent: getParent(fields.references),
       tags: Object.assign(tags, this._tags, fields.tags),
