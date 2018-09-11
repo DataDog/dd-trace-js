@@ -64,6 +64,23 @@ describe('Span', () => {
     expect(span.context().trace.started).to.deep.equal(['span', span])
   })
 
+  it('should start a new trace if the parent trace is finished', () => {
+    const parent = {
+      traceId: new Uint64BE(123, 123),
+      spanId: new Uint64BE(456, 456),
+      sampled: false,
+      baggageItems: { foo: 'bar' },
+      trace: {
+        started: ['span'],
+        finished: ['span']
+      }
+    }
+
+    span = new Span(tracer, sampler, { operationName: 'operation', parent })
+
+    expect(span.context().trace.started).to.deep.equal([span])
+  })
+
   it('should set the sample rate metric from the sampler', () => {
     expect(span._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })

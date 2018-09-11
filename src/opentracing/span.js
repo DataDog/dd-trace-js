@@ -41,7 +41,7 @@ class DatadogSpan extends Span {
         parentId: parent.spanId,
         sampled: parent.sampled,
         baggageItems: Object.assign({}, parent.baggageItems),
-        trace: parent.trace
+        trace: parent.trace.started.length !== parent.trace.finished.length ? parent.trace : null
       })
     } else {
       const spanId = platform.id()
