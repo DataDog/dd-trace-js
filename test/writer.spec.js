@@ -69,12 +69,6 @@ describe('Writer', () => {
     writer = new Writer(prioritySampler, url, 3)
   })
 
-  it('should get the priority sampling rates on initialization', () => {
-    return request.then(() => {
-      expect(prioritySampler.update).to.have.been.calledWithMatch(JSON.parse(response).rate_by_service)
-    })
-  })
-
   describe('length', () => {
     it('should return the number of traces', () => {
       writer.append(span)
@@ -111,7 +105,7 @@ describe('Writer', () => {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(platform.request).to.have.been.calledOnce
+      expect(platform.request).to.not.have.been.called
     })
 
     it('should empty the internal queue', () => {

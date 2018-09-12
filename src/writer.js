@@ -12,8 +12,6 @@ class Writer {
     this._prioritySampler = prioritySampler
     this._url = url
     this._size = size
-
-    this._request([], 0)
   }
 
   get length () {
