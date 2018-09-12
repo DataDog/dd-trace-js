@@ -160,12 +160,9 @@ describe('format', () => {
     })
 
     it('should include the sampling priority', () => {
-      const priorities = [-1, 0, 1, 2]
-      priorities.forEach(p => {
-        spanContext.sampling.priority = p
-        trace = format(span)
-        expect(trace.metrics._sampling_priority_v1).to.equal(p)
-      })
+      spanContext.sampling.priority = 0
+      trace = format(span)
+      expect(trace.metrics._sampling_priority_v1).to.equal(0)
     })
   })
 })
