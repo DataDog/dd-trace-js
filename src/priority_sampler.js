@@ -11,12 +11,12 @@ const AUTO_KEEP = ext.priority.AUTO_KEEP
 const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
-const priorities = [
+const priorities = new Set([
   USER_REJECT,
   AUTO_REJECT,
   AUTO_KEEP,
   USER_KEEP
-]
+])
 
 class PrioritySampler {
   constructor (env) {
@@ -63,7 +63,7 @@ class PrioritySampler {
   }
 
   validate (samplingPriority) {
-    return priorities.indexOf(samplingPriority) !== -1
+    return priorities.has(samplingPriority)
   }
 
   _getContext (span) {
