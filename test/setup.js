@@ -275,10 +275,8 @@ function withVersions (plugin, moduleName, range, cb) {
     .forEach(instrumentation => {
       instrumentation.versions
         .forEach(version => {
-          const min = semver.coerce(version).version
-          const max = require(`./plugins/versions/${moduleName}@${version}`).version()
-
           try {
+            const min = semver.coerce(version).version
             require(`./plugins/versions/${moduleName}@${min}`).get()
             testVersions.set(min, { range: version, test: min })
           } catch (e) {
@@ -286,6 +284,7 @@ function withVersions (plugin, moduleName, range, cb) {
           }
 
           try {
+            const max = require(`./plugins/versions/${moduleName}@${version}`).version()
             require(`./plugins/versions/${moduleName}@${version}`).get()
             testVersions.set(max, { range: version, test: version })
           } catch (e) {
