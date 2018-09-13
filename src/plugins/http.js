@@ -82,26 +82,16 @@ function patch (http, methodName, tracer, config) {
     })
   }
 
-  let normalizeArgs
-  if (semver.satisfies(process.version, '>=10')) {
-    normalizeArgs = function normalizeArgs (inputURL, inputOptions, callback) {
-      let options = typeof inputURL === 'string' ? url.parse(inputURL) : Object.assign({}, inputURL)
-      options.headers = options.headers || {}
-      if (typeof inputOptions === 'object') {
-        options = Object.assign(options, inputOptions)
-      } else if (typeof inputOptions === 'function') {
-        callback = inputOptions
-      }
-      const uri = extractUrl(options)
-      return { uri, options, callback }
+  function normalizeArgs (inputURL, inputOptions, callback) {
+    let options = typeof inputURL === 'string' ? url.parse(inputURL) : Object.assign({}, inputURL)
+    options.headers = options.headers || {}
+    if (typeof inputOptions === 'function') {
+      callback = inputOptions
+    } else if (typeof inputOptions === 'object') {
+      options = Object.assign(options, inputOptions)
     }
-  } else {
-    normalizeArgs = function normalizeArgs (options, callback) {
-      const uri = extractUrl(options)
-      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
-      options.headers = options.headers || {}
-      return { uri, options, callback }
-    }
+    const uri = extractUrl(options)
+    return { uri, options, callback }
   }
 }
 
