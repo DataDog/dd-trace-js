@@ -438,13 +438,13 @@ describe('Plugin', () => {
               tracer.scopeManager().activate(span)
 
               // Test `http(s).request
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
                 res.on('data', () => {})
               })
               req.end()
 
               // Test `http(s).get`
-              http.get(`${protocol}://localhost:${port}/user`, res => {
+              http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
                 res.on('data', () => {})
               })
 

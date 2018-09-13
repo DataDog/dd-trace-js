@@ -7,9 +7,8 @@ const semver = require('semver')
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 
-function patch (http, tracer, config) {
-  this.wrap(http, 'request', request => makeRequestTrace(request))
-  this.wrap(http, 'get', get => makeRequestTrace(get))
+function patch (http, methodName, tracer, config) {
+  this.wrap(http, methodName, fn => makeRequestTrace(fn))
 
   function makeRequestTrace (request) {
     return function requestTrace (options, callback) {
@@ -139,14 +138,24 @@ function unpatch (http) {
 module.exports = [
   {
     name: 'http',
-    patch,
+    patch: function (http, tracer, config) {
+      patch.call(this, http, 'request', tracer, config)
+      if (semver.satisfies(process.version, '>=8')) {
+        /**
+         * In newer Node versions references internal to modules, such as `http(s).get` calling `http(s).request`, do
+         * not use externally patched versions, which is why we need to also patch `get` here separately.
+         */
+        patch.call(this, http, 'get', tracer, config)
+      }
+    },
     unpatch
   },
   {
     name: 'https',
     patch: function (http, tracer, config) {
       if (semver.satisfies(process.version, '>=9')) {
-        patch.call(this, http, tracer, config)
+        patch.call(this, http, 'request', tracer, config)
+        patch.call(this, http, 'get', tracer, config)
       } else {
         /**
          * Below Node v9 the `https` module invokes `http.request`, which would end up counting requests twice.
