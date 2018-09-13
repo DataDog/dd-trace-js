@@ -144,9 +144,9 @@ module.exports = [
   },
   {
     name: 'https',
-    patch: (http, tracer, config) => {
+    patch: function (http, tracer, config) {
       if (semver.satisfies(process.version, '>=9')) {
-        patch(http, tracer, config)
+        patch.call(this, http, tracer, config)
       } else {
         /**
          * Below Node v9 the `https` module invokes `http.request`, which would end up counting requests twice.
