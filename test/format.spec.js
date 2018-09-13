@@ -1,6 +1,10 @@
 'use strict'
 
 const Int64BE = require('int64-buffer').Int64BE
+const constants = require('../src/constants')
+
+const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+
 const id = new Int64BE(0x02345678, 0x12345678)
 
 describe('format', () => {
@@ -162,7 +166,7 @@ describe('format', () => {
     it('should include the sampling priority', () => {
       spanContext.sampling.priority = 0
       trace = format(span)
-      expect(trace.metrics._sampling_priority_v1).to.equal(0)
+      expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })
   })
 })

@@ -1,6 +1,9 @@
 'use strict'
 
 const Int64BE = require('int64-buffer').Int64BE
+const constants = require('./constants')
+
+const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 
 const map = {
   'service.name': 'service',
@@ -84,7 +87,7 @@ function extractMetrics (trace, span) {
   })
 
   if (spanContext.sampling.priority !== undefined) {
-    trace.metrics['_sampling_priority_v1'] = spanContext.sampling.priority
+    trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext.sampling.priority
   }
 }
 
