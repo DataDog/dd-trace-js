@@ -4,9 +4,11 @@ const Buffer = require('safe-buffer').Buffer
 const Uint64BE = require('int64-buffer').Uint64BE
 const randomBytes = require('crypto').randomBytes
 
+// Cryptographically secure local seeds to mitigate Math.random() seed reuse.
 const hiSeed = randomBytes(4).readUInt32BE()
 const loSeed = randomBytes(4).readUInt32BE()
 
+// Simple pseudo-random 64-bit ID generator.
 function pseudoRandom () {
   const buffer = Buffer.allocUnsafe(8)
 
@@ -19,10 +21,12 @@ function pseudoRandom () {
   return buffer
 }
 
+// Generate a random unsigned 32-bit integer.
 function randomUInt32 (seed) {
   return seed ^ Math.floor(Math.random() * (0xFFFFFFFF + 1))
 }
 
+// Write unsigned integer bytes to a buffer. Faster than Buffer.writeUInt32BE().
 function writeUInt32BE (buffer, value, offset) {
   buffer[3 + offset] = value & 255
   value = value >> 8
