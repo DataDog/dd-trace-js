@@ -31,9 +31,9 @@ class DatadogTracer extends Tracer {
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
-      [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(this._prioritySampler),
-      [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(this._prioritySampler),
-      [opentracing.FORMAT_BINARY]: new BinaryPropagator(this._prioritySampler)
+      [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(),
+      [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(),
+      [opentracing.FORMAT_BINARY]: new BinaryPropagator()
     }
   }
 
@@ -58,6 +58,7 @@ class DatadogTracer extends Tracer {
 
   _inject (spanContext, format, carrier) {
     try {
+      this._prioritySampler.sample(spanContext)
       this._propagators[format].inject(spanContext, carrier)
     } catch (e) {
       log.error(e)

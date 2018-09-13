@@ -70,20 +70,6 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
     })
 
-    it('should generate the sampling priority', () => {
-      const carrier = {}
-      const spanContext = new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(-456),
-        baggageItems
-      })
-
-      propagator.inject(spanContext, carrier)
-
-      expect(carrier).to.have.property('x-datadog-sampling-priority', '2')
-      expect(spanContext.sampling).to.have.property('priority', 2)
-    })
-
     it('should inject an existing sampling priority', () => {
       prioritySampler.sample = () => {}
 

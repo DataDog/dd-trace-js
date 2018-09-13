@@ -35,7 +35,9 @@ describe('Tracer', () => {
     span = {}
     Span = sinon.stub().returns(span)
 
-    prioritySampler = {}
+    prioritySampler = {
+      sample: sinon.stub()
+    }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
     writer = {}
@@ -297,6 +299,15 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
 
       expect(() => tracer.inject()).not.to.throw()
+    })
+
+    it('should generate the sampling priority', () => {
+      TextMapPropagator.returns(propagator)
+
+      tracer = new Tracer(config)
+      tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
+
+      expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
     })
   })
 

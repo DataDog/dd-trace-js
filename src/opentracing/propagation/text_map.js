@@ -11,10 +11,6 @@ const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
 class TextMapPropagator {
-  constructor (prioritySampler) {
-    this._prioritySampler = prioritySampler
-  }
-
   inject (spanContext, carrier) {
     carrier[traceKey] = new Int64BE(spanContext.traceId.toBuffer()).toString()
     carrier[spanKey] = new Int64BE(spanContext.spanId.toBuffer()).toString()
@@ -40,9 +36,11 @@ class TextMapPropagator {
   }
 
   _injectSamplingPriority (spanContext, carrier) {
-    this._prioritySampler.sample(spanContext)
+    const priority = spanContext.sampling.priority
 
-    carrier[samplingKey] = spanContext.sampling.priority.toString()
+    if (Number.isInteger(priority)) {
+      carrier[samplingKey] = priority.toString()
+    }
   }
 
   _injectBaggageItems (spanContext, carrier) {
@@ -64,8 +62,8 @@ class TextMapPropagator {
   _extractSamplingPriority (carrier, spanContext) {
     const priority = parseInt(carrier[samplingKey], 10)
 
-    if (this._prioritySampler.validate(priority)) {
-      spanContext.sampling.priority = priority
+    if (Number.isInteger(priority)) {
+      spanContext.sampling.priority = parseInt(carrier[samplingKey], 10)
     }
   }
 }
