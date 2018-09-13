@@ -12,7 +12,10 @@ describe('SpanContext', () => {
       traceId: '123',
       spanId: '456',
       parentId: '789',
+      tags: {},
+      metrics: {},
       sampled: false,
+      sampling: { priority: 2 },
       baggageItems: { foo: 'bar' },
       trace: {
         started: ['span1', 'span2'],
@@ -29,7 +32,10 @@ describe('SpanContext', () => {
       traceId: '123',
       spanId: '456',
       parentId: null,
+      tags: {},
+      metrics: {},
       sampled: true,
+      sampling: {},
       baggageItems: {},
       trace: {
         started: [],

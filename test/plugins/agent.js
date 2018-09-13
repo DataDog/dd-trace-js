@@ -21,11 +21,12 @@ module.exports = {
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
     agent.use((req, res, next) => {
+      if (req.body.length === 0) return res.status(200).send()
       req.body = msgpack.decode(req.body, { codec })
       next()
     })
 
-    agent.put('/v0.3/traces', (req, res) => {
+    agent.put('/v0.4/traces', (req, res) => {
       res.status(200).send('OK')
 
       if (skip[0]) {

@@ -34,7 +34,7 @@ suite
           protocol: 'http:',
           hostname: 'test',
           port: '8080',
-          path: '/v0.3/traces',
+          path: '/v0.4/traces',
           method: 'PUT',
           headers: {
             'Content-Type': 'application/msgpack'

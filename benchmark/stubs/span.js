@@ -18,17 +18,19 @@ const span = {
     trace: {
       started: [span, span],
       finished: [span, span]
-    }
+    },
+    tags: {
+      resource: '/resource',
+      type: 'web',
+      error: true
+    },
+    metrics: {
+      [SAMPLE_RATE_METRIC_KEY]: 1
+    },
+    sampled: true,
+    sampling: {}
   }),
   _operationName: 'operation',
-  _tags: {
-    resource: '/resource',
-    type: 'web',
-    error: true
-  },
-  _metrics: {
-    [SAMPLE_RATE_METRIC_KEY]: 1
-  },
   _startTime: 1500000000000.123456,
   _duration: 100
 }

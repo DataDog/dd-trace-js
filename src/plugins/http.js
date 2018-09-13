@@ -15,7 +15,7 @@ function patch (http, tracer, config) {
       const uri = extractUrl(options)
       const method = (options.method || 'GET').toUpperCase()
 
-      if (uri === `${tracer._url.href}/v0.3/traces`) {
+      if (uri === `${tracer._url.href}/v0.4/traces`) {
         return request.apply(this, [options, callback])
       }
 

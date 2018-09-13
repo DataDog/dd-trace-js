@@ -7,8 +7,9 @@ const encode = require('./encode')
 const tracerVersion = require('../lib/version')
 
 class Writer {
-  constructor (url, size) {
+  constructor (prioritySampler, url, size) {
     this._queue = []
+    this._prioritySampler = prioritySampler
     this._url = url
     this._size = size
   }
@@ -40,31 +41,40 @@ class Writer {
   flush () {
     if (this._queue.length > 0) {
       const data = platform.msgpack.prefix(this._queue)
-      const options = {
-        protocol: this._url.protocol,
-        hostname: this._url.hostname,
-        port: this._url.port,
-        path: '/v0.3/traces',
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/msgpack',
-          'Datadog-Meta-Lang': platform.name(),
-          'Datadog-Meta-Lang-Version': platform.version(),
-          'Datadog-Meta-Lang-Interpreter': platform.engine(),
-          'Datadog-Meta-Tracer-Version': tracerVersion,
-          'X-Datadog-Trace-Count': String(this._queue.length)
-        }
-      }
 
-      log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
-
-      platform
-        .request(Object.assign({ data }, options))
-        .then(res => log.debug(`Response from the agent: ${res}`))
-        .catch(e => log.error(e))
+      this._request(data, this._queue.length)
 
       this._queue = []
     }
+  }
+
+  _request (data, count) {
+    const options = {
+      protocol: this._url.protocol,
+      hostname: this._url.hostname,
+      port: this._url.port,
+      path: '/v0.4/traces',
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/msgpack',
+        'Datadog-Meta-Lang': platform.name(),
+        'Datadog-Meta-Lang-Version': platform.version(),
+        'Datadog-Meta-Lang-Interpreter': platform.engine(),
+        'Datadog-Meta-Tracer-Version': tracerVersion,
+        'X-Datadog-Trace-Count': String(count)
+      }
+    }
+
+    log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
+
+    platform
+      .request(Object.assign({ data }, options))
+      .then(res => {
+        log.debug(`Response from the agent: ${res}`)
+
+        this._prioritySampler.update(JSON.parse(res).rate_by_service)
+      })
+      .catch(e => log.error(e))
   }
 
   _squeeze (buffer) {
