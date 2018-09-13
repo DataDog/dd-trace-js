@@ -11,16 +11,17 @@ function patch (http, methodName, tracer, config) {
   this.wrap(http, methodName, fn => makeRequestTrace(fn))
 
   function makeRequestTrace (request) {
-    return function requestTrace (options, callback) {
-      const uri = extractUrl(options)
-      const method = (options.method || 'GET').toUpperCase()
+    return function requestTrace () {
+      const args = normalizeArgs.apply(null, arguments)
+      const uri = args.uri
+      const options = args.options
+      const callback = args.callback
 
       if (uri === `${tracer._url.href}/v0.3/traces`) {
-        return request.apply(this, [options, callback])
+        return request.call(this, options, callback)
       }
 
-      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
-      options.headers = options.headers || {}
+      const method = (options.method || 'GET').toUpperCase()
 
       const parentScope = tracer.scopeManager().active()
       const parent = parentScope && parentScope.span()
@@ -79,6 +80,28 @@ function patch (http, methodName, tracer, config) {
       port: options.port,
       pathname: options.path || options.pathname || '/'
     })
+  }
+
+  let normalizeArgs
+  if (semver.satisfies(process.version, '>=10')) {
+    normalizeArgs = function normalizeArgs (inputURL, inputOptions, callback) {
+      let options = typeof inputURL === 'string' ? url.parse(inputURL) : Object.assign({}, inputURL)
+      options.headers = options.headers || {}
+      if (typeof inputOptions === 'object') {
+        options = Object.assign(options, inputOptions)
+      } else if (typeof inputOptions === 'function') {
+        callback = inputOptions
+      }
+      const uri = extractUrl(options)
+      return { uri, options, callback }
+    }
+  } else {
+    normalizeArgs = function normalizeArgs (options, callback) {
+      const uri = extractUrl(options)
+      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
+      options.headers = options.headers || {}
+      return { uri, options, callback }
+    }
   }
 }
 
