@@ -7,16 +7,11 @@ describe('TextMapPropagator', () => {
   let TextMapPropagator
   let propagator
   let textMap
-  let prioritySampler
   let baggageItems
 
   beforeEach(() => {
-    prioritySampler = {
-      validate: sinon.stub().returns(false)
-    }
-
     TextMapPropagator = require('../../../src/opentracing/propagation/text_map')
-    propagator = new TextMapPropagator(prioritySampler)
+    propagator = new TextMapPropagator()
     textMap = {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '-456',
@@ -28,12 +23,6 @@ describe('TextMapPropagator', () => {
   })
 
   describe('inject', () => {
-    beforeEach(() => {
-      prioritySampler.sample = sinon.spy(context => {
-        context.sampling.priority = context.sampling.priority || 2
-      })
-    })
-
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = new SpanContext({
@@ -71,8 +60,6 @@ describe('TextMapPropagator', () => {
     })
 
     it('should inject an existing sampling priority', () => {
-      prioritySampler.sample = () => {}
-
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: new Uint64BE(0, 123),
@@ -109,8 +96,6 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract a span context with a valid sampling priority', () => {
-      prioritySampler.validate.returns(true)
-
       textMap['x-datadog-sampling-priority'] = '0'
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
