@@ -2,6 +2,7 @@
 
 const url = require('url')
 const opentracing = require('opentracing')
+const semver = require('semver')
 
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
@@ -143,7 +144,17 @@ module.exports = [
   },
   {
     name: 'https',
-    patch,
+    patch: (http, tracer, config) => {
+      if (semver.satisfies(process.version, '>=9')) {
+        patch(http, tracer, config)
+      } else {
+        /**
+         * Below Node v9 the `https` module invokes `http.request`, which would end up counting requests twice.
+         * So rather then patch the `https` module, we ensure the `http` module is patched and we count only there.
+         */
+        require('http')
+      }
+    },
     unpatch
   }
 ]

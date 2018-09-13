@@ -412,6 +412,10 @@ describe('Plugin', () => {
         })
 
         it('should only record a request once', done => {
+          // Make sure both plugins are loaded, which could cause double-counting.
+          require('http')
+          require('https')
+
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -428,15 +432,18 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              // Activate a new parent span so we capture any double counting that may happen
+              // Activate a new parent span so we capture any double counting that may happen, otherwise double-counts
+              // would be siblings and our test would only capture 1 as a false positive.
               const span = tracer.startSpan('http-test')
               tracer.scopeManager().activate(span)
 
+              // Test `http(s).request
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
                 res.on('data', () => {})
               })
               req.end()
 
+              // Test `http(s).get`
               http.get(`${protocol}://localhost:${port}/user`, res => {
                 res.on('data', () => {})
               })
