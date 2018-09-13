@@ -18,6 +18,7 @@ const amqp = require('amqp10')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 const ScopeManager = require('../src/scope/scope_manager')
+const agent = require('./plugins/agent')
 
 const scopeManager = new ScopeManager()
 
@@ -277,8 +278,19 @@ function withVersions (plugin, moduleName, range, cb) {
           const min = semver.coerce(version).version
           const max = require(`./plugins/versions/${moduleName}@${version}`).version()
 
-          testVersions.set(min, { range: version, test: min })
-          testVersions.set(max, { range: version, test: version })
+          try {
+            require(`./plugins/versions/${moduleName}@${min}`).get()
+            testVersions.set(min, { range: version, test: min })
+          } catch (e) {
+            // skip unsupported version
+          }
+
+          try {
+            require(`./plugins/versions/${moduleName}@${version}`).get()
+            testVersions.set(max, { range: version, test: version })
+          } catch (e) {
+            // skip unsupported version
+          }
         })
     })
 
@@ -289,6 +301,8 @@ function withVersions (plugin, moduleName, range, cb) {
     .forEach(v => {
       describe(`with ${moduleName} ${v.range} (${v.version})`, () => cb(v.test))
     })
+
+  agent.wipe()
 }
 
 function createOperation (service) {
