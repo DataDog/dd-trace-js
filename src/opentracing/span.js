@@ -33,7 +33,7 @@ class DatadogSpan extends Span {
     this._spanContext.metrics = metrics
   }
 
-  _createContext (parent, tags) {
+  _createContext (parent) {
     let spanContext
 
     if (parent) {
