@@ -14,7 +14,7 @@ describe('TextMapPropagator', () => {
     propagator = new TextMapPropagator()
     textMap = {
       'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '-456',
+      'x-datadog-parent-id': '18446744073709551160', // -456 casted to uint64
       'ot-baggage-foo': 'bar'
     }
     baggageItems = {
