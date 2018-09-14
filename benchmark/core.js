@@ -77,21 +77,6 @@ suite
       writer.append(spanStub)
     }
   })
-  .add('Writer#flush (1000 items)', {
-    onStart () {
-      writer = new Writer({}, 1001)
-
-      for (let i = 0; i < 1000; i++) {
-        writer.append(spanStub)
-      }
-
-      queue = writer._queue
-    },
-    fn () {
-      writer._queue = queue
-      writer.flush()
-    }
-  })
   .add('Sampler#isSampled', {
     onStart () {
       sampler = new Sampler(0.5)

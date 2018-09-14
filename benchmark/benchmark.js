@@ -4,7 +4,7 @@
 
 const Benchmark = require('benchmark')
 
-Benchmark.options.maxTime = 0.5
+Benchmark.options.maxTime = 0.1
 Benchmark.options.minSamples = 5
 
 module.exports = title => {
