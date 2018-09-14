@@ -28,7 +28,6 @@ let propagator
 let carrier
 let writer
 let sampler
-let queue
 
 const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
