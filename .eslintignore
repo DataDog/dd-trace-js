@@ -1,3 +1,3 @@
 coverage
 out
-test/plugins/versions
+node_modules

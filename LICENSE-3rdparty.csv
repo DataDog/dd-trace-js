@@ -16,7 +16,6 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
-dev,@airbnb/node-memwatch,WTFPL,Copyright Lloyd Hilaiel
 dev,amqplib,MIT,Copyright 2013-2014 Michael Bridgen
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
