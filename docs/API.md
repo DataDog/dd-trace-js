@@ -181,6 +181,25 @@ query HelloWorld {
 | variables       | `undefined`                                      | A callback to enable recording of variables. By default, no variables are recorded. For example, using `variables => variables` would record all variables. |
 | depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
 
+<h3 id="hapi">hapi</h3>
+
+<h5 id="hapi-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| http.url         | The complete URL of the request.                          |
+| http.method      | The HTTP method of the request.                           |
+| http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
+
+<h5 id="hapi-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
+
 <h3 id="http">http / https</h3>
 
 <h5 id="http-tags">Tags</h5>
