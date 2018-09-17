@@ -18,45 +18,84 @@ const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_HEADERS = tags.HTTP_HEADERS
 
-function normalizeConfig (config) {
-  const headers = getHeadersToRecord(config)
-  const validateStatus = getStatusValidator(config)
+const web = {
+  // Ensure the configuration has the correct structure and defaults.
+  normalizeConfig (config) {
+    const headers = getHeadersToRecord(config)
+    const validateStatus = getStatusValidator(config)
 
-  return Object.assign({}, config, {
-    headers,
-    validateStatus
-  })
-}
+    return Object.assign({}, config, {
+      headers,
+      validateStatus
+    })
+  },
 
-function instrument (tracer, config, req, res, name, callback) {
-  const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
-  const span = tracer.startSpan(name, { childOf })
-  const scope = tracer.scopeManager().activate(span)
+  // Start a span and activate a scope for a request.
+  instrument (tracer, config, req, res, name, callback) {
+    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
+    const span = tracer.startSpan(name, { childOf })
+    const scope = tracer.scopeManager().activate(span)
 
-  if (config.service) {
-    span.setTag(SERVICE_NAME, config.service)
+    if (config.service) {
+      span.setTag(SERVICE_NAME, config.service)
+    }
+
+    this.patch(req)
+
+    req._datadog.tracer = tracer
+    req._datadog.config = config
+    req._datadog.span = span
+    req._datadog.scope = scope
+    req._datadog.res = res
+
+    addRequestTags(req)
+
+    callback && callback(span)
+
+    wrapEnd(req)
+
+    return span
+  },
+
+  // Reactivate the request scope in case it was changed by a middleware.
+  reactivate (req) {
+    req._datadog.scope && req._datadog.scope.close()
+    req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
+  },
+
+  // Add a route segment that will be used for the resource name.
+  enterRoute (req, path) {
+    req._datadog.paths.push(path)
+  },
+
+  // Remove the current route segment.
+  exitRoute (req) {
+    req._datadog.paths.pop()
+  },
+
+  // Register a callback to run before res.end() is called.
+  beforeEnd (req, callback) {
+    req._datadog.beforeEnd.push(callback)
+  },
+
+  // Prepare the request for instrumentation.
+  patch (req) {
+    if (req._datadog) return
+
+    Object.defineProperty(req, '_datadog', {
+      value: {
+        span: null,
+        scope: null,
+        paths: [],
+        beforeEnd: []
+      }
+    })
+  },
+
+  // Return the active span. For now, this is always the request span.
+  active (req) {
+    return req._datadog.span
   }
-
-  patch(req)
-
-  req._datadog.tracer = tracer
-  req._datadog.config = config
-  req._datadog.span = span
-  req._datadog.scope = scope
-  req._datadog.res = res
-
-  addRequestTags(req)
-
-  callback && callback(span)
-
-  wrapEnd(req)
-
-  return span
-}
-
-function reactivate (req) {
-  req._datadog.scope && req._datadog.scope.close()
-  req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
 }
 
 function finish (req) {
@@ -67,18 +106,6 @@ function finish (req) {
   req._datadog.span.finish()
   req._datadog.scope && req._datadog.scope.close()
   req._datadog.finished = true
-}
-
-function enterRoute (req, path) {
-  req._datadog.paths.push(path)
-}
-
-function exitRoute (req) {
-  req._datadog.paths.pop()
-}
-
-function beforeEnd (req, callback) {
-  req._datadog.beforeEnd.push(callback)
 }
 
 function wrapEnd (req) {
@@ -94,23 +121,6 @@ function wrapEnd (req) {
 
     return returnValue
   }
-}
-
-function patch (req) {
-  if (req._datadog) return
-
-  Object.defineProperty(req, '_datadog', {
-    value: {
-      span: null,
-      scope: null,
-      paths: [],
-      beforeEnd: []
-    }
-  })
-}
-
-function active (req) {
-  return req._datadog.span
 }
 
 function addRequestTags (req) {
@@ -182,13 +192,4 @@ function getStatusValidator (config) {
   return code => code < 500
 }
 
-module.exports = {
-  patch,
-  active,
-  normalizeConfig,
-  instrument,
-  reactivate,
-  enterRoute,
-  exitRoute,
-  beforeEnd
-}
+module.exports = web
