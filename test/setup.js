@@ -44,6 +44,10 @@ after(() => {
   scopeManager._disable()
 })
 
+afterEach(() => {
+  agent.reset()
+})
+
 waitForServices()
   .then(run)
   .catch(err => {
@@ -219,7 +223,7 @@ function wrapIt () {
 
     if (fn.length > 0) {
       return it.call(this, title, function (done) {
-        arguments[0] = withoutScope(done)
+        arguments[0] = withoutScope(agent.wrap(done))
 
         return fn.apply(this, arguments)
       })
@@ -231,9 +235,11 @@ function wrapIt () {
           return result
             .then(withoutScope(res => res))
             .catch(withoutScope(err => Promise.reject(err)))
+            .then(() => agent.promise())
         }
 
-        return result
+        return agent.promise()
+          .then(() => result)
       })
     }
   }

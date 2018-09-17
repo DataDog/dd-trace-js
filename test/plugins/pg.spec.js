@@ -16,26 +16,26 @@ describe('Plugin', () => {
         tracer = require('../..')
       })
 
-      afterEach(() => {
-        agent.close()
-      })
-
       describe('when using a client', () => {
+        before(() => {
+          return agent.load(plugin, 'pg')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
         beforeEach(done => {
-          agent.load(plugin, 'pg')
-            .then(() => {
-              pg = require(`./versions/pg@${version}`).get()
+          pg = require(`./versions/pg@${version}`).get()
 
-              client = new pg.Client({
-                user: 'postgres',
-                password: 'postgres',
-                database: 'postgres',
-                application_name: 'test'
-              })
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+            application_name: 'test'
+          })
 
-              client.connect(err => done(err))
-            })
-            .catch(done)
+          client.connect(err => done(err))
         })
 
         it('should do automatic instrumentation when using callbacks', done => {
@@ -108,24 +108,28 @@ describe('Plugin', () => {
       describe('when using a pool', () => {
         let pool
 
+        before(() => {
+          return agent.load(plugin, 'pg')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
         beforeEach(done => {
-          agent.load(plugin, 'pg')
-            .then(() => {
-              pg = require('pg')
+          pg = require('pg')
 
-              pool = new pg.Pool({
-                user: 'postgres',
-                password: 'postgres',
-                database: 'postgres',
-                application_name: 'test'
-              })
+          pool = new pg.Pool({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+            application_name: 'test'
+          })
 
-              pool.connect((err, c) => {
-                client = c
-                done(err)
-              })
-            })
-            .catch(done)
+          pool.connect((err, c) => {
+            client = c
+            done(err)
+          })
         })
 
         afterEach(() => {
@@ -149,26 +153,24 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        let config
+        before(() => {
+          return agent.load(plugin, 'pg', { service: 'custom' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
 
         beforeEach(done => {
-          config = {
-            service: 'custom'
-          }
+          pg = require('pg')
 
-          agent.load(plugin, 'pg', config)
-            .then(() => {
-              pg = require('pg')
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
 
-              client = new pg.Client({
-                user: 'postgres',
-                password: 'postgres',
-                database: 'postgres'
-              })
-
-              client.connect(err => done(err))
-            })
-            .catch(done)
+          client.connect(err => done(err))
         })
 
         it('should be configured with the correct values', done => {
