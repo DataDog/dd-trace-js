@@ -12,9 +12,9 @@ const handlers = new Set()
 let agent = null
 let listener = null
 let tracer = null
-let skipped = []
 
 module.exports = {
+  // Load the plugin on the tracer with an optional config and start a mock agent.
   load (plugin, pluginName, config) {
     tracer = require('../..')
     agent = express()
@@ -52,26 +52,7 @@ module.exports = {
     })
   },
 
-  // use (callback, count) {
-  //   count = count || 1
-  //   promise = Promise.reject(new Error('No request was expected.'))
-
-  //   for (let i = 0; i < count; i++) {
-  //     promise = promise.catch(() => new Promise((resolve, reject) => {
-  //       handlers.push(function () {
-  //         try {
-  //           callback.apply(null, arguments)
-  //           resolve()
-  //         } catch (e) {
-  //           reject(e)
-  //         }
-  //       })
-  //     }))
-  //   }
-
-  //   return promise
-  // },
-
+  // Register a callback with expectations to be run on ever agent call.
   use (callback) {
     const deferred = {}
     const promise = new Promise((resolve, reject) => {
@@ -104,6 +85,7 @@ module.exports = {
     return promise
   },
 
+  // Return a promise that will resolve when all expectations have run.
   promise () {
     const promises = Array.from(handlers)
       .map(handler => handler.promise.catch(e => e))
@@ -112,10 +94,12 @@ module.exports = {
       .then(results => results.find(e => e instanceof Error))
   },
 
+  // Unregister any outstanding expectation callbacks.
   reset () {
     handlers.clear()
   },
 
+  // Wrap a callback so it will only be called when all expectations have run.
   wrap (callback) {
     return error => {
       this.promise()
@@ -123,30 +107,26 @@ module.exports = {
     }
   },
 
+  // Return the current active span.
   currentSpan () {
     const scope = tracer.scopeManager().active()
     return scope ? scope.span() : null
   },
 
+  // Stop the mock agent, reset all expectations and wipe the require cache.
   close () {
-    const timeout = setTimeout(() => {
-      skipped.forEach(defer => defer.resolve())
-    }, 1000)
-
     this.wipe()
 
-    return Promise.all(skipped.map(defer => defer.promise))
-      .then(() => {
-        clearTimeout(timeout)
-        listener.close()
-        listener = null
-        agent = null
-        handlers.clear()
-        skipped = []
-        delete require.cache[require.resolve('../..')]
-      })
+    listener.close()
+    listener = null
+    agent = null
+    handlers.clear()
+    delete require.cache[require.resolve('../..')]
+
+    return Promise.resolve()
   },
 
+  // Wipe the require cache.
   wipe () {
     const basedir = path.join(__dirname, 'versions')
 
