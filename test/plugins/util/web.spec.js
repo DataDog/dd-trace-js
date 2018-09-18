@@ -235,5 +235,9 @@ describe('plugins/util/web', () => {
 
       expect(web.active(req)).to.equal(span)
     })
+
+    it('should return null when not yet instrumented', () => {
+      expect(web.active(req)).to.be.null
+    })
   })
 })
