@@ -6,6 +6,7 @@ module.exports = {
   'elasticsearch': require('./elasticsearch'),
   'express': require('./express'),
   'graphql': require('./graphql'),
+  'hapi': require('./hapi'),
   'http': require('./http'),
   'mongodb-core': require('./mongodb-core'),
   'mysql': require('./mysql'),
