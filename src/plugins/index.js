@@ -8,6 +8,7 @@ module.exports = {
   'graphql': require('./graphql'),
   'hapi': require('./hapi'),
   'http': require('./http'),
+  'kafka-node': require('./kafka-node'),
   'mongodb-core': require('./mongodb-core'),
   'mysql': require('./mysql'),
   'mysql2': require('./mysql2'),

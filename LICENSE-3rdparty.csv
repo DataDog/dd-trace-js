@@ -38,6 +38,7 @@ dev,graphql,MIT,Copyright 2015-present Facebook Inc.
 dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
 dev,gulp-jsdoc3,Apache-2.0,Copyright Marc Udoff
 dev,jsdoc,Apache-2.0,Copyright 2011-present Michael Mathews and the contributors to JSDoc
+dev,kafka-node,MIT,Copyright 2015 sohu.com
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,mongodb-core,Apache-2.0,Copyright Christian Kvalheim
 dev,mysql,MIT,Copyright 2012 Felix Geisendörfer and contributors

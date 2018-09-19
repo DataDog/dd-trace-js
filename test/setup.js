@@ -15,6 +15,7 @@ const mongo = require('mongodb-core')
 const elasticsearch = require('elasticsearch')
 const amqplib = require('amqplib/callback_api')
 const amqp = require('amqp10')
+const kafka = require('kafka-node')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 const ScopeManager = require('../src/scope/scope_manager')
@@ -59,7 +60,8 @@ function waitForServices () {
     waitForMongo(),
     waitForElasticsearch(),
     waitForRabbitMQ(),
-    waitForQpid()
+    waitForQpid(),
+    waitForKafka()
   ])
 }
 
@@ -215,6 +217,31 @@ function waitForQpid () {
           if (operation.retry(err)) return
           reject(err)
         })
+    })
+  })
+}
+
+function waitForKafka () {
+  return new Promise((resolve, reject) => {
+    const operation = createOperation('kafka')
+
+    operation.attempt(currentAttempt => {
+      const client = new kafka.KafkaClient({
+        kafkaHost: 'localhost:9092',
+        connectTimeout: 1000,
+        connectRetryOptions: { retries: 0 }
+      })
+
+      client.on('error', err => {
+        if (!retryOperation(operation, err)) {
+          reject(err)
+        }
+      })
+
+      client.on('connect', () => {
+        client.close()
+        resolve()
+      })
     })
   })
 }

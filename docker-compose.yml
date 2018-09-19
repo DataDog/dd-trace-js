@@ -35,3 +35,19 @@ services:
       - QPIDD_ADMIN_PASSWORD=admin
     ports:
       - "127.0.0.1:5673:5673"
+  zookeeper:
+    image: zookeeper:3.4
+    ports:
+      - "2181:2181"
+  kafka:
+    image: wurstmeister/kafka:2.11-2.0.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_HOST_NAME: localhost
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "test.topic:1:1"
+    ports:
+      - "9092:9092"
