@@ -52,7 +52,7 @@ module.exports = {
     })
   },
 
-  // Register a callback with expectations to be run on ever agent call.
+  // Register a callback with expectations to be run on every agent call.
   use (callback) {
     const deferred = {}
     const promise = new Promise((resolve, reject) => {
