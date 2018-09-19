@@ -18,30 +18,32 @@ describe('Plugin', () => {
 
       afterEach(() => {
         connection.close()
-        agent.close()
-        agent.wipe()
       })
 
       describe('without configuration', () => {
+        before(() => {
+          return agent.load(plugin, 'amqplib')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
         describe('when using a callback', () => {
           beforeEach(done => {
-            agent.load(plugin, 'amqplib')
-              .then(() => {
-                require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
-                  .connect((err, conn) => {
-                    connection = conn
+            require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
+              .connect((err, conn) => {
+                connection = conn
 
-                    if (err != null) {
-                      return done(err)
-                    }
+                if (err != null) {
+                  return done(err)
+                }
 
-                    conn.createChannel((err, ch) => {
-                      channel = ch
-                      done(err)
-                    })
-                  })
+                conn.createChannel((err, ch) => {
+                  channel = ch
+                  done(err)
+                })
               })
-              .catch(done)
           })
 
           describe('when sending commands', () => {
@@ -211,8 +213,7 @@ describe('Plugin', () => {
 
         describe('when using a promise', () => {
           beforeEach(() => {
-            return agent.load(plugin, 'amqplib')
-              .then(() => require(`./versions/amqplib@${version}`).get().connect())
+            return require(`./versions/amqplib@${version}`).get().connect()
               .then(conn => (connection = conn))
               .then(conn => conn.createChannel())
               .then(ch => (channel = ch))
@@ -230,24 +231,28 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
+        before(() => {
+          return agent.load(plugin, 'amqplib', { service: 'test' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
         beforeEach(done => {
-          agent.load(plugin, 'amqplib', { service: 'test' })
-            .then(() => {
-              require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
-                .connect((err, conn) => {
-                  connection = conn
+          require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
+            .connect((err, conn) => {
+              connection = conn
 
-                  if (err !== null) {
-                    return done(err)
-                  }
+              if (err !== null) {
+                return done(err)
+              }
 
-                  conn.createChannel((err, ch) => {
-                    channel = ch
-                    done(err)
-                  })
-                })
+              conn.createChannel((err, ch) => {
+                channel = ch
+                done(err)
+              })
             })
-            .catch(done)
         })
 
         it('should be configured with the correct values', done => {

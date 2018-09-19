@@ -136,24 +136,23 @@ describe('Plugin', () => {
 
   describe('graphql', () => {
     withVersions(plugin, 'graphql', version => {
-      beforeEach(() => {
-        tracer = require('../..')
-
+      before(() => {
         sort = spans => spans.sort((a, b) => a.start.toString() > b.start.toString() ? 1 : -1)
       })
 
-      afterEach(() => {
-        agent.close()
-        agent.wipe()
-      })
-
       describe('without configuration', () => {
-        beforeEach(() => {
+        before(() => {
+          tracer = require('../..')
+
           return agent.load(plugin, 'graphql')
             .then(() => {
               graphql = require(`./versions/graphql@${version}`).get()
               buildSchema()
             })
+        })
+
+        after(() => {
+          return agent.close()
         })
 
         it('should instrument operations', done => {
@@ -389,9 +388,8 @@ describe('Plugin', () => {
           graphql.graphql(schema, source)
             .then((result) => {
               expect(result.data.human.pets[0].owner.name).to.equal('test')
-
-              done()
             })
+            .then(done)
             .catch(done)
         })
 
@@ -687,12 +685,18 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
+        before(() => {
+          tracer = require('../..')
+
           return agent.load(plugin, 'graphql', { service: 'test' })
             .then(() => {
               graphql = require(`./versions/graphql@${version}`).get()
               buildSchema()
             })
+        })
+
+        after(() => {
+          return agent.close()
         })
 
         it('should be configured with the correct values', done => {

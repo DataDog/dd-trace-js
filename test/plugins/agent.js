@@ -8,14 +8,13 @@ const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
 
+const handlers = new Set()
 let agent = null
 let listener = null
 let tracer = null
-let handlers = []
-let promise
-let skip = []
 
 module.exports = {
+  // Load the plugin on the tracer with an optional config and start a mock agent.
   load (plugin, pluginName, config) {
     tracer = require('../..')
     agent = express()
@@ -27,14 +26,7 @@ module.exports = {
 
     agent.put('/v0.3/traces', (req, res) => {
       res.status(200).send('OK')
-
-      if (skip[0]) {
-        skip[0].resolve()
-        skip.shift()
-      } else if (handlers[0]) {
-        handlers[0](req.body)
-        handlers.shift()
-      }
+      handlers.forEach(handler => handler(req.body))
     })
 
     return getPort().then(port => {
@@ -60,61 +52,81 @@ module.exports = {
     })
   },
 
-  use (callback, count) {
-    count = count || 1
-    promise = Promise.reject(new Error('No request was expected.'))
+  // Register a callback with expectations to be run on every agent call.
+  use (callback) {
+    const deferred = {}
+    const promise = new Promise((resolve, reject) => {
+      deferred.resolve = resolve
+      deferred.reject = reject
+    })
 
-    for (let i = 0; i < count; i++) {
-      promise = promise.catch(() => new Promise((resolve, reject) => {
-        handlers.push(function () {
-          try {
-            callback.apply(null, arguments)
-            resolve()
-          } catch (e) {
-            reject(e)
-          }
-        })
-      }))
+    const timeout = setTimeout(() => {
+      if (error) {
+        deferred.reject(error)
+      }
+    }, 1000)
+
+    let error
+
+    const handler = function () {
+      try {
+        callback.apply(null, arguments)
+        handlers.delete(handler)
+        clearTimeout(timeout)
+        deferred.resolve()
+      } catch (e) {
+        error = error || e
+      }
     }
+
+    handler.promise = promise
+    handlers.add(handler)
 
     return promise
   },
 
-  skip (count) {
-    for (let i = 0; i < count; i++) {
-      const defer = {}
+  // Return a promise that will resolve when all expectations have run.
+  promise () {
+    const promises = Array.from(handlers)
+      .map(handler => handler.promise.catch(e => e))
 
-      defer.promise = new Promise((resolve, reject) => {
-        defer.resolve = resolve
-        defer.reject = reject
-      })
+    return Promise.all(promises)
+      .then(results => results.find(e => e instanceof Error))
+  },
 
-      skip.push(defer)
+  // Unregister any outstanding expectation callbacks.
+  reset () {
+    handlers.clear()
+  },
+
+  // Wrap a callback so it will only be called when all expectations have run.
+  wrap (callback) {
+    return error => {
+      this.promise()
+        .then(err => callback(error || err))
     }
   },
 
+  // Return the current active span.
   currentSpan () {
     const scope = tracer.scopeManager().active()
     return scope ? scope.span() : null
   },
 
+  // Stop the mock agent, reset all expectations and wipe the require cache.
   close () {
-    const timeout = setTimeout(() => {
-      skip.forEach(defer => defer.resolve())
-    }, 1000)
+    this.wipe()
 
-    return Promise.all(skip.map(defer => defer.promise))
-      .then(() => {
-        clearTimeout(timeout)
-        listener.close()
-        listener = null
-        agent = null
-        handlers = []
-        skip = []
-        delete require.cache[require.resolve('../..')]
-      })
+    listener.close()
+    listener = null
+    agent = null
+    handlers.clear()
+    delete require.cache[require.resolve('../..')]
+
+    return Promise.resolve()
   },
 
+  // Wipe the require cache.
   wipe () {
     const basedir = path.join(__dirname, 'versions')
 
