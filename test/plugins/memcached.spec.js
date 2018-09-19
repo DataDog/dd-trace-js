@@ -1,7 +1,7 @@
 'use strict'
 
 const agent = require('./agent')
-const plugin = require('../../src/plugins/Memcached')
+const plugin = require('../../src/plugins/memcached')
 
 wrapIt()
 
