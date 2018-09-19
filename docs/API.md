@@ -217,6 +217,22 @@ query HelloWorld {
 | service          | http-client      | The service name for this integration. |
 | splitByDomain    | false            | Use the remote endpoint host as the service name instead of the default. |
 
+<h3 id="memcached">memcached</h3>
+
+<h5 id="memcached-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| memcached.query  | The query sent to the server.                             |
+| out.host         | The host of the Memcached server.                         |
+| out.port         | The port of the Memcached server.                         |
+
+<h5 id="memcached-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | memcached        | The service name for this integration. |
+
 <h3 id="mongodb-core">mongodb-core</h3>
 
 <h5 id="mongodb-core-tags">Tags</h5>
