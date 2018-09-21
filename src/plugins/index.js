@@ -14,5 +14,6 @@ module.exports = {
   'mysql': require('./mysql'),
   'mysql2': require('./mysql2'),
   'pg': require('./pg'),
-  'redis': require('./redis')
+  'redis': require('./redis'),
+  'restify': require('./restify')
 }

@@ -284,6 +284,8 @@ function withVersions (plugin, moduleName, range, cb) {
             // skip unsupported version
           }
 
+          agent.wipe()
+
           try {
             const max = require(`./plugins/versions/${moduleName}@${version}`).version()
             require(`./plugins/versions/${moduleName}@${version}`).get()
@@ -291,6 +293,8 @@ function withVersions (plugin, moduleName, range, cb) {
           } catch (e) {
             // skip unsupported version
           }
+
+          agent.wipe()
         })
     })
 
