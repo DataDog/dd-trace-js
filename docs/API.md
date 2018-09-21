@@ -217,6 +217,22 @@ query HelloWorld {
 | service          | http-client      | The service name for this integration. |
 | splitByDomain    | false            | Use the remote endpoint host as the service name instead of the default. |
 
+<h3 id="ioredis">ioredis</h3>
+
+<h5 id="ioredis-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| db.name          | The index of the queried database.                        |
+| out.host         | The host of the Redis server.                             |
+| out.port         | The port of the Redis server.                             |
+
+<h5 id="ioredis-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | redis            | The service name for this integration. |
+
 <h3 id="memcached">memcached</h3>
 
 <h5 id="memcached-tags">Tags</h5>
