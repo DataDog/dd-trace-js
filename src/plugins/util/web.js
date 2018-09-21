@@ -94,7 +94,7 @@ const web = {
 
   // Return the active span. For now, this is always the request span.
   active (req) {
-    return req._datadog.span
+    return req._datadog ? req._datadog.span : null
   }
 }
 

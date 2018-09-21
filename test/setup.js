@@ -20,6 +20,7 @@ const platform = require('../src/platform')
 const node = require('../src/platform/node')
 const ScopeManager = require('../src/scope/scope_manager')
 const agent = require('./plugins/agent')
+const externals = require('./plugins/externals.json')
 
 const scopeManager = new ScopeManager()
 
@@ -282,7 +283,7 @@ function wrapIt () {
 }
 
 function withVersions (plugin, moduleName, range, cb) {
-  const instrumentations = [].concat(plugin)
+  const instrumentations = [].concat(plugin, externals)
   const testVersions = new Map()
 
   if (!cb) {
@@ -303,6 +304,8 @@ function withVersions (plugin, moduleName, range, cb) {
             // skip unsupported version
           }
 
+          agent.wipe()
+
           try {
             const max = require(`./plugins/versions/${moduleName}@${version}`).version()
             require(`./plugins/versions/${moduleName}@${version}`).get()
@@ -310,6 +313,8 @@ function withVersions (plugin, moduleName, range, cb) {
           } catch (e) {
             // skip unsupported version
           }
+
+          agent.wipe()
         })
     })
 
