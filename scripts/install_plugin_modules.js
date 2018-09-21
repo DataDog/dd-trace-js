@@ -7,6 +7,7 @@ const crypto = require('crypto')
 const semver = require('semver')
 const exec = require('./helpers/exec')
 const plugins = requireDir('../src/plugins')
+const externals = require('../test/plugins/externals')
 
 const workspaces = new Set()
 
@@ -19,14 +20,17 @@ function run () {
 }
 
 function assertVersions () {
-  Object.keys(plugins).filter(key => key !== 'index').forEach(key => {
-    [].concat(plugins[key]).forEach(instrumentation => {
-      [].concat(instrumentation.versions).forEach(version => {
-        if (version) {
-          assertModules(instrumentation.name, version)
-          assertModules(instrumentation.name, semver.coerce(version).version)
-        }
-      })
+  const internals = Object.keys(plugins)
+    .filter(key => key !== 'index')
+    .map(key => plugins[key])
+    .reduce((prev, next) => prev.concat(next), [])
+
+  internals.concat(externals).forEach(instrumentation => {
+    [].concat(instrumentation.versions).forEach(version => {
+      if (version) {
+        assertModules(instrumentation.name, version)
+        assertModules(instrumentation.name, semver.coerce(version).version)
+      }
     })
   })
 }

@@ -233,6 +233,25 @@ query HelloWorld {
 |------------------|------------------|----------------------------------------|
 | service          | redis            | The service name for this integration. |
 
+<h3 id="koa">koa</h3>
+
+<h5 id="koa-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| http.url         | The complete URL of the request.                          |
+| http.method      | The HTTP method of the request.                           |
+| http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
+
+<h5 id="koa-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
+
 <h3 id="mongodb-core">mongodb-core</h3>
 
 <h5 id="mongodb-core-tags">Tags</h5>
