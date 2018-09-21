@@ -8,6 +8,7 @@ module.exports = {
   'graphql': require('./graphql'),
   'hapi': require('./hapi'),
   'http': require('./http'),
+  'ioredis': require('./ioredis'),
   'koa': require('./koa'),
   'mongodb-core': require('./mongodb-core'),
   'mysql': require('./mysql'),
