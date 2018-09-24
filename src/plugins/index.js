@@ -10,6 +10,7 @@ module.exports = {
   'http': require('./http'),
   'ioredis': require('./ioredis'),
   'koa': require('./koa'),
+  'memcached': require('./memcached'),
   'mongodb-core': require('./mongodb-core'),
   'mysql': require('./mysql'),
   'mysql2': require('./mysql2'),

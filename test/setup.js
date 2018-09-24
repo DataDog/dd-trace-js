@@ -15,6 +15,7 @@ const mongo = require('mongodb-core')
 const elasticsearch = require('elasticsearch')
 const amqplib = require('amqplib/callback_api')
 const amqp = require('amqp10')
+const Memcached = require('memcached')
 const platform = require('../src/platform')
 const node = require('../src/platform/node')
 const ScopeManager = require('../src/scope/scope_manager')
@@ -60,7 +61,8 @@ function waitForServices () {
     waitForMongo(),
     waitForElasticsearch(),
     waitForRabbitMQ(),
-    waitForQpid()
+    waitForQpid(),
+    waitForMemcached()
   ])
 }
 
@@ -216,6 +218,24 @@ function waitForQpid () {
           if (operation.retry(err)) return
           reject(err)
         })
+    })
+  })
+}
+
+function waitForMemcached () {
+  return new Promise((resolve, reject) => {
+    const operation = createOperation('memcached')
+
+    operation.attempt(currentAttempt => {
+      const memcached = new Memcached('localhost:11211', { retries: 0 })
+
+      memcached.version((err, version) => {
+        if (retryOperation(operation, err)) return
+        if (err) return reject(err)
+
+        memcached.end()
+        resolve()
+      })
     })
   })
 }

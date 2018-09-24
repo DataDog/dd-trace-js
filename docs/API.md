@@ -252,6 +252,22 @@ query HelloWorld {
 | validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
 | headers          | `[]`                      | An array of headers to include in the span metadata. |
 
+<h3 id="memcached">memcached</h3>
+
+<h5 id="memcached-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| memcached.query  | The query sent to the server.                             |
+| out.host         | The host of the Memcached server.                         |
+| out.port         | The port of the Memcached server.                         |
+
+<h5 id="memcached-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | memcached        | The service name for this integration. |
+
 <h3 id="mongodb-core">mongodb-core</h3>
 
 <h5 id="mongodb-core-tags">Tags</h5>
