@@ -15,6 +15,9 @@ docker-base: &docker-base
       image: mongo:3.6
     - &elasticsearch
       image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
+      environment:
+        - discovery.type=single-node
+        - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
     - &rabbitmq
       image: rabbitmq:3.6-alpine
     - &qpid
@@ -33,9 +36,18 @@ build-node-base: &node-base
     - run:
         name: Versions
         command: yarn versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
         command: yarn install
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
     - run:
         name: Test
         command: yarn test
@@ -52,9 +64,11 @@ jobs:
       - run:
           name: Versions
           command: yarn versions
+      - *restore-yarn-cache
       - run:
           name: Install dependencies
           command: yarn install
+      - *save-yarn-cache
       - run:
           name: Lint
           command: yarn lint
@@ -66,9 +80,11 @@ jobs:
       - run:
           name: Versions
           command: yarn versions
+      - *restore-yarn-cache
       - run:
           name: Install dependencies
           command: yarn install
+      - *save-yarn-cache
       - run:
           name: Test
           command: yarn leak

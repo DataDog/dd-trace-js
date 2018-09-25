@@ -62,20 +62,27 @@ describe('Platform', () => {
       let randomBytes
 
       beforeEach(() => {
-        randomBytes = sinon.stub()
+        const seed = Buffer.alloc(4)
+
+        seed.writeUInt32BE(0xFF000000)
+
+        randomBytes = sinon.stub().returns(seed)
+
+        sinon.stub(Math, 'random')
+
         id = proxyquire('../src/platform/node/id', {
           'crypto': { randomBytes }
         })
       })
 
-      it('should return a random 64bit ID', () => {
-        const buffer = Buffer.alloc(8)
-        buffer.writeUInt32BE(0x12345678)
-        buffer.writeUInt32BE(0x87654321, 4)
+      afterEach(() => {
+        Math.random.restore()
+      })
 
-        randomBytes.returns(buffer)
+      it('should return a random 63bit ID', () => {
+        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
 
-        expect(id().toString('16')).to.equal('1234567887654321')
+        expect(id().toBuffer().toString('hex')).to.equal('7f00ff00ff00ff00')
       })
     })
 

@@ -14,20 +14,16 @@ describe('Plugin', () => {
     withVersions(plugin, 'memcached', version => {
       beforeEach(() => {
         tracer = require('../..')
+        Memcached = require(`./versions/memcached@${version}`).get()
       })
 
       afterEach(() => {
         memcached.end()
-        return agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load(plugin, 'memcached')
-            .then(() => {
-              Memcached = require(`./versions/memcached@${version}`).get()
-            })
-        })
+        before(() => agent.load(plugin, 'memcached'))
+        after(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', done => {
           memcached = new Memcached('localhost:11211', { retries: 0 })
@@ -122,16 +118,16 @@ describe('Plugin', () => {
             redundancy: 1
           })
 
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('out.port', '11211')
-            })
-            .then(done)
-            .catch(done)
-
           try {
             memcached.del('test', err => err && done(err))
+
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+                expect(traces[0][0].meta).to.have.property('out.port', '11211')
+              })
+              .then(done)
+              .catch(done)
           } catch (e) {
             // Bug in memcached will throw. Skip test when this happens.
             done()
@@ -140,12 +136,11 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
+        before(() => agent.load(plugin, 'memcached', { service: 'custom' }))
+        after(() => agent.close())
+
         beforeEach(() => {
-          return agent.load(plugin, 'memcached', { service: 'custom' })
-            .then(() => {
-              const Memcached = require(`./versions/memcached@${version}`).get()
-              memcached = new Memcached('localhost:11211', { retries: 0 })
-            })
+          memcached = new Memcached('localhost:11211', { retries: 0 })
         })
 
         it('should be configured with the correct values', done => {

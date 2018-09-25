@@ -15,22 +15,22 @@ describe('Plugin', () => {
         tracer = require('../..')
       })
 
-      afterEach(() => {
-        agent.close()
-        agent.wipe()
-      })
-
       describe('without configuration', () => {
         let client
 
-        beforeEach(() => {
+        before(() => {
           return agent.load(plugin, 'elasticsearch')
-            .then(() => {
-              elasticsearch = require(`./versions/elasticsearch@${version}`).get()
-              client = new elasticsearch.Client({
-                host: 'localhost:9200'
-              })
-            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          elasticsearch = require(`./versions/elasticsearch@${version}`).get()
+          client = new elasticsearch.Client({
+            host: 'localhost:9200'
+          })
         })
 
         it('should sanitize the resource name', done => {
@@ -222,14 +222,19 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         let client
 
-        beforeEach(() => {
+        before(() => {
           return agent.load(plugin, 'elasticsearch', { service: 'test' })
-            .then(() => {
-              elasticsearch = require(`./versions/elasticsearch@${version}`).get()
-              client = new elasticsearch.Client({
-                host: 'localhost:9200'
-              })
-            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          elasticsearch = require(`./versions/elasticsearch@${version}`).get()
+          client = new elasticsearch.Client({
+            host: 'localhost:9200'
+          })
         })
 
         it('should be configured with the correct values', done => {

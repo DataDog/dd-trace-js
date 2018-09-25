@@ -20,9 +20,10 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        agent.close()
-        agent.wipe()
-        server.stop()
+        return Promise.all([
+          agent.close(),
+          server.stop()
+        ])
       })
 
       beforeEach(() => {

@@ -19,16 +19,20 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        agent.close()
         appListener.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
+        before(() => {
           return agent.load(plugin, 'express')
-            .then(() => {
-              express = require(`./versions/express@${version}`).get()
-            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          express = require(`./versions/express@${version}`).get()
         })
 
         it('should do automatic instrumentation on app routes', done => {
@@ -476,11 +480,6 @@ describe('Plugin', () => {
 
             appListener = app.listen(port, 'localhost', () => {
               axios.get(`http://localhost:${port}/app/user/123`)
-                .then(res => {
-                  expect(res.status).to.equal(200)
-                  expect(res.data).to.be.empty
-                  done()
-                })
                 .catch(done)
             })
           })
@@ -547,19 +546,20 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        let config
-
-        beforeEach(() => {
-          config = {
+        before(() => {
+          return agent.load(plugin, 'express', {
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent']
-          }
+          })
+        })
 
-          return agent.load(plugin, 'express', config)
-            .then(() => {
-              express = require(`./versions/express@${version}`).get()
-            })
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          express = require(`./versions/express@${version}`).get()
         })
 
         it('should be configured with the correct service name', done => {

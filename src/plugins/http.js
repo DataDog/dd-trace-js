@@ -2,25 +2,26 @@
 
 const url = require('url')
 const opentracing = require('opentracing')
+const semver = require('semver')
 
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 
-function patch (http, tracer, config) {
-  this.wrap(http, 'request', request => makeRequestTrace(request))
-  this.wrap(http, 'get', get => makeRequestTrace(get))
+function patch (http, methodName, tracer, config) {
+  this.wrap(http, methodName, fn => makeRequestTrace(fn))
 
   function makeRequestTrace (request) {
-    return function requestTrace (options, callback) {
-      const uri = extractUrl(options)
-      const method = (options.method || 'GET').toUpperCase()
+    return function requestTrace () {
+      const args = normalizeArgs.apply(null, arguments)
+      const uri = args.uri
+      const options = args.options
+      const callback = args.callback
 
       if (uri === `${tracer._url.href}/v0.4/traces`) {
-        return request.apply(this, [options, callback])
+        return request.call(this, options, callback)
       }
 
-      options = typeof options === 'string' ? url.parse(uri) : Object.assign({}, options)
-      options.headers = options.headers || {}
+      const method = (options.method || 'GET').toUpperCase()
 
       const parentScope = tracer.scopeManager().active()
       const parent = parentScope && parentScope.span()
@@ -80,6 +81,18 @@ function patch (http, tracer, config) {
       pathname: options.path || options.pathname || '/'
     })
   }
+
+  function normalizeArgs (inputURL, inputOptions, callback) {
+    let options = typeof inputURL === 'string' ? url.parse(inputURL) : Object.assign({}, inputURL)
+    options.headers = options.headers || {}
+    if (typeof inputOptions === 'function') {
+      callback = inputOptions
+    } else if (typeof inputOptions === 'object') {
+      options = Object.assign(options, inputOptions)
+    }
+    const uri = extractUrl(options)
+    return { uri, options, callback }
+  }
 }
 
 function getHost (options) {
@@ -138,12 +151,32 @@ function unpatch (http) {
 module.exports = [
   {
     name: 'http',
-    patch,
+    patch: function (http, tracer, config) {
+      patch.call(this, http, 'request', tracer, config)
+      if (semver.satisfies(process.version, '>=8')) {
+        /**
+         * In newer Node versions references internal to modules, such as `http(s).get` calling `http(s).request`, do
+         * not use externally patched versions, which is why we need to also patch `get` here separately.
+         */
+        patch.call(this, http, 'get', tracer, config)
+      }
+    },
     unpatch
   },
   {
     name: 'https',
-    patch,
+    patch: function (http, tracer, config) {
+      if (semver.satisfies(process.version, '>=9')) {
+        patch.call(this, http, 'request', tracer, config)
+        patch.call(this, http, 'get', tracer, config)
+      } else {
+        /**
+         * Below Node v9 the `https` module invokes `http.request`, which would end up counting requests twice.
+         * So rather then patch the `https` module, we ensure the `http` module is patched and we count only there.
+         */
+        require('http')
+      }
+    },
     unpatch
   }
 ]

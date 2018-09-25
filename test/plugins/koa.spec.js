@@ -18,27 +18,19 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         tracer = require('../..')
+        Koa = require(`./versions/koa@${version}`).get()
+        return getPort().then(newPort => {
+          port = newPort
+        })
       })
 
       afterEach(done => {
         appListener.close(() => done())
       })
 
-      afterEach(() => {
-        return agent.close()
-      })
-
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load(plugin, 'koa')
-        })
-
-        beforeEach(() => {
-          Koa = require(`./versions/koa@${version}`).get()
-          return getPort().then(newPort => {
-            port = newPort
-          })
-        })
+        before(() => agent.load(plugin, 'koa'))
+        after(() => agent.close())
 
         it('should do automatic instrumentation on middleware', done => {
           const app = new Koa()

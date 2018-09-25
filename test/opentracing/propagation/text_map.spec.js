@@ -14,7 +14,7 @@ describe('TextMapPropagator', () => {
     propagator = new TextMapPropagator()
     textMap = {
       'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '-456',
+      'x-datadog-parent-id': '18446744073709551160', // -456 casted to uint64
       'ot-baggage-foo': 'bar'
     }
     baggageItems = {
@@ -34,7 +34,7 @@ describe('TextMapPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('x-datadog-trace-id', '123')
-      expect(carrier).to.have.property('x-datadog-parent-id', '-456')
+      expect(carrier).to.have.property('x-datadog-parent-id', '18446744073709551160') // -456 casted to uint64
       expect(carrier).to.have.property('ot-baggage-foo', 'bar')
     })
 

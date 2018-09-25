@@ -23,28 +23,31 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        agent.close()
         server.destroy()
       })
 
       describe('without configuration', () => {
+        before(() => {
+          return agent.load(plugin, 'mongodb-core')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
         beforeEach(done => {
-          agent.load(plugin, 'mongodb-core')
-            .then(() => {
-              mongo = require(`./versions/mongodb-core@${version}`).get()
+          mongo = require(`./versions/mongodb-core@${version}`).get()
 
-              server = new mongo.Server({
-                host: 'localhost',
-                port: 27017,
-                reconnect: false
-              })
+          server = new mongo.Server({
+            host: 'localhost',
+            port: 27017,
+            reconnect: false
+          })
 
-              server.on('connect', () => done())
-              server.on('error', done)
+          server.on('connect', () => done())
+          server.on('error', done)
 
-              server.connect()
-            })
-            .catch(done)
+          server.connect()
         })
 
         describe('server', () => {
@@ -285,29 +288,27 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        let config
+        before(() => {
+          return agent.load(plugin, 'mongodb-core', { service: 'custom' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
 
         beforeEach(done => {
-          config = {
-            service: 'custom'
-          }
+          mongo = require(`./versions/mongodb-core@${version}`).get()
 
-          agent.load(plugin, 'mongodb-core', config)
-            .then(() => {
-              mongo = require(`./versions/mongodb-core@${version}`).get()
+          server = new mongo.Server({
+            host: 'localhost',
+            port: 27017,
+            reconnect: false
+          })
 
-              server = new mongo.Server({
-                host: 'localhost',
-                port: 27017,
-                reconnect: false
-              })
+          server.on('connect', () => done())
+          server.on('error', done)
 
-              server.on('connect', () => done())
-              server.on('error', done)
-
-              server.connect()
-            })
-            .catch(done)
+          server.connect()
         })
 
         it('should be configured with the correct values', done => {

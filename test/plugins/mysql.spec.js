@@ -15,27 +15,27 @@ describe('Plugin', () => {
         tracer = require('../..')
       })
 
-      afterEach(() => {
-        agent.close()
-        agent.wipe()
-      })
-
       describe('without configuration', () => {
         let connection
 
-        beforeEach(() => {
+        before(() => {
           return agent.load(plugin, 'mysql')
-            .then(() => {
-              mysql = require(`./versions/mysql@${version}`).get()
+        })
 
-              connection = mysql.createConnection({
-                host: 'localhost',
-                user: 'root',
-                database: 'db'
-              })
+        after(() => {
+          return agent.close()
+        })
 
-              connection.connect()
-            })
+        beforeEach(() => {
+          mysql = require(`./versions/mysql@${version}`).get()
+
+          connection = mysql.createConnection({
+            host: 'localhost',
+            user: 'root',
+            database: 'db'
+          })
+
+          connection.connect()
         })
 
         afterEach(done => {
@@ -122,25 +122,25 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         let connection
-        let config
+
+        before(() => {
+          return agent.load(plugin, 'mysql', { service: 'custom' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
 
         beforeEach(() => {
-          config = {
-            service: 'custom'
-          }
+          mysql = require(`./versions/mysql@${version}`).get()
 
-          return agent.load(plugin, 'mysql', config)
-            .then(() => {
-              mysql = require(`./versions/mysql@${version}`).get()
+          connection = mysql.createConnection({
+            host: 'localhost',
+            user: 'root',
+            database: 'db'
+          })
 
-              connection = mysql.createConnection({
-                host: 'localhost',
-                user: 'root',
-                database: 'db'
-              })
-
-              connection.connect()
-            })
+          connection.connect()
         })
 
         afterEach(done => {
@@ -160,18 +160,23 @@ describe('Plugin', () => {
       describe('with a connection pool', () => {
         let pool
 
-        beforeEach(() => {
+        before(() => {
           return agent.load(plugin, 'mysql')
-            .then(() => {
-              mysql = require(`./versions/mysql@${version}`).get()
+        })
 
-              pool = mysql.createPool({
-                connectionLimit: 10,
-                host: 'localhost',
-                user: 'root',
-                database: 'db'
-              })
-            })
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          mysql = require(`./versions/mysql@${version}`).get()
+
+          pool = mysql.createPool({
+            connectionLimit: 10,
+            host: 'localhost',
+            user: 'root',
+            database: 'db'
+          })
         })
 
         afterEach(done => {

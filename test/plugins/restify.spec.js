@@ -16,21 +16,16 @@ describe('Plugin', () => {
     withVersions(plugin, 'restify', version => {
       beforeEach(() => {
         tracer = require('../..')
+        restify = require(`./versions/restify@${version}`).get()
       })
 
       afterEach(() => {
-        agent.wipe()
-        agent.close()
         appListener.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load(plugin, 'restify')
-            .then(() => {
-              restify = require(`./versions/restify@${version}`).get()
-            })
-        })
+        before(() => agent.load(plugin, 'restify'))
+        after(() => agent.close())
 
         it('should do automatic instrumentation', done => {
           const server = restify.createServer()

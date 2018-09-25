@@ -18,16 +18,20 @@ describe('Plugin', () => {
 
       afterEach(() => {
         client.quit()
-        agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
+        before(() => {
           return agent.load(plugin, 'redis')
-            .then(() => {
-              redis = require(`./versions/redis@${version}`).get()
-              client = redis.createClient()
-            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          redis = require(`./versions/redis@${version}`).get()
+          client = redis.createClient()
         })
 
         it('should do automatic instrumentation when using callbacks', done => {
@@ -108,18 +112,17 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        let config
+        before(() => {
+          return agent.load(plugin, 'redis', { service: 'custom' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
 
         beforeEach(() => {
-          config = {
-            service: 'custom'
-          }
-
-          return agent.load(plugin, 'redis', config)
-            .then(() => {
-              redis = require(`./versions/redis@${version}`).get()
-              client = redis.createClient()
-            })
+          redis = require(`./versions/redis@${version}`).get()
+          client = redis.createClient()
         })
 
         it('should be configured with the correct values', done => {

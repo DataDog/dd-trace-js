@@ -140,24 +140,23 @@ describe('Plugin', () => {
 
   describe('graphql', () => {
     withVersions(plugin, 'graphql', version => {
-      beforeEach(() => {
-        tracer = require('../..')
-
+      before(() => {
         sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
       })
 
-      afterEach(() => {
-        agent.close()
-        agent.wipe()
-      })
-
       describe('without configuration', () => {
-        beforeEach(() => {
+        before(() => {
+          tracer = require('../..')
+
           return agent.load(plugin, 'graphql')
             .then(() => {
               graphql = require(`./versions/graphql@${version}`).get()
               buildSchema()
             })
+        })
+
+        after(() => {
+          return agent.close()
         })
 
         it('should instrument operations', done => {
@@ -472,9 +471,8 @@ describe('Plugin', () => {
           graphql.graphql(schema, source)
             .then((result) => {
               expect(result.data.human.pets[0].owner.name).to.equal('test')
-
-              done()
             })
+            .then(done)
             .catch(done)
         })
 
@@ -776,14 +774,22 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
+        before(() => {
+          tracer = require('../..')
+
           return agent.load(plugin, 'graphql', {
             service: 'test',
             variables: variables => Object.assign({}, variables, { who: 'REDACTED' })
-          }).then(() => {
-            graphql = require(`./versions/graphql@${version}`).get()
-            buildSchema()
           })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`./versions/graphql@${version}`).get()
+          buildSchema()
         })
 
         it('should be configured with the correct values', done => {
@@ -824,12 +830,19 @@ describe('Plugin', () => {
       })
 
       describe('with a depth of 0', () => {
-        beforeEach(() => {
+        before(() => {
+          tracer = require('../..')
+
           return agent.load(plugin, 'graphql', { depth: 0 })
-            .then(() => {
-              graphql = require(`./versions/graphql@${version}`).get()
-              buildSchema()
-            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`./versions/graphql@${version}`).get()
+          buildSchema()
         })
 
         it('should only instrument the operation', done => {
@@ -863,12 +876,19 @@ describe('Plugin', () => {
       })
 
       describe('with a depth >=1', () => {
-        beforeEach(() => {
+        before(() => {
+          tracer = require('../..')
+
           return agent.load(plugin, 'graphql', { depth: 2 })
-            .then(() => {
-              graphql = require(`./versions/graphql@${version}`).get()
-              buildSchema()
-            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`./versions/graphql@${version}`).get()
+          buildSchema()
         })
 
         it('should only instrument up to the specified depth', done => {

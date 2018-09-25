@@ -12,7 +12,7 @@ const pg = require('pg')
 const mysql = require('mysql')
 const redis = require('redis')
 const mongo = require('mongodb-core')
-const elasticsearch = require('elasticsearch')
+const axios = require('axios')
 const amqplib = require('amqplib/callback_api')
 const amqp = require('amqp10')
 const Memcached = require('memcached')
@@ -45,6 +45,10 @@ platform.use(node)
 
 after(() => {
   scopeManager._disable()
+})
+
+afterEach(() => {
+  agent.reset()
 })
 
 waitForServices()
@@ -172,16 +176,13 @@ function waitForElasticsearch () {
     const operation = createOperation('elasticsearch')
 
     operation.attempt(currentAttempt => {
-      const client = new elasticsearch.Client({
-        host: 'localhost:9200'
-      })
-
-      client.ping((err) => {
-        if (retryOperation(operation, err)) return
-        if (err) return reject(err)
-
-        resolve()
-      })
+      // Not using ES client because it's buggy for initial connection.
+      axios.get('http://localhost:9200/_cluster/health?wait_for_status=green&local=true&timeout=100ms')
+        .then(() => resolve())
+        .catch(err => {
+          if (retryOperation(operation, err)) return
+          reject(err)
+        })
     })
   })
 }
@@ -262,7 +263,7 @@ function wrapIt () {
 
     if (fn.length > 0) {
       return it.call(this, title, function (done) {
-        arguments[0] = withoutScope(done)
+        arguments[0] = withoutScope(agent.wrap(done))
 
         return fn.apply(this, arguments)
       })
@@ -274,9 +275,11 @@ function wrapIt () {
           return result
             .then(withoutScope(res => res))
             .catch(withoutScope(err => Promise.reject(err)))
+            .then(() => agent.promise())
         }
 
-        return result
+        return agent.promise()
+          .then(() => result)
       })
     }
   }

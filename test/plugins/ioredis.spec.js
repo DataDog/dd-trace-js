@@ -14,21 +14,17 @@ describe('Plugin', () => {
     withVersions(plugin, 'ioredis', version => {
       beforeEach(() => {
         tracer = require('../..')
+        Redis = require(`./versions/ioredis@${version}`).get()
+        redis = new Redis()
       })
 
       afterEach(() => {
         redis.quit()
-        return agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load(plugin, 'ioredis')
-            .then(() => {
-              Redis = require(`./versions/ioredis@${version}`).get()
-              redis = new Redis()
-            })
-        })
+        before(() => agent.load(plugin, 'ioredis'))
+        after(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', done => {
           agent.use(() => {}) // wait for initial info command
@@ -76,22 +72,15 @@ describe('Plugin', () => {
             .catch(done)
 
           redis.set('foo', 123, 'bar')
-            .then(() => done())
             .catch(err => {
               error = err
-              done()
             })
         })
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
-          return agent.load(plugin, 'ioredis', { service: 'custom' })
-            .then(() => {
-              Redis = require(`./versions/ioredis@${version}`).get()
-              redis = new Redis()
-            })
-        })
+        before(() => agent.load(plugin, 'ioredis', { service: 'custom' }))
+        after(() => agent.close())
 
         it('should be configured with the correct values', done => {
           agent
