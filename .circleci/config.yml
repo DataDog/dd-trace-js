@@ -20,6 +20,14 @@ docker-base: &docker-base
         - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
     - &rabbitmq
       image: rabbitmq:3.6-alpine
+    - &qpid
+      image: scholzj/qpid-cpp:1.38.0
+      command: -p 5673
+      environment:
+        - QPIDD_ADMIN_USERNAME=admin
+        - QPIDD_ADMIN_PASSWORD=admin
+    - &memcached
+      image: memcached:1.5-alpine
 build-node-base: &node-base
   <<: *docker-base
   working_directory: ~/dd-trace-js
@@ -90,6 +98,8 @@ jobs:
       - *mongo
       - *elasticsearch
       - *rabbitmq
+      - *qpid
+      - *memcached
   build-node-6:
     <<: *node-base
     docker:
@@ -100,6 +110,8 @@ jobs:
       - *mongo
       - *elasticsearch
       - *rabbitmq
+      - *qpid
+      - *memcached
   build-node-8:
     <<: *node-base
     docker:
@@ -110,6 +122,8 @@ jobs:
       - *mongo
       - *elasticsearch
       - *rabbitmq
+      - *qpid
+      - *memcached
   build-node-latest:
     <<: *node-base
     docker:
@@ -120,6 +134,8 @@ jobs:
       - *mongo
       - *elasticsearch
       - *rabbitmq
+      - *qpid
+      - *memcached
 
 workflows:
   version: 2

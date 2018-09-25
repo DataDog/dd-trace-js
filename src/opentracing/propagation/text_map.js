@@ -5,6 +5,7 @@ const DatadogSpanContext = require('../span_context')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
+const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
@@ -13,9 +14,8 @@ class TextMapPropagator {
     carrier[traceKey] = spanContext.traceId.toString()
     carrier[spanKey] = spanContext.spanId.toString()
 
-    spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
-      carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
-    })
+    this._injectSamplingPriority(spanContext, carrier)
+    this._injectBaggageItems(spanContext, carrier)
   }
 
   extract (carrier) {
@@ -23,21 +23,47 @@ class TextMapPropagator {
       return null
     }
 
-    const baggageItems = {}
+    const spanContext = new DatadogSpanContext({
+      traceId: new Uint64BE(carrier[traceKey], 10),
+      spanId: new Uint64BE(carrier[spanKey], 10)
+    })
 
+    this._extractBaggageItems(carrier, spanContext)
+    this._extractSamplingPriority(carrier, spanContext)
+
+    return spanContext
+  }
+
+  _injectSamplingPriority (spanContext, carrier) {
+    const priority = spanContext.sampling.priority
+
+    if (Number.isInteger(priority)) {
+      carrier[samplingKey] = priority.toString()
+    }
+  }
+
+  _injectBaggageItems (spanContext, carrier) {
+    spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
+      carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
+    })
+  }
+
+  _extractBaggageItems (carrier, spanContext) {
     Object.keys(carrier).forEach(key => {
       const match = key.match(baggageExpr)
 
       if (match) {
-        baggageItems[match[1]] = carrier[key]
+        spanContext.baggageItems[match[1]] = carrier[key]
       }
     })
+  }
 
-    return new DatadogSpanContext({
-      traceId: new Uint64BE(carrier[traceKey], 10),
-      spanId: new Uint64BE(carrier[spanKey], 10),
-      baggageItems
-    })
+  _extractSamplingPriority (carrier, spanContext) {
+    const priority = parseInt(carrier[samplingKey], 10)
+
+    if (Number.isInteger(priority)) {
+      spanContext.sampling.priority = parseInt(carrier[samplingKey], 10)
+    }
   }
 }
 

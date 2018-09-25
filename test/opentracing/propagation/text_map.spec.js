@@ -33,7 +33,9 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.deep.equal(textMap)
+      expect(carrier).to.have.property('x-datadog-trace-id', '123')
+      expect(carrier).to.have.property('x-datadog-parent-id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier).to.have.property('ot-baggage-foo', 'bar')
     })
 
     it('should handle non-string values', () => {
@@ -56,6 +58,22 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-array']).to.equal('foo,bar')
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
     })
+
+    it('should inject an existing sampling priority', () => {
+      const carrier = {}
+      const spanContext = new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        sampling: {
+          priority: 0
+        },
+        baggageItems
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-datadog-sampling-priority', '0')
+    })
   })
 
   describe('extract', () => {
@@ -75,6 +93,21 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.equal(null)
+    })
+
+    it('should extract a span context with a valid sampling priority', () => {
+      textMap['x-datadog-sampling-priority'] = '0'
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: new Uint64BE(0, 123),
+        spanId: new Uint64BE(-456),
+        sampling: {
+          priority: 0
+        },
+        baggageItems
+      }))
     })
   })
 })

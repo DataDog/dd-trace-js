@@ -1,60 +1,16 @@
 'use strict'
 
-const opentracing = require('opentracing')
-const Tags = opentracing.Tags
-const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 const METHODS = require('methods').concat('use', 'route', 'param', 'all')
 const pathToRegExp = require('path-to-regexp')
-
-const OPERATION_NAME = 'express.request'
+const web = require('./util/web')
 
 function createWrapMethod (tracer, config) {
-  const validateStatus = typeof config.validateStatus === 'function'
-    ? config.validateStatus
-    : code => code < 500
+  config = web.normalizeConfig(config)
 
   function ddTrace (req, res, next) {
-    if (req._datadog.span) return next()
+    if (web.active(req)) return next()
 
-    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
-
-    const span = tracer.startSpan(OPERATION_NAME, {
-      childOf,
-      tags: {
-        [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_SERVER,
-        [Tags.HTTP_URL]: url,
-        [Tags.HTTP_METHOD]: req.method
-      }
-    })
-
-    const originalEnd = res.end
-
-    res.end = function () {
-      if (req._datadog.finished) return originalEnd.apply(this, arguments)
-
-      const returned = originalEnd.apply(this, arguments)
-      const path = req._datadog.paths.join('')
-      const resource = [req.method].concat(path).filter(val => val).join(' ')
-
-      span.setTag('resource.name', resource)
-      span.setTag('service.name', config.service || tracer._service)
-      span.setTag('span.type', 'http')
-      span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
-
-      if (!validateStatus(res.statusCode)) {
-        span.setTag(Tags.ERROR, true)
-      }
-
-      span.finish()
-
-      req._datadog.scope && req._datadog.scope.close()
-      req._datadog.finished = true
-
-      return returned
-    }
-
-    req._datadog.span = span
+    web.instrument(tracer, config, req, res, 'express.request')
 
     next()
   }
@@ -73,11 +29,7 @@ function createWrapMethod (tracer, config) {
 function createWrapHandle (tracer, config) {
   return function wrapHandle (handle) {
     return function handleWithTracer (req) {
-      if (!req._datadog) {
-        Object.defineProperty(req, '_datadog', {
-          value: { paths: [] }
-        })
-      }
+      web.patch(req)
 
       return handle.apply(this, arguments)
     }
@@ -95,7 +47,7 @@ function createWrapProcessParams (tracer, config) {
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
           if (matchers[i].test(layer.path)) {
-            req._datadog.paths.push(matchers[i].path)
+            web.enterRoute(req, matchers[i].path)
 
             break
           }
@@ -136,18 +88,17 @@ function createWrapRouterMethod (tracer) {
 }
 
 function wrapNext (tracer, layer, req, next) {
-  if (!req._datadog.span) {
+  if (!web.active(req)) {
     return next
   }
 
   const originalNext = next
 
-  req._datadog.scope && req._datadog.scope.close()
-  req._datadog.scope = tracer.scopeManager().activate(req._datadog.span)
+  web.reactivate(req)
 
   return function (error) {
     if (!error && layer.path && !isFastStar(layer)) {
-      req._datadog.paths.pop()
+      web.exitRoute(req)
     }
 
     process.nextTick(() => {

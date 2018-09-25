@@ -136,6 +136,7 @@ Each integration also has its own list of default tags. These tags get automatic
 | http.url         | The complete URL of the request.                          |
 | http.method      | The HTTP method of the request.                           |
 | http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
 
 <h5 id="express-config">Configuration Options</h5>
 
@@ -143,6 +144,7 @@ Each integration also has its own list of default tags. These tags get automatic
 |------------------|---------------------------|----------------------------------------|
 | service          | *Service name of the app* | The service name for this integration. |
 | validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
 
 <h3 id="graphql">graphql</h3>
 
@@ -166,15 +168,37 @@ query HelloWorld {
 
 <h5 id="graphql-tags">Tags</h5>
 
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| graphql.document | The original GraphQL document.                            |
+| Tag                 | Description                                               |
+|---------------------|-----------------------------------------------------------|
+| graphql.document    | The original GraphQL document.                            |
+| graphql.variables.* | The variables applied to the document.                    |
 
 <h5 id="graphql-config">Configuration Options</h5>
 
-| Option  | Default                                          | Description                            |
-|---------|--------------------------------------------------|----------------------------------------|
-| service | *Service name of the app suffixed with -graphql* | The service name for this integration. |
+| Option          | Default                                          | Description                                                            |
+|-----------------|--------------------------------------------------|------------------------------------------------------------------------|
+| service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                                 |
+| variables       | `undefined`                                      | A callback to enable recording of variables. By default, no variables are recorded. For example, using `variables => variables` would record all variables. |
+| depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
+
+<h3 id="hapi">hapi</h3>
+
+<h5 id="hapi-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| http.url         | The complete URL of the request.                          |
+| http.method      | The HTTP method of the request.                           |
+| http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
+
+<h5 id="hapi-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
 
 <h3 id="http">http / https</h3>
 
@@ -192,6 +216,57 @@ query HelloWorld {
 |------------------|------------------|----------------------------------------|
 | service          | http-client      | The service name for this integration. |
 | splitByDomain    | false            | Use the remote endpoint host as the service name instead of the default. |
+
+<h3 id="ioredis">ioredis</h3>
+
+<h5 id="ioredis-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| db.name          | The index of the queried database.                        |
+| out.host         | The host of the Redis server.                             |
+| out.port         | The port of the Redis server.                             |
+
+<h5 id="ioredis-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | redis            | The service name for this integration. |
+
+<h3 id="koa">koa</h3>
+
+<h5 id="koa-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| http.url         | The complete URL of the request.                          |
+| http.method      | The HTTP method of the request.                           |
+| http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
+
+<h5 id="koa-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
+
+<h3 id="memcached">memcached</h3>
+
+<h5 id="memcached-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| memcached.query  | The query sent to the server.                             |
+| out.host         | The host of the Memcached server.                         |
+| out.port         | The port of the Memcached server.                         |
+
+<h5 id="memcached-config">Configuration Options</h5>
+
+| Option           | Default          | Description                            |
+|------------------|------------------|----------------------------------------|
+| service          | memcached        | The service name for this integration. |
 
 <h3 id="mongodb-core">mongodb-core</h3>
 
@@ -277,6 +352,26 @@ query HelloWorld {
 |------------------|------------------|----------------------------------------|
 | service          | redis            | The service name for this integration. |
 
+<h3 id="restify">restify</h3>
+
+<h5 id="restify-tags">Tags</h5>
+
+| Tag              | Description                                               |
+|------------------|-----------------------------------------------------------|
+| http.url         | The complete URL of the request.                          |
+| http.method      | The HTTP method of the request.                           |
+| http.status_code | The HTTP status code of the response.                     |
+| http.headers.*   | A recorded HTTP header.                                   |
+
+<h5 id="restify-config">Configuration Options</h5>
+
+| Option           | Default                   | Description                            |
+|------------------|---------------------------|----------------------------------------|
+| service          | *Service name of the app* | The service name for this integration. |
+| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
+| headers          | `[]`                      | An array of headers to include in the span metadata. |
+
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>
@@ -285,6 +380,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 
 | Config        | Environment Variable         | Default   | Description |
 | ------------- | ---------------------------- | --------- | ----------- |
+| enabled       | DD_TRACE_ENABLED             | true      | Whether to enable the tracer. |
 | debug         | DD_TRACE_DEBUG               | false     | Enable debug logging in the tracer. |
 | service       | DD_SERVICE_NAME              |           | The service name to be used for this program. |
 | hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |

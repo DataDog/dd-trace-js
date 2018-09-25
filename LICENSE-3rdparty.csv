@@ -16,6 +16,7 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+dev,amqp10,MIT,Copyright 2014 Michael Lanzetta
 dev,amqplib,MIT,Copyright 2013-2014 Michael Bridgen
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
@@ -36,6 +37,7 @@ dev,graphql,MIT,Copyright 2015-present Facebook Inc.
 dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
 dev,gulp-jsdoc3,Apache-2.0,Copyright Marc Udoff
 dev,jsdoc,Apache-2.0,Copyright 2011-present Michael Mathews and the contributors to JSDoc
+dev,memcached,MIT,Copyright 2010 Arnout Kazemier and 3rd-Eden
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,mongodb-core,Apache-2.0,Copyright Christian Kvalheim
 dev,mysql,MIT,Copyright 2012 Felix Geisendörfer and contributors

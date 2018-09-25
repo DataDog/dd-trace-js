@@ -10,6 +10,7 @@ const path = require('path')
 
 const handlers = new Set()
 let agent = null
+let server = null
 let listener = null
 let tracer = null
 
@@ -20,18 +21,19 @@ module.exports = {
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
     agent.use((req, res, next) => {
+      if (req.body.length === 0) return res.status(200).send()
       req.body = msgpack.decode(req.body, { codec })
       next()
     })
 
-    agent.put('/v0.3/traces', (req, res) => {
+    agent.put('/v0.4/traces', (req, res) => {
       res.status(200).send('OK')
       handlers.forEach(handler => handler(req.body))
     })
 
     return getPort().then(port => {
       return new Promise((resolve, reject) => {
-        const server = http.createServer(agent)
+        server = http.createServer(agent)
 
         listener = server.listen(port, 'localhost', resolve)
 
@@ -123,7 +125,13 @@ module.exports = {
     handlers.clear()
     delete require.cache[require.resolve('../..')]
 
-    return Promise.resolve()
+    return new Promise((resolve, reject) => {
+      server.on('close', () => {
+        server = null
+
+        resolve()
+      })
+    })
   },
 
   // Wipe the require cache.

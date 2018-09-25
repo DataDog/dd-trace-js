@@ -17,7 +17,7 @@ function patch (http, methodName, tracer, config) {
       const options = args.options
       const callback = args.callback
 
-      if (uri === `${tracer._url.href}/v0.3/traces`) {
+      if (uri === `${tracer._url.href}/v0.4/traces`) {
         return request.call(this, options, callback)
       }
 

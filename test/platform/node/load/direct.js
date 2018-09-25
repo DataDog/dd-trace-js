@@ -2,4 +2,4 @@
 
 const caller = require('./module/caller')
 
-caller()
+module.exports = caller()

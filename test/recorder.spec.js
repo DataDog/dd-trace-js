@@ -4,7 +4,6 @@ describe('Recorder', () => {
   let Scheduler
   let scheduler
   let Recorder
-  let Writer
   let writer
   let recorder
   let span
@@ -20,16 +19,14 @@ describe('Recorder', () => {
       flush: sinon.spy()
     }
     Scheduler = sinon.stub().returns(scheduler)
-    Writer = sinon.stub().returns(writer)
     Recorder = proxyquire('../src/recorder', {
-      './scheduler': Scheduler,
-      './writer': Writer
+      './scheduler': Scheduler
     })
   })
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
-      recorder = new Recorder('http://test', 1000, 2)
+      recorder = new Recorder(writer, 1000)
     })
 
     describe('init', () => {
@@ -60,7 +57,7 @@ describe('Recorder', () => {
 
   describe('when interval is set to 0', () => {
     beforeEach(() => {
-      recorder = new Recorder('http://test', 0)
+      recorder = new Recorder(writer, 0)
     })
 
     describe('init', () => {
