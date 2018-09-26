@@ -9,7 +9,7 @@
     "jsdoc:watch": "gulp jsdoc:watch",
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "node ./scripts/install_plugin_modules && mocha --watch",
-    "test": "node ./scripts/install_plugin_modules && nyc --reporter text --reporter lcov mocha 'test/**/*.spec.js'",
+    "test": "node ./scripts/install_plugin_modules && nyc --reporter text --reporter lcov mocha --exit 'test/**/*.spec.js'",
     "leak": "(cd test/leak && yarn) && NODE_PATH=./test/leak/node_modules node --no-warnings ./node_modules/.bin/tape 'test/leak/{,!(node_modules)/**/}/*.js'"
   },
   "repository": {
