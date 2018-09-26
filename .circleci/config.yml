@@ -49,8 +49,20 @@ build-node-base: &node-base
           - ./node_modules
           - ./yarn.lock
     - run:
+        name: Prepare test
+        command: yarn test:prepare
+    - restore_cache:
+        key: yarn-test-versions-{{ .Environment.CIRCLE_JOB }}-{{ checksum "test/plugins/versions/package.json" }}
+    - run:
+        name: Install test versions
+        command: yarn test:install
+    - save_cache:
+        key: yarn-test-versions-{{ .Environment.CIRCLE_JOB }}-{{ checksum "test/plugins/versions/package.json" }}
+        paths:
+          - ./test/plugins/versions
+    - run:
         name: Test
-        command: yarn test
+        command: yarn test:run
     - run:
         name: Benchmark
         command: yarn bench

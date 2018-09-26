@@ -5,7 +5,6 @@ const path = require('path')
 const requireDir = require('require-dir')
 const crypto = require('crypto')
 const semver = require('semver')
-const exec = require('./helpers/exec')
 const plugins = requireDir('../src/plugins')
 const externals = require('../test/plugins/externals')
 
@@ -16,7 +15,6 @@ run()
 function run () {
   assertVersions()
   assertWorkspace()
-  install()
 }
 
 function assertVersions () {
@@ -83,10 +81,6 @@ function assertWorkspace () {
     private: true,
     workspaces: Array.from(workspaces)
   }, null, 2) + '\n')
-}
-
-function install () {
-  exec('yarn', { cwd: folder() })
 }
 
 function addFolder (name, version) {
