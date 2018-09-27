@@ -196,7 +196,7 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, '/bar')
       res.end()
 
-      expect(span.context().tags).to.have.property([RESOURCE_NAME], 'GET /foo/bar')
+      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
     })
   })
 
@@ -214,7 +214,7 @@ describe('plugins/util/web', () => {
       web.exitRoute(req)
       res.end()
 
-      expect(span.context().tags).to.have.property([RESOURCE_NAME], 'GET /foo')
+      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo')
     })
   })
 
