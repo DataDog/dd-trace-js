@@ -3,11 +3,13 @@
 const url = require('url')
 const opentracing = require('opentracing')
 const semver = require('semver')
+const log = require('../log')
 
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 
 function patch (http, methodName, tracer, config) {
+  config = normalizeConfig(config)
   this.wrap(http, methodName, fn => makeRequestTrace(fn))
 
   function makeRequestTrace (request) {
@@ -52,6 +54,10 @@ function patch (http, methodName, tracer, config) {
 
       req.on('response', res => {
         span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+
+        if (!config.validateStatus(res.statusCode)) {
+          span.setTag('error', 1)
+        }
 
         res.on('end', () => span.finish())
       })
@@ -146,6 +152,23 @@ function startsWith (searchString) {
 function unpatch (http) {
   this.unwrap(http, 'request')
   this.unwrap(http, 'get')
+}
+
+function getStatusValidator (config) {
+  if (typeof config.validateStatus === 'function') {
+    return config.validateStatus
+  } else if (config.hasOwnProperty('validateStatus')) {
+    log.error('Expected `validateStatus` to be a function.')
+  }
+  return code => code < 400 || code >= 500
+}
+
+function normalizeConfig (config) {
+  const validateStatus = getStatusValidator(config)
+
+  return Object.assign({}, config, {
+    validateStatus
+  })
 }
 
 module.exports = [

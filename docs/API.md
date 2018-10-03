@@ -214,8 +214,9 @@ query HelloWorld {
 
 | Option           | Default          | Description                            |
 |------------------|------------------|----------------------------------------|
-| service          | http-client      | The service name for this integration. |
-| splitByDomain    | false            | Use the remote endpoint host as the service name instead of the default. |
+| service          | http-client                           | The service name for this integration. |
+| splitByDomain    | false                                 | Use the remote endpoint host as the service name instead of the default. |
+| validateStatus   | `code => code < 400 || code >= 500`   | Callback function to determine if an HTTP response should be recorded as an error. It should take a status code as its only parameter and return `true` for success or `false` for errors.
 
 <h3 id="ioredis">ioredis</h3>
 
