@@ -55,7 +55,7 @@ module.exports = {
   },
 
   // Register a callback with expectations to be run on every agent call.
-  use (callback) {
+  use (callback, waitForMoreTraces) {
     const deferred = {}
     const promise = new Promise((resolve, reject) => {
       deferred.resolve = resolve
@@ -69,14 +69,26 @@ module.exports = {
     }, 1000)
 
     let error
+    let allTraces = []
+    let doneTimer
+
+    const done = traces => {
+      const sorted = traces.map(spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1))
+      callback(sorted)
+      handlers.delete(handler)
+      clearTimeout(timeout)
+      deferred.resolve()
+    }
 
     const handler = function (traces) {
       try {
-        const sorted = traces.map(spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1))
-        callback(sorted)
-        handlers.delete(handler)
-        clearTimeout(timeout)
-        deferred.resolve()
+        if (waitForMoreTraces) {
+          allTraces = allTraces.concat(traces)
+          if (doneTimer) clearTimeout(doneTimer)
+          doneTimer = setTimeout(() => done(allTraces), waitForMoreTraces)
+        } else {
+          done(traces)
+        }
       } catch (e) {
         error = error || e
       }

@@ -556,10 +556,10 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                const spans = traces[0]
+                const spans = traces.reduce((arr, spans) => arr.concat(spans), [])
                 // 1 parent span created in this test, 2 spans for first request, 1 span for second request.
                 expect(spans.length).to.equal(4)
-              })
+              }, 10)
               .then(done)
               .catch(done)
 
@@ -583,7 +583,7 @@ describe('Plugin', () => {
                     // ...once finished start second request that should re-use connection.
                     http.get(options, res => {
                       res.on('data', () => {})
-                      res.on('end', () => span.finish())
+                      res.on('end', () => setImmediate(() => span.finish()))
                     })
                   })
                 })
