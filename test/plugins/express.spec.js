@@ -288,7 +288,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][1]).to.have.property('resource', 'GET /app/user/:id')
+                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)

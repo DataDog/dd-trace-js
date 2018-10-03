@@ -70,9 +70,10 @@ module.exports = {
 
     let error
 
-    const handler = function () {
+    const handler = function (traces) {
       try {
-        callback.apply(null, arguments)
+        const sorted = traces.map(spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1))
+        callback(sorted)
         handlers.delete(handler)
         clearTimeout(timeout)
         deferred.resolve()

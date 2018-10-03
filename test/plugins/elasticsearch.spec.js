@@ -99,8 +99,8 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('parent_id')
-                expect(traces[0][0].parent_id).to.not.be.null
+                expect(traces[0][1]).to.have.property('parent_id')
+                expect(traces[0][1].parent_id).to.not.be.null
               })
               .then(done)
               .catch(done)
@@ -162,8 +162,8 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('parent_id')
-                expect(traces[0][0].parent_id).to.not.be.null
+                expect(traces[0][1]).to.have.property('parent_id')
+                expect(traces[0][1].parent_id).to.not.be.null
               })
               .then(done)
               .catch(done)

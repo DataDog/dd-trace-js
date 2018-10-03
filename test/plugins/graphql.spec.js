@@ -9,7 +9,6 @@ describe('Plugin', () => {
   let tracer
   let graphql
   let schema
-  let sort
 
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
@@ -140,10 +139,6 @@ describe('Plugin', () => {
 
   describe('graphql', () => {
     withVersions(plugin, 'graphql', version => {
-      before(() => {
-        sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
-      })
-
       describe('without configuration', () => {
         before(() => {
           tracer = require('../..')
@@ -164,7 +159,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[0]).to.have.property('service', 'test-graphql')
@@ -183,7 +178,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
               expect(spans[0].meta).to.not.have.property('graphql.variables')
             })
             .then(done)
@@ -197,7 +192,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[4]).to.have.property('service', 'test-graphql')
@@ -215,7 +210,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[5]).to.have.property('service', 'test-graphql')
@@ -233,7 +228,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               const query = spans[0]
               const parse = spans[1]
@@ -254,7 +249,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               const query = spans[0]
               const parse = spans[1]
@@ -277,7 +272,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               const query = spans[0]
               const validate = spans[2]
@@ -310,7 +305,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(14)
 
@@ -389,7 +384,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(10)
 
@@ -438,7 +433,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(8)
               expect(spans[0]).to.have.property('name', 'graphql.mutation')
@@ -454,7 +449,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[0]).to.have.property('name', 'graphql.subscription')
@@ -487,7 +482,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(4)
               expect(spans[0]).to.have.property('resource', 'query')
@@ -515,7 +510,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(4)
               expect(spans[0]).to.have.property('resource', 'query')
@@ -532,7 +527,7 @@ describe('Plugin', () => {
           agent.use(() => { // skip first call
             agent
               .use(traces => {
-                const spans = sort(traces[0])
+                const spans = traces[0]
 
                 expect(spans).to.have.length(6)
               })
@@ -609,7 +604,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[0]).to.have.property('name', 'graphql.query')
@@ -634,7 +629,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(5)
               expect(spans[0]).to.have.property('service', 'test-graphql')
@@ -665,7 +660,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(3)
               expect(spans[2]).to.have.property('service', 'test-graphql')
@@ -704,7 +699,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[5]).to.have.property('error', 1)
@@ -737,7 +732,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[5]).to.have.property('error', 1)
@@ -797,7 +792,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(6)
               expect(spans[2]).to.have.property('service', 'test')
@@ -817,7 +812,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
               expect(spans[0].meta).to.have.property('graphql.variables.who', 'REDACTED')
@@ -860,7 +855,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
 
               expect(spans).to.have.length(4)
               expect(spans[0]).to.have.property('name', 'graphql.query')
@@ -909,7 +904,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              const spans = sort(traces[0])
+              const spans = traces[0]
               const ignored = spans.filter(span => {
                 return [
                   'human.address.civicNumber',
