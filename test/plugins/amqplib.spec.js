@@ -58,7 +58,7 @@ describe('Plugin', () => {
                   expect(span).to.have.property('type', 'worker')
                   expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('out.port', '5672')
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -76,7 +76,7 @@ describe('Plugin', () => {
                   expect(span).to.have.property('type', 'worker')
                   expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('out.port', '5672')
-                }, 3)
+                })
                 .then(done)
                 .catch(done)
 
@@ -95,7 +95,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('error.type', error.name)
                   expect(span.meta).to.have.property('error.msg', error.message)
                   expect(span.meta).to.have.property('error.stack', error.stack)
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -121,7 +121,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('out.port', '5672')
                   expect(span.meta).to.have.property('span.kind', 'producer')
                   expect(span.meta).to.have.property('amqp.routingKey', 'routingKey')
-                }, 3)
+                })
                 .then(done)
                 .catch(done)
 
@@ -140,7 +140,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('error.type', error.name)
                   expect(span.meta).to.have.property('error.msg', error.message)
                   expect(span.meta).to.have.property('error.stack', error.stack)
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -169,7 +169,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('out.port', '5672')
                   expect(span.meta).to.have.property('span.kind', 'consumer')
                   expect(span.meta).to.have.property('amqp.consumerTag', consumerTag)
-                }, 5)
+                })
                 .then(done)
                 .catch(done)
 
@@ -266,7 +266,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('resource', 'queue.declare test')
-            }, 2)
+            })
             .then(done)
             .catch(done)
 

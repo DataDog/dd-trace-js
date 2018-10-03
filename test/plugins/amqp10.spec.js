@@ -82,7 +82,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('amqp.link.role', 'sender')
                 expect(span.meta).to.have.property('amqp.link.handle', '1')
                 expect(span.meta['amqp.link.name']).to.match(/^amq\.topic_[0-9a-f-]+$/)
-              }, 2)
+              })
               .then(done)
               .catch(done)
 
@@ -100,7 +100,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('error.type', error.name)
                 expect(span.meta).to.have.property('error.msg', error.message)
                 expect(span.meta).to.have.property('error.stack', error.stack)
-              }, 2)
+              })
               .then(done)
               .catch(done)
 
@@ -136,7 +136,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('amqp.link.role', 'receiver')
                 expect(span.meta).to.have.property('amqp.link.handle', '0')
                 expect(span.meta['amqp.link.name']).to.match(/^amq\.topic_[0-9a-f-]+$/)
-              }, 2)
+              })
               .then(done)
               .catch(done)
 
@@ -189,7 +189,7 @@ describe('Plugin', () => {
               const span = traces[0][0]
 
               expect(span).to.have.property('service', 'test')
-            }, 2)
+            })
             .then(done)
             .catch(done)
 
