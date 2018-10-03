@@ -43,7 +43,17 @@ function patch (http, methodName, tracer, config) {
 
       const req = request.call(this, options, callback)
 
-      req.on('socket', () => {
+      req.on('socket', socket => {
+        socket.once(socket.encrypted ? 'secureConnect' : 'connect', () => {
+          tracer.startSpan('http.request.connect', {
+            childOf: span,
+            startTime: span._startTime,
+            tags: {
+              'service.name': getServiceName(tracer, config, options)
+            }
+          }).finish()
+        })
+
         // empty the data stream when no other listener exists to consume it
         if (req.listenerCount('response') === 1) {
           req.on('response', res => res.resume())

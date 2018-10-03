@@ -486,7 +486,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = traces[0]
-                expect(spans.length).to.equal(3)
+                // 1 parent span created in this test, 2 spans for first request, 2 spans for second request.
+                expect(spans.length).to.equal(5)
               })
               .then(done)
               .catch(done)
@@ -509,6 +510,84 @@ describe('Plugin', () => {
               })
 
               span.finish()
+            })
+          })
+        })
+
+        it('should trace connection establishment', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+                const request = spans[0]
+                const connect = spans[1]
+                expect(connect).to.have.property('service', 'test-http-client')
+                expect(connect).to.have.property('resource', 'http.request.connect')
+                expect(connect.parent_id.toString()).to.equal(request.span_id.toString())
+                expect(connect.start.toNumber()).to.be.gte(request.start.toNumber())
+                expect(connect.duration.toNumber()).to.be.lte(request.duration.toNumber())
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+
+              req.end()
+            })
+          })
+        })
+
+        it('should not include connection establishment spans for keep-alive connections', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+                // 1 parent span created in this test, 2 spans for first request, 1 span for second request.
+                expect(spans.length).to.equal(4)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              // Activate a new parent span so we capture both these requests.
+              const span = tracer.startSpan('http-test')
+              tracer.scopeManager().activate(span)
+
+              const options = {
+                agent: new http.Agent({ keepAlive: true }),
+                protocol: `${protocol}:`,
+                hostname: 'localhost',
+                port,
+                pathname: '/user'
+              }
+              // First make request that will keep connection alive...
+              http.get(options, res => {
+                res.on('data', () => {})
+                res.on('end', () => {
+                  setImmediate(() => {
+                    // ...once finished start second request that should re-use connection.
+                    http.get(options, res => {
+                      res.on('data', () => {})
+                      res.on('end', () => span.finish())
+                    })
+                  })
+                })
+              })
             })
           })
         })
