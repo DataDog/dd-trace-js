@@ -2,6 +2,7 @@
 
 const axios = require('axios')
 const getPort = require('get-port')
+const semver = require('semver')
 const agent = require('./agent')
 const plugin = require('../../src/plugins/hapi')
 
@@ -12,18 +13,17 @@ describe('Plugin', () => {
   let Hapi
   let server
   let port
+  let handler
 
   describe('hapi', () => {
     withVersions(plugin, 'hapi', version => {
       beforeEach(() => {
         tracer = require('../..')
+        handler = (request, h, body) => h.response ? h.response(body) : h(body)
       })
 
       afterEach(() => {
-        return Promise.all([
-          agent.close(),
-          server.stop()
-        ])
+        return agent.close()
       })
 
       beforeEach(() => {
@@ -33,24 +33,53 @@ describe('Plugin', () => {
           })
       })
 
-      beforeEach(() => {
-        return getPort()
-          .then(_port => {
-            port = _port
-            server = Hapi.server({
-              address: '127.0.0.1',
-              port
+      if (semver.intersects(version, '>=17')) {
+        beforeEach(() => {
+          return getPort()
+            .then(_port => {
+              port = _port
+              server = Hapi.server({
+                address: '127.0.0.1',
+                port
+              })
+              return server.start()
             })
+        })
 
-            return server.start()
-          })
-      })
+        afterEach(() => {
+          return server.stop()
+        })
+      } else {
+        beforeEach(done => {
+          getPort()
+            .then(_port => {
+              port = _port
+
+              if (Hapi.Server.prototype.connection) {
+                server = new Hapi.Server()
+                server.connection({ address: '127.0.0.1', port })
+              } else {
+                server = new Hapi.Server('127.0.0.1', port)
+              }
+
+              server.start(done)
+            })
+        })
+
+        afterEach(done => {
+          try {
+            server.stop()
+          } finally {
+            done()
+          }
+        })
+      }
 
       it('should do automatic instrumentation on routes', done => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler: () => ''
+          handler
         })
 
         agent
@@ -76,10 +105,10 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler: () => {
+          handler: (request, h) => {
             expect(tracer.scopeManager().active()).to.not.be.null
             done()
-            return ''
+            return handler(request, h)
           }
         })
 
@@ -97,10 +126,10 @@ describe('Plugin', () => {
               (request, h) => {
                 expect(tracer.scopeManager().active()).to.not.be.null
                 done()
-                return ''
+                return handler(request, h)
               }
             ],
-            handler: () => ''
+            handler
           }
         })
 
@@ -113,13 +142,20 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler: () => ''
+          handler
         })
 
         server.ext('onRequest', (request, h) => {
           expect(tracer.scopeManager().active()).to.not.be.null
           done()
-          return h.continue
+
+          if (typeof h === 'function') {
+            return h()
+          } else if (typeof h.continue === 'function') {
+            return h.continue()
+          } else {
+            return h.continue
+          }
         })
 
         axios
@@ -131,7 +167,7 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler: () => ''
+          handler
         })
 
         agent
@@ -170,8 +206,14 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler: () => {
-            throw new Error()
+          handler: (request, h) => {
+            const error = new Error()
+
+            if (typeof h === 'function') {
+              h(error)
+            } else {
+              throw error
+            }
           }
         })
 
