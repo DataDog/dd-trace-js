@@ -1,13 +1,16 @@
 'use strict'
 
+const pick = require('lodash.pick')
 const Uint64BE = require('int64-buffer').Uint64BE
 const DatadogSpanContext = require('../span_context')
+const log = require('../../log')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
 const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
+const logKeys = [traceKey, spanKey, samplingKey]
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
@@ -16,6 +19,8 @@ class TextMapPropagator {
 
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
+
+    log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
   extract (carrier) {
@@ -30,6 +35,8 @@ class TextMapPropagator {
 
     this._extractBaggageItems(carrier, spanContext)
     this._extractSamplingPriority(carrier, spanContext)
+
+    log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     return spanContext
   }
