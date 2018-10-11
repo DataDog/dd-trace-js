@@ -8,7 +8,7 @@ function createWrapCommand (tracer, config) {
         childOf: scope && scope.span(),
         tags: {
           'span.kind': 'client',
-          'span.type': 'memcached',
+          'span.type': 'cache',
           'service.name': config.service || `${tracer._service}-memcached`
         }
       })

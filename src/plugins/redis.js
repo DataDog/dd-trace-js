@@ -13,7 +13,7 @@ function createWrapInternalSendCommand (tracer, config) {
           [Tags.DB_TYPE]: 'redis',
           'service.name': config.service || `${tracer._service}-redis`,
           'resource.name': options.command,
-          'span.type': 'redis',
+          'span.type': 'cache',
           'db.name': this.selected_db || '0'
         }
       })

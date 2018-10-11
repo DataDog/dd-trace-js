@@ -26,7 +26,7 @@ function patch (pg, tracer, config) {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': config.service || `${tracer._service}-postgres`,
           'resource.name': statement,
-          'span.type': 'sql',
+          'span.type': 'db',
           'db.type': 'postgres'
         }
       })

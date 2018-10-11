@@ -8,7 +8,7 @@ function createWrapSendCommand (tracer, config) {
         childOf: scope && scope.span(),
         tags: {
           'span.kind': 'client',
-          'span.type': 'redis',
+          'span.type': 'db',
           'service.name': config.service || `${tracer._service}-redis`,
           'resource.name': command.name,
           'db.type': 'redis',

@@ -233,7 +233,7 @@ function addTags (span, tracer, config, resource, ns, topology) {
   span.addTags({
     'service.name': config.service || `${tracer._service}-mongodb`,
     'resource.name': resource,
-    'span.type': 'mongodb',
+    'span.type': 'db',
     'db.name': ns
   })
 
