@@ -37,7 +37,6 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', done => {
           client.on('error', done)
 
-          agent.use(() => client.get('foo')) // wait for initial info command
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'redis.command')
@@ -52,6 +51,8 @@ describe('Plugin', () => {
             })
             .then(done)
             .catch(done)
+
+          client.get('foo', () => {})
         })
 
         it('should run the callback in the parent context', done => {
