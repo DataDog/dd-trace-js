@@ -18,7 +18,7 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         tracer = require('../..')
-        Koa = require(`./versions/koa@${version}`).get()
+        Koa = require(`../../versions/koa@${version}`).get()
         return getPort().then(newPort => {
           port = newPort
         })
@@ -124,7 +124,7 @@ describe('Plugin', () => {
           let Router
 
           beforeEach(() => {
-            Router = require(`./versions/koa-router@${routerVersion}`).get()
+            Router = require(`../../versions/koa-router@${routerVersion}`).get()
           })
 
           it('should do automatic instrumentation on routers', done => {

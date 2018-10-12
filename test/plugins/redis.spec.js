@@ -30,7 +30,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          redis = require(`./versions/redis@${version}`).get()
+          redis = require(`../../versions/redis@${version}`).get()
           client = redis.createClient()
         })
 
@@ -121,7 +121,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          redis = require(`./versions/redis@${version}`).get()
+          redis = require(`../../versions/redis@${version}`).get()
           client = redis.createClient()
         })
 

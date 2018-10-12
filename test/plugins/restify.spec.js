@@ -16,7 +16,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'restify', version => {
       beforeEach(() => {
         tracer = require('../..')
-        restify = require(`./versions/restify@${version}`).get()
+        restify = require(`../../versions/restify@${version}`).get()
       })
 
       afterEach(() => {

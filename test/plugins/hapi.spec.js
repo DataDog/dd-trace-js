@@ -29,7 +29,7 @@ describe('Plugin', () => {
       beforeEach(() => {
         return agent.load(plugin, 'hapi')
           .then(() => {
-            Hapi = require(`./versions/hapi@${version}`).get()
+            Hapi = require(`../../versions/hapi@${version}`).get()
           })
       })
 

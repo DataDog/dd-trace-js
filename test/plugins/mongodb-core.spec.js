@@ -36,7 +36,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          mongo = require(`./versions/mongodb-core@${version}`).get()
+          mongo = require(`../../versions/mongodb-core@${version}`).get()
 
           server = new mongo.Server({
             host: 'localhost',
@@ -297,7 +297,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          mongo = require(`./versions/mongodb-core@${version}`).get()
+          mongo = require(`../../versions/mongodb-core@${version}`).get()
 
           server = new mongo.Server({
             host: 'localhost',
