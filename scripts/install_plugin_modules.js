@@ -96,7 +96,7 @@ function addFolder (name, version) {
 
 function folder (name, version) {
   const basename = [name, version].filter(val => val).join('@')
-  return path.join(__dirname, '..', 'test', 'plugins', 'versions', basename)
+  return path.join(__dirname, '..', 'versions', basename)
 }
 
 function filename (name, version, file) {

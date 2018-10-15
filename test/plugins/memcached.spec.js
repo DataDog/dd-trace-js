@@ -14,7 +14,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'memcached', version => {
       beforeEach(() => {
         tracer = require('../..')
-        Memcached = require(`./versions/memcached@${version}`).get()
+        Memcached = require(`../../versions/memcached@${version}`).get()
       })
 
       afterEach(() => {

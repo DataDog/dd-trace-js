@@ -301,7 +301,7 @@ function withVersions (plugin, moduleName, range, cb) {
         .forEach(version => {
           try {
             const min = semver.coerce(version).version
-            require(`./plugins/versions/${moduleName}@${min}`).get()
+            require(`../versions/${moduleName}@${min}`).get()
             testVersions.set(min, { range: version, test: min })
           } catch (e) {
             // skip unsupported version
@@ -310,8 +310,8 @@ function withVersions (plugin, moduleName, range, cb) {
           agent.wipe()
 
           try {
-            const max = require(`./plugins/versions/${moduleName}@${version}`).version()
-            require(`./plugins/versions/${moduleName}@${version}`).get()
+            const max = require(`../versions/${moduleName}@${version}`).version()
+            require(`../versions/${moduleName}@${version}`).get()
             testVersions.set(max, { range: version, test: version })
           } catch (e) {
             // skip unsupported version

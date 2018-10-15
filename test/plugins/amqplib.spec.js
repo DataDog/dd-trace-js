@@ -31,7 +31,7 @@ describe('Plugin', () => {
 
         describe('when using a callback', () => {
           beforeEach(done => {
-            require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
+            require(`../../versions/amqplib@${version}`).get('amqplib/callback_api')
               .connect((err, conn) => {
                 connection = conn
 
@@ -217,7 +217,7 @@ describe('Plugin', () => {
 
         describe('when using a promise', () => {
           beforeEach(() => {
-            return require(`./versions/amqplib@${version}`).get().connect()
+            return require(`../../versions/amqplib@${version}`).get().connect()
               .then(conn => (connection = conn))
               .then(conn => conn.createChannel())
               .then(ch => (channel = ch))
@@ -246,7 +246,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          require(`./versions/amqplib@${version}`).get('amqplib/callback_api')
+          require(`../../versions/amqplib@${version}`).get('amqplib/callback_api')
             .connect((err, conn) => {
               connection = conn
 

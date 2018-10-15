@@ -14,7 +14,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'ioredis', version => {
       beforeEach(() => {
         tracer = require('../..')
-        Redis = require(`./versions/ioredis@${version}`).get()
+        Redis = require(`../../versions/ioredis@${version}`).get()
         redis = new Redis()
       })
 

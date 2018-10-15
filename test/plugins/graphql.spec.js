@@ -150,7 +150,7 @@ describe('Plugin', () => {
 
           return agent.load(plugin, 'graphql')
             .then(() => {
-              graphql = require(`./versions/graphql@${version}`).get()
+              graphql = require(`../../versions/graphql@${version}`).get()
               buildSchema()
             })
         })
@@ -788,7 +788,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          graphql = require(`./versions/graphql@${version}`).get()
+          graphql = require(`../../versions/graphql@${version}`).get()
           buildSchema()
         })
 
@@ -841,7 +841,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          graphql = require(`./versions/graphql@${version}`).get()
+          graphql = require(`../../versions/graphql@${version}`).get()
           buildSchema()
         })
 
@@ -887,7 +887,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          graphql = require(`./versions/graphql@${version}`).get()
+          graphql = require(`../../versions/graphql@${version}`).get()
           buildSchema()
         })
 

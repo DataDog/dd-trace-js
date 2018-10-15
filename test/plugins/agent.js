@@ -136,7 +136,7 @@ module.exports = {
 
   // Wipe the require cache.
   wipe () {
-    const basedir = path.join(__dirname, 'versions')
+    const basedir = path.join(__dirname, '..', '..', 'versions')
 
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
