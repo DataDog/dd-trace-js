@@ -956,6 +956,62 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with collapsing enabled', () => {
+        before(() => {
+          tracer = require('../..')
+
+          return agent.load(plugin, 'graphql', { collapse: true })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should collapse list field resolvers', done => {
+          const source = `{ friends { name } }`
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(8)
+
+              const execute = spans[3]
+              const friendsField = spans[4]
+              const friendsResolve = spans[5]
+              const friendNameField = spans[6]
+              const friendNameResolve = spans[7]
+
+              expect(execute).to.have.property('name', 'graphql.execute')
+
+              expect(friendsField).to.have.property('name', 'graphql.field')
+              expect(friendsField).to.have.property('resource', 'friends')
+              expect(friendsField.parent_id.toString()).to.equal(execute.span_id.toString())
+
+              expect(friendsResolve).to.have.property('name', 'graphql.resolve')
+              expect(friendsResolve).to.have.property('resource', 'friends')
+              expect(friendsResolve.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+              expect(friendNameField).to.have.property('name', 'graphql.field')
+              expect(friendNameField).to.have.property('resource', 'friends.*.name')
+              expect(friendNameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+              expect(friendNameResolve).to.have.property('name', 'graphql.resolve')
+              expect(friendNameResolve).to.have.property('resource', 'friends.*.name')
+              expect(friendNameResolve.parent_id.toString()).to.equal(friendNameField.span_id.toString())
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
+        })
+      })
+
       withVersions(plugin, 'apollo-server-core', apolloVersion => {
         let runQuery
         let mergeSchemas

@@ -180,6 +180,7 @@ query HelloWorld {
 | service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                                 |
 | variables       | `undefined`                                      | A callback to enable recording of variables. By default, no variables are recorded. For example, using `variables => variables` would record all variables. |
 | depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
+| collapse        | false                                            | Collapse list items to a single element. (i.e. single `users.*.name` span instead of `users.0.name`, `users.1.name`, etc) |
 
 <h3 id="hapi">hapi</h3>
 

@@ -97,14 +97,17 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
   if (resolve._datadog_patched) return resolve
+  if (config.collapse) {
+    responsePathAsArray = withCollapse(responsePathAsArray)
+  }
 
   function resolveWithTrace (source, args, contextValue, info) {
     const operation = info.operation
     const path = responsePathAsArray(info.path)
     const depth = path.filter(item => typeof item === 'string').length
-    const fieldParent = getFieldParent(operation, path)
 
     if (config.depth >= 0 && config.depth < depth) {
+      const fieldParent = getFieldParent(operation, path)
       const scope = tracer.scopeManager().activate(fieldParent)
 
       return call(resolve, this, arguments, () => {
@@ -113,15 +116,8 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
       })
     }
 
-    const childOf = createPathSpan(tracer, config, 'field', fieldParent, path)
-
-    operation._datadog_fields[path.join('.')] = {
-      span: childOf,
-      parent: fieldParent
-    }
-
-    const span = createPathSpan(tracer, config, 'resolve', childOf, path)
-    const scope = tracer.scopeManager().activate(span)
+    const field = assertField(tracer, config, operation, path)
+    const scope = tracer.scopeManager().activate(field.resolveSpan)
 
     return call(resolve, this, arguments, err => finish(scope, operation, path, err))
   }
@@ -164,6 +160,28 @@ function call (fn, thisContext, args, callback) {
     callback(e)
     throw e
   }
+}
+
+function assertField (tracer, config, operation, path) {
+  let field = getField(operation, path)
+
+  if (!field) {
+    field = operation._datadog_fields[path.join('.')] = {
+      pending: 0
+    }
+
+    const fieldParent = getFieldParent(operation, path)
+    const childOf = createPathSpan(tracer, config, 'field', fieldParent, path)
+    const span = createPathSpan(tracer, config, 'resolve', childOf, path)
+
+    field.parent = fieldParent
+    field.span = childOf
+    field.resolveSpan = span
+  }
+
+  field.pending++
+
+  return field
 }
 
 function getFieldParent (operation, path) {
@@ -287,6 +305,12 @@ function createPathSpan (tracer, config, name, childOf, path) {
 }
 
 function finish (scope, operation, path, error) {
+  const field = getField(operation, path)
+
+  field.pending = error ? 0 : field.pending - 1
+
+  if (field.pending !== 0) return
+
   const span = scope.span()
 
   addError(span, error)
@@ -316,6 +340,13 @@ function finishOperation (operation, error) {
 
   operation._datadog_execute_span.finish()
   operation._datadog_span.finish()
+}
+
+function withCollapse (responsePathAsArray) {
+  return function () {
+    return responsePathAsArray.apply(this, arguments)
+      .map(segment => typeof segment === 'number' ? '*' : segment)
+  }
 }
 
 function getField (operation, path) {
