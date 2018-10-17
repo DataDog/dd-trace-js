@@ -141,7 +141,7 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
     const depth = path.filter(item => typeof item === 'string').length
 
     if (config.depth > 0 && config.depth < depth) {
-      return call(resolve, this, arguments, err => updateFinishTime(scope, contextValue, path, err))
+      return call(resolve, this, arguments, () => updateFinishTime(contextValue, path))
     }
 
     const fieldParent = getFieldParent(contextValue, path)
