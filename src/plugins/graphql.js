@@ -19,16 +19,13 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       }
 
       args.contextValue = contextValue
+      args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
 
-      if (config.depth !== 0) {
-        args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
+      if (!schema._datadog_patched) {
+        wrapFields(schema._queryType, tracer, config, responsePathAsArray)
+        wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
 
-        if (!schema._datadog_patched) {
-          wrapFields(schema._queryType, tracer, config, responsePathAsArray)
-          wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
-
-          schema._datadog_patched = true
-        }
+        schema._datadog_patched = true
       }
 
       if (!contextValue._datadog_spans) {
@@ -139,12 +136,16 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
 
     const path = responsePathAsArray(info.path)
     const depth = path.filter(item => typeof item === 'string').length
-
-    if (config.depth > 0 && config.depth < depth) {
-      return call(resolve, this, arguments, () => updateFinishTime(contextValue, path))
-    }
-
     const fieldParent = getFieldParent(contextValue, path)
+
+    if (config.depth >= 0 && config.depth < depth) {
+      const scope = tracer.scopeManager().activate(fieldParent)
+
+      return call(resolve, this, arguments, () => {
+        scope.close()
+        updateFinishTime(contextValue, path)
+      })
+    }
 
     const childOf = createPathSpan(tracer, config, 'field', fieldParent, path)
 
