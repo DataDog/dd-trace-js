@@ -41,7 +41,7 @@ function finish (span, error) {
 
 module.exports = {
   name: 'ioredis',
-  versions: ['4.x'],
+  versions: ['>=2 <=4'],
   patch (Redis, tracer, config) {
     this.wrap(Redis.prototype, 'sendCommand', createWrapSendCommand(tracer, config))
   },
