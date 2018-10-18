@@ -123,7 +123,7 @@ class DatadogSpan extends Span {
     }
 
     this._spanContext.children
-      .filter(child => !child.isFinished)
+      .filter(child => !child.context().isFinished)
       .forEach(child => {
         log.error(`Parent span ${this} was finished before child span ${child}.`)
       })

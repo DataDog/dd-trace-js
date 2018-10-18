@@ -295,9 +295,9 @@ function updateFinishTime (contextValue, path) {
 }
 
 function finishOperation (contextValue, error) {
-  for (const key in contextValue._datadog_fields) {
+  Object.keys(contextValue._datadog_fields).reverse().forEach(key => {
     contextValue._datadog_fields[key].span.finish(contextValue._datadog_fields[key].finishTime)
-  }
+  })
 
   addError(contextValue._datadog_spans.executeSpan, error)
 
