@@ -873,6 +873,34 @@ describe('Plugin', () => {
 
           graphql.graphql(schema, source).catch(done)
         })
+
+        it('should run the resolvers in the execution scope', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const schema = graphql.buildSchema(`
+            type Query {
+              hello: String
+            }
+          `)
+
+          const source = `{ hello }`
+
+          const rootValue = {
+            hello () {
+              const scope = tracer.scopeManager().active()
+
+              try {
+                expect(scope).to.not.be.null
+                expect(scope.span()).to.have.property('_operationName', 'graphql.execute')
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }
+          }
+
+          graphql.graphql({ schema, source, rootValue }).catch(done)
+        })
       })
 
       describe('with a depth >=1', () => {
