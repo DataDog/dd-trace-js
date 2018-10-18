@@ -50,11 +50,16 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
 
-          const scope = tracer.scopeManager().activate({})
+          const span = {}
+
+          tracer.scopeManager().activate(span)
 
           return redis.get('foo')
             .then(() => {
-              expect(tracer.scopeManager().active()).to.equal(scope)
+              const scope = tracer.scopeManager().active()
+
+              expect(scope).to.not.be.null
+              expect(scope.span()).to.equal(span)
             })
         })
 
