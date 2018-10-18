@@ -955,6 +955,109 @@ describe('Plugin', () => {
           graphql.graphql(schema, source).catch(done)
         })
       })
+
+      withVersions(plugin, 'apollo-server-core', apolloVersion => {
+        let runQuery
+        let mergeSchemas
+        let makeExecutableSchema
+
+        before(() => {
+          tracer = require('../..')
+
+          return agent.load(plugin, 'graphql')
+            .then(() => {
+              graphql = require(`../../versions/graphql@${version}`).get()
+
+              const apolloCore = require(`../../versions/apollo-server-core@${apolloVersion}`).get()
+              const graphqlTools = require(`../../versions/graphql-tools@3.1.1`).get()
+
+              runQuery = apolloCore.runQuery
+              mergeSchemas = graphqlTools.mergeSchemas
+              makeExecutableSchema = graphqlTools.makeExecutableSchema
+            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('should support apollo-server schema stitching', done => {
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(11)
+
+              expect(spans[0]).to.have.property('name', 'graphql.query')
+              expect(spans[0]).to.have.property('resource', 'query MyQuery')
+
+              expect(spans[1]).to.have.property('name', 'graphql.parse')
+
+              expect(spans[2]).to.have.property('name', 'graphql.validate')
+
+              expect(spans[3]).to.have.property('name', 'graphql.execute')
+
+              expect(spans[4]).to.have.property('name', 'graphql.field')
+              expect(spans[4]).to.have.property('resource', 'hello')
+
+              expect(spans[5]).to.have.property('name', 'graphql.resolve')
+              expect(spans[5]).to.have.property('resource', 'hello')
+
+              expect(spans[6]).to.have.property('name', 'graphql.query')
+              expect(spans[6]).to.have.property('resource', 'query MyQuery')
+
+              expect(spans[7]).to.have.property('name', 'graphql.validate')
+
+              expect(spans[8]).to.have.property('name', 'graphql.execute')
+
+              expect(spans[9]).to.have.property('name', 'graphql.field')
+              expect(spans[9]).to.have.property('resource', 'hello')
+
+              expect(spans[10]).to.have.property('name', 'graphql.resolve')
+              expect(spans[10]).to.have.property('resource', 'hello')
+            })
+            .then(done)
+            .catch(done)
+
+          schema = mergeSchemas({
+            schemas: [
+              makeExecutableSchema({
+                typeDefs: `
+                  type Query {
+                    hello: String
+                  }
+                `,
+                resolvers: {
+                  Query: {
+                    hello: () => 'Hello world!'
+                  }
+                }
+              }),
+              makeExecutableSchema({
+                typeDefs: `
+                  type Query {
+                    world: String
+                  }
+                `,
+                resolvers: {
+                  Query: {
+                    world: () => 'Hello world!'
+                  }
+                }
+              })
+            ]
+          })
+
+          const params = {
+            schema,
+            query: 'query MyQuery { hello }',
+            operationName: 'MyQuery'
+          }
+
+          runQuery(params)
+            .catch(done)
+        })
+      })
     })
   })
 })
