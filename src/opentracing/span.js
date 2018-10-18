@@ -2,6 +2,7 @@
 
 const opentracing = require('opentracing')
 const Span = opentracing.Span
+const truncate = require('lodash.truncate')
 const SpanContext = require('./span_context')
 const platform = require('../platform')
 const log = require('../log')
@@ -29,8 +30,23 @@ class DatadogSpan extends Span {
     this._startTime = startTime
 
     this._spanContext = this._createContext(parent)
+    this._spanContext.name = operationName
     this._spanContext.tags = tags
     this._spanContext.metrics = metrics
+  }
+
+  toString () {
+    const spanContext = this.context()
+    const json = JSON.stringify({
+      traceId: spanContext.traceId,
+      spanId: spanContext.spanId,
+      parentId: spanContext.parentId,
+      service: spanContext.tags['service.name'],
+      name: spanContext.name,
+      resource: truncate(spanContext.tags['resource.name'], { length: 100 })
+    })
+
+    return `Span${json}`
   }
 
   _createContext (parent) {
@@ -99,11 +115,18 @@ class DatadogSpan extends Span {
 
     this._duration = finishTime - this._startTime
     this._spanContext.trace.finished.push(this)
+    this._spanContext.isFinished = true
     this._prioritySampler.sample(this)
 
     if (this._spanContext.sampled) {
       this._recorder.record(this)
     }
+
+    this._spanContext.children
+      .filter(child => !child.isFinished)
+      .forEach(child => {
+        log.error(`Parent span ${this} was finished before child span ${child}.`)
+      })
   }
 }
 
