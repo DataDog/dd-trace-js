@@ -11,7 +11,7 @@ shimmer({ logger: () => {} })
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
-    this._names = []
+    this._names = new Set()
     this._plugins = new Map()
     this._instrumented = new Map()
   }
@@ -58,33 +58,45 @@ class Instrumenter {
     const instrumentedModules = uniq(instrumentations
       .map(instrumentation => instrumentation.name))
 
-    this._names = instrumentations
-      .map(instrumentation => filename(instrumentation))
+    this._names = new Set(instrumentations
+      .map(instrumentation => filename(instrumentation)))
 
     hook(instrumentedModules, { internals: true }, this.hookModule.bind(this))
   }
 
-  wrap (nodule, name) {
-    if (typeof nodule[name] !== 'function') {
-      throw new Error(`Expected object ${nodule} to contain method ${name}.`)
-    }
+  wrap (nodules, names, wrapper) {
+    nodules = [].concat(nodules)
+    names = [].concat(names)
 
-    return shimmer.wrap.apply(this, arguments)
+    nodules.forEach(nodule => {
+      names.forEach(name => {
+        if (typeof nodule[name] !== 'function') {
+          throw new Error(`Expected object ${nodule} to contain method ${name}.`)
+        }
+      })
+    })
+
+    return shimmer.massWrap.call(this, nodules, names, wrapper)
   }
 
-  unwrap () {
-    return shimmer.unwrap.apply(this, arguments)
+  unwrap (nodules, names, wrapper) {
+    nodules = [].concat(nodules)
+    names = [].concat(names)
+
+    return shimmer.massUnwrap.call(this, nodules, names, wrapper)
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
-    if (this._names.indexOf(moduleName) === -1) {
+    if (!this._names.has(moduleName)) {
       return moduleExports
     }
 
     const moduleVersion = getVersion(moduleBaseDir)
 
     Array.from(this._plugins.keys())
-      .filter(plugin => [].concat(plugin).some(instrumentation => filename(instrumentation) === moduleName))
+      .filter(plugin => [].concat(plugin).some(instrumentation =>
+        filename(instrumentation) === moduleName && matchVersion(moduleVersion, instrumentation.versions)
+      ))
       .forEach(plugin => this._validate(plugin, moduleBaseDir))
 
     this._plugins
