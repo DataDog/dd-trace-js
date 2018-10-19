@@ -242,15 +242,20 @@ function createOperationSpan (tracer, config, operation, source, variableValues,
   const parentScope = tracer.scopeManager().active()
   const tags = {
     'service.name': getService(tracer, config),
-    'resource.name': [type, name].filter(val => val).join(' '),
-    'graphql.document': source
+    'resource.name': [type, name].filter(val => val).join(' ')
   }
+
+  if (source) {
+    tags['graphql.document'] = source
+  }
+
   if (variableValues && config.variables) {
     const variables = config.variables(variableValues)
     for (const param in variables) {
       tags[`graphql.variables.${param}`] = variables[param]
     }
   }
+
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
     tags,
     startTime,

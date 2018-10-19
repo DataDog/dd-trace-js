@@ -990,6 +990,7 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'graphql.query')
               expect(spans[0]).to.have.property('resource', 'query MyQuery')
+              expect(spans[0].meta).to.have.property('graphql.document')
 
               expect(spans[1]).to.have.property('name', 'graphql.parse')
 
@@ -1005,6 +1006,7 @@ describe('Plugin', () => {
 
               expect(spans[6]).to.have.property('name', 'graphql.query')
               expect(spans[6]).to.have.property('resource', 'query MyQuery')
+              expect(spans[6].meta).to.not.have.property('graphql.document')
 
               expect(spans[7]).to.have.property('name', 'graphql.validate')
 
