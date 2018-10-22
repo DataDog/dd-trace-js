@@ -37,7 +37,10 @@ class DatadogTracer extends Tracer {
     }
   }
 
+  // TODO: move references handling to the Span class
   _startSpan (name, fields) {
+    const references = getReferences(fields.references)
+    const parent = getParent(references)
     const tags = {
       'resource.name': name
     }
@@ -48,12 +51,18 @@ class DatadogTracer extends Tracer {
       tags.env = this._env
     }
 
-    return new Span(this, this._recorder, this._sampler, this._prioritySampler, {
+    const span = new Span(this, this._recorder, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
-      parent: getParent(fields.references),
+      parent: parent && parent.referencedContext(),
       tags: Object.assign(tags, this._tags, fields.tags),
       startTime: fields.startTime
     })
+
+    if (parent && parent.type() === opentracing.REFERENCE_CHILD_OF) {
+      parent.referencedContext().children.push(span)
+    }
+
+    return span
   }
 
   _inject (spanContext, format, carrier) {
@@ -77,32 +86,38 @@ class DatadogTracer extends Tracer {
   }
 }
 
+function getReferences (references) {
+  if (!references) return []
+
+  return references.filter(ref => {
+    if (!(ref instanceof Reference)) {
+      log.error(() => `Expected ${ref} to be an instance of opentracing.Reference`)
+      return false
+    }
+
+    const spanContext = ref.referencedContext()
+
+    if (!(spanContext instanceof SpanContext)) {
+      log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
+      return false
+    }
+
+    return true
+  })
+}
+
 function getParent (references) {
   let parent = null
 
-  if (references) {
-    for (let i = 0; i < references.length; i++) {
-      const ref = references[i]
+  for (let i = 0; i < references.length; i++) {
+    const ref = references[i]
 
-      if (!(ref instanceof Reference)) {
-        log.error(() => `Expected ${ref} to be an instance of opentracing.Reference`)
-        break
-      }
-
-      const spanContext = ref.referencedContext()
-
-      if (!(spanContext instanceof SpanContext)) {
-        log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
-        break
-      }
-
-      if (ref.type() === opentracing.REFERENCE_CHILD_OF) {
-        parent = ref.referencedContext()
-        break
-      } else if (ref.type() === opentracing.REFERENCE_FOLLOWS_FROM) {
-        if (!parent) {
-          parent = ref.referencedContext()
-        }
+    if (ref.type() === opentracing.REFERENCE_CHILD_OF) {
+      parent = ref
+      break
+    } else if (ref.type() === opentracing.REFERENCE_FOLLOWS_FROM) {
+      if (!parent) {
+        parent = ref
       }
     }
   }
