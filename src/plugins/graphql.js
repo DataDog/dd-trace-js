@@ -167,7 +167,8 @@ function assertField (tracer, config, operation, path) {
 
   if (!field) {
     field = operation._datadog_fields[path.join('.')] = {
-      pending: 0
+      pending: 0,
+      error: null
     }
 
     const fieldParent = getFieldParent(operation, path)
@@ -307,9 +308,11 @@ function createPathSpan (tracer, config, name, childOf, path) {
 function finish (scope, operation, path, error) {
   const field = getField(operation, path)
 
-  field.pending = error ? 0 : field.pending - 1
+  field.pending--
 
-  if (field.pending !== 0) return
+  if (field.error || field.pending > 0) return
+
+  field.error = error
 
   const span = scope.span()
 
