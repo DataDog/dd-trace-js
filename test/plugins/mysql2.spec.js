@@ -27,7 +27,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          mysql2 = require(`./versions/mysql2@${version}`).get()
+          mysql2 = require(`../../versions/mysql2@${version}`).get()
 
           connection = mysql2.createConnection({
             host: 'localhost',
@@ -135,7 +135,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          mysql2 = require(`./versions/mysql2@${version}`).get()
+          mysql2 = require(`../../versions/mysql2@${version}`).get()
 
           connection = mysql2.createConnection({
             host: 'localhost',
@@ -174,7 +174,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          mysql2 = require(`./versions/mysql2@${version}`).get()
+          mysql2 = require(`../../versions/mysql2@${version}`).get()
 
           pool = mysql2.createPool({
             connectionLimit: 10,

@@ -9,7 +9,6 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const args = normalizeArgs(arguments)
       const schema = args.schema
       const document = args.document
-      const contextValue = args.contextValue || {}
       const fieldResolver = args.fieldResolver || defaultFieldResolver
       const variableValues = args.variableValues
       const operation = getOperation(document)
@@ -18,52 +17,17 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         return execute.apply(this, arguments)
       }
 
-      args.contextValue = contextValue
+      args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
 
-      if (config.depth !== 0) {
-        args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
+      wrapFields(schema._queryType, tracer, config, responsePathAsArray)
+      wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
 
-        if (!schema._datadog_patched) {
-          wrapFields(schema._queryType, tracer, config, responsePathAsArray)
-          wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+      addOperationSpan(tracer, config, operation, document, variableValues)
+      addParseSpan(tracer, config, document, operation)
+      addValidateSpan(tracer, config, document, operation)
+      addExecuteSpan(tracer, config, operation)
 
-          schema._datadog_patched = true
-        }
-      }
-
-      if (!contextValue._datadog_spans) {
-        const parseTime = document._datadog_parse_time
-        const validateTime = document._datadog_validate_time
-
-        const operationSpan = createOperationSpan(
-          tracer,
-          config,
-          operation,
-          document._datadog_source,
-          variableValues,
-          (parseTime && parseTime.start) || (validateTime && validateTime.start)
-        )
-
-        if (parseTime) {
-          const span = createSpan(tracer, config, 'parse', operationSpan, parseTime.start)
-          span.finish(parseTime.end)
-        }
-        if (validateTime) {
-          const span = createSpan(tracer, config, 'validate', operationSpan, validateTime.start)
-          span.finish(validateTime.end)
-        }
-
-        const executeSpan = createSpan(tracer, config, 'execute', operationSpan)
-
-        Object.defineProperties(contextValue, {
-          _datadog_spans: {
-            value: { executeSpan, operationSpan }
-          },
-          _datadog_fields: { value: {} }
-        })
-      }
-
-      return call(execute, this, [args], err => finishOperation(contextValue, err))
+      return call(execute, this, [args], err => finishOperation(operation, err))
     }
   }
 }
@@ -117,7 +81,7 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
   Object.keys(type._fields).forEach(key => {
     const field = type._fields[key]
 
-    if (typeof field.resolve === 'function' && !field.resolve._datadog_patched) {
+    if (typeof field.resolve === 'function') {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
@@ -132,23 +96,26 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
 }
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
-  function resolveWithTrace (source, args, contextValue, info) {
-    if (!contextValue || !contextValue._datadog_fields) {
-      return resolve.apply(arguments)
-    }
+  if (resolve._datadog_patched) return resolve
 
+  function resolveWithTrace (source, args, contextValue, info) {
+    const operation = info.operation
     const path = responsePathAsArray(info.path)
     const depth = path.filter(item => typeof item === 'string').length
+    const fieldParent = getFieldParent(operation, path)
 
-    if (config.depth > 0 && config.depth < depth) {
-      return call(resolve, this, arguments, err => updateFinishTime(scope, contextValue, path, err))
+    if (config.depth >= 0 && config.depth < depth) {
+      const scope = tracer.scopeManager().activate(fieldParent)
+
+      return call(resolve, this, arguments, () => {
+        scope.close()
+        updateFinishTime(operation, path)
+      })
     }
-
-    const fieldParent = getFieldParent(contextValue, path)
 
     const childOf = createPathSpan(tracer, config, 'field', fieldParent, path)
 
-    contextValue._datadog_fields[path.join('.')] = {
+    operation._datadog_fields[path.join('.')] = {
       span: childOf,
       parent: fieldParent
     }
@@ -156,7 +123,7 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
     const span = createPathSpan(tracer, config, 'resolve', childOf, path)
     const scope = tracer.scopeManager().activate(span)
 
-    return call(resolve, this, arguments, err => finish(scope, contextValue, path, err))
+    return call(resolve, this, arguments, err => finish(scope, operation, path, err))
   }
 
   resolveWithTrace._datadog_patched = true
@@ -199,16 +166,16 @@ function call (fn, thisContext, args, callback) {
   }
 }
 
-function getFieldParent (contextValue, path) {
+function getFieldParent (operation, path) {
   for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(contextValue, path.slice(0, i))
+    const field = getField(operation, path.slice(0, i))
 
     if (field) {
       return field.span
     }
   }
 
-  return contextValue._datadog_spans.executeSpan
+  return operation._datadog_execute_span
 }
 
 function normalizeArgs (args) {
@@ -227,21 +194,68 @@ function normalizeArgs (args) {
   }
 }
 
+function addOperationSpan (tracer, config, operation, document, variableValues) {
+  const parseTime = document._datadog_parse_time
+  const validateTime = document._datadog_validate_time
+  const startTime = (parseTime && parseTime.start) || (validateTime && validateTime.start)
+
+  const operationSpan = createOperationSpan(
+    tracer,
+    config,
+    operation,
+    document._datadog_source,
+    variableValues,
+    startTime
+  )
+
+  Object.defineProperty(operation, '_datadog_span', { value: operationSpan })
+  Object.defineProperty(operation, '_datadog_fields', { value: {} })
+}
+
+function addExecuteSpan (tracer, config, operation) {
+  const span = createSpan(tracer, config, 'execute', operation._datadog_span)
+
+  Object.defineProperty(operation, '_datadog_execute_span', { value: span })
+}
+
+function addParseSpan (tracer, config, document, operation) {
+  const parseTime = document._datadog_parse_time
+
+  if (parseTime) {
+    const span = createSpan(tracer, config, 'parse', operation._datadog_span, parseTime.start)
+    span.finish(parseTime.end)
+  }
+}
+
+function addValidateSpan (tracer, config, document, operation) {
+  const validateTime = document._datadog_validate_time
+
+  if (validateTime) {
+    const span = createSpan(tracer, config, 'validate', operation._datadog_span, validateTime.start)
+    span.finish(validateTime.end)
+  }
+}
+
 function createOperationSpan (tracer, config, operation, source, variableValues, startTime) {
   const type = operation.operation
   const name = operation.name && operation.name.value
   const parentScope = tracer.scopeManager().active()
   const tags = {
     'service.name': getService(tracer, config),
-    'resource.name': [type, name].filter(val => val).join(' '),
-    'graphql.document': source
+    'resource.name': [type, name].filter(val => val).join(' ')
   }
+
+  if (source) {
+    tags['graphql.document'] = source
+  }
+
   if (variableValues && config.variables) {
     const variables = config.variables(variableValues)
     for (const param in variables) {
       tags[`graphql.variables.${param}`] = variables[param]
     }
   }
+
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
     tags,
     startTime,
@@ -272,7 +286,7 @@ function createPathSpan (tracer, config, name, childOf, path) {
   return span
 }
 
-function finish (scope, contextValue, path, error) {
+function finish (scope, operation, path, error) {
   const span = scope.span()
 
   addError(span, error)
@@ -280,12 +294,12 @@ function finish (scope, contextValue, path, error) {
   span.finish()
   scope.close()
 
-  updateFinishTime(contextValue, path)
+  updateFinishTime(operation, path)
 }
 
-function updateFinishTime (contextValue, path) {
+function updateFinishTime (operation, path) {
   for (let i = path.length; i > 0; i--) {
-    const field = getField(contextValue, path.slice(0, i))
+    const field = getField(operation, path.slice(0, i))
 
     if (field) {
       field.finishTime = platform.now()
@@ -293,19 +307,19 @@ function updateFinishTime (contextValue, path) {
   }
 }
 
-function finishOperation (contextValue, error) {
-  for (const key in contextValue._datadog_fields) {
-    contextValue._datadog_fields[key].span.finish(contextValue._datadog_fields[key].finishTime)
-  }
+function finishOperation (operation, error) {
+  Object.keys(operation._datadog_fields).reverse().forEach(key => {
+    operation._datadog_fields[key].span.finish(operation._datadog_fields[key].finishTime)
+  })
 
-  addError(contextValue._datadog_spans.executeSpan, error)
+  addError(operation._datadog_execute_span, error)
 
-  contextValue._datadog_spans.executeSpan.finish()
-  contextValue._datadog_spans.operationSpan.finish()
+  operation._datadog_execute_span.finish()
+  operation._datadog_span.finish()
 }
 
-function getField (contextValue, path) {
-  return contextValue._datadog_fields[path.join('.')]
+function getField (operation, path) {
+  return operation._datadog_fields[path.join('.')]
 }
 
 function getService (tracer, config) {

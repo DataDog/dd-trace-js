@@ -27,7 +27,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          elasticsearch = require(`./versions/elasticsearch@${version}`).get()
+          elasticsearch = require(`../../versions/elasticsearch@${version}`).get()
           client = new elasticsearch.Client({
             host: 'localhost:9200'
           })
@@ -231,7 +231,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          elasticsearch = require(`./versions/elasticsearch@${version}`).get()
+          elasticsearch = require(`../../versions/elasticsearch@${version}`).get()
           client = new elasticsearch.Client({
             host: 'localhost:9200'
           })

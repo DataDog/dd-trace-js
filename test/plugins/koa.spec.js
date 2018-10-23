@@ -18,7 +18,7 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         tracer = require('../..')
-        Koa = require(`./versions/koa@${version}`).get()
+        Koa = require(`../../versions/koa@${version}`).get()
         return getPort().then(newPort => {
           port = newPort
         })
@@ -124,7 +124,7 @@ describe('Plugin', () => {
           let Router
 
           beforeEach(() => {
-            Router = require(`./versions/koa-router@${routerVersion}`).get()
+            Router = require(`../../versions/koa-router@${routerVersion}`).get()
           })
 
           it('should do automatic instrumentation on routers', done => {
@@ -154,12 +154,70 @@ describe('Plugin', () => {
             })
           })
 
+          it('should not lose the route if next() is called', done => {
+            const app = new Koa()
+            const router = new Router()
+
+            router.get('/user/:id', (ctx, next) => {
+              ctx.body = ''
+              return next()
+            })
+
+            app
+              .use(router.routes())
+              .use(router.allowedMethods())
+
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', (e) => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+
           it('should support nested routers', done => {
             const app = new Koa()
             const forums = new Router()
             const posts = new Router()
 
             posts.get('/:pid', (ctx, next) => {
+              ctx.body = ''
+            })
+
+            forums.use('/forums/:fid/posts', posts.routes(), posts.allowedMethods())
+
+            app.use(forums.routes())
+
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/forums/123/posts/456`)
+                .catch(done)
+            })
+          })
+
+          it('should only match the current HTTP method', done => {
+            const app = new Koa()
+            const forums = new Router()
+            const posts = new Router()
+
+            posts.get('/:pid', (ctx, next) => {
+              ctx.body = ''
+            })
+            posts.post('/:pid', (ctx, next) => {
               ctx.body = ''
             })
 

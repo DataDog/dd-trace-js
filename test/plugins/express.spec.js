@@ -32,7 +32,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          express = require(`./versions/express@${version}`).get()
+          express = require(`../../versions/express@${version}`).get()
         })
 
         it('should do automatic instrumentation on app routes', done => {
@@ -559,7 +559,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          express = require(`./versions/express@${version}`).get()
+          express = require(`../../versions/express@${version}`).get()
         })
 
         it('should be configured with the correct service name', done => {

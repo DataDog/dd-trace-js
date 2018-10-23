@@ -142,17 +142,19 @@ describe('Tracer', () => {
     it('should start a span that is the child of a span', () => {
       const parent = new SpanContext()
 
+      parent.children = []
       fields.references = [
         new Reference(opentracing.REFERENCE_CHILD_OF, parent)
       ]
 
       tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const span = tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
+      expect(parent.children).to.include(span)
     })
 
     it('should start a span that follows from a span', () => {

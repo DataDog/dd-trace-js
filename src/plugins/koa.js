@@ -11,11 +11,6 @@ function createWrapUse (tracer, config) {
     web.instrument(tracer, config, ctx.req, ctx.res, 'koa.request')
 
     return next()
-      .then(() => extractRoute(ctx))
-      .catch(e => {
-        extractRoute(ctx)
-        return Promise.reject(e)
-      })
   }
 
   return function wrapUse (use) {
@@ -33,13 +28,24 @@ function createWrapUse (tracer, config) {
   }
 }
 
-function extractRoute (ctx) {
-  if (ctx.matched) {
-    ctx.matched
-      .filter(layer => layer.methods.length > 0)
-      .forEach(layer => {
-        web.enterRoute(ctx.req, layer.path)
+function createWrapRegister (tracer, config) {
+  return function wrapRegister (register) {
+    return function registerWithTrace (path, methods, middleware, opts) {
+      const route = register.apply(this, arguments)
+
+      if (Array.isArray(path)) return route
+
+      route.stack = route.stack.map(middleware => {
+        return function (ctx, next) {
+          web.exitRoute(ctx.req)
+          web.enterRoute(ctx.req, route.path)
+
+          return middleware.apply(this, arguments)
+        }
       })
+
+      return route
+    }
   }
 }
 
@@ -52,6 +58,16 @@ module.exports = [
     },
     unpatch (Koa) {
       this.unwrap(Koa.prototype, 'use')
+    }
+  },
+  {
+    name: 'koa-router',
+    versions: ['7.x'],
+    patch (Router, tracer, config) {
+      this.wrap(Router.prototype, 'register', createWrapRegister(tracer, config))
+    },
+    unpatch (Router) {
+      this.unwrap(Router.prototype, 'register')
     }
   }
 ]
