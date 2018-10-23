@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('./agent')
 const plugin = require('../../src/plugins/pg')
 
@@ -60,23 +61,25 @@ describe('Plugin', () => {
           })
         })
 
-        it('should do automatic instrumentation when using promises', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'test-postgres')
-            expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-            expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-            expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
-            expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+        if (semver.intersects(version, '>=5.1')) { // initial promise support
+          it('should do automatic instrumentation when using promises', done => {
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('service', 'test-postgres')
+              expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+              expect(traces[0][0]).to.have.property('type', 'sql')
+              expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+              expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
+              expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
 
-            done()
+              done()
+            })
+
+            client.query('SELECT $1::text as message', ['Hello world!'])
+              .then(() => client.end())
+              .catch(done)
           })
-
-          client.query('SELECT $1::text as message', ['Hello world!'])
-            .then(() => client.end())
-            .catch(done)
-        })
+        }
 
         it('should handle errors', done => {
           agent.use(traces => {
