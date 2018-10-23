@@ -298,7 +298,7 @@ function isObject (val) {
 module.exports = [
   {
     name: 'mongodb-core',
-    versions: ['3.x'],
+    versions: ['>=2 <=3'],
     patch (mongo, tracer, config) {
       this.wrap(mongo.Server.prototype, 'command', createWrapOperation(tracer, config))
       this.wrap(mongo.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))
