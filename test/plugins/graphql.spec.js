@@ -391,15 +391,13 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(10)
+              expect(spans).to.have.length(8)
 
               const execute = spans[3]
               const friendsField = spans[4]
               const friendsResolve = spans[5]
-              const friend0NameField = spans[6]
-              const friend0NameResolve = spans[7]
-              const friend1NameField = spans[8]
-              const friend1NameResolve = spans[9]
+              const friendNameField = spans[6]
+              const friendNameResolve = spans[7]
 
               expect(execute).to.have.property('name', 'graphql.execute')
 
@@ -411,21 +409,13 @@ describe('Plugin', () => {
               expect(friendsResolve).to.have.property('resource', 'friends')
               expect(friendsResolve.parent_id.toString()).to.equal(friendsField.span_id.toString())
 
-              expect(friend0NameField).to.have.property('name', 'graphql.field')
-              expect(friend0NameField).to.have.property('resource', 'friends.0.name')
-              expect(friend0NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+              expect(friendNameField).to.have.property('name', 'graphql.field')
+              expect(friendNameField).to.have.property('resource', 'friends.*.name')
+              expect(friendNameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
 
-              expect(friend0NameResolve).to.have.property('name', 'graphql.resolve')
-              expect(friend0NameResolve).to.have.property('resource', 'friends.0.name')
-              expect(friend0NameResolve.parent_id.toString()).to.equal(friend0NameField.span_id.toString())
-
-              expect(friend1NameField).to.have.property('name', 'graphql.field')
-              expect(friend1NameField).to.have.property('resource', 'friends.1.name')
-              expect(friend1NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
-
-              expect(friend1NameResolve).to.have.property('name', 'graphql.resolve')
-              expect(friend1NameResolve).to.have.property('resource', 'friends.1.name')
-              expect(friend1NameResolve.parent_id.toString()).to.equal(friend1NameField.span_id.toString())
+              expect(friendNameResolve).to.have.property('name', 'graphql.resolve')
+              expect(friendNameResolve).to.have.property('resource', 'friends.*.name')
+              expect(friendNameResolve.parent_id.toString()).to.equal(friendNameField.span_id.toString())
             })
             .then(done)
             .catch(done)
@@ -937,7 +927,7 @@ describe('Plugin', () => {
                 ].indexOf(span.resource) !== -1
               })
 
-              expect(spans).to.have.length(16)
+              expect(spans).to.have.length(12)
               expect(ignored).to.have.length(0)
             })
             .then(done)
@@ -947,11 +937,11 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with collapsing enabled', () => {
+      describe('with collapsing disabled', () => {
         before(() => {
           tracer = require('../..')
 
-          return agent.load(plugin, 'graphql', { collapse: true })
+          return agent.load(plugin, 'graphql', { collapse: false })
         })
 
         after(() => {
@@ -963,20 +953,22 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should collapse list field resolvers', done => {
+        it('should not collapse list field resolvers', done => {
           const source = `{ friends { name } }`
 
           agent
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(8)
+              expect(spans).to.have.length(10)
 
               const execute = spans[3]
               const friendsField = spans[4]
               const friendsResolve = spans[5]
-              const friendNameField = spans[6]
-              const friendNameResolve = spans[7]
+              const friend0NameField = spans[6]
+              const friend0NameResolve = spans[7]
+              const friend1NameField = spans[8]
+              const friend1NameResolve = spans[9]
 
               expect(execute).to.have.property('name', 'graphql.execute')
 
@@ -988,13 +980,21 @@ describe('Plugin', () => {
               expect(friendsResolve).to.have.property('resource', 'friends')
               expect(friendsResolve.parent_id.toString()).to.equal(friendsField.span_id.toString())
 
-              expect(friendNameField).to.have.property('name', 'graphql.field')
-              expect(friendNameField).to.have.property('resource', 'friends.*.name')
-              expect(friendNameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+              expect(friend0NameField).to.have.property('name', 'graphql.field')
+              expect(friend0NameField).to.have.property('resource', 'friends.0.name')
+              expect(friend0NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
 
-              expect(friendNameResolve).to.have.property('name', 'graphql.resolve')
-              expect(friendNameResolve).to.have.property('resource', 'friends.*.name')
-              expect(friendNameResolve.parent_id.toString()).to.equal(friendNameField.span_id.toString())
+              expect(friend0NameResolve).to.have.property('name', 'graphql.resolve')
+              expect(friend0NameResolve).to.have.property('resource', 'friends.0.name')
+              expect(friend0NameResolve.parent_id.toString()).to.equal(friend0NameField.span_id.toString())
+
+              expect(friend1NameField).to.have.property('name', 'graphql.field')
+              expect(friend1NameField).to.have.property('resource', 'friends.1.name')
+              expect(friend1NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+              expect(friend1NameResolve).to.have.property('name', 'graphql.resolve')
+              expect(friend1NameResolve).to.have.property('resource', 'friends.1.name')
+              expect(friend1NameResolve.parent_id.toString()).to.equal(friend1NameField.span_id.toString())
             })
             .then(done)
             .catch(done)

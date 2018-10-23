@@ -386,7 +386,8 @@ function addError (span, error) {
 function validateConfig (config) {
   return Object.assign({}, config, {
     depth: getDepth(config),
-    variables: getVariablesFilter(config)
+    variables: getVariablesFilter(config),
+    collapse: config.collapse === undefined || !!config.collapse
   })
 }
 
