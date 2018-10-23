@@ -454,7 +454,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should handle errors', done => {
+        it('should handle connection errors', done => {
           getPort().then(port => {
             agent
               .use(traces => {
@@ -468,6 +468,56 @@ describe('Plugin', () => {
             const req = http.request(`${protocol}://localhost:${port}/user`)
 
             req.end()
+          })
+        })
+
+        it('should not record HTTP 5XX responses as errors by default', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(500).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 0)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.end()
+            })
+          })
+        })
+
+        it('should record HTTP 4XX responses as errors by default', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(400).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.end()
+            })
           })
         })
 
@@ -547,6 +597,47 @@ describe('Plugin', () => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
                 res.on('data', () => {})
+              })
+
+              req.end()
+            })
+          })
+        })
+      })
+
+      describe('with validateStatus configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            validateStatus: status => status < 500
+          }
+
+          return agent.load(plugin, 'http', config)
+            .then(() => {
+              http = require(protocol)
+              express = require('express')
+            })
+        })
+
+        it('should use the supplied function to decide if a response is an error', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(500).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
               })
 
               req.end()
