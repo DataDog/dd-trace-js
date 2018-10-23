@@ -649,15 +649,6 @@ describe('Plugin', () => {
         })
 
         it('should handle executor exceptions', done => {
-          schema = new graphql.GraphQLSchema({
-            query: new graphql.GraphQLObjectType({
-              name: 'RootQueryType',
-              fields: {
-                hello: {}
-              }
-            })
-          })
-
           const source = `{ hello }`
           const document = graphql.parse(source)
 
@@ -679,7 +670,7 @@ describe('Plugin', () => {
             .catch(done)
 
           try {
-            graphql.execute(schema, document)
+            graphql.execute({}, document)
           } catch (e) {
             error = e
           }
