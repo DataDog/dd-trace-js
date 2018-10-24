@@ -9,7 +9,7 @@ const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
 
 function patch (http, methodName, tracer, config) {
-  config = normalizeConfig(config)
+  config = normalizeConfig(tracer, config)
   this.wrap(http, methodName, fn => makeRequestTrace(fn))
 
   function makeRequestTrace (request) {
@@ -19,7 +19,7 @@ function patch (http, methodName, tracer, config) {
       const options = args.options
       const callback = args.callback
 
-      if (uri === `${tracer._url.href}/v0.4/traces`) {
+      if (!config.filter(uri)) {
         return request.call(this, options, callback)
       }
 
@@ -163,11 +163,32 @@ function getStatusValidator (config) {
   return code => code < 400 || code >= 500
 }
 
-function normalizeConfig (config) {
+function getFilter (tracer, config) {
+  const whitelist = config.whitelist || /.*/
+  const blacklist = [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
+
+  return uri => applyFilter(whitelist, uri) && !applyFilter(blacklist, uri)
+
+  function applyFilter (filter, uri) {
+    if (typeof filter === 'function') {
+      return filter(uri)
+    } else if (filter instanceof RegExp) {
+      return filter.test(uri)
+    } else if (filter instanceof Array) {
+      return filter.some(filter => applyFilter(filter, uri))
+    }
+
+    return filter === uri
+  }
+}
+
+function normalizeConfig (tracer, config) {
   const validateStatus = getStatusValidator(config)
+  const filter = getFilter(tracer, config)
 
   return Object.assign({}, config, {
-    validateStatus
+    validateStatus,
+    filter
   })
 }
 
