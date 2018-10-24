@@ -11,10 +11,10 @@ if (!msg) {
   throw new Error('Please provide a reason for the change. Example: node scripts/publish_docs.js "fix typo"')
 }
 
-exec('yarn install')
-exec('rm -rf ./out')
-exec('git clone -b gh-pages --single-branch git@github.com:DataDog/dd-trace-js.git out')
-exec('yarn jsdoc')
-exec('git add -A', { cwd: './out' })
-exec(`git commit -m "${msg}"`, { cwd: './out' })
-exec('git push', { cwd: './out' })
+exec('yarn install', { cwd: './docs' })
+exec('rm -rf ./out', { cwd: './docs' })
+exec('git clone -b gh-pages --single-branch git@github.com:DataDog/dd-trace-js.git docs/out')
+exec('yarn jsdoc', { cwd: './docs' })
+exec('git add -A', { cwd: './docs/out' })
+exec(`git commit -m "${msg}"`, { cwd: './docs/out' })
+exec('git push', { cwd: './docs/out' })
