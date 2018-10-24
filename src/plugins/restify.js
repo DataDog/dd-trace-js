@@ -1,58 +1,69 @@
 'use strict'
 
 const web = require('./util/web')
+const handlers = ['use', 'pre']
+const methods = ['del', 'get', 'head', 'opts', 'post', 'put', 'patch']
 
-function createWrapOnRequest (tracer, config) {
+function createWrapSetupRequest (tracer, config) {
   config = web.normalizeConfig(config)
 
-  return function wrapOnRequest (onRequest) {
-    return function onRequestWithTrace (req, res) {
+  return function wrapSetupRequest (setupRequest) {
+    return function setupRequestWithTrace (req, res) {
       web.instrument(tracer, config, req, res, 'restify.request')
       web.beforeEnd(req, () => {
-        const route = req.getRoute()
-
-        if (route) {
-          web.enterRoute(req, route.path)
+        if (req.route) {
+          web.enterRoute(req, req.route.path)
         }
       })
 
-      return onRequest.apply(this, arguments)
+      return setupRequest.apply(this, arguments)
     }
   }
 }
 
-function createWrapAdd (tracer, config) {
-  return function wrapAdd (add) {
-    return function addWithTrace (handler) {
-      return add.call(this, function (req, res, next) {
-        web.reactivate(req)
-        handler.apply(this, arguments)
-      })
+function createWrapMethod (tracer, config) {
+  return function wrapMethod (method) {
+    return function methodWithTrace (path) {
+      const middleware = wrapMiddleware(Array.prototype.slice.call(arguments, 1))
+
+      return method.apply(this, [path].concat(middleware))
     }
+  }
+}
+
+function createWrapHandler (tracer, config) {
+  return function wrapMethod (method) {
+    return function methodWithTrace () {
+      return method.apply(this, wrapMiddleware(arguments))
+    }
+  }
+}
+
+function wrapMiddleware (middleware) {
+  return Array.prototype.map.call(middleware, wrapFn)
+}
+
+function wrapFn (fn) {
+  return function (req, res, next) {
+    web.reactivate(req)
+    return fn.apply(this, arguments)
   }
 }
 
 module.exports = [
   {
     name: 'restify',
-    versions: ['7.x'],
+    versions: ['>=3 <=7'],
     file: 'lib/server.js',
     patch (Server, tracer, config) {
-      this.wrap(Server.prototype, '_onRequest', createWrapOnRequest(tracer, config))
+      this.wrap(Server.prototype, '_setupRequest', createWrapSetupRequest(tracer, config))
+      this.wrap(Server.prototype, handlers, createWrapHandler(tracer, config))
+      this.wrap(Server.prototype, methods, createWrapMethod(tracer, config))
     },
     unpatch (Server) {
-      this.unwrap(Server.prototype, '_onRequest')
-    }
-  },
-  {
-    name: 'restify',
-    versions: ['7.x'],
-    file: 'lib/chain.js',
-    patch (Chain, tracer, config) {
-      this.wrap(Chain.prototype, 'add', createWrapAdd(tracer, config))
-    },
-    unpatch (Chain) {
-      this.unwrap(Chain.prototype, 'add')
+      this.unwrap(Server.prototype, '_setupRequest')
+      this.unwrap(Server.prototype, handlers)
+      this.unwrap(Server.prototype, methods)
     }
   }
 ]

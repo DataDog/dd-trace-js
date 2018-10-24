@@ -45,8 +45,8 @@ describe('Instrumenter', () => {
     }
 
     shimmer = sinon.spy()
-    shimmer.wrap = sinon.spy()
-    shimmer.unwrap = sinon.spy()
+    shimmer.massWrap = sinon.spy()
+    shimmer.massUnwrap = sinon.spy()
 
     Instrumenter = proxyquire('../src/instrumenter', {
       'shimmer': shimmer,
@@ -217,7 +217,7 @@ describe('Instrumenter', () => {
 
         instrumenter.wrap(obj, 'method', wrapper)
 
-        expect(shimmer.wrap).to.have.been.calledWith(obj, 'method', wrapper)
+        expect(shimmer.massWrap).to.have.been.calledWith([obj], ['method'], wrapper)
       })
 
       it('should throw if the method does not exist', () => {
@@ -234,7 +234,7 @@ describe('Instrumenter', () => {
 
         instrumenter.unwrap(obj, 'method')
 
-        expect(shimmer.unwrap).to.have.been.calledWith(obj, 'method')
+        expect(shimmer.massUnwrap).to.have.been.calledWith([obj], ['method'])
       })
     })
   })
