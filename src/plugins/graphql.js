@@ -1,5 +1,6 @@
 'use strict'
 
+const pick = require('lodash.pick')
 const platform = require('../platform')
 const log = require('../log')
 
@@ -403,8 +404,10 @@ function getDepth (config) {
 function getVariablesFilter (config) {
   if (typeof config.variables === 'function') {
     return config.variables
+  } else if (config.variables instanceof Array) {
+    return variables => pick(variables, config.variables)
   } else if (config.hasOwnProperty('variables')) {
-    log.error('Expected `variables` to be a function.')
+    log.error('Expected `variables` to be an array or function.')
   }
   return null
 }

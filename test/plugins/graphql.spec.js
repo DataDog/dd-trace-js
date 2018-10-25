@@ -810,6 +810,45 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with an array of variable names', () => {
+        before(() => {
+          tracer = require('../..')
+
+          return agent.load(plugin, 'graphql', {
+            variables: ['title']
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should only include the configured variables', done => {
+          const source = `
+            query MyQuery($title: String!, $who: String!) {
+              hello(title: $title, name: $who)
+            }
+          `
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
+              expect(spans[0].meta).to.not.have.property('graphql.variables.who')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source, null, null, { title: 'planet', who: 'world' }).catch(done)
+        })
+      })
+
       describe('with a depth of 0', () => {
         before(() => {
           tracer = require('../..')
