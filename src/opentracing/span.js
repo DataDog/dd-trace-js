@@ -7,6 +7,7 @@ const SpanContext = require('./span_context')
 const platform = require('../platform')
 const log = require('../log')
 const constants = require('../constants')
+const tracerVersion = require('../../lib/version')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
@@ -33,6 +34,10 @@ class DatadogSpan extends Span {
     this._spanContext.name = operationName
     this._spanContext.tags = tags
     this._spanContext.metrics = metrics
+
+    if (!parent) {
+      this._addSystemTags()
+    }
   }
 
   toString () {
@@ -74,6 +79,17 @@ class DatadogSpan extends Span {
     spanContext.trace.started.push(this)
 
     return spanContext
+  }
+
+  _addSystemTags () {
+    const info = platform.info()
+
+    info.runtime.name && this.setTag('system.runtime.name', info.runtime.name)
+    info.runtime.version && this.setTag('system.runtime.version', info.runtime.version)
+    info.interpreter.name && this.setTag('system.interpreter.name', info.interpreter.name)
+    info.interpreter.version && this.setTag('system.interpreter.version', info.interpreter.version)
+
+    this.setTag('system.tracer.version', tracerVersion)
   }
 
   _context () {

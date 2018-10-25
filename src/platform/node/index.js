@@ -1,6 +1,7 @@
 'use strict'
 
 const EventEmitter = require('events')
+const info = require('./info')
 const id = require('./id')
 const now = require('./now')
 const env = require('./env')
@@ -18,6 +19,7 @@ const platform = {
   configure (config) {
     this._config = config
   },
+  info,
   id,
   now,
   env,
