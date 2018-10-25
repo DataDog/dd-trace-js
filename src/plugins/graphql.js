@@ -116,7 +116,7 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
       })
     }
 
-    const field = assertField(tracer, config, operation, path)
+    const field = assertField(tracer, config, operation, path, info)
     const scope = tracer.scopeManager().activate(field.resolveSpan)
 
     return call(resolve, this, arguments, err => finish(scope, operation, path, err))
@@ -162,7 +162,7 @@ function call (fn, thisContext, args, callback) {
   }
 }
 
-function assertField (tracer, config, operation, path) {
+function assertField (tracer, config, operation, path, info) {
   let field = getField(operation, path)
 
   if (!field) {
@@ -172,8 +172,8 @@ function assertField (tracer, config, operation, path) {
     }
 
     const fieldParent = getFieldParent(operation, path)
-    const childOf = createPathSpan(tracer, config, 'field', fieldParent, path)
-    const span = createPathSpan(tracer, config, 'resolve', childOf, path)
+    const childOf = createPathSpan(tracer, config, 'field', fieldParent, path, info)
+    const span = createPathSpan(tracer, config, 'resolve', childOf, path, info)
 
     field.parent = fieldParent
     field.span = childOf
@@ -222,11 +222,12 @@ function addOperationSpan (tracer, config, operation, document, variableValues) 
     tracer,
     config,
     operation,
-    document._datadog_source,
+    document,
     variableValues,
     startTime
   )
 
+  Object.defineProperty(operation, '_datadog_source', { value: document._datadog_source })
   Object.defineProperty(operation, '_datadog_span', { value: operationSpan })
   Object.defineProperty(operation, '_datadog_fields', { value: {} })
 }
@@ -255,17 +256,26 @@ function addValidateSpan (tracer, config, document, operation) {
   }
 }
 
-function createOperationSpan (tracer, config, operation, source, variableValues, startTime) {
+function createOperationSpan (tracer, config, operation, document, variableValues, startTime) {
   const type = operation.operation
   const name = operation.name && operation.name.value
+  const def = document.definitions.find(def => def.kind === 'OperationDefinition')
   const parentScope = tracer.scopeManager().active()
   const tags = {
     'service.name': getService(tracer, config),
     'resource.name': [type, name].filter(val => val).join(' ')
   }
 
-  if (source) {
-    tags['graphql.document'] = source
+  if (def) {
+    tags['graphql.operation.type'] = def.operation
+
+    if (def.name) {
+      tags['graphql.operation.name'] = def.name.value
+    }
+  }
+
+  if (document._datadog_source) {
+    tags['graphql.document'] = document._datadog_source
   }
 
   if (variableValues && config.variables) {
@@ -295,12 +305,35 @@ function createSpan (tracer, config, name, childOf, startTime) {
   return span
 }
 
-function createPathSpan (tracer, config, name, childOf, path) {
+function createPathSpan (tracer, config, name, childOf, path, info) {
   const span = createSpan(tracer, config, name, childOf)
+  const document = info.operation._datadog_source
+  const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
 
   span.addTags({
-    'resource.name': path.join('.')
+    'resource.name': path.join('.'),
+    'graphql.field.name': info.fieldName,
+    'graphql.field.path': path.join('.'),
+    'graphql.field.type': info.returnType
   })
+
+  if (fieldNode) {
+    if (document) {
+      span.setTag('graphql.field.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
+    }
+
+    if (config.variables) {
+      const variables = config.variables(info.variableValues)
+
+      fieldNode.arguments
+        .filter(arg => arg.value && arg.value.kind === 'Variable')
+        .filter(arg => arg.value.name && variables[arg.value.name.value])
+        .map(arg => arg.value.name.value)
+        .forEach(name => {
+          span.setTag(`graphql.variables.${name}`, variables[name])
+        })
+    }
+  }
 
   return span
 }
