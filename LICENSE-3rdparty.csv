@@ -36,9 +36,6 @@ dev,eventemitter3,MIT,Copyright 2014 Arnout Kazemier
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,graphql,MIT,Copyright 2015-present Facebook Inc.
-dev,gulp,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
-dev,gulp-jsdoc3,Apache-2.0,Copyright Marc Udoff
-dev,jsdoc,Apache-2.0,Copyright 2011-present Michael Mathews and the contributors to JSDoc
 dev,memcached,MIT,Copyright 2010 Arnout Kazemier and 3rd-Eden
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,mongodb-core,Apache-2.0,Copyright Christian Kvalheim
