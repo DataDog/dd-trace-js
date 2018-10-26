@@ -2,19 +2,16 @@
 
 const web = require('../util/web')
 
-function createWrapListen (tracer, config) {
+function createWrapEmit (tracer, config) {
   config = web.normalizeConfig(config)
 
-  return function wrapListen (listen) {
-    const listener = (req, res) => {
-      web.instrument(tracer, config, req, res, 'http.request')
-    }
+  return function wrapEmit (emit) {
+    return function emitWithTrace (eventName, req, res) {
+      if (eventName === 'request') {
+        web.instrument(tracer, config, req, res, 'http.request')
+      }
 
-    return function listenWithTrace () {
-      this.removeListener('request', listener)
-      this.prependListener('request', listener)
-
-      return listen.apply(this, arguments)
+      return emit.apply(this, arguments)
     }
   }
 }
@@ -23,10 +20,10 @@ function plugin (name) {
   return {
     name,
     patch (http, tracer, config) {
-      this.wrap(http.Server.prototype, 'listen', createWrapListen(tracer, config))
+      this.wrap(http.Server.prototype, 'emit', createWrapEmit(tracer, config))
     },
     unpatch (http) {
-      this.unwrap(http.Server.prototype, 'listen')
+      this.unwrap(http.Server.prototype, 'emit')
     }
   }
 }
