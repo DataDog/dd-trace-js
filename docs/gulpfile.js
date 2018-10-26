@@ -3,7 +3,7 @@
 const gulp = require('gulp')
 const jsdoc = require('gulp-jsdoc3')
 const jsdocConfig = require('./jsdoc.json')
-const jsdocSource = ['docs/API.md', 'src/**/*.js']
+const jsdocSource = ['API.md', '../src/**/*.js']
 
 gulp.task('jsdoc:watch', ['jsdoc'], () => {
   gulp.watch(jsdocSource, ['jsdoc'])
