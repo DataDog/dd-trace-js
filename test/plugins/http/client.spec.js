@@ -1,7 +1,7 @@
 'use strict'
 
 const getPort = require('get-port')
-const agent = require('./agent')
+const agent = require('../agent')
 const semver = require('semver')
 
 wrapIt()
@@ -34,8 +34,8 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        plugin = require('../../src/plugins/http')
-        tracer = require('../..')
+        plugin = require('../../../src/plugins/http/client')
+        tracer = require('../../..')
         appListener = null
       })
 

@@ -32,23 +32,13 @@ const web = {
 
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
-    const span = tracer.startSpan(name, { childOf })
-    const scope = tracer.scopeManager().activate(span)
+    this.patch(req)
+
+    const span = startSpan(tracer, config, req, res, name)
 
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
     }
-
-    this.patch(req)
-
-    req._datadog.tracer = tracer
-    req._datadog.config = config
-    req._datadog.span = span
-    req._datadog.scope = scope
-    req._datadog.res = res
-
-    addRequestTags(req)
 
     callback && callback(span)
 
@@ -96,6 +86,27 @@ const web = {
   active (req) {
     return req._datadog ? req._datadog.span : null
   }
+}
+
+function startSpan (tracer, config, req, res, name) {
+  if (req._datadog.span) {
+    req._datadog.span.context().name = name
+    return req._datadog.span
+  }
+
+  const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
+  const span = tracer.startSpan(name, { childOf })
+  const scope = tracer.scopeManager().activate(span)
+
+  req._datadog.tracer = tracer
+  req._datadog.config = config
+  req._datadog.span = span
+  req._datadog.scope = scope
+  req._datadog.res = res
+
+  addRequestTags(req)
+
+  return span
 }
 
 function finish (req) {
