@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "bench": "node benchmark",
-    "jsdoc": "cd docs && yarn && gulp jsdoc",
-    "jsdoc:watch": "cd docs && yarn && gulp jsdoc:watch",
+    "jsdoc": "cd docs && yarn && ./node_modules/.bin/gulp jsdoc",
+    "jsdoc:watch": "cd docs && yarn && ./node_modules/.bin/gulp jsdoc:watch",
     "lint": "eslint . && node scripts/check_licenses.js",
     "tdd": "node ./scripts/install_plugin_modules && mocha --watch",
     "test": "node ./scripts/install_plugin_modules && nyc --reporter text --reporter lcov mocha --exit 'test/**/*.spec.js'",
