@@ -105,6 +105,31 @@ describe('plugins/util/web', () => {
           [`${HTTP_HEADERS}.host`]: 'localhost'
         })
       })
+
+      it('should only start one span for the entire request', () => {
+        const span1 = web.instrument(tracer, config, req, res, 'test.request')
+        const scope1 = tracer.scopeManager().active()
+        const span2 = web.instrument(tracer, config, req, res, 'test.request')
+        const scope2 = tracer.scopeManager().active()
+
+        expect(span1).to.equal(span2)
+        expect(scope1).to.equal(scope2)
+      })
+
+      it('should allow overriding the span name', () => {
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        span = web.instrument(tracer, config, req, res, 'test2.request')
+
+        expect(span.context().name).to.equal('test2.request')
+      })
+
+      it('should allow overriding the span service name', () => {
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        config.service = 'test2'
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        expect(span.context().tags).to.have.property('service.name', 'test2')
+      })
     })
 
     describe('on request end', () => {

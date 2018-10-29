@@ -3,7 +3,7 @@
 const url = require('url')
 const opentracing = require('opentracing')
 const semver = require('semver')
-const log = require('../log')
+const log = require('../../log')
 
 const Tags = opentracing.Tags
 const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
