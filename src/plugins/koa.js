@@ -37,8 +37,10 @@ function createWrapRegister (tracer, config) {
 
       route.stack = route.stack.map(middleware => {
         return function (ctx, next) {
-          web.exitRoute(ctx.req)
-          web.enterRoute(ctx.req, route.path)
+          if (web.active(ctx.req)) {
+            web.exitRoute(ctx.req)
+            web.enterRoute(ctx.req, route.path)
+          }
 
           return middleware.apply(this, arguments)
         }

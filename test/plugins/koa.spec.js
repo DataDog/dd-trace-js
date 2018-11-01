@@ -1,6 +1,7 @@
 'use strict'
 
 const axios = require('axios')
+const WebSocket = require('ws')
 const getPort = require('get-port')
 const agent = require('./agent')
 const plugin = require('../../src/plugins/koa')
@@ -297,6 +298,46 @@ describe('Plugin', () => {
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(() => {})
+            })
+          })
+
+          withVersions(plugin, 'koa-websocket', wsVersion => {
+            let websockify
+            let ws
+
+            beforeEach(() => {
+              websockify = require(`../../versions/koa-websocket@${wsVersion}`).get()
+            })
+
+            afterEach(() => {
+              ws && ws.close()
+            })
+
+            it('should skip instrumentation', done => {
+              const app = websockify(new Koa())
+              const router = new Router()
+
+              router.all('/message', (ctx, next) => {
+                ctx.websocket.send('pong')
+                ctx.websocket.on('message', message => {})
+              })
+
+              app.ws
+                .use(router.routes())
+                .use(router.allowedMethods())
+
+              appListener = app.listen(port, 'localhost', () => {
+                ws = new WebSocket(`ws://localhost:${port}/message`)
+                ws.on('error', done)
+                ws.on('open', () => {
+                  ws.send('ping', err => err && done(err))
+                })
+                ws.on('message', msg => {
+                  if (msg === 'pong') {
+                    done()
+                  }
+                })
+              })
             })
           })
         })
