@@ -24,10 +24,12 @@ const web = {
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
+    const hooks = getHooks(config)
 
     return Object.assign({}, config, {
       headers,
-      validateStatus
+      validateStatus,
+      hooks
     })
   },
 
@@ -78,6 +80,7 @@ const web = {
         span: null,
         scope: null,
         paths: [],
+        hooks: [],
         beforeEnd: []
       }
     })
@@ -90,6 +93,8 @@ const web = {
 }
 
 function startSpan (tracer, config, req, res, name) {
+  req._datadog.hooks.push(config.hooks)
+
   if (req._datadog.span) {
     req._datadog.span.context().name = name
     return req._datadog.span
@@ -110,11 +115,12 @@ function startSpan (tracer, config, req, res, name) {
   return span
 }
 
-function finish (req) {
+function finish (req, res) {
   if (req._datadog.finished) return
 
   addResponseTags(req)
 
+  req._datadog.hooks.forEach(hooks => hooks.request(req._datadog.span, req, res))
   req._datadog.span.finish()
   req._datadog.scope && req._datadog.scope.close()
   req._datadog.finished = true
@@ -129,7 +135,7 @@ function wrapEnd (req) {
 
     const returnValue = end.apply(this, arguments)
 
-    finish(req)
+    finish(req, res)
 
     return returnValue
   }
@@ -210,6 +216,13 @@ function getStatusValidator (config) {
     log.error('Expected `validateStatus` to be a function.')
   }
   return code => code < 500
+}
+
+function getHooks (config) {
+  const noop = () => {}
+  const request = (config.hooks && config.hooks.request) || noop
+
+  return { request }
 }
 
 module.exports = web
