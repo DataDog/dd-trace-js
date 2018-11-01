@@ -6,5 +6,9 @@
   {
     "name": "graphql-tools",
     "versions": ["3.1.1"]
+  },
+  {
+    "name": "koa-websocket",
+    "versions": ["5.0.1"]
   }
 ]
