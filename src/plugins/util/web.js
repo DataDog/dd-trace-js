@@ -16,6 +16,7 @@ const ERROR = tags.ERROR
 const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
+const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_HEADERS = tags.HTTP_HEADERS
 
 const web = {
@@ -150,10 +151,18 @@ function addRequestTags (req) {
 }
 
 function addResponseTags (req) {
-  const path = req._datadog.paths.join('')
-  const resource = [req.method].concat(path).filter(val => val).join(' ')
   const span = req._datadog.span
+  const tags = span.context().tags
   const res = req._datadog.res
+
+  if (!tags.hasOwnProperty(HTTP_ROUTE) && req._datadog.paths.length > 0) {
+    span.setTag(HTTP_ROUTE, req._datadog.paths.join(''))
+  }
+
+  const resource = [req.method]
+    .concat(tags[HTTP_ROUTE])
+    .filter(val => val)
+    .join(' ')
 
   span.addTags({
     [RESOURCE_NAME]: resource,
