@@ -1,0 +1,10 @@
+*
+!ext/**/*
+!lib/**/*
+!src/**/*
+!CONTRIBUTING.md
+!LICENSE
+!LICENSE-3rdparty.csv
+!index.js
+!package.json
+!README.md
