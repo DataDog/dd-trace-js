@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('path')
 const web = require('./util/web')
 
 function createWrapGenerate (tracer, config) {
@@ -49,7 +50,7 @@ module.exports = [
   {
     name: 'hapi',
     versions: ['^17.1'],
-    file: 'lib/request.js',
+    file: path.join('lib', 'request.js'),
     patch (Request, tracer, config) {
       this.wrap(Request, 'generate', createWrapGenerate(tracer, config))
     },
@@ -60,7 +61,7 @@ module.exports = [
   {
     name: 'hapi',
     versions: ['8.5 - 17.0'],
-    file: 'lib/request.js',
+    file: path.join('lib', 'request.js'),
     patch (Generator, tracer, config) {
       this.wrap(Generator.prototype, 'request', createWrapGenerate(tracer, config))
     },
@@ -71,7 +72,7 @@ module.exports = [
   {
     name: 'hapi',
     versions: ['2 - 8.4'],
-    file: 'lib/request.js',
+    file: path.join('lib', 'request.js'),
     patch (Request, tracer, config) {
       this.wrap(Request.prototype, '_execute', createWrapExecute(tracer, config))
     },

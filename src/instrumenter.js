@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('path')
 const semver = require('semver')
 const hook = require('require-in-the-middle')
 const shimmer = require('shimmer')
@@ -158,12 +159,12 @@ function getVersion (moduleBaseDir) {
 }
 
 function filename (plugin) {
-  return [plugin.name, plugin.file].filter(val => val).join('/')
+  return path.join(...[plugin.name, plugin.file].filter(val => val))
 }
 
 function exists (basedir, file) {
   try {
-    require.resolve(`${basedir}/${file}`)
+    require.resolve(path.join(basedir, file))
     return true
   } catch (e) {
     return false
