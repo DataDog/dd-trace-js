@@ -37,7 +37,7 @@ describe('plugins/util/web', () => {
     res = {
       end
     }
-    config = {}
+    config = { hooks: {} }
 
     tracer = require('../../..').init({ plugins: false })
     web = require('../../../src/plugins/util/web')
@@ -215,6 +215,26 @@ describe('plugins/util/web', () => {
         expect(span.context().tags).to.include({
           [HTTP_ROUTE]: '/custom/route'
         })
+      })
+
+      it('should execute the request end hook', () => {
+        config.hooks.request = sinon.spy()
+
+        res.end()
+
+        expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+      })
+
+      it('should execute multiple end hooks', () => {
+        config.hooks = {
+          request: sinon.spy()
+        }
+
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        res.end()
+
+        expect(config.hooks.request).to.have.been.calledWith(span, req, res)
       })
     })
   })
