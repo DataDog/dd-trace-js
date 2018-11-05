@@ -14,6 +14,7 @@ const ERROR = tags.ERROR
 const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
+const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_HEADERS = tags.HTTP_HEADERS
 
 describe('plugins/util/web', () => {
@@ -205,6 +206,16 @@ describe('plugins/util/web', () => {
           [ERROR]: 'true'
         })
       })
+
+      it('should use the user provided route', () => {
+        span.setTag('http.route', '/custom/route')
+
+        res.end()
+
+        expect(span.context().tags).to.include({
+          [HTTP_ROUTE]: '/custom/route'
+        })
+      })
     })
   })
 
@@ -222,10 +233,22 @@ describe('plugins/util/web', () => {
       res.end()
 
       expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
+      expect(span.context().tags).to.have.property(HTTP_ROUTE, '/foo/bar')
+    })
+
+    it('should not override user provided routes', () => {
+      req.method = 'GET'
+      span.setTag('http.route', '/custom')
+
+      web.enterRoute(req, '/foo')
+      res.end()
+
+      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /custom')
+      expect(span.context().tags).to.have.property(HTTP_ROUTE, '/custom')
     })
   })
 
-  describe('enterRoute', () => {
+  describe('exitRoute', () => {
     beforeEach(() => {
       config = web.normalizeConfig(config)
       span = web.instrument(tracer, config, req, res, 'test.request')
