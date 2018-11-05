@@ -87,29 +87,15 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should use a fallback for unknown commands', done => {
+          it('should sanitize the query', done => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `unknownCommand test.${collection}`
+                const query = '{"foo":"?","bar":{"baz":"?"}}'
+                const resource = `find test.${collection} ${query}`
 
                 expect(span).to.have.property('resource', resource)
-              })
-              .then(done)
-              .catch(done)
-
-            server.command(`test.${collection}`, {
-              invalidCommand: `test.${collection}`
-            }, () => {})
-          })
-
-          it('should sanitize the query as the resource', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                const resource = `find test.${collection} {"foo":"?","bar":{"baz":"?"}}`
-
-                expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
