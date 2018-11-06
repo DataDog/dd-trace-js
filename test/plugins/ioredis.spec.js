@@ -39,6 +39,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('out.port', '6379')
+              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
             })
             .then(done)
             .catch(done)
