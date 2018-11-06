@@ -159,7 +159,7 @@ function getVersion (moduleBaseDir) {
 }
 
 function filename (plugin) {
-  return path.join(...[plugin.name, plugin.file].filter(val => val))
+  return path.join.apply(path, [plugin.name, plugin.file].filter(val => val))
 }
 
 function exists (basedir, file) {
