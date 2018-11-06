@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('path')
 const platform = require('../platform')
 const log = require('../log')
 
@@ -377,7 +378,7 @@ function getVariablesFilter (config) {
 module.exports = [
   {
     name: 'graphql',
-    file: 'execution/execute.js',
+    file: path.join('execution', 'execute.js'),
     versions: ['0.13.x'],
     patch (execute, tracer, config) {
       this.wrap(execute, 'execute', createWrapExecute(
@@ -393,7 +394,7 @@ module.exports = [
   },
   {
     name: 'graphql',
-    file: 'language/parser.js',
+    file: path.join('language', 'parser.js'),
     versions: ['0.13.x'],
     patch (parser, tracer, config) {
       this.wrap(parser, 'parse', createWrapParse(tracer, validateConfig(config)))
@@ -404,7 +405,7 @@ module.exports = [
   },
   {
     name: 'graphql',
-    file: 'validation/validate.js',
+    file: path.join('validation', 'validate.js'),
     versions: ['0.13.x'],
     patch (validate, tracer, config) {
       this.wrap(validate, 'validate', createWrapValidate(tracer, validateConfig(config)))

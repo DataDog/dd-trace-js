@@ -1,6 +1,7 @@
 'use strict'
 
 const kebabCase = require('lodash.kebabcase')
+const path = require('path')
 
 let methods = {}
 
@@ -128,7 +129,7 @@ function addTags (channel, tracer, config, span, method, fields) {
 module.exports = [
   {
     name: 'amqplib',
-    file: 'lib/defs.js',
+    file: path.join('lib', 'defs.js'),
     versions: ['0.5.x'],
     patch (defs, tracer, config) {
       methods = Object.keys(defs)
@@ -142,7 +143,7 @@ module.exports = [
   },
   {
     name: 'amqplib',
-    file: 'lib/channel.js',
+    file: path.join('lib', 'channel.js'),
     versions: ['0.5.x'],
     patch (channel, tracer, config) {
       this.wrap(channel.Channel.prototype, 'sendImmediately', createWrapSendImmediately(tracer, config))

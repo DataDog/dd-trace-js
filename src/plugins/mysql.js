@@ -1,6 +1,7 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
+const path = require('path')
 
 function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
@@ -72,7 +73,7 @@ function unpatchConnection (Connection) {
 module.exports = [
   {
     name: 'mysql',
-    file: 'lib/Connection.js',
+    file: path.join('lib', 'Connection.js'),
     versions: ['2.x'],
     patch: patchConnection,
     unpatch: unpatchConnection

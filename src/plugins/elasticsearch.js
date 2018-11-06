@@ -1,6 +1,7 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
+const path = require('path')
 
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
@@ -74,7 +75,7 @@ function quantizePath (path) {
 module.exports = [
   {
     name: 'elasticsearch',
-    file: 'src/lib/transport.js',
+    file: path.join('src', 'lib', 'transport.js'),
     versions: ['15.x'],
     patch (Transport, tracer, config) {
       this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))

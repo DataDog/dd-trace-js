@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('path')
+
 function createWrapSend (tracer, config) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, options) {
@@ -132,7 +134,7 @@ function getAddress (link) {
 module.exports = [
   {
     name: 'amqp10',
-    file: 'lib/sender_link.js',
+    file: path.join('lib', 'sender_link.js'),
     versions: ['3.x'],
     patch (SenderLink, tracer, config) {
       this.wrap(SenderLink.prototype, 'send', createWrapSend(tracer, config))
@@ -143,7 +145,7 @@ module.exports = [
   },
   {
     name: 'amqp10',
-    file: 'lib/receiver_link.js',
+    file: path.join('lib', 'receiver_link.js'),
     versions: ['3.x'],
     patch (ReceiverLink, tracer, config) {
       this.wrap(ReceiverLink.prototype, '_messageReceived', createWrapMessageReceived(tracer, config))

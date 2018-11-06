@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('path')
 const web = require('./util/web')
 
 function createWrapOnRequest (tracer, config) {
@@ -36,7 +37,7 @@ module.exports = [
   {
     name: 'restify',
     versions: ['7.x'],
-    file: 'lib/server.js',
+    file: path.join('lib', 'server.js'),
     patch (Server, tracer, config) {
       this.wrap(Server.prototype, '_onRequest', createWrapOnRequest(tracer, config))
     },
@@ -47,7 +48,7 @@ module.exports = [
   {
     name: 'restify',
     versions: ['7.x'],
-    file: 'lib/chain.js',
+    file: path.join('lib', 'chain.js'),
     patch (Chain, tracer, config) {
       this.wrap(Chain.prototype, 'add', createWrapAdd(tracer, config))
     },
