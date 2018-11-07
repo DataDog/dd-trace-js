@@ -27,7 +27,7 @@ function wrapQueryCompiler (original, client, server, span) {
 
     span.addTags({
       'resource.name': query.type,
-      'memcached.query': query.command
+      'memcached.command': query.command
     })
 
     addHost(span, client, server, query)
