@@ -5,8 +5,8 @@ const platform = require('./platform')
 const coalesce = require('koalas')
 
 class Config {
-  constructor (options) {
-    options = options || {}
+  constructor (service, options) {
+    options = typeof service === 'object' ? service : options || {}
 
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
@@ -28,18 +28,7 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
-
-    Object.defineProperty(this, 'service', {
-      get () {
-        const service = coalesce(options.service, platform.env('DD_SERVICE_NAME'))
-
-        if (service) {
-          return service
-        }
-
-        return platform.service() || 'node'
-      }
-    })
+    this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
   }
 }
 

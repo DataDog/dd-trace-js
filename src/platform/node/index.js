@@ -4,6 +4,7 @@ const EventEmitter = require('events')
 const id = require('./id')
 const now = require('./now')
 const env = require('./env')
+const validate = require('./validate')
 const service = require('./service')
 const request = require('./request')
 const msgpack = require('./msgpack')
@@ -21,6 +22,7 @@ const platform = {
   id,
   now,
   env,
+  validate,
   service,
   request,
   msgpack,
