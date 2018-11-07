@@ -80,7 +80,6 @@ const web = {
         span: null,
         scope: null,
         paths: [],
-        hooks: [],
         beforeEnd: []
       }
     })
@@ -93,7 +92,7 @@ const web = {
 }
 
 function startSpan (tracer, config, req, res, name) {
-  req._datadog.hooks.push(config.hooks)
+  req._datadog.config = config
 
   if (req._datadog.span) {
     req._datadog.span.context().name = name
@@ -105,7 +104,6 @@ function startSpan (tracer, config, req, res, name) {
   const scope = tracer.scopeManager().activate(span)
 
   req._datadog.tracer = tracer
-  req._datadog.config = config
   req._datadog.span = span
   req._datadog.scope = scope
   req._datadog.res = res
@@ -120,7 +118,7 @@ function finish (req, res) {
 
   addResponseTags(req)
 
-  req._datadog.hooks.forEach(hooks => hooks.request(req._datadog.span, req, res))
+  req._datadog.config.hooks.request(req._datadog.span, req, res)
 
   addResourceTag(req)
 
@@ -133,7 +131,9 @@ function wrapEnd (req) {
   const res = req._datadog.res
   const end = res.end
 
-  res.end = function () {
+  if (end === req._datadog.end) return
+
+  req._datadog.end = res.end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
 
     const returnValue = end.apply(this, arguments)
