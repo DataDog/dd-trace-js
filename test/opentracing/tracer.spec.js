@@ -130,8 +130,7 @@ describe('Tracer', () => {
         parent: null,
         tags: {
           'foo': 'bar',
-          'service.name': 'service',
-          'resource.name': 'name'
+          'service.name': 'service'
         },
         startTime: fields.startTime
       })
