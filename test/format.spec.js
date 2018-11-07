@@ -10,28 +10,22 @@ const id = new Int64BE(0x02345678, 0x12345678)
 describe('format', () => {
   let format
   let span
-  let tracer
   let trace
   let spanContext
 
   beforeEach(() => {
-    tracer = {
-      _service: 'service'
-    }
-
     spanContext = {
       traceId: id,
       spanId: id,
       parentId: id,
       tags: {},
       metrics: {},
-      sampling: {}
+      sampling: {},
+      name: 'operation'
     }
 
     span = {
-      tracer: sinon.stub().returns(tracer),
       context: sinon.stub().returns(spanContext),
-      _operationName: 'operation',
       _startTime: 1500000000000.123456,
       _duration: 100
     }
@@ -46,9 +40,8 @@ describe('format', () => {
       expect(trace.trace_id).to.equal(span.context().traceId)
       expect(trace.span_id).to.equal(span.context().spanId)
       expect(trace.parent_id).to.equal(span.context().parentId)
-      expect(trace.name).to.equal(span._operationName)
-      expect(trace.resource).to.equal(span._operationName)
-      expect(trace.service).to.equal(span.tracer()._service)
+      expect(trace.name).to.equal(span.context().name)
+      expect(trace.resource).to.equal(span.context().name)
       expect(trace.error).to.equal(0)
       expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
@@ -145,8 +138,7 @@ describe('format', () => {
     })
 
     it('should sanitize the input', () => {
-      tracer._service = null
-      span._operationName = null
+      spanContext.name = null
       spanContext.tags = {
         'foo.bar': null
       }
@@ -156,7 +148,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.name).to.equal('null')
-      expect(trace.service).to.equal('null')
       expect(trace.resource).to.equal('null')
       expect(trace.meta['foo.bar']).to.equal('null')
       expect(trace.start).to.be.instanceof(Int64BE)

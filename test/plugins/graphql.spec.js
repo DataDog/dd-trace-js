@@ -939,7 +939,7 @@ describe('Plugin', () => {
 
               try {
                 expect(scope).to.not.be.null
-                expect(scope.span()).to.have.property('_operationName', 'graphql.execute')
+                expect(scope.span().context()).to.have.property('name', 'graphql.execute')
                 done()
               } catch (e) {
                 done(e)
