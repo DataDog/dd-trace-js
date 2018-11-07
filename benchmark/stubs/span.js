@@ -28,9 +28,9 @@ const span = {
       [SAMPLE_RATE_METRIC_KEY]: 1
     },
     sampled: true,
-    sampling: {}
+    sampling: {},
+    name: 'operation'
   }),
-  _operationName: 'operation',
   _startTime: 1500000000000.123456,
   _duration: 100
 }
