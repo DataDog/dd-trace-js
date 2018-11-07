@@ -6,8 +6,7 @@ describe('Config', () => {
 
   beforeEach(() => {
     platform = {
-      env: sinon.stub(),
-      service: sinon.stub()
+      env: sinon.stub()
     }
 
     Config = proxyquire('../src/config', {
@@ -32,10 +31,8 @@ describe('Config', () => {
     expect(config).to.have.property('env', undefined)
   })
 
-  it('should initialize from the platform', () => {
-    platform.service.returns('test')
-
-    const config = new Config()
+  it('should initialize from the default service', () => {
+    const config = new Config('test')
 
     expect(config).to.have.property('service', 'test')
   })
