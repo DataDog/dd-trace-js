@@ -1,13 +1,13 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
+const tx = require('./util/redis')
 
 function createWrapInternalSendCommand (tracer, config) {
   return function wrapInternalSendCommand (internalSendCommand) {
     return function internalSendCommandWithTrace (options) {
-      const span = startSpan(tracer, config, this, options.command)
+      const span = startSpan(tracer, config, this, options.command, options.args)
 
-      options.callback = wrapCallback(tracer, span, options.callback)
+      options.callback = tx.wrap(span, options.callback)
 
       return internalSendCommand.call(this, options)
     }
@@ -17,14 +17,14 @@ function createWrapInternalSendCommand (tracer, config) {
 function createWrapSendCommand (tracer, config) {
   return function wrapSendCommand (sendCommand) {
     return function sendCommandWithTrace (command, args, callback) {
-      const span = startSpan(tracer, config, this, command)
+      const span = startSpan(tracer, config, this, command, args)
 
       if (callback) {
-        callback = wrapCallback(tracer, span, callback)
+        callback = tx.wrap(span, callback)
       } else if (args) {
-        args[(args.length || 1) - 1] = wrapCallback(tracer, span, args[args.length - 1])
+        args[(args.length || 1) - 1] = tx.wrap(span, args[args.length - 1])
       } else {
-        args = [wrapCallback(tracer, span)]
+        args = [tx.wrap(span)]
       }
 
       return sendCommand.call(this, command, args, callback)
@@ -32,51 +32,14 @@ function createWrapSendCommand (tracer, config) {
   }
 }
 
-function startSpan (tracer, config, client, command) {
-  const scope = tracer.scopeManager().active()
-  const span = tracer.startSpan('redis.command', {
-    childOf: scope && scope.span(),
-    tags: {
-      [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-      [Tags.DB_TYPE]: 'redis',
-      'service.name': config.service || `${tracer._service}-redis`,
-      'resource.name': command,
-      'span.type': 'redis',
-      'db.name': client.selected_db || '0'
-    }
-  })
+function startSpan (tracer, config, client, command, args) {
+  const db = client.selected_db
+  const connectionOptions = client.connection_options || client.connection_option || {}
+  const span = tx.instrument(tracer, config, db, command, args)
 
-  const connectionOptions = client.connection_options || client.connection_option || {
-    host: client.options.host || '127.0.0.1',
-    port: client.options.port || 6379
-  }
-
-  if (connectionOptions) {
-    span.addTags({
-      'out.host': String(connectionOptions.host),
-      'out.port': String(connectionOptions.port)
-    })
-  }
+  tx.setHost(span, connectionOptions.host, connectionOptions.port)
 
   return span
-}
-
-function wrapCallback (tracer, span, done) {
-  return (err, res) => {
-    if (err) {
-      span.addTags({
-        'error.type': err.name,
-        'error.msg': err.message,
-        'error.stack': err.stack
-      })
-    }
-
-    span.finish()
-
-    if (typeof done === 'function') {
-      done(err, res)
-    }
-  }
 }
 
 module.exports = [
