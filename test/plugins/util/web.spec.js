@@ -28,6 +28,7 @@ describe('plugins/util/web', () => {
 
   beforeEach(() => {
     req = {
+      method: 'GET',
       headers: {
         'host': 'localhost'
       },
@@ -236,6 +237,18 @@ describe('plugins/util/web', () => {
 
         expect(config.hooks.request).to.have.been.calledWith(span, req, res)
       })
+
+      it('should set the resource name from the http.route tag set in the hooks', () => {
+        config.hooks = {
+          request: span => span.setTag('http.route', '/custom/route')
+        }
+
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        res.end()
+
+        expect(span.context().tags).to.have.property('resource.name', 'GET /custom/route')
+      })
     })
   })
 
@@ -254,17 +267,6 @@ describe('plugins/util/web', () => {
 
       expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
       expect(span.context().tags).to.have.property(HTTP_ROUTE, '/foo/bar')
-    })
-
-    it('should not override user provided routes', () => {
-      req.method = 'GET'
-      span.setTag('http.route', '/custom')
-
-      web.enterRoute(req, '/foo')
-      res.end()
-
-      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /custom')
-      expect(span.context().tags).to.have.property(HTTP_ROUTE, '/custom')
     })
   })
 

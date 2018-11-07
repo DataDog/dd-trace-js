@@ -121,6 +121,9 @@ function finish (req, res) {
   addResponseTags(req)
 
   req._datadog.hooks.forEach(hooks => hooks.request(req._datadog.span, req, res))
+
+  addResourceTag(req)
+
   req._datadog.span.finish()
   req._datadog.scope && req._datadog.scope.close()
   req._datadog.finished = true
@@ -158,24 +161,31 @@ function addRequestTags (req) {
 
 function addResponseTags (req) {
   const span = req._datadog.span
-  const tags = span.context().tags
   const res = req._datadog.res
 
-  if (!tags.hasOwnProperty(HTTP_ROUTE) && req._datadog.paths.length > 0) {
+  if (req._datadog.paths.length > 0) {
     span.setTag(HTTP_ROUTE, req._datadog.paths.join(''))
   }
+
+  span.addTags({
+    [HTTP_STATUS_CODE]: res.statusCode
+  })
+
+  addStatusError(req)
+}
+
+function addResourceTag (req) {
+  const span = req._datadog.span
+  const tags = span.context().tags
+
+  if (tags['resource.name']) return
 
   const resource = [req.method]
     .concat(tags[HTTP_ROUTE])
     .filter(val => val)
     .join(' ')
 
-  span.addTags({
-    [RESOURCE_NAME]: resource,
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
-
-  addStatusError(req)
+  span.setTag(RESOURCE_NAME, resource)
 }
 
 function addHeaders (req) {

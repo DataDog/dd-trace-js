@@ -42,10 +42,8 @@ class DatadogTracer extends Tracer {
     const references = getReferences(fields.references)
     const parent = getParent(references)
     const tags = {
-      'resource.name': name
+      'service.name': this._service
     }
-
-    tags['service.name'] = this._service
 
     if (this._env) {
       tags.env = this._env
