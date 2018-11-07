@@ -81,7 +81,7 @@ describe('TracerProxy', () => {
 
         proxy.init(options)
 
-        expect(Config).to.have.been.calledWith(options)
+        expect(Config).to.have.been.calledWith('dd-trace', options)
         expect(DatadogTracer).to.have.been.calledWith(config)
       })
 
