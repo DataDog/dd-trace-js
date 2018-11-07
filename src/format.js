@@ -22,16 +22,14 @@ function format (span) {
 }
 
 function formatSpan (span) {
-  const tracer = span.tracer()
   const spanContext = span.context()
 
   return {
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
     parent_id: spanContext.parentId,
-    name: String(span._operationName),
-    resource: String(span._operationName),
-    service: String(tracer._service),
+    name: String(spanContext.name),
+    resource: String(spanContext.name),
     error: 0,
     meta: {},
     metrics: {},

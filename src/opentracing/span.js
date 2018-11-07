@@ -26,7 +26,6 @@ class DatadogSpan extends Span {
     this._sampler = sampler
     this._recorder = recorder
     this._prioritySampler = prioritySampler
-    this._operationName = operationName
     this._startTime = startTime
 
     this._spanContext = this._createContext(parent)
@@ -85,7 +84,7 @@ class DatadogSpan extends Span {
   }
 
   _setOperationName (name) {
-    this._operationName = name
+    this._spanContext.name = name
   }
 
   _setBaggageItem (key, value) {

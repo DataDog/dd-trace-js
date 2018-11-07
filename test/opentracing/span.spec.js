@@ -106,7 +106,7 @@ describe('Span', () => {
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'foo' })
       span.setOperationName('bar')
 
-      expect(span._operationName).to.equal('bar')
+      expect(span.context().name).to.equal('bar')
     })
   })
 
