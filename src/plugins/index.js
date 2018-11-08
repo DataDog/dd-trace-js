@@ -3,6 +3,7 @@
 module.exports = {
   'amqp10': require('./amqp10'),
   'amqplib': require('./amqplib'),
+  'bluebird': require('./bluebird'),
   'elasticsearch': require('./elasticsearch'),
   'express': require('./express'),
   'graphql': require('./graphql'),
