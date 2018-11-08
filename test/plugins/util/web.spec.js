@@ -132,6 +132,14 @@ describe('plugins/util/web', () => {
 
         expect(span.context().tags).to.have.property('service.name', 'test2')
       })
+
+      it('should only wrap res.end once', () => {
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        const end = res.end
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        expect(end).to.equal(res.end)
+      })
     })
 
     describe('on request end', () => {

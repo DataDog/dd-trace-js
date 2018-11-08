@@ -6,8 +6,6 @@ function createWrapUse (tracer, config) {
   config = web.normalizeConfig(config)
 
   function ddTrace (ctx, next) {
-    if (web.active(ctx.req)) return next()
-
     web.instrument(tracer, config, ctx.req, ctx.res, 'koa.request')
 
     return next()
