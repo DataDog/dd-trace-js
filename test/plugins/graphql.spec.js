@@ -141,7 +141,24 @@ describe('Plugin', () => {
   describe('graphql', () => {
     withVersions(plugin, 'graphql', version => {
       before(() => {
-        sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
+        sort = spans => spans.sort((a, b) => {
+          const order = [
+            'graphql.query',
+            'graphql.mutation',
+            'graphql.subscription',
+            'graphql.parse',
+            'graphql.validate',
+            'graphql.execute',
+            'graphql.field',
+            'graphql.resolve'
+          ]
+
+          if (a.start.toString() === b.start.toString()) {
+            return order.indexOf(a.name) - order.indexOf(b.name)
+          }
+
+          return a.start.toString() >= b.start.toString() ? 1 : -1
+        })
       })
 
       describe('without configuration', () => {
