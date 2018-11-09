@@ -77,6 +77,27 @@ describe('Plugin', () => {
               expect(scope.span()).to.equal(span)
             })
         })
+
+        it('should allow to run without a scope if not available when calling then()', () => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
+          tracer.scopeManager().activate(null)
+
+          const promise = new Promise((resolve, reject) => {
+            setImmediate(() => {
+              tracer.scopeManager().activate({})
+              resolve()
+            })
+          })
+
+          return promise
+            .then(() => {
+              tracer.scopeManager().activate({})
+            })
+            .then(() => {
+              expect(tracer.scopeManager().active()).to.be.null
+            })
+        })
       })
     })
   })

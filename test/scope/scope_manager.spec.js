@@ -241,4 +241,13 @@ describe('ScopeManager', () => {
       asyncHooks.before(1)
     }).not.to.throw()
   })
+
+  it('should allow deactivating a scope', () => {
+    const span = {}
+
+    scopeManager.activate(span)
+    scopeManager.activate(null)
+
+    expect(scopeManager.active()).to.be.null
+  })
 })

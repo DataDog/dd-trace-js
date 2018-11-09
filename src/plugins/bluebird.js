@@ -17,7 +17,7 @@ function wrapCallback (tracer, callback) {
   const scope = tracer.scopeManager().active()
 
   return function () {
-    tracer.scopeManager().activate(scope.span())
+    tracer.scopeManager().activate(scope ? scope.span() : null)
     return callback.apply(this, arguments)
   }
 }
