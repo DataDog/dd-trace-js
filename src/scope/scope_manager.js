@@ -49,8 +49,10 @@ class ScopeManager {
     let execution = this._active
 
     while (execution !== null) {
-      if (execution.scope()) {
-        return execution.scope()
+      const scope = execution.scope()
+
+      if (scope) {
+        return scope.span() ? scope : null
       }
 
       execution = execution.parent()
