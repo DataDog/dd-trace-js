@@ -3,6 +3,10 @@
 const getPort = require('get-port')
 const agent = require('./agent')
 const semver = require('semver')
+const fs = require('fs')
+const path = require('path')
+const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
+const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
 wrapIt()
 
@@ -12,20 +16,14 @@ describe('Plugin', () => {
   let http
   let appListener
   let tracer
-  let pems
 
   ['http', 'https'].forEach(protocol => {
     describe(protocol, () => {
       function server (app, port, listener) {
         let server
         if (protocol === 'https') {
-          if (!pems) {
-            // Generate self-signed cert
-            pems = require('selfsigned').generate([{ name: 'commonName', value: 'datadoghq.com' }], { days: 365 })
-            // We're fine with self-signed certs for this test
-            process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-          }
-          server = require('https').createServer({ key: pems.private, cert: pems.cert }, app)
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+          server = require('https').createServer({ key, cert }, app)
         } else {
           server = require('http').createServer(app)
         }

@@ -5,7 +5,7 @@ require('../../..')
   .use('graphql')
 
 const test = require('tape')
-const graphql = require('graphql')
+const graphql = require(`../../../versions/graphql@0.13.x`).get()
 const profile = require('../../profile')
 
 test('graphql plugin should not leak', t => {

@@ -5,7 +5,7 @@ require('../../..')
   .use('mongodb-core')
 
 const test = require('tape')
-const mongo = require('mongodb-core')
+const mongo = require('../../../versions/mongodb-core@3.x').get()
 const profile = require('../../profile')
 
 test('mongodb-core plugin should not leak', t => {

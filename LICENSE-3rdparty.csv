@@ -18,14 +18,10 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
-dev,amqp10,MIT,Copyright 2014 Michael Lanzetta
-dev,amqplib,MIT,Copyright 2013-2014 Michael Bridgen
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
-dev,bluebird,MIT,Copyright 2013-2018 Petka Antonov
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
-dev,elasticsearch,Apache-2.0,Copyright 2013 Elasticsearch BV
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
@@ -35,22 +31,13 @@ dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
 dev,eventemitter3,MIT,Copyright 2014 Arnout Kazemier
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
-dev,graphql,MIT,Copyright 2015-present Facebook Inc.
-dev,memcached,MIT,Copyright 2010 Arnout Kazemier and 3rd-Eden
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
-dev,mongodb-core,Apache-2.0,Copyright Christian Kvalheim
-dev,mysql,MIT,Copyright 2012 Felix Geisendörfer and contributors
-dev,mysql2,MIT,Copyright 2016 Andrey Sidorov and contributors
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
-dev,nyc,ISC,Copyright 2015 Contributors
-dev,pg,MIT,Copyright 2010-2018 Brian Carlson
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
-dev,redis,MIT,Copyright 2016 NodeRedis
 dev,require-dir,MIT,2012-2015 Aseem Kishore
 dev,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
-dev,selfsigned,MIT,Copyright 2013 José F. Romaniello
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
-dev,ws,MIT,Copyright 2011 Einar Otto Stangvik
+dev,v8-coverage,ISC,Copyright Eywek

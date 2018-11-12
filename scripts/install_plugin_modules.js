@@ -20,19 +20,35 @@ function run () {
 }
 
 function assertVersions () {
-  const internals = Object.keys(plugins)
+  let filter = []
+  let names = Object.keys(plugins)
     .filter(key => key !== 'index')
+
+  if (process.env.hasOwnProperty('PLUGINS')) {
+    filter = process.env.PLUGINS.split('|')
+    names = names.filter(name => ~filter.indexOf(name))
+  }
+
+  const internals = names
     .map(key => plugins[key])
     .reduce((prev, next) => prev.concat(next), [])
 
-  internals.concat(externals).forEach(instrumentation => {
+  internals.forEach(assertInstrumentation)
+
+  Object.keys(externals)
+    .filter(name => ~filter.indexOf(name))
+    .forEach(name => {
+      [].concat(externals[name]).forEach(assertInstrumentation)
+    })
+
+  function assertInstrumentation (instrumentation) {
     [].concat(instrumentation.versions).forEach(version => {
       if (version) {
         assertModules(instrumentation.name, version)
         assertModules(instrumentation.name, semver.coerce(version).version)
       }
     })
-  })
+  }
 }
 
 function assertModules (name, version) {

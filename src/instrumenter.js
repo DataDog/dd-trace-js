@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const hook = require('require-in-the-middle')
+const path = require('path')
 const shimmer = require('shimmer')
 const uniq = require('lodash.uniq')
 const log = require('./log')
@@ -77,8 +78,14 @@ class Instrumenter {
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
+    moduleName = moduleName.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
+
     if (this._names.indexOf(moduleName) === -1) {
       return moduleExports
+    }
+
+    if (moduleBaseDir) {
+      moduleBaseDir = moduleBaseDir.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
     }
 
     const moduleVersion = getVersion(moduleBaseDir)

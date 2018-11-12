@@ -5,7 +5,7 @@ require('../../..')
   .use('mysql2')
 
 const test = require('tape')
-const mysql2 = require('mysql2')
+const mysql2 = require('../../../versions/mysql2@^1.5').get()
 const profile = require('../../profile')
 
 test('mysql2 plugin should not leak', t => {
