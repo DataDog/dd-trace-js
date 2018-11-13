@@ -18,5 +18,6 @@ module.exports = {
   'pg': require('./pg'),
   'q': require('./q'),
   'redis': require('./redis'),
-  'restify': require('./restify')
+  'restify': require('./restify'),
+  'when': require('./when')
 }
