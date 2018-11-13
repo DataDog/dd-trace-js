@@ -49,6 +49,7 @@ module.exports = {
           plugins: false
         })
 
+        tracer.use('bluebird')
         tracer.use(pluginName, config)
       })
     })
