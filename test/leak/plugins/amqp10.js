@@ -7,25 +7,7 @@ require('../../..')
 const test = require('tape')
 const profile = require('../../profile')
 
-test('amqp10 plugin should not leak when sending', t => {
-  const amqp = require('../../../versions/amqp10@3.x').get()
-  const client = new amqp.Client()
-
-  return client.connect('amqp://admin:admin@localhost:5673')
-    .then(() => client.createSender('amq.topic'))
-    .then(sender => {
-      profile(t, operation, 400)
-        .then(() => sender.detach())
-        .then(() => client.disconnect())
-
-      function operation (done) {
-        sender.send({ key: 'value' })
-        done()
-      }
-    })
-})
-
-test('amqp10 plugin should not leak when receiving', t => {
+test('amqp10 plugin should not leak', t => {
   const amqp = require('../../../versions/amqp10@3.x').get()
   const client = new amqp.Client()
 
@@ -56,7 +38,7 @@ test('amqp10 plugin should not leak when receiving', t => {
         deferred[messageIdx++].resolve()
       })
 
-      profile(t, operation, 400)
+      profile(t, operation, 200, 10)
         .then(() => receiver.detach())
         .then(() => sender.detach())
         .then(() => client.disconnect())
