@@ -232,7 +232,7 @@ jobs:
 workflows:
   version: 2
   build:
-    jobs:
+    jobs: &workflow-jobs
       - lint
       - test-node-leaks
       - test-node-core-4
@@ -242,6 +242,8 @@ workflows:
       - test-node-amqplib
       - test-node-amqp10
       - test-node-elasticsearch
+      - test-node-graphql
+      - test-node-http
       - test-node-memcached
       - test-node-mongo
       - test-node-mysql
@@ -257,16 +259,4 @@ workflows:
               only:
                 - master
     jobs:
-      - test-node-core-4
-      - test-node-core-6
-      - test-node-core-8
-      - test-node-core-latest
-      - test-node-amqplib
-      - test-node-amqp10
-      - test-node-elasticsearch
-      - test-node-memcached
-      - test-node-mongo
-      - test-node-mysql
-      - test-node-postgres
-      - test-node-redis
-      - test-node-web
+      <<: *workflow-jobs
