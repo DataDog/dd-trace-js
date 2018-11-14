@@ -87,11 +87,11 @@ After installing the `circleci` CLI, simply run one of the following:
 
 ```sh
 $ circleci build --job lint
-$ circleci build --job test-memory-leaks
-$ circleci build --job build-node-4
-$ circleci build --job build-node-6
-$ circleci build --job build-node-8
-$ circleci build --job build-node-latest
+$ circleci build --job test-node-leaks
+$ circleci build --job test-node-core-4
+$ circleci build --job test-node-core-6
+$ circleci build --job test-node-core-8
+$ circleci build --job test-node-core-latest
 ```
 
 ### Benchmarks
