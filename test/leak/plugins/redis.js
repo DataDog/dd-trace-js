@@ -5,7 +5,7 @@ require('../../..')
   .use('redis')
 
 const test = require('tape')
-const redis = require('../../../versions/redis@^2.6').get()
+const redis = require('../../../versions/redis').get()
 const profile = require('../../profile')
 
 test('redis plugin should not leak', t => {

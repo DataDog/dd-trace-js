@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const amqplib = require('../../../versions/amqplib@0.5.x').get('amqplib/callback_api')
+const amqplib = require('../../../versions/amqplib').get('amqplib/callback_api')
 
 function waitForRabbitMQ () {
   return new Promise((resolve, reject) => {

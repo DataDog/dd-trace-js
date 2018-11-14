@@ -8,7 +8,7 @@ const test = require('tape')
 const profile = require('../../profile')
 
 test('amqp10 plugin should not leak', t => {
-  const amqp = require('../../../versions/amqp10@3.x').get()
+  const amqp = require('../../../versions/amqp10').get()
   const client = new amqp.Client()
 
   return client.connect('amqp://admin:admin@localhost:5673')

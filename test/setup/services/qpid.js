@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const amqp = require('../../../versions/amqp10@3.x').get()
+const amqp = require('../../../versions/amqp10').get()
 
 function waitForQpid () {
   return new Promise((resolve, reject) => {

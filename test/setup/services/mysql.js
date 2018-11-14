@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const mysql = require('../../../versions/mysql@2.x').get()
+const mysql = require('../../../versions/mysql').get()
 
 function waitForMysql () {
   return new Promise((resolve, reject) => {

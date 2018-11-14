@@ -8,7 +8,7 @@ const test = require('tape')
 const profile = require('../../profile')
 
 test('amqplib plugin should not leak when using callbacks', t => {
-  require('../../../versions/amqplib@0.5.x').get('amqplib/callback_api')
+  require('../../../versions/amqplib').get('amqplib/callback_api')
     .connect((err, conn) => {
       if (err) return t.fail(err)
 
@@ -25,7 +25,7 @@ test('amqplib plugin should not leak when using callbacks', t => {
 })
 
 test('amqplib plugin should not leak when using promises', t => {
-  require('../../../versions/amqplib@0.5.x').get().connect()
+  require('../../../versions/amqplib').get().connect()
     .then(conn => {
       return conn.createChannel()
         .then(ch => {

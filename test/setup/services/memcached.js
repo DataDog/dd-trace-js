@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const Memcached = require('../../../versions/memcached@^2.2').get()
+const Memcached = require('../../../versions/memcached').get()
 
 function waitForMemcached () {
   return new Promise((resolve, reject) => {

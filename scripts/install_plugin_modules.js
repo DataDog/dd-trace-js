@@ -52,9 +52,13 @@ function assertVersions () {
 }
 
 function assertModules (name, version) {
+  addFolder(name)
   addFolder(name, version)
+  assertFolder(name)
   assertFolder(name, version)
+  assertPackage(name)
   assertPackage(name, version)
+  assertIndex(name)
   assertIndex(name, version)
 }
 
@@ -70,7 +74,7 @@ function assertFolder (name, version) {
 
 function assertPackage (name, version) {
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify({
-    name: [name, sha1(version)].filter(val => val).join('-'),
+    name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,

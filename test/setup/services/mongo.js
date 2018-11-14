@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const mongo = require('../../../versions/mongodb-core@3.x').get()
+const mongo = require('../../../versions/mongodb-core').get()
 
 function waitForMongo () {
   return new Promise((resolve, reject) => {

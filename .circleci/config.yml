@@ -157,6 +157,22 @@ jobs:
           - discovery.type=single-node
           - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
 
+  test-node-graphql:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=graphql
+
+  test-node-http:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=http
+
   test-node-memcached:
     <<: *node-plugin-base
     docker:

@@ -5,7 +5,7 @@ require('../../..')
   .use('memcached')
 
 const test = require('tape')
-const Memcached = require('../../../versions/memcached@^2.2').get()
+const Memcached = require('../../../versions/memcached').get()
 const profile = require('../../profile')
 
 test('memcached plugin should not leak', t => {
