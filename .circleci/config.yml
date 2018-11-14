@@ -232,7 +232,7 @@ jobs:
 workflows:
   version: 2
   build:
-    jobs: &workflow-jobs
+    jobs:
       - lint
       - test-node-leaks
       - test-node-core-4
