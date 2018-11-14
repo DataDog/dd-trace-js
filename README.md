@@ -1,6 +1,7 @@
 # dd-trace-js
 
 [![npm](https://img.shields.io/npm/v/dd-trace.svg)](https://www.npmjs.com/package/dd-trace)
+[![npm (tag)](https://img.shields.io/npm/v/dd-trace/dev.svg)](https://www.npmjs.com/package/dd-trace/v/dev)
 [![CircleCI](https://circleci.com/gh/DataDog/dd-trace-js.svg?style=shield)](https://circleci.com/gh/DataDog/dd-trace-js)
 [![Build Status](https://dev.azure.com/datadog-apm/dd-trace-js/_apis/build/status/build-node-core-windows)](https://dev.azure.com/datadog-apm/dd-trace-js/_build/latest)
 
