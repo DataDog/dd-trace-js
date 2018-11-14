@@ -227,7 +227,7 @@ jobs:
       - image: node:8
         environment:
           - SERVICES=
-          - PLUGINS=express|graphql|hapi|http|koa|restify
+          - PLUGINS=express|hapi|koa|restify
 
 workflows:
   version: 2

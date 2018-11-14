@@ -14,6 +14,7 @@ const workspaces = new Set()
 run()
 
 function run () {
+  assertFolder()
   assertVersions()
   assertWorkspace()
   install()
@@ -40,15 +41,15 @@ function assertVersions () {
     .forEach(name => {
       [].concat(externals[name]).forEach(assertInstrumentation)
     })
+}
 
-  function assertInstrumentation (instrumentation) {
-    [].concat(instrumentation.versions).forEach(version => {
-      if (version) {
-        assertModules(instrumentation.name, version)
-        assertModules(instrumentation.name, semver.coerce(version).version)
-      }
-    })
-  }
+function assertInstrumentation (instrumentation) {
+  [].concat(instrumentation.versions).forEach(version => {
+    if (version) {
+      assertModules(instrumentation.name, version)
+      assertModules(instrumentation.name, semver.coerce(version).version)
+    }
+  })
 }
 
 function assertModules (name, version) {
