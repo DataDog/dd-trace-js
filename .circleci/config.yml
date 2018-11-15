@@ -1,36 +1,10 @@
 version: 2
-docker-base: &docker-base
+
+node-core-base: &node-core-base
   docker:
     - image: node:8
-    - &postgres
-      image: postgres:9.5
-    - &mysql
-      image: mysql:5.7
-      environment:
-        - MYSQL_ALLOW_EMPTY_PASSWORD=yes
-        - MYSQL_DATABASE=db
-    - &redis
-      image: redis:4.0-alpine
-    - &mongo
-      image: mongo:3.6
-    - &elasticsearch
-      image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
-      environment:
-        - discovery.type=single-node
-        - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
-    - &rabbitmq
-      image: rabbitmq:3.6-alpine
-    - &qpid
-      image: scholzj/qpid-cpp:1.38.0
-      command: -p 5673
-      environment:
-        - QPIDD_ADMIN_USERNAME=admin
-        - QPIDD_ADMIN_PASSWORD=admin
-    - &memcached
-      image: memcached:1.5-alpine
-build-node-base: &node-base
-  <<: *docker-base
   working_directory: ~/dd-trace-js
+  resource_class: small
   steps:
     - checkout
     - run:
@@ -49,16 +23,49 @@ build-node-base: &node-base
           - ./node_modules
           - ./yarn.lock
     - run:
-        name: Test
-        command: yarn test
+        name: Unit tests
+        command: yarn test:core
     - run:
         name: Benchmark
         command: yarn bench
+
+node-plugin-base: &node-plugin-base
+  docker:
+    - image: node:8
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - run:
+        name: Versions
+        command: yarn versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - run:
+        name: Install dependencies
+        command: yarn install
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
+    - run:
+        name: Unit tests
+        command: yarn test:plugins
+    - run:
+        name: Memory leak tests
+        command: yarn leak:plugins
+
 jobs:
+  # Linting
+
   lint:
     docker:
       - image: node
     working_directory: ~/dd-trace-js
+    resource_class: small
     steps:
       - checkout
       - run:
@@ -72,9 +79,34 @@ jobs:
       - run:
           name: Lint
           command: yarn lint
-  test-memory-leaks:
-    <<: *docker-base
+
+  # Core tests
+
+  node-core-4:
+    <<: *node-core-base
+    docker:
+      - image: node:4
+
+  node-core-6:
+    <<: *node-core-base
+    docker:
+      - image: node:6
+
+  node-core-8:
+    <<: *node-core-base
+    docker:
+      - image: node:8
+
+  node-core-latest:
+    <<: *node-core-base
+    docker:
+      - image: node
+
+  node-leaks:
+    docker:
+      - image: node:8
     working_directory: ~/dd-trace-js
+    resource_class: small
     steps:
       - checkout
       - run:
@@ -86,67 +118,138 @@ jobs:
           command: yarn install
       - *save-yarn-cache
       - run:
-          name: Test
-          command: yarn leak
-  build-node-4:
-    <<: *node-base
-    docker:
-      - image: node:4
-      - *postgres
-      - *mysql
-      - *redis
-      - *mongo
-      - *elasticsearch
-      - *rabbitmq
-      - *qpid
-      - *memcached
-  build-node-6:
-    <<: *node-base
-    docker:
-      - image: node:6
-      - *postgres
-      - *mysql
-      - *redis
-      - *mongo
-      - *elasticsearch
-      - *rabbitmq
-      - *qpid
-      - *memcached
-  build-node-8:
-    <<: *node-base
+          name: Memory leak tests
+          command: yarn leak:core
+
+  # Plugin tests
+
+  node-amqplib:
+    <<: *node-plugin-base
     docker:
       - image: node:8
-      - *postgres
-      - *mysql
-      - *redis
-      - *mongo
-      - *elasticsearch
-      - *rabbitmq
-      - *qpid
-      - *memcached
-  build-node-latest:
-    <<: *node-base
+        environment:
+          - SERVICES=rabbitmq
+          - PLUGINS=amqplib
+      - image: rabbitmq:3.6-alpine
+
+  node-amqp10:
+    <<: *node-plugin-base
     docker:
-      - image: node
-      - *postgres
-      - *mysql
-      - *redis
-      - *mongo
-      - *elasticsearch
-      - *rabbitmq
-      - *qpid
-      - *memcached
+      - image: node:8
+        environment:
+          - SERVICES=qpid
+          - PLUGINS=amqp10
+      - image: scholzj/qpid-cpp:1.38.0
+        command: -p 5673
+        environment:
+          - QPIDD_ADMIN_USERNAME=admin
+          - QPIDD_ADMIN_PASSWORD=admin
+
+  node-elasticsearch:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=elasticsearch
+          - PLUGINS=elasticsearch
+      - image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
+        environment:
+          - discovery.type=single-node
+          - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
+
+  node-graphql:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=graphql
+
+  node-http:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=http
+
+  node-memcached:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=memcached
+          - PLUGINS=memcached
+      - image: memcached:1.5-alpine
+
+  node-mysql:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=mysql
+          - PLUGINS=mysql|mysql2
+      - image: mysql:5.7
+        environment:
+          - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+          - MYSQL_DATABASE=db
+
+  node-mongo:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=mongo
+          - PLUGINS=mongodb-core
+      - image: mongo:3.6
+
+  node-postgres:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=postgres
+          - PLUGINS=pg
+      - image: postgres:9.5
+
+  node-redis:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=redis
+          - PLUGINS=redis|ioredis
+      - image: redis:4.0-alpine
+
+  node-web:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=express|hapi|koa|restify
 
 workflows:
   version: 2
   build:
     jobs:
       - lint
-      - test-memory-leaks
-      - build-node-4
-      - build-node-6
-      - build-node-8
-      - build-node-latest
+      - node-leaks
+      - node-core-4
+      - node-core-6
+      - node-core-8
+      - node-core-latest
+      - node-amqplib
+      - node-amqp10
+      - node-elasticsearch
+      - node-graphql
+      - node-http
+      - node-memcached
+      - node-mongo
+      - node-mysql
+      - node-postgres
+      - node-redis
+      - node-web
   nightly:
     triggers:
       - schedule:
@@ -156,7 +259,18 @@ workflows:
               only:
                 - master
     jobs:
-      - build-node-4
-      - build-node-6
-      - build-node-8
-      - build-node-latest
+      - node-core-4
+      - node-core-6
+      - node-core-8
+      - node-core-latest
+      - node-amqplib
+      - node-amqp10
+      - node-elasticsearch
+      - node-graphql
+      - node-http
+      - node-memcached
+      - node-mongo
+      - node-mysql
+      - node-postgres
+      - node-redis
+      - node-web

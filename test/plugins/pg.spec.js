@@ -126,7 +126,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          pg = require('pg')
+          pg = require(`../../versions/pg@${version}`).get()
 
           pool = new pg.Pool({
             user: 'postgres',
@@ -173,7 +173,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          pg = require('pg')
+          pg = require(`../../versions/pg@${version}`).get()
 
           client = new pg.Client({
             user: 'postgres',

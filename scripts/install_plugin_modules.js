@@ -14,31 +14,52 @@ const workspaces = new Set()
 run()
 
 function run () {
+  assertFolder()
   assertVersions()
   assertWorkspace()
   install()
 }
 
 function assertVersions () {
-  const internals = Object.keys(plugins)
+  let filter = []
+  let names = Object.keys(plugins)
     .filter(key => key !== 'index')
+
+  if (process.env.hasOwnProperty('PLUGINS')) {
+    filter = process.env.PLUGINS.split('|')
+    names = names.filter(name => ~filter.indexOf(name))
+  }
+
+  const internals = names
     .map(key => plugins[key])
     .reduce((prev, next) => prev.concat(next), [])
 
-  internals.concat(externals).forEach(instrumentation => {
-    [].concat(instrumentation.versions).forEach(version => {
-      if (version) {
-        assertModules(instrumentation.name, version)
-        assertModules(instrumentation.name, semver.coerce(version).version)
-      }
+  internals.forEach(assertInstrumentation)
+
+  Object.keys(externals)
+    .filter(name => ~filter.indexOf(name))
+    .forEach(name => {
+      [].concat(externals[name]).forEach(assertInstrumentation)
     })
+}
+
+function assertInstrumentation (instrumentation) {
+  [].concat(instrumentation.versions).forEach(version => {
+    if (version) {
+      assertModules(instrumentation.name, version)
+      assertModules(instrumentation.name, semver.coerce(version).version)
+    }
   })
 }
 
 function assertModules (name, version) {
+  addFolder(name)
   addFolder(name, version)
+  assertFolder(name)
   assertFolder(name, version)
+  assertPackage(name)
   assertPackage(name, version)
+  assertIndex(name)
   assertIndex(name, version)
 }
 
@@ -54,7 +75,7 @@ function assertFolder (name, version) {
 
 function assertPackage (name, version) {
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify({
-    name: [name, sha1(version)].filter(val => val).join('-'),
+    name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
