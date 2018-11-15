@@ -7,6 +7,8 @@ const shimmer = require('shimmer')
 const uniq = require('lodash.uniq')
 const log = require('./log')
 
+const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
+
 shimmer({ logger: () => {} })
 
 class Instrumenter {
@@ -78,14 +80,14 @@ class Instrumenter {
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
-    moduleName = moduleName.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
+    moduleName = moduleName.replace(pathSepExpr, '/')
 
     if (this._names.indexOf(moduleName) === -1) {
       return moduleExports
     }
 
     if (moduleBaseDir) {
-      moduleBaseDir = moduleBaseDir.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
+      moduleBaseDir = moduleBaseDir.replace(pathSepExpr, '/')
     }
 
     const moduleVersion = getVersion(moduleBaseDir)
