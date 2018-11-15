@@ -5,7 +5,7 @@ require('../../..')
   .use('pg')
 
 const test = require('tape')
-const pg = require('pg')
+const pg = require('../../../versions/pg').get()
 const profile = require('../../profile')
 
 test('pg plugin should not leak', t => {

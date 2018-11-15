@@ -1,3 +1,7 @@
 {
-  "include": ["src"]
+  "include": ["src"],
+  "reporter": [
+    "text",
+    "lcov"
+  ]
 }

@@ -5,7 +5,7 @@ require('../../..')
   .use('express')
 
 const test = require('tape')
-const express = require('express')
+const express = require(`../../../versions/express`).get()
 const axios = require('axios')
 const getPort = require('get-port')
 const profile = require('../../profile')

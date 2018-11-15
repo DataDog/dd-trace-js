@@ -1,7 +1,6 @@
 'use strict'
 
 const axios = require('axios')
-const WebSocket = require('ws')
 const getPort = require('get-port')
 const agent = require('./agent')
 const plugin = require('../../src/plugins/koa')
@@ -302,10 +301,12 @@ describe('Plugin', () => {
           })
 
           withVersions(plugin, 'koa-websocket', wsVersion => {
+            let WebSocket
             let websockify
             let ws
 
             beforeEach(() => {
+              WebSocket = require(`../../versions/ws@6.1.0`).get()
               websockify = require(`../../versions/koa-websocket@${wsVersion}`).get()
             })
 

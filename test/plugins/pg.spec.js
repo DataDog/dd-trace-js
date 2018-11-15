@@ -117,55 +117,6 @@ describe('Plugin', () => {
         })
       })
 
-      describe('when using a pool', () => {
-        let pool
-
-        before(() => {
-          return agent.load(plugin, 'pg')
-        })
-
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(done => {
-          pg = require('pg')
-
-          pool = new pg.Pool({
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres',
-            application_name: 'test'
-          })
-
-          pool.connect((err, c) => {
-            client = c
-            done(err)
-          })
-        })
-
-        afterEach(() => {
-          client && client.release()
-        })
-
-        it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
-          const span = {}
-          const scope = tracer.scopeManager().activate(span)
-
-          pool.query('SELECT $1::text as message', ['Hello World!'], () => {
-            const active = tracer.scopeManager().active()
-            expect(active.span()).to.equal(scope.span())
-            done()
-          })
-
-          pool.end((err) => {
-            if (err) throw err
-          })
-        })
-      })
-
       describe('with configuration', () => {
         before(() => {
           return agent.load(plugin, 'pg', { service: 'custom' })
@@ -176,7 +127,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          pg = require('pg')
+          pg = require(`../../versions/pg@${version}`).get()
 
           client = new pg.Client({
             user: 'postgres',
