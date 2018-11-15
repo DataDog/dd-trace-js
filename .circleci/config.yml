@@ -202,15 +202,6 @@ jobs:
           - SERVICES=
           - PLUGINS=http
 
-  node-ioredis:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - SERVICES=redis
-          - PLUGINS=ioredis
-      - image: redis:4.0-alpine
-
   node-koa:
     <<: *node-plugin-base
     docker:
@@ -234,19 +225,7 @@ jobs:
       - image: node:8
         environment:
           - SERVICES=mysql
-          - PLUGINS=mysql
-      - image: mysql:5.7
-        environment:
-          - MYSQL_ALLOW_EMPTY_PASSWORD=yes
-          - MYSQL_DATABASE=db
-
-  node-mysql2:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - SERVICES=mysql
-          - PLUGINS=mysql2
+          - PLUGINS=mysql|mysql2
       - image: mysql:5.7
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=yes
@@ -261,7 +240,7 @@ jobs:
           - PLUGINS=mongodb-core
       - image: mongo:3.6
 
-  node-pg:
+  node-postgres:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -284,7 +263,7 @@ jobs:
       - image: node:8
         environment:
           - SERVICES=redis
-          - PLUGINS=redis
+          - PLUGINS=redis|ioredis
       - image: redis:4.0-alpine
 
   node-restify:
@@ -330,13 +309,11 @@ workflows:
       - node-graphql
       - node-hapi
       - node-http
-      - node-ioredis
       - node-koa
       - node-memcached
       - node-mongodb-core
       - node-mysql
-      - node-mysql2
-      - node-pg
+      - node-postgres
       - node-q
       - node-redis
       - node-restify
@@ -363,13 +340,11 @@ workflows:
       - node-graphql
       - node-hapi
       - node-http
-      - node-ioredis
       - node-koa
       - node-memcached
       - node-mongodb-core
       - node-mysql
-      - node-mysql2
-      - node-pg
+      - node-postgres
       - node-q
       - node-redis
       - node-restify
