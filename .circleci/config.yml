@@ -1,6 +1,6 @@
 version: 2
 
-test-node-core-base: &node-core-base
+node-core-base: &node-core-base
   docker:
     - image: node:8
   working_directory: ~/dd-trace-js
@@ -29,7 +29,7 @@ test-node-core-base: &node-core-base
         name: Benchmark
         command: yarn bench
 
-test-node-plugin-base: &node-plugin-base
+node-plugin-base: &node-plugin-base
   docker:
     - image: node:8
   working_directory: ~/dd-trace-js
@@ -82,27 +82,27 @@ jobs:
 
   # Core tests
 
-  test-node-core-4:
+  node-core-4:
     <<: *node-core-base
     docker:
       - image: node:4
 
-  test-node-core-6:
+  node-core-6:
     <<: *node-core-base
     docker:
       - image: node:6
 
-  test-node-core-8:
+  node-core-8:
     <<: *node-core-base
     docker:
       - image: node:8
 
-  test-node-core-latest:
+  node-core-latest:
     <<: *node-core-base
     docker:
       - image: node
 
-  test-node-leaks:
+  node-leaks:
     docker:
       - image: node:8
     working_directory: ~/dd-trace-js
@@ -123,7 +123,7 @@ jobs:
 
   # Plugin tests
 
-  test-node-amqplib:
+  node-amqplib:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -132,7 +132,7 @@ jobs:
           - PLUGINS=amqplib
       - image: rabbitmq:3.6-alpine
 
-  test-node-amqp10:
+  node-amqp10:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -145,7 +145,7 @@ jobs:
           - QPIDD_ADMIN_USERNAME=admin
           - QPIDD_ADMIN_PASSWORD=admin
 
-  test-node-elasticsearch:
+  node-elasticsearch:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -157,7 +157,7 @@ jobs:
           - discovery.type=single-node
           - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
 
-  test-node-graphql:
+  node-graphql:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -165,7 +165,7 @@ jobs:
           - SERVICES=
           - PLUGINS=graphql
 
-  test-node-http:
+  node-http:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -173,7 +173,7 @@ jobs:
           - SERVICES=
           - PLUGINS=http
 
-  test-node-memcached:
+  node-memcached:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -182,7 +182,7 @@ jobs:
           - PLUGINS=memcached
       - image: memcached:1.5-alpine
 
-  test-node-mysql:
+  node-mysql:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -194,7 +194,7 @@ jobs:
           - MYSQL_ALLOW_EMPTY_PASSWORD=yes
           - MYSQL_DATABASE=db
 
-  test-node-mongo:
+  node-mongo:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -203,7 +203,7 @@ jobs:
           - PLUGINS=mongodb-core
       - image: mongo:3.6
 
-  test-node-postgres:
+  node-postgres:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -212,7 +212,7 @@ jobs:
           - PLUGINS=pg
       - image: postgres:9.5
 
-  test-node-redis:
+  node-redis:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -221,7 +221,7 @@ jobs:
           - PLUGINS=redis|ioredis
       - image: redis:4.0-alpine
 
-  test-node-web:
+  node-web:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -234,22 +234,22 @@ workflows:
   build:
     jobs:
       - lint
-      - test-node-leaks
-      - test-node-core-4
-      - test-node-core-6
-      - test-node-core-8
-      - test-node-core-latest
-      - test-node-amqplib
-      - test-node-amqp10
-      - test-node-elasticsearch
-      - test-node-graphql
-      - test-node-http
-      - test-node-memcached
-      - test-node-mongo
-      - test-node-mysql
-      - test-node-postgres
-      - test-node-redis
-      - test-node-web
+      - node-leaks
+      - node-core-4
+      - node-core-6
+      - node-core-8
+      - node-core-latest
+      - node-amqplib
+      - node-amqp10
+      - node-elasticsearch
+      - node-graphql
+      - node-http
+      - node-memcached
+      - node-mongo
+      - node-mysql
+      - node-postgres
+      - node-redis
+      - node-web
   nightly:
     triggers:
       - schedule:
@@ -259,18 +259,18 @@ workflows:
               only:
                 - master
     jobs:
-      - test-node-core-4
-      - test-node-core-6
-      - test-node-core-8
-      - test-node-core-latest
-      - test-node-amqplib
-      - test-node-amqp10
-      - test-node-elasticsearch
-      - test-node-graphql
-      - test-node-http
-      - test-node-memcached
-      - test-node-mongo
-      - test-node-mysql
-      - test-node-postgres
-      - test-node-redis
-      - test-node-web
+      - node-core-4
+      - node-core-6
+      - node-core-8
+      - node-core-latest
+      - node-amqplib
+      - node-amqp10
+      - node-elasticsearch
+      - node-graphql
+      - node-http
+      - node-memcached
+      - node-mongo
+      - node-mysql
+      - node-postgres
+      - node-redis
+      - node-web
