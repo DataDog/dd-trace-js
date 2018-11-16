@@ -148,7 +148,7 @@ Each integration also has its own list of default tags. These tags get automatic
 
 <h3 id="graphql">graphql</h3>
 
-The `graphql` integration uses the operation name as the span resource name. If no operation name is set, the resource name will always be just `query` or `mutation`.
+The `graphql` integration uses the operation name as the span resource name. If no operation name is set, the resource name will always be just `query`, `mutation` or `subscription`.
 
 For example:
 
@@ -178,8 +178,9 @@ query HelloWorld {
 | Option          | Default                                          | Description                                                            |
 |-----------------|--------------------------------------------------|------------------------------------------------------------------------|
 | service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                                 |
-| variables       | `undefined`                                      | A callback to enable recording of variables. By default, no variables are recorded. For example, using `variables => variables` would record all variables. |
+| variables       | []                                               | An array of variable names to record. Can also be a callback that returns the key/value pairs to record. For example, using `variables => variables` would record all variables. |
 | depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
+| collapse        | true                                             | Whether to collapse list items into a single element. (i.e. single `users.*.name` span instead of `users.0.name`, `users.1.name`, etc) |
 
 <h3 id="hapi">hapi</h3>
 
@@ -212,10 +213,13 @@ query HelloWorld {
 
 <h5 id="http-config">Configuration Options</h5>
 
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | http-client      | The service name for this integration. |
-| splitByDomain    | false            | Use the remote endpoint host as the service name instead of the default. |
+| Option           | Default                               | Description       |
+|------------------|---------------------------------------|-------------------|
+| service          | http-client                           | The service name for this integration. |
+| splitByDomain    | false                                 | Use the remote endpoint host as the service name instead of the default. |
+| validateStatus   | `code => code < 400 || code >= 500`   | Callback function to determine if an HTTP response should be recorded as an error. It should take a status code as its only parameter and return `true` for success or `false` for errors.
+| blacklist        | []                                    | List of URLs that should not be instrumented. Can be a string, RegExp, callback that takes the URL as a parameter, or an array of any of these.
+| whitelist        | /.*/                                  | List of URLs that should be instrumented. If this is set, other URLs will not be instrumented. Can be a string, RegExp, callback that takes the URL as a parameter, or an array of any of these.
 
 <h3 id="ioredis">ioredis</h3>
 

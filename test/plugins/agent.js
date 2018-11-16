@@ -27,7 +27,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', (req, res) => {
-      res.status(200).send('OK')
+      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       handlers.forEach(handler => handler(req.body))
     })
 
@@ -49,6 +49,7 @@ module.exports = {
           plugins: false
         })
 
+        tracer.use('bluebird')
         tracer.use(pluginName, config)
       })
     })

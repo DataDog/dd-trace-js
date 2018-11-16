@@ -1,47 +1,24 @@
 'use strict'
 
+const tx = require('./util/redis')
+
 function createWrapSendCommand (tracer, config) {
   return function wrapSendCommand (sendCommand) {
     return function sendCommandWithTrace (command, stream) {
-      const scope = tracer.scopeManager().active()
-      const span = tracer.startSpan('redis.command', {
-        childOf: scope && scope.span(),
-        tags: {
-          'span.kind': 'client',
-          'span.type': 'redis',
-          'service.name': config.service || `${tracer._service}-redis`,
-          'resource.name': command.name,
-          'db.type': 'redis',
-          'db.name': this.options.db || '0',
-          'out.host': this.options.host,
-          'out.port': String(this.options.port)
-        }
-      })
+      const db = this.options.db
+      const span = tx.instrument(tracer, config, db, command.name, command.args)
 
-      command.promise
-        .then(() => finish(span))
-        .catch(err => finish(span, err))
+      tx.setHost(span, this.options.host, this.options.port)
+      tx.wrap(span, command.promise)
 
       return sendCommand.apply(this, arguments)
     }
   }
 }
 
-function finish (span, error) {
-  if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
-  }
-
-  span.finish()
-}
-
 module.exports = {
   name: 'ioredis',
-  versions: ['4.x'],
+  versions: ['>=2 <=4'],
   patch (Redis, tracer, config) {
     this.wrap(Redis.prototype, 'sendCommand', createWrapSendCommand(tracer, config))
   },

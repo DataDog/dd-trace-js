@@ -16,6 +16,7 @@ const ERROR = tags.ERROR
 const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
+const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_HEADERS = tags.HTTP_HEADERS
 
 const web = {
@@ -23,32 +24,24 @@ const web = {
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
+    const hooks = getHooks(config)
 
     return Object.assign({}, config, {
       headers,
-      validateStatus
+      validateStatus,
+      hooks
     })
   },
 
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
-    const span = tracer.startSpan(name, { childOf })
-    const scope = tracer.scopeManager().activate(span)
+    this.patch(req)
+
+    const span = startSpan(tracer, config, req, res, name)
 
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
     }
-
-    this.patch(req)
-
-    req._datadog.tracer = tracer
-    req._datadog.config = config
-    req._datadog.span = span
-    req._datadog.scope = scope
-    req._datadog.res = res
-
-    addRequestTags(req)
 
     callback && callback(span)
 
@@ -98,10 +91,36 @@ const web = {
   }
 }
 
-function finish (req) {
+function startSpan (tracer, config, req, res, name) {
+  req._datadog.config = config
+
+  if (req._datadog.span) {
+    req._datadog.span.context().name = name
+    return req._datadog.span
+  }
+
+  const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
+  const span = tracer.startSpan(name, { childOf })
+  const scope = tracer.scopeManager().activate(span)
+
+  req._datadog.tracer = tracer
+  req._datadog.span = span
+  req._datadog.scope = scope
+  req._datadog.res = res
+
+  addRequestTags(req)
+
+  return span
+}
+
+function finish (req, res) {
   if (req._datadog.finished) return
 
   addResponseTags(req)
+
+  req._datadog.config.hooks.request(req._datadog.span, req, res)
+
+  addResourceTag(req)
 
   req._datadog.span.finish()
   req._datadog.scope && req._datadog.scope.close()
@@ -112,12 +131,14 @@ function wrapEnd (req) {
   const res = req._datadog.res
   const end = res.end
 
-  res.end = function () {
+  if (end === req._datadog.end) return
+
+  req._datadog.end = res.end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
 
     const returnValue = end.apply(this, arguments)
 
-    finish(req)
+    finish(req, res)
 
     return returnValue
   }
@@ -139,17 +160,32 @@ function addRequestTags (req) {
 }
 
 function addResponseTags (req) {
-  const path = req._datadog.paths.join('')
-  const resource = [req.method].concat(path).filter(val => val).join(' ')
   const span = req._datadog.span
   const res = req._datadog.res
 
+  if (req._datadog.paths.length > 0) {
+    span.setTag(HTTP_ROUTE, req._datadog.paths.join(''))
+  }
+
   span.addTags({
-    [RESOURCE_NAME]: resource,
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
   addStatusError(req)
+}
+
+function addResourceTag (req) {
+  const span = req._datadog.span
+  const tags = span.context().tags
+
+  if (tags['resource.name']) return
+
+  const resource = [req.method]
+    .concat(tags[HTTP_ROUTE])
+    .filter(val => val)
+    .join(' ')
+
+  span.setTag(RESOURCE_NAME, resource)
 }
 
 function addHeaders (req) {
@@ -190,6 +226,13 @@ function getStatusValidator (config) {
     log.error('Expected `validateStatus` to be a function.')
   }
   return code => code < 500
+}
+
+function getHooks (config) {
+  const noop = () => {}
+  const request = (config.hooks && config.hooks.request) || noop
+
+  return { request }
 }
 
 module.exports = web

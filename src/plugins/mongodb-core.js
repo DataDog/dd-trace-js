@@ -2,200 +2,15 @@
 
 const Buffer = require('safe-buffer').Buffer
 
-// TODO: remove sanitization when implemented by the agent
-
-// Reference https://docs.mongodb.com/v3.6/reference/command/
-const DATABASE_COMMANDS = [
-  // Aggregation Commands
-  'aggregate',
-  'count',
-  'distinct',
-  'group',
-  'mapReduce',
-
-  // Geospatial Commands
-  'geoNear',
-  'geoSearch',
-
-  // Query and Write Operation Commands
-  'delete',
-  'eval',
-  'find',
-  'findAndModify',
-  'getLastError',
-  'getMore',
-  'getPrevError',
-  'insert',
-  'parallelCollectionScan',
-  'resetError',
-  'update',
-
-  // Query Plan Cache Commands
-  'planCacheClear',
-  'planCacheClearFilters',
-  'planCacheListFilters',
-  'planCacheListPlans',
-  'planCacheListQueryShapes',
-  'planCacheSetFilter',
-
-  // Authentication Commands
-  'authenticate',
-  'authSchemaUpgrade',
-  'copydbgetnonce',
-  'getnonce',
-  'logout',
-
-  // User Management Commands
-  'createUser',
-  'dropAllUsersFromDatabase',
-  'dropUser',
-  'grantRolesToUser',
-  'revokeRolesFromUser',
-  'updateUser',
-  'usersInfo',
-
-  // Role Management Commands
-  'createRole',
-  'dropRole',
-  'dropAllRolesFromDatabase',
-  'grantPrivilegesToRole',
-  'grantRolesToRole',
-  'invalidateUserCache',
-  'revokePrivilegesFromRole',
-  'revokeRolesFromRole',
-  'rolesInfo',
-  'updateRole',
-
-  // Replication Commands
-  'applyOps',
-  'isMaster',
-  'replSetAbortPrimaryCatchUp',
-  'replSetFreeze',
-  'replSetGetConfig',
-  'replSetGetStatus',
-  'replSetInitiate',
-  'replSetMaintenance',
-  'replSetReconfig',
-  'replSetResizeOplog',
-  'replSetStepDown',
-  'replSetSyncFrom',
-  'resync',
-
-  // Sharding Commands
-  'addShard',
-  'addShardToZone',
-  'balancerStart',
-  'balancerStatus',
-  'balancerStop',
-  'checkShardingIndex',
-  'cleanupOrphaned',
-  'enableSharding',
-  'flushRouterConfig',
-  'getShardMap',
-  'getShardVersion',
-  'isdbgrid',
-  'listShards',
-  'medianKey',
-  'moveChunk',
-  'movePrimary',
-  'mergeChunks',
-  'removeShard',
-  'removeShardFromZone',
-  'setShardVersion',
-  'shardCollection',
-  'shardingState',
-  'split',
-  'splitChunk',
-  'splitVector',
-  'unsetSharding',
-  'updateZoneKeyRange',
-
-  // Session Commands
-  'endSessions',
-  'killAllSessions',
-  'killAllSessionsByPattern',
-  'killSessions',
-  'refreshSessions',
-  'startSession',
-
-  // Administration Commands
-  'clean',
-  'clone',
-  'cloneCollection',
-  'cloneCollectionAsCapped',
-  'collMod',
-  'compact',
-  'connPoolSync',
-  'convertToCapped',
-  'copydb',
-  'create',
-  'createIndexes',
-  'currentOp',
-  'drop',
-  'dropDatabase',
-  'dropIndexes',
-  'filemd5',
-  'fsync',
-  'fsyncUnlock',
-  'getParameter',
-  'killCursors',
-  'killOp',
-  'listCollections',
-  'listDatabases',
-  'listIndexes',
-  'logRotate',
-  'reIndex',
-  'renameCollection',
-  'repairCursor',
-  'repairDatabase',
-  'setFeatureCompatibilityVersion',
-  'setParameter',
-  'shutdown',
-  'touch',
-
-  // Diagnostic Commands
-  'availableQueryOptions',
-  'buildInfo',
-  'collStats',
-  'connPoolStats',
-  'connectionStatus',
-  'cursorInfo',
-  'dataSize',
-  'dbHash',
-  'dbStats',
-  'diagLogging',
-  'driverOIDTest',
-  'explain',
-  'features',
-  'getCmdLineOpts',
-  'getLog',
-  'hostInfo',
-  'isSelf',
-  'listCommands',
-  'netstat',
-  'ping',
-  'profile',
-  'serverStatus',
-  'shardConnPoolStats',
-  'top',
-  'validate',
-  'whatsmyuri',
-
-  // System Events Auditing Commands
-  'logApplicationMessage'
-]
-
 function createWrapOperation (tracer, config, operationName) {
   return function wrapOperation (operation) {
     return function operationWithTrace (ns, ops, options, callback) {
-      const resource = getResource(ns, ops, operationName)
-
       const parentScope = tracer.scopeManager().active()
       const span = tracer.startSpan('mongodb.query', {
         childOf: parentScope && parentScope.span()
       })
 
-      addTags(span, tracer, config, resource, ns, this)
+      addTags(span, tracer, config, ns, ops, this, operationName)
 
       if (typeof options === 'function') {
         return operation.call(this, ns, ops, wrapCallback(tracer, span, options))
@@ -209,14 +24,12 @@ function createWrapOperation (tracer, config, operationName) {
 function createWrapNext (tracer, config) {
   return function wrapNext (next) {
     return function nextWithTrace (cb) {
-      const resource = getResource(this.ns, this.cmd)
-
       const parentScope = tracer.scopeManager().active()
       const span = tracer.startSpan('mongodb.query', {
         childOf: parentScope && parentScope.span()
       })
 
-      addTags(span, tracer, config, resource, this.ns, this.topology)
+      addTags(span, tracer, config, this.ns, this.cmd, this.topology)
 
       if (this.cursorState) {
         span.addTags({
@@ -229,13 +42,20 @@ function createWrapNext (tracer, config) {
   }
 }
 
-function addTags (span, tracer, config, resource, ns, topology) {
+function addTags (span, tracer, config, ns, cmd, topology, operationName) {
+  const query = getQuery(cmd)
+  const resource = getResource(ns, cmd, query, operationName)
+
   span.addTags({
     'service.name': config.service || `${tracer._service}-mongodb`,
     'resource.name': resource,
     'span.type': 'mongodb',
     'db.name': ns
   })
+
+  if (query) {
+    span.setTag('mongodb.query', query)
+  }
 
   if (topology.s && topology.s.options) {
     span.addTags({
@@ -263,15 +83,19 @@ function wrapCallback (tracer, span, done) {
   }
 }
 
-function getResource (ns, cmd, operationName) {
+function getQuery (cmd) {
+  return cmd.query && JSON.stringify(sanitize(cmd.query))
+}
+
+function getResource (ns, cmd, query, operationName) {
   if (!operationName) {
-    operationName = DATABASE_COMMANDS.find(name => cmd[name] !== undefined) || 'unknownCommand'
+    operationName = Object.keys(cmd)[0]
   }
 
   const parts = [operationName, ns]
 
-  if (cmd.query) {
-    parts.push(JSON.stringify(sanitize(cmd.query)))
+  if (query) {
+    parts.push(query)
   }
 
   return parts.join(' ')
@@ -298,7 +122,7 @@ function isObject (val) {
 module.exports = [
   {
     name: 'mongodb-core',
-    versions: ['3.x'],
+    versions: ['>=2 <=3'],
     patch (mongo, tracer, config) {
       this.wrap(mongo.Server.prototype, 'command', createWrapOperation(tracer, config))
       this.wrap(mongo.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))

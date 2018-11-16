@@ -14,6 +14,7 @@ const ERROR = tags.ERROR
 const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
+const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_HEADERS = tags.HTTP_HEADERS
 
 describe('plugins/util/web', () => {
@@ -27,6 +28,7 @@ describe('plugins/util/web', () => {
 
   beforeEach(() => {
     req = {
+      method: 'GET',
       headers: {
         'host': 'localhost'
       },
@@ -36,7 +38,7 @@ describe('plugins/util/web', () => {
     res = {
       end
     }
-    config = {}
+    config = { hooks: {} }
 
     tracer = require('../../..').init({ plugins: false })
     web = require('../../../src/plugins/util/web')
@@ -104,6 +106,39 @@ describe('plugins/util/web', () => {
         expect(span.context().tags).to.include({
           [`${HTTP_HEADERS}.host`]: 'localhost'
         })
+      })
+
+      it('should only start one span for the entire request', () => {
+        const span1 = web.instrument(tracer, config, req, res, 'test.request')
+        const scope1 = tracer.scopeManager().active()
+        const span2 = web.instrument(tracer, config, req, res, 'test.request')
+        const scope2 = tracer.scopeManager().active()
+
+        expect(span1).to.equal(span2)
+        expect(scope1).to.equal(scope2)
+      })
+
+      it('should allow overriding the span name', () => {
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        span = web.instrument(tracer, config, req, res, 'test2.request')
+
+        expect(span.context().name).to.equal('test2.request')
+      })
+
+      it('should allow overriding the span service name', () => {
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        config.service = 'test2'
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        expect(span.context().tags).to.have.property('service.name', 'test2')
+      })
+
+      it('should only wrap res.end once', () => {
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        const end = res.end
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        expect(end).to.equal(res.end)
       })
     })
 
@@ -180,6 +215,48 @@ describe('plugins/util/web', () => {
           [ERROR]: 'true'
         })
       })
+
+      it('should use the user provided route', () => {
+        span.setTag('http.route', '/custom/route')
+
+        res.end()
+
+        expect(span.context().tags).to.include({
+          [HTTP_ROUTE]: '/custom/route'
+        })
+      })
+
+      it('should execute the request end hook', () => {
+        config.hooks.request = sinon.spy()
+
+        res.end()
+
+        expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+      })
+
+      it('should execute multiple end hooks', () => {
+        config.hooks = {
+          request: sinon.spy()
+        }
+
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        res.end()
+
+        expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+      })
+
+      it('should set the resource name from the http.route tag set in the hooks', () => {
+        config.hooks = {
+          request: span => span.setTag('http.route', '/custom/route')
+        }
+
+        span = web.instrument(tracer, config, req, res, 'test.request')
+
+        res.end()
+
+        expect(span.context().tags).to.have.property('resource.name', 'GET /custom/route')
+      })
     })
   })
 
@@ -197,10 +274,11 @@ describe('plugins/util/web', () => {
       res.end()
 
       expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
+      expect(span.context().tags).to.have.property(HTTP_ROUTE, '/foo/bar')
     })
   })
 
-  describe('enterRoute', () => {
+  describe('exitRoute', () => {
     beforeEach(() => {
       config = web.normalizeConfig(config)
       span = web.instrument(tracer, config, req, res, 'test.request')

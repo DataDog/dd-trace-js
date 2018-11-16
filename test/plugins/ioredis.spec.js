@@ -39,6 +39,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('out.port', '6379')
+              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
             })
             .then(done)
             .catch(done)
@@ -49,11 +50,16 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
 
-          const scope = tracer.scopeManager().activate({})
+          const span = {}
+
+          tracer.scopeManager().activate(span)
 
           return redis.get('foo')
             .then(() => {
-              expect(tracer.scopeManager().active()).to.equal(scope)
+              const scope = tracer.scopeManager().active()
+
+              expect(scope).to.not.be.null
+              expect(scope.span()).to.equal(span)
             })
         })
 

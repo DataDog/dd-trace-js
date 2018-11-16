@@ -1,5 +1,6 @@
 'use strict'
 
+const pick = require('lodash.pick')
 const platform = require('../platform')
 const log = require('../log')
 
@@ -97,14 +98,17 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
   if (resolve._datadog_patched) return resolve
+  if (config.collapse) {
+    responsePathAsArray = withCollapse(responsePathAsArray)
+  }
 
   function resolveWithTrace (source, args, contextValue, info) {
     const operation = info.operation
     const path = responsePathAsArray(info.path)
     const depth = path.filter(item => typeof item === 'string').length
-    const fieldParent = getFieldParent(operation, path)
 
     if (config.depth >= 0 && config.depth < depth) {
+      const fieldParent = getFieldParent(operation, path)
       const scope = tracer.scopeManager().activate(fieldParent)
 
       return call(resolve, this, arguments, () => {
@@ -113,15 +117,8 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
       })
     }
 
-    const childOf = createPathSpan(tracer, config, 'field', fieldParent, path)
-
-    operation._datadog_fields[path.join('.')] = {
-      span: childOf,
-      parent: fieldParent
-    }
-
-    const span = createPathSpan(tracer, config, 'resolve', childOf, path)
-    const scope = tracer.scopeManager().activate(span)
+    const field = assertField(tracer, config, operation, path, info)
+    const scope = tracer.scopeManager().activate(field.resolveSpan)
 
     return call(resolve, this, arguments, err => finish(scope, operation, path, err))
   }
@@ -166,6 +163,29 @@ function call (fn, thisContext, args, callback) {
   }
 }
 
+function assertField (tracer, config, operation, path, info) {
+  let field = getField(operation, path)
+
+  if (!field) {
+    field = operation._datadog_fields[path.join('.')] = {
+      pending: 0,
+      error: null
+    }
+
+    const fieldParent = getFieldParent(operation, path)
+    const childOf = createPathSpan(tracer, config, 'field', fieldParent, path, info)
+    const span = createPathSpan(tracer, config, 'resolve', childOf, path, info)
+
+    field.parent = fieldParent
+    field.span = childOf
+    field.resolveSpan = span
+  }
+
+  field.pending++
+
+  return field
+}
+
 function getFieldParent (operation, path) {
   for (let i = path.length - 1; i > 0; i--) {
     const field = getField(operation, path.slice(0, i))
@@ -203,11 +223,12 @@ function addOperationSpan (tracer, config, operation, document, variableValues) 
     tracer,
     config,
     operation,
-    document._datadog_source,
+    document,
     variableValues,
     startTime
   )
 
+  Object.defineProperty(operation, '_datadog_source', { value: document._datadog_source })
   Object.defineProperty(operation, '_datadog_span', { value: operationSpan })
   Object.defineProperty(operation, '_datadog_fields', { value: {} })
 }
@@ -236,17 +257,26 @@ function addValidateSpan (tracer, config, document, operation) {
   }
 }
 
-function createOperationSpan (tracer, config, operation, source, variableValues, startTime) {
+function createOperationSpan (tracer, config, operation, document, variableValues, startTime) {
   const type = operation.operation
   const name = operation.name && operation.name.value
+  const def = document.definitions.find(def => def.kind === 'OperationDefinition')
   const parentScope = tracer.scopeManager().active()
   const tags = {
     'service.name': getService(tracer, config),
     'resource.name': [type, name].filter(val => val).join(' ')
   }
 
-  if (source) {
-    tags['graphql.document'] = source
+  if (def) {
+    tags['graphql.operation.type'] = def.operation
+
+    if (def.name) {
+      tags['graphql.operation.name'] = def.name.value
+    }
+  }
+
+  if (document._datadog_source) {
+    tags['graphql.document'] = document._datadog_source
   }
 
   if (variableValues && config.variables) {
@@ -276,17 +306,48 @@ function createSpan (tracer, config, name, childOf, startTime) {
   return span
 }
 
-function createPathSpan (tracer, config, name, childOf, path) {
+function createPathSpan (tracer, config, name, childOf, path, info) {
   const span = createSpan(tracer, config, name, childOf)
+  const document = info.operation._datadog_source
+  const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
 
   span.addTags({
-    'resource.name': path.join('.')
+    'resource.name': path.join('.'),
+    'graphql.field.name': info.fieldName,
+    'graphql.field.path': path.join('.'),
+    'graphql.field.type': info.returnType
   })
+
+  if (fieldNode) {
+    if (document) {
+      span.setTag('graphql.field.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
+    }
+
+    if (config.variables) {
+      const variables = config.variables(info.variableValues)
+
+      fieldNode.arguments
+        .filter(arg => arg.value && arg.value.kind === 'Variable')
+        .filter(arg => arg.value.name && variables[arg.value.name.value])
+        .map(arg => arg.value.name.value)
+        .forEach(name => {
+          span.setTag(`graphql.variables.${name}`, variables[name])
+        })
+    }
+  }
 
   return span
 }
 
 function finish (scope, operation, path, error) {
+  const field = getField(operation, path)
+
+  field.pending--
+
+  if (field.error || field.pending > 0) return
+
+  field.error = error
+
   const span = scope.span()
 
   addError(span, error)
@@ -316,6 +377,13 @@ function finishOperation (operation, error) {
 
   operation._datadog_execute_span.finish()
   operation._datadog_span.finish()
+}
+
+function withCollapse (responsePathAsArray) {
+  return function () {
+    return responsePathAsArray.apply(this, arguments)
+      .map(segment => typeof segment === 'number' ? '*' : segment)
+  }
 }
 
 function getField (operation, path) {
@@ -352,7 +420,8 @@ function addError (span, error) {
 function validateConfig (config) {
   return Object.assign({}, config, {
     depth: getDepth(config),
-    variables: getVariablesFilter(config)
+    variables: getVariablesFilter(config),
+    collapse: config.collapse === undefined || !!config.collapse
   })
 }
 
@@ -368,8 +437,10 @@ function getDepth (config) {
 function getVariablesFilter (config) {
   if (typeof config.variables === 'function') {
     return config.variables
+  } else if (config.variables instanceof Array) {
+    return variables => pick(variables, config.variables)
   } else if (config.hasOwnProperty('variables')) {
-    log.error('Expected `variables` to be a function.')
+    log.error('Expected `variables` to be an array or function.')
   }
   return null
 }
@@ -378,7 +449,7 @@ module.exports = [
   {
     name: 'graphql',
     file: 'execution/execute.js',
-    versions: ['0.13.x'],
+    versions: ['>=0.10 <=14'],
     patch (execute, tracer, config) {
       this.wrap(execute, 'execute', createWrapExecute(
         tracer,
@@ -394,7 +465,7 @@ module.exports = [
   {
     name: 'graphql',
     file: 'language/parser.js',
-    versions: ['0.13.x'],
+    versions: ['>=0.10 <=14'],
     patch (parser, tracer, config) {
       this.wrap(parser, 'parse', createWrapParse(tracer, validateConfig(config)))
     },
@@ -405,7 +476,7 @@ module.exports = [
   {
     name: 'graphql',
     file: 'validation/validate.js',
-    versions: ['0.13.x'],
+    versions: ['>=0.10 <=14'],
     patch (validate, tracer, config) {
       this.wrap(validate, 'validate', createWrapValidate(tracer, validateConfig(config)))
     },

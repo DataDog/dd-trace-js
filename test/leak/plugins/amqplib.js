@@ -15,7 +15,7 @@ test('amqplib plugin should not leak when using callbacks', t => {
       conn.createChannel((err, ch) => {
         if (err) return t.fail(err)
 
-        profile(t, operation).then(() => conn.close())
+        profile(t, operation, 400).then(() => conn.close())
 
         function operation (done) {
           ch.assertQueue('test', {}, done)
@@ -29,7 +29,7 @@ test('amqplib plugin should not leak when using promises', t => {
     .then(conn => {
       return conn.createChannel()
         .then(ch => {
-          profile(t, operation).then(() => conn.close())
+          profile(t, operation, 400).then(() => conn.close())
 
           function operation (done) {
             ch.assertQueue('test', {}).then(done)

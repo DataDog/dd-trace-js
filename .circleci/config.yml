@@ -97,6 +97,11 @@ jobs:
     docker:
       - image: node:8
 
+  node-core-10:
+    <<: *node-core-base
+    docker:
+      - image: node:10
+
   node-core-latest:
     <<: *node-core-base
     docker:
@@ -145,6 +150,14 @@ jobs:
           - QPIDD_ADMIN_USERNAME=admin
           - QPIDD_ADMIN_PASSWORD=admin
 
+  node-bluebird:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=bluebird
+
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
@@ -157,6 +170,14 @@ jobs:
           - discovery.type=single-node
           - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
 
+  node-express:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=express
+
   node-graphql:
     <<: *node-plugin-base
     docker:
@@ -165,6 +186,14 @@ jobs:
           - SERVICES=
           - PLUGINS=graphql
 
+  node-hapi:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=hapi
+
   node-http:
     <<: *node-plugin-base
     docker:
@@ -172,6 +201,14 @@ jobs:
         environment:
           - SERVICES=
           - PLUGINS=http
+
+  node-koa:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=koa
 
   node-memcached:
     <<: *node-plugin-base
@@ -194,7 +231,7 @@ jobs:
           - MYSQL_ALLOW_EMPTY_PASSWORD=yes
           - MYSQL_DATABASE=db
 
-  node-mongo:
+  node-mongodb-core:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -212,6 +249,14 @@ jobs:
           - PLUGINS=pg
       - image: postgres:9.5
 
+  node-q:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=q
+
   node-redis:
     <<: *node-plugin-base
     docker:
@@ -221,13 +266,29 @@ jobs:
           - PLUGINS=redis|ioredis
       - image: redis:4.0-alpine
 
-  node-web:
+  node-restify:
     <<: *node-plugin-base
     docker:
       - image: node:8
         environment:
           - SERVICES=
-          - PLUGINS=express|hapi|koa|restify
+          - PLUGINS=restify
+
+  node-router:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=router
+
+  node-when:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=when
 
 workflows:
   version: 2
@@ -238,18 +299,25 @@ workflows:
       - node-core-4
       - node-core-6
       - node-core-8
+      - node-core-10
       - node-core-latest
       - node-amqplib
       - node-amqp10
+      - node-bluebird
       - node-elasticsearch
+      - node-express
       - node-graphql
+      - node-hapi
       - node-http
+      - node-koa
       - node-memcached
-      - node-mongo
+      - node-mongodb-core
       - node-mysql
       - node-postgres
+      - node-q
       - node-redis
-      - node-web
+      - node-restify
+      - node-when
   nightly:
     triggers:
       - schedule:
@@ -262,15 +330,22 @@ workflows:
       - node-core-4
       - node-core-6
       - node-core-8
+      - node-core-10
       - node-core-latest
       - node-amqplib
       - node-amqp10
+      - node-bluebird
       - node-elasticsearch
+      - node-express
       - node-graphql
+      - node-hapi
       - node-http
+      - node-koa
       - node-memcached
-      - node-mongo
+      - node-mongodb-core
       - node-mysql
       - node-postgres
+      - node-q
       - node-redis
-      - node-web
+      - node-restify
+      - node-when

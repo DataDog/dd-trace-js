@@ -85,6 +85,15 @@ describe('Config', () => {
     expect(config).to.have.property('plugins', false)
   })
 
+  it('should give priority to the common agent environment variable', () => {
+    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('trace-agent')
+    platform.env.withArgs('DD_AGENT_HOST').returns('agent')
+
+    const config = new Config()
+
+    expect(config).to.have.nested.property('url.hostname', 'agent')
+  })
+
   it('should give priority to the options', () => {
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')

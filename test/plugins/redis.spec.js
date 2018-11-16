@@ -37,7 +37,6 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', done => {
           client.on('error', done)
 
-          agent.use(() => client.get('foo')) // wait for initial info command
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'redis.command')
@@ -49,9 +48,12 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('out.port', '6379')
+              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
             })
             .then(done)
             .catch(done)
+
+          client.get('foo', () => {})
         })
 
         it('should run the callback in the parent context', done => {

@@ -2,6 +2,7 @@
 
 const axios = require('axios')
 const getPort = require('get-port')
+const semver = require('semver')
 const agent = require('./agent')
 const plugin = require('../../src/plugins/restify')
 
@@ -14,6 +15,9 @@ describe('Plugin', () => {
 
   describe('restify', () => {
     withVersions(plugin, 'restify', version => {
+      // Some internal code of older versions is not compatible with Node >6
+      if (semver.intersects(version, '<5') && semver.intersects(process.version, '>6')) return
+
       beforeEach(() => {
         tracer = require('../..')
         restify = require(`../../versions/restify@${version}`).get()

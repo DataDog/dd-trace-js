@@ -12,7 +12,12 @@ class Config {
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const env = coalesce(options.env, platform.env('DD_ENV'))
     const protocol = 'http'
-    const hostname = coalesce(options.hostname, platform.env('DD_TRACE_AGENT_HOSTNAME'), 'localhost')
+    const hostname = coalesce(
+      options.hostname,
+      platform.env('DD_AGENT_HOST'),
+      platform.env('DD_TRACE_AGENT_HOSTNAME'),
+      'localhost'
+    )
     const port = coalesce(options.port, platform.env('DD_TRACE_AGENT_PORT'), 8126)
     const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
