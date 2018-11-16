@@ -7,12 +7,15 @@ describe('Instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
+  let tracerConfig
   let shimmer
 
   beforeEach(() => {
     tracer = {
       _tracer: 'tracer'
     }
+
+    tracerConfig = { enabled: true }
 
     integrations = {
       http: {
@@ -60,7 +63,7 @@ describe('Instrumenter', () => {
       './plugins/mysql-mock': integrations.mysql
     })
 
-    instrumenter = new Instrumenter(tracer)
+    instrumenter = new Instrumenter(tracer, tracerConfig)
   })
 
   afterEach(() => {
@@ -68,6 +71,10 @@ describe('Instrumenter', () => {
   })
 
   describe('with integrations enabled', () => {
+    beforeEach(() => {
+      instrumenter.enable()
+    })
+
     describe('use', () => {
       it('should allow configuring a plugin by name', () => {
         const config = { foo: 'bar' }
@@ -240,6 +247,10 @@ describe('Instrumenter', () => {
   })
 
   describe('with integrations disabled', () => {
+    beforeEach(() => {
+      instrumenter.enable()
+    })
+
     describe('use', () => {
       it('should still allow adding plugins manually by name', () => {
         instrumenter.use('express-mock')
@@ -258,6 +269,32 @@ describe('Instrumenter', () => {
         const express = require('express-mock')
 
         expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer', {})
+      })
+    })
+  })
+
+  describe('with the instrumenter disabled', () => {
+    describe('use', () => {
+      it('should not patch modules when they are loaded when the tracer is disabled', () => {
+        tracerConfig.enabled = false
+
+        instrumenter.patch()
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.not.have.been.called
+      })
+    })
+
+    describe('patch', () => {
+      it('should not patch if the tracer is disabled', () => {
+        tracerConfig.enabled = false
+
+        instrumenter.use('express-mock')
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.not.have.been.called
       })
     })
   })
