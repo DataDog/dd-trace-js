@@ -14,6 +14,7 @@ shimmer({ logger: () => {} })
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
+    this._enabled = false
     this._names = new Set()
     this._plugins = new Map()
     this._instrumented = new Map()
@@ -55,6 +56,8 @@ class Instrumenter {
   }
 
   reload () {
+    if (!this._enabled) return
+
     const instrumentations = Array.from(this._plugins.keys())
       .reduce((prev, current) => prev.concat(current), [])
 
@@ -126,6 +129,10 @@ class Instrumenter {
       })
 
     return moduleExports
+  }
+
+  enable () {
+    this._enabled = true
   }
 
   _set (plugin, meta) {
