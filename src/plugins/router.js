@@ -1,5 +1,6 @@
 'use strict'
 
+const METHODS = require('methods').concat('all')
 const pathToRegExp = require('path-to-regexp')
 const web = require('./util/web')
 
@@ -36,35 +37,44 @@ function createWrapProcessParams (tracer, config) {
   }
 }
 
-function createWrapRouterMethod (tracer) {
-  return function wrapRouterMethod (original) {
-    return function methodWithTrace (fn) {
-      const offset = this.stack.length
-      const router = original.apply(this, arguments)
-      const matchers = extractMatchers(fn)
+function wrapRouterMethod (original) {
+  return function methodWithTrace (fn) {
+    const offset = this.stack ? [].concat(this.stack).length : 0
+    const router = original.apply(this, arguments)
 
-      this.stack.slice(offset).forEach(layer => {
-        const handle = layer.handle
-
-        if (handle.length === 4) {
-          layer.handle = (error, req, res, next) => {
-            return handle.call(layer, error, req, res, wrapNext(tracer, layer, req, next))
-          }
-        } else {
-          layer.handle = (req, res, next) => {
-            return handle.call(layer, req, res, wrapNext(tracer, layer, req, next))
-          }
-        }
-
-        layer._datadog_matchers = matchers
-      })
-
-      return router
+    if (this.stack) {
+      wrapStack(this.stack, offset, extractMatchers(fn))
     }
+
+    return router
   }
 }
 
-function wrapNext (tracer, layer, req, next) {
+function wrapStack (stack, offset, matchers) {
+  [].concat(stack).slice(offset).forEach(layer => {
+    const handle = layer.handle || layer
+
+    if (handle.length === 4) {
+      layer.handle = (error, req, res, next) => {
+        return handle.call(layer, error, req, res, wrapNext(layer, req, next))
+      }
+    } else {
+      layer.handle = (req, res, next) => {
+        return handle.call(layer, req, res, wrapNext(layer, req, next))
+      }
+    }
+
+    layer._datadog_matchers = matchers
+
+    if (layer.route) {
+      METHODS.forEach(method => {
+        layer.route[method] = wrapRouterMethod(layer.route[method])
+      })
+    }
+  })
+}
+
+function wrapNext (layer, req, next) {
   if (!web.active(req)) {
     return next
   }
@@ -115,8 +125,8 @@ module.exports = {
   patch (Router, tracer, config) {
     this.wrap(Router.prototype, 'handle', createWrapHandle(tracer, config))
     this.wrap(Router.prototype, 'process_params', createWrapProcessParams(tracer, config))
-    this.wrap(Router.prototype, 'use', createWrapRouterMethod(tracer, config))
-    this.wrap(Router.prototype, 'route', createWrapRouterMethod(tracer, config))
+    this.wrap(Router.prototype, 'use', wrapRouterMethod)
+    this.wrap(Router.prototype, 'route', wrapRouterMethod)
   },
   unpatch (Router) {
     this.unwrap(Router.prototype, 'handle')
