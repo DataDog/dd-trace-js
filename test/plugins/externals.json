@@ -18,5 +18,11 @@
       "name": "ws",
       "versions": ["6.1.0"]
     }
+  ],
+  "mongodb-core": [
+    {
+      "name": "bson",
+      "versions": ["4.0.0"]
+    }
   ]
 }
