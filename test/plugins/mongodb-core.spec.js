@@ -14,7 +14,7 @@ describe('Plugin', () => {
   let collection
 
   describe('mongodb-core', () => {
-    withVersions(plugin, 'mongodb-core', version => {
+    withVersions(plugin, 'mongodb-core', '>=3', version => {
       beforeEach(() => {
         platform = require('../../src/platform')
         tracer = require('../..')
@@ -270,6 +270,53 @@ describe('Plugin', () => {
               error = err
             })
           })
+        })
+      })
+
+      describe('with a replica set', () => {
+        before(() => {
+          return agent.load(plugin, 'mongodb-core')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          mongo = require(`../../versions/mongodb-core@${version}`).get()
+
+          server = new mongo.ReplSet([{
+            host: 'localhost',
+            port: 27017
+          }], {
+            setName: 'replicaset',
+            reconnect: false,
+            connectionTimeout: 1000
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+        })
+
+        it('should set the correct host/port tags', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(span.meta).to.have.property('out.host', 'localhost')
+              expect(span.meta).to.have.property('out.port', '27017')
+            })
+            .then(done)
+            .catch(done)
+
+          const cursor = server.cursor(`test.${collection}`, {
+            insert: `test.${collection}`,
+            documents: [{ a: 1 }]
+          }, {})
+
+          cursor.next()
         })
       })
 
