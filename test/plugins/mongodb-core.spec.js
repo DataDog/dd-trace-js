@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('./agent')
 const Buffer = require('safe-buffer').Buffer
 const plugin = require('../../src/plugins/mongodb-core')
@@ -14,7 +15,7 @@ describe('Plugin', () => {
   let collection
 
   describe('mongodb-core', () => {
-    withVersions(plugin, 'mongodb-core', '>=3', version => {
+    withVersions(plugin, 'mongodb-core', version => {
       beforeEach(() => {
         platform = require('../../src/platform')
         tracer = require('../..')
@@ -274,6 +275,8 @@ describe('Plugin', () => {
       })
 
       describe('with a replica set', () => {
+        if (!semver.intersects(version, '>=2.0.5')) return // bug with replica sets before 2.0.5
+
         before(() => {
           return agent.load(plugin, 'mongodb-core')
         })
