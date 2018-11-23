@@ -114,8 +114,7 @@ function getResource (ns, cmd, query, operationName) {
 function sanitize (input) {
   const output = {}
 
-  if (!isObject(input) || Buffer.isBuffer(input)) return '?'
-  if (isBSON(input)) return sanitize(input.toJSON())
+  if (!isObject(input) || Buffer.isBuffer(input) || isBSON(input)) return '?'
 
   for (const key in input) {
     if (typeof input[key] === 'function') continue
