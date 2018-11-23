@@ -130,7 +130,7 @@ function isObject (val) {
 }
 
 function isBSON (val) {
-  return val && val._bsontype && typeof val.toJSON === 'function'
+  return val && val._bsontype
 }
 
 module.exports = [
