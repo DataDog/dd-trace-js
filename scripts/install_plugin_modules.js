@@ -37,7 +37,7 @@ function assertVersions () {
   internals.forEach(assertInstrumentation)
 
   Object.keys(externals)
-    .filter(name => ~filter.indexOf(name))
+    .filter(name => ~names.indexOf(name))
     .forEach(name => {
       [].concat(externals[name]).forEach(assertInstrumentation)
     })

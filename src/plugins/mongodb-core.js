@@ -114,12 +114,12 @@ function getResource (ns, cmd, query, operationName) {
 function sanitize (input) {
   const output = {}
 
+  if (!isObject(input) || Buffer.isBuffer(input) || isBSON(input)) return '?'
+
   for (const key in input) {
-    if (isObject(input[key]) && !Buffer.isBuffer(input[key])) {
-      output[key] = sanitize(input[key])
-    } else {
-      output[key] = '?'
-    }
+    if (typeof input[key] === 'function') continue
+
+    output[key] = sanitize(input[key])
   }
 
   return output
@@ -127,6 +127,10 @@ function sanitize (input) {
 
 function isObject (val) {
   return typeof val === 'object' && val !== null && !(val instanceof Array)
+}
+
+function isBSON (val) {
+  return val && val._bsontype
 }
 
 module.exports = [

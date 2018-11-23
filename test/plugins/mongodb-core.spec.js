@@ -131,6 +131,47 @@ describe('Plugin', () => {
             }, () => {})
           })
 
+          it('should sanitize BSON as values and not as objects', done => {
+            const BSON = require(`../../versions/bson@4.0.0`).get()
+
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collection} {"_id":"?"}`
+
+                expect(span).to.have.property('resource', resource)
+              })
+              .then(done)
+              .catch(done)
+
+            server.command(`test.${collection}`, {
+              find: `test.${collection}`,
+              query: {
+                _id: new BSON.ObjectID('123456781234567812345678')
+              }
+            }, () => {})
+          })
+
+          it('should skip functions when sanitizing', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collection} {"_id":"?"}`
+
+                expect(span).to.have.property('resource', resource)
+              })
+              .then(done)
+              .catch(done)
+
+            server.command(`test.${collection}`, {
+              find: `test.${collection}`,
+              query: {
+                _id: '1234',
+                foo: () => {}
+              }
+            }, () => {})
+          })
+
           it('should run the callback in the parent context', done => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
