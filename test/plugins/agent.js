@@ -37,6 +37,9 @@ module.exports = {
 
         listener = server.listen(port, 'localhost', resolve)
 
+        pluginName = [].concat(pluginName)
+        config = [].concat(config)
+
         server.on('close', () => {
           tracer._instrumenter.unpatch()
           tracer = null
@@ -49,8 +52,9 @@ module.exports = {
           plugins: false
         })
 
-        tracer.use('bluebird')
-        tracer.use(pluginName, config)
+        for (let i = 0, l = pluginName.length; i < l; i++) {
+          tracer.use(pluginName[i], config[i])
+        }
       })
     })
   },
