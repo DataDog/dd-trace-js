@@ -37,7 +37,7 @@ function assertVersions () {
   internals.forEach(assertInstrumentation)
 
   Object.keys(externals)
-    .filter(name => ~filter.indexOf(name))
+    .filter(name => ~names.indexOf(name))
     .forEach(name => {
       [].concat(externals[name]).forEach(assertInstrumentation)
     })
@@ -46,8 +46,8 @@ function assertVersions () {
 function assertInstrumentation (instrumentation) {
   [].concat(instrumentation.versions).forEach(version => {
     if (version) {
-      assertModules(instrumentation.name, version)
       assertModules(instrumentation.name, semver.coerce(version).version)
+      assertModules(instrumentation.name, version)
     }
   })
 }
@@ -57,8 +57,8 @@ function assertModules (name, version) {
   addFolder(name, version)
   assertFolder(name)
   assertFolder(name, version)
-  assertPackage(name)
-  assertPackage(name, version)
+  assertPackage(name, null, version)
+  assertPackage(name, version, version)
   assertIndex(name)
   assertIndex(name, version)
 }
@@ -73,14 +73,14 @@ function assertFolder (name, version) {
   }
 }
 
-function assertPackage (name, version) {
+function assertPackage (name, version, dependency) {
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify({
     name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
     optionalDependencies: {
-      [name]: version
+      [name]: dependency
     }
   }, null, 2) + '\n')
 }
