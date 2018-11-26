@@ -29,7 +29,19 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = require(`../../versions/elasticsearch@${version}`).get()
           client = new elasticsearch.Client({
-            host: 'localhost:9200'
+            host: 'localhost:9200',
+            defer: () => {
+              const deferred = {}
+
+              deferred.promise = new Promise((resolve, reject) => {
+                deferred.resolve = resolve
+                deferred.reject = reject
+              })
+
+              deferred.promise.test = true
+
+              return deferred
+            }
           })
         })
 
@@ -215,6 +227,14 @@ describe('Plugin', () => {
             expect(() => {
               client.ping().abort()
             }).not.to.throw()
+          })
+
+          it('should not override the returned promise', () => {
+            const promise = client.ping()
+
+            return promise.then(() => {
+              expect(promise).to.have.property('test', true)
+            })
           })
         })
       })

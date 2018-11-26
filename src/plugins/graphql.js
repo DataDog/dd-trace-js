@@ -140,18 +140,10 @@ function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) 
 
 function call (fn, thisContext, args, callback) {
   try {
-    let result = fn.apply(thisContext, args)
+    const result = fn.apply(thisContext, args)
 
     if (result && typeof result.then === 'function') {
-      result = result
-        .then(value => {
-          callback(null, value)
-          return value
-        })
-        .catch(err => {
-          callback(err)
-          return Promise.reject(err)
-        })
+      result.then(value => callback(null, value), callback)
     } else {
       callback(null, result)
     }
