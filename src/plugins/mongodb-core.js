@@ -37,7 +37,7 @@ function createWrapNext (tracer, config) {
         })
       }
 
-      next.call(this, wrapCallback(tracer, span, cb))
+      next.call(this, wrapCallback(tracer, span, cb, this))
     }
   }
 }
@@ -57,7 +57,13 @@ function addTags (span, tracer, config, ns, cmd, topology, operationName) {
     span.setTag('mongodb.query', query)
   }
 
-  if (topology.s && topology.s.options) {
+  addHost(span, topology)
+}
+
+function addHost (span, topology) {
+  const options = topology && topology.s && topology.s.options
+
+  if (options && options.host && options.port) {
     span.addTags({
       'out.host': topology.s.options.host,
       'out.port': topology.s.options.port
@@ -65,7 +71,7 @@ function addTags (span, tracer, config, ns, cmd, topology, operationName) {
   }
 }
 
-function wrapCallback (tracer, span, done) {
+function wrapCallback (tracer, span, done, cursor) {
   return (err, res) => {
     if (err) {
       span.addTags({
@@ -73,6 +79,10 @@ function wrapCallback (tracer, span, done) {
         'error.msg': err.message,
         'error.stack': err.stack
       })
+    }
+
+    if (cursor) {
+      addHost(span, cursor.server)
     }
 
     span.finish()
@@ -104,12 +114,12 @@ function getResource (ns, cmd, query, operationName) {
 function sanitize (input) {
   const output = {}
 
+  if (!isObject(input) || Buffer.isBuffer(input) || isBSON(input)) return '?'
+
   for (const key in input) {
-    if (isObject(input[key]) && !Buffer.isBuffer(input[key])) {
-      output[key] = sanitize(input[key])
-    } else {
-      output[key] = '?'
-    }
+    if (typeof input[key] === 'function') continue
+
+    output[key] = sanitize(input[key])
   }
 
   return output
@@ -117,6 +127,10 @@ function sanitize (input) {
 
 function isObject (val) {
   return typeof val === 'object' && val !== null && !(val instanceof Array)
+}
+
+function isBSON (val) {
+  return val && val._bsontype
 }
 
 module.exports = [

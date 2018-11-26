@@ -238,7 +238,10 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
-      - image: mongo:3.6
+      - image: bitnami/mongodb:3.6
+        environment:
+          - MONGODB_REPLICA_SET_MODE=primary
+          - MONGODB_ADVERTISED_HOSTNAME=localhost
 
   node-postgres:
     <<: *node-plugin-base
