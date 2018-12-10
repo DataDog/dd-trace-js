@@ -73,7 +73,7 @@ function createWrapValidate (tracer, config) {
 }
 
 function wrapFields (type, tracer, config, responsePathAsArray) {
-  if (!type || type._datadog_patched) {
+  if (!type || !type._fields || type._datadog_patched) {
     return
   }
 
@@ -86,13 +86,13 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
-    if (field.type) {
-      if (field.type._fields) {
-        wrapFields(field.type, tracer, config, responsePathAsArray)
-      } else if (field.type.ofType && field.type.ofType._fields) {
-        wrapFields(field.type.ofType, tracer, config, responsePathAsArray)
-      }
+    let unwrappedType = field.type
+
+    while (unwrappedType.ofType) {
+      unwrappedType = unwrappedType.ofType
     }
+
+    wrapFields(unwrappedType, tracer, config, responsePathAsArray)
   })
 }
 
