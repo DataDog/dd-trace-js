@@ -32,11 +32,40 @@ describe('Plugin', () => {
         before(() => agent.load(plugin, 'koa'))
         after(() => agent.close())
 
-        it('should do automatic instrumentation on middleware', done => {
+        it('should do automatic instrumentation on 2.x middleware', done => {
           const app = new Koa()
 
           app.use((ctx) => {
             ctx.body = ''
+          })
+
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'koa.request')
+              expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0]).to.have.property('type', 'http')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = app.listen(port, 'localhost', () => {
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+
+        it('should do automatic instrumentation on 1.x middleware', done => {
+          const app = new Koa()
+
+          app.use(function * (next) {
+            this.body = ''
+            yield next
           })
 
           agent
