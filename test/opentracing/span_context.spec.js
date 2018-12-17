@@ -1,5 +1,7 @@
 'use strict'
 
+const Uint64BE = require('int64-buffer').Uint64BE
+
 describe('SpanContext', () => {
   let SpanContext
 
@@ -86,6 +88,28 @@ describe('SpanContext', () => {
         started: [],
         finished: []
       }
+    })
+  })
+
+  describe('toTraceId()', () => {
+    it('should return the trace ID as string', () => {
+      const spanContext = new SpanContext({
+        traceId: new Uint64BE(123),
+        spanId: new Uint64BE(456)
+      })
+
+      expect(spanContext.toTraceId()).to.equal('123')
+    })
+  })
+
+  describe('toSpanId()', () => {
+    it('should return the span ID as string', () => {
+      const spanContext = new SpanContext({
+        traceId: new Uint64BE(123),
+        spanId: new Uint64BE(456)
+      })
+
+      expect(spanContext.toSpanId()).to.equal('456')
     })
   })
 })

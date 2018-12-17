@@ -22,6 +22,14 @@ class DatadogSpanContext extends SpanContext {
       finished: []
     }
   }
+
+  toTraceId () {
+    return this._traceId.toString()
+  }
+
+  toSpanId () {
+    return this._spanId.toString()
+  }
 }
 
 module.exports = DatadogSpanContext
