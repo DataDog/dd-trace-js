@@ -95,7 +95,7 @@ function startSpan (tracer, config, req, res, name) {
   req._datadog.config = config
 
   if (req._datadog.span) {
-    req._datadog.span.context().name = name
+    req._datadog.span.context()._name = name
     return req._datadog.span
   }
 
@@ -176,7 +176,7 @@ function addResponseTags (req) {
 
 function addResourceTag (req) {
   const span = req._datadog.span
-  const tags = span.context().tags
+  const tags = span.context()._tags
 
   if (tags['resource.name']) return
 

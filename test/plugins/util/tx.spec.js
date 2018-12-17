@@ -21,8 +21,8 @@ describe('plugins/util/tx', () => {
     it('should set the out.host and out.port tags', () => {
       tx.setHost(span, 'example.com', '1234')
 
-      expect(span.context().tags).to.have.property('out.host', 'example.com')
-      expect(span.context().tags).to.have.property('out.port', '1234')
+      expect(span.context()._tags).to.have.property('out.host', 'example.com')
+      expect(span.context()._tags).to.have.property('out.port', '1234')
     })
   })
 
@@ -45,9 +45,9 @@ describe('plugins/util/tx', () => {
 
         wrapper(error)
 
-        expect(span.context().tags).to.have.property('error.msg', error.message)
-        expect(span.context().tags).to.have.property('error.type', error.name)
-        expect(span.context().tags).to.have.property('error.stack', error.stack)
+        expect(span.context()._tags).to.have.property('error.msg', error.message)
+        expect(span.context()._tags).to.have.property('error.type', error.name)
+        expect(span.context()._tags).to.have.property('error.stack', error.stack)
       })
     })
 
@@ -71,9 +71,9 @@ describe('plugins/util/tx', () => {
 
         return promise.catch(err => {
           expect(err).to.equal(error)
-          expect(span.context().tags).to.have.property('error.msg', error.message)
-          expect(span.context().tags).to.have.property('error.type', error.name)
-          expect(span.context().tags).to.have.property('error.stack', error.stack)
+          expect(span.context()._tags).to.have.property('error.msg', error.message)
+          expect(span.context()._tags).to.have.property('error.type', error.name)
+          expect(span.context()._tags).to.have.property('error.stack', error.stack)
         })
       })
     })

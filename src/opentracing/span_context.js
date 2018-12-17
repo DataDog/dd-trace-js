@@ -8,16 +8,16 @@ class DatadogSpanContext extends SpanContext {
 
     this.traceId = props.traceId
     this.spanId = props.spanId
-    this.parentId = props.parentId || null
-    this.name = props.name
-    this.children = props.children || []
-    this.isFinished = props.isFinished || false
-    this.tags = props.tags || {}
-    this.metrics = props.metrics || {}
-    this.sampled = props.sampled === undefined || props.sampled
-    this.sampling = props.sampling || {}
-    this.baggageItems = props.baggageItems || {}
-    this.trace = props.trace || {
+    this._parentId = props.parentId || null
+    this._name = props.name
+    this._children = props.children || []
+    this._isFinished = props.isFinished || false
+    this._tags = props.tags || {}
+    this._metrics = props.metrics || {}
+    this._sampled = props.sampled === undefined || props.sampled
+    this._sampling = props.sampling || {}
+    this._baggageItems = props.baggageItems || {}
+    this._trace = props.trace || {
       started: [],
       finished: []
     }

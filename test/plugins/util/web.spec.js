@@ -59,7 +59,7 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
 
         expect(span.context().traceId.toString()).to.equal('123')
-        expect(span.context().parentId.toString()).to.equal('456')
+        expect(span.context()._parentId.toString()).to.equal('456')
       })
 
       it('should set the service name', () => {
@@ -67,7 +67,7 @@ describe('plugins/util/web', () => {
 
         span = web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(span.context().tags).to.have.property(SERVICE_NAME, 'custom')
+        expect(span.context()._tags).to.have.property(SERVICE_NAME, 'custom')
       })
 
       it('should activate a scope with the span', () => {
@@ -88,7 +88,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [SPAN_TYPE]: HTTP,
           [HTTP_URL]: 'http://localhost/user/123',
           [HTTP_METHOD]: 'GET',
@@ -103,7 +103,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [`${HTTP_HEADERS}.host`]: 'localhost'
         })
       })
@@ -122,7 +122,7 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
         span = web.instrument(tracer, config, req, res, 'test2.request')
 
-        expect(span.context().name).to.equal('test2.request')
+        expect(span.context()._name).to.equal('test2.request')
       })
 
       it('should allow overriding the span service name', () => {
@@ -130,7 +130,7 @@ describe('plugins/util/web', () => {
         config.service = 'test2'
         span = web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(span.context().tags).to.have.property('service.name', 'test2')
+        expect(span.context()._tags).to.have.property('service.name', 'test2')
       })
 
       it('should only wrap res.end once', () => {
@@ -190,7 +190,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [RESOURCE_NAME]: 'GET',
           [HTTP_STATUS_CODE]: '200'
         })
@@ -201,7 +201,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [ERROR]: 'true'
         })
       })
@@ -211,7 +211,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [ERROR]: 'true'
         })
       })
@@ -221,7 +221,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [HTTP_ROUTE]: '/custom/route'
         })
       })
@@ -255,7 +255,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.have.property('resource.name', 'GET /custom/route')
+        expect(span.context()._tags).to.have.property('resource.name', 'GET /custom/route')
       })
     })
   })
@@ -273,8 +273,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, '/bar')
       res.end()
 
-      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
-      expect(span.context().tags).to.have.property(HTTP_ROUTE, '/foo/bar')
+      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
+      expect(span.context()._tags).to.have.property(HTTP_ROUTE, '/foo/bar')
     })
   })
 
@@ -292,7 +292,7 @@ describe('plugins/util/web', () => {
       web.exitRoute(req)
       res.end()
 
-      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo')
+      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo')
     })
   })
 

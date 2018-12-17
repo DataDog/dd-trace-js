@@ -19,7 +19,7 @@ class Writer {
   }
 
   append (span) {
-    const trace = span.context().trace
+    const trace = span.context()._trace
 
     if (trace.started.length === trace.finished.length) {
       const formattedTrace = trace.finished.map(format)

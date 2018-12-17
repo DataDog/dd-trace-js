@@ -27,9 +27,9 @@ function formatSpan (span) {
   return {
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
-    parent_id: spanContext.parentId,
-    name: String(spanContext.name),
-    resource: String(spanContext.name),
+    parent_id: spanContext._parentId,
+    name: String(spanContext._name),
+    resource: String(spanContext._name),
     error: 0,
     meta: {},
     metrics: {},
@@ -39,7 +39,7 @@ function formatSpan (span) {
 }
 
 function extractTags (trace, span) {
-  const tags = span.context().tags
+  const tags = span.context()._tags
 
   Object.keys(tags).forEach(tag => {
     switch (tag) {
@@ -78,14 +78,14 @@ function extractError (trace, span) {
 function extractMetrics (trace, span) {
   const spanContext = span.context()
 
-  Object.keys(spanContext.metrics).forEach(metric => {
-    if (typeof spanContext.metrics[metric] === 'number') {
-      trace.metrics[metric] = spanContext.metrics[metric]
+  Object.keys(spanContext._metrics).forEach(metric => {
+    if (typeof spanContext._metrics[metric] === 'number') {
+      trace.metrics[metric] = spanContext._metrics[metric]
     }
   })
 
-  if (spanContext.sampling.priority !== undefined) {
-    trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext.sampling.priority
+  if (spanContext._sampling.priority !== undefined) {
+    trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
   }
 }
 
