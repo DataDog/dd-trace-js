@@ -37,8 +37,8 @@ describe('format', () => {
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
-      expect(trace.trace_id).to.equal(span.context().traceId)
-      expect(trace.span_id).to.equal(span.context().spanId)
+      expect(trace.trace_id).to.equal(span.context()._traceId)
+      expect(trace.span_id).to.equal(span.context()._spanId)
       expect(trace.parent_id).to.equal(span.context()._parentId)
       expect(trace.name).to.equal(span.context()._name)
       expect(trace.resource).to.equal(span.context()._name)

@@ -25,8 +25,8 @@ function formatSpan (span) {
   const spanContext = span.context()
 
   return {
-    trace_id: spanContext.traceId,
-    span_id: spanContext.spanId,
+    trace_id: spanContext._traceId,
+    span_id: spanContext._spanId,
     parent_id: spanContext._parentId,
     name: String(spanContext._name),
     resource: String(spanContext._name),

@@ -58,7 +58,7 @@ describe('plugins/util/web', () => {
 
         span = web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(span.context().traceId.toString()).to.equal('123')
+        expect(span.context()._traceId.toString()).to.equal('123')
         expect(span.context()._parentId.toString()).to.equal('456')
       })
 

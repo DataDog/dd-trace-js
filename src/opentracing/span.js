@@ -37,8 +37,8 @@ class DatadogSpan extends Span {
   toString () {
     const spanContext = this.context()
     const json = JSON.stringify({
-      traceId: spanContext.traceId,
-      spanId: spanContext.spanId,
+      traceId: spanContext._traceId,
+      spanId: spanContext._spanId,
       parentId: spanContext._parentId,
       service: spanContext._tags['service.name'],
       name: spanContext._name,
@@ -53,9 +53,9 @@ class DatadogSpan extends Span {
 
     if (parent) {
       spanContext = new SpanContext({
-        traceId: parent.traceId,
+        traceId: parent._traceId,
         spanId: platform.id(),
-        parentId: parent.spanId,
+        parentId: parent._spanId,
         sampled: parent._sampled,
         sampling: parent._sampling,
         baggageItems: Object.assign({}, parent._baggageItems),

@@ -28,8 +28,8 @@ describe('SpanContext', () => {
     const spanContext = new SpanContext(props)
 
     expect(spanContext).to.deep.equal({
-      traceId: '123',
-      spanId: '456',
+      _traceId: '123',
+      _spanId: '456',
       _parentId: '789',
       _name: 'test',
       _children: ['span'],
@@ -71,8 +71,8 @@ describe('SpanContext', () => {
     })
 
     expect(spanContext).to.deep.equal({
-      traceId: '123',
-      spanId: '456',
+      _traceId: '123',
+      _spanId: '456',
       _parentId: null,
       _name: undefined,
       _children: [],

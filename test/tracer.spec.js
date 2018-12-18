@@ -40,7 +40,7 @@ describe('Tracer', () => {
     it('should use the parent context', done => {
       tracer.trace('parent', parent => {
         tracer.trace('child', child => {
-          expect(child.context()).to.have.property('_parentId', parent.context().spanId)
+          expect(child.context()).to.have.property('_parentId', parent.context()._spanId)
           done()
         })
       })
@@ -103,8 +103,8 @@ describe('Tracer', () => {
       })
 
       tracer.trace('name', { childOf }, current => {
-        expect(current.context().traceId).to.equal(childOf.traceId)
-        expect(current.context()._parentId).to.equal(childOf.spanId)
+        expect(current.context()._traceId).to.equal(childOf._traceId)
+        expect(current.context()._parentId).to.equal(childOf._spanId)
         done()
       })
     })

@@ -14,8 +14,8 @@ const logKeys = [traceKey, spanKey, samplingKey]
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
-    carrier[traceKey] = spanContext.traceId.toString()
-    carrier[spanKey] = spanContext.spanId.toString()
+    carrier[traceKey] = spanContext._traceId.toString()
+    carrier[spanKey] = spanContext._spanId.toString()
 
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)

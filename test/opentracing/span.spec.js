@@ -42,8 +42,8 @@ describe('Span', () => {
   it('should have a default context', () => {
     span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
 
-    expect(span.context().traceId).to.deep.equal(new Uint64BE(123, 123))
-    expect(span.context().spanId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context()._traceId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context()._spanId).to.deep.equal(new Uint64BE(123, 123))
   })
 
   it('should add itself to the context trace started spans', () => {
@@ -54,8 +54,8 @@ describe('Span', () => {
 
   it('should use a parent context', () => {
     const parent = {
-      traceId: new Uint64BE(123, 123),
-      spanId: new Uint64BE(456, 456),
+      _traceId: new Uint64BE(123, 123),
+      _spanId: new Uint64BE(456, 456),
       _sampled: false,
       _baggageItems: { foo: 'bar' },
       _trace: {
@@ -66,7 +66,7 @@ describe('Span', () => {
 
     span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
 
-    expect(span.context().traceId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context()._traceId).to.deep.equal(new Uint64BE(123, 123))
     expect(span.context()._parentId).to.deep.equal(new Uint64BE(456, 456))
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context()._trace.started).to.deep.equal(['span', span])
@@ -74,8 +74,8 @@ describe('Span', () => {
 
   it('should start a new trace if the parent trace is finished', () => {
     const parent = {
-      traceId: new Uint64BE(123, 123),
-      spanId: new Uint64BE(456, 456),
+      _traceId: new Uint64BE(123, 123),
+      _spanId: new Uint64BE(456, 456),
       _sampled: false,
       _baggageItems: { foo: 'bar' },
       _trace: {

@@ -6,8 +6,8 @@ class DatadogSpanContext extends SpanContext {
   constructor (props) {
     super()
 
-    this.traceId = props.traceId
-    this.spanId = props.spanId
+    this._traceId = props.traceId
+    this._spanId = props.spanId
     this._parentId = props.parentId || null
     this._name = props.name
     this._children = props.children || []

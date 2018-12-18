@@ -38,7 +38,7 @@ describe('plugins/util/redis', () => {
 
       span = redis.instrument(tracer, config, '1', 'ping', [])
 
-      expect(span.context()._parentId.toString()).to.equal(parent.context().spanId.toString())
+      expect(span.context()._parentId.toString()).to.equal(parent.context()._spanId.toString())
     })
 
     it('should trim command arguments if yoo long', () => {
