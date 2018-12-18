@@ -6,10 +6,10 @@ const web = require('./util/web')
 
 function createWrapHandle (tracer, config) {
   return function wrapHandle (handle) {
-    return function handleWithTracer (req) {
+    return function handleWithTracer (req, res, done) {
       web.patch(req)
 
-      return handle.apply(this, arguments)
+      return handle.call(this, req, res, wrapDone(done, req))
     }
   }
 }
@@ -42,32 +42,39 @@ function wrapRouterMethod (original) {
     const offset = this.stack ? [].concat(this.stack).length : 0
     const router = original.apply(this, arguments)
 
-    if (this.stack) {
-      wrapStack(this.stack, offset, extractMatchers(fn))
+    if (typeof this.stack === 'function') {
+      this.stack = [{ handle: this.stack }]
     }
+
+    wrapStack(this.stack, offset, extractMatchers(fn))
 
     return router
   }
 }
 
+function wrapLayerHandle (layer, handle) {
+  if (handle.length === 4) {
+    return function (error, req, res, next) {
+      return callHandle(layer, handle, req, [error, req, res, wrapNext(layer, req, next)])
+    }
+  } else {
+    return function (req, res, next) {
+      return callHandle(layer, handle, req, [req, res, wrapNext(layer, req, next)])
+    }
+  }
+}
+
 function wrapStack (stack, offset, matchers) {
   [].concat(stack).slice(offset).forEach(layer => {
-    const handle = layer.handle || layer
-
-    if (handle.length === 4) {
-      layer.handle = (error, req, res, next) => {
-        return handle.call(layer, error, req, res, wrapNext(layer, req, next))
-      }
-    } else {
-      layer.handle = (req, res, next) => {
-        return handle.call(layer, req, res, wrapNext(layer, req, next))
-      }
-    }
-
+    layer.handle = wrapLayerHandle(layer, layer.handle)
     layer._datadog_matchers = matchers
 
     if (layer.route) {
       METHODS.forEach(method => {
+        if (typeof layer.route.stack === 'function') {
+          layer.route.stack = [{ handle: layer.route.stack }]
+        }
+
         layer.route[method] = wrapRouterMethod(layer.route[method])
       })
     }
@@ -75,22 +82,42 @@ function wrapStack (stack, offset, matchers) {
 }
 
 function wrapNext (layer, req, next) {
-  if (!web.active(req)) {
-    return next
-  }
+  if (!next || !web.active(req)) return next
 
   const originalNext = next
-
-  web.reactivate(req)
 
   return function (error) {
     if (!error && layer.path && !isFastStar(layer)) {
       web.exitRoute(req)
     }
 
+    addError(web.active(req), error)
+
+    web.exitMiddleware(req)
+
     process.nextTick(() => {
       originalNext.apply(null, arguments)
     })
+  }
+}
+
+function wrapDone (original, req) {
+  return function done (error) {
+    const span = web.root(req)
+
+    addError(span, error)
+
+    return original.apply(this, arguments)
+  }
+}
+
+function callHandle (layer, handle, req, args) {
+  web.enterMiddleware(req, handle, 'express.middleware')
+
+  try {
+    return handle.apply(layer, args)
+  } catch (e) {
+    throw addError(web.active(req), e)
   }
 }
 
@@ -117,6 +144,18 @@ function isFastStar (layer) {
 
 function flatten (arr) {
   return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
+}
+
+function addError (span, error) {
+  if (error) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
+  }
+
+  return error
 }
 
 module.exports = {
