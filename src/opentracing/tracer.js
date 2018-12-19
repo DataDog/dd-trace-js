@@ -12,6 +12,8 @@ const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
+const LogPropagator = require('./propagation/log')
+const formats = require('../../ext/formats')
 const log = require('../log')
 
 class DatadogTracer extends Tracer {
@@ -31,9 +33,10 @@ class DatadogTracer extends Tracer {
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
-      [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(),
-      [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(),
-      [opentracing.FORMAT_BINARY]: new BinaryPropagator()
+      [formats.TEXT_MAP]: new TextMapPropagator(),
+      [formats.HTTP_HEADERS]: new HttpPropagator(),
+      [formats.BINARY]: new BinaryPropagator(),
+      [formats.LOG]: new LogPropagator()
     }
   }
 
