@@ -8,8 +8,8 @@ const spanKey = 'dd.span_id'
 
 class LogPropagator {
   inject (spanContext, carrier) {
-    carrier[traceKey] = spanContext.traceId.toString()
-    carrier[spanKey] = spanContext.spanId.toString()
+    carrier[traceKey] = spanContext.toTraceId()
+    carrier[spanKey] = spanContext.toSpanId()
   }
 
   extract (carrier) {
