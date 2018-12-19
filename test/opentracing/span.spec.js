@@ -111,11 +111,23 @@ describe('Span', () => {
   })
 
   describe('setBaggageItem', () => {
-    it('should set a baggage item', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+    it('should set a baggage item on the trace', () => {
+      const parent = {
+        traceId: new Uint64BE(123, 123),
+        spanId: new Uint64BE(456, 456),
+        _sampled: false,
+        _baggageItems: {},
+        _trace: {
+          started: ['span'],
+          finished: ['span']
+        }
+      }
+
+      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
       span.setBaggageItem('foo', 'bar')
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
+      expect(parent._baggageItems).to.have.property('foo', 'bar')
     })
   })
 
