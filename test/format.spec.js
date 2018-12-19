@@ -17,11 +17,11 @@ describe('format', () => {
     spanContext = {
       traceId: id,
       spanId: id,
-      parentId: id,
-      tags: {},
-      metrics: {},
-      sampling: {},
-      name: 'operation'
+      _parentId: id,
+      _tags: {},
+      _metrics: {},
+      _sampling: {},
+      _name: 'operation'
     }
 
     span = {
@@ -37,11 +37,11 @@ describe('format', () => {
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
-      expect(trace.trace_id).to.equal(span.context().traceId)
-      expect(trace.span_id).to.equal(span.context().spanId)
-      expect(trace.parent_id).to.equal(span.context().parentId)
-      expect(trace.name).to.equal(span.context().name)
-      expect(trace.resource).to.equal(span.context().name)
+      expect(trace.trace_id).to.equal(span.context()._traceId)
+      expect(trace.span_id).to.equal(span.context()._spanId)
+      expect(trace.parent_id).to.equal(span.context()._parentId)
+      expect(trace.name).to.equal(span.context()._name)
+      expect(trace.resource).to.equal(span.context()._name)
       expect(trace.error).to.equal(0)
       expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
@@ -50,9 +50,9 @@ describe('format', () => {
     })
 
     it('should extract Datadog specific tags', () => {
-      spanContext.tags['service.name'] = 'service'
-      spanContext.tags['span.type'] = 'type'
-      spanContext.tags['resource.name'] = 'resource'
+      spanContext._tags['service.name'] = 'service'
+      spanContext._tags['span.type'] = 'type'
+      spanContext._tags['resource.name'] = 'resource'
 
       trace = format(span)
 
@@ -62,10 +62,10 @@ describe('format', () => {
     })
 
     it('should only extract tags that are not Datadog specific to meta', () => {
-      spanContext.tags['service.name'] = 'service'
-      spanContext.tags['span.type'] = 'type'
-      spanContext.tags['resource.name'] = 'resource'
-      spanContext.tags['foo.bar'] = 'foobar'
+      spanContext._tags['service.name'] = 'service'
+      spanContext._tags['span.type'] = 'type'
+      spanContext._tags['resource.name'] = 'resource'
+      spanContext._tags['foo.bar'] = 'foobar'
 
       trace = format(span)
 
@@ -76,7 +76,7 @@ describe('format', () => {
     })
 
     it('should extract metrics', () => {
-      spanContext.metrics = { metric: 50 }
+      spanContext._metrics = { metric: 50 }
 
       trace = format(span)
 
@@ -84,7 +84,7 @@ describe('format', () => {
     })
 
     it('should ignore metrics with invalid values', () => {
-      spanContext.metrics = { metric: 'test' }
+      spanContext._metrics = { metric: 'test' }
 
       trace = format(span)
 
@@ -103,7 +103,7 @@ describe('format', () => {
 
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
-        spanContext.tags['error'] = true
+        spanContext._tags['error'] = true
 
         trace = format(span)
 
@@ -111,7 +111,7 @@ describe('format', () => {
       })
 
       it('should not set the error flag when error is false', () => {
-        spanContext.tags['error'] = false
+        spanContext._tags['error'] = false
 
         trace = format(span)
 
@@ -119,7 +119,7 @@ describe('format', () => {
       })
 
       it('should not extract error to meta', () => {
-        spanContext.tags['error'] = true
+        spanContext._tags['error'] = true
 
         trace = format(span)
 
@@ -128,9 +128,9 @@ describe('format', () => {
     })
 
     it('should set the error flag when there is an error-related tag', () => {
-      spanContext.tags['error.type'] = 'Error'
-      spanContext.tags['error.msg'] = 'boom'
-      spanContext.tags['error.stack'] = ''
+      spanContext._tags['error.type'] = 'Error'
+      spanContext._tags['error.msg'] = 'boom'
+      spanContext._tags['error.stack'] = ''
 
       trace = format(span)
 
@@ -138,8 +138,8 @@ describe('format', () => {
     })
 
     it('should sanitize the input', () => {
-      spanContext.name = null
-      spanContext.tags = {
+      spanContext._name = null
+      spanContext._tags = {
         'foo.bar': null
       }
       span._startTime = NaN
@@ -155,7 +155,7 @@ describe('format', () => {
     })
 
     it('should include the sampling priority', () => {
-      spanContext.sampling.priority = 0
+      spanContext._sampling.priority = 0
       trace = format(span)
       expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })

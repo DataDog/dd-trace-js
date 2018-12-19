@@ -17,8 +17,8 @@ describe('PrioritySampler', () => {
 
   beforeEach(() => {
     context = {
-      tags: {},
-      sampling: {}
+      _tags: {},
+      _sampling: {}
     }
 
     span = {
@@ -59,31 +59,31 @@ describe('PrioritySampler', () => {
     it('should set the correct priority by default', () => {
       prioritySampler.sample(span)
 
-      expect(context.sampling.priority).to.equal(AUTO_KEEP)
+      expect(context._sampling.priority).to.equal(AUTO_KEEP)
     })
 
     it('should set the priority from the corresponding tag', () => {
-      context.tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
+      context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
 
       prioritySampler.sample(span)
 
-      expect(context.sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.priority).to.equal(USER_KEEP)
     })
 
     it('should freeze the sampling priority once set', () => {
       prioritySampler.sample(span)
 
-      context.tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
+      context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
 
       prioritySampler.sample(span)
 
-      expect(context.sampling.priority).to.equal(AUTO_KEEP)
+      expect(context._sampling.priority).to.equal(AUTO_KEEP)
     })
 
     it('should accept a span context', () => {
       prioritySampler.sample(context)
 
-      expect(context.sampling.priority).to.equal(AUTO_KEEP)
+      expect(context._sampling.priority).to.equal(AUTO_KEEP)
     })
   })
 
@@ -95,11 +95,11 @@ describe('PrioritySampler', () => {
 
       prioritySampler.sample(span)
 
-      expect(context.sampling.priority).to.equal(AUTO_REJECT)
+      expect(context._sampling.priority).to.equal(AUTO_REJECT)
     })
 
     it('should update service rates', () => {
-      context.tags[SERVICE_NAME] = 'hello'
+      context._tags[SERVICE_NAME] = 'hello'
 
       prioritySampler.update({
         'service:hello,env:test': AUTO_REJECT
@@ -107,7 +107,7 @@ describe('PrioritySampler', () => {
 
       prioritySampler.sample(span)
 
-      expect(context.sampling.priority).to.equal(AUTO_REJECT)
+      expect(context._sampling.priority).to.equal(AUTO_REJECT)
     })
   })
 })

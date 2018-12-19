@@ -16,7 +16,7 @@ describe('plugins/util/redis', () => {
     it('should start a span with the correct tags', () => {
       span = redis.instrument(tracer, config, '1', 'set', ['foo', 'bar'])
 
-      expect(span.context().tags).to.deep.include({
+      expect(span.context()._tags).to.deep.include({
         'span.kind': 'client',
         'service.name': 'test-redis',
         'resource.name': 'set',
@@ -38,7 +38,7 @@ describe('plugins/util/redis', () => {
 
       span = redis.instrument(tracer, config, '1', 'ping', [])
 
-      expect(span.context().parentId.toString()).to.equal(parent.context().spanId.toString())
+      expect(span.context()._parentId.toString()).to.equal(parent.context()._spanId.toString())
     })
 
     it('should trim command arguments if yoo long', () => {
@@ -50,7 +50,7 @@ describe('plugins/util/redis', () => {
 
       span = redis.instrument(tracer, config, '1', 'get', [key])
 
-      const rawCommand = span.context().tags['redis.raw_command']
+      const rawCommand = span.context()._tags['redis.raw_command']
 
       expect(rawCommand).to.have.length(104)
       expect(rawCommand.substr(0, 10)).to.equal('GET aaaaaa')
@@ -72,7 +72,7 @@ describe('plugins/util/redis', () => {
 
       span = redis.instrument(tracer, config, '1', 'get', values)
 
-      const rawCommand = span.context().tags['redis.raw_command']
+      const rawCommand = span.context()._tags['redis.raw_command']
 
       expect(rawCommand).to.have.length(1000)
       expect(rawCommand.substr(0, 10)).to.equal('GET aaaaaa')

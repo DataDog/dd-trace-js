@@ -20,7 +20,7 @@ const redis = {
       }
     })
 
-    span.setTag('service.name', config.service || `${span.context().tags['service.name']}-redis`)
+    span.setTag('service.name', config.service || `${span.context()._tags['service.name']}-redis`)
 
     return span
   }

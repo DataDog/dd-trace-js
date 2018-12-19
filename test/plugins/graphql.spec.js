@@ -986,7 +986,7 @@ describe('Plugin', () => {
 
               try {
                 expect(scope).to.not.be.null
-                expect(scope.span().context()).to.have.property('name', 'graphql.execute')
+                expect(scope.span().context()).to.have.property('_name', 'graphql.execute')
                 done()
               } catch (e) {
                 done(e)

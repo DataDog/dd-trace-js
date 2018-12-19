@@ -26,7 +26,7 @@ class PrioritySampler {
 
   isSampled (span) {
     const context = this._getContext(span)
-    const key = `service:${context.tags[SERVICE_NAME]},env:${this._env}`
+    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
     return sampler.isSampled(span)
@@ -35,16 +35,16 @@ class PrioritySampler {
   sample (span) {
     const context = this._getContext(span)
 
-    if (context.sampling.priority !== undefined) return
+    if (context._sampling.priority !== undefined) return
 
-    const tag = parseInt(context.tags[SAMPLING_PRIORITY], 10)
+    const tag = parseInt(context._tags[SAMPLING_PRIORITY], 10)
 
     if (this.validate(tag)) {
-      context.sampling.priority = tag
+      context._sampling.priority = tag
       return
     }
 
-    context.sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
+    context._sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
   }
 
   update (rates) {

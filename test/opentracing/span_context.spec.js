@@ -27,7 +27,23 @@ describe('SpanContext', () => {
     }
     const spanContext = new SpanContext(props)
 
-    expect(spanContext).to.deep.equal(props)
+    expect(spanContext).to.deep.equal({
+      _traceId: '123',
+      _spanId: '456',
+      _parentId: '789',
+      _name: 'test',
+      _children: ['span'],
+      _isFinished: true,
+      _tags: {},
+      _metrics: {},
+      _sampled: false,
+      _sampling: { priority: 2 },
+      _baggageItems: { foo: 'bar' },
+      _trace: {
+        started: ['span1', 'span2'],
+        finished: ['span1']
+      }
+    })
   })
 
   it('should have the correct default values', () => {
@@ -54,6 +70,22 @@ describe('SpanContext', () => {
       spanId: expected.spanId
     })
 
-    expect(spanContext).to.deep.equal(expected)
+    expect(spanContext).to.deep.equal({
+      _traceId: '123',
+      _spanId: '456',
+      _parentId: null,
+      _name: undefined,
+      _children: [],
+      _isFinished: false,
+      _tags: {},
+      _metrics: {},
+      _sampled: true,
+      _sampling: {},
+      _baggageItems: {},
+      _trace: {
+        started: [],
+        finished: []
+      }
+    })
   })
 })
