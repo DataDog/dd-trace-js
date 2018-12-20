@@ -66,6 +66,38 @@ const web = {
     req._datadog.paths.pop()
   },
 
+  // Start a new middleware span and activate a new scope with the span.
+  enterMiddleware (req, middleware, name) {
+    if (!this.active(req)) return
+
+    const tracer = req._datadog.tracer
+    const childOf = this.active(req)
+    const span = tracer.startSpan(name, { childOf })
+    const scope = tracer.scopeManager().activate(span)
+
+    span.addTags({
+      [RESOURCE_NAME]: middleware.name || '<anonymous>'
+    })
+
+    req._datadog.middleware.push(scope)
+
+    return span
+  },
+
+  // Close the active middleware scope and finish its span.
+  exitMiddleware (req) {
+    if (!this.active(req)) return
+
+    const scope = req._datadog.middleware.pop()
+
+    if (!scope) return
+
+    const span = scope.span()
+
+    span.finish()
+    scope.close()
+  },
+
   // Register a callback to run before res.end() is called.
   beforeEnd (req, callback) {
     req._datadog.beforeEnd.push(callback)
@@ -80,14 +112,23 @@ const web = {
         span: null,
         scope: null,
         paths: [],
+        middleware: [],
         beforeEnd: []
       }
     })
   },
 
-  // Return the active span. For now, this is always the request span.
-  active (req) {
+  // Return the request root span.
+  root (req) {
     return req._datadog ? req._datadog.span : null
+  },
+
+  // Return the active span.
+  active (req) {
+    if (!req._datadog) return null
+    if (req._datadog.middleware.length === 0) return req._datadog.span || null
+
+    return req._datadog.middleware.slice(-1)[0].span()
   }
 }
 
@@ -127,6 +168,17 @@ function finish (req, res) {
   req._datadog.finished = true
 }
 
+function finishMiddleware (req, res) {
+  if (req._datadog.finished) return
+
+  let scope
+
+  while ((scope = req._datadog.middleware.pop())) {
+    scope.span().finish()
+    scope.close()
+  }
+}
+
 function wrapEnd (req) {
   const res = req._datadog.res
   const end = res.end
@@ -135,6 +187,8 @@ function wrapEnd (req) {
 
   req._datadog.end = res.end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
+
+    finishMiddleware(req, res)
 
     const returnValue = end.apply(this, arguments)
 

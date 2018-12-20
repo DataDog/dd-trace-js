@@ -147,7 +147,7 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
       })
 
-      it('should finish the span', () => {
+      it('should finish the request span', () => {
         sinon.spy(span, 'finish')
 
         res.end()
@@ -162,6 +162,16 @@ describe('plugins/util/web', () => {
         res.end()
 
         expect(span.finish).to.have.been.calledOnce
+      })
+
+      it('should finish middleware spans', () => {
+        span = web.enterMiddleware(req, () => {}, 'middleware')
+
+        sinon.spy(span, 'finish')
+
+        res.end()
+
+        expect(span.finish).to.have.been.called
       })
 
       it('should execute any beforeEnd handlers', () => {
@@ -296,6 +306,52 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('enterMiddleware', () => {
+    beforeEach(() => {
+      config = web.normalizeConfig(config)
+      span = web.instrument(tracer, config, req, res, 'test.request')
+    })
+
+    it('should activate a scope with the span', (done) => {
+      const fn = function test () {
+        const scope = tracer.scopeManager().active()
+
+        expect(scope).to.not.be.null
+        expect(scope.span()).to.equal(span)
+        expect(scope.span().context()._tags).to.have.property('resource.name', 'test')
+
+        done()
+      }
+
+      span = web.enterMiddleware(req, fn, 'middleware')
+
+      fn(req, res)
+    })
+  })
+
+  describe('exitMiddleware', () => {
+    beforeEach(() => {
+      config = web.normalizeConfig(config)
+      span = web.instrument(tracer, config, req, res, 'test.request')
+    })
+
+    it('should close the scope of the current middleware', (done) => {
+      const fn = () => {
+        const scope = tracer.scopeManager().active()
+
+        expect(scope).to.not.be.null
+        expect(scope.span()).to.equal(span)
+
+        done()
+      }
+
+      web.enterMiddleware(req, fn, 'middleware')
+      web.exitMiddleware(req, fn, 'middleware')
+
+      fn(req, res)
+    })
+  })
+
   describe('patch', () => {
     it('should patch the request with Datadog metadata', () => {
       web.patch(req)
@@ -307,11 +363,34 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('root', () => {
+    it('should return the request root span', () => {
+      span = web.instrument(tracer, config, req, res, 'test.request')
+
+      web.enterMiddleware(req, () => {}, 'express.middleware')
+
+      expect(web.root(req)).to.equal(span)
+    })
+
+    it('should return null when not yet instrumented', () => {
+      expect(web.active(req)).to.be.null
+    })
+  })
+
   describe('active', () => {
-    it('should return the active span', () => {
+    it('should return the request span by default', () => {
       span = web.instrument(tracer, config, req, res, 'test.request')
 
       expect(web.active(req)).to.equal(span)
+    })
+
+    it('should return the active middleware span', () => {
+      span = web.instrument(tracer, config, req, res, 'test.request')
+
+      web.enterMiddleware(req, () => {}, 'express.middleware')
+
+      expect(web.active(req)).to.not.be.null
+      expect(web.active(req)).to.not.equal(span)
     })
 
     it('should return null when not yet instrumented', () => {

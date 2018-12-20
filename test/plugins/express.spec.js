@@ -7,6 +7,8 @@ const plugin = require('../../src/plugins/express')
 
 wrapIt()
 
+const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
+
 describe('Plugin', () => {
   let tracer
   let express
@@ -45,13 +47,15 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test')
-                expect(traces[0][0]).to.have.property('type', 'http')
-                expect(traces[0][0]).to.have.property('resource', 'GET /user')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'http')
+                expect(spans[0]).to.have.property('resource', 'GET /user')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
               })
               .then(done)
               .catch(done)
@@ -77,13 +81,15 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test')
-                expect(traces[0][0]).to.have.property('type', 'http')
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
-                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'http')
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
               })
               .then(done)
               .catch(done)
@@ -111,13 +117,56 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test')
-                expect(traces[0][0]).to.have.property('type', 'http')
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
-                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'http')
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app/user/1`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should do automatic instrumentation on middleware', done => {
+          const app = express()
+          const router = express.Router()
+
+          router.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          app.use(function named (req, res, next) { next() })
+          app.use('/app', router)
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans).to.have.length(5)
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[1]).to.have.property('resource', 'named')
+                expect(spans[1]).to.have.property('name', 'express.middleware')
+                expect(spans[1].parent_id.toString()).to.equal(spans[0].trace_id.toString())
+                expect(spans[2]).to.have.property('resource', 'router')
+                expect(spans[2]).to.have.property('name', 'express.middleware')
+                expect(spans[3].resource).to.match(/^bound\s.*$/)
+                expect(spans[3]).to.have.property('name', 'express.middleware')
+                expect(spans[4]).to.have.property('resource', '<anonymous>')
+                expect(spans[4]).to.have.property('name', 'express.middleware')
               })
               .then(done)
               .catch(done)
@@ -143,7 +192,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app(/^\\/user\\/(\\d)$/)')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app(/^\\/user\\/(\\d)$/)')
               })
               .then(done)
               .catch(done)
@@ -169,7 +220,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -201,7 +254,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /foo/bar')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
               })
               .then(done)
               .catch(done)
@@ -227,7 +282,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -254,7 +311,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -280,8 +339,10 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0]).to.have.length(1)
-                expect(traces[0][0]).to.have.property('resource', 'GET /parent/child')
+                const spans = sort(traces[0])
+
+                expect(spans.filter(span => span.name === 'express.request')).to.have.length(1)
+                expect(spans[0]).to.have.property('resource', 'GET /parent/child')
               })
               .then(done)
               .catch(done)
@@ -289,6 +350,35 @@ describe('Plugin', () => {
             appListener = app.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/parent/child`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should finish middleware spans when next() is called', done => {
+          const app = express()
+
+          let span
+
+          app.use((req, res, next) => {
+            const scope = tracer.scopeManager().active()
+
+            span = scope.span()
+            sinon.spy(span, 'finish')
+
+            next()
+          })
+
+          app.use((req, res, next) => {
+            expect(span.finish).to.have.been.called
+            res.status(200).send()
+            done()
+          })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app/user/1`)
                 .catch(done)
             })
           })
@@ -322,7 +412,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][1]).to.have.property('resource', 'GET /app/user/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -358,7 +450,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -385,7 +479,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app')
               })
               .then(done)
               .catch(done)
@@ -440,7 +536,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET')
               })
               .then(done)
               .catch(done)
@@ -453,13 +551,13 @@ describe('Plugin', () => {
           })
         })
 
-        it('should reactivate the span when the active scope is closed', done => {
+        it('should activate a scope per middleware', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const app = express()
 
-          let span
           let scope
+          let span
 
           app.use((req, res, next) => {
             scope = tracer.scopeManager().active()
@@ -475,7 +573,7 @@ describe('Plugin', () => {
 
             try {
               expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
+              expect(scope.span()).to.not.equal(span)
               done()
             } catch (e) {
               done(e)
@@ -490,7 +588,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should reactivate the span with multiple middleware on a route', done => {
+        it('should activate a span for every middleware on a route', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const app = express()
@@ -500,10 +598,8 @@ describe('Plugin', () => {
           app.get(
             '/user',
             (req, res, next) => {
-              const scope = tracer.scopeManager().active()
-
+              const scope = tracer.scopeManager().activate({})
               span = scope.span()
-              tracer.scopeManager().activate({})
 
               next()
             },
@@ -514,7 +610,7 @@ describe('Plugin', () => {
 
               try {
                 expect(scope).to.not.be.null
-                expect(scope.span()).to.equal(span)
+                expect(scope.span()).to.not.equal(span)
                 done()
               } catch (e) {
                 done(e)
@@ -547,7 +643,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
               })
               .then(done)
               .catch(done)
@@ -568,8 +666,10 @@ describe('Plugin', () => {
 
           getPort().then(port => {
             agent.use(traces => {
-              expect(traces[0][0].trace_id.toString()).to.equal('1234')
-              expect(traces[0][0].parent_id.toString()).to.equal('5678')
+              const spans = sort(traces[0])
+
+              expect(spans[0].trace_id.toString()).to.equal('1234')
+              expect(spans[0].parent_id.toString()).to.equal('5678')
             })
               .then(done)
               .catch(done)
@@ -588,7 +688,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should handle errors', done => {
+        it('should handle error status codes', done => {
           const app = express()
 
           app.use((req, res, next) => {
@@ -601,12 +701,71 @@ describe('Plugin', () => {
 
           getPort().then(port => {
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0]).to.have.property('resource', 'GET /user')
-              expect(traces[0][0].meta).to.have.property('http.status_code', '500')
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('error', 1)
+              expect(spans[0]).to.have.property('resource', 'GET /user')
+              expect(spans[0].meta).to.have.property('http.status_code', '500')
 
               done()
             })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle request errors', done => {
+          const app = express()
+          const error = new Error('boom')
+
+          app.use(() => { throw error })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('http.status_code', '500')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle middleware errors', done => {
+          const app = express()
+          const error = new Error('boom')
+
+          app.use((req, res) => { throw error })
+          app.use((error, req, res, next) => res.status(500).send())
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[1]).to.have.property('error', 1)
+                expect(spans[1].meta).to.have.property('error.type', error.name)
+                expect(spans[1].meta).to.have.property('error.msg', error.message)
+                expect(spans[1].meta).to.have.property('error.stack', error.stack)
+              })
+              .then(done)
+              .catch(done)
 
             appListener = app.listen(port, 'localhost', () => {
               axios
@@ -646,7 +805,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'custom')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'custom')
               })
               .then(done)
               .catch(done)
@@ -669,7 +830,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
               })
               .then(done)
               .catch(done)
@@ -694,7 +857,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('http.headers.user-agent', 'test')
+                const spans = sort(traces[0])
+
+                expect(spans[0].meta).to.have.property('http.headers.user-agent', 'test')
               })
               .then(done)
               .catch(done)

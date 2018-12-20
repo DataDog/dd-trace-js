@@ -11,6 +11,8 @@ const plugin = require('../../src/plugins/router')
 
 wrapIt()
 
+const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
+
 describe('Plugin', () => {
   let tracer
   let Router
@@ -66,8 +68,9 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0]).to.have.length(1)
-                expect(traces[0][0]).to.have.property('resource', 'GET /parent/child/:id')
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /parent/child/:id')
               })
               .then(done)
               .catch(done)
