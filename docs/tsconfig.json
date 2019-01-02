@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "module": "commonjs",
+    "baseUrl": ".."
+  },
+  "files": [
+    "../index.d.ts"
+  ]
+}

@@ -5,8 +5,6 @@
   "license": "BSD-3-Clause",
   "private": true,
   "devDependencies": {
-    "gulp": "^3.9.1",
-    "gulp-jsdoc3": "^2.0.0",
-    "jsdoc": "^3.5.5"
+    "typedoc": "^0.13.0"
   }
 }

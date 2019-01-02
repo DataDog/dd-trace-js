@@ -3,10 +3,10 @@
   "version": "0.9.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
+  "typings": "index.d.ts",
   "scripts": {
     "bench": "node benchmark",
-    "jsdoc": "cd docs && yarn && ./node_modules/.bin/gulp jsdoc",
-    "jsdoc:watch": "cd docs && yarn && ./node_modules/.bin/gulp jsdoc:watch",
+    "typedoc": "cd docs && yarn && typedoc",
     "lint": "eslint . && node scripts/check_licenses.js",
     "services": "node ./scripts/install_plugin_modules && node test/setup/services",
     "tdd": "yarn services && NO_DEPRECATION=* mocha --watch 'test/setup/**/*.js'",
@@ -37,6 +37,7 @@
     "node": "^4.7 || ^6.9 || >=8"
   },
   "dependencies": {
+    "@types/node": "^10.12.18",
     "async-hook-jl": "^1.7.6",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
