@@ -9,6 +9,8 @@ describe('Plugin', () => {
   let redis
   let tracer
   let client
+  let pub
+  let sub
 
   describe('redis', () => {
     withVersions(plugin, 'redis', version => {
@@ -17,7 +19,9 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        client.quit()
+        client.quit(() => {})
+        pub.quit(() => {})
+        sub.quit(() => {})
       })
 
       describe('without configuration', () => {
@@ -32,6 +36,8 @@ describe('Plugin', () => {
         beforeEach(() => {
           redis = require(`../../versions/redis@${version}`).get()
           client = redis.createClient()
+          pub = redis.createClient()
+          sub = redis.createClient()
         })
 
         it('should do automatic instrumentation when using callbacks', done => {
@@ -54,6 +60,17 @@ describe('Plugin', () => {
             .catch(done)
 
           client.get('foo', () => {})
+        })
+
+        it('should support commands without a callback', done => {
+          sub.on('error', done)
+          sub.on('message', () => done())
+          sub.subscribe('foo')
+
+          sub.on('subscribe', () => {
+            pub.on('error', done)
+            pub.publish('foo', 'test')
+          })
         })
 
         it('should run the callback in the parent context', done => {
