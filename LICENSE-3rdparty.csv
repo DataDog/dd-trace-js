@@ -1,4 +1,5 @@
 Component,Origin,License,Copyright
+require,@types/node,MIT,Copyright Authors
 require,async-hook-jl,MIT,Copyright 2015 Andreas Madsen
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
