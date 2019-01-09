@@ -1,5 +1,6 @@
 'use strict'
 
+const eventSampler = require('../../event_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
 const tags = require('../../../ext/tags')
@@ -42,6 +43,8 @@ const web = {
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
     }
+
+    eventSampler.sample(span, config.eventSampleRate)
 
     callback && callback(span)
 
