@@ -79,17 +79,28 @@ class Instrumenter {
         if (typeof nodule[name] !== 'function') {
           throw new Error(`Expected object ${nodule} to contain method ${name}.`)
         }
+
+        Object.defineProperty(nodule[name], '_datadog_patched', {
+          value: true,
+          configurable: true
+        })
       })
     })
 
-    return shimmer.massWrap.call(this, nodules, names, wrapper)
+    shimmer.massWrap.call(this, nodules, names, wrapper)
   }
 
   unwrap (nodules, names, wrapper) {
     nodules = [].concat(nodules)
     names = [].concat(names)
 
-    return shimmer.massUnwrap.call(this, nodules, names, wrapper)
+    shimmer.massUnwrap.call(this, nodules, names, wrapper)
+
+    nodules.forEach(nodule => {
+      names.forEach(name => {
+        nodule[name] && delete nodule[name]._datadog_patched
+      })
+    })
   }
 
   hookModule (moduleExports, moduleName, moduleBaseDir) {
