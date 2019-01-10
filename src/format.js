@@ -2,8 +2,11 @@
 
 const Int64BE = require('int64-buffer').Int64BE
 const constants = require('./constants')
+const tags = require('../ext/tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const EVENT_SAMPLE_RATE_KEY = constants.EVENT_SAMPLE_RATE_KEY
+const EVENT_SAMPLE_RATE = tags.EVENT_SAMPLE_RATE
 
 const map = {
   'service.name': 'service',
@@ -59,6 +62,8 @@ function extractTags (trace, span) {
         trace.error = 1
         trace.meta[tag] = String(tags[tag])
         break
+      case EVENT_SAMPLE_RATE:
+        break
       default:
         trace.meta[tag] = String(tags[tag])
     }
@@ -77,6 +82,7 @@ function extractError (trace, span) {
 
 function extractMetrics (trace, span) {
   const spanContext = span.context()
+  const eventSampleRate = parseFloat(spanContext._tags[EVENT_SAMPLE_RATE])
 
   Object.keys(spanContext._metrics).forEach(metric => {
     if (typeof spanContext._metrics[metric] === 'number') {
@@ -86,6 +92,10 @@ function extractMetrics (trace, span) {
 
   if (spanContext._sampling.priority !== undefined) {
     trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
+  }
+
+  if (eventSampleRate >= 0 && eventSampleRate <= 1) {
+    trace.metrics[EVENT_SAMPLE_RATE_KEY] = eventSampleRate
   }
 }
 

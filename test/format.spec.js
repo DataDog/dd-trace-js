@@ -2,8 +2,11 @@
 
 const Int64BE = require('int64-buffer').Int64BE
 const constants = require('../src/constants')
+const tags = require('../ext/tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const EVENT_SAMPLE_RATE_KEY = constants.EVENT_SAMPLE_RATE_KEY
+const EVENT_SAMPLE_RATE = tags.EVENT_SAMPLE_RATE
 
 const id = new Int64BE(0x02345678, 0x12345678)
 
@@ -158,6 +161,12 @@ describe('format', () => {
       spanContext._sampling.priority = 0
       trace = format(span)
       expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
+    })
+
+    it('should include the event sample rate', () => {
+      spanContext._tags[EVENT_SAMPLE_RATE] = '0.5'
+      trace = format(span)
+      expect(trace.metrics[EVENT_SAMPLE_RATE_KEY]).to.equal(0.5)
     })
   })
 })
