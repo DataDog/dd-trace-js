@@ -4,6 +4,7 @@ module.exports = {
   'amqp10': require('./amqp10'),
   'amqplib': require('./amqplib'),
   'bluebird': require('./bluebird'),
+  'bunyan': require('./bunyan'),
   'dns': require('./dns'),
   'elasticsearch': require('./elasticsearch'),
   'express': require('./express'),
