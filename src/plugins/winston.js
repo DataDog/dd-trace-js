@@ -1,9 +1,11 @@
 'use strict'
 
+const tx = require('./util/log')
+
 function createWrapWrite (tracer, config) {
   return function wrapWrite (write) {
     return function writeWithTrace (chunk, encoding, callback) {
-      correlate(tracer.scopeManager().active(), chunk)
+      tx.correlate(tracer, chunk)
 
       return write.apply(this, arguments)
     }
@@ -20,12 +22,12 @@ function createWrapLog (tracer, config) {
       for (let i = 0, l = arguments.length; i < l; i++) {
         if (typeof arguments[i] !== 'object') continue
 
-        correlate(scope, arguments[i])
+        tx.correlate(tracer, arguments[i])
 
         return log.apply(this, arguments)
       }
 
-      meta = correlate(scope)
+      meta = tx.correlate(tracer)
       callback = arguments[arguments.length - 1]
 
       const index = typeof callback === 'function'
@@ -37,19 +39,6 @@ function createWrapLog (tracer, config) {
       return log.apply(this, arguments)
     }
   }
-}
-
-function correlate (scope, record) {
-  record = record || {}
-
-  if (scope && record) {
-    const span = scope.span()
-
-    record['dd.trace_id'] = span.context().toTraceId()
-    record['dd.span_id'] = span.context().toSpanId()
-  }
-
-  return record
 }
 
 module.exports = [
