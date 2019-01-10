@@ -9,7 +9,7 @@ const log = {
 
     record = record || {}
 
-    if (scope && record) {
+    if (scope) {
       const span = scope.span()
 
       record['dd.trace_id'] = span.context().toTraceId()
