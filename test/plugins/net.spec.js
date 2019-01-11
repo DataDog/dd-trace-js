@@ -54,13 +54,12 @@ describe('Plugin', () => {
       agent
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
-            name: 'net.connect',
-            service: 'test-net',
+            name: 'ipc.connect',
+            service: 'test-ipc',
             resource: '/tmp/dd-trace.sock',
             meta: {
               'span.kind': 'client',
-              'socket.type': 'ipc',
-              'socket.path': '/tmp/dd-trace.sock'
+              'ipc.path': '/tmp/dd-trace.sock'
             }
           })
         })
@@ -71,45 +70,59 @@ describe('Plugin', () => {
     })
 
     it('should instrument connect with a port', done => {
+      const socket = new net.Socket()
+
       agent
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
-            name: 'net.connect',
-            service: 'test-net',
+            name: 'tcp.connect',
+            service: 'test-tcp',
             resource: `localhost:${port}`,
             meta: {
               'span.kind': 'client',
-              'socket.type': 'tcp',
-              'socket.port': `${port}`,
-              'socket.hostname': 'localhost'
+              'tcp.family': 'IPv4',
+              'tcp.remote.host': 'localhost',
+              'tcp.remote.address': '127.0.0.1',
+              'tcp.remote.port': `${port}`,
+              'tcp.local.address': '127.0.0.1',
+              'tcp.local.port': `${socket.localPort}`,
+              'out.host': 'localhost',
+              'out.port': `${port}`
             }
           })
         })
         .then(done)
         .catch(done)
 
-      net.connect(port, 'localhost')
+      socket.connect(port, 'localhost')
     })
 
     it('should instrument connect with TCP options', done => {
+      const socket = new net.Socket()
+
       agent
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
-            name: 'net.connect',
-            service: 'test-net',
+            name: 'tcp.connect',
+            service: 'test-tcp',
             resource: `localhost:${port}`,
             meta: {
               'span.kind': 'client',
-              'socket.type': 'tcp',
-              'socket.port': `${port}`,
-              'socket.hostname': 'localhost'
+              'tcp.family': 'IPv4',
+              'tcp.remote.host': 'localhost',
+              'tcp.remote.address': '127.0.0.1',
+              'tcp.remote.port': `${port}`,
+              'tcp.local.address': '127.0.0.1',
+              'tcp.local.port': `${socket.localPort}`,
+              'out.host': 'localhost',
+              'out.port': `${port}`
             }
           })
         })
         .then(done)
         .catch(done)
 
-      net.connect({
+      socket.connect({
         port,
         host: 'localhost'
       })
@@ -119,13 +132,12 @@ describe('Plugin', () => {
       agent
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
-            name: 'net.connect',
-            service: 'test-net',
+            name: 'ipc.connect',
+            service: 'test-ipc',
             resource: '/tmp/dd-trace.sock',
             meta: {
               'span.kind': 'client',
-              'socket.type': 'ipc',
-              'socket.path': '/tmp/dd-trace.sock'
+              'ipc.path': '/tmp/dd-trace.sock'
             }
           })
         })
