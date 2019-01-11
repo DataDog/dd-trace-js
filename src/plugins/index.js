@@ -21,5 +21,6 @@ module.exports = {
   'q': require('./q'),
   'redis': require('./redis'),
   'restify': require('./restify'),
-  'when': require('./when')
+  'when': require('./when'),
+  'winston': require('./winston')
 }
