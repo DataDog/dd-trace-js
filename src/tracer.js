@@ -7,14 +7,17 @@ class DatadogTracer extends Tracer {
     super(config)
 
     let ScopeManager
+    let Scope
 
     if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
       ScopeManager = require('./scope/noop/scope_manager')
     } else {
       ScopeManager = require('./scope/scope_manager')
+      Scope = require('./scope/new/scope')
     }
 
     this._scopeManager = new ScopeManager()
+    this._scope = new Scope()
   }
 
   trace (name, options, callback) {
@@ -44,6 +47,10 @@ class DatadogTracer extends Tracer {
 
   scopeManager () {
     return this._scopeManager
+  }
+
+  scope () {
+    return this._scope
   }
 
   currentSpan () {

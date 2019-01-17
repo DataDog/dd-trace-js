@@ -619,8 +619,12 @@ describe('Plugin', () => {
 
           const rootValue = {
             hello () {
-              expect(tracer.scopeManager().active()).to.not.be.null
-              done()
+              try {
+                expect(tracer.scope().active()).to.not.be.null
+                done()
+              } catch (e) {
+                done(e)
+              }
             }
           }
 
@@ -645,13 +649,14 @@ describe('Plugin', () => {
           }
 
           const span = tracer.startSpan('test')
-          const scope = tracer.scopeManager().activate(span)
 
-          return graphql.graphql({ schema, source, rootValue })
-            .then(value => {
-              expect(value).to.have.nested.property('data.hello', 'test')
-              expect(tracer.scopeManager().active()).to.equal(scope)
-            })
+          return tracer.scope().activate(span, () => {
+            return graphql.graphql({ schema, source, rootValue })
+              .then(value => {
+                expect(value).to.have.nested.property('data.hello', 'test')
+                expect(tracer.scope().active()).to.equal(span)
+              })
+          })
         })
 
         it('should handle unsupported operations', () => {
@@ -982,11 +987,11 @@ describe('Plugin', () => {
 
           const rootValue = {
             hello () {
-              const scope = tracer.scopeManager().active()
+              const span = tracer.scope().active()
 
               try {
-                expect(scope).to.not.be.null
-                expect(scope.span().context()).to.have.property('_name', 'graphql.execute')
+                expect(span).to.not.be.null
+                expect(span.context()).to.have.property('_name', 'graphql.execute')
                 done()
               } catch (e) {
                 done(e)

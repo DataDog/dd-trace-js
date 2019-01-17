@@ -9,10 +9,12 @@ const semver = require('semver')
 const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
 const ScopeManager = require('../../src/scope/scope_manager')
+const Scope = require('../../src/scope/new/scope')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
 const scopeManager = new ScopeManager()
+const scope = new Scope()
 
 chai.use(sinonChai)
 

@@ -109,18 +109,19 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
 
     if (config.depth >= 0 && config.depth < depth) {
       const fieldParent = getFieldParent(operation, path)
-      const scope = tracer.scopeManager().activate(fieldParent)
 
-      return call(resolve, this, arguments, () => {
-        scope.close()
-        updateFinishTime(operation, path)
+      return tracer.scope().activate(fieldParent, () => {
+        return call(resolve, this, arguments, () => {
+          updateFinishTime(operation, path)
+        })
       })
     }
 
     const field = assertField(tracer, config, operation, path, info)
-    const scope = tracer.scopeManager().activate(field.resolveSpan)
 
-    return call(resolve, this, arguments, err => finish(scope, operation, path, err))
+    return tracer.scope().activate(field.resolveSpan, () => {
+      return call(resolve, this, arguments, err => finish(field.resolveSpan, operation, path, err))
+    })
   }
 
   resolveWithTrace._datadog_patched = true
@@ -253,7 +254,7 @@ function createOperationSpan (tracer, config, operation, document, variableValue
   const type = operation.operation
   const name = operation.name && operation.name.value
   const def = document.definitions.find(def => def.kind === 'OperationDefinition')
-  const parentScope = tracer.scopeManager().active()
+  const childOf = tracer.scope().active()
   const tags = {
     'service.name': getService(tracer, config),
     'resource.name': [type, name].filter(val => val).join(' ')
@@ -281,7 +282,7 @@ function createOperationSpan (tracer, config, operation, document, variableValue
   const span = tracer.startSpan(`graphql.${operation.operation}`, {
     tags,
     startTime,
-    childOf: parentScope && parentScope.span()
+    childOf
   })
 
   return span
@@ -331,7 +332,7 @@ function createPathSpan (tracer, config, name, childOf, path, info) {
   return span
 }
 
-function finish (scope, operation, path, error) {
+function finish (span, operation, path, error) {
   const field = getField(operation, path)
 
   field.pending--
@@ -340,12 +341,9 @@ function finish (scope, operation, path, error) {
 
   field.error = error
 
-  const span = scope.span()
-
   addError(span, error)
 
   span.finish()
-  scope.close()
 
   updateFinishTime(operation, path)
 }
