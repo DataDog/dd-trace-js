@@ -19,12 +19,12 @@ function createWrapSendCommand (tracer, config) {
     return function sendCommandWithTrace (command, args, callback) {
       const span = startSpan(tracer, config, this, command, args)
 
-      if (callback) {
+      if (typeof callback === 'function') {
         callback = tx.wrap(span, callback)
-      } else if (args) {
-        args[(args.length || 1) - 1] = tx.wrap(span, args[args.length - 1])
+      } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
+        args[args.length - 1] = tx.wrap(span, args[args.length - 1])
       } else {
-        args = [tx.wrap(span)]
+        callback = tx.wrap(span)
       }
 
       return sendCommand.call(this, command, args, callback)
