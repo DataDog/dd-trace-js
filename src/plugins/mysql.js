@@ -5,10 +5,10 @@ const Tags = require('opentracing').Tags
 function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
     return function queryWithTrace (sql, values, cb) {
-      const parentScope = tracer.scopeManager().active()
-      const parent = parentScope && parentScope.span()
+      const scope = tracer.scope()
+      const childOf = scope.active()
       const span = tracer.startSpan('mysql.query', {
-        childOf: parent,
+        childOf,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': config.service || `${tracer._service}-mysql`,
@@ -24,12 +24,12 @@ function createWrapQuery (tracer, config) {
         span.setTag('db.name', this.config.database)
       }
 
-      const sequence = query.call(this, sql, values, cb)
+      const sequence = scope.bind(query, span).call(this, sql, values, cb)
 
       span.setTag('resource.name', sequence.sql)
 
       if (sequence._callback) {
-        sequence._callback = wrapCallback(tracer, span, parent, sequence._callback)
+        sequence._callback = wrapCallback(tracer, span, childOf, sequence._callback)
       } else {
         sequence.on('end', () => {
           span.finish()
@@ -42,7 +42,7 @@ function createWrapQuery (tracer, config) {
 }
 
 function wrapCallback (tracer, span, parent, done) {
-  return (err, res) => {
+  return tracer.scope().bind((err, res) => {
     if (err) {
       span.addTags({
         'error.type': err.name,
@@ -58,7 +58,7 @@ function wrapCallback (tracer, span, parent, done) {
     }
 
     done(err, res)
-  }
+  }, parent)
 }
 
 function patchConnection (Connection, tracer, config) {

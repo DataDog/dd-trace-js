@@ -43,7 +43,7 @@ function withoutScope (fn) {
       active.close()
     }
 
-    return fn.apply(this, arguments)
+    return scope.bind(fn, null).apply(this, arguments)
   }
 }
 

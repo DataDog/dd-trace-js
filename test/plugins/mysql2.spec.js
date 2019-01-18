@@ -46,12 +46,14 @@ describe('Plugin', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const span = tracer.startSpan('test')
-          const scope = tracer.scopeManager().activate(span)
 
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            const active = tracer.scopeManager().active()
-            expect(active.span()).to.equal(scope.span())
-            done()
+          tracer.scope().activate(span, () => {
+            const span = tracer.scope().active()
+
+            connection.query('SELECT 1 + 1 AS solution', () => {
+              expect(tracer.scope().active()).to.equal(span)
+              done()
+            })
           })
         })
 
@@ -59,8 +61,7 @@ describe('Plugin', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           connection.query('SELECT 1 + 1 AS solution', () => {
-            const active = tracer.scopeManager().active()
-            expect(active).to.be.null
+            expect(tracer.scope().active()).to.be.null
             done()
           })
         })
@@ -71,8 +72,7 @@ describe('Plugin', () => {
           const query = connection.query('SELECT 1 + 1 AS solution')
 
           query.on('result', () => {
-            const active = tracer.scopeManager().active()
-            expect(active).to.be.null
+            expect(tracer.scope().active()).to.be.null
             done()
           })
         })
@@ -207,8 +207,7 @@ describe('Plugin', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           pool.query('SELECT 1 + 1 AS solution', () => {
-            const active = tracer.scopeManager().active()
-            expect(active).to.be.null
+            expect(tracer.scope().active()).to.be.null
             done()
           })
         })

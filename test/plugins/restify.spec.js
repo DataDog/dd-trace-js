@@ -15,8 +15,10 @@ describe('Plugin', () => {
 
   describe('restify', () => {
     withVersions(plugin, 'restify', version => {
+      const pkgVersion = require(`../../versions/restify@${version}`).version()
+
       // Some internal code of older versions is not compatible with Node >6
-      if (semver.intersects(version, '<5') && semver.intersects(process.version, '>6')) return
+      if (semver.intersects(pkgVersion, '<5') && semver.intersects(process.version, '>6')) return
 
       beforeEach(() => {
         tracer = require('../..')
@@ -88,17 +90,17 @@ describe('Plugin', () => {
           const server = restify.createServer()
 
           server.pre((req, res, next) => {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             next()
           })
 
           server.use((req, res, next) => {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             next()
           })
 
           server.get('/user', (req, res, next) => {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             res.send(200)
             done()
             next()
@@ -121,13 +123,12 @@ describe('Plugin', () => {
           let span
 
           server.use((req, res, next) => {
-            span = tracer.scopeManager().active().span()
-            tracer.scopeManager().activate({})
-            next()
+            span = tracer.scope().active()
+            tracer.scope().activate({}, () => next())
           })
 
           server.use((req, res, next) => {
-            expect(tracer.scopeManager().active().span()).to.equal(span)
+            expect(tracer.scope().active()).to.equal(span)
             next()
           })
 

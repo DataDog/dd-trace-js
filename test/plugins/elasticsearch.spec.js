@@ -117,7 +117,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            tracer.trace('test', span => {
+            const span = tracer.startSpan('test')
+
+            tracer.scope().activate(span, () => {
               client.ping(() => span.finish())
             })
           })
@@ -126,7 +128,7 @@ describe('Plugin', () => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
             client.ping(error => {
-              expect(tracer.scopeManager().active()).to.be.null
+              expect(tracer.scope().active()).to.be.null
               done(error)
             })
           })
@@ -180,7 +182,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            tracer.trace('test', span => {
+            const span = tracer.startSpan('test')
+
+            tracer.scope().activate(span, () => {
               client.ping()
                 .then(() => span.finish())
                 .catch(done)
@@ -192,7 +196,7 @@ describe('Plugin', () => {
 
             return client.ping()
               .then(() => {
-                expect(tracer.scopeManager().active()).to.be.null
+                expect(tracer.scope().active()).to.be.null
               })
           })
 
@@ -201,7 +205,7 @@ describe('Plugin', () => {
 
             client.search({ index: 'invalid' })
               .catch(() => {
-                expect(tracer.scopeManager().active()).to.be.null
+                expect(tracer.scope().active()).to.be.null
                 done()
               })
           })

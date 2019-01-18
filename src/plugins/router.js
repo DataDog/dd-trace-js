@@ -93,11 +93,9 @@ function wrapNext (layer, req, next) {
 
     addError(web.active(req), error)
 
-    web.exitMiddleware(req)
+    web.finish(req)
 
-    process.nextTick(() => {
-      originalNext.apply(null, arguments)
-    })
+    originalNext.apply(null, arguments)
   }
 }
 
@@ -112,13 +110,13 @@ function wrapDone (original, req) {
 }
 
 function callHandle (layer, handle, req, args) {
-  web.enterMiddleware(req, handle, 'express.middleware')
-
-  try {
-    return handle.apply(layer, args)
-  } catch (e) {
-    throw addError(web.active(req), e)
-  }
+  return web.wrapMiddleware(req, handle, 'express.middleware', () => {
+    try {
+      return handle.apply(layer, args)
+    } catch (e) {
+      throw addError(web.active(req), e)
+    }
+  })
 }
 
 function extractMatchers (fn) {

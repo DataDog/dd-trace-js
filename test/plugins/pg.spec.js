@@ -103,16 +103,18 @@ describe('Plugin', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const span = {}
-          const scope = tracer.scopeManager().activate(span)
 
-          client.query('SELECT $1::text as message', ['Hello World!'], () => {
-            const active = tracer.scopeManager().active()
-            expect(active.span()).to.equal(scope.span())
-            done()
-          })
+          tracer.scope().activate(span, () => {
+            const span = tracer.scope().active()
 
-          client.end((err) => {
-            if (err) throw err
+            client.query('SELECT $1::text as message', ['Hello World!'], () => {
+              expect(tracer.scope().active()).to.equal(span)
+              done()
+            })
+
+            client.end((err) => {
+              if (err) throw err
+            })
           })
         })
       })

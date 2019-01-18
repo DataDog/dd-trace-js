@@ -106,7 +106,7 @@ describe('Plugin', () => {
           method: 'GET',
           path: '/user/{id}',
           handler: (request, h) => {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             done()
             return handler(request, h)
           }
@@ -124,7 +124,7 @@ describe('Plugin', () => {
           config: {
             pre: [
               (request, h) => {
-                expect(tracer.scopeManager().active()).to.not.be.null
+                expect(tracer.scope().active()).to.not.be.null
                 done()
                 return handler(request, h)
               }
@@ -146,7 +146,7 @@ describe('Plugin', () => {
         })
 
         server.ext('onRequest', (request, h) => {
-          expect(tracer.scopeManager().active()).to.not.be.null
+          expect(tracer.scope().active()).to.not.be.null
           done()
 
           if (typeof h === 'function') {

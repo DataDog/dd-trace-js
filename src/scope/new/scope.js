@@ -37,12 +37,14 @@ class Scope {
     }
 
     this._spans.set(asyncId, span)
+    this._active = span
 
     try {
       return callback() // TODO: add error to span
     } finally {
       if (oldSpan) {
         this._spans.set(asyncId, oldSpan)
+        this._active = oldSpan
       } else {
         this._destroy(asyncId)
       }

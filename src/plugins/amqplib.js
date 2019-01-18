@@ -27,17 +27,13 @@ function createWrapDispatchMessage (tracer, config) {
 
       addTags(this, tracer, config, span, 'basic.deliver', fields)
 
-      setImmediate(() => {
-        const scope = tracer.scopeManager().activate(span, true)
-
+      tracer.scope().activate(span, () => {
         try {
           dispatchMessage.apply(this, arguments)
         } catch (e) {
           throw addError(span, e)
         } finally {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
-            scope.close()
-          }
+          span.finish()
         }
       })
     }
@@ -45,20 +41,20 @@ function createWrapDispatchMessage (tracer, config) {
 }
 
 function sendWithTrace (send, channel, args, tracer, config, method, fields) {
-  const parentScope = tracer.scopeManager().active()
-  const span = tracer.startSpan('amqp.command', {
-    childOf: parentScope && parentScope.span()
-  })
+  const childOf = tracer.scopeManager().active()
+  const span = tracer.startSpan('amqp.command', { childOf })
 
   addTags(channel, tracer, config, span, method, fields)
 
-  try {
-    return send.apply(channel, args)
-  } catch (e) {
-    throw addError(span, e)
-  } finally {
-    span.finish()
-  }
+  return tracer.scope().activate(span, () => {
+    try {
+      return send.apply(channel, args)
+    } catch (e) {
+      throw addError(span, e)
+    } finally {
+      span.finish()
+    }
+  })
 }
 
 function isCamelCase (str) {

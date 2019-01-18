@@ -9,14 +9,15 @@ function createWrapSetupRequest (tracer, config) {
 
   return function wrapSetupRequest (setupRequest) {
     return function setupRequestWithTrace (req, res) {
-      web.instrument(tracer, config, req, res, 'restify.request')
-      web.beforeEnd(req, () => {
-        if (req.route) {
-          web.enterRoute(req, req.route.path)
-        }
-      })
+      return web.instrument(tracer, config, req, res, 'restify.request', () => {
+        web.beforeEnd(req, () => {
+          if (req.route) {
+            web.enterRoute(req, req.route.path)
+          }
+        })
 
-      return setupRequest.apply(this, arguments)
+        return setupRequest.apply(this, arguments)
+      })
     }
   }
 }
@@ -45,8 +46,7 @@ function wrapMiddleware (middleware) {
 
 function wrapFn (fn) {
   return function (req, res, next) {
-    web.reactivate(req)
-    return fn.apply(this, arguments)
+    return web.reactivate(req, () => fn.apply(this, arguments))
   }
 }
 

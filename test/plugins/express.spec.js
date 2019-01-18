@@ -361,9 +361,8 @@ describe('Plugin', () => {
           let span
 
           app.use((req, res, next) => {
-            const scope = tracer.scopeManager().active()
+            span = tracer.scope().active()
 
-            span = scope.span()
             sinon.spy(span, 'finish')
 
             next()
@@ -391,16 +390,13 @@ describe('Plugin', () => {
           const router = express.Router()
 
           router.use((req, res, next) => {
-            const scope = tracer.scopeManager().active()
-            const child = tracer.startSpan('child', {
-              childOf: scope.span()
+            const childOf = tracer.scope().active()
+            const child = tracer.startSpan('child', { childOf })
+
+            tracer.scope().activate(child, () => {
+              child.finish()
+              next()
             })
-
-            tracer.scopeManager().activate(child)
-
-            child.finish()
-
-            next()
           })
 
           router.get('/user/:id', (req, res) => {
@@ -434,11 +430,7 @@ describe('Plugin', () => {
           const router = express.Router()
 
           router.use((req, res, next) => {
-            const scope = tracer.scopeManager().active()
-
-            scope.close()
-
-            next()
+            tracer.scope().activate(null, () => next())
           })
 
           router.get('/user/:id', (req, res) => {
@@ -505,7 +497,7 @@ describe('Plugin', () => {
 
               clearInterval(interval)
 
-              expect(tracer.scopeManager().active()).to.be.null
+              expect(tracer.scope().active()).to.be.null
 
               done()
             }
@@ -556,24 +548,19 @@ describe('Plugin', () => {
 
           const app = express()
 
-          let scope
           let span
 
           app.use((req, res, next) => {
-            scope = tracer.scopeManager().active()
-            span = scope.span()
-            scope.close()
-            next()
+            span = tracer.scope().active()
+
+            tracer.scope().activate(null, () => next())
           })
 
           app.get('/user', (req, res) => {
-            const scope = tracer.scopeManager().active()
-
             res.status(200).send()
 
             try {
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.not.equal(span)
+              expect(tracer.scope().active()).to.not.be.null.and.not.equal(span)
               done()
             } catch (e) {
               done(e)
@@ -593,24 +580,18 @@ describe('Plugin', () => {
 
           const app = express()
 
-          let span
+          const span = {}
 
           app.get(
             '/user',
             (req, res, next) => {
-              const scope = tracer.scopeManager().activate({})
-              span = scope.span()
-
-              next()
+              tracer.scope().activate(span, () => next())
             },
             (req, res, next) => {
-              const scope = tracer.scopeManager().active()
-
               res.status(200).send()
 
               try {
-                expect(scope).to.not.be.null
-                expect(scope.span()).to.not.equal(span)
+                expect(tracer.scope().active()).to.not.be.null.and.not.equal(span)
                 done()
               } catch (e) {
                 done(e)

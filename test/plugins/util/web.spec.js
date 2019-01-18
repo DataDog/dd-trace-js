@@ -76,10 +76,7 @@ describe('plugins/util/web', () => {
 
       it('should activate a scope with the span', () => {
         span = web.instrument(tracer, config, req, res, 'test.request', span => {
-          const scope = tracer.scopeManager().active()
-
-          expect(scope).to.not.be.null
-          expect(scope.span()).to.equal(span)
+          expect(tracer.scope().active()).to.equal(span)
         })
       })
 
@@ -113,13 +110,11 @@ describe('plugins/util/web', () => {
       })
 
       it('should only start one span for the entire request', () => {
-        const span1 = web.instrument(tracer, config, req, res, 'test.request')
-        const scope1 = tracer.scopeManager().active()
-        const span2 = web.instrument(tracer, config, req, res, 'test.request')
-        const scope2 = tracer.scopeManager().active()
-
-        expect(span1).to.equal(span2)
-        expect(scope1).to.equal(scope2)
+        web.instrument(tracer, config, req, res, 'test.request', span1 => {
+          web.instrument(tracer, config, req, res, 'test.request', span2 => {
+            expect(span1).to.equal(span2)
+          })
+        })
       })
 
       it('should allow overriding the span name', () => {
@@ -169,13 +164,15 @@ describe('plugins/util/web', () => {
       })
 
       it('should finish middleware spans', () => {
-        span = web.enterMiddleware(req, () => {}, 'middleware')
+        span = web.wrapMiddleware(req, () => {}, 'middleware', () => {
+          const span = tracer.scope().active()
 
-        sinon.spy(span, 'finish')
+          sinon.spy(span, 'finish')
 
-        res.end()
+          res.end()
 
-        expect(span.finish).to.have.been.called
+          expect(span.finish).to.have.been.called
+        })
       })
 
       it('should execute any beforeEnd handlers', () => {
@@ -310,48 +307,43 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('enterMiddleware', () => {
+  describe('wrapMiddleware', () => {
     beforeEach(() => {
       config = web.normalizeConfig(config)
-      span = web.instrument(tracer, config, req, res, 'test.request')
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+      })
     })
 
     it('should activate a scope with the span', (done) => {
       const fn = function test () {
-        const scope = tracer.scopeManager().active()
-
-        expect(scope).to.not.be.null
-        expect(scope.span()).to.equal(span)
-        expect(scope.span().context()._tags).to.have.property('resource.name', 'test')
-
+        expect(tracer.scope().active()).to.not.equal(span)
         done()
       }
 
-      span = web.enterMiddleware(req, fn, 'middleware')
-
-      fn(req, res)
+      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
     })
   })
 
-  describe('exitMiddleware', () => {
+  describe('finish', () => {
     beforeEach(() => {
       config = web.normalizeConfig(config)
       span = web.instrument(tracer, config, req, res, 'test.request')
     })
 
-    it('should close the scope of the current middleware', (done) => {
+    it('should finish the span of the current middleware', (done) => {
       const fn = () => {
-        const scope = tracer.scopeManager().active()
+        const span = tracer.scope().active()
 
-        expect(scope).to.be.null
+        sinon.spy(span, 'finish')
+        web.finish(req, fn, 'middleware')
+
+        expect(span.finish).to.have.been.called
 
         done()
       }
 
-      web.enterMiddleware(req, fn, 'middleware')
-      web.exitMiddleware(req, fn, 'middleware')
-
-      fn(req, res)
+      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
     })
   })
 
@@ -368,32 +360,36 @@ describe('plugins/util/web', () => {
 
   describe('root', () => {
     it('should return the request root span', () => {
-      span = web.instrument(tracer, config, req, res, 'test.request')
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        const span = tracer.scope().active()
 
-      web.enterMiddleware(req, () => {}, 'express.middleware')
-
-      expect(web.root(req)).to.equal(span)
+        web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
+          expect(web.root(req)).to.equal(span)
+        })
+      })
     })
 
     it('should return null when not yet instrumented', () => {
-      expect(web.active(req)).to.be.null
+      expect(web.root(req)).to.be.null
     })
   })
 
   describe('active', () => {
     it('should return the request span by default', () => {
-      span = web.instrument(tracer, config, req, res, 'test.request')
-
-      expect(web.active(req)).to.equal(span)
+      span = web.instrument(tracer, config, req, res, 'test.request', () => {
+        expect(web.active(req)).to.equal(tracer.scope().active())
+      })
     })
 
     it('should return the active middleware span', () => {
-      span = web.instrument(tracer, config, req, res, 'test.request')
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        const span = tracer.scope().active()
 
-      web.enterMiddleware(req, () => {}, 'express.middleware')
-
-      expect(web.active(req)).to.not.be.null
-      expect(web.active(req)).to.not.equal(span)
+        web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
+          expect(web.active(req)).to.not.be.null
+          expect(web.active(req)).to.not.equal(span)
+        })
+      })
     })
 
     it('should return null when not yet instrumented', () => {

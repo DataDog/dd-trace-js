@@ -10,6 +10,7 @@ function createWrapGenerate (tracer, config) {
       let request
 
       web.instrument(tracer, config, req, res, 'hapi.request', () => {
+        global.tracer = tracer
         request = generate.apply(this, arguments)
 
         web.beforeEnd(req, () => {

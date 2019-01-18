@@ -97,11 +97,11 @@ describe('Plugin', () => {
           app.use((ctx, next) => {
             ctx.body = ''
 
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
 
             return next()
               .then(() => {
-                expect(tracer.scopeManager().active()).to.not.be.null
+                expect(tracer.scope().active()).to.not.be.null
                 done()
               })
               .catch(done)
@@ -122,19 +122,15 @@ describe('Plugin', () => {
           let span
 
           app.use((ctx, next) => {
-            span = tracer.scopeManager().active().span()
-            tracer.scopeManager().activate({})
-            return next()
+            span = tracer.scope().active()
+            tracer.scope().activate({}, () => next())
           })
 
           app.use((ctx) => {
-            const scope = tracer.scopeManager().active()
-
             ctx.body = ''
 
             try {
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
+              expect(tracer.scope().active()).to.equal(span)
               done()
             } catch (e) {
               done(e)

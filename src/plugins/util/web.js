@@ -48,12 +48,12 @@ const web = {
     wrapEnd(req)
     wrapEvents(req)
 
-    return span
+    return callback && tracer.scope().activate(span, () => callback(span))
   },
 
   // Reactivate the request scope in case it was changed by a middleware.
-  reactivate (req) {
-    reactivate(req)
+  reactivate (req, fn) {
+    reactivate(req, fn)
   },
 
   // Add a route segment that will be used for the resource name.
@@ -67,35 +67,29 @@ const web = {
   },
 
   // Start a new middleware span and activate a new scope with the span.
-  enterMiddleware (req, middleware, name) {
-    if (!this.active(req)) return
+  wrapMiddleware (req, middleware, name, fn) {
+    if (!this.active(req)) return fn()
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)
     const span = tracer.startSpan(name, { childOf })
-    const scope = tracer.scopeManager().activate(span)
 
     span.addTags({
       [RESOURCE_NAME]: middleware.name || '<anonymous>'
     })
 
-    req._datadog.middleware.push(scope)
+    req._datadog.middleware.push(span)
 
-    return span
+    return tracer.scope().activate(span, fn)
   },
 
-  // Close the active middleware scope and finish its span.
-  exitMiddleware (req) {
+  // Finish the active middleware span.
+  finish (req) {
     if (!this.active(req)) return
 
-    const scope = req._datadog.middleware.pop()
+    const span = req._datadog.middleware.pop()
 
-    if (!scope) return
-
-    const span = scope.span()
-
-    span.finish()
-    scope.close()
+    span && span.finish()
   },
 
   // Register a callback to run before res.end() is called.
@@ -110,7 +104,6 @@ const web = {
     Object.defineProperty(req, '_datadog', {
       value: {
         span: null,
-        scope: null,
         paths: [],
         middleware: [],
         beforeEnd: []
@@ -128,7 +121,7 @@ const web = {
     if (!req._datadog) return null
     if (req._datadog.middleware.length === 0) return req._datadog.span || null
 
-    return req._datadog.middleware.slice(-1)[0].span()
+    return req._datadog.middleware.slice(-1)[0]
   }
 }
 
@@ -142,11 +135,9 @@ function startSpan (tracer, config, req, res, name) {
 
   const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
   const span = tracer.startSpan(name, { childOf })
-  const scope = tracer.scopeManager().activate(span)
 
   req._datadog.tracer = tracer
   req._datadog.span = span
-  req._datadog.scope = scope
   req._datadog.res = res
 
   addRequestTags(req)
@@ -170,11 +161,10 @@ function finish (req, res) {
 function finishMiddleware (req, res) {
   if (req._datadog.finished) return
 
-  let scope
+  let span
 
-  while ((scope = req._datadog.middleware.pop())) {
-    scope.span().finish()
-    scope.close()
+  while ((span = req._datadog.middleware.pop())) {
+    span.finish()
   }
 }
 
@@ -231,9 +221,8 @@ function wrapEvents (req) {
   }
 }
 
-function reactivate (req) {
-  req._datadog.scope && req._datadog.scope.close()
-  req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
+function reactivate (req, fn) {
+  return req._datadog.tracer.scope().activate(req._datadog.span, fn)
 }
 
 function addRequestTags (req) {

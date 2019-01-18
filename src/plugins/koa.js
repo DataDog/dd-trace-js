@@ -22,8 +22,7 @@ function createWrapUse (tracer, config) {
       const fn = this.middleware.pop()
 
       this.middleware.push(function (ctx, next) {
-        web.reactivate(ctx.req)
-        return fn.apply(this, arguments)
+        return web.reactivate(ctx.req, () => fn.apply(this, arguments))
       })
 
       return result
