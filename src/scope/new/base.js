@@ -1,3 +1,5 @@
+'use strict'
+
 const shimmer = require('shimmer')
 const wrapEmitter = require('emitter-listener')
 
