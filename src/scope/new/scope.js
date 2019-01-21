@@ -29,10 +29,6 @@ class Scope extends Base {
     const asyncId = asyncHooks.executionAsyncId()
     const oldSpan = this._spans.get(asyncId)
 
-    if (this._spans.size === 0) {
-      this._hook.enable()
-    }
-
     this._spans.set(asyncId, span)
 
     try {
@@ -63,9 +59,7 @@ class Scope extends Base {
   }
 
   _destroy (asyncId) {
-    if (this._spans.delete(asyncId) && !this._spans.size) {
-      this._hook.disable()
-    }
+    this._spans.delete(asyncId)
   }
 }
 
