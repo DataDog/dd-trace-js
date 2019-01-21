@@ -5,6 +5,7 @@ const tx = require('./util/tx')
 function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
     return function connectWithTrace () {
+      const scope = tracer.scope()
       const options = getOptions(arguments)
 
       if (!options) return connect.apply(this, arguments)
@@ -16,7 +17,7 @@ function createWrapConnect (tracer, config) {
       this.once('connect', tx.wrap(span))
       this.once('error', tx.wrap(span))
 
-      return connect.apply(this, arguments)
+      return scope.bind(connect, span).apply(this, arguments)
     }
   }
 }

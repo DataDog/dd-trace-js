@@ -157,6 +157,8 @@ describe('Plugin', () => {
     it('should be a child of the parent span when available', done => {
       const span = tracer.startSpan('test')
 
+      span.finish()
+
       agent
         .use(traces => {
           expect(traces[0][0].parent_id.toString()).to.equal(span.context().toSpanId())
@@ -167,8 +169,6 @@ describe('Plugin', () => {
       tracer.scope().activate(span, () => {
         net.connect('/tmp/dd-trace.sock')
       })
-
-      span.finish()
     })
   })
 })
