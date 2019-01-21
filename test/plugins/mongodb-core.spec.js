@@ -176,7 +176,7 @@ describe('Plugin', () => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
             server.insert(`test.${collection}`, [{ a: 1 }], {}, () => {
-              expect(tracer.scopeManager().active()).to.be.null
+              expect(tracer.scope().active()).to.be.null
               done()
             })
           })
@@ -286,7 +286,7 @@ describe('Plugin', () => {
             })
 
             cursor.next(() => {
-              expect(tracer.scopeManager().active()).to.be.null
+              expect(tracer.scope().active()).to.be.null
               done()
             })
           })

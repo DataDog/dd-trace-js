@@ -348,6 +348,7 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-dns
       - node-elasticsearch
       - node-express
       - node-graphql
@@ -357,6 +358,7 @@ workflows:
       - node-memcached
       - node-mongodb-core
       - node-mysql
+      - node-net
       - node-pino
       - node-postgres
       - node-q
@@ -382,6 +384,7 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-dns
       - node-elasticsearch
       - node-express
       - node-graphql
@@ -391,6 +394,7 @@ workflows:
       - node-memcached
       - node-mongodb-core
       - node-mysql
+      - node-net
       - node-pino
       - node-postgres
       - node-q
