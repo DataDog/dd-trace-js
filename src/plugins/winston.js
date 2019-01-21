@@ -15,7 +15,7 @@ function createWrapWrite (tracer, config) {
 function createWrapLog (tracer, config) {
   return function wrapLog (log) {
     return function logWithTrace (level, msg, meta, callback) {
-      const scope = tracer.scopeManager().active()
+      const scope = tracer.scope().active()
 
       if (!scope || arguments.length < 1) return log.apply(this, arguments)
 

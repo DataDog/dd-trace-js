@@ -16,7 +16,7 @@ describe('plugins/util/log', () => {
       const record = {}
       const span = tracer.startSpan('test')
 
-      tracer.scopeManager().activate(span, () => {
+      tracer.scope().activate(span, () => {
         log.correlate(tracer, record)
 
         expect(record).to.have.deep.property('dd', {
@@ -29,7 +29,7 @@ describe('plugins/util/log', () => {
     it('should return a new correlated log record if one was not provided', () => {
       const span = tracer.startSpan('test')
 
-      tracer.scopeManager().activate(span, () => {
+      tracer.scope().activate(span, () => {
         const record = log.correlate(tracer)
 
         expect(record).to.have.deep.property('dd', {

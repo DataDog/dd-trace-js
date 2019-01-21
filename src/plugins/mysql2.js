@@ -53,10 +53,6 @@ function wrapCallback (tracer, span, parent, done) {
 
     span.finish()
 
-    if (parent) {
-      tracer.scopeManager().activate(parent)
-    }
-
     done(err, res)
   })
 }

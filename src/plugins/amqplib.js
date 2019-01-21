@@ -41,7 +41,7 @@ function createWrapDispatchMessage (tracer, config) {
 }
 
 function sendWithTrace (send, channel, args, tracer, config, method, fields) {
-  const childOf = tracer.scopeManager().active()
+  const childOf = tracer.scope().active()
   const span = tracer.startSpan('amqp.command', { childOf })
 
   addTags(channel, tracer, config, span, method, fields)
