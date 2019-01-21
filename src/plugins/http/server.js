@@ -8,7 +8,9 @@ function createWrapEmit (tracer, config) {
   return function wrapEmit (emit) {
     return function emitWithTrace (eventName, req, res) {
       if (eventName === 'request') {
-        web.instrument(tracer, config, req, res, 'http.request')
+        return web.instrument(tracer, config, req, res, 'http.request', () => {
+          return emit.apply(this, arguments)
+        })
       }
 
       return emit.apply(this, arguments)

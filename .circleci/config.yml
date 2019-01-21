@@ -166,6 +166,14 @@ jobs:
           - SERVICES=
           - PLUGINS=bunyan
 
+  node-dns:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=dns
+
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
@@ -250,6 +258,14 @@ jobs:
         environment:
           - MONGODB_REPLICA_SET_MODE=primary
           - MONGODB_ADVERTISED_HOSTNAME=localhost
+
+  node-net:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=net
 
   node-pino:
     <<: *node-plugin-base

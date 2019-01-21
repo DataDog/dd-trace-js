@@ -16,26 +16,26 @@ describe('plugins/util/log', () => {
       const record = {}
       const span = tracer.startSpan('test')
 
-      tracer.scopeManager().activate(span)
+      tracer.scopeManager().activate(span, () => {
+        log.correlate(tracer, record)
 
-      log.correlate(tracer, record)
-
-      expect(record).to.have.deep.property('dd', {
-        trace_id: span.context().toTraceId(),
-        span_id: span.context().toSpanId()
+        expect(record).to.have.deep.property('dd', {
+          trace_id: span.context().toTraceId(),
+          span_id: span.context().toSpanId()
+        })
       })
     })
 
     it('should return a new correlated log record if one was not provided', () => {
       const span = tracer.startSpan('test')
 
-      tracer.scopeManager().activate(span)
+      tracer.scopeManager().activate(span, () => {
+        const record = log.correlate(tracer)
 
-      const record = log.correlate(tracer)
-
-      expect(record).to.have.deep.property('dd', {
-        trace_id: span.context().toTraceId(),
-        span_id: span.context().toSpanId()
+        expect(record).to.have.deep.property('dd', {
+          trace_id: span.context().toTraceId(),
+          span_id: span.context().toSpanId()
+        })
       })
     })
 

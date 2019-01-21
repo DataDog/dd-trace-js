@@ -1,6 +1,10 @@
 'use strict'
 
+const opentracing = require('opentracing')
 const Tracer = require('./opentracing/tracer')
+const log = require('./log')
+
+const noop = new opentracing.Span()
 
 class DatadogTracer extends Tracer {
   constructor (config) {
@@ -11,6 +15,7 @@ class DatadogTracer extends Tracer {
 
     if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
       ScopeManager = require('./scope/noop/scope_manager')
+      Scope = require('./scope/new/base')
     } else {
       ScopeManager = require('./scope/scope_manager')
       Scope = require('./scope/new/scope')
@@ -21,31 +26,25 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, callback) {
+    log.deprecate(
+      'Tracer.trace',
+      'Tracer.trace() is deprecated. Please use Tracer.startSpan() instead.'
+    )
+
     if (!callback) {
       callback = options
       options = {}
     }
 
-    const childOf = options.childOf !== undefined ? options.childOf : this.currentSpan()
-    const defaultTags = {
-      'service.name': options.service || this._service,
-      'resource.name': options.resource || name
-    }
-
-    if (options.type) {
-      defaultTags['span.type'] = options.type
-    }
-
-    const tags = Object.assign(defaultTags, options.tags)
-    const span = this.startSpan(name, { childOf, tags })
-
-    setImmediate(() => {
-      this._scopeManager.activate(span, true)
-      callback(span)
-    })
+    callback(noop)
   }
 
   scopeManager () {
+    log.deprecate(
+      'Tracer.scopeManager',
+      'Tracer.scopeManager() is deprecated. Please use Tracer.scope() instead.'
+    )
+
     return this._scopeManager
   }
 
@@ -54,8 +53,12 @@ class DatadogTracer extends Tracer {
   }
 
   currentSpan () {
-    const scope = this._scopeManager.active()
-    return scope ? scope.span() : null
+    log.deprecate(
+      'Tracer.currentSpan',
+      'Tracer.currentSpan() is deprecated. Please use Tracer.scope().active() instead.'
+    )
+
+    return noop // return a noop span instead of null to avoid crashing the app
   }
 }
 

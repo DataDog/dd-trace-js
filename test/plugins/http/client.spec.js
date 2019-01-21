@@ -419,7 +419,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                expect(tracer.scopeManager().active()).to.be.null
+                expect(tracer.scope().active()).to.be.null
                 done()
               })
 
@@ -440,9 +440,11 @@ describe('Plugin', () => {
           getPort().then(port => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                const span = tracer.scope().active()
+
                 res.on('data', () => {})
                 res.on('end', () => {
-                  expect(tracer.scopeManager().active()).to.be.null
+                  expect(tracer.scope().active()).to.equal(span)
                   done()
                 })
               })
@@ -543,20 +545,20 @@ describe('Plugin', () => {
               // Activate a new parent span so we capture any double counting that may happen, otherwise double-counts
               // would be siblings and our test would only capture 1 as a false positive.
               const span = tracer.startSpan('http-test')
-              tracer.scopeManager().activate(span)
+              tracer.scope().activate(span, () => {
+                // Test `http(s).request
+                const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
+                  res.on('data', () => {})
+                })
+                req.end()
 
-              // Test `http(s).request
-              const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
-                res.on('data', () => {})
+                // Test `http(s).get`
+                http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
+                  res.on('data', () => {})
+                })
+
+                span.finish()
               })
-              req.end()
-
-              // Test `http(s).get`
-              http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
-                res.on('data', () => {})
-              })
-
-              span.finish()
             })
           })
         })

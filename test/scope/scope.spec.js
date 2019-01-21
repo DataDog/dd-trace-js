@@ -1,50 +1,117 @@
 'use strict'
 
+const Scope = require('../../src/scope/new/scope')
+const Span = require('opentracing').Span
+
+wrapIt()
+
 describe('Scope', () => {
-  let Scope
   let scope
   let span
-  let context
 
   beforeEach(() => {
-    span = {
-      finish: sinon.spy()
+    scope = new Scope()
+    span = new Span()
+  })
+
+  describe('active()', () => {
+    it('should return null by default', () => {
+      expect(scope.active()).to.be.null
+    })
+  })
+
+  describe('activate()', () => {
+    it('should return the value returned by the callback', () => {
+      expect(scope.activate(span, () => 'test')).to.equal('test')
+    })
+
+    it('should preserve the surrounding scope', () => {
+      expect(scope.active()).to.be.null
+
+      scope.activate(span, () => {})
+
+      expect(scope.active()).to.be.null
+    })
+
+    it('should support an invalid callback', () => {
+      expect(() => { scope.activate(span, 'invalid') }).to.not.throw(Error)
+    })
+
+    it('should activate the span on the current scope', () => {
+      expect(scope.active()).to.be.null
+
+      scope.activate(span, () => {
+        expect(scope.active()).to.equal(span)
+      })
+
+      expect(scope.active()).to.be.null
+    })
+
+    it('should persist through setTimeout', done => {
+      scope.activate(span, () => {
+        setTimeout(() => {
+          expect(scope.active()).to.equal(span)
+          done()
+        }, 0)
+      })
+    })
+
+    it('should persist through setImmediate', done => {
+      scope.activate(span, () => {
+        setImmediate(() => {
+          expect(scope.active()).to.equal(span)
+          done()
+        }, 0)
+      })
+    })
+
+    it('should persist through setInterval', done => {
+      scope.activate(span, () => {
+        let shouldReturn = false
+
+        const timer = setInterval(() => {
+          expect(scope.active()).to.equal(span)
+
+          if (shouldReturn) {
+            clearInterval(timer)
+            return done()
+          }
+
+          shouldReturn = true
+        }, 0)
+      })
+    })
+
+    if (global.process && global.process.nextTick) {
+      it('should persist through process.nextTick', done => {
+        scope.activate(span, () => {
+          process.nextTick(() => {
+            expect(scope.active()).to.equal(span)
+            done()
+          }, 0)
+        })
+      })
     }
 
-    context = {
-      remove: sinon.spy()
-    }
+    it('should persist through promises', () => {
+      const promise = Promise.resolve()
 
-    Scope = require('../../src/scope/scope')
-  })
+      return scope.activate(span, () => {
+        return promise.then(() => {
+          expect(scope.active()).to.equal(span)
+        })
+      })
+    })
 
-  it('should expose its span', () => {
-    scope = new Scope(span, context)
+    it('should handle concurrency', done => {
+      scope.activate(span, () => {
+        setImmediate(() => {
+          expect(scope.active()).to.equal(span)
+          done()
+        })
+      })
 
-    expect(scope.span()).to.equal(span)
-  })
-
-  it('should remove itself from the context on close', () => {
-    scope = new Scope(span, context)
-
-    scope.close()
-
-    expect(context.remove).to.have.been.calledWith(scope)
-  })
-
-  it('should not finish the span on close by default', () => {
-    scope = new Scope(span, context)
-
-    scope.close()
-
-    expect(span.finish).to.not.have.been.called
-  })
-
-  it('should support enabling to finish the span on close', () => {
-    scope = new Scope(span, context, true)
-
-    scope.close()
-
-    expect(span.finish).to.have.been.called
+      scope.activate(span, () => {})
+    })
   })
 })

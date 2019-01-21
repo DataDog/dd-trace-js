@@ -57,15 +57,15 @@ describe('Plugin', () => {
             }
           }
 
-          tracer.scopeManager().activate(span)
+          tracer.scope().activate(span, () => {
+            winston.info('message')
 
-          winston.info('message')
-
-          if (semver.intersects(version, '>=3')) {
-            expect(transport.log).to.not.have.been.calledWithMatch(meta)
-          } else {
-            expect(transport.log).to.not.have.been.calledWithMatch('info', 'message', meta)
-          }
+            if (semver.intersects(version, '>=3')) {
+              expect(transport.log).to.not.have.been.calledWithMatch(meta)
+            } else {
+              expect(transport.log).to.not.have.been.calledWithMatch('info', 'message', meta)
+            }
+          })
         })
       })
 
@@ -83,15 +83,15 @@ describe('Plugin', () => {
             }
           }
 
-          tracer.scopeManager().activate(span)
+          tracer.scope().activate(span, () => {
+            winston.info('message')
 
-          winston.info('message')
-
-          if (semver.intersects(version, '>=3')) {
-            expect(transport.log).to.have.been.calledWithMatch(meta)
-          } else {
-            expect(transport.log).to.have.been.calledWithMatch('info', 'message', meta)
-          }
+            if (semver.intersects(version, '>=3')) {
+              expect(transport.log).to.have.been.calledWithMatch(meta)
+            } else {
+              expect(transport.log).to.have.been.calledWithMatch('info', 'message', meta)
+            }
+          })
         })
 
         it('should add the trace identifiers to logger instances', () => {
@@ -110,15 +110,15 @@ describe('Plugin', () => {
             ? winston.createLogger(options)
             : new winston.Logger(options)
 
-          tracer.scopeManager().activate(span)
+          tracer.scope().activate(span, () => {
+            logger.info('message')
 
-          logger.info('message')
-
-          if (semver.intersects(version, '>=3')) {
-            expect(transport.log).to.have.been.calledWithMatch(meta)
-          } else {
-            expect(transport.log).to.have.been.calledWithMatch('info', 'message', meta)
-          }
+            if (semver.intersects(version, '>=3')) {
+              expect(transport.log).to.have.been.calledWithMatch(meta)
+            } else {
+              expect(transport.log).to.have.been.calledWithMatch('info', 'message', meta)
+            }
+          })
         })
 
         if (semver.intersects(version, '>=3')) {
@@ -127,18 +127,18 @@ describe('Plugin', () => {
               transports: [transport]
             })
 
-            tracer.scopeManager().activate(span)
+            tracer.scope().activate(span, () => {
+              logger.write({
+                level: 'info',
+                message: 'message'
+              })
 
-            logger.write({
-              level: 'info',
-              message: 'message'
-            })
-
-            expect(transport.log).to.have.been.calledWithMatch({
-              dd: {
-                trace_id: span.context().toTraceId(),
-                span_id: span.context().toSpanId()
-              }
+              expect(transport.log).to.have.been.calledWithMatch({
+                dd: {
+                  trace_id: span.context().toTraceId(),
+                  span_id: span.context().toSpanId()
+                }
+              })
             })
           })
         }
