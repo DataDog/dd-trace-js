@@ -3,19 +3,12 @@
 const web = require('./util/web')
 
 function createWrapGenerate (tracer, config) {
-  config = web.normalizeConfig(config)
-
   return function wrapGenerate (generate) {
     return function generateWithTrace (server, req, res, options) {
-      let request
+      const request = generate.apply(this, arguments)
 
-      web.instrument(tracer, config, req, res, 'hapi.request', () => {
-        global.tracer = tracer
-        request = generate.apply(this, arguments)
-
-        web.beforeEnd(req, () => {
-          web.enterRoute(req, request.route.path)
-        })
+      web.beforeEnd(req, () => {
+        web.enterRoute(req, request.route.path)
       })
 
       return request
@@ -29,19 +22,28 @@ function createWrapExecute (tracer, config) {
   return function wrapExecute (execute) {
     return function executeWithTrace () {
       const req = this.raw.req
-      const res = this.raw.res
 
-      let returnValue
-
-      web.instrument(tracer, config, req, res, 'hapi.request', () => {
-        returnValue = execute.apply(this, arguments)
-
-        web.beforeEnd(req, () => {
-          web.enterRoute(req, this.route.path)
-        })
+      web.beforeEnd(req, () => {
+        web.enterRoute(req, this.route.path)
       })
 
-      return returnValue
+      return execute.apply(this, arguments)
+    }
+  }
+}
+
+function createWrapDispatch (tracer, config) {
+  config = web.normalizeConfig(config)
+
+  return function wrapDispatch (dispatch) {
+    return function dispatchWithTrace (options) {
+      const handler = dispatch.apply(this, arguments)
+
+      return function (req, res) {
+        return web.instrument(tracer, config, req, res, 'hapi.request', () => {
+          return handler.apply(this, arguments)
+        })
+      }
     }
   }
 }
@@ -78,6 +80,39 @@ module.exports = [
     },
     unpatch (Request) {
       this.unwrap(Request.prototype, '_execute')
+    }
+  },
+  {
+    name: 'hapi',
+    versions: ['7.2 - 16'],
+    file: 'lib/connection.js',
+    patch (Connection, tracer, config) {
+      this.wrap(Connection.prototype, '_dispatch', createWrapDispatch(tracer, config))
+    },
+    unpatch (Connection) {
+      this.unwrap(Connection.prototype, '_dispatch')
+    }
+  },
+  {
+    name: 'hapi',
+    versions: ['17'],
+    file: 'lib/core.js',
+    patch (Core, tracer, config) {
+      this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
+    },
+    unpatch (Core) {
+      this.unwrap(Core.prototype, '_dispatch')
+    }
+  },
+  {
+    name: 'hapi',
+    versions: ['2 - 7.1'],
+    file: 'lib/server.js',
+    patch (Server, tracer, config) {
+      this.wrap(Server.prototype, '_dispatch', createWrapDispatch(tracer, config))
+    },
+    unpatch (Server) {
+      this.unwrap(Server.prototype, '_dispatch')
     }
   }
 ]

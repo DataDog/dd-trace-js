@@ -22,11 +22,11 @@ describe('Plugin', () => {
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
       })
 
-      afterEach(() => {
+      after(() => {
         return agent.close()
       })
 
-      beforeEach(() => {
+      before(() => {
         return agent.load(plugin, 'hapi')
           .then(() => {
             Hapi = require(`../../versions/hapi@${version}`).get()
