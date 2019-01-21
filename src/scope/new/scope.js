@@ -1,3 +1,5 @@
+'use strict'
+
 const asyncHooks = require('../async_hooks')
 const Base = require('./base')
 
