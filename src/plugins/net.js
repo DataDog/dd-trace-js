@@ -8,7 +8,7 @@ function createWrapConnect (tracer, config) {
       const scope = tracer.scope()
       const options = getOptions(arguments)
 
-      if (!options) return connect.apply(this, arguments)
+      if (!scope.active() || !options) return connect.apply(this, arguments)
 
       const span = options.path
         ? wrapIpc(tracer, config, this, options)
