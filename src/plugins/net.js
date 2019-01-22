@@ -8,7 +8,7 @@ function createWrapConnect (tracer, config) {
       const scope = tracer.scope()
       const options = getOptions(arguments)
 
-      if (!scope.active() || !options) return connect.apply(this, arguments)
+      if (!options) return connect.apply(this, arguments)
 
       const span = options.path
         ? wrapIpc(tracer, config, this, options)
@@ -70,6 +70,10 @@ function startSpan (tracer, config, protocol, tags) {
       'service.name': config.service || `${tracer._service}-${protocol}`
     }, tags)
   })
+
+  if (!childOf) {
+    span.context()._sampled = false
+  }
 
   return span
 }
