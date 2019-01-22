@@ -5,17 +5,41 @@ const wrapEmitter = require('emitter-listener')
 
 const SCOPE_SYMBOL = 'dd-trace@scope'
 
+/**
+ * The Datadog Scope Manager. This is used for context propagation.
+ *
+ * @hideconstructor
+ */
 class Scope {
+  /**
+   * Get the current active span or null if there is none.
+   *
+   * @returns {Span} The active span.
+   */
   active () {
     return this._active() || null
   }
 
+  /**
+   * Activate a span in the scope of a function.
+   *
+   * @param {external:"opentracing.Span"} span The span to activate.
+   * @param {Function} [callback] Function that will have the span activated on its scope.
+   * @returns The return value of the callback.
+   */
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
     return this._activate(span, callback)
   }
 
+  /**
+   * Binds a target to the provided span, or the active span if omitted.
+   *
+   * @param {Function|Promise|EventEmitter} target Function that will have the span activated on its scope.
+   * @param {?(external:"opentracing.Span")} [span=scope.active()] The span to activate.
+   * @returns The bound target.
+   */
   bind (target, span) {
     if (this._isEmitter(target)) {
       return this._bindEmitter(target, span)

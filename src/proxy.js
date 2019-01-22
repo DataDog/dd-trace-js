@@ -112,20 +112,15 @@ class Tracer extends BaseTracer {
     return this._tracer.extract.apply(this._tracer, arguments)
   }
 
-  /**
-   * Get the scope manager to manager context propagation for the tracer.
-   *
-   * @returns {ScopeManager} The scope manager.
-   */
   scopeManager () {
     this._deprecate('scopeManager')
     return this._tracer.scopeManager.apply(this._tracer, arguments)
   }
 
   /**
-   * Get the current scope to manage context propagation for the tracer.
+   * Get the scope manager to manager context propagation for the tracer.
    *
-   * @returns {ScopeManager} The scope manager.
+   * @returns {Scope} The scope manager.
    */
   scope () {
     return this._tracer.scope.apply(this._tracer, arguments)

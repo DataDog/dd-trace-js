@@ -42,18 +42,15 @@ const app = express()
 
 app.use((req, res, next) => {
   const span = tracer.startSpan('web.request')
-  const scope = tracer.scopeManager().activate(span)
-
-  next()
+  
+  tracer.scope().activate(span, () => next())
 })
 
 app.get('/hello', (req, res, next) => {
   setTimeout(() => {
-    const scope = tracer.scopeManager().active() // the scope activated earlier
-    const span = scope.span() // the span wrapped by the scope
+    const span = tracer.scope().active() // the span activated earlier
 
     span.finish()
-    scope.close() // optional as the scope is automatically closed at the end of the current asynchronous context.
 
     res.status(200).send()
   }, 100)
@@ -62,7 +59,7 @@ app.get('/hello', (req, res, next) => {
 app.listen(3000)
 ```
 
-See the [API documentation](./ScopeManager.html) for usage.
+See the [API documentation](./Scope.html) for usage.
 
 <h2 id="integrations">Integrations</h2>
 
