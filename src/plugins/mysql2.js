@@ -54,7 +54,7 @@ function wrapCallback (tracer, span, parent, done) {
     span.finish()
 
     done(err, res)
-  })
+  }, parent)
 }
 
 function patchConnection (Connection, tracer, config) {
