@@ -7,7 +7,7 @@ describe('NoopTracer', () => {
   let tracer
 
   beforeEach(() => {
-    NoopTracer = require('../src/noop')
+    NoopTracer = require('../src/noop/tracer')
     tracer = new NoopTracer()
   })
 
@@ -23,6 +23,17 @@ describe('NoopTracer', () => {
   describe('currentSpan', () => {
     it('should return null', () => {
       expect(tracer.currentSpan()).to.be.null
+    })
+  })
+
+  describe('startSpan', () => {
+    it('should return a span with a valid context', () => {
+      const span = tracer.startSpan()
+
+      expect(span.context().toTraceId).to.be.a('function')
+      expect(span.context().toTraceId()).to.equal('')
+      expect(span.context().toSpanId).to.be.a('function')
+      expect(span.context().toSpanId()).to.equal('')
     })
   })
 })

@@ -2,7 +2,7 @@
 
 const BaseTracer = require('opentracing').Tracer
 const memoize = require('lodash.memoize')
-const NoopTracer = require('./noop')
+const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')

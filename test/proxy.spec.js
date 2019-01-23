@@ -53,7 +53,7 @@ describe('TracerProxy', () => {
 
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
-      './noop': NoopTracer,
+      './noop/tracer': NoopTracer,
       './instrumenter': Instrumenter,
       './config': Config,
       './platform': platform
