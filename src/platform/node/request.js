@@ -15,7 +15,7 @@ function request (options, callback) {
   options.headers['Content-Length'] = byteLength(data)
 
   return new Promise((resolve, reject) => {
-    let client = options.protocol === 'https:' ? https : http;
+    const client = options.protocol === 'https:' ? https : http
     const req = client.request(options, res => {
       let data = ''
 
