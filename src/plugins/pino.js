@@ -14,6 +14,28 @@ function createWrapWrite (tracer, config) {
   }
 }
 
+function createWrapGenLog (tracer, config) {
+  return function wrapGenLog (genLog) {
+    return function genLogWithTrace (z) {
+      const log = genLog(z)
+
+      return function logWithTrace (a, b, c, d, e, f, g, h, i, j, k) {
+        const args = [a, b, c, d, e, f, g, h, i, j, k]
+
+        if (!a) {
+          args[0] = {}
+        } else if (typeof a !== 'object') {
+          args.unshift({})
+        }
+
+        tx.correlate(tracer, args[0])
+
+        return log.apply(this, args)
+      }
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'pino',
@@ -21,14 +43,35 @@ module.exports = [
     patch (pino, tracer, config) {
       if (!config.correlate) return
 
-      const logger = pino()
-
-      this.wrap(Object.getPrototypeOf(logger), pino.symbols.writeSym, createWrapWrite(tracer, config))
+      this.wrap(Object.getPrototypeOf(pino()), pino.symbols.writeSym, createWrapWrite(tracer, config))
     },
     unpatch (pino) {
-      const logger = pino()
+      this.unwrap(Object.getPrototypeOf(pino()), pino.symbols.writeSym)
+    }
+  },
+  {
+    name: 'pino',
+    versions: ['4'],
+    file: 'lib/tools.js',
+    patch (tools, tracer, config) {
+      if (!config.correlate) return
 
-      this.unwrap(Object.getPrototypeOf(logger), pino.symbols.writeSym)
+      this.wrap(tools, 'genLog', createWrapGenLog(tracer, config))
+    },
+    unpatch (tools) {
+      this.unwrap(tools, 'genLog')
+    }
+  },
+  {
+    name: 'pino',
+    versions: ['2 - 3'],
+    patch (pino, tracer, config) {
+      if (!config.correlate) return
+
+      this.wrap(Object.getPrototypeOf(pino()), 'asJson', createWrapWrite(tracer, config))
+    },
+    unpatch (pino) {
+      this.unwrap(Object.getPrototypeOf(pino()), 'asJson')
     }
   }
 ]
