@@ -19,6 +19,7 @@ module.exports = {
   'mysql2': require('./mysql2'),
   'net': require('./net'),
   'pg': require('./pg'),
+  'pino': require('./pino'),
   'q': require('./q'),
   'redis': require('./redis'),
   'restify': require('./restify'),
