@@ -11,6 +11,7 @@ class Config {
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const env = coalesce(options.env, platform.env('DD_ENV'))
+    const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), null)
     const protocol = 'http'
     const hostname = coalesce(
       options.hostname,
@@ -26,7 +27,7 @@ class Config {
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
     this.env = env
-    this.url = new URL(`${protocol}://${hostname}:${port}`)
+    this.url = url ? new URL(url) : new URL(`${protocol}://${hostname}:${port}`)
     this.tags = Object.assign({}, options.tags)
     this.flushInterval = flushInterval
     this.bufferSize = 100000
