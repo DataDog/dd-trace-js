@@ -49,7 +49,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
-    expect(config).to.have.nested.property('url.protocol', 'https:')
+    expect(config).to.have.nested.property('url.protocol', 'http:')
     expect(config).to.have.nested.property('url.hostname', 'agent')
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.property('service', 'service')
@@ -57,7 +57,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:443')
+    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:7777')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
@@ -71,7 +71,7 @@ describe('Config', () => {
     expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '443')
+    expect(config).to.have.nested.property('url.port', '7777')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
   })
@@ -114,7 +114,7 @@ describe('Config', () => {
       enabled: false,
       debug: true,
       hostname: 'agent',
-      overrideUrl: 'https://agent2:443',
+      overrideUrl: 'https://agent2:7777',
       port: 6218,
       service: 'service',
       env: 'test',
@@ -129,7 +129,7 @@ describe('Config', () => {
     expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '443')
+    expect(config).to.have.nested.property('url.port', '7777')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -149,7 +149,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:443')
+    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:6218')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
@@ -170,8 +170,8 @@ describe('Config', () => {
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
     expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'server')
-    expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.nested.property('url.hostname', 'agent2')
+    expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })
@@ -188,7 +188,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: true,
       debug: false,
-      overrideUrl: 'https://agent3:443',
+      overrideUrl: 'https://agent3:7778',
       protocol: 'http',
       hostname: 'server',
       port: 7777,
@@ -200,7 +200,7 @@ describe('Config', () => {
     expect(config).to.have.property('debug', false)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent3')
-    expect(config).to.have.nested.property('url.port', '443')
+    expect(config).to.have.nested.property('url.port', '7778')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })
