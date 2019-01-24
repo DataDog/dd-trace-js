@@ -107,14 +107,14 @@ describe('Config', () => {
     expect(config).to.have.property('plugins', false)
   })
 
-  it('should initialize from the options with overrideUrl taking precedence', () => {
+  it('should initialize from the options with url taking precedence', () => {
     const logger = {}
     const tags = { foo: 'bar' }
     const config = new Config({
       enabled: false,
       debug: true,
       hostname: 'agent',
-      overrideUrl: 'https://agent2:7777',
+      url: 'https://agent2:7777',
       port: 6218,
       service: 'service',
       env: 'test',
@@ -176,7 +176,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
   })
 
-  it('should give priority to the options especially overrideUrl', () => {
+  it('should give priority to the options especially url', () => {
     platform.env.withArgs('DD_TRACE_AGENT_URL').returns('http://agent2:6218')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
@@ -188,7 +188,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: true,
       debug: false,
-      overrideUrl: 'https://agent3:7778',
+      url: 'https://agent3:7778',
       protocol: 'http',
       hostname: 'server',
       port: 7777,
