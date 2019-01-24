@@ -188,7 +188,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: true,
       debug: false,
-      overrideUrl: 'https://agent3:443'
+      overrideUrl: 'https://agent3:443',
       protocol: 'http',
       hostname: 'server',
       port: 7777,
