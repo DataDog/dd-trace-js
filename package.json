@@ -38,7 +38,6 @@
   },
   "dependencies": {
     "async-hook-jl": "^1.7.6",
-    "emitter-listener": "^1.1.2",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",

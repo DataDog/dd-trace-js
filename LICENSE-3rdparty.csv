@@ -1,6 +1,5 @@
 Component,Origin,License,Copyright
 require,async-hook-jl,MIT,Copyright 2015 Andreas Madsen
-require,emitter-listener,BSD-2-Clause,Copyright Forrest L Norvell
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
