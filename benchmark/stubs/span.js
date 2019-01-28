@@ -11,6 +11,7 @@ const span = {
   tracer: () => ({
     _service: 'service'
   }),
+  addTags: () => {},
   context: () => ({
     traceId: id,
     spanId: id,
