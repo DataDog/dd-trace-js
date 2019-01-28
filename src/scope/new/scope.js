@@ -1,6 +1,7 @@
 'use strict'
 
 const asyncHooks = require('../async_hooks')
+const executionAsyncId = asyncHooks.executionAsyncId
 const Base = require('./base')
 
 let singleton = null
@@ -13,7 +14,7 @@ class Scope extends Base {
 
     singleton = this
 
-    this._spans = new Map()
+    this._spans = Object.create(null)
     this._hook = asyncHooks.createHook({
       init: this._init.bind(this),
       destroy: this._destroy.bind(this),
@@ -24,14 +25,14 @@ class Scope extends Base {
   }
 
   _active () {
-    return this._spans.get(asyncHooks.executionAsyncId())
+    return this._spans[executionAsyncId()]
   }
 
   _activate (span, callback) {
-    const asyncId = asyncHooks.executionAsyncId()
-    const oldSpan = this._spans.get(asyncId)
+    const asyncId = executionAsyncId()
+    const oldSpan = this._spans[asyncId]
 
-    this._spans.set(asyncId, span)
+    this._spans[asyncId] = span
 
     try {
       return callback()
@@ -45,7 +46,7 @@ class Scope extends Base {
       throw e
     } finally {
       if (oldSpan) {
-        this._spans.set(asyncId, oldSpan)
+        this._spans[asyncId] = oldSpan
       } else {
         this._destroy(asyncId)
       }
@@ -53,15 +54,15 @@ class Scope extends Base {
   }
 
   _init (asyncId) {
-    const span = this._spans.get(asyncHooks.executionAsyncId())
+    const span = this._spans[executionAsyncId()]
 
     if (span) {
-      this._spans.set(asyncId, span)
+      this._spans[asyncId] = span
     }
   }
 
   _destroy (asyncId) {
-    this._spans.delete(asyncId)
+    delete this._spans[asyncId]
   }
 }
 
