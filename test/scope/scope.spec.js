@@ -114,4 +114,140 @@ describe('Scope', () => {
       scope.activate(span, () => {})
     })
   })
+
+  describe('bind()', () => {
+    describe('with a function', () => {
+      it('should bind the function to the active span', () => {
+        let fn = () => {
+          expect(scope.active()).to.equal(span)
+        }
+
+        scope.activate(span, () => {
+          fn = scope.bind(fn)
+        })
+
+        fn()
+      })
+
+      it('should bind the function to the provided span', () => {
+        let fn = () => {
+          expect(scope.active()).to.equal(span)
+        }
+
+        fn = scope.bind(fn, span)
+
+        fn()
+      })
+
+      it('should keep the return value', () => {
+        let fn = () => 'test'
+
+        fn = scope.bind(fn)
+
+        expect(fn()).to.equal('test')
+      })
+    })
+
+    describe('with a promise', () => {
+      let promise
+
+      beforeEach(() => {
+        promise = Promise.resolve()
+      })
+
+      it('should bind the promise to the active span', () => {
+        return scope.activate(span, () => {
+          scope.bind(promise)
+
+          return promise.then(() => {
+            expect(scope.active()).to.equal(span)
+          })
+        })
+      })
+
+      it('should bind the function to the provided span', () => {
+        scope.bind(promise, span)
+
+        return promise.then(() => {
+          expect(scope.active()).to.equal(span)
+        })
+      })
+
+      it('should return the promise', () => {
+        expect(scope.bind(promise, span)).to.equal(promise)
+      })
+    })
+
+    describe('with an event emitter', () => {
+      let emitter
+
+      beforeEach(() => {
+        const events = require('events')
+        emitter = new events.EventEmitter()
+      })
+
+      it('should bind listeners to the active span', done => {
+        scope.activate(span, () => {
+          scope.bind(emitter)
+
+          emitter.on('test', () => {
+            expect(scope.active()).to.equal(span)
+            done()
+          })
+        })
+
+        emitter.emit('test')
+      })
+
+      it('should bind the function to the provided span', done => {
+        scope.bind(emitter, span)
+
+        emitter.on('test', () => {
+          expect(scope.active()).to.equal(span)
+          done()
+        })
+
+        emitter.emit('test')
+      })
+
+      it('should return the emitter', () => {
+        expect(scope.bind(emitter, span)).to.equal(emitter)
+      })
+
+      it('should support reusing listeners', done => {
+        const spans = []
+        const listener = () => {
+          spans.push(scope.active())
+        }
+
+        scope.bind(emitter)
+
+        scope.activate(span, () => {
+          emitter.on('test', listener)
+
+          scope.activate(null, () => {
+            emitter.on('test', listener)
+          })
+        })
+
+        emitter.on('test', () => {
+          try {
+            expect(spans[0]).to.equal(span)
+            expect(spans[1]).to.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        emitter.emit('test')
+      })
+    })
+
+    describe('with an unsupported target', () => {
+      it('should return the target', () => {
+        expect(scope.bind('test', span)).to.equal('test')
+      })
+    })
+  })
 })

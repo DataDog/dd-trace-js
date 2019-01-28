@@ -1,9 +1,6 @@
 'use strict'
 
 const shimmer = require('shimmer')
-const wrapEmitter = require('emitter-listener')
-
-const SCOPE_SYMBOL = 'dd-trace@scope'
 
 /**
  * The Datadog Scope Manager. This is used for context propagation.
@@ -72,25 +69,28 @@ class Scope {
   }
 
   _bindEmitter (emitter, span) {
-    const scope = this
+    if (this._datadog_events) return emitter
 
-    function mark (listener) {
-      if (!listener) { return }
+    Object.defineProperty(emitter, '_datadog_events', {
+      configurable: true,
+      writable: true,
+      value: {}
+    })
 
-      listener[SCOPE_SYMBOL] = listener[SCOPE_SYMBOL] || []
-      listener[SCOPE_SYMBOL].push(scope._spanOrActive(span))
-    }
+    this._tryWrap(emitter, [
+      'addListener',
+      'prependListener',
+      'on'
+    ], createWrapAddListener(this, span))
 
-    function prepare (listener) {
-      if (!listener || !listener[SCOPE_SYMBOL]) { return listener }
+    this._tryWrap(emitter, [
+      'removeListener',
+      'off'
+    ], wrapRemoveListener)
 
-      return listener[SCOPE_SYMBOL]
-        .reduce((prev, next) => {
-          return scope.bind(prev, next)
-        }, listener)
-    }
-
-    wrapEmitter(emitter, mark, prepare)
+    this._tryWrap(emitter, [
+      'removeAllListeners'
+    ], wrapRemoveAllListeners)
 
     return emitter
   }
@@ -124,6 +124,68 @@ class Scope {
 
   _isPromise (promise) {
     return promise && typeof promise.then === 'function'
+  }
+
+  _tryWrap (obj, methods, wrapper) {
+    for (let i = 0, l = methods.length; i < l; i++) {
+      if (obj[methods[i]]) {
+        shimmer.wrap(obj, methods[i], wrapper)
+      }
+    }
+  }
+}
+
+function createWrapAddListener (scope, span) {
+  return function wrapAddListener (addListener) {
+    return function addListenerWithTrace (eventName, listener) {
+      if (!listener || listener._datadog_bound) return addListener.apply(this, arguments)
+
+      const bound = scope.bind(listener, scope._spanOrActive(span))
+
+      bound._datadog_bound = true
+
+      if (!this._datadog_events[eventName]) {
+        this._datadog_events[eventName] = new Map()
+      }
+
+      if (!this._datadog_events[eventName][listener]) {
+        this._datadog_events[eventName][listener] = []
+      }
+
+      this._datadog_events[eventName][listener].push(bound)
+
+      return addListener.call(this, eventName, bound)
+    }
+  }
+}
+
+function wrapRemoveListener (removeListener) {
+  return function removeListenerWithTrace (eventName, listener) {
+    const listeners = this._datadog_events[eventName]
+
+    if (!listener || !listeners || !listeners[listener]) {
+      return removeListener.apply(this, arguments)
+    }
+
+    let bound
+
+    while ((bound = listeners.pop())) {
+      this.removeListener(eventName, bound)
+    }
+
+    return removeListener.call(this, eventName, listener)
+  }
+}
+
+function wrapRemoveAllListeners (removeAllListeners) {
+  return function removeAllListenersWithTrace (eventName) {
+    if (eventName) {
+      this._datadog_events[eventName] = new Map()
+    } else {
+      this._datadog_events = {}
+    }
+
+    return removeAllListeners.call(this, eventName)
   }
 }
 
