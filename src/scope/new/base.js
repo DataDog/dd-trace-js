@@ -1,7 +1,5 @@
 'use strict'
 
-const shimmer = require('shimmer')
-
 /**
  * The Datadog Scope Manager. This is used for context propagation.
  *
@@ -38,15 +36,21 @@ class Scope {
    * @returns The bound target.
    */
   bind (target, span) {
+    if (target === undefined || target === null) return target
+
     if (this._isEmitter(target)) {
-      return this._bindEmitter(target, span)
-    } else if (this._isPromise(target)) {
-      return this._bindPromise(target, span)
-    } else if (typeof target === 'function') {
-      return this._bindFn(target, span)
-    } else {
-      return target
+      target = this._bindEmitter(target, span)
     }
+
+    if (this._isPromise(target)) {
+      target = this._bindPromise(target, span)
+    }
+
+    if (typeof target === 'function') {
+      target = this._bindFn(target, span)
+    }
+
+    return target
   }
 
   _active () {
@@ -69,43 +73,47 @@ class Scope {
   }
 
   _bindEmitter (emitter, span) {
-    if (this._datadog_events) return emitter
+    if (emitter._datadog_events) return emitter
 
-    Object.defineProperty(emitter, '_datadog_events', {
-      configurable: true,
-      writable: true,
-      value: {}
-    })
+    this._datadog_events = {}
 
-    this._tryWrap(emitter, [
-      'addListener',
-      'prependListener',
-      'on'
-    ], createWrapAddListener(this, span))
+    if (emitter.addListener) {
+      emitter.addListener = wrapAddListener(emitter.addListener, this, span)
+    }
 
-    this._tryWrap(emitter, [
-      'removeListener',
-      'off'
-    ], wrapRemoveListener)
+    if (emitter.prependListener) {
+      emitter.prependListener = wrapAddListener(emitter.prependListener, this, span)
+    }
 
-    this._tryWrap(emitter, [
-      'removeAllListeners'
-    ], wrapRemoveAllListeners)
+    if (emitter.on) {
+      emitter.on = wrapAddListener(emitter.on, this, span)
+    }
+
+    if (emitter.removeListener) {
+      emitter.removeListener = wrapRemoveListener(emitter.removeListener)
+    }
+
+    if (emitter.off) {
+      emitter.off = wrapRemoveListener(emitter.off)
+    }
+
+    if (emitter.removeAllListeners) {
+      emitter.removeAllListeners = wrapRemoveAllListeners(emitter.removeAllListeners)
+    }
 
     return emitter
   }
 
   _bindPromise (promise, span) {
     const scope = this
+    const then = promise.then
 
-    shimmer.wrap(promise, 'then', (then) => {
-      return function () {
-        return then.apply(this, Array.prototype.map.call(arguments, arg => {
-          if (typeof arg !== 'function') { return arg }
-          return scope.bind(arg, span)
-        }))
-      }
-    })
+    promise.then = function thenWithTrace (onFulfilled, onRejected) {
+      return then.apply(this, Array.prototype.map.call(arguments, arg => {
+        if (typeof arg !== 'function') { return arg }
+        return scope.bind(arg, span)
+      }))
+    }
 
     return promise
   }
@@ -116,46 +124,36 @@ class Scope {
 
   _isEmitter (emitter) {
     return emitter &&
-        typeof emitter.emit === 'function' &&
-        typeof emitter.on === 'function' &&
-        typeof emitter.addListener === 'function' &&
-        typeof emitter.removeListener === 'function'
+      typeof emitter.emit === 'function' &&
+      typeof emitter.on === 'function' &&
+      typeof emitter.addListener === 'function' &&
+      typeof emitter.removeListener === 'function'
   }
 
   _isPromise (promise) {
     return promise && typeof promise.then === 'function'
   }
-
-  _tryWrap (obj, methods, wrapper) {
-    for (let i = 0, l = methods.length; i < l; i++) {
-      if (obj[methods[i]]) {
-        shimmer.wrap(obj, methods[i], wrapper)
-      }
-    }
-  }
 }
 
-function createWrapAddListener (scope, span) {
-  return function wrapAddListener (addListener) {
-    return function addListenerWithTrace (eventName, listener) {
-      if (!listener || listener._datadog_bound) return addListener.apply(this, arguments)
+function wrapAddListener (addListener, scope, span) {
+  return function addListenerWithTrace (eventName, listener) {
+    if (!listener || listener._datadog_bound) return addListener.apply(this, arguments)
 
-      const bound = scope.bind(listener, scope._spanOrActive(span))
+    const bound = scope.bind(listener, scope._spanOrActive(span))
 
-      bound._datadog_bound = true
+    bound._datadog_bound = true
 
-      if (!this._datadog_events[eventName]) {
-        this._datadog_events[eventName] = new Map()
-      }
-
-      if (!this._datadog_events[eventName][listener]) {
-        this._datadog_events[eventName][listener] = []
-      }
-
-      this._datadog_events[eventName][listener].push(bound)
-
-      return addListener.call(this, eventName, bound)
+    if (!this._datadog_events[eventName]) {
+      this._datadog_events[eventName] = new Map()
     }
+
+    if (!this._datadog_events[eventName][listener]) {
+      this._datadog_events[eventName][listener] = []
+    }
+
+    this._datadog_events[eventName][listener].push(bound)
+
+    return addListener.call(this, eventName, bound)
   }
 }
 

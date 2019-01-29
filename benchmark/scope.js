@@ -37,7 +37,7 @@ const Scope = proxyquire('../src/scope/new/scope', {
 const scope = new Scope()
 
 suite
-  .add('Scope', {
+  .add('Scope#activate', {
     fn () {
       scope.activate(spanStub, () => {
         asyncHooks.init(1)
@@ -48,7 +48,7 @@ suite
       asyncHooks.destroy(1)
     }
   })
-  .add('Scope (nested)', {
+  .add('Scope#activate (nested)', {
     fn () {
       asyncHooks.init(1)
       asyncHooks.before(1)
@@ -70,6 +70,42 @@ suite
       asyncHooks.before(3)
       asyncHooks.after(3)
       asyncHooks.destroy(3)
+    }
+  })
+  .add('Scope#active', {
+    fn () {
+      scope.active()
+    }
+  })
+  .add('Scope#bind (null)', {
+    fn () {
+      scope.bind(null, {})
+    }
+  })
+  .add('Scope#bind (fn)', {
+    fn () {
+      scope.bind(() => {}, {})
+    }
+  })
+  .add('Scope#bind (promise)', {
+    fn () {
+      const promise = {
+        then: () => {}
+      }
+
+      scope.bind(promise, {})
+    }
+  })
+  .add('Scope#bind (emitter)', {
+    fn () {
+      const emitter = {
+        addListener: () => {},
+        on: () => {},
+        emit: () => {},
+        removeListener: () => {}
+      }
+
+      scope.bind(emitter, {})
     }
   })
 
