@@ -75,7 +75,7 @@ class Scope {
   _bindEmitter (emitter, span) {
     if (emitter._datadog_events) return emitter
 
-    this._datadog_events = {}
+    emitter._datadog_events = {}
 
     if (emitter.addListener) {
       emitter.addListener = wrapAddListener(emitter.addListener, this, span)
