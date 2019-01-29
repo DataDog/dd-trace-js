@@ -36,6 +36,10 @@ const Scope = proxyquire('../src/scope/new/scope', {
 
 const scope = new Scope()
 
+let fn
+let promise
+let emitter
+
 suite
   .add('Scope#activate', {
     fn () {
@@ -87,6 +91,14 @@ suite
       scope.bind(() => {}, {})
     }
   })
+  .add('Scope#bind (fn())', {
+    onStart () {
+      fn = scope.bind(() => {}, {})
+    },
+    fn () {
+      fn()
+    }
+  })
   .add('Scope#bind (promise)', {
     fn () {
       const promise = {
@@ -94,6 +106,16 @@ suite
       }
 
       scope.bind(promise, {})
+    }
+  })
+  .add('Scope#bind (promise.then)', {
+    onStart () {
+      promise = scope.bind({
+        then: () => {}
+      }, {})
+    },
+    fn () {
+      promise.then(() => {})
     }
   })
   .add('Scope#bind (emitter)', {
@@ -106,6 +128,23 @@ suite
       }
 
       scope.bind(emitter, {})
+    }
+  })
+  .add('Scope#bind (emitter.on/off)', {
+    onStart () {
+      emitter = scope.bind({
+        addListener: () => {},
+        on: () => {},
+        emit: () => {},
+        removeListener: () => {},
+        off: () => {}
+      }, {})
+    },
+    fn () {
+      const listener = () => {}
+
+      emitter.on('test', listener)
+      emitter.off('test', listener)
     }
   })
 

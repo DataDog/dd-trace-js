@@ -165,7 +165,7 @@ describe('Scope', () => {
         })
       })
 
-      it('should bind the function to the provided span', () => {
+      it('should bind the promise to the provided span', () => {
         scope.bind(promise, span)
 
         return promise.then(() => {
@@ -199,7 +199,7 @@ describe('Scope', () => {
         emitter.emit('test')
       })
 
-      it('should bind the function to the provided span', done => {
+      it('should bind listeners to the provided span', done => {
         scope.bind(emitter, span)
 
         emitter.on('test', () => {
@@ -234,6 +234,31 @@ describe('Scope', () => {
           try {
             expect(spans[0]).to.equal(span)
             expect(spans[1]).to.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        emitter.emit('test')
+      })
+
+      it('should remove the right listener', done => {
+        const listener = sinon.spy()
+        const listener2 = sinon.spy()
+
+        scope.bind(emitter)
+
+        emitter.on('test', listener)
+        emitter.on('test', listener2)
+        emitter.on('test', listener2)
+
+        emitter.removeListener('test', listener2)
+
+        emitter.on('test', () => {
+          try {
+            expect(listener).to.have.been.called
+            expect(listener2).to.not.have.been.called
             done()
           } catch (e) {
             done(e)

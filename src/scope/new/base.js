@@ -1,5 +1,7 @@
 'use strict'
 
+let id = 0
+
 /**
  * The Datadog Scope Manager. This is used for context propagation.
  *
@@ -109,10 +111,13 @@ class Scope {
     const then = promise.then
 
     promise.then = function thenWithTrace (onFulfilled, onRejected) {
-      return then.apply(this, Array.prototype.map.call(arguments, arg => {
-        if (typeof arg !== 'function') { return arg }
-        return scope.bind(arg, span)
-      }))
+      const args = new Array(arguments.length)
+
+      for (let i = 0, l = args.length; i < l; i++) {
+        args[i] = scope.bind(arguments[i], span)
+      }
+
+      return then.apply(this, args)
     }
 
     return promise
@@ -142,16 +147,19 @@ function wrapAddListener (addListener, scope, span) {
     const bound = scope.bind(listener, scope._spanOrActive(span))
 
     bound._datadog_bound = true
+    listener._datadog_id = listener._datadog_id || ++id
 
     if (!this._datadog_events[eventName]) {
-      this._datadog_events[eventName] = new Map()
+      this._datadog_events[eventName] = {}
     }
 
-    if (!this._datadog_events[eventName][listener]) {
-      this._datadog_events[eventName][listener] = []
+    const events = this._datadog_events[eventName]
+
+    if (!events[id]) {
+      events[id] = []
     }
 
-    this._datadog_events[eventName][listener].push(bound)
+    events[id].push(bound)
 
     return addListener.call(this, eventName, bound)
   }
@@ -161,14 +169,14 @@ function wrapRemoveListener (removeListener) {
   return function removeListenerWithTrace (eventName, listener) {
     const listeners = this._datadog_events[eventName]
 
-    if (!listener || !listeners || !listeners[listener]) {
+    if (!listener || !listeners || !listeners[listener._datadog_id]) {
       return removeListener.apply(this, arguments)
     }
 
     let bound
 
-    while ((bound = listeners.pop())) {
-      this.removeListener(eventName, bound)
+    while ((bound = listeners[listener._datadog_id].pop())) {
+      removeListener.call(this, eventName, bound)
     }
 
     return removeListener.call(this, eventName, listener)
@@ -178,7 +186,7 @@ function wrapRemoveListener (removeListener) {
 function wrapRemoveAllListeners (removeAllListeners) {
   return function removeAllListenersWithTrace (eventName) {
     if (eventName) {
-      this._datadog_events[eventName] = new Map()
+      this._datadog_events[eventName] = {}
     } else {
       this._datadog_events = {}
     }
