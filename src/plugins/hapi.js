@@ -48,7 +48,7 @@ function createWrapExecute (tracer, config) {
 module.exports = [
   {
     name: 'hapi',
-    versions: ['^17.1'],
+    versions: ['>=17.1'],
     file: 'lib/request.js',
     patch (Request, tracer, config) {
       this.wrap(Request, 'generate', createWrapGenerate(tracer, config))

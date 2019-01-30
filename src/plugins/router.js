@@ -160,7 +160,7 @@ function addError (span, error) {
 
 module.exports = {
   name: 'router',
-  versions: ['1.x'],
+  versions: ['>=1'],
   patch (Router, tracer, config) {
     this.wrap(Router.prototype, 'handle', createWrapHandle(tracer, config))
     this.wrap(Router.prototype, 'process_params', createWrapProcessParams(tracer, config))

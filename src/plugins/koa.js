@@ -57,7 +57,7 @@ function createWrapRegister (tracer, config) {
 module.exports = [
   {
     name: 'koa',
-    versions: ['2.x'],
+    versions: ['>=2'],
     patch (Koa, tracer, config) {
       this.wrap(Koa.prototype, 'use', createWrapUse(tracer, config))
     },
@@ -67,7 +67,7 @@ module.exports = [
   },
   {
     name: 'koa-router',
-    versions: ['7.x'],
+    versions: ['>=7'],
     patch (Router, tracer, config) {
       this.wrap(Router.prototype, 'register', createWrapRegister(tracer, config))
     },

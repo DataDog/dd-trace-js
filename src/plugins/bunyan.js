@@ -14,7 +14,7 @@ function createWrapEmit (tracer, config) {
 
 module.exports = {
   name: 'bunyan',
-  versions: ['1 - 2'],
+  versions: ['>=1'],
   patch (Logger, tracer, config) {
     if (!config.correlate) return
     this.wrap(Logger.prototype, '_emit', createWrapEmit(tracer, config))

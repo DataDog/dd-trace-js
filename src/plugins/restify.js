@@ -53,7 +53,7 @@ function wrapFn (fn) {
 module.exports = [
   {
     name: 'restify',
-    versions: ['>=3 <=7'],
+    versions: ['>=3'],
     file: 'lib/server.js',
     patch (Server, tracer, config) {
       this.wrap(Server.prototype, '_setupRequest', createWrapSetupRequest(tracer, config))

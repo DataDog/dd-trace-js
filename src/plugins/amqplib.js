@@ -129,7 +129,7 @@ module.exports = [
   {
     name: 'amqplib',
     file: 'lib/defs.js',
-    versions: ['0.5.x'],
+    versions: ['>=0.5'],
     patch (defs, tracer, config) {
       methods = Object.keys(defs)
         .filter(key => Number.isInteger(defs[key]))
@@ -143,7 +143,7 @@ module.exports = [
   {
     name: 'amqplib',
     file: 'lib/channel.js',
-    versions: ['0.5.x'],
+    versions: ['>=0.5'],
     patch (channel, tracer, config) {
       this.wrap(channel.Channel.prototype, 'sendImmediately', createWrapSendImmediately(tracer, config))
       this.wrap(channel.Channel.prototype, 'sendMessage', createWrapSendMessage(tracer, config))

@@ -39,7 +39,7 @@ function createWrapGenLog (tracer, config) {
 module.exports = [
   {
     name: 'pino',
-    versions: ['5'],
+    versions: ['>=5'],
     patch (pino, tracer, config) {
       if (!config.correlate) return
 
