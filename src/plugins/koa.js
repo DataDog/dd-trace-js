@@ -12,16 +12,21 @@ function createWrapUse (tracer, config) {
   }
 
   return function wrapUse (use) {
-    return function useWithTrace (fn) {
+    return function useWithTrace () {
       if (!this._datadog_trace_patched) {
         this._datadog_trace_patched = true
         use.call(this, ddTrace)
       }
 
-      return use.call(this, function (ctx, next) {
+      const result = use.apply(this, arguments)
+      const fn = this.middleware.pop()
+
+      this.middleware.push(function (ctx, next) {
         web.reactivate(ctx.req)
         return fn.apply(this, arguments)
       })
+
+      return result
     }
   }
 }

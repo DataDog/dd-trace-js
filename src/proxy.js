@@ -57,6 +57,7 @@ class Tracer extends BaseTracer {
           platform.configure(config)
 
           this._tracer = new DatadogTracer(config)
+          this._instrumenter.enable()
           this._instrumenter.patch(config)
         }
       } catch (e) {

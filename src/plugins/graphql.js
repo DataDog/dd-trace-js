@@ -73,7 +73,7 @@ function createWrapValidate (tracer, config) {
 }
 
 function wrapFields (type, tracer, config, responsePathAsArray) {
-  if (!type || type._datadog_patched) {
+  if (!type || !type._fields || type._datadog_patched) {
     return
   }
 
@@ -86,13 +86,13 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
       field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
     }
 
-    if (field.type) {
-      if (field.type._fields) {
-        wrapFields(field.type, tracer, config, responsePathAsArray)
-      } else if (field.type.ofType && field.type.ofType._fields) {
-        wrapFields(field.type.ofType, tracer, config, responsePathAsArray)
-      }
+    let unwrappedType = field.type
+
+    while (unwrappedType.ofType) {
+      unwrappedType = unwrappedType.ofType
     }
+
+    wrapFields(unwrappedType, tracer, config, responsePathAsArray)
   })
 }
 
@@ -140,18 +140,10 @@ function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) 
 
 function call (fn, thisContext, args, callback) {
   try {
-    let result = fn.apply(thisContext, args)
+    const result = fn.apply(thisContext, args)
 
     if (result && typeof result.then === 'function') {
-      result = result
-        .then(value => {
-          callback(null, value)
-          return value
-        })
-        .catch(err => {
-          callback(err)
-          return Promise.reject(err)
-        })
+      result.then(value => callback(null, value), callback)
     } else {
       callback(null, result)
     }

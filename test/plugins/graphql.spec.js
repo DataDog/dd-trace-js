@@ -40,7 +40,7 @@ describe('Plugin', () => {
           }
         },
         pets: {
-          type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
+          type: new graphql.GraphQLList(new graphql.GraphQLNonNull(new graphql.GraphQLObjectType({
             name: 'Pet',
             fields: () => ({
               type: {
@@ -70,7 +70,7 @@ describe('Plugin', () => {
                 }
               }
             })
-          })),
+          }))),
           resolve (obj, args) {
             return [{}, {}, {}]
           }
@@ -338,7 +338,6 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               const spans = sort(traces[0])
-
               expect(spans).to.have.length(14)
 
               const execute = spans[3]
@@ -422,19 +421,30 @@ describe('Plugin', () => {
         })
 
         it('should instrument list field resolvers', done => {
-          const source = `{ friends { name } }`
+          const source = `{
+            friends {
+              name
+              pets {
+                name
+              }
+            }
+          }`
 
           agent
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(8)
+              expect(spans).to.have.length(12)
 
               const execute = spans[3]
               const friendsField = spans[4]
               const friendsResolve = spans[5]
               const friendNameField = spans[6]
               const friendNameResolve = spans[7]
+              const petsField = spans[8]
+              const petsResolve = spans[9]
+              const petsNameField = spans[10]
+              const petsNameResolve = spans[11]
 
               expect(execute).to.have.property('name', 'graphql.execute')
 
@@ -457,6 +467,26 @@ describe('Plugin', () => {
               expect(friendNameResolve).to.have.property('resource', 'friends.*.name')
               expect(friendNameResolve.meta).to.have.property('graphql.field.path', 'friends.*.name')
               expect(friendNameResolve.parent_id.toString()).to.equal(friendNameField.span_id.toString())
+
+              expect(petsField).to.have.property('name', 'graphql.field')
+              expect(petsField).to.have.property('resource', 'friends.*.pets')
+              expect(petsField.meta).to.have.property('graphql.field.path', 'friends.*.pets')
+              expect(petsField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+
+              expect(petsResolve).to.have.property('name', 'graphql.resolve')
+              expect(petsResolve).to.have.property('resource', 'friends.*.pets')
+              expect(petsResolve.meta).to.have.property('graphql.field.path', 'friends.*.pets')
+              expect(petsResolve.parent_id.toString()).to.equal(petsField.span_id.toString())
+
+              expect(petsNameField).to.have.property('name', 'graphql.field')
+              expect(petsNameField).to.have.property('resource', 'friends.*.pets.*.name')
+              expect(petsNameField.meta).to.have.property('graphql.field.path', 'friends.*.pets.*.name')
+              expect(petsNameField.parent_id.toString()).to.equal(petsField.span_id.toString())
+
+              expect(petsNameResolve).to.have.property('name', 'graphql.resolve')
+              expect(petsNameResolve).to.have.property('resource', 'friends.*.pets.*.name')
+              expect(petsNameResolve.meta).to.have.property('graphql.field.path', 'friends.*.pets.*.name')
+              expect(petsNameResolve.parent_id.toString()).to.equal(petsNameField.span_id.toString())
             })
             .then(done)
             .catch(done)

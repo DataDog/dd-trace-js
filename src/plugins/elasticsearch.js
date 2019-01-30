@@ -27,20 +27,9 @@ function createWrapRequest (tracer, config) {
       if (typeof cb === 'function') {
         return request.call(this, params, wrapCallback(tracer, span, cb))
       } else {
-        const result = request.apply(this, arguments)
-        const promise = new Promise((resolve, reject) => {
-          result
-            .then(function () {
-              finish(span)
-              resolve.apply(this, arguments)
-            })
-            .catch(function (e) {
-              finish(span, e)
-              reject.apply(this, arguments)
-            })
-        })
+        const promise = request.apply(this, arguments)
 
-        promise.abort = result.abort
+        promise.then(() => finish(span), e => finish(span, e))
 
         return promise
       }

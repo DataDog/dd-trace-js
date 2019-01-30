@@ -96,6 +96,40 @@ describe('Plugin', () => {
           })
         })
 
+        it('should do automatic instrumentation on routes', done => {
+          const app = express()
+          const router = express.Router()
+
+          router
+            .route('/user/:id')
+            .all((req, res) => {
+              res.status(200).send()
+            })
+
+          app.use('/app', router)
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test')
+                expect(traces[0][0]).to.have.property('type', 'http')
+                expect(traces[0][0]).to.have.property('resource', 'GET /app/user/:id')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
+                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app/user/1`)
+                .catch(done)
+            })
+          })
+        })
+
         it('should surround matchers based on regular expressions', done => {
           const app = express()
           const router = express.Router()
@@ -447,6 +481,46 @@ describe('Plugin', () => {
               done(e)
             }
           })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should reactivate the span with multiple middleware on a route', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const app = express()
+
+          let span
+
+          app.get(
+            '/user',
+            (req, res, next) => {
+              const scope = tracer.scopeManager().active()
+
+              span = scope.span()
+              tracer.scopeManager().activate({})
+
+              next()
+            },
+            (req, res, next) => {
+              const scope = tracer.scopeManager().active()
+
+              res.status(200).send()
+
+              try {
+                expect(scope).to.not.be.null
+                expect(scope.span()).to.equal(span)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }
+          )
 
           getPort().then(port => {
             appListener = app.listen(port, 'localhost', () => {

@@ -11,7 +11,7 @@ Datadog APM tracing client for JavaScript.
 
 ## Getting Started
 
-For a basic product overview, check out our [setup documentation](https://docs.datadoghq.com/tracing/setup/javascript/).
+For a basic product overview, check out our [setup documentation](https://docs.datadoghq.com/tracing/languages/nodejs/).
 
 For installation, configuration, and details about using the API, check out our [API documentation](https://datadog.github.io/dd-trace-js).
 

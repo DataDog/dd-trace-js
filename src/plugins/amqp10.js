@@ -114,15 +114,9 @@ function wrapPromise (promise, span) {
     return promise
   }
 
+  promise.then(() => finish(span), e => finish(span, e))
+
   return promise
-    .then(() => {
-      finish(span)
-      return promise
-    })
-    .catch(err => {
-      finish(span, err)
-      return promise
-    })
 }
 
 function getAddress (link) {

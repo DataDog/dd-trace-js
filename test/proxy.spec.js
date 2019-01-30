@@ -35,6 +35,7 @@ describe('TracerProxy', () => {
     }
 
     instrumenter = {
+      enable: sinon.spy(),
       patch: sinon.spy(),
       use: sinon.spy()
     }
@@ -103,6 +104,7 @@ describe('TracerProxy', () => {
       it('should set up automatic instrumentation', () => {
         proxy.init()
 
+        expect(instrumenter.enable).to.have.been.called
         expect(instrumenter.patch).to.have.been.called
       })
 

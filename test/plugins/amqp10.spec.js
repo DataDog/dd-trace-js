@@ -116,6 +116,16 @@ describe('Plugin', () => {
               })
             }
           })
+
+          it('should not override the returned promise', () => {
+            if (callbackPolicy === 'none') return
+
+            const promise = sender.send({ key: 'value' })
+
+            return promise.then(() => {
+              expect(promise).to.have.property('value')
+            })
+          })
         })
 
         describe('when consuming messages', () => {

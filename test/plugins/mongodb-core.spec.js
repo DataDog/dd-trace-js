@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('./agent')
 const Buffer = require('safe-buffer').Buffer
 const plugin = require('../../src/plugins/mongodb-core')
@@ -126,6 +127,47 @@ describe('Plugin', () => {
               find: `test.${collection}`,
               query: {
                 _id: Buffer.from('1234')
+              }
+            }, () => {})
+          })
+
+          it('should sanitize BSON as values and not as objects', done => {
+            const BSON = require(`../../versions/bson@4.0.0`).get()
+
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collection} {"_id":"?"}`
+
+                expect(span).to.have.property('resource', resource)
+              })
+              .then(done)
+              .catch(done)
+
+            server.command(`test.${collection}`, {
+              find: `test.${collection}`,
+              query: {
+                _id: new BSON.ObjectID('123456781234567812345678')
+              }
+            }, () => {})
+          })
+
+          it('should skip functions when sanitizing', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collection} {"_id":"?"}`
+
+                expect(span).to.have.property('resource', resource)
+              })
+              .then(done)
+              .catch(done)
+
+            server.command(`test.${collection}`, {
+              find: `test.${collection}`,
+              query: {
+                _id: '1234',
+                foo: () => {}
               }
             }, () => {})
           })
@@ -270,6 +312,55 @@ describe('Plugin', () => {
               error = err
             })
           })
+        })
+      })
+
+      describe('with a replica set', () => {
+        if (!semver.intersects(version, '>=2.0.5')) return // bug with replica sets before 2.0.5
+
+        before(() => {
+          return agent.load(plugin, 'mongodb-core')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          mongo = require(`../../versions/mongodb-core@${version}`).get()
+
+          server = new mongo.ReplSet([{
+            host: 'localhost',
+            port: 27017
+          }], {
+            setName: 'replicaset',
+            reconnect: false,
+            connectionTimeout: 1000
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+        })
+
+        it('should set the correct host/port tags', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+
+              expect(span.meta).to.have.property('out.host', 'localhost')
+              expect(span.meta).to.have.property('out.port', '27017')
+            })
+            .then(done)
+            .catch(done)
+
+          const cursor = server.cursor(`test.${collection}`, {
+            insert: `test.${collection}`,
+            documents: [{ a: 1 }]
+          }, {})
+
+          cursor.next()
         })
       })
 
