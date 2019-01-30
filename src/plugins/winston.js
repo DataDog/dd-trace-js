@@ -45,7 +45,7 @@ module.exports = [
   {
     name: 'winston',
     file: 'lib/winston/logger.js',
-    versions: ['3'],
+    versions: ['>=3'],
     patch (Logger, tracer, config) {
       if (!config.correlate) return
       this.wrap(Logger.prototype, 'write', createWrapWrite(tracer, config))

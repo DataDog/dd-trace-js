@@ -136,7 +136,7 @@ function isBSON (val) {
 module.exports = [
   {
     name: 'mongodb-core',
-    versions: ['>=2 <=3'],
+    versions: ['>=2'],
     patch (mongo, tracer, config) {
       this.wrap(mongo.Server.prototype, 'command', createWrapOperation(tracer, config))
       this.wrap(mongo.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))

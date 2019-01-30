@@ -127,7 +127,7 @@ module.exports = [
   {
     name: 'amqp10',
     file: 'lib/sender_link.js',
-    versions: ['3.x'],
+    versions: ['>=3'],
     patch (SenderLink, tracer, config) {
       this.wrap(SenderLink.prototype, 'send', createWrapSend(tracer, config))
     },
@@ -138,7 +138,7 @@ module.exports = [
   {
     name: 'amqp10',
     file: 'lib/receiver_link.js',
-    versions: ['3.x'],
+    versions: ['>=3'],
     patch (ReceiverLink, tracer, config) {
       this.wrap(ReceiverLink.prototype, '_messageReceived', createWrapMessageReceived(tracer, config))
     },

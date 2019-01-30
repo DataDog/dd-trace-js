@@ -6,7 +6,7 @@ module.exports = [
   {
     name: 'when',
     file: 'lib/Promise.js',
-    versions: ['3'],
+    versions: ['>=3'],
     patch (Promise, tracer, config) {
       this.wrap(Promise.prototype, 'then', tx.createWrapThen(tracer, config))
     },

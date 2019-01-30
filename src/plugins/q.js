@@ -5,7 +5,7 @@ const tx = require('./util/promise')
 module.exports = [
   {
     name: 'q',
-    versions: ['1'],
+    versions: ['>=1'],
     patch (Q, tracer, config) {
       this.wrap(Q.makePromise.prototype, 'then', tx.createWrapThen(tracer, config))
     },

@@ -36,7 +36,7 @@ function unpatch (express) {
 
 module.exports = {
   name: 'express',
-  versions: ['4.x'],
+  versions: ['>=4'],
   patch,
   unpatch
 }
