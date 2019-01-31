@@ -37,6 +37,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'winston', version => {
       beforeEach(() => {
         tracer = require('../..')
+        return agent.load(plugin, 'winston')
       })
 
       afterEach(() => {
@@ -45,10 +46,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'winston')
-            .then(() => {
-              setup(version)
-            })
+          setup(version)
         })
 
         it('should not alter the default behavior', () => {
@@ -71,10 +69,8 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'winston', { correlate: true })
-            .then(() => {
-              setup(version)
-            })
+          tracer._tracer._logInjection = true
+          setup(version)
         })
 
         it('should add the trace identifiers to the default logger', () => {

@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const hook = require('require-in-the-middle')
+const parse = require('module-details-from-path')
 const path = require('path')
 const shimmer = require('shimmer')
 const uniq = require('lodash.uniq')
@@ -147,7 +148,10 @@ class Instrumenter {
   }
 
   _set (plugin, meta) {
-    this._plugins.set(plugin, Object.assign({ config: {} }, meta))
+    meta = Object.assign({ config: {} }, meta)
+
+    this._plugins.set(plugin, meta)
+    this._load(plugin, meta)
   }
 
   _validate (plugin, moduleBaseDir, moduleVersion) {
@@ -184,6 +188,61 @@ class Instrumenter {
       log.error(e)
     }
   }
+
+  _load (plugin, meta) {
+    if (this._enabled) {
+      const instrumentations = [].concat(plugin)
+
+      try {
+        instrumentations
+          .forEach(instrumentation => {
+            if (this._instrumented.has(instrumentation)) return
+
+            getModules(instrumentation).forEach(nodule => {
+              this._instrumented.set(instrumentation, nodule)
+              instrumentation.patch.call(this, nodule, this._tracer._tracer, meta.config)
+            })
+          })
+      } catch (e) {
+        log.error(e)
+        this._fail(plugin)
+        log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
+      }
+    }
+  }
+}
+
+function getModules (instrumentation) {
+  const modules = []
+  const ids = Object.keys(require.cache)
+
+  let pkg
+
+  for (let i = 0, l = ids.length; i < l; i++) {
+    const id = ids[i]
+
+    if (!id.includes(`/node_modules/${instrumentation.name}/`)) continue
+
+    if (instrumentation.file) {
+      if (!id.endsWith(`/node_modules/${filename(instrumentation)}`)) continue
+
+      const stat = parse(id)
+
+      pkg = require(`${stat.basedir}/package.json`)
+    } else {
+      const stat = parse(id)
+
+      pkg = require(`${stat.basedir}/package.json`)
+
+      if (!id.endsWith(`/node_modules/${instrumentation.name}/${pkg.main}`)) continue
+    }
+
+    if (!matchVersion(pkg.version, instrumentation.versions)) continue
+
+    modules.push(require.cache[id].exports)
+  }
+
+  return modules
 }
 
 function matchVersion (version, ranges) {

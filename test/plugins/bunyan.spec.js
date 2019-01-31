@@ -29,6 +29,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'bunyan', version => {
       beforeEach(() => {
         tracer = require('../..')
+        return agent.load(plugin, 'bunyan')
       })
 
       afterEach(() => {
@@ -37,10 +38,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'bunyan')
-            .then(() => {
-              setup(version)
-            })
+          setup(version)
         })
 
         it('should not alter the default behavior', () => {
@@ -61,10 +59,8 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'bunyan', { correlate: true })
-            .then(() => {
-              setup(version)
-            })
+          tracer._tracer._logInjection = true
+          setup(version)
         })
 
         it('should add the trace identifiers to logger instances', () => {

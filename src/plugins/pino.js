@@ -41,8 +41,7 @@ module.exports = [
     name: 'pino',
     versions: ['>=5'],
     patch (pino, tracer, config) {
-      if (!config.correlate) return
-
+      if (!tracer._logInjection) return
       this.wrap(Object.getPrototypeOf(pino()), pino.symbols.writeSym, createWrapWrite(tracer, config))
     },
     unpatch (pino) {
@@ -54,8 +53,7 @@ module.exports = [
     versions: ['4'],
     file: 'lib/tools.js',
     patch (tools, tracer, config) {
-      if (!config.correlate) return
-
+      if (!tracer._logInjection) return
       this.wrap(tools, 'genLog', createWrapGenLog(tracer, config))
     },
     unpatch (tools) {
@@ -66,8 +64,7 @@ module.exports = [
     name: 'pino',
     versions: ['2 - 3'],
     patch (pino, tracer, config) {
-      if (!config.correlate) return
-
+      if (!tracer._logInjection) return
       this.wrap(Object.getPrototypeOf(pino()), 'asJson', createWrapWrite(tracer, config))
     },
     unpatch (pino) {
