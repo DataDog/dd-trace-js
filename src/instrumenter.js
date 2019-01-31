@@ -221,6 +221,9 @@ function getModules (instrumentation) {
   for (let i = 0, l = ids.length; i < l; i++) {
     const id = ids[i].replace(pathSepExpr, '/')
 
+    console.log('id', id)
+    console.log('ids[i]', ids[i])
+
     if (!id.includes(`/node_modules/${instrumentation.name}/`)) continue
 
     if (instrumentation.file) {
@@ -228,9 +231,13 @@ function getModules (instrumentation) {
 
       const basedir = getBasedir(ids[i])
 
+      console.log('basedir', basedir)
+
       pkg = require(`${basedir}/package.json`)
     } else {
       const basedir = getBasedir(ids[i])
+
+      console.log('basedir', basedir)
 
       pkg = require(`${basedir}/package.json`)
 
