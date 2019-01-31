@@ -219,20 +219,20 @@ function getModules (instrumentation) {
   let pkg
 
   for (let i = 0, l = ids.length; i < l; i++) {
-    const id = ids[i]
+    const id = ids[i].replace(pathSepExpr, '/')
 
     if (!id.includes(`/node_modules/${instrumentation.name}/`)) continue
 
     if (instrumentation.file) {
       if (!id.endsWith(`/node_modules/${filename(instrumentation)}`)) continue
 
-      const stat = parse(id)
+      const basedir = getBasedir(ids[i])
 
-      pkg = require(`${stat.basedir}/package.json`)
+      pkg = require(`${basedir}/package.json`)
     } else {
-      const stat = parse(id)
+      const basedir = getBasedir(ids[i])
 
-      pkg = require(`${stat.basedir}/package.json`)
+      pkg = require(`${basedir}/package.json`)
 
       if (!id.endsWith(`/node_modules/${instrumentation.name}/${pkg.main}`)) continue
     }
@@ -243,6 +243,10 @@ function getModules (instrumentation) {
   }
 
   return modules
+}
+
+function getBasedir (id) {
+  return parse(id).basedir.replace(pathSepExpr, '/')
 }
 
 function matchVersion (version, ranges) {
