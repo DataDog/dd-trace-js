@@ -158,6 +158,16 @@ describe('Instrumenter', () => {
         expect(integrations.express.patch).to.have.been.called
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
       })
+
+      it('should not patch twice already loaded modules', () => {
+        require('express-mock')
+
+        instrumenter.use('express-mock')
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledOnce
+      })
     })
 
     describe('patch', () => {

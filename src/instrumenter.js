@@ -130,8 +130,7 @@ class Instrumenter {
             .filter(instrumentation => moduleName === filename(instrumentation))
             .filter(instrumentation => matchVersion(moduleVersion, instrumentation.versions))
             .forEach(instrumentation => {
-              this._instrumented.set(instrumentation, moduleExports)
-              instrumentation.patch.call(this, moduleExports, this._tracer._tracer, this._plugins.get(plugin).config)
+              this._patch(instrumentation, moduleExports, this._plugins.get(plugin).config)
             })
         } catch (e) {
           log.error(e)
@@ -181,11 +180,30 @@ class Instrumenter {
     this._plugins.delete(plugin)
   }
 
+  _patch (instrumentation, moduleExports, config) {
+    let instrumented = this._instrumented.get(instrumentation)
+
+    if (!instrumented) {
+      this._instrumented.set(instrumentation, instrumented = new Set())
+    }
+
+    if (!instrumented.has(moduleExports)) {
+      instrumented.add(moduleExports)
+      instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config)
+    }
+  }
+
   _unpatch (instrumentation) {
-    try {
-      instrumentation.unpatch.call(this, this._instrumented.get(instrumentation))
-    } catch (e) {
-      log.error(e)
+    const instrumented = this._instrumented.get(instrumentation)
+
+    if (instrumented) {
+      try {
+        instrumented.forEach(moduleExports => {
+          instrumentation.unpatch.call(this, moduleExports)
+        })
+      } catch (e) {
+        log.error(e)
+      }
     }
   }
 
@@ -196,11 +214,8 @@ class Instrumenter {
       try {
         instrumentations
           .forEach(instrumentation => {
-            if (this._instrumented.has(instrumentation)) return
-
             getModules(instrumentation).forEach(nodule => {
-              this._instrumented.set(instrumentation, nodule)
-              instrumentation.patch.call(this, nodule, this._tracer._tracer, meta.config)
+              this._patch(instrumentation, nodule, meta.config)
             })
           })
       } catch (e) {
