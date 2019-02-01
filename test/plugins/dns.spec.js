@@ -6,6 +6,8 @@ const plugin = require('../../src/plugins/dns')
 
 wrapIt()
 
+const describe = () => {} // integration disabled for the upcoming release
+
 describe('Plugin', () => {
   let dns
 

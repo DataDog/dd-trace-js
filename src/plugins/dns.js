@@ -161,3 +161,5 @@ module.exports = [
     }
   }
 ]
+
+module.exports = [] // disable this integration for the upcoming release
