@@ -197,13 +197,13 @@ class Instrumenter {
     const instrumented = this._instrumented.get(instrumentation)
 
     if (instrumented) {
-      try {
-        instrumented.forEach(moduleExports => {
+      instrumented.forEach(moduleExports => {
+        try {
           instrumentation.unpatch.call(this, moduleExports)
-        })
-      } catch (e) {
-        log.error(e)
-      }
+        } catch (e) {
+          log.error(e)
+        }
+      })
     }
   }
 
