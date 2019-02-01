@@ -16,7 +16,7 @@ module.exports = {
   name: 'bunyan',
   versions: ['>=1'],
   patch (Logger, tracer, config) {
-    if (!config.correlate) return
+    if (!tracer._logInjection) return
     this.wrap(Logger.prototype, '_emit', createWrapEmit(tracer, config))
   },
   unpatch (Logger) {

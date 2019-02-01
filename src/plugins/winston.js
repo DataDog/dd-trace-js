@@ -47,7 +47,7 @@ module.exports = [
     file: 'lib/winston/logger.js',
     versions: ['>=3'],
     patch (Logger, tracer, config) {
-      if (!config.correlate) return
+      if (!tracer._logInjection) return
       this.wrap(Logger.prototype, 'write', createWrapWrite(tracer, config))
     },
     unpatch (Logger) {
@@ -59,7 +59,7 @@ module.exports = [
     file: 'lib/winston/logger.js',
     versions: ['1 - 2'],
     patch (logger, tracer, config) {
-      if (!config.correlate) return
+      if (!tracer._logInjection) return
       this.wrap(logger.Logger.prototype, 'log', createWrapLog(tracer, config))
     },
     unpatch (logger) {

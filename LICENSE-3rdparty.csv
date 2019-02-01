@@ -8,6 +8,7 @@ require,lodash.pick,MIT,Copyright JS Foundation and other contributors
 require,lodash.truncate,MIT,Copyright JS Foundation and other contributors
 require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
+require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,parent-module,MIT,Copyright Sindre Sorhus
