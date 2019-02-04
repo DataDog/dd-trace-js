@@ -75,8 +75,10 @@ describe('Plugin', () => {
 
         it('should add the trace identifiers to the default logger', () => {
           const meta = {
-            'dd.trace_id': span.context().toTraceId(),
-            'dd.span_id': span.context().toSpanId()
+            dd: {
+              trace_id: span.context().toTraceId(),
+              span_id: span.context().toSpanId()
+            }
           }
 
           tracer.scopeManager().activate(span)
@@ -96,8 +98,10 @@ describe('Plugin', () => {
           }
 
           const meta = {
-            'dd.trace_id': span.context().toTraceId(),
-            'dd.span_id': span.context().toSpanId()
+            dd: {
+              trace_id: span.context().toTraceId(),
+              span_id: span.context().toSpanId()
+            }
           }
 
           const logger = winston.createLogger
@@ -129,8 +133,10 @@ describe('Plugin', () => {
             })
 
             expect(transport.log).to.have.been.calledWithMatch({
-              'dd.trace_id': span.context().toTraceId(),
-              'dd.span_id': span.context().toSpanId()
+              dd: {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              }
             })
           })
         }
