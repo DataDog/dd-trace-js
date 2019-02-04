@@ -9,11 +9,13 @@ const log = {
 
     record = record || {}
 
-    if (scope) {
+    if (scope && scope.span()) {
       const span = scope.span()
 
-      record['dd.trace_id'] = span.context().toTraceId()
-      record['dd.span_id'] = span.context().toSpanId()
+      record.dd = {
+        trace_id: span.context().toTraceId(),
+        span_id: span.context().toSpanId()
+      }
     }
 
     return record
