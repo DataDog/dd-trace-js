@@ -1,5 +1,7 @@
 'use strict'
 
+const getPort = require('get-port')
+const agent = require('../agent')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
 const tags = require('../../../ext/tags')
@@ -16,6 +18,8 @@ const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_HEADERS = tags.HTTP_HEADERS
+
+wrapIt()
 
 describe('plugins/util/web', () => {
   let web
@@ -351,8 +355,7 @@ describe('plugins/util/web', () => {
       const fn = () => {
         const scope = tracer.scopeManager().active()
 
-        expect(scope).to.not.be.null
-        expect(scope.span()).to.equal(span)
+        expect(scope).to.be.null
 
         done()
       }
@@ -407,6 +410,106 @@ describe('plugins/util/web', () => {
 
     it('should return null when not yet instrumented', () => {
       expect(web.active(req)).to.be.null
+    })
+  })
+
+  describe('with an instrumented web server', done => {
+    let express
+    let app
+    let port
+    let server
+    let http
+
+    beforeEach(done => {
+      agent.load(null, 'express')
+        .then(getPort)
+        .then(_port => {
+          port = _port
+          http = require('http')
+          express = require('express')
+          app = express()
+
+          server = app.listen(port, '127.0.0.1', () => done())
+        })
+    })
+
+    afterEach(done => {
+      agent.close().then(() => {
+        server.close(() => done())
+      })
+    })
+
+    it('should run res.end handlers in the request scope', done => {
+      let handler
+
+      const interval = setInterval(() => {
+        if (handler) {
+          handler()
+          clearInterval(interval)
+        }
+      })
+
+      app.use((req, res) => {
+        const end = res.end
+
+        res.end = function () {
+          end.apply(this, arguments)
+
+          try {
+            expect(tracer.scopeManager().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        }
+
+        handler = () => res.status(200).send()
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', done)
+    })
+
+    it('should run "finish" event handlers in the request scope', done => {
+      app.use((req, res, next) => {
+        res.on('finish', () => {
+          try {
+            expect(tracer.scopeManager().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        res.status(200).send()
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', done)
+    })
+
+    it('should run "close" event handlers in the request scope', done => {
+      const sockets = []
+
+      app.use((req, res, next) => {
+        res.on('close', () => {
+          try {
+            expect(tracer.scopeManager().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        sockets.forEach(socket => socket.destroy())
+      })
+
+      server.on('connection', (socket) => {
+        sockets.push(socket)
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', () => {})
     })
   })
 })

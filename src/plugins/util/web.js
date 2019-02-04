@@ -49,14 +49,14 @@ const web = {
     callback && callback(span)
 
     wrapEnd(req)
+    wrapEvents(req)
 
     return span
   },
 
   // Reactivate the request scope in case it was changed by a middleware.
   reactivate (req) {
-    req._datadog.scope && req._datadog.scope.close()
-    req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
+    reactivate(req)
   },
 
   // Add a route segment that will be used for the resource name.
@@ -167,7 +167,6 @@ function finish (req, res) {
   addResourceTag(req)
 
   req._datadog.span.finish()
-  req._datadog.scope && req._datadog.scope.close()
   req._datadog.finished = true
 }
 
@@ -188,7 +187,7 @@ function wrapEnd (req) {
 
   if (end === req._datadog.end) return
 
-  req._datadog.end = res.end = function () {
+  let _end = req._datadog.end = res.end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
 
     finishMiddleware(req, res)
@@ -199,6 +198,45 @@ function wrapEnd (req) {
 
     return returnValue
   }
+
+  Object.defineProperty(res, 'end', {
+    configurable: true,
+    get () {
+      return _end
+    },
+    set (value) {
+      _end = value
+      if (typeof value === 'function') {
+        _end = function () {
+          reactivate(req)
+          return value.apply(this, arguments)
+        }
+      } else {
+        _end = value
+      }
+    }
+  })
+}
+
+function wrapEvents (req) {
+  const res = req._datadog.res
+  const on = res.on
+
+  if (on === req._datadog.on) return
+
+  req._datadog.on = res.on = function (eventName, listener) {
+    if (typeof listener !== 'function') return on.apply(this, arguments)
+
+    return on.call(this, eventName, function () {
+      reactivate(req)
+      return listener.apply(this, arguments)
+    })
+  }
+}
+
+function reactivate (req) {
+  req._datadog.scope && req._datadog.scope.close()
+  req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
 }
 
 function addRequestTags (req) {
