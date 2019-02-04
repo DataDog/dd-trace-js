@@ -1,5 +1,7 @@
 'use strict'
 
+wrapIt()
+
 describe('plugins/util/log', () => {
   let log
   let tracer
@@ -18,9 +20,9 @@ describe('plugins/util/log', () => {
 
       log.correlate(tracer, record)
 
-      expect(record).to.include({
-        'dd.trace_id': span.context().toTraceId(),
-        'dd.span_id': span.context().toSpanId()
+      expect(record).to.have.deep.property('dd', {
+        trace_id: span.context().toTraceId(),
+        span_id: span.context().toSpanId()
       })
     })
 
@@ -31,20 +33,24 @@ describe('plugins/util/log', () => {
 
       const record = log.correlate(tracer)
 
-      expect(record).to.include({
-        'dd.trace_id': span.context().toTraceId(),
-        'dd.span_id': span.context().toSpanId()
+      expect(record).to.have.deep.property('dd', {
+        trace_id: span.context().toTraceId(),
+        span_id: span.context().toSpanId()
       })
     })
 
     it('should do nothing if there is no active scope', () => {
-      const span = tracer.startSpan('test')
       const record = log.correlate(tracer)
 
-      expect(record).to.not.include({
-        'dd.trace_id': span.context().toTraceId(),
-        'dd.span_id': span.context().toSpanId()
-      })
+      expect(record).to.not.have.property('dd')
+    })
+
+    it('should do nothing if the active span is null', () => {
+      tracer.scopeManager().activate(null)
+
+      const record = log.correlate(tracer)
+
+      expect(record).to.not.have.property('dd')
     })
   })
 })

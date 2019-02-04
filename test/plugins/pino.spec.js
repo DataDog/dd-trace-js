@@ -50,10 +50,7 @@ describe('Plugin', () => {
 
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-          expect(record).to.not.include({
-            'dd.trace_id': span.context().toTraceId(),
-            'dd.span_id': span.context().toSpanId()
-          })
+          expect(record).to.not.have.property('dd')
         })
       })
 
@@ -72,9 +69,9 @@ describe('Plugin', () => {
 
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-          expect(record).to.include({
-            'dd.trace_id': span.context().toTraceId(),
-            'dd.span_id': span.context().toSpanId()
+          expect(record).to.have.deep.property('dd', {
+            trace_id: span.context().toTraceId(),
+            span_id: span.context().toSpanId()
           })
         })
       })
