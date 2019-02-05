@@ -12,8 +12,10 @@ describe('LogPropagator', () => {
     LogPropagator = require('../../../src/opentracing/propagation/log')
     propagator = new LogPropagator()
     log = {
-      'dd.trace_id': '123',
-      'dd.span_id': '18446744073709551160' // -456 casted to uint64
+      dd: {
+        trace_id: '123',
+        span_id: '18446744073709551160' // -456 casted to uint64
+      }
     }
   })
 
@@ -27,8 +29,12 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('dd.trace_id', '123')
-      expect(carrier).to.have.property('dd.span_id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier).to.deep.include({
+        dd: {
+          trace_id: '123',
+          span_id: '18446744073709551160' // -456 casted to uint64
+        }
+      })
     })
   })
 
