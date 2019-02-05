@@ -391,6 +391,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 | hostname      | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the trace agent that the tracer will submit to. |
 | port          | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
 | env           | DD_ENV                       |           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
+| logInjection  | DD_LOGS_INJECTION            | false     | Enable automatic injection of trace IDs in logs for supported logging libraries.
 | tags          |                              | {}        | Set global tags that should be applied to all spans. |
 | sampleRate    |                              | 1         | Percentage of spans to sample as a float between 0 and 1. |
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
