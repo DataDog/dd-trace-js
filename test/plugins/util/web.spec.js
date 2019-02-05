@@ -29,7 +29,6 @@ describe('plugins/util/web', () => {
   let res
   let end
   let config
-  let eventSampler
 
   beforeEach(() => {
     req = {
@@ -44,12 +43,9 @@ describe('plugins/util/web', () => {
       end
     }
     config = { hooks: {} }
-    eventSampler = { sample: sinon.spy() }
 
     tracer = require('../../..').init({ plugins: false })
-    web = proxyquire('../src/plugins/util/web', {
-      '../../event_sampler': eventSampler
-    })
+    web = require('../../../src/plugins/util/web')
   })
 
   beforeEach(() => {
@@ -147,14 +143,6 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
 
         expect(end).to.equal(res.end)
-      })
-
-      it('should configure event sampling', () => {
-        config.eventSampleRate = 0.5
-
-        span = web.instrument(tracer, config, req, res, 'test.request')
-
-        expect(eventSampler.sample).to.have.been.calledWith(span, 0.5)
       })
     })
 
