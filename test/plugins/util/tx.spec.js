@@ -49,6 +49,26 @@ describe('plugins/util/tx', () => {
         expect(span.context().tags).to.have.property('error.type', error.name)
         expect(span.context().tags).to.have.property('error.stack', error.stack)
       })
+
+      it('should return a wrapper that runs in the current scope', done => {
+        const parent = {}
+        const child = {}
+
+        tracer.scopeManager().activate(parent)
+
+        const wrapper = tx.wrap(span, () => {
+          const scope = tracer.scopeManager().active()
+
+          expect(scope).to.not.be.null
+          expect(scope.span()).to.equal(parent)
+
+          done()
+        })
+
+        tracer.scopeManager().activate(child)
+
+        wrapper()
+      })
     })
 
     describe('with a promise', () => {
