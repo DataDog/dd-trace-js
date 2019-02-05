@@ -51,8 +51,10 @@ describe('Plugin', () => {
 
         it('should not alter the default behavior', () => {
           const meta = {
-            'dd.trace_id': span.context().toTraceId(),
-            'dd.span_id': span.context().toSpanId()
+            dd: {
+              trace_id: span.context().toTraceId(),
+              span_id: span.context().toSpanId()
+            }
           }
 
           tracer.scopeManager().activate(span)
