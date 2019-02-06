@@ -31,9 +31,9 @@ describe('NoopTracer', () => {
       const span = tracer.startSpan()
 
       expect(span.context().toTraceId).to.be.a('function')
-      expect(span.context().toTraceId()).to.equal('')
+      expect(span.context().toTraceId()).to.equal('0')
       expect(span.context().toSpanId).to.be.a('function')
-      expect(span.context().toSpanId()).to.equal('')
+      expect(span.context().toSpanId()).to.equal('0')
     })
   })
 })
