@@ -183,6 +183,8 @@ function getFilter (tracer, config) {
 }
 
 function normalizeConfig (tracer, config) {
+  config = config.client || config
+
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
 
@@ -196,6 +198,8 @@ module.exports = [
   {
     name: 'http',
     patch: function (http, tracer, config) {
+      if (config.client === false) return
+
       patch.call(this, http, 'request', tracer, config)
       if (semver.satisfies(process.version, '>=8')) {
         /**
@@ -210,6 +214,8 @@ module.exports = [
   {
     name: 'https',
     patch: function (http, tracer, config) {
+      if (config.client === false) return
+
       if (semver.satisfies(process.version, '>=9')) {
         patch.call(this, http, 'request', tracer, config)
         patch.call(this, http, 'get', tracer, config)

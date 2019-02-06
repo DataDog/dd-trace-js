@@ -34,7 +34,8 @@ describe('plugins/util/web', () => {
     req = {
       method: 'GET',
       headers: {
-        'host': 'localhost'
+        'host': 'localhost',
+        'date': 'now'
       },
       connection: {}
     }
@@ -50,6 +51,66 @@ describe('plugins/util/web', () => {
 
   beforeEach(() => {
     config = web.normalizeConfig(config)
+  })
+
+  describe('normalizeConfig', () => {
+    it('should set the correct defaults', () => {
+      const config = web.normalizeConfig({})
+
+      expect(config).to.have.property('headers')
+      expect(config.headers).to.be.an('array')
+      expect(config).to.have.property('validateStatus')
+      expect(config.validateStatus).to.be.a('function')
+      expect(config.validateStatus(200)).to.equal(true)
+      expect(config.validateStatus(500)).to.equal(false)
+      expect(config).to.have.property('hooks')
+      expect(config.hooks).to.be.an('object')
+      expect(config.hooks).to.have.property('request')
+      expect(config.hooks.request).to.be.a('function')
+    })
+
+    it('should use the shared config if set', () => {
+      const config = web.normalizeConfig({
+        headers: ['test'],
+        validateStatus: code => false,
+        hooks: {
+          request: () => 'test'
+        }
+      })
+
+      expect(config.headers).to.include('test')
+      expect(config.validateStatus(200)).to.equal(false)
+      expect(config).to.have.property('hooks')
+      expect(config.hooks.request()).to.equal('test')
+    })
+
+    it('should use the server config if set', () => {
+      const config = web.normalizeConfig({
+        server: {
+          headers: ['test'],
+          validateStatus: code => false,
+          hooks: {
+            request: () => 'test'
+          }
+        }
+      })
+
+      expect(config.headers).to.include('test')
+      expect(config.validateStatus(200)).to.equal(false)
+      expect(config).to.have.property('hooks')
+      expect(config.hooks.request()).to.equal('test')
+    })
+
+    it('should prioritize the server config over the shared config', () => {
+      const config = web.normalizeConfig({
+        headers: ['foo'],
+        server: {
+          headers: ['bar']
+        }
+      })
+
+      expect(config.headers).to.include('bar')
+    })
   })
 
   describe('instrument', () => {
@@ -143,6 +204,23 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
 
         expect(end).to.equal(res.end)
+      })
+
+      it('should use the config from the last call', () => {
+        config.headers = ['host']
+
+        const override = web.normalizeConfig({
+          headers: ['date']
+        })
+
+        span = web.instrument(tracer, config, req, res, 'test.request')
+        span = web.instrument(tracer, override, req, res, 'test.request')
+
+        res.end()
+
+        expect(span.context()._tags).to.include({
+          [`${HTTP_HEADERS}.date`]: 'now'
+        })
       })
     })
 

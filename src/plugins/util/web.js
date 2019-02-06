@@ -22,6 +22,8 @@ const HTTP_HEADERS = tags.HTTP_HEADERS
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
+    config = config.server || config
+
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
@@ -149,14 +151,13 @@ function startSpan (tracer, config, req, res, name) {
   req._datadog.scope = scope
   req._datadog.res = res
 
-  addRequestTags(req)
-
   return span
 }
 
 function finish (req, res) {
   if (req._datadog.finished) return
 
+  addRequestTags(req)
   addResponseTags(req)
 
   req._datadog.config.hooks.request(req._datadog.span, req, res)

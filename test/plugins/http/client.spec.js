@@ -567,7 +567,9 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            service: 'custom'
+            client: {
+              service: 'custom'
+            }
           }
 
           return agent.load(plugin, 'http', config)
@@ -608,7 +610,9 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            validateStatus: status => status < 500
+            client: {
+              validateStatus: status => status < 500
+            }
           }
 
           return agent.load(plugin, 'http', config)
@@ -649,7 +653,9 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            splitByDomain: true
+            client: {
+              splitByDomain: true
+            }
           }
 
           return agent.load(plugin, 'http', config)
