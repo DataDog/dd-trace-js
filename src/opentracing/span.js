@@ -29,20 +29,20 @@ class DatadogSpan extends Span {
     this._startTime = startTime
 
     this._spanContext = this._createContext(parent)
-    this._spanContext.name = operationName
-    this._spanContext.tags = tags
-    this._spanContext.metrics = metrics
+    this._spanContext._name = operationName
+    this._spanContext._tags = tags
+    this._spanContext._metrics = metrics
   }
 
   toString () {
     const spanContext = this.context()
     const json = JSON.stringify({
-      traceId: spanContext.traceId,
-      spanId: spanContext.spanId,
-      parentId: spanContext.parentId,
-      service: spanContext.tags['service.name'],
-      name: spanContext.name,
-      resource: truncate(spanContext.tags['resource.name'], { length: 100 })
+      traceId: spanContext._traceId,
+      spanId: spanContext._spanId,
+      parentId: spanContext._parentId,
+      service: spanContext._tags['service.name'],
+      name: spanContext._name,
+      resource: truncate(spanContext._tags['resource.name'], { length: 100 })
     })
 
     return `Span${json}`
@@ -53,13 +53,13 @@ class DatadogSpan extends Span {
 
     if (parent) {
       spanContext = new SpanContext({
-        traceId: parent.traceId,
+        traceId: parent._traceId,
         spanId: platform.id(),
-        parentId: parent.spanId,
-        sampled: parent.sampled,
-        sampling: parent.sampling,
-        baggageItems: Object.assign({}, parent.baggageItems),
-        trace: parent.trace.started.length !== parent.trace.finished.length ? parent.trace : null
+        parentId: parent._spanId,
+        sampled: parent._sampled,
+        sampling: parent._sampling,
+        baggageItems: parent._baggageItems,
+        trace: parent._trace.started.length !== parent._trace.finished.length ? parent._trace : null
       })
     } else {
       const spanId = platform.id()
@@ -70,7 +70,7 @@ class DatadogSpan extends Span {
       })
     }
 
-    spanContext.trace.started.push(this)
+    spanContext._trace.started.push(this)
 
     return spanContext
   }
@@ -84,21 +84,21 @@ class DatadogSpan extends Span {
   }
 
   _setOperationName (name) {
-    this._spanContext.name = name
+    this._spanContext._name = name
   }
 
   _setBaggageItem (key, value) {
-    this._spanContext.baggageItems[key] = value
+    this._spanContext._baggageItems[key] = value
   }
 
   _getBaggageItem (key) {
-    return this._spanContext.baggageItems[key]
+    return this._spanContext._baggageItems[key]
   }
 
   _addTags (keyValuePairs) {
     try {
       Object.keys(keyValuePairs).forEach(key => {
-        this._spanContext.tags[key] = String(keyValuePairs[key])
+        this._spanContext._tags[key] = String(keyValuePairs[key])
       })
     } catch (e) {
       log.error(e)
@@ -113,16 +113,16 @@ class DatadogSpan extends Span {
     finishTime = parseFloat(finishTime) || platform.now()
 
     this._duration = finishTime - this._startTime
-    this._spanContext.trace.finished.push(this)
-    this._spanContext.isFinished = true
+    this._spanContext._trace.finished.push(this)
+    this._spanContext._isFinished = true
     this._prioritySampler.sample(this)
 
-    if (this._spanContext.sampled) {
+    if (this._spanContext._sampled) {
       this._recorder.record(this)
     }
 
-    this._spanContext.children
-      .filter(child => !child.context().isFinished)
+    this._spanContext._children
+      .filter(child => !child.context()._isFinished)
       .forEach(child => {
         log.error(`Parent span ${this} was finished before child span ${child}.`)
       })

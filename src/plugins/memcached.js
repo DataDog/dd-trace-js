@@ -89,7 +89,7 @@ function getAddress (client, server, query) {
 
 module.exports = {
   name: 'memcached',
-  versions: ['^2.2'],
+  versions: ['>=2.2'],
   patch (Memcached, tracer, config) {
     this.wrap(Memcached.prototype, 'command', createWrapCommand(tracer, config))
   },

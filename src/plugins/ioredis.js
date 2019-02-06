@@ -18,7 +18,7 @@ function createWrapSendCommand (tracer, config) {
 
 module.exports = {
   name: 'ioredis',
-  versions: ['>=2 <=4'],
+  versions: ['>=2'],
   patch (Redis, tracer, config) {
     this.wrap(Redis.prototype, 'sendCommand', createWrapSendCommand(tracer, config))
   },

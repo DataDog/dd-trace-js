@@ -141,7 +141,7 @@ describe('Tracer', () => {
     it('should start a span that is the child of a span', () => {
       const parent = new SpanContext()
 
-      parent.children = []
+      parent._children = []
       fields.references = [
         new Reference(opentracing.REFERENCE_CHILD_OF, parent)
       ]

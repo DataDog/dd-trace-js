@@ -73,7 +73,7 @@ function unpatch (pg) {
 
 module.exports = {
   name: 'pg',
-  versions: ['>=4 <=7'],
+  versions: ['>=4'],
   patch,
   unpatch
 }

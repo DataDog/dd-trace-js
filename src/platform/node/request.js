@@ -1,6 +1,7 @@
 'use strict'
 
 const http = require('http')
+const https = require('https')
 
 function request (options, callback) {
   options = Object.assign({
@@ -14,7 +15,8 @@ function request (options, callback) {
   options.headers['Content-Length'] = byteLength(data)
 
   return new Promise((resolve, reject) => {
-    const req = http.request(options, res => {
+    const client = options.protocol === 'https:' ? https : http
+    const req = client.request(options, res => {
       let data = ''
 
       res.on('data', chunk => { data += chunk })

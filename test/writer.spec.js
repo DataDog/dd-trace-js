@@ -21,7 +21,7 @@ describe('Writer', () => {
     }
 
     span = {
-      context: sinon.stub().returns({ trace })
+      context: sinon.stub().returns({ _trace: trace })
     }
 
     response = JSON.stringify({

@@ -14,8 +14,8 @@ const logKeys = [traceKey, spanKey, samplingKey]
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
-    carrier[traceKey] = spanContext.traceId.toString()
-    carrier[spanKey] = spanContext.spanId.toString()
+    carrier[traceKey] = spanContext.toTraceId()
+    carrier[spanKey] = spanContext.toSpanId()
 
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
@@ -42,7 +42,7 @@ class TextMapPropagator {
   }
 
   _injectSamplingPriority (spanContext, carrier) {
-    const priority = spanContext.sampling.priority
+    const priority = spanContext._sampling.priority
 
     if (Number.isInteger(priority)) {
       carrier[samplingKey] = priority.toString()
@@ -50,8 +50,8 @@ class TextMapPropagator {
   }
 
   _injectBaggageItems (spanContext, carrier) {
-    spanContext.baggageItems && Object.keys(spanContext.baggageItems).forEach(key => {
-      carrier[baggagePrefix + key] = String(spanContext.baggageItems[key])
+    spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+      carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
   }
 
@@ -60,7 +60,7 @@ class TextMapPropagator {
       const match = key.match(baggageExpr)
 
       if (match) {
-        spanContext.baggageItems[match[1]] = carrier[key]
+        spanContext._baggageItems[match[1]] = carrier[key]
       }
     })
   }
@@ -69,7 +69,7 @@ class TextMapPropagator {
     const priority = parseInt(carrier[samplingKey], 10)
 
     if (Number.isInteger(priority)) {
-      spanContext.sampling.priority = parseInt(carrier[samplingKey], 10)
+      spanContext._sampling.priority = parseInt(carrier[samplingKey], 10)
     }
   }
 }

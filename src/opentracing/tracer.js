@@ -12,6 +12,8 @@ const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
+const LogPropagator = require('./propagation/log')
+const formats = require('../../ext/formats')
 const log = require('../log')
 
 class DatadogTracer extends Tracer {
@@ -25,15 +27,17 @@ class DatadogTracer extends Tracer {
     this._url = config.url
     this._env = config.env
     this._tags = config.tags
+    this._logInjection = config.logInjection
     this._prioritySampler = new PrioritySampler(config.env)
     this._writer = new Writer(this._prioritySampler, config.url, config.bufferSize)
     this._recorder = new Recorder(this._writer, config.flushInterval)
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
-      [opentracing.FORMAT_TEXT_MAP]: new TextMapPropagator(),
-      [opentracing.FORMAT_HTTP_HEADERS]: new HttpPropagator(),
-      [opentracing.FORMAT_BINARY]: new BinaryPropagator()
+      [formats.TEXT_MAP]: new TextMapPropagator(),
+      [formats.HTTP_HEADERS]: new HttpPropagator(),
+      [formats.BINARY]: new BinaryPropagator(),
+      [formats.LOG]: new LogPropagator()
     }
   }
 
@@ -57,7 +61,7 @@ class DatadogTracer extends Tracer {
     })
 
     if (parent && parent.type() === opentracing.REFERENCE_CHILD_OF) {
-      parent.referencedContext().children.push(span)
+      parent.referencedContext()._children.push(span)
     }
 
     return span

@@ -1,5 +1,7 @@
 'use strict'
 
+const getPort = require('get-port')
+const agent = require('../agent')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
 const tags = require('../../../ext/tags')
@@ -16,6 +18,8 @@ const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_HEADERS = tags.HTTP_HEADERS
+
+wrapIt()
 
 describe('plugins/util/web', () => {
   let web
@@ -58,8 +62,8 @@ describe('plugins/util/web', () => {
 
         span = web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(span.context().traceId.toString()).to.equal('123')
-        expect(span.context().parentId.toString()).to.equal('456')
+        expect(span.context()._traceId.toString()).to.equal('123')
+        expect(span.context()._parentId.toString()).to.equal('456')
       })
 
       it('should set the service name', () => {
@@ -67,7 +71,7 @@ describe('plugins/util/web', () => {
 
         span = web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(span.context().tags).to.have.property(SERVICE_NAME, 'custom')
+        expect(span.context()._tags).to.have.property(SERVICE_NAME, 'custom')
       })
 
       it('should activate a scope with the span', () => {
@@ -88,7 +92,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [SPAN_TYPE]: HTTP,
           [HTTP_URL]: 'http://localhost/user/123',
           [HTTP_METHOD]: 'GET',
@@ -103,7 +107,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [`${HTTP_HEADERS}.host`]: 'localhost'
         })
       })
@@ -122,7 +126,7 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
         span = web.instrument(tracer, config, req, res, 'test2.request')
 
-        expect(span.context().name).to.equal('test2.request')
+        expect(span.context()._name).to.equal('test2.request')
       })
 
       it('should allow overriding the span service name', () => {
@@ -130,7 +134,7 @@ describe('plugins/util/web', () => {
         config.service = 'test2'
         span = web.instrument(tracer, config, req, res, 'test.request')
 
-        expect(span.context().tags).to.have.property('service.name', 'test2')
+        expect(span.context()._tags).to.have.property('service.name', 'test2')
       })
 
       it('should only wrap res.end once', () => {
@@ -147,7 +151,7 @@ describe('plugins/util/web', () => {
         span = web.instrument(tracer, config, req, res, 'test.request')
       })
 
-      it('should finish the span', () => {
+      it('should finish the request span', () => {
         sinon.spy(span, 'finish')
 
         res.end()
@@ -162,6 +166,16 @@ describe('plugins/util/web', () => {
         res.end()
 
         expect(span.finish).to.have.been.calledOnce
+      })
+
+      it('should finish middleware spans', () => {
+        span = web.enterMiddleware(req, () => {}, 'middleware')
+
+        sinon.spy(span, 'finish')
+
+        res.end()
+
+        expect(span.finish).to.have.been.called
       })
 
       it('should execute any beforeEnd handlers', () => {
@@ -190,7 +204,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [RESOURCE_NAME]: 'GET',
           [HTTP_STATUS_CODE]: '200'
         })
@@ -201,7 +215,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [ERROR]: 'true'
         })
       })
@@ -211,7 +225,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [ERROR]: 'true'
         })
       })
@@ -221,7 +235,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.include({
+        expect(span.context()._tags).to.include({
           [HTTP_ROUTE]: '/custom/route'
         })
       })
@@ -255,7 +269,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context().tags).to.have.property('resource.name', 'GET /custom/route')
+        expect(span.context()._tags).to.have.property('resource.name', 'GET /custom/route')
       })
     })
   })
@@ -273,8 +287,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, '/bar')
       res.end()
 
-      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
-      expect(span.context().tags).to.have.property(HTTP_ROUTE, '/foo/bar')
+      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
+      expect(span.context()._tags).to.have.property(HTTP_ROUTE, '/foo/bar')
     })
   })
 
@@ -292,7 +306,52 @@ describe('plugins/util/web', () => {
       web.exitRoute(req)
       res.end()
 
-      expect(span.context().tags).to.have.property(RESOURCE_NAME, 'GET /foo')
+      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo')
+    })
+  })
+
+  describe('enterMiddleware', () => {
+    beforeEach(() => {
+      config = web.normalizeConfig(config)
+      span = web.instrument(tracer, config, req, res, 'test.request')
+    })
+
+    it('should activate a scope with the span', (done) => {
+      const fn = function test () {
+        const scope = tracer.scopeManager().active()
+
+        expect(scope).to.not.be.null
+        expect(scope.span()).to.equal(span)
+        expect(scope.span().context()._tags).to.have.property('resource.name', 'test')
+
+        done()
+      }
+
+      span = web.enterMiddleware(req, fn, 'middleware')
+
+      fn(req, res)
+    })
+  })
+
+  describe('exitMiddleware', () => {
+    beforeEach(() => {
+      config = web.normalizeConfig(config)
+      span = web.instrument(tracer, config, req, res, 'test.request')
+    })
+
+    it('should close the scope of the current middleware', (done) => {
+      const fn = () => {
+        const scope = tracer.scopeManager().active()
+
+        expect(scope).to.be.null
+
+        done()
+      }
+
+      web.enterMiddleware(req, fn, 'middleware')
+      web.exitMiddleware(req, fn, 'middleware')
+
+      fn(req, res)
     })
   })
 
@@ -307,15 +366,138 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('root', () => {
+    it('should return the request root span', () => {
+      span = web.instrument(tracer, config, req, res, 'test.request')
+
+      web.enterMiddleware(req, () => {}, 'express.middleware')
+
+      expect(web.root(req)).to.equal(span)
+    })
+
+    it('should return null when not yet instrumented', () => {
+      expect(web.active(req)).to.be.null
+    })
+  })
+
   describe('active', () => {
-    it('should return the active span', () => {
+    it('should return the request span by default', () => {
       span = web.instrument(tracer, config, req, res, 'test.request')
 
       expect(web.active(req)).to.equal(span)
     })
 
+    it('should return the active middleware span', () => {
+      span = web.instrument(tracer, config, req, res, 'test.request')
+
+      web.enterMiddleware(req, () => {}, 'express.middleware')
+
+      expect(web.active(req)).to.not.be.null
+      expect(web.active(req)).to.not.equal(span)
+    })
+
     it('should return null when not yet instrumented', () => {
       expect(web.active(req)).to.be.null
+    })
+  })
+
+  describe('with an instrumented web server', done => {
+    let express
+    let app
+    let port
+    let server
+    let http
+
+    beforeEach(done => {
+      agent.load(null, 'express')
+        .then(getPort)
+        .then(_port => {
+          port = _port
+          http = require('http')
+          express = require('express')
+          app = express()
+
+          server = app.listen(port, '127.0.0.1', () => done())
+        })
+    })
+
+    afterEach(done => {
+      agent.close().then(() => {
+        server.close(() => done())
+      })
+    })
+
+    it('should run res.end handlers in the request scope', done => {
+      let handler
+
+      const interval = setInterval(() => {
+        if (handler) {
+          handler()
+          clearInterval(interval)
+        }
+      })
+
+      app.use((req, res) => {
+        const end = res.end
+
+        res.end = function () {
+          end.apply(this, arguments)
+
+          try {
+            expect(tracer.scopeManager().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        }
+
+        handler = () => res.status(200).send()
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', done)
+    })
+
+    it('should run "finish" event handlers in the request scope', done => {
+      app.use((req, res, next) => {
+        res.on('finish', () => {
+          try {
+            expect(tracer.scopeManager().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        res.status(200).send()
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', done)
+    })
+
+    it('should run "close" event handlers in the request scope', done => {
+      const sockets = []
+
+      app.use((req, res, next) => {
+        res.on('close', () => {
+          try {
+            expect(tracer.scopeManager().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+
+        sockets.forEach(socket => socket.destroy())
+      })
+
+      server.on('connection', (socket) => {
+        sockets.push(socket)
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', () => {})
     })
   })
 })

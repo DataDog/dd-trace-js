@@ -57,11 +57,11 @@ function wrapIt () {
       return it.call(this, title, function (done) {
         arguments[0] = withoutScope(agent.wrap(done))
 
-        return fn.apply(this, arguments)
+        return withoutScope(fn).apply(this, arguments)
       })
     } else {
       return it.call(this, title, function () {
-        const result = fn.apply(this, arguments)
+        const result = withoutScope(fn).apply(this, arguments)
 
         if (result && result.then) {
           return result

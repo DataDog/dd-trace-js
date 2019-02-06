@@ -64,7 +64,7 @@ module.exports = [
   {
     name: 'elasticsearch',
     file: 'src/lib/transport.js',
-    versions: ['>=10 <=15'],
+    versions: ['>=10'],
     patch (Transport, tracer, config) {
       this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
     },

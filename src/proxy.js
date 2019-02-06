@@ -2,7 +2,7 @@
 
 const BaseTracer = require('opentracing').Tracer
 const memoize = require('lodash.memoize')
-const NoopTracer = require('./noop')
+const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')
@@ -36,6 +36,8 @@ class Tracer extends BaseTracer {
    * @param {boolean} [options.enabled=true] Whether to enable the tracer.
    * @param {boolean} [options.debug=false] Enable debug logging in the tracer.
    * @param {string} [options.service] The service name to be used for this program.
+   * @param {string} [options.url=null] The url to the trace agent that the tracer will submit to. Takes
+   * precedence over hostname and port, if set.
    * @param {string} [options.hostname=localhost] The address of the trace agent that the tracer will submit to.
    * @param {number|string} [options.port=8126] The port of the trace agent that the tracer will submit to.
    * @param {number} [options.sampleRate=1] Percentage of spans to sample as a float between 0 and 1.

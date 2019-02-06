@@ -1,6 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire').noCallThru()
+const path = require('path')
 
 describe('Instrumenter', () => {
   let Instrumenter
@@ -67,7 +68,13 @@ describe('Instrumenter', () => {
   })
 
   afterEach(() => {
-    delete require.cache[require.resolve('mysql-mock')]
+    const basedir = path.resolve(path.join(__dirname, 'node_modules'))
+
+    Object.keys(require.cache)
+      .filter(name => name.indexOf(basedir) !== -1)
+      .forEach(name => {
+        delete require.cache[name]
+      })
   })
 
   describe('with integrations enabled', () => {
@@ -141,6 +148,25 @@ describe('Instrumenter', () => {
 
         expect(integrations.mysql[0].patch).to.not.have.been.called
         expect(integrations.mysql[1].patch).to.not.have.been.called
+      })
+
+      it('should attempt to patch already loaded modules', () => {
+        const express = require('express-mock')
+
+        instrumenter.use('express-mock')
+
+        expect(integrations.express.patch).to.have.been.called
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
+      })
+
+      it('should not patch twice already loaded modules', () => {
+        require('express-mock')
+
+        instrumenter.use('express-mock')
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledOnce
       })
     })
 

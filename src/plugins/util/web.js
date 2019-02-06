@@ -46,14 +46,14 @@ const web = {
     callback && callback(span)
 
     wrapEnd(req)
+    wrapEvents(req)
 
     return span
   },
 
   // Reactivate the request scope in case it was changed by a middleware.
   reactivate (req) {
-    req._datadog.scope && req._datadog.scope.close()
-    req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
+    reactivate(req)
   },
 
   // Add a route segment that will be used for the resource name.
@@ -64,6 +64,38 @@ const web = {
   // Remove the current route segment.
   exitRoute (req) {
     req._datadog.paths.pop()
+  },
+
+  // Start a new middleware span and activate a new scope with the span.
+  enterMiddleware (req, middleware, name) {
+    if (!this.active(req)) return
+
+    const tracer = req._datadog.tracer
+    const childOf = this.active(req)
+    const span = tracer.startSpan(name, { childOf })
+    const scope = tracer.scopeManager().activate(span)
+
+    span.addTags({
+      [RESOURCE_NAME]: middleware.name || '<anonymous>'
+    })
+
+    req._datadog.middleware.push(scope)
+
+    return span
+  },
+
+  // Close the active middleware scope and finish its span.
+  exitMiddleware (req) {
+    if (!this.active(req)) return
+
+    const scope = req._datadog.middleware.pop()
+
+    if (!scope) return
+
+    const span = scope.span()
+
+    span.finish()
+    scope.close()
   },
 
   // Register a callback to run before res.end() is called.
@@ -80,14 +112,23 @@ const web = {
         span: null,
         scope: null,
         paths: [],
+        middleware: [],
         beforeEnd: []
       }
     })
   },
 
-  // Return the active span. For now, this is always the request span.
-  active (req) {
+  // Return the request root span.
+  root (req) {
     return req._datadog ? req._datadog.span : null
+  },
+
+  // Return the active span.
+  active (req) {
+    if (!req._datadog) return null
+    if (req._datadog.middleware.length === 0) return req._datadog.span || null
+
+    return req._datadog.middleware.slice(-1)[0].span()
   }
 }
 
@@ -95,7 +136,7 @@ function startSpan (tracer, config, req, res, name) {
   req._datadog.config = config
 
   if (req._datadog.span) {
-    req._datadog.span.context().name = name
+    req._datadog.span.context()._name = name
     return req._datadog.span
   }
 
@@ -123,8 +164,18 @@ function finish (req, res) {
   addResourceTag(req)
 
   req._datadog.span.finish()
-  req._datadog.scope && req._datadog.scope.close()
   req._datadog.finished = true
+}
+
+function finishMiddleware (req, res) {
+  if (req._datadog.finished) return
+
+  let scope
+
+  while ((scope = req._datadog.middleware.pop())) {
+    scope.span().finish()
+    scope.close()
+  }
 }
 
 function wrapEnd (req) {
@@ -133,8 +184,10 @@ function wrapEnd (req) {
 
   if (end === req._datadog.end) return
 
-  req._datadog.end = res.end = function () {
+  let _end = req._datadog.end = res.end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
+
+    finishMiddleware(req, res)
 
     const returnValue = end.apply(this, arguments)
 
@@ -142,6 +195,45 @@ function wrapEnd (req) {
 
     return returnValue
   }
+
+  Object.defineProperty(res, 'end', {
+    configurable: true,
+    get () {
+      return _end
+    },
+    set (value) {
+      _end = value
+      if (typeof value === 'function') {
+        _end = function () {
+          reactivate(req)
+          return value.apply(this, arguments)
+        }
+      } else {
+        _end = value
+      }
+    }
+  })
+}
+
+function wrapEvents (req) {
+  const res = req._datadog.res
+  const on = res.on
+
+  if (on === req._datadog.on) return
+
+  req._datadog.on = res.on = function (eventName, listener) {
+    if (typeof listener !== 'function') return on.apply(this, arguments)
+
+    return on.call(this, eventName, function () {
+      reactivate(req)
+      return listener.apply(this, arguments)
+    })
+  }
+}
+
+function reactivate (req) {
+  req._datadog.scope && req._datadog.scope.close()
+  req._datadog.scope = req._datadog.tracer.scopeManager().activate(req._datadog.span)
 }
 
 function addRequestTags (req) {
@@ -176,7 +268,7 @@ function addResponseTags (req) {
 
 function addResourceTag (req) {
   const span = req._datadog.span
-  const tags = span.context().tags
+  const tags = span.context()._tags
 
   if (tags['resource.name']) return
 
