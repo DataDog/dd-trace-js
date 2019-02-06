@@ -4,11 +4,11 @@ const SpanContext = require('opentracing').SpanContext
 
 class NoopSpanContext extends SpanContext {
   toTraceId () {
-    return ''
+    return '0'
   }
 
   toSpanId () {
-    return ''
+    return '0'
   }
 }
 
