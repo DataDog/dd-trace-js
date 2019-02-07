@@ -17,7 +17,8 @@ const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
-const HTTP_HEADERS = tags.HTTP_HEADERS
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const web = {
   // Ensure the configuration has the correct structure and defaults.
@@ -285,10 +286,18 @@ function addHeaders (req) {
   const span = req._datadog.span
 
   req._datadog.config.headers.forEach(key => {
-    const value = req.headers[key]
+    const reqHeader = req.headers[key]
+    const resHeader = req._datadog.res.getHeader[key]
 
-    if (value) {
-      span.setTag(`${HTTP_HEADERS}.${key}`, value)
+    console.log(reqHeader)
+    console.log(resHeader)
+
+    if (reqHeader) {
+      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+    }
+
+    if (resHeader) {
+      span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
 }
