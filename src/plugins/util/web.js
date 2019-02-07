@@ -287,10 +287,7 @@ function addHeaders (req) {
 
   req._datadog.config.headers.forEach(key => {
     const reqHeader = req.headers[key]
-    const resHeader = req._datadog.res.getHeader[key]
-
-    console.log(reqHeader)
-    console.log(resHeader)
+    const resHeader = req._datadog.res.getHeader(key)
 
     if (reqHeader) {
       span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
