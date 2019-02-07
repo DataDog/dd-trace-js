@@ -1,12 +1,18 @@
 'use strict'
 
 const url = require('url')
-const opentracing = require('opentracing')
 const semver = require('semver')
 const log = require('../../log')
+const tags = require('../../../ext/tags')
+const kinds = require('../../../ext/kinds')
+const formats = require('../../../ext/formats')
 
-const Tags = opentracing.Tags
-const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
+const HTTP_HEADERS = formats.HTTP_HEADERS
+const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const SPAN_KIND = tags.SPAN_KIND
+const CLIENT = kinds.CLIENT
 
 function patch (http, methodName, tracer, config) {
   config = normalizeConfig(tracer, config)
@@ -30,7 +36,7 @@ function patch (http, methodName, tracer, config) {
       const span = tracer.startSpan('http.request', {
         childOf: parent,
         tags: {
-          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
+          [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(tracer, config, options),
           'resource.name': method,
           'span.type': 'web',
@@ -40,7 +46,7 @@ function patch (http, methodName, tracer, config) {
       })
 
       if (!hasAmazonSignature(options)) {
-        tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
+        tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
       const req = request.call(this, options, callback)
@@ -53,7 +59,9 @@ function patch (http, methodName, tracer, config) {
       })
 
       req.on('response', res => {
-        span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+        span.setTag(HTTP_STATUS_CODE, res.statusCode)
+
+        addResponseHeaders(res, span, config)
 
         if (!config.validateStatus(res.statusCode)) {
           span.setTag('error', 1)
@@ -72,8 +80,30 @@ function patch (http, methodName, tracer, config) {
         span.finish()
       })
 
+      addRequestHeaders(req, span, config)
+
       return req
     }
+  }
+
+  function addRequestHeaders (req, span, config) {
+    config.headers.forEach(key => {
+      const value = req.getHeader(key)
+
+      if (value) {
+        span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
+      }
+    })
+  }
+
+  function addResponseHeaders (res, span, config) {
+    config.headers.forEach(key => {
+      const value = res.headers[key]
+
+      if (value) {
+        span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
+      }
+    })
   }
 
   function extractUrl (options) {
@@ -187,11 +217,21 @@ function normalizeConfig (tracer, config) {
 
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
+  const headers = getHeaders(config)
 
   return Object.assign({}, config, {
     validateStatus,
-    filter
+    filter,
+    headers
   })
+}
+
+function getHeaders (config) {
+  if (!Array.isArray(config.headers)) return []
+
+  return config.headers
+    .filter(key => typeof key === 'string')
+    .map(key => key.toLowerCase())
 }
 
 module.exports = [
