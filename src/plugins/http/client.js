@@ -61,6 +61,7 @@ function patch (http, methodName, tracer, config) {
       req.on('response', res => {
         span.setTag(HTTP_STATUS_CODE, res.statusCode)
 
+        addRequestHeaders(req, span, config)
         addResponseHeaders(res, span, config)
 
         if (!config.validateStatus(res.statusCode)) {
@@ -77,10 +78,10 @@ function patch (http, methodName, tracer, config) {
           'error.stack': err.stack
         })
 
+        addRequestHeaders(req, span, config)
+
         span.finish()
       })
-
-      addRequestHeaders(req, span, config)
 
       return req
     }
