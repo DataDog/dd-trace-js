@@ -105,3 +105,4 @@ yarn.lock
 out
 versions
 !test/node_modules
+!examples/**/yarn.lock

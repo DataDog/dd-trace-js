@@ -1,0 +1,57 @@
+version: '3.5'
+services:
+  api-gateway:
+    build: api-gateway
+    environment:
+      - DD_ENV=node-apm-example
+      - DD_TRACE_DEBUG
+      - DD_TRACE_ENABLED
+      - DD_LOGS_INJECTION=true
+      - DD_AGENT_HOST=agent
+    volumes:
+      - ./api-gateway/src:/usr/src/app/src
+    ports:
+      - 127.0.0.1:8080:8080
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "docker", "service": "api-gateway"}]'
+  auth:
+    build: auth
+    environment:
+      - DD_ENV=node-apm-example
+      - DD_TRACE_DEBUG
+      - DD_TRACE_ENABLED
+      - DD_LOGS_INJECTION=true
+      - DD_AGENT_HOST=agent
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "docker", "service": "auth"}]'
+  user:
+    build: user
+    environment:
+      - DD_ENV=node-apm-example
+      - DD_TRACE_DEBUG
+      - DD_TRACE_ENABLED
+      - DD_LOGS_INJECTION=true
+      - DD_AGENT_HOST=agent
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "docker", "service": "user"}]'
+  agent:
+    image: datadog/agent:6.8.3
+    environment:
+      - DD_ENV=node-apm-example
+      - DD_TAGS='env:node-apm-example'
+      - DD_PROCESS_AGENT_ENABLED=true
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_APM_ENABLED=true
+      - DD_APM_ANALYZED_SPANS=api-gateway|express.request=1,auth|express.request=1,user|express.request=1
+      - DD_BIND_HOST=0.0.0.0
+      - DD_LOGS_ENABLED=true
+      - DD_API_KEY
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+  redis:
+    image: redis
+  mongo:
+    image: mongo
