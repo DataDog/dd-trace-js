@@ -240,7 +240,7 @@ function reactivate (req) {
 
 function addRequestTags (req) {
   const protocol = req.connection.encrypted ? 'https' : 'http'
-  const url = `${protocol}://${req.headers['host']}${req.url}`
+  const url = `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
   const span = req._datadog.span
 
   span.addTags({
