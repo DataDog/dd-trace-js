@@ -1,7 +1,7 @@
 'use strict'
 
 const Tracer = require('opentracing').Tracer
-const Scope = require('./scope/new/base')
+const Scope = require('../scope/new/base')
 const Span = require('./span')
 
 const span = new Span()
