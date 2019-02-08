@@ -43,8 +43,6 @@ const web = {
       span.setTag(SERVICE_NAME, config.service)
     }
 
-    callback && callback(span)
-
     wrapEnd(req)
     wrapEvents(req)
 
