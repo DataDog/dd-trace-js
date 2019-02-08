@@ -19,12 +19,13 @@ const tx = {
 
 function wrapCallback (span, callback) {
   const scope = span.tracer().scope()
+  const previous = scope.active()
 
   return function (err) {
     finish(span, err)
 
     if (callback) {
-      return scope.activate(scope.active(), () => callback.apply(this, arguments))
+      return scope.activate(previous, () => callback.apply(this, arguments))
     }
   }
 }

@@ -167,6 +167,7 @@ function finishMiddleware (req, res) {
 }
 
 function wrapEnd (req) {
+  const scope = req._datadog.tracer.scope()
   const res = req._datadog.res
   const end = res.end
 
@@ -190,33 +191,19 @@ function wrapEnd (req) {
       return _end
     },
     set (value) {
-      _end = value
-      if (typeof value === 'function') {
-        _end = function () {
-          reactivate(req)
-          return value.apply(this, arguments)
-        }
-      } else {
-        _end = value
-      }
+      _end = scope.bind(value, req._datadog.span)
     }
   })
 }
 
 function wrapEvents (req) {
+  const scope = req._datadog.tracer.scope()
   const res = req._datadog.res
   const on = res.on
 
   if (on === req._datadog.on) return
 
-  req._datadog.on = res.on = function (eventName, listener) {
-    if (typeof listener !== 'function') return on.apply(this, arguments)
-
-    return on.call(this, eventName, function () {
-      reactivate(req)
-      return listener.apply(this, arguments)
-    })
-  }
+  req._datadog.on = scope.bind(res, req._datadog.span).on
 }
 
 function reactivate (req, fn) {

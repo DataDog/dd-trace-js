@@ -37,11 +37,13 @@ class Scope extends Base {
     try {
       return callback()
     } catch (e) {
-      span && span.addTags({
-        'error.type': e.name,
-        'error.msg': e.message,
-        'error.stack': e.stack
-      })
+      if (span && typeof span.addTags === 'function') {
+        span.addTags({
+          'error.type': e.name,
+          'error.msg': e.message,
+          'error.stack': e.stack
+        })
+      }
 
       throw e
     } finally {
