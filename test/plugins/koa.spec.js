@@ -12,7 +12,7 @@ describe('Plugin', () => {
   let Koa
   let appListener
 
-  describe('express', () => {
+  describe('koa', () => {
     withVersions(plugin, 'koa', version => {
       let port
 

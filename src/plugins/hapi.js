@@ -95,7 +95,7 @@ module.exports = [
   },
   {
     name: 'hapi',
-    versions: ['17'],
+    versions: ['>=17'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
       this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))

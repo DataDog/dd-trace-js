@@ -51,7 +51,7 @@ const web = {
 
   // Reactivate the request scope in case it was changed by a middleware.
   reactivate (req, fn) {
-    reactivate(req, fn)
+    return reactivate(req, fn)
   },
 
   // Add a route segment that will be used for the resource name.
