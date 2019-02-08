@@ -450,7 +450,7 @@ describe('plugins/util/web', () => {
           end.apply(this, arguments)
 
           try {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             done()
           } catch (e) {
             done(e)
@@ -468,7 +468,7 @@ describe('plugins/util/web', () => {
       app.use((req, res, next) => {
         res.on('finish', () => {
           try {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             done()
           } catch (e) {
             done(e)
@@ -488,7 +488,7 @@ describe('plugins/util/web', () => {
       app.use((req, res, next) => {
         res.on('close', () => {
           try {
-            expect(tracer.scopeManager().active()).to.not.be.null
+            expect(tracer.scope().active()).to.not.be.null
             done()
           } catch (e) {
             done(e)

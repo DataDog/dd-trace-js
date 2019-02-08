@@ -46,11 +46,11 @@ describe('plugins/util/log', () => {
     })
 
     it('should do nothing if the active span is null', () => {
-      tracer.scopeManager().activate(null)
+      tracer.scope().activate(null, () => {
+        const record = log.correlate(tracer)
 
-      const record = log.correlate(tracer)
-
-      expect(record).to.not.have.property('dd')
+        expect(record).to.not.have.property('dd')
+      })
     })
   })
 })
