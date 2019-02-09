@@ -12,24 +12,24 @@ const span = {
     _service: 'service'
   }),
   context: () => ({
-    traceId: id,
-    spanId: id,
-    parentId: id,
-    trace: {
+    _traceId: id,
+    _spanId: id,
+    _parentId: id,
+    _trace: {
       started: [span, span],
       finished: [span, span]
     },
-    tags: {
+    _tags: {
       resource: '/resource',
       type: 'web',
       error: true
     },
-    metrics: {
+    _metrics: {
       [SAMPLE_RATE_METRIC_KEY]: 1
     },
-    sampled: true,
-    sampling: {},
-    name: 'operation'
+    _sampled: true,
+    _sampling: {},
+    _name: 'operation'
   }),
   _startTime: 1500000000000.123456,
   _duration: 100
