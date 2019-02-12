@@ -5,8 +5,14 @@ const pathToRegExp = require('path-to-regexp')
 const web = require('./util/web')
 
 function createWrapHandle (tracer, config) {
+  config = web.normalizeConfig(config)
+
   return function wrapHandle (handle) {
     return function handleWithTracer (req, res, done) {
+      if (!config.filter(req.url)) {
+        return handle.call(this, req, res, done)
+      }
+
       web.patch(req)
 
       return handle.call(this, req, res, wrapDone(done, req))

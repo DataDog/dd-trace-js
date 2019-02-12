@@ -6,6 +6,7 @@ const log = require('../../log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
+const web = require('../util/web')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -194,23 +195,12 @@ function getStatusValidator (config) {
   return code => code < 400 || code >= 500
 }
 
-function getFilter (tracer, config) {
-  const whitelist = config.whitelist || /.*/
-  const blacklist = [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
+function getFilter(tracer, config) {
+  config = Object.assign({}, config, {
+    blacklist: [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
+  })
 
-  return uri => applyFilter(whitelist, uri) && !applyFilter(blacklist, uri)
-
-  function applyFilter (filter, uri) {
-    if (typeof filter === 'function') {
-      return filter(uri)
-    } else if (filter instanceof RegExp) {
-      return filter.test(uri)
-    } else if (filter instanceof Array) {
-      return filter.some(filter => applyFilter(filter, uri))
-    }
-
-    return filter === uri
-  }
+  return web.getFilter(config)
 }
 
 function normalizeConfig (tracer, config) {

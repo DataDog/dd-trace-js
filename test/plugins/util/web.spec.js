@@ -582,4 +582,38 @@ describe('plugins/util/web', () => {
       req.on('error', () => {})
     })
   })
+
+  describe('whitelistFilter', () => {
+    beforeEach(() => {
+      config.whitelist = ['/_okay']
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('blacklistFilter', () => {
+    beforeEach(() => {
+      config.blacklist = ['/_okay']
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
 })
