@@ -153,7 +153,7 @@ function flatten (arr) {
 }
 
 function addError (span, error) {
-  if (error) {
+  if (span && error) {
     span.addTags({
       'error.type': error.name,
       'error.msg': error.message,
