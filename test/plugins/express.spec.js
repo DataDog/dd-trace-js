@@ -859,7 +859,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0].meta).to.have.property('http.headers.user-agent', 'test')
+                expect(spans[0].meta).to.have.property('http.request.headers.user-agent', 'test')
               })
               .then(done)
               .catch(done)

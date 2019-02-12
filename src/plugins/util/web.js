@@ -17,11 +17,14 @@ const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
-const HTTP_HEADERS = tags.HTTP_HEADERS
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
+    config = config.server || config
+
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
@@ -149,14 +152,13 @@ function startSpan (tracer, config, req, res, name) {
   req._datadog.scope = scope
   req._datadog.res = res
 
-  addRequestTags(req)
-
   return span
 }
 
 function finish (req, res) {
   if (req._datadog.finished) return
 
+  addRequestTags(req)
   addResponseTags(req)
 
   req._datadog.config.hooks.request(req._datadog.span, req, res)
@@ -238,7 +240,7 @@ function reactivate (req) {
 
 function addRequestTags (req) {
   const protocol = req.connection.encrypted ? 'https' : 'http'
-  const url = `${protocol}://${req.headers['host']}${req.url}`
+  const url = `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
   const span = req._datadog.span
 
   span.addTags({
@@ -284,10 +286,15 @@ function addHeaders (req) {
   const span = req._datadog.span
 
   req._datadog.config.headers.forEach(key => {
-    const value = req.headers[key]
+    const reqHeader = req.headers[key]
+    const resHeader = req._datadog.res.getHeader(key)
 
-    if (value) {
-      span.setTag(`${HTTP_HEADERS}.${key}`, value)
+    if (reqHeader) {
+      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+    }
+
+    if (resHeader) {
+      span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
 }

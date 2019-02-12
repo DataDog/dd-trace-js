@@ -14,5 +14,6 @@ module.exports = {
   HTTP_METHOD: 'http.method',
   HTTP_STATUS_CODE: 'http.status_code',
   HTTP_ROUTE: 'http.route',
-  HTTP_HEADERS: 'http.headers'
+  HTTP_REQUEST_HEADERS: 'http.request.headers',
+  HTTP_RESPONSE_HEADERS: 'http.response.headers'
 }
