@@ -195,7 +195,7 @@ function getStatusValidator (config) {
   return code => code < 400 || code >= 500
 }
 
-function getFilter(tracer, config) {
+function getFilter (tracer, config) {
   config = Object.assign({}, config, {
     blacklist: [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
   })
