@@ -106,7 +106,12 @@ describe('Writer', () => {
 
   describe('drop', () => {
     beforeEach(() => {
-      span.context._sampling.drop = true
+      span.context = sinon.stub().returns({
+        _trace: trace,
+        _sampling: {
+          drop: true
+        }
+      })
     })
 
     it('should not append if being dropped', () => {
