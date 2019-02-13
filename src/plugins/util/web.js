@@ -45,7 +45,7 @@ const web = {
 
     const span = startSpan(tracer, config, req, res, name)
     if (!config.filter(req.url)) {
-      span.context()._sampling.pleaseDrop = true
+      span.context()._sampling.drop = true
     }
 
     if (config.service) {
