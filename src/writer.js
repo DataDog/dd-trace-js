@@ -22,7 +22,7 @@ class Writer {
     const spanContext = span.context()
     const trace = spanContext._trace
 
-    if (spanContext._sampling.pleaseDrop === true) {
+    if (spanContext._sampling !== undefined && spanContext._sampling.pleaseDrop === true) {
       log.debug(() => `Dropping span due to user configured filtering: ${span}`)
       return
     }
