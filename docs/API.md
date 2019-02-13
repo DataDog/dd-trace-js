@@ -131,12 +131,14 @@ Each integration also has its own list of default tags. These tags get automatic
 
 <h5 id="express-tags">Tags</h5>
 
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| http.url         | The complete URL of the request.                          |
-| http.method      | The HTTP method of the request.                           |
-| http.status_code | The HTTP status code of the response.                     |
-| http.headers.*   | A recorded HTTP header.                                   |
+| Tag              | Default | Description                                               |
+|------------------|---------|-----------------------------------------------------------|
+| http.url         |         | The complete URL of the request.                          |
+| http.method      |         | The HTTP method of the request.                           |
+| http.status_code |         | The HTTP status code of the response.                     |
+| http.headers.*   |         | A recorded HTTP header.                                   |
+| blacklist        | []      | List of URLs that should not be instrumented. Can be a string, RegExp, callback that takes the URL as a parameter, or an array of any of these. |
+| whitelist        | /.*/    | List of URLs that should be instrumented. If this is set, other URLs will not be instrumented. Can be a string, RegExp, callback that takes the URL as a parameter, or an array of any of these. |
 
 <h5 id="express-config">Configuration Options</h5>
 

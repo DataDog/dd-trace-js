@@ -19,10 +19,16 @@ class Writer {
   }
 
   append (span) {
-    const trace = span.context()._trace
+    const spanContext = span.context()
+    const trace = spanContext._trace
 
     if (trace.started.length === trace.finished.length) {
       const formattedTrace = trace.finished.map(format)
+
+      if (spanContext._sampling.drop === true) {
+        log.debug(() => `Dropping trace due to user configured filtering: ${JSON.stringify(formattedTrace)}`)
+        return
+      }
 
       log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
 

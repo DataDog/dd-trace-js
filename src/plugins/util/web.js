@@ -5,6 +5,7 @@ const log = require('../../log')
 const tags = require('../../../ext/tags')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
+const urlFilter = require('./urlfilter')
 
 const HTTP = types.HTTP
 const SERVER = kinds.SERVER
@@ -28,11 +29,13 @@ const web = {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
+    const filter = urlFilter.getFilter(config)
 
     return Object.assign({}, config, {
       headers,
       validateStatus,
-      hooks
+      hooks,
+      filter
     })
   },
 
@@ -41,6 +44,9 @@ const web = {
     this.patch(req)
 
     const span = startSpan(tracer, config, req, res, name)
+    if (!config.filter(req.url)) {
+      span.context()._sampling.drop = true
+    }
 
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
