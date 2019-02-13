@@ -5,6 +5,7 @@ const log = require('../../log')
 const tags = require('../../../ext/tags')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
+const urlFilter = require('./urlfilter');
 
 const HTTP = types.HTTP
 const SERVER = kinds.SERVER
@@ -28,7 +29,7 @@ const web = {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
-    const filter = this.getFilter(config)
+    const filter = urlFilter.getFilter(config)
 
     return Object.assign({}, config, {
       headers,
@@ -40,14 +41,12 @@ const web = {
 
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
-    if (!config.filter(req.url)) {
-      callback && callback()
-      return null
-    }
-
     this.patch(req)
 
     const span = startSpan(tracer, config, req, res, name)
+    if (!config.filter(req.url)) {
+      span.context()._sampling.pleaseDrop = true
+    }
 
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
@@ -140,35 +139,6 @@ const web = {
 
     return req._datadog.middleware.slice(-1)[0].span()
   },
-
-  getFilter (config) {
-    if (typeof config.filter === 'function') {
-      return config.filter
-    } else if (config.hasOwnProperty('filter')) {
-      log.error('Expected `filter` to be a function. Overriding filter property to default.')
-    }
-
-    const whitelist = config.whitelist || /.*/
-    const blacklist = config.blacklist || []
-
-    return uri => {
-      const whitelisted = applyFilter(whitelist, uri)
-      const blacklisted = applyFilter(blacklist, uri)
-      return whitelisted && !blacklisted
-    }
-
-    function applyFilter (filter, uri) {
-      if (typeof filter === 'function') {
-        return filter(uri)
-      } else if (filter instanceof RegExp) {
-        return filter.test(uri)
-      } else if (filter instanceof Array) {
-        return filter.some(filter => applyFilter(filter, uri))
-      }
-
-      return filter === uri
-    }
-  }
 }
 
 function startSpan (tracer, config, req, res, name) {

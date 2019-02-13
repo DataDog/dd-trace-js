@@ -6,7 +6,7 @@ const log = require('../../log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
-const web = require('../util/web')
+const urlFilter = require('../util/urlfilter')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -200,7 +200,7 @@ function getFilter (tracer, config) {
     blacklist: [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
   })
 
-  return web.getFilter(config)
+  return urlFilter.getFilter(config)
 }
 
 function normalizeConfig (tracer, config) {

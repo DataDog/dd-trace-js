@@ -19,7 +19,13 @@ class Writer {
   }
 
   append (span) {
-    const trace = span.context()._trace
+    const spanContext = span.context()
+    const trace = spanContext._trace
+
+    if (spanContext._sampling.pleaseDrop === true) {
+      log.debug(() => `Dropping span due to user configured filtering: ${span}`)
+      return
+    }
 
     if (trace.started.length === trace.finished.length) {
       const formattedTrace = trace.finished.map(format)
@@ -33,6 +39,7 @@ class Writer {
       if (this.length < this._size) {
         this._queue.push(buffer)
       } else {
+        log.error(() => `Writer buffer full at ${this._size} entries. Squeezing trace in place of another`)
         this._squeeze(buffer)
       }
     }
