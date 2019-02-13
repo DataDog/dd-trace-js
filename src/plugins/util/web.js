@@ -5,7 +5,7 @@ const log = require('../../log')
 const tags = require('../../../ext/tags')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
-const urlFilter = require('./urlfilter');
+const urlFilter = require('./urlfilter')
 
 const HTTP = types.HTTP
 const SERVER = kinds.SERVER
@@ -138,7 +138,7 @@ const web = {
     if (req._datadog.middleware.length === 0) return req._datadog.span || null
 
     return req._datadog.middleware.slice(-1)[0].span()
-  },
+  }
 }
 
 function startSpan (tracer, config, req, res, name) {

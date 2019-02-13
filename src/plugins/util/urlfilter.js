@@ -9,16 +9,16 @@ const urlFilter = {
     } else if (config.hasOwnProperty('filter')) {
       log.error('Expected `filter` to be a function. Overriding filter property to default.')
     }
-  
+
     const whitelist = config.whitelist || /.*/
     const blacklist = config.blacklist || []
-  
+
     return uri => {
       const whitelisted = applyFilter(whitelist, uri)
       const blacklisted = applyFilter(blacklist, uri)
       return whitelisted && !blacklisted
     }
-  
+
     function applyFilter (filter, uri) {
       if (typeof filter === 'function') {
         return filter(uri)
@@ -27,10 +27,10 @@ const urlFilter = {
       } else if (filter instanceof Array) {
         return filter.some(filter => applyFilter(filter, uri))
       }
-  
+
       return filter === uri
     }
   }
 }
 
-module.exports = urlFilter;
+module.exports = urlFilter
