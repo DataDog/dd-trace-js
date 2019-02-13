@@ -25,7 +25,8 @@ class Writer {
 
     if (spanContext._sampling.drop === true) {
       if (isCompletedTrace) {
-        log.debug(() => `Dropping trace due to user configured filtering: ${trace}`)
+        const formattedTrace = trace.finished.map(format)
+        log.debug(() => `Dropping trace due to user configured filtering: ${JSON.stringify(formattedTrace)}`)
       }
 
       return
