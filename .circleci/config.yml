@@ -194,6 +194,14 @@ jobs:
           - SERVICES=
           - PLUGINS=express
 
+  node-generic-pool:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=generic-pool
+
   node-graphql:
     <<: *node-plugin-base
     docker:
@@ -351,6 +359,7 @@ workflows:
       - node-dns
       - node-elasticsearch
       - node-express
+      - node-generic-pool
       - node-graphql
       - node-hapi
       - node-http
@@ -387,6 +396,7 @@ workflows:
       - node-dns
       - node-elasticsearch
       - node-express
+      - node-generic-pool
       - node-graphql
       - node-hapi
       - node-http
