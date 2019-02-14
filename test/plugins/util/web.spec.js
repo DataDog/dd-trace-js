@@ -17,7 +17,8 @@ const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
-const HTTP_HEADERS = tags.HTTP_HEADERS
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 wrapIt()
 
@@ -34,14 +35,17 @@ describe('plugins/util/web', () => {
     req = {
       method: 'GET',
       headers: {
-        'host': 'localhost'
+        'host': 'localhost',
+        'date': 'now'
       },
       connection: {}
     }
     end = sinon.stub()
     res = {
-      end
+      end,
+      getHeader: sinon.stub()
     }
+    res.getHeader.withArgs('server').returns('test')
     config = { hooks: {} }
 
     tracer = require('../../..').init({ plugins: false })
@@ -50,6 +54,66 @@ describe('plugins/util/web', () => {
 
   beforeEach(() => {
     config = web.normalizeConfig(config)
+  })
+
+  describe('normalizeConfig', () => {
+    it('should set the correct defaults', () => {
+      const config = web.normalizeConfig({})
+
+      expect(config).to.have.property('headers')
+      expect(config.headers).to.be.an('array')
+      expect(config).to.have.property('validateStatus')
+      expect(config.validateStatus).to.be.a('function')
+      expect(config.validateStatus(200)).to.equal(true)
+      expect(config.validateStatus(500)).to.equal(false)
+      expect(config).to.have.property('hooks')
+      expect(config.hooks).to.be.an('object')
+      expect(config.hooks).to.have.property('request')
+      expect(config.hooks.request).to.be.a('function')
+    })
+
+    it('should use the shared config if set', () => {
+      const config = web.normalizeConfig({
+        headers: ['test'],
+        validateStatus: code => false,
+        hooks: {
+          request: () => 'test'
+        }
+      })
+
+      expect(config.headers).to.include('test')
+      expect(config.validateStatus(200)).to.equal(false)
+      expect(config).to.have.property('hooks')
+      expect(config.hooks.request()).to.equal('test')
+    })
+
+    it('should use the server config if set', () => {
+      const config = web.normalizeConfig({
+        server: {
+          headers: ['test'],
+          validateStatus: code => false,
+          hooks: {
+            request: () => 'test'
+          }
+        }
+      })
+
+      expect(config.headers).to.include('test')
+      expect(config.validateStatus(200)).to.equal(false)
+      expect(config).to.have.property('hooks')
+      expect(config.hooks.request()).to.equal('test')
+    })
+
+    it('should prioritize the server config over the shared config', () => {
+      const config = web.normalizeConfig({
+        headers: ['foo'],
+        server: {
+          headers: ['bar']
+        }
+      })
+
+      expect(config.headers).to.include('bar')
+    })
   })
 
   describe('instrument', () => {
@@ -98,13 +162,14 @@ describe('plugins/util/web', () => {
       })
 
       it('should add configured headers to the span tags', () => {
-        config.headers = ['host']
+        config.headers = ['host', 'server']
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
           res.end()
 
           expect(span.context()._tags).to.include({
-            [`${HTTP_HEADERS}.host`]: 'localhost'
+            [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
+            [`${HTTP_RESPONSE_HEADERS}.server`]: 'test'
           })
         })
       })
@@ -140,6 +205,24 @@ describe('plugins/util/web', () => {
         web.instrument(tracer, config, req, res, 'test.request')
 
         expect(end).to.equal(res.end)
+      })
+
+      it('should use the config from the last call', () => {
+        config.headers = ['host']
+
+        const override = web.normalizeConfig({
+          headers: ['date']
+        })
+
+        web.instrument(tracer, config, req, res, 'test.request', () => {
+          web.instrument(tracer, override, req, res, 'test.request', span => {
+            res.end()
+
+            expect(span.context()._tags).to.include({
+              [`${HTTP_REQUEST_HEADERS}.date`]: 'now'
+            })
+          })
+        })
       })
     })
 
@@ -505,6 +588,40 @@ describe('plugins/util/web', () => {
 
       const req = http.get(`http://127.0.0.1:${port}`)
       req.on('error', () => {})
+    })
+  })
+
+  describe('whitelistFilter', () => {
+    beforeEach(() => {
+      config = { whitelist: ['/_okay'] }
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('blacklistFilter', () => {
+    beforeEach(() => {
+      config = { blacklist: ['/_notokay'] }
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
     })
   })
 })
