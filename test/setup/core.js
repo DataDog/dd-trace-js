@@ -50,12 +50,15 @@ function wrapIt () {
 function withVersions (plugin, moduleName, range, cb) {
   const instrumentations = [].concat(plugin)
   const testVersions = new Map()
+  const names = [].concat(plugin).map(instrumentation => instrumentation.name)
 
-  if (externals[moduleName]) {
-    [].concat(externals[moduleName]).forEach(external => {
-      instrumentations.push(external)
-    })
-  }
+  names.forEach(name => {
+    if (externals[name]) {
+      [].concat(externals[name]).forEach(external => {
+        instrumentations.push(external)
+      })
+    }
+  })
 
   if (!cb) {
     cb = range
