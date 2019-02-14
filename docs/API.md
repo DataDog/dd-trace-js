@@ -43,9 +43,9 @@ This method returns the active span from the current scope.
 
 <h4>scope.activate(span, fn)</h4>
 
-This method activates the provided span in a new scope available in the function
-provided as the second argument. Any asynchronous context created from whithin
-that function will also have the same scope.
+This method activates the provided span in a new scope available in the
+provided function. Any asynchronous context created from whithin that function
+will also have the same scope.
 
 ```javascript
 const tracer = require('dd-trace').init()
