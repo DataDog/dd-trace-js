@@ -1,9 +1,11 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const Uint64BEBase = require('int64-buffer').Uint64BE
 
-Uint64BE.prototype.toJSON = function toJSON () {
-  return this.toString()
+class Uint64BE extends Uint64BEBase {
+  toJSON () {
+    return this.toString()
+  }
 }
 
 module.exports = Uint64BE
