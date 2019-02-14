@@ -585,7 +585,7 @@ describe('plugins/util/web', () => {
 
   describe('whitelistFilter', () => {
     beforeEach(() => {
-      config.whitelist = ['/_okay']
+      config = { whitelist: ['/_okay'] }
       config = web.normalizeConfig(config)
     })
 
@@ -602,7 +602,7 @@ describe('plugins/util/web', () => {
 
   describe('blacklistFilter', () => {
     beforeEach(() => {
-      config.blacklist = ['/_okay']
+      config = { blacklist: ['/_notokay'] }
       config = web.normalizeConfig(config)
     })
 
