@@ -20,8 +20,11 @@ class Writer {
 
   printableJsonTrace (formattedTrace) {
     return JSON.stringify(formattedTrace.map(trace => {
-      trace.traceId = trace.traceId.toString()
-      trace.parentId = trace.parentId.toString()
+      trace.trace_id = trace.trace_id.toString()
+      trace.span_id = trace.span_id.toString()
+      if (trace.parent_id !== null) {
+        trace.parent_id = trace.parent_id.toString()
+      }
       return trace
     }))
   }
