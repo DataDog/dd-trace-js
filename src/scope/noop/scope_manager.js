@@ -1,8 +1,11 @@
 'use strict'
 
+const Span = require('opentracing').Span
 const Scope = require('./scope')
 
 let singleton = null
+
+const span = new Span()
 
 class ScopeManager {
   constructor () {
@@ -14,7 +17,7 @@ class ScopeManager {
   }
 
   active () {
-    return null
+    return new Scope(span)
   }
 
   activate (span, finishSpanOnClose) {

@@ -7,7 +7,19 @@ const OPERATION_NAME = 'pg.query'
 function patch (pg, tracer, config) {
   function queryWrap (query) {
     return function queryTrace () {
-      const retval = query.apply(this, arguments)
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const span = tracer.startSpan(OPERATION_NAME, {
+        childOf,
+        tags: {
+          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
+          'service.name': config.service || `${tracer._service}-postgres`,
+          'span.type': 'sql',
+          'db.type': 'postgres'
+        }
+      })
+
+      const retval = scope.bind(query, span).apply(this, arguments)
       const pgQuery = this.queryQueue[this.queryQueue.length - 1] || this.activeQuery
 
       if (!pgQuery) {
@@ -18,18 +30,7 @@ function patch (pg, tracer, config) {
       const statement = pgQuery.text
       const params = this.connectionParameters
 
-      const parentScope = tracer.scopeManager().active()
-      const parent = parentScope && parentScope.span()
-      const span = tracer.startSpan(OPERATION_NAME, {
-        childOf: parent,
-        tags: {
-          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          'service.name': config.service || `${tracer._service}-postgres`,
-          'resource.name': statement,
-          'span.type': 'sql',
-          'db.type': 'postgres'
-        }
-      })
+      span.setTag('resource.name', statement)
 
       if (params) {
         span.addTags({
@@ -40,7 +41,7 @@ function patch (pg, tracer, config) {
         })
       }
 
-      pgQuery.callback = (err, res) => {
+      pgQuery.callback = scope.bind((err, res) => {
         if (err) {
           span.addTags({
             'error.type': err.name,
@@ -52,13 +53,9 @@ function patch (pg, tracer, config) {
         span.finish()
 
         if (originalCallback) {
-          if (parent) {
-            tracer.scopeManager().activate(parent)
-          }
-
           originalCallback(err, res)
         }
-      }
+      }, childOf)
 
       return retval
     }

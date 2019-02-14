@@ -33,23 +33,18 @@ describe('Plugin', () => {
           const span = {}
           const promise = new Promise((resolve, reject) => {
             setImmediate(() => {
-              tracer.scopeManager().activate({})
-              resolve()
+              tracer.scope().activate({}, () => {
+                resolve()
+              })
             })
           })
 
-          tracer.scopeManager().activate(span)
-
-          return promise
-            .then(() => {
-              tracer.scopeManager().activate({})
-            })
-            .then(() => {
-              const scope = tracer.scopeManager().active()
-
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
-            })
+          return tracer.scope().activate(span, () => {
+            return promise
+              .then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+          })
         })
 
         it('should run the catch() callback in context where catch() was called', () => {
@@ -58,45 +53,40 @@ describe('Plugin', () => {
           const span = {}
           const promise = new Promise((resolve, reject) => {
             setImmediate(() => {
-              tracer.scopeManager().activate({})
-              reject(new Error())
+              tracer.scope().activate({}, () => {
+                reject(new Error())
+              })
             })
           })
 
-          tracer.scopeManager().activate(span)
-
-          return promise
-            .catch(err => {
-              tracer.scopeManager().activate({})
-              throw err
-            })
-            .catch(() => {
-              const scope = tracer.scopeManager().active()
-
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
-            })
+          return tracer.scope().activate(span, () => {
+            return promise
+              .catch(err => {
+                throw err
+              })
+              .catch(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+          })
         })
 
         it('should allow to run without a scope if not available when calling then()', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
 
-          tracer.scopeManager().activate(null)
-
-          const promise = new Promise((resolve, reject) => {
-            setImmediate(() => {
-              tracer.scopeManager().activate({})
-              resolve()
+          tracer.scope().activate(null, () => {
+            const promise = new Promise((resolve, reject) => {
+              setImmediate(() => {
+                tracer.scope().activate({}, () => {
+                  resolve()
+                })
+              })
             })
+
+            return promise
+              .then(() => {
+                expect(tracer.scope().active()).to.be.null
+              })
           })
-
-          return promise
-            .then(() => {
-              tracer.scopeManager().activate({})
-            })
-            .then(() => {
-              expect(tracer.scopeManager().active()).to.be.null
-            })
         })
       })
     })

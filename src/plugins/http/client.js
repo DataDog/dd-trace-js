@@ -24,7 +24,8 @@ function patch (http, methodName, tracer, config) {
       const args = normalizeArgs.apply(null, arguments)
       const uri = args.uri
       const options = args.options
-      const callback = args.callback
+
+      let callback = args.callback
 
       if (!config.filter(uri)) {
         return request.call(this, options, callback)
@@ -32,10 +33,10 @@ function patch (http, methodName, tracer, config) {
 
       const method = (options.method || 'GET').toUpperCase()
 
-      const parentScope = tracer.scopeManager().active()
-      const parent = parentScope && parentScope.span()
+      const scope = tracer.scope()
+      const childOf = scope.active()
       const span = tracer.startSpan('http.request', {
-        childOf: parent,
+        childOf,
         tags: {
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(tracer, config, options),
@@ -50,16 +51,11 @@ function patch (http, methodName, tracer, config) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
-      const req = request.call(this, options, callback)
+      callback = scope.bind(callback, childOf)
 
-      req.on('socket', () => {
-        // empty the data stream when no other listener exists to consume it
-        if (req.listenerCount('response') === 1) {
-          req.on('response', res => res.resume())
-        }
-      })
+      const req = scope.bind(request, span).call(this, options, function (res) {
+        scope.bind(res)
 
-      req.on('response', res => {
         span.setTag(HTTP_STATUS_CODE, res.statusCode)
 
         addRequestHeaders(req, span, config)
@@ -70,6 +66,17 @@ function patch (http, methodName, tracer, config) {
         }
 
         res.on('end', () => span.finish())
+
+        return callback && callback.apply(this, arguments)
+      })
+
+      scope.bind(req)
+
+      req.on('socket', () => {
+        // empty the data stream when no other listener exists to consume it
+        if (!callback && req.listenerCount('response') === 1) {
+          req.on('response', res => res.resume())
+        }
       })
 
       req.on('error', err => {

@@ -1,7 +1,6 @@
 'use strict'
 
 const BaseTracer = require('opentracing').Tracer
-const memoize = require('lodash.memoize')
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
@@ -22,11 +21,11 @@ class Tracer extends BaseTracer {
     super()
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
-    this._deprecate = memoize(method => log.debug([
+    this._deprecate = method => log.deprecate(`tracer.${method}`, [
       `tracer.${method}() is deprecated.`,
-      'Please use tracer.startSpan() and tracer.scopeManager() instead.',
+      'Please use tracer.startSpan() and tracer.scope() instead.',
       'See: https://datadog.github.io/dd-trace-js/#manual-instrumentation.'
-    ]))
+    ].join(' '))
   }
 
   /**
@@ -113,13 +112,18 @@ class Tracer extends BaseTracer {
     return this._tracer.extract.apply(this._tracer, arguments)
   }
 
+  scopeManager () {
+    this._deprecate('scopeManager')
+    return this._tracer.scopeManager.apply(this._tracer, arguments)
+  }
+
   /**
    * Get the scope manager to manager context propagation for the tracer.
    *
-   * @returns {ScopeManager} The scope manager.
+   * @returns {Scope} The scope manager.
    */
-  scopeManager () {
-    return this._tracer.scopeManager.apply(this._tracer, arguments)
+  scope () {
+    return this._tracer.scope.apply(this._tracer, arguments)
   }
 
   currentSpan () {

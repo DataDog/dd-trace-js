@@ -35,22 +35,17 @@ describe('Plugin', () => {
           const promise = deferred.promise
 
           setImmediate(() => {
-            tracer.scopeManager().activate({})
-            deferred.resolve()
+            tracer.scope().activate({}, () => {
+              deferred.resolve()
+            })
           })
 
-          tracer.scopeManager().activate(span)
-
-          return promise
-            .then(() => {
-              tracer.scopeManager().activate({})
-            })
-            .then(() => {
-              const scope = tracer.scopeManager().active()
-
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
-            })
+          return tracer.scope().activate(span, () => {
+            return promise
+              .then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+          })
         })
 
         it('should run the catch() callback in context where catch() was called', () => {
@@ -61,23 +56,17 @@ describe('Plugin', () => {
           const promise = deferred.promise
 
           setImmediate(() => {
-            tracer.scopeManager().activate({})
-            deferred.reject(new Error())
+            tracer.scope().activate({}, () => {
+              deferred.reject(new Error())
+            })
           })
 
-          tracer.scopeManager().activate(span)
-
-          return promise
-            .catch(err => {
-              tracer.scopeManager().activate({})
-              throw err
-            })
-            .catch(() => {
-              const scope = tracer.scopeManager().active()
-
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
-            })
+          return tracer.scope().activate(span, () => {
+            return promise
+              .catch(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+          })
         })
       })
     })

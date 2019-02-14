@@ -5,11 +5,12 @@ const tx = require('./util/redis')
 function createWrapInternalSendCommand (tracer, config) {
   return function wrapInternalSendCommand (internalSendCommand) {
     return function internalSendCommandWithTrace (options) {
+      const scope = tracer.scope()
       const span = startSpan(tracer, config, this, options.command, options.args)
 
-      options.callback = tx.wrap(span, options.callback)
+      options.callback = scope.bind(tx.wrap(span, options.callback))
 
-      return internalSendCommand.call(this, options)
+      return scope.bind(internalSendCommand, span).call(this, options)
     }
   }
 }
@@ -17,17 +18,18 @@ function createWrapInternalSendCommand (tracer, config) {
 function createWrapSendCommand (tracer, config) {
   return function wrapSendCommand (sendCommand) {
     return function sendCommandWithTrace (command, args, callback) {
+      const scope = tracer.scope()
       const span = startSpan(tracer, config, this, command, args)
 
       if (typeof callback === 'function') {
-        callback = tx.wrap(span, callback)
+        callback = scope.bind(tx.wrap(span, callback))
       } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
-        args[args.length - 1] = tx.wrap(span, args[args.length - 1])
+        args[args.length - 1] = scope.bind(tx.wrap(span, args[args.length - 1]))
       } else {
         callback = tx.wrap(span)
       }
 
-      return sendCommand.call(this, command, args, callback)
+      return scope.bind(sendCommand, span).call(this, command, args, callback)
     }
   }
 }

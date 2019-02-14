@@ -50,11 +50,13 @@ describe('Plugin', () => {
 
           memcached = new Memcached('localhost:11211', { retries: 0 })
 
-          const scope = tracer.scopeManager().activate({})
+          const span = {}
 
-          memcached.get('test', err => {
-            expect(tracer.scopeManager().active()).to.equal(scope)
-            done(err)
+          tracer.scope().activate(span, () => {
+            memcached.get('test', err => {
+              expect(tracer.scope().active()).to.equal(span)
+              done(err)
+            })
           })
         })
 

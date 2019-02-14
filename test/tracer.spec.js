@@ -1,7 +1,6 @@
 'use strict'
 
-const Span = require('../src/opentracing/span')
-const SpanContext = require('../src/opentracing/span_context')
+const Span = require('opentracing').Span
 const Config = require('../src/config')
 
 wrapIt()
@@ -30,81 +29,9 @@ describe('Tracer', () => {
   })
 
   describe('trace', () => {
-    it('should run the callback with the new span', done => {
+    it('should run the callback with a noop span', done => {
       tracer.trace('name', current => {
         expect(current).to.be.instanceof(Span)
-        done()
-      })
-    })
-
-    it('should use the parent context', done => {
-      tracer.trace('parent', parent => {
-        tracer.trace('child', child => {
-          expect(child.context()).to.have.property('_parentId', parent.context()._spanId)
-          done()
-        })
-      })
-    })
-
-    it('should support explicitly creating a root span', done => {
-      tracer.trace('parent', parent => {
-        tracer.trace('child', { childOf: null }, child => {
-          expect(child.context()).to.have.property('_parentId', null)
-          done()
-        })
-      })
-    })
-
-    it('should set default tags', done => {
-      tracer.trace('name', current => {
-        expect(current.context()._tags).to.have.property('service.name', 'service')
-        expect(current.context()._tags).to.have.property('resource.name', 'name')
-        expect(current.context()._tags).to.not.have.property('span.type')
-        done()
-      })
-    })
-
-    it('should support service option', done => {
-      tracer.trace('name', { service: 'test' }, current => {
-        expect(current.context()._tags).to.have.property('service.name', 'test')
-        done()
-      })
-    })
-
-    it('should support resource option', done => {
-      tracer.trace('name', { resource: 'test' }, current => {
-        expect(current.context()._tags).to.have.property('resource.name', 'test')
-        done()
-      })
-    })
-
-    it('should support type option', done => {
-      tracer.trace('name', { type: 'test' }, current => {
-        expect(current.context()._tags).to.have.property('span.type', 'test')
-        done()
-      })
-    })
-
-    it('should support custom tags', done => {
-      const tags = {
-        'foo': 'bar'
-      }
-
-      tracer.trace('name', { tags }, current => {
-        expect(current.context()._tags).to.have.property('foo', 'bar')
-        done()
-      })
-    })
-
-    it('should support a custom parent span', done => {
-      const childOf = new SpanContext({
-        traceId: 1234,
-        spanId: 5678
-      })
-
-      tracer.trace('name', { childOf }, current => {
-        expect(current.context()._traceId).to.equal(childOf._traceId)
-        expect(current.context()._parentId).to.equal(childOf._spanId)
         done()
       })
     })
@@ -118,8 +45,8 @@ describe('Tracer', () => {
       })
     })
 
-    it('should return null when there is no current span', () => {
-      expect(tracer.currentSpan()).to.be.null
+    it('should return a noop span', () => {
+      expect(tracer.currentSpan()).to.not.be.null
     })
   })
 })

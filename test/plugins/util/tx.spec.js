@@ -54,20 +54,16 @@ describe('plugins/util/tx', () => {
         const parent = {}
         const child = {}
 
-        tracer.scopeManager().activate(parent)
+        tracer.scope().activate(parent, () => {
+          const wrapper = tx.wrap(span, () => {
+            expect(tracer.scope().active()).to.equal(parent)
+            done()
+          })
 
-        const wrapper = tx.wrap(span, () => {
-          const scope = tracer.scopeManager().active()
-
-          expect(scope).to.not.be.null
-          expect(scope.span()).to.equal(parent)
-
-          done()
+          tracer.scope().activate(child, () => {
+            wrapper()
+          })
         })
-
-        tracer.scopeManager().activate(child)
-
-        wrapper()
       })
     })
 

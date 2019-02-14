@@ -79,7 +79,7 @@ describe('Plugin', () => {
           client.on('error', done)
 
           client.get('foo', () => {
-            expect(tracer.scopeManager().active()).to.be.null
+            expect(tracer.scope().active()).to.be.null
             done()
           })
         })
@@ -90,7 +90,7 @@ describe('Plugin', () => {
           client.on('error', done)
 
           client.on('ready', () => {
-            expect(tracer.scopeManager().active()).to.be.null
+            expect(tracer.scope().active()).to.be.null
             done()
           })
         })
@@ -101,7 +101,7 @@ describe('Plugin', () => {
           client.on('error', done)
 
           client.stream.on('close', () => {
-            expect(tracer.scopeManager().active()).to.be.null
+            expect(tracer.scope().active()).to.be.null
             done()
           })
 
