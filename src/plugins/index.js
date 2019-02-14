@@ -8,6 +8,7 @@ module.exports = {
   'dns': require('./dns'),
   'elasticsearch': require('./elasticsearch'),
   'express': require('./express'),
+  'generic-pool': require('./generic-pool'),
   'graphql': require('./graphql'),
   'hapi': require('./hapi'),
   'http': require('./http'),
