@@ -1,6 +1,7 @@
 'use strict'
 
 const Tracer = require('opentracing').Tracer
+const Scope = require('../scope/new/base')
 const Span = require('./span')
 
 const span = new Span()
@@ -18,6 +19,7 @@ class NoopTracer extends Tracer {
     }
 
     this._scopeManager = new ScopeManager()
+    this._scope = new Scope()
   }
 
   trace (operationName, options, callback) {
@@ -26,6 +28,10 @@ class NoopTracer extends Tracer {
 
   scopeManager () {
     return this._scopeManager
+  }
+
+  scope () {
+    return this._scope
   }
 
   currentSpan () {

@@ -52,15 +52,12 @@ describe('Plugin', () => {
 
           const span = {}
 
-          tracer.scopeManager().activate(span)
-
-          return redis.get('foo')
-            .then(() => {
-              const scope = tracer.scopeManager().active()
-
-              expect(scope).to.not.be.null
-              expect(scope.span()).to.equal(span)
-            })
+          return tracer.scope().activate(span, () => {
+            return redis.get('foo')
+              .then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+          })
         })
 
         it('should handle errors', done => {

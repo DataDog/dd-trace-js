@@ -5,9 +5,9 @@ const Tags = require('opentracing').Tags
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (params, cb) {
-      const scope = tracer.scopeManager().active()
+      const childOf = tracer.scope().active()
       const span = tracer.startSpan('elasticsearch.query', {
-        childOf: scope && scope.span(),
+        childOf,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           [Tags.DB_TYPE]: 'elasticsearch',
@@ -24,15 +24,19 @@ function createWrapRequest (tracer, config) {
         span.setTag('elasticsearch.body', JSON.stringify(params.body))
       }
 
-      if (typeof cb === 'function') {
-        return request.call(this, params, wrapCallback(tracer, span, cb))
-      } else {
-        const promise = request.apply(this, arguments)
+      cb = tracer.scope().bind(cb, childOf)
 
-        promise.then(() => finish(span), e => finish(span, e))
+      return tracer.scope().activate(span, () => {
+        if (typeof cb === 'function') {
+          return request.call(this, params, wrapCallback(tracer, span, cb))
+        } else {
+          const promise = request.apply(this, arguments)
 
-        return promise
-      }
+          promise.then(() => finish(span), e => finish(span, e))
+
+          return promise
+        }
+      })
     }
   }
 }

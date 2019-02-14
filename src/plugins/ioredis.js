@@ -11,7 +11,7 @@ function createWrapSendCommand (tracer, config) {
       tx.setHost(span, this.options.host, this.options.port)
       tx.wrap(span, command.promise)
 
-      return sendCommand.apply(this, arguments)
+      return tracer.scope().bind(sendCommand, span).apply(this, arguments)
     }
   }
 }

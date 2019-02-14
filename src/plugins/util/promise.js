@@ -21,10 +21,11 @@ module.exports = {
 function wrapCallback (tracer, callback) {
   if (typeof callback !== 'function') return callback
 
-  const scope = tracer.scopeManager().active()
+  const span = tracer.scope().active()
 
   return function () {
-    tracer.scopeManager().activate(scope ? scope.span() : null)
-    return callback.apply(this, arguments)
+    return tracer.scope().activate(span, () => {
+      return callback.apply(this, arguments)
+    })
   }
 }

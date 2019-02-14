@@ -26,7 +26,7 @@ function createWrapLookup (tracer, config) {
 
       wrapArgs(span, arguments)
 
-      return lookup.apply(this, arguments)
+      return tracer.scope().activate(span, () => lookup.apply(this, arguments))
     }
   }
 }
@@ -42,7 +42,7 @@ function createWrapLookupService (tracer, config) {
 
       wrapArgs(span, arguments)
 
-      return lookupService.apply(this, arguments)
+      return tracer.scope().activate(span, () => lookupService.apply(this, arguments))
     }
   }
 }
@@ -54,9 +54,9 @@ function createWrapResolve (tracer, config) {
         rrtype = 'A'
       }
 
-      wrapResolver(tracer, config, rrtype, arguments)
+      const span = wrapResolver(tracer, config, rrtype, arguments)
 
-      return resolve.apply(this, arguments)
+      return tracer.scope().activate(span, () => resolve.apply(this, arguments))
     }
   }
 }
@@ -64,9 +64,9 @@ function createWrapResolve (tracer, config) {
 function createWrapResolver (tracer, config, rrtype) {
   return function wrapResolve (resolve) {
     return function resolveWithTrace (hostname, callback) {
-      wrapResolver(tracer, config, rrtype, arguments)
+      const span = wrapResolver(tracer, config, rrtype, arguments)
 
-      return resolve.apply(this, arguments)
+      return tracer.scope().activate(span, () => resolve.apply(this, arguments))
     }
   }
 }
@@ -81,15 +81,15 @@ function createWrapReverse (tracer, config) {
 
       wrapArgs(span, arguments)
 
-      return reverse.apply(this, arguments)
+      return tracer.scope().activate(span, () => reverse.apply(this, arguments))
     }
   }
 }
 
 function startSpan (tracer, config, operation, tags) {
-  const scope = tracer.scopeManager().active()
+  const childOf = tracer.scope().active()
   const span = tracer.startSpan(operation, {
-    childOf: scope && scope.span(),
+    childOf,
     tags: Object.assign({
       'span.kind': 'client',
       'service.name': config.service || `${tracer._service}-dns`
@@ -112,6 +112,8 @@ function wrapResolver (tracer, config, rrtype, args) {
   })
 
   wrapArgs(span, args)
+
+  return span
 }
 
 module.exports = [

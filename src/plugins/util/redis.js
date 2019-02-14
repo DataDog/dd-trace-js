@@ -5,9 +5,9 @@ const tx = require('./tx')
 const redis = {
   // Start a span for a Redis command.
   instrument (tracer, config, db, command, args) {
-    const scope = tracer.scopeManager().active()
+    const childOf = tracer.scope().active()
     const span = tracer.startSpan('redis.command', {
-      childOf: scope && scope.span(),
+      childOf,
       tags: {
         'span.kind': 'client',
         'resource.name': command,

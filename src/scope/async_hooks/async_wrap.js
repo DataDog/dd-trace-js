@@ -10,22 +10,46 @@ try {
   asyncHook = require('async-hook-jl')
 }
 
+const stack = []
+
 module.exports = {
-  createHook: (callbacks) => {
-    const hooks = {
-      init: (uid, handle, provider, parentUid, parentHandle) => {
+  createHook (callbacks) {
+    const hooks = {}
+
+    if (callbacks.init) {
+      hooks.init = (uid, handle, provider, parentUid, parentHandle) => {
         callbacks.init(uid)
-      },
-      pre: (uid, handle) => {
+      }
+    }
+
+    if (callbacks.before) {
+      hooks.pre = (uid, handle) => {
         callbacks.before(uid)
-      },
-      post: (uid, handle, didThrow) => {
+      }
+    }
+
+    if (callbacks.after) {
+      hooks.post = (uid, handle, didThrow) => {
         callbacks.after(uid)
-      },
-      destroy: (uid) => {
+      }
+    }
+
+    if (callbacks.destroy) {
+      hooks.destroy = (uid) => {
         callbacks.destroy(uid)
       }
     }
+
+    asyncHook.addHooks({
+      pre: (uid, handle) => {
+        stack.push(uid)
+      },
+      post: (uid, handle, didThrow) => {
+        if (uid === this.executionAsyncId()) {
+          stack.pop()
+        }
+      }
+    })
 
     asyncHook.enable()
 
@@ -33,5 +57,9 @@ module.exports = {
       enable: () => asyncHook.addHooks(hooks),
       disable: () => asyncHook.removeHooks(hooks)
     }
+  },
+
+  executionAsyncId () {
+    return stack[stack.length - 1] || 0
   }
 }

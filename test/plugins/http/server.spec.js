@@ -73,7 +73,7 @@ describe('Plugin', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         app = (req, res) => {
-          expect(tracer.scopeManager().active()).to.not.be.null
+          expect(tracer.scope().active()).to.not.be.null
           done()
         }
 

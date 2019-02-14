@@ -155,4 +155,19 @@ describe('log', () => {
       expect(console.error).to.not.have.been.called
     })
   })
+
+  describe('deprecate', () => {
+    it('should log a deprecation warning', () => {
+      log.deprecate('test', 'message')
+
+      expect(console.error).to.have.been.calledWith('message')
+    })
+
+    it('should only log once for a given code', () => {
+      log.deprecate('test', 'message')
+      log.deprecate('test', 'message')
+
+      expect(console.error).to.have.been.calledOnce
+    })
+  })
 })

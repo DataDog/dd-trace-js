@@ -4,6 +4,7 @@ class Scope {
   constructor (span, finishSpanOnClose) {
     this._span = span
     this._finishSpanOnClose = finishSpanOnClose
+    this.close()
   }
 
   span () {
