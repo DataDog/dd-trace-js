@@ -1,7 +1,7 @@
 'use strict'
 
 const Buffer = require('safe-buffer').Buffer
-const Uint64BE = require('int64-buffer').Uint64BE
+const Uint64BE = require('./uint64be')
 const randomBytes = require('crypto').randomBytes
 
 // Cryptographically secure local seeds to mitigate Math.random() seed reuse.

@@ -82,7 +82,7 @@ describe('Platform', () => {
       it('should return a random 63bit ID', () => {
         Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
 
-        expect(id().toBuffer().toString('hex')).to.equal('7f00ff00ff00ff00')
+        expect(id().valueOf().toBuffer().toString('hex')).to.equal('7f00ff00ff00ff00')
       })
     })
 

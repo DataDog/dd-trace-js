@@ -18,17 +18,6 @@ class Writer {
     return this._queue.length
   }
 
-  printableJsonTrace (formattedTrace) {
-    return JSON.stringify(formattedTrace.map(trace => {
-      trace.trace_id = trace.trace_id.toString()
-      trace.span_id = trace.span_id.toString()
-      if (trace.parent_id !== null) {
-        trace.parent_id = trace.parent_id.toString()
-      }
-      return trace
-    }))
-  }
-
   append (span) {
     const spanContext = span.context()
     const trace = spanContext._trace
@@ -37,11 +26,11 @@ class Writer {
       const formattedTrace = trace.finished.map(format)
 
       if (spanContext._sampling.drop === true) {
-        log.debug(() => `Dropping trace due to user configured filtering: ${this.printableJsonTrace(formattedTrace)}`)
+        log.debug(() => `Dropping trace due to user configured filtering: ${JSON.stringify(formattedTrace)}`)
         return
       }
 
-      log.debug(() => `Encoding trace: ${this.printableJsonTrace(formattedTrace)}`)
+      log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
 
       const buffer = encode(formattedTrace)
 
