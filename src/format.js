@@ -2,6 +2,7 @@
 
 const Int64BE = require('int64-buffer').Int64BE
 const constants = require('./constants')
+const log = require('./log')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 
@@ -28,8 +29,8 @@ function formatSpan (span) {
     trace_id: spanContext._traceId,
     span_id: spanContext._spanId,
     parent_id: spanContext._parentId,
-    name: String(spanContext._name),
-    resource: String(spanContext._name),
+    name: serialize(spanContext._name),
+    resource: serialize(spanContext._name),
     error: 0,
     meta: {},
     metrics: {},
@@ -46,7 +47,7 @@ function extractTags (trace, span) {
       case 'service.name':
       case 'span.type':
       case 'resource.name':
-        trace[map[tag]] = String(tags[tag])
+        addTag(trace, map[tag], tags[tag])
         break
       case 'error':
         if (tags[tag]) {
@@ -57,10 +58,8 @@ function extractTags (trace, span) {
       case 'error.msg':
       case 'error.stack':
         trace.error = 1
-        trace.meta[tag] = String(tags[tag])
-        break
-      default:
-        trace.meta[tag] = String(tags[tag])
+      default: // eslint-disable-line no-fallthrough
+        addTag(trace.meta, tag, tags[tag])
     }
   })
 }
@@ -86,6 +85,22 @@ function extractMetrics (trace, span) {
 
   if (spanContext._sampling.priority !== undefined) {
     trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
+  }
+}
+
+function addTag (meta, key, value) {
+  value = serialize(value)
+
+  if (typeof value === 'string') {
+    meta[key] = value
+  }
+}
+
+function serialize (obj) {
+  try {
+    return obj && typeof obj.toString !== 'function' ? JSON.stringify(obj) : String(obj)
+  } catch (e) {
+    log.error(e)
   }
 }
 
