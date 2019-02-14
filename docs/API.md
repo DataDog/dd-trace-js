@@ -31,35 +31,161 @@ The following tags are available to override Datadog specific options:
 
 <h3 id="scope-manager">Scope Manager</h3>
 
-In order to provide context propagation, this library includes a scope manager. A scope is basically a wrapper around a span that can cross both synchronous and asynchronous contexts.
+In order to provide context propagation, this library includes a scope manager.
+A scope is basically a wrapper around a span that can cross both synchronous and
+asynchronous contexts.
 
-For example:
+Basically, the scope manager contains 3 APIs available on `tracer.scope()`:
+
+<h4>scope.active()</h4>
+
+This method returns the active span from the current scope.
+
+<h4>scope.activate(span, fn)</h4>
+
+This method activates the provided span in a new scope available in the function
+provided as the second argument. Any asynchronous context created from whithin
+that function will also have the same scope.
 
 ```javascript
-const tracer = require('dd-trace').init({ plugins: false })
-const express = require('express')
-const app = express()
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const span = tracer.startSpan('web.request')
+const promise = Promise.resolve()
+const log = console.log
 
-app.use((req, res, next) => {
-  const span = tracer.startSpan('web.request')
-  
-  tracer.scope().activate(span, () => next())
-})
+scope.activate(span, () => {
+  log(scope.active()) // the span because in new scope
 
-app.get('/hello', (req, res, next) => {
+  someFunction() // the span because called in scope
+
   setTimeout(() => {
-    const span = tracer.scope().active() // the span activated earlier
+    log(scope.active()) // the span because setTimeout called in scope
+  })
 
-    span.finish()
-
-    res.status(200).send()
-  }, 100)
+  promise.then(() => {
+    log(scope.active()) // the span because then() called in scope
+  })
 })
 
-app.listen(3000)
+function someFunction () {
+  log(scope.active())
+}
+
+log(scope.active()) // null
+
+someFunction() // null because called outside the scope
 ```
 
-See the [API documentation](./Scope.html) for usage.
+<h4>scope.bind(target, [span])</h4>
+
+This method binds a target to the specified span, or to the active span if
+unspecified. It supports binding functions, promises and event emitters.
+
+When a span is provided, the target is always bound to that span. Explicitly
+passing `null` as the span will actually bind to `null` or no span. When a span
+is not provided, the binding uses the following rules:
+
+* Functions are bound to the span that is active when `scope.bind(fn)` is called.
+* Promise handlers are bound to the active span in the scope where `.then()` was
+called. This also applies to any equivalent method such as `.catch()`.
+* Event emitter listeners are bound to the active span in the scope where
+`.addEventListener()` was called. This also applies to any equivalent method
+such as `.on()`
+
+**Note**: Native promises and promises from `bluebird`, `q` and `when` are
+already bound by default and don't need to be explicitly bound.
+
+<h5>Examples</h5>
+
+<h6>Function binding</h6>
+
+```javascript
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
+
+const outerSpan = tracer.startSpan('web.request')
+
+scope.activate(outerSpan, () => {
+  const innerSpan = tracer.startSpan('web.middleware')
+
+  const boundToInner = scope.bind(() => {
+    log(scope.active())
+  }, innerSpan)
+
+  const boundToOuter = scope.bind(() => {
+    log(scope.active())
+  })
+
+  boundToInner() // innerSpan because explicitly bound
+  boundToOuter() // outerSpan because implicitly bound
+})
+```
+
+<h6>Promise binding</h6>
+
+```javascript
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
+
+const outerSpan = tracer.startSpan('web.request')
+const innerPromise = Promise.resolve()
+const outerPromise = Promise.resolve()
+
+scope.activate(outerSpan, () => {
+  const innerSpan = tracer.startSpan('web.middleware')
+
+  scope.bind(innerPromise, innerSpan)
+  scope.bind(outerPromise)
+
+  innerPromise.then(() => {
+    log(scope.active()) // innerSpan because explicitly bound
+  })
+
+  outerPromise.then(() => {
+    log(scope.active()) // outerSpan because implicitly bound on `then()` call
+  })
+})
+```
+
+**Note**: `async/await` cannot be bound and always execute in the scope where
+`await` was called. It binding `async/await` is needed, the promise must be
+wrapped by a function.
+
+<h6>Event emitter binding</h6>
+
+```javascript
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
+const EventEmitter = require('events').EventEmitter
+
+const outerSpan = tracer.startSpan('web.request')
+const innerEmitter = new EventEmitter()
+const outerEmitter = new EventEmitter()
+
+scope.activate(outerSpan, async () => {
+  const innerSpan = tracer.startSpan('web.middleware')
+
+  scope.bind(innerEmitter, innerSpan)
+  scope.bind(outerEmitter)
+
+  innerEmitter.on('request', () => {
+    log(scope.active()) // innerSpan because explicitly bound
+  })
+
+  outerEmitter.on('request', () => {
+    log(scope.active()) // outerSpan because implicitly bound on `then()` call
+  })
+})
+
+innerEmitter.emit('request')
+outerEmitter.emit('request')
+```
+
+See the [API documentation](./Scope.html) for more details.
 
 <h2 id="integrations">Integrations</h2>
 
