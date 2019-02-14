@@ -159,5 +159,25 @@ describe('format', () => {
       trace = format(span)
       expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })
+
+    it('should support objects without a toString implementation', () => {
+      spanContext._tags['foo'] = Object.create(null)
+      trace = format(span)
+      expect(trace.meta['foo']).to.equal('{}')
+    })
+
+    it('should support objects with a non-function toString property', () => {
+      spanContext._tags['foo'] = Object.create(null)
+      spanContext._tags['foo'].toString = 'baz'
+      trace = format(span)
+      expect(trace.meta['foo']).to.equal('{"toString":"baz"}')
+    })
+
+    it('should ignore complex objects with circular references', () => {
+      spanContext._tags['foo'] = Object.create(null)
+      spanContext._tags['foo'].baz = spanContext._tags['foo']
+      trace = format(span)
+      expect(trace.meta).to.not.have.property('foo')
+    })
   })
 })
