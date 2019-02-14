@@ -35,7 +35,7 @@ In order to provide context propagation, this library includes a scope manager.
 A scope is basically a wrapper around a span that can cross both synchronous and
 asynchronous contexts.
 
-Basically, the scope manager contains 3 APIs available on `tracer.scope()`:
+The scope manager contains 3 APIs available on `tracer.scope()`:
 
 <h4>scope.active()</h4>
 
