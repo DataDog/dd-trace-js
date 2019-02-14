@@ -50,21 +50,22 @@ will also have the same scope.
 ```javascript
 const tracer = require('dd-trace').init()
 const scope = tracer.scope()
-const span = tracer.startSpan('web.request')
-const promise = Promise.resolve()
 const log = console.log
 
-scope.activate(span, () => {
-  log(scope.active()) // the span because in new scope
+const requestSpan = tracer.startSpan('web.request')
+const promise = Promise.resolve()
 
-  someFunction() // the span because called in scope
+scope.activate(requestSpan, () => {
+  log(scope.active()) // requestSpan because in new scope
+
+  someFunction() // requestSpan because called in scope
 
   setTimeout(() => {
-    log(scope.active()) // the span because setTimeout called in scope
+    log(scope.active()) // requestSpan because setTimeout called in scope
   })
 
   promise.then(() => {
-    log(scope.active()) // the span because then() called in scope
+    log(scope.active()) // requestSpan because then() called in scope
   })
 })
 
