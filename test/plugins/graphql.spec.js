@@ -828,6 +828,26 @@ describe('Plugin', () => {
             .then(() => done())
             .catch(done)
         })
+
+        it('should support multiple executions on a pre-parsed document', () => {
+          const source = `query MyQuery { hello(name: "world") }`
+          const document = graphql.parse(source)
+
+          expect(() => {
+            graphql.execute({ schema, document })
+            graphql.execute({ schema, document })
+          }).to.not.throw()
+        })
+
+        it('should support multiple validations on a pre-parsed document', () => {
+          const source = `query MyQuery { hello(name: "world") }`
+          const document = graphql.parse(source)
+
+          expect(() => {
+            graphql.validate(schema, document)
+            graphql.validate(schema, document)
+          }).to.not.throw()
+        })
       })
 
       describe('with configuration', () => {
