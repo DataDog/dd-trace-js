@@ -152,7 +152,7 @@ scope.activate(outerSpan, () => {
 ```
 
 **Note**: `async/await` cannot be bound and always execute in the scope where
-`await` was called. It binding `async/await` is needed, the promise must be
+`await` was called. If binding `async/await` is needed, the promise must be
 wrapped by a function.
 
 <h6>Event emitter binding</h6>
