@@ -110,5 +110,3 @@ module.exports = {
     this.unwrap(net.Socket.prototype, 'connect')
   }
 }
-
-module.exports = [] // disable this integration for the upcoming release
