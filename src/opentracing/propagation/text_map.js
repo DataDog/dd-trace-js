@@ -1,7 +1,7 @@
 'use strict'
 
 const pick = require('lodash.pick')
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../platform')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 
@@ -29,8 +29,8 @@ class TextMapPropagator {
     }
 
     const spanContext = new DatadogSpanContext({
-      traceId: new Uint64BE(carrier[traceKey], 10),
-      spanId: new Uint64BE(carrier[spanKey], 10)
+      traceId: new platform.Uint64BE(carrier[traceKey], 10),
+      spanId: new platform.Uint64BE(carrier[spanKey], 10)
     })
 
     this._extractBaggageItems(carrier, spanContext)
