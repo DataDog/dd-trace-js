@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../../src/platform')
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('LogPropagator', () => {
@@ -23,8 +23,8 @@ describe('LogPropagator', () => {
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(-456)
+        traceId: new platform.Uint64BE(0, 123),
+        spanId: new platform.Uint64BE(-456)
       })
 
       propagator.inject(spanContext, carrier)
@@ -44,8 +44,8 @@ describe('LogPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(-456)
+        traceId: new platform.Uint64BE(0, 123),
+        spanId: new platform.Uint64BE(-456)
       }))
     })
 

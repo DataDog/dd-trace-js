@@ -8,6 +8,7 @@ const validate = require('./validate')
 const service = require('./service')
 const request = require('./request')
 const msgpack = require('./msgpack')
+const Uint64BE = require('./uint64be')
 
 const emitter = new EventEmitter()
 
@@ -26,6 +27,7 @@ const platform = {
   service,
   request,
   msgpack,
+  Uint64BE,
   on: emitter.on.bind(emitter),
   once: emitter.once.bind(emitter),
   off: emitter.removeListener.bind(emitter)
