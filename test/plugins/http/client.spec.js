@@ -566,6 +566,29 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should record when the request was aborted', done => {
+          const app = express()
+
+          app.get('/abort', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-http-client')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/abort`)
+
+              req.abort()
+            })
+          })
+        })
       })
 
       describe('with service configuration', () => {
