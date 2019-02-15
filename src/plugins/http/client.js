@@ -58,27 +58,25 @@ function patch (http, methodName, tracer, config) {
 
         span.setTag(HTTP_STATUS_CODE, res.statusCode)
 
-        addRequestHeaders(req, span, config)
         addResponseHeaders(res, span, config)
 
         if (!config.validateStatus(res.statusCode)) {
           span.setTag('error', 1)
         }
 
-        res.on('end', () => span.finish())
+        res.on('end', () => finish(req, span, config))
 
-        return callback && callback.apply(this, arguments)
+        // empty the data stream when no other listener exists to consume it
+        if (callback) {
+          return callback.apply(this, arguments)
+        } else if (req.listenerCount('response') === 0) {
+          res.resume()
+        }
       })
 
       scope.bind(req)
 
-      req.on('socket', () => {
-        // empty the data stream when no other listener exists to consume it
-        if (!callback && req.listenerCount('response') === 1) {
-          req.on('response', res => res.resume())
-        }
-      })
-
+      req.on('abort', () => finish(req, span, config))
       req.on('error', err => {
         span.addTags({
           'error.type': err.name,
@@ -86,13 +84,17 @@ function patch (http, methodName, tracer, config) {
           'error.stack': err.stack
         })
 
-        addRequestHeaders(req, span, config)
-
-        span.finish()
+        finish(req, span, config)
       })
 
       return req
     }
+  }
+
+  function finish (req, span, config) {
+    addRequestHeaders(req, span, config)
+
+    span.finish()
   }
 
   function addRequestHeaders (req, span, config) {
