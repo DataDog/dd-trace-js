@@ -272,177 +272,113 @@ describe('Plugin', () => {
           graphql.graphql(schema, source).catch(done)
         })
 
-        // it('should instrument nested field resolvers', done => {
-        //   const source = `
-        //     {
-        //       human {
-        //         name
-        //         address {
-        //           civicNumber
-        //           street
-        //         }
-        //       }
-        //     }
-        //   `
+        it('should instrument nested field resolvers', done => {
+          const source = `
+            {
+              human {
+                name
+                address {
+                  civicNumber
+                  street
+                }
+              }
+            }
+          `
 
-        //   agent
-        //     .use(traces => {
-        //       const spans = sort(traces[0])
-        //       expect(spans).to.have.length(14)
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+              expect(spans).to.have.length(6)
 
-        //       const execute = spans[3]
-        //       const humanField = spans[4]
-        //       const humanResolve = spans[5]
-        //       const humanNameField = spans[6]
-        //       const humanNameResolve = spans[7]
-        //       const addressField = spans[8]
-        //       const addressResolve = spans[9]
-        //       const addressCivicNumberField = spans[10]
-        //       const addressCivicNumberResolve = spans[11]
-        //       const addressStreetField = spans[12]
-        //       const addressStreetResolve = spans[13]
+              const execute = spans[0]
+              const human = spans[1]
+              const humanName = spans[2]
+              const address = spans[3]
+              const addressCivicNumber = spans[4]
+              const addressStreet = spans[5]
 
-        //       expect(execute).to.have.property('name', 'graphql.execute')
+              expect(execute).to.have.property('name', 'graphql.execute')
 
-        //       expect(humanField).to.have.property('name', 'graphql.field')
-        //       expect(humanField).to.have.property('resource', 'human')
-        //       expect(humanField.meta).to.have.property('graphql.field.path', 'human')
-        //       expect(humanField.parent_id.toString()).to.equal(execute.span_id.toString())
-        //       expect(humanField.duration.toNumber()).to.be.lte(execute.duration.toNumber())
+              expect(human).to.have.property('name', 'graphql.resolve')
+              expect(human).to.have.property('resource', 'human:Human')
+              expect(human.meta).to.have.property('graphql.field.path', 'human')
+              expect(human.parent_id.toString()).to.equal(execute.span_id.toString())
 
-        //       expect(humanResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(humanResolve).to.have.property('resource', 'human')
-        //       expect(humanResolve.meta).to.have.property('graphql.field.path', 'human')
-        //       expect(humanResolve.parent_id.toString()).to.equal(humanField.span_id.toString())
-        //       expect(humanResolve.duration.toNumber()).to.be.lte(humanField.duration.toNumber())
+              expect(humanName).to.have.property('name', 'graphql.resolve')
+              expect(humanName).to.have.property('resource', 'name:String')
+              expect(humanName.meta).to.have.property('graphql.field.path', 'human.name')
+              expect(humanName.parent_id.toString()).to.equal(human.span_id.toString())
 
-        //       expect(humanNameField).to.have.property('name', 'graphql.field')
-        //       expect(humanNameField).to.have.property('resource', 'human.name')
-        //       expect(humanNameField.meta).to.have.property('graphql.field.path', 'human.name')
-        //       expect(humanNameField.parent_id.toString()).to.equal(humanField.span_id.toString())
+              expect(address).to.have.property('name', 'graphql.resolve')
+              expect(address).to.have.property('resource', 'address:Address')
+              expect(address.meta).to.have.property('graphql.field.path', 'human.address')
+              expect(address.parent_id.toString()).to.equal(human.span_id.toString())
 
-        //       expect(humanNameResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(humanNameResolve).to.have.property('resource', 'human.name')
-        //       expect(humanNameResolve.meta).to.have.property('graphql.field.path', 'human.name')
-        //       expect(humanNameResolve.parent_id.toString()).to.equal(humanNameField.span_id.toString())
+              expect(addressCivicNumber).to.have.property('name', 'graphql.resolve')
+              expect(addressCivicNumber).to.have.property('resource', 'civicNumber:String')
+              expect(addressCivicNumber.meta).to.have.property('graphql.field.path', 'human.address.civicNumber')
+              expect(addressCivicNumber.parent_id.toString()).to.equal(address.span_id.toString())
 
-        //       expect(addressField).to.have.property('name', 'graphql.field')
-        //       expect(addressField).to.have.property('resource', 'human.address')
-        //       expect(addressField.meta).to.have.property('graphql.field.path', 'human.address')
-        //       expect(addressField.parent_id.toString()).to.equal(humanField.span_id.toString())
-        //       expect(addressField.duration.toNumber()).to.be.lte(humanField.duration.toNumber())
+              expect(addressStreet).to.have.property('name', 'graphql.resolve')
+              expect(addressStreet).to.have.property('resource', 'street:String')
+              expect(addressStreet.meta).to.have.property('graphql.field.path', 'human.address.street')
+              expect(addressStreet.parent_id.toString()).to.equal(address.span_id.toString())
+            })
+            .then(done)
+            .catch(done)
 
-        //       expect(addressResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(addressResolve).to.have.property('resource', 'human.address')
-        //       expect(addressResolve.meta).to.have.property('graphql.field.path', 'human.address')
-        //       expect(addressResolve.parent_id.toString()).to.equal(addressField.span_id.toString())
-        //       expect(addressResolve.duration.toNumber()).to.be.lte(addressField.duration.toNumber())
+          graphql.graphql(schema, source).catch(done)
+        })
 
-        //       expect(addressCivicNumberField).to.have.property('name', 'graphql.field')
-        //       expect(addressCivicNumberField).to.have.property('resource', 'human.address.civicNumber')
-        //       expect(addressCivicNumberField.meta).to.have.property('graphql.field.path', 'human.address.civicNumber')
-        //       expect(addressCivicNumberField.parent_id.toString()).to.equal(addressField.span_id.toString())
-        //       expect(addressCivicNumberField.duration.toNumber()).to.be.lte(addressField.duration.toNumber())
+        it('should instrument list field resolvers', done => {
+          const source = `{
+            friends {
+              name
+              pets {
+                name
+              }
+            }
+          }`
 
-        //       expect(addressCivicNumberResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(addressCivicNumberResolve).to.have.property('resource', 'human.address.civicNumber')
-        //       expect(addressCivicNumberResolve.meta).to.have.property('graphql.field.path', 'human.address.civicNumber')
-        //       expect(addressCivicNumberResolve.parent_id.toString())
-        //         .to.equal(addressCivicNumberField.span_id.toString())
-        //       expect(addressCivicNumberResolve.duration.toNumber())
-        //         .to.be.lte(addressCivicNumberField.duration.toNumber())
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
 
-        //       expect(addressStreetField).to.have.property('name', 'graphql.field')
-        //       expect(addressStreetField).to.have.property('resource', 'human.address.street')
-        //       expect(addressStreetField.meta).to.have.property('graphql.field.path', 'human.address.street')
-        //       expect(addressStreetField.parent_id.toString()).to.equal(addressField.span_id.toString())
-        //       expect(addressStreetField.duration.toNumber()).to.be.lte(addressField.duration.toNumber())
+              expect(spans).to.have.length(5)
 
-        //       expect(addressStreetResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(addressStreetResolve).to.have.property('resource', 'human.address.street')
-        //       expect(addressStreetResolve.meta).to.have.property('graphql.field.path', 'human.address.street')
-        //       expect(addressStreetResolve.parent_id.toString()).to.equal(addressStreetField.span_id.toString())
-        //       expect(addressStreetResolve.duration.toNumber()).to.be.lte(addressStreetField.duration.toNumber())
-        //     })
-        //     .then(done)
-        //     .catch(done)
+              const execute = spans[0]
+              const friends = spans[1]
+              const friendsName = spans[2]
+              const pets = spans[3]
+              const petsName = spans[4]
 
-        //   graphql.graphql(schema, source).catch(done)
-        // })
+              expect(execute).to.have.property('name', 'graphql.execute')
 
-        // it('should instrument list field resolvers', done => {
-        //   const source = `{
-        //     friends {
-        //       name
-        //       pets {
-        //         name
-        //       }
-        //     }
-        //   }`
+              expect(friends).to.have.property('name', 'graphql.resolve')
+              expect(friends).to.have.property('resource', 'friends:[Human]')
+              expect(friends.meta).to.have.property('graphql.field.path', 'friends')
+              expect(friends.parent_id.toString()).to.equal(execute.span_id.toString())
 
-        //   agent
-        //     .use(traces => {
-        //       const spans = sort(traces[0])
+              expect(friendsName).to.have.property('name', 'graphql.resolve')
+              expect(friendsName).to.have.property('resource', 'name:String')
+              expect(friendsName.meta).to.have.property('graphql.field.path', 'friends.*.name')
+              expect(friendsName.parent_id.toString()).to.equal(friends.span_id.toString())
 
-        //       expect(spans).to.have.length(12)
+              expect(pets).to.have.property('name', 'graphql.resolve')
+              expect(pets).to.have.property('resource', 'pets:[Pet!]')
+              expect(pets.meta).to.have.property('graphql.field.path', 'friends.*.pets')
+              expect(pets.parent_id.toString()).to.equal(friends.span_id.toString())
 
-        //       const execute = spans[3]
-        //       const friendsField = spans[4]
-        //       const friendsResolve = spans[5]
-        //       const friendNameField = spans[6]
-        //       const friendNameResolve = spans[7]
-        //       const petsField = spans[8]
-        //       const petsResolve = spans[9]
-        //       const petsNameField = spans[10]
-        //       const petsNameResolve = spans[11]
+              expect(petsName).to.have.property('name', 'graphql.resolve')
+              expect(petsName).to.have.property('resource', 'name:String')
+              expect(petsName.meta).to.have.property('graphql.field.path', 'friends.*.pets.*.name')
+              expect(petsName.parent_id.toString()).to.equal(pets.span_id.toString())
+            })
+            .then(done)
+            .catch(done)
 
-        //       expect(execute).to.have.property('name', 'graphql.execute')
-
-        //       expect(friendsField).to.have.property('name', 'graphql.field')
-        //       expect(friendsField).to.have.property('resource', 'friends')
-        //       expect(friendsField.meta).to.have.property('graphql.field.path', 'friends')
-        //       expect(friendsField.parent_id.toString()).to.equal(execute.span_id.toString())
-
-        //       expect(friendsResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(friendsResolve).to.have.property('resource', 'friends')
-        //       expect(friendsResolve.meta).to.have.property('graphql.field.path', 'friends')
-        //       expect(friendsResolve.parent_id.toString()).to.equal(friendsField.span_id.toString())
-
-        //       expect(friendNameField).to.have.property('name', 'graphql.field')
-        //       expect(friendNameField).to.have.property('resource', 'friends.*.name')
-        //       expect(friendNameField.meta).to.have.property('graphql.field.path', 'friends.*.name')
-        //       expect(friendNameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
-
-        //       expect(friendNameResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(friendNameResolve).to.have.property('resource', 'friends.*.name')
-        //       expect(friendNameResolve.meta).to.have.property('graphql.field.path', 'friends.*.name')
-        //       expect(friendNameResolve.parent_id.toString()).to.equal(friendNameField.span_id.toString())
-
-        //       expect(petsField).to.have.property('name', 'graphql.field')
-        //       expect(petsField).to.have.property('resource', 'friends.*.pets')
-        //       expect(petsField.meta).to.have.property('graphql.field.path', 'friends.*.pets')
-        //       expect(petsField.parent_id.toString()).to.equal(friendsField.span_id.toString())
-
-        //       expect(petsResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(petsResolve).to.have.property('resource', 'friends.*.pets')
-        //       expect(petsResolve.meta).to.have.property('graphql.field.path', 'friends.*.pets')
-        //       expect(petsResolve.parent_id.toString()).to.equal(petsField.span_id.toString())
-
-        //       expect(petsNameField).to.have.property('name', 'graphql.field')
-        //       expect(petsNameField).to.have.property('resource', 'friends.*.pets.*.name')
-        //       expect(petsNameField.meta).to.have.property('graphql.field.path', 'friends.*.pets.*.name')
-        //       expect(petsNameField.parent_id.toString()).to.equal(petsField.span_id.toString())
-
-        //       expect(petsNameResolve).to.have.property('name', 'graphql.resolve')
-        //       expect(petsNameResolve).to.have.property('resource', 'friends.*.pets.*.name')
-        //       expect(petsNameResolve.meta).to.have.property('graphql.field.path', 'friends.*.pets.*.name')
-        //       expect(petsNameResolve.parent_id.toString()).to.equal(petsNameField.span_id.toString())
-        //     })
-        //     .then(done)
-        //     .catch(done)
-
-        //   graphql.graphql(schema, source).catch(done)
-        // })
+          graphql.graphql(schema, source).catch(done)
+        })
 
         it('should instrument mutations', done => {
           const source = `mutation { human { name } }`
@@ -971,124 +907,111 @@ describe('Plugin', () => {
         })
       })
 
-      // describe('with a depth >=1', () => {
-      //   before(() => {
-      //     tracer = require('../..')
+      describe('with a depth >=1', () => {
+        before(() => {
+          tracer = require('../..')
 
-      //     return agent.load(plugin, 'graphql', { depth: 2 })
-      //   })
+          return agent.load(plugin, 'graphql', { depth: 2 })
+        })
 
-      //   after(() => {
-      //     return agent.close()
-      //   })
+        after(() => {
+          return agent.close()
+        })
 
-      //   beforeEach(() => {
-      //     graphql = require(`../../versions/graphql@${version}`).get()
-      //     buildSchema()
-      //   })
+        beforeEach(() => {
+          graphql = require(`../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
 
-      //   it('should only instrument up to the specified depth', done => {
-      //     const source = `
-      //       {
-      //         human {
-      //           name
-      //           address {
-      //             civicNumber
-      //             street
-      //           }
-      //         }
-      //         friends {
-      //           name
-      //         }
-      //       }
-      //     `
+        it('should only instrument up to the specified depth', done => {
+          const source = `
+            {
+              human {
+                name
+                address {
+                  civicNumber
+                  street
+                }
+              }
+              friends {
+                name
+              }
+            }
+          `
 
-      //     agent
-      //       .use(traces => {
-      //         const spans = sort(traces[0])
-      //         const ignored = spans.filter(span => {
-      //           return [
-      //             'human.address.civicNumber',
-      //             'human.address.civicNumber',
-      //             'human.address.street'
-      //           ].indexOf(span.resource) !== -1
-      //         })
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+              const ignored = spans.filter(span => {
+                return [
+                  'human.address.civicNumber',
+                  'human.address.street'
+                ].indexOf(span.resource) !== -1
+              })
 
-      //         expect(spans).to.have.length(12)
-      //         expect(ignored).to.have.length(0)
-      //       })
-      //       .then(done)
-      //       .catch(done)
+              expect(spans).to.have.length(5)
+              expect(ignored).to.have.length(0)
+            })
+            .then(done)
+            .catch(done)
 
-      //     graphql.graphql(schema, source).catch(done)
-      //   })
-      // })
+          graphql.graphql(schema, source).catch(done)
+        })
+      })
 
-      // describe('with collapsing disabled', () => {
-      //   before(() => {
-      //     tracer = require('../..')
+      describe('with collapsing disabled', () => {
+        before(() => {
+          tracer = require('../..')
 
-      //     return agent.load(plugin, 'graphql', { collapse: false })
-      //   })
+          return agent.load(plugin, 'graphql', { collapse: false })
+        })
 
-      //   after(() => {
-      //     return agent.close()
-      //   })
+        after(() => {
+          return agent.close()
+        })
 
-      //   beforeEach(() => {
-      //     graphql = require(`../../versions/graphql@${version}`).get()
-      //     buildSchema()
-      //   })
+        beforeEach(() => {
+          graphql = require(`../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
 
-      //   it('should not collapse list field resolvers', done => {
-      //     const source = `{ friends { name } }`
+        it('should not collapse list field resolvers', done => {
+          const source = `{ friends { name } }`
 
-      //     agent
-      //       .use(traces => {
-      //         const spans = sort(traces[0])
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
 
-      //         expect(spans).to.have.length(10)
+              expect(spans).to.have.length(4)
 
-      //         const execute = spans[3]
-      //         const friendsField = spans[4]
-      //         const friendsResolve = spans[5]
-      //         const friend0NameField = spans[6]
-      //         const friend0NameResolve = spans[7]
-      //         const friend1NameField = spans[8]
-      //         const friend1NameResolve = spans[9]
+              const execute = spans[0]
+              const friends = spans[1]
+              const friend0Name = spans[2]
+              const friend1Name = spans[3]
 
-      //         expect(execute).to.have.property('name', 'graphql.execute')
+              expect(execute).to.have.property('name', 'graphql.execute')
 
-      //         expect(friendsField).to.have.property('name', 'graphql.field')
-      //         expect(friendsField).to.have.property('resource', 'friends')
-      //         expect(friendsField.parent_id.toString()).to.equal(execute.span_id.toString())
+              expect(friends).to.have.property('name', 'graphql.resolve')
+              expect(friends).to.have.property('resource', 'friends:[Human]')
+              expect(friends.meta).to.have.property('graphql.field.path', 'friends')
+              expect(friends.parent_id.toString()).to.equal(execute.span_id.toString())
 
-      //         expect(friendsResolve).to.have.property('name', 'graphql.resolve')
-      //         expect(friendsResolve).to.have.property('resource', 'friends')
-      //         expect(friendsResolve.parent_id.toString()).to.equal(friendsField.span_id.toString())
+              expect(friend0Name).to.have.property('name', 'graphql.resolve')
+              expect(friend0Name).to.have.property('resource', 'name:String')
+              expect(friend0Name.meta).to.have.property('graphql.field.path', 'friends.0.name')
+              expect(friend0Name.parent_id.toString()).to.equal(friends.span_id.toString())
 
-      //         expect(friend0NameField).to.have.property('name', 'graphql.field')
-      //         expect(friend0NameField).to.have.property('resource', 'friends.0.name')
-      //         expect(friend0NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
+              expect(friend1Name).to.have.property('name', 'graphql.resolve')
+              expect(friend1Name).to.have.property('resource', 'name:String')
+              expect(friend1Name.meta).to.have.property('graphql.field.path', 'friends.1.name')
+              expect(friend1Name.parent_id.toString()).to.equal(friends.span_id.toString())
+            })
+            .then(done)
+            .catch(done)
 
-      //         expect(friend0NameResolve).to.have.property('name', 'graphql.resolve')
-      //         expect(friend0NameResolve).to.have.property('resource', 'friends.0.name')
-      //         expect(friend0NameResolve.parent_id.toString()).to.equal(friend0NameField.span_id.toString())
-
-      //         expect(friend1NameField).to.have.property('name', 'graphql.field')
-      //         expect(friend1NameField).to.have.property('resource', 'friends.1.name')
-      //         expect(friend1NameField.parent_id.toString()).to.equal(friendsField.span_id.toString())
-
-      //         expect(friend1NameResolve).to.have.property('name', 'graphql.resolve')
-      //         expect(friend1NameResolve).to.have.property('resource', 'friends.1.name')
-      //         expect(friend1NameResolve.parent_id.toString()).to.equal(friend1NameField.span_id.toString())
-      //       })
-      //       .then(done)
-      //       .catch(done)
-
-      //     graphql.graphql(schema, source).catch(done)
-      //   })
-      // })
+          graphql.graphql(schema, source).catch(done)
+        })
+      })
 
       // withVersions(plugin, 'apollo-server-core', apolloVersion => {
       //   let runQuery

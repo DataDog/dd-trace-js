@@ -1,6 +1,7 @@
 'use strict'
 
 const pick = require('lodash.pick')
+const platform = require('../platform')
 const log = require('../log')
 
 function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
@@ -31,7 +32,10 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         Object.defineProperty(contextValue, '_datadog_fields', { value: {} })
       }
 
-      return wrap(span, execute).apply(this, [args])
+      return call(execute, span, this, [args], (err, span) => {
+        finishResolvers(contextValue)
+        finish(err, span)
+      })
     }
   }
 }
@@ -55,11 +59,11 @@ function createWrapParse (tracer, config) {
 
         addMethodTags(tracer, config, span, operation, document)
 
-        finish(span)
+        finish(null, span)
 
         return document
       } catch (e) {
-        finish(span, e)
+        finish(e, span)
         throw e
       }
     }
@@ -77,11 +81,11 @@ function createWrapValidate (tracer, config) {
 
         addMethodTags(tracer, config, span, operation, document)
 
-        finish(span)
+        finish(null, span)
 
         return errors
       } catch (e) {
-        finish(span, e)
+        finish(e, span)
         throw e
       }
     }
@@ -122,15 +126,15 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
     const path = responsePathAsArray(info.path)
     const depth = path.filter(item => typeof item === 'string').length
 
-    const childOf = getParent(tracer, contextValue, path)
-
     if (config.depth >= 0 && config.depth < depth) {
-      return resolve.apply(this, arguments)
+      const parent = getParentField(tracer, contextValue, path)
+
+      return call(resolve, parent.span, this, arguments)
     }
 
-    const span = startResolveSpan(tracer, config, childOf, path, info, contextValue)
+    const field = assertField(tracer, config, contextValue, info, path)
 
-    return wrap(span, resolve).apply(this, arguments)
+    return call(resolve, field.span, this, arguments, err => updateField(field, err))
   }
 
   resolveWithTrace._datadog_patched = true
@@ -148,40 +152,46 @@ function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) 
   }
 }
 
-function wrap (span, fn) {
+function call (fn, span, thisArg, args, callback) {
   const scope = span.tracer().scope()
 
-  return function () {
-    try {
-      const result = scope.activate(span, () => fn.apply(this, arguments))
+  callback = callback || (() => {})
 
-      if (result && typeof result.then === 'function') {
-        result.then(
-          () => finish(span),
-          err => finish(span, err)
-        )
-      } else {
-        finish(span)
-      }
+  try {
+    const result = scope.activate(span, () => fn.apply(thisArg, args))
 
-      return result
-    } catch (e) {
-      finish(span, e)
-      throw e
+    if (result && typeof result.then === 'function') {
+      result.then(
+        () => callback(null, span),
+        err => callback(err, span)
+      )
+    } else {
+      callback(null, span)
     }
+
+    return result
+  } catch (e) {
+    callback(e, span)
+    throw e
   }
 }
 
-function getParent (tracer, contextValue, path) {
+function getParentField (tracer, contextValue, path) {
   for (let i = path.length - 1; i > 0; i--) {
     const field = getField(contextValue, path.slice(0, i))
 
     if (field) {
-      return field.span
+      return field
     }
   }
 
-  return tracer.scope().active()
+  return {
+    span: tracer.scope().active()
+  }
+}
+
+function getField (contextValue, path) {
+  return contextValue._datadog_fields[path.join('.')]
 }
 
 function normalizeArgs (args) {
@@ -282,7 +292,7 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   return span
 }
 
-function finish (span, error) {
+function finish (error, span, finishTime) {
   if (error) {
     span.addTags({
       'error.type': error.name,
@@ -291,7 +301,22 @@ function finish (span, error) {
     })
   }
 
-  span.finish()
+  span.finish(finishTime)
+}
+
+function finishResolvers (contextValue) {
+  const fields = contextValue._datadog_fields
+
+  Object.keys(fields).reverse().forEach(key => {
+    const field = fields[key]
+
+    finish(field.error, field.span, field.finishTime)
+  })
+}
+
+function updateField (field, error) {
+  field.finishTime = platform.now()
+  field.error = field.error || error
 }
 
 function withCollapse (responsePathAsArray) {
@@ -301,8 +326,22 @@ function withCollapse (responsePathAsArray) {
   }
 }
 
-function getField (contextValue, path) {
-  return contextValue._datadog_fields[path.join('.')]
+function assertField (tracer, config, contextValue, info, path) {
+  const pathString = path.join('.')
+
+  let field = contextValue._datadog_fields[pathString]
+
+  if (!field) {
+    const parent = getParentField(tracer, contextValue, path)
+
+    field = contextValue._datadog_fields[pathString] = {
+      parent,
+      span: startResolveSpan(tracer, config, parent.span, path, info, contextValue),
+      error: null
+    }
+  }
+
+  return field
 }
 
 function getService (tracer, config) {
