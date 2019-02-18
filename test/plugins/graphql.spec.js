@@ -420,7 +420,7 @@ describe('Plugin', () => {
             .catch(done)
         })
 
-        it('should ignore the default field resolver', done => {
+        it('should instrument the default field resolver', done => {
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -433,8 +433,9 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
+              expect(spans).to.have.length(2)
               expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[1]).to.have.property('name', 'graphql.resolve')
             })
             .then(done)
             .catch(done)
@@ -442,7 +443,7 @@ describe('Plugin', () => {
           graphql.graphql(schema, source, { hello: 'world' }).catch(done)
         })
 
-        it('should ignore the execution field resolver without a rootValue resolver', done => {
+        it('should instrument the execution field resolver without a rootValue resolver', done => {
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -461,8 +462,9 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
+              expect(spans).to.have.length(2)
               expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[1]).to.have.property('name', 'graphql.resolve')
             })
             .then(done)
             .catch(done)

@@ -20,7 +20,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         return execute.apply(this, arguments)
       }
 
-      args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
+      args.fieldResolver = wrapResolve(fieldResolver, tracer, config, responsePathAsArray)
 
       wrapFields(schema._queryType, tracer, config, responsePathAsArray)
       wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
@@ -141,16 +141,6 @@ function wrapResolve (resolve, tracer, config, responsePathAsArray) {
   resolveWithTrace._datadog_patched = true
 
   return resolveWithTrace
-}
-
-function wrapFieldResolver (fieldResolver, tracer, config, responsePathAsArray) {
-  return function fieldResolverWithTrace (source, args, contextValue, info) {
-    if (source && typeof source[info.fieldName] === 'function') {
-      return wrapResolve(fieldResolver, tracer, config, responsePathAsArray).apply(this, arguments)
-    }
-
-    return fieldResolver.apply(this, arguments)
-  }
 }
 
 function call (fn, span, thisArg, args, callback) {
