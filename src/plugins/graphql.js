@@ -225,8 +225,11 @@ function addMethodTags (tracer, config, span, operation, document) {
   const name = operation.name && operation.name.value
   const tags = {
     'resource.name': [type, name].filter(val => val).join(' '),
-    'graphql.operation.type': type,
-    'graphql.operation.name': name
+    'graphql.operation.type': type
+  }
+
+  if (name) {
+    tags['graphql.operation.name'] = name
   }
 
   if (document._datadog_source) {
