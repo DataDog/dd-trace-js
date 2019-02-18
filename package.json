@@ -37,6 +37,7 @@
     "node": "^4.7 || ^6.9 || >=8"
   },
   "dependencies": {
+    "apollo-graphql": "^0.1.1",
     "async-hook-jl": "^1.7.6",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
@@ -73,6 +74,7 @@
     "eventemitter3": "^3.1.0",
     "express": "^4.16.2",
     "get-port": "^3.2.0",
+    "graphql": "^14.1.1",
     "mocha": "^5.2.0",
     "nock": "^9.6.1",
     "proxyquire": "^1.8.0",

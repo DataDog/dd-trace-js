@@ -184,10 +184,8 @@ describe('Plugin', () => {
 
               expect(span).to.have.property('service', 'test-graphql')
               expect(span).to.have.property('name', 'graphql.parse')
-              expect(span).to.have.property('resource', 'query MyQuery')
-              expect(span.meta).to.have.property('graphql.document', source)
-              expect(span.meta).to.have.property('graphql.operation.type', 'query')
-              expect(span.meta).to.have.property('graphql.operation.name', 'MyQuery')
+              expect(span).to.have.property('resource', 'graphql.parse')
+              expect(span.meta).to.have.property('graphql.source', source)
             })
             .then(done)
             .catch(done)
@@ -204,10 +202,8 @@ describe('Plugin', () => {
 
               expect(span).to.have.property('service', 'test-graphql')
               expect(span).to.have.property('name', 'graphql.validate')
-              expect(span).to.have.property('resource', 'query MyQuery')
-              expect(span.meta).to.have.property('graphql.document', source)
-              expect(span.meta).to.have.property('graphql.operation.type', 'query')
-              expect(span.meta).to.have.property('graphql.operation.name', 'MyQuery')
+              expect(span).to.have.property('resource', 'graphql.validate')
+              expect(span.meta).to.have.property('graphql.source', source)
             })
             .then(done)
             .catch(done)
@@ -224,8 +220,8 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('service', 'test-graphql')
               expect(spans[0]).to.have.property('name', 'graphql.execute')
-              expect(spans[0]).to.have.property('resource', 'query MyQuery')
-              expect(spans[0].meta).to.have.property('graphql.document', source)
+              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
+              expect(spans[0].meta).to.have.property('graphql.source', source)
               expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
               expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
             })
@@ -507,15 +503,13 @@ describe('Plugin', () => {
 
               expect(spans[1]).to.have.property('service', 'test-graphql')
               expect(spans[1]).to.have.property('name', 'graphql.parse')
-              expect(spans[1]).to.have.property('resource', 'query MyQuery')
 
               expect(spans[2]).to.have.property('service', 'test-graphql')
               expect(spans[2]).to.have.property('name', 'graphql.validate')
-              expect(spans[2]).to.have.property('resource', 'query MyQuery')
 
               expect(spans[3]).to.have.property('service', 'test-graphql')
               expect(spans[3]).to.have.property('name', 'graphql.execute')
-              expect(spans[3]).to.have.property('resource', 'query MyQuery')
+              expect(spans[3]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
 
               expect(spans[4]).to.have.property('service', 'test-graphql')
               expect(spans[4]).to.have.property('name', 'graphql.resolve')
@@ -634,8 +628,8 @@ describe('Plugin', () => {
               expect(spans).to.have.length(2)
               expect(spans[0]).to.have.property('service', 'test-graphql')
               expect(spans[0]).to.have.property('name', 'graphql.execute')
-              expect(spans[0]).to.have.property('resource', 'query MyQuery')
-              expect(spans[0].meta).to.have.property('graphql.document', source)
+              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
+              expect(spans[0].meta).to.have.property('graphql.source', source)
             })
             .then(done)
             .catch(done)
@@ -776,6 +770,35 @@ describe('Plugin', () => {
             graphql.validate(schema, document)
             graphql.validate(schema, document)
           }).to.not.throw()
+        })
+
+        it('should support multi-operations documents', done => {
+          const source = `
+            query FirstQuery { hello(name: "world") }
+            query SecondQuery { hello(name: "world") }
+          `
+
+          const operationName = 'SecondQuery'
+          const variableValues = { who: 'world' }
+
+          Promise
+            .all([
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('service', 'test-graphql')
+                  expect(spans[0]).to.have.property('name', 'graphql.execute')
+                  expect(spans[0]).to.have.property('resource', 'query SecondQuery{hello(name:"")}')
+                  expect(spans[0].meta).to.have.property('graphql.source', `query SecondQuery { hello(name: "world") }`)
+                  expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+                  expect(spans[0].meta).to.have.property('graphql.operation.name', 'SecondQuery')
+                })
+            ])
+            .then(() => done())
+            .catch(done)
+
+          graphql.graphql({ schema, source, variableValues, operationName }).catch(done)
         })
       })
 
@@ -1087,8 +1110,8 @@ describe('Plugin', () => {
               expect(spans).to.have.length(2)
 
               expect(spans[0]).to.have.property('name', 'graphql.execute')
-              expect(spans[0]).to.have.property('resource', 'query MyQuery')
-              expect(spans[0].meta).to.have.property('graphql.document')
+              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
+              expect(spans[0].meta).to.have.property('graphql.source')
 
               expect(spans[1]).to.have.property('name', 'graphql.resolve')
               expect(spans[1]).to.have.property('resource', 'hello:String')

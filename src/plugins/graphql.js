@@ -4,6 +4,8 @@ const pick = require('lodash.pick')
 const platform = require('../platform')
 const log = require('../log')
 
+let tools
+
 function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
   return function wrapExecute (execute) {
     return function executeWithTrace () {
@@ -13,8 +15,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const source = document._datadog_source
       const fieldResolver = args.fieldResolver || defaultFieldResolver
       const contextValue = args.contextValue = args.contextValue || {}
-      const variableValues = args.variableValues
-      const operation = getOperation(document)
+      const operation = getOperation(document, args.operationName)
 
       if (contextValue._datadog_graphql || !schema || !operation || !source || typeof fieldResolver !== 'function') {
         return execute.apply(this, arguments)
@@ -25,7 +26,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       wrapFields(schema._queryType, tracer, config, responsePathAsArray)
       wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
 
-      const span = startExecutionSpan(tracer, config, operation, document, variableValues)
+      const span = startExecutionSpan(tracer, config, operation, args)
 
       Object.defineProperty(contextValue, '_datadog_graphql', {
         value: { source, span, fields: {} }
@@ -56,7 +57,7 @@ function createWrapParse (tracer, config) {
           }
         })
 
-        addMethodTags(tracer, config, span, operation, document)
+        addDocumentTags(span, document)
 
         finish(null, span)
 
@@ -75,20 +76,13 @@ function createWrapValidate (tracer, config) {
       if (!document.loc) return validate.apply(this, arguments)
 
       const span = startSpan(tracer, config, 'validate')
+      const errors = validate.apply(this, arguments)
 
-      try {
-        const errors = validate.apply(this, arguments)
-        const operation = getOperation(document)
+      addDocumentTags(span, document)
 
-        addMethodTags(tracer, config, span, operation, document)
+      finish(errors[0], span)
 
-        finish(null, span)
-
-        return errors
-      } catch (e) {
-        finish(e, span)
-        throw e
-      }
+      return errors
     }
   }
 }
@@ -201,29 +195,37 @@ function normalizeArgs (args) {
   }
 }
 
-function startExecutionSpan (tracer, config, operation, document, variableValues) {
+function startExecutionSpan (tracer, config, operation, args) {
   const span = startSpan(tracer, config, 'execute')
 
-  addMethodTags(tracer, config, span, operation, document)
-  addVariableTags(tracer, config, span, variableValues)
+  addExecutionTags(span, operation, args.document, args.operationName)
+  addVariableTags(tracer, config, span, args.variableValues)
 
   return span
 }
 
-function addMethodTags (tracer, config, span, operation, document) {
+function addExecutionTags (span, operation, document, operationName) {
   const type = operation.operation
   const name = operation.name && operation.name.value
+  const source = document._datadog_source
   const tags = {
-    'resource.name': [type, name].filter(val => val).join(' '),
-    'graphql.operation.type': type
+    'resource.name': getSignature(document, operationName),
+    'graphql.operation.type': type,
+    'graphql.operation.name': name
   }
 
-  if (name) {
-    tags['graphql.operation.name'] = name
+  if (operation.loc) {
+    tags['graphql.source'] = source.substring(operation.loc.start, operation.loc.end)
   }
+
+  span.addTags(tags)
+}
+
+function addDocumentTags (span, document) {
+  const tags = {}
 
   if (document._datadog_source) {
-    tags['graphql.document'] = document._datadog_source
+    tags['graphql.source'] = document._datadog_source
   }
 
   span.addTags(tags)
@@ -343,15 +345,20 @@ function getService (tracer, config) {
   return config.service || `${tracer._service}-graphql`
 }
 
-function getOperation (document) {
+function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
     return
   }
 
   const types = ['query', 'mutation', 'subscription']
-  const definition = document.definitions.find(def => types.indexOf(def.operation) !== -1)
 
-  return definition
+  if (operationName) {
+    return document.definitions
+      .filter(def => types.indexOf(def.operation) !== -1)
+      .find(def => operationName === (def.name && def.name.value))
+  } else {
+    return document.definitions.find(def => types.indexOf(def.operation) !== -1)
+  }
 }
 
 function validateConfig (config) {
@@ -380,6 +387,23 @@ function getVariablesFilter (config) {
     log.error('Expected `variables` to be an array or function.')
   }
   return null
+}
+
+function getSignature (document, operationName) {
+  if (tools !== false) {
+    try {
+      tools = tools || require('apollo-graphql')
+      return tools.defaultEngineReportingSignature(document, operationName)
+    } catch (e) {
+      tools = false // older Node/GraphQL versions are not supported
+    }
+  }
+
+  const operation = getOperation(document)
+  const type = operation.operation
+  const name = operation.name && operation.name.value
+
+  return [type, name].filter(val => val).join(' ')
 }
 
 module.exports = [
