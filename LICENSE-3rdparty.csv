@@ -1,5 +1,6 @@
 Component,Origin,License,Copyright
 require,async-hook-jl,MIT,Copyright 2015 Andreas Madsen
+require,apollo-graphql,MIT,Copyright 2016 Meteor Development Group Inc.
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
@@ -32,6 +33,7 @@ dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
 dev,eventemitter3,MIT,Copyright 2014 Arnout Kazemier
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
+dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz

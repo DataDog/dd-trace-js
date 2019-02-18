@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.9.0",
+  "version": "0.9.0-beta.3",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "scripts": {
@@ -37,7 +37,6 @@
     "node": "^4.7 || ^6.9 || >=8"
   },
   "dependencies": {
-    "apollo-graphql": "^0.1.1",
     "async-hook-jl": "^1.7.6",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
@@ -84,5 +83,8 @@
     "sinon-chai": "^2.14.0",
     "tape": "^4.9.1",
     "v8-coverage": "^1.0.8"
+  },
+  "optionalDependencies": {
+    "apollo-graphql": "^0.1.1"
   }
 }
