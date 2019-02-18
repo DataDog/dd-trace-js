@@ -16,12 +16,8 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const variableValues = args.variableValues
       const operation = getOperation(document)
 
-      if (!schema || !operation || !source || typeof fieldResolver !== 'function') {
+      if (contextValue._datadog || !schema || !operation || !source || typeof fieldResolver !== 'function') {
         return execute.apply(this, arguments)
-      }
-
-      if (contextValue._datadog) {
-        return tracer.scope().activate(contextValue._datadog.span, () => execute.apply(this, arguments))
       }
 
       args.fieldResolver = wrapFieldResolver(fieldResolver, tracer, config, responsePathAsArray)
