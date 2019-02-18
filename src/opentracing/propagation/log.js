@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../platform')
 const DatadogSpanContext = require('../span_context')
 
 class LogPropagator {
@@ -19,8 +19,8 @@ class LogPropagator {
     }
 
     const spanContext = new DatadogSpanContext({
-      traceId: new Uint64BE(carrier.dd.trace_id, 10),
-      spanId: new Uint64BE(carrier.dd.span_id, 10)
+      traceId: new platform.Uint64BE(carrier.dd.trace_id, 10),
+      spanId: new platform.Uint64BE(carrier.dd.span_id, 10)
     })
 
     return spanContext
