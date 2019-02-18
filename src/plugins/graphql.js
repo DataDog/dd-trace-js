@@ -16,7 +16,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const variableValues = args.variableValues
       const operation = getOperation(document)
 
-      if (contextValue._datadog || !schema || !operation || !source || typeof fieldResolver !== 'function') {
+      if (contextValue._datadog_graphql || !schema || !operation || !source || typeof fieldResolver !== 'function') {
         return execute.apply(this, arguments)
       }
 
@@ -27,7 +27,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
 
       const span = startExecutionSpan(tracer, config, operation, document, variableValues)
 
-      Object.defineProperty(contextValue, '_datadog', {
+      Object.defineProperty(contextValue, '_datadog_graphql', {
         value: { source, span, fields: {} }
       })
 
@@ -177,12 +177,12 @@ function getParentField (tracer, contextValue, path) {
   }
 
   return {
-    span: contextValue._datadog.span
+    span: contextValue._datadog_graphql.span
   }
 }
 
 function getField (contextValue, path) {
-  return contextValue._datadog.fields[path.join('.')]
+  return contextValue._datadog_graphql.fields[path.join('.')]
 }
 
 function normalizeArgs (args) {
@@ -255,7 +255,7 @@ function startSpan (tracer, config, name, childOf) {
 
 function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   const span = startSpan(tracer, config, 'resolve', childOf)
-  const document = contextValue._datadog.source
+  const document = contextValue._datadog_graphql.source
   const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
 
   span.addTags({
@@ -299,7 +299,7 @@ function finish (error, span, finishTime) {
 }
 
 function finishResolvers (contextValue) {
-  const fields = contextValue._datadog.fields
+  const fields = contextValue._datadog_graphql.fields
 
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
@@ -322,7 +322,7 @@ function withCollapse (responsePathAsArray) {
 
 function assertField (tracer, config, contextValue, info, path) {
   const pathString = path.join('.')
-  const fields = contextValue._datadog.fields
+  const fields = contextValue._datadog_graphql.fields
 
   let field = fields[pathString]
 
