@@ -163,10 +163,9 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          tracer = require('../..')
-
           return agent.load(plugin, 'graphql')
             .then(() => {
+              tracer = require('../..')
               graphql = require(`../../versions/graphql@${version}`).get()
               buildSchema()
             })
@@ -488,6 +487,46 @@ describe('Plugin', () => {
           })
 
           graphql.graphql(schema, source).catch(done)
+        })
+
+        it('should run parsing, validation and execution in the current context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const source = `query MyQuery { hello(name: "world") }`
+          const span = tracer.startSpan('test.request')
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(5)
+
+              expect(spans[0]).to.have.property('name', 'test.request')
+
+              expect(spans[1]).to.have.property('service', 'test-graphql')
+              expect(spans[1]).to.have.property('name', 'graphql.parse')
+              expect(spans[1]).to.have.property('resource', 'query MyQuery')
+
+              expect(spans[2]).to.have.property('service', 'test-graphql')
+              expect(spans[2]).to.have.property('name', 'graphql.validate')
+              expect(spans[2]).to.have.property('resource', 'query MyQuery')
+
+              expect(spans[3]).to.have.property('service', 'test-graphql')
+              expect(spans[3]).to.have.property('name', 'graphql.execute')
+              expect(spans[3]).to.have.property('resource', 'query MyQuery')
+
+              expect(spans[4]).to.have.property('service', 'test-graphql')
+              expect(spans[4]).to.have.property('name', 'graphql.resolve')
+              expect(spans[4]).to.have.property('resource', 'hello:String')
+            })
+            .then(done)
+            .catch(done)
+
+          tracer.scope().activate(span, () => {
+            graphql.graphql(schema, source, null, null, { who: 'world' })
+              .then(() => span.finish())
+              .catch(done)
+          })
         })
 
         it('should run rootValue resolvers in the current context', done => {
@@ -1045,7 +1084,6 @@ describe('Plugin', () => {
 
               expect(spans).to.have.length(2)
 
-              // TODO: document source?
               expect(spans[0]).to.have.property('name', 'graphql.execute')
               expect(spans[0]).to.have.property('resource', 'query MyQuery')
               expect(spans[0].meta).to.have.property('graphql.document')
