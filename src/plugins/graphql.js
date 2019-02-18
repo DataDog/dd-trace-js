@@ -178,7 +178,7 @@ function call (fn, span, thisArg, args, callback) {
 
 function getParentField (tracer, contextValue, path) {
   for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(contextValue, path.slice(0, i))
+    const field = getField(tracer, contextValue, path.slice(0, i))
 
     if (field) {
       return field
@@ -190,8 +190,16 @@ function getParentField (tracer, contextValue, path) {
   }
 }
 
-function getField (contextValue, path) {
-  return contextValue._datadog_fields[path.join('.')]
+function getField (tracer, contextValue, path) {
+  const fields = contextValue._datadog_fields
+  const executionId = getExecutionId(tracer)
+
+  return fields[executionId] && fields[executionId][path.join('.')]
+}
+
+function getExecutionId (tracer) {
+  const span = tracer.scope().active()
+  return span ? span.context().toSpanId() : '0'
 }
 
 function normalizeArgs (args) {
@@ -307,10 +315,12 @@ function finish (error, span, finishTime) {
 function finishResolvers (contextValue) {
   const fields = contextValue._datadog_fields
 
-  Object.keys(fields).reverse().forEach(key => {
-    const field = fields[key]
+  Object.keys(fields).forEach(id => {
+    Object.keys(fields[id]).reverse().forEach(key => {
+      const field = fields[id][key]
 
-    finish(field.error, field.span, field.finishTime)
+      finish(field.error, field.span, field.finishTime)
+    })
   })
 }
 
@@ -328,13 +338,17 @@ function withCollapse (responsePathAsArray) {
 
 function assertField (tracer, config, contextValue, info, path) {
   const pathString = path.join('.')
+  const fields = contextValue._datadog_fields
+  const executionId = getExecutionId(tracer)
 
-  let field = contextValue._datadog_fields[pathString]
+  fields[executionId] = fields[executionId] || {}
+
+  let field = fields[executionId][pathString]
 
   if (!field) {
     const parent = getParentField(tracer, contextValue, path)
 
-    field = contextValue._datadog_fields[pathString] = {
+    field = fields[executionId][pathString] = {
       parent,
       span: startResolveSpan(tracer, config, parent.span, path, info, contextValue),
       error: null
