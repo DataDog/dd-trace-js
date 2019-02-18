@@ -1038,74 +1038,62 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        // it('should support apollo-server schema stitching', done => {
-        //   agent
-        //     .use(traces => {
-        //       const spans = sort(traces[0])
+        it('should support apollo-server schema stitching', done => {
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
 
-        //       console.log(spans)
-        //       expect(spans).to.have.length(3)
+              expect(spans).to.have.length(2)
 
-        //       // TODO: document source?
-        //       expect(spans[0]).to.have.property('name', 'graphql.execute')
-        //       expect(spans[0]).to.have.property('resource', 'query MyQuery')
-        //       expect(spans[0].meta).to.have.property('graphql.document')
+              // TODO: document source?
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[0]).to.have.property('resource', 'query MyQuery')
+              expect(spans[0].meta).to.have.property('graphql.document')
 
-        //       expect(spans[1]).to.have.property('name', 'graphql.resolve')
-        //       expect(spans[1]).to.have.property('resource', 'hello:String')
+              expect(spans[1]).to.have.property('name', 'graphql.resolve')
+              expect(spans[1]).to.have.property('resource', 'hello:String')
+            })
+            .then(done)
+            .catch(done)
 
-        //       expect(spans[2]).to.have.property('name', 'graphql.execute')
-        //       expect(spans[2]).to.have.property('resource', 'query MyQuery')
-        //       expect(spans[2].meta).to.not.have.property('graphql.document')
+          schema = mergeSchemas({
+            schemas: [
+              makeExecutableSchema({
+                typeDefs: `
+                  type Query {
+                    hello: String
+                  }
+                `,
+                resolvers: {
+                  Query: {
+                    hello: () => 'Hello world!'
+                  }
+                }
+              }),
+              makeExecutableSchema({
+                typeDefs: `
+                  type Query {
+                    world: String
+                  }
+                `,
+                resolvers: {
+                  Query: {
+                    world: () => 'Hello world!'
+                  }
+                }
+              })
+            ]
+          })
 
-        //       // expect(spans[3]).to.have.property('name', 'graphql.validate')
+          const params = {
+            schema,
+            query: 'query MyQuery { hello }',
+            operationName: 'MyQuery'
+          }
 
-        //       // expect(spans[4]).to.have.property('name', 'graphql.execute')
-
-        //       // expect(spans[5]).to.have.property('name', 'graphql.resolve')
-        //       // expect(spans[5]).to.have.property('resource', 'hello:String')
-        //     })
-        //     .then(done)
-        //     .catch(done)
-
-        //   schema = mergeSchemas({
-        //     schemas: [
-        //       makeExecutableSchema({
-        //         typeDefs: `
-        //           type Query {
-        //             hello: String
-        //           }
-        //         `,
-        //         resolvers: {
-        //           Query: {
-        //             hello: () => 'Hello world!'
-        //           }
-        //         }
-        //       }),
-        //       makeExecutableSchema({
-        //         typeDefs: `
-        //           type Query {
-        //             world: String
-        //           }
-        //         `,
-        //         resolvers: {
-        //           Query: {
-        //             world: () => 'Hello world!'
-        //           }
-        //         }
-        //       })
-        //     ]
-        //   })
-
-        //   const params = {
-        //     schema,
-        //     query: 'query MyQuery { hello }',
-        //     operationName: 'MyQuery'
-        //   }
-
-        //   runQuery(params)
-        //     .catch(done)
-        // })
+          runQuery(params)
+            .catch(done)
+        })
       })
     })
   })
