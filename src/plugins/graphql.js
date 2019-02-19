@@ -12,7 +12,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const args = normalizeArgs(arguments)
       const schema = args.schema
       const document = args.document
-      const source = document._datadog_source
+      const source = document && document._datadog_source
       const fieldResolver = args.fieldResolver || defaultFieldResolver
       const contextValue = args.contextValue = args.contextValue || {}
       const operation = getOperation(document, args.operationName)
