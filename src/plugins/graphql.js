@@ -220,8 +220,7 @@ function addExecutionTags (span, config, operation, document, operationName) {
   const name = operation.name && operation.name.value
   const tags = {
     'resource.name': getSignature(document, operationName, config.signature),
-    'graphql.operation.type': type,
-    'graphql.operation.name': name
+    'graphql.operation.type': type
   }
 
   if (name) {
