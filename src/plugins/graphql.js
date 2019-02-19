@@ -17,14 +17,16 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
       const contextValue = args.contextValue = args.contextValue || {}
       const operation = getOperation(document, args.operationName)
 
-      if (contextValue._datadog_graphql || !schema || !operation || !source || typeof fieldResolver !== 'function') {
+      if (contextValue._datadog_graphql) {
         return execute.apply(this, arguments)
       }
 
       args.fieldResolver = wrapResolve(fieldResolver, tracer, config, responsePathAsArray)
 
-      wrapFields(schema._queryType, tracer, config, responsePathAsArray)
-      wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+      if (schema) {
+        wrapFields(schema._queryType, tracer, config, responsePathAsArray)
+        wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+      }
 
       const span = startExecutionSpan(tracer, config, operation, args)
 
@@ -122,7 +124,7 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
 }
 
 function wrapResolve (resolve, tracer, config, responsePathAsArray) {
-  if (resolve._datadog_patched) return resolve
+  if (resolve._datadog_patched || typeof resolve !== 'function') return resolve
   if (config.collapse) {
     responsePathAsArray = withCollapse(responsePathAsArray)
   }
@@ -216,11 +218,14 @@ function startExecutionSpan (tracer, config, operation, args) {
 }
 
 function addExecutionTags (span, config, operation, document, operationName) {
-  const type = operation.operation
-  const name = operation.name && operation.name.value
+  const type = operation && operation.operation
+  const name = operation && operation.name && operation.name.value
   const tags = {
-    'resource.name': getSignature(document, operationName, config.signature),
-    'graphql.operation.type': type
+    'resource.name': getSignature(document, name, type, config.signature)
+  }
+
+  if (type) {
+    tags['graphql.operation.type'] = type
   }
 
   if (name) {
@@ -399,21 +404,23 @@ function getVariablesFilter (config) {
   return null
 }
 
-function getSignature (document, operationName, calculate) {
+function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
-      tools = tools || require('apollo-graphql')
+      try {
+        tools = tools || require('apollo-graphql')
+      } catch (e) {
+        tools = false
+        throw e
+      }
+
       return tools.defaultEngineReportingSignature(document, operationName)
     } catch (e) {
-      tools = false // older Node/GraphQL versions are not supported
+      // older Node/GraphQL versions are not supported
     }
   }
 
-  const operation = getOperation(document)
-  const type = operation.operation
-  const name = operation.name && operation.name.value
-
-  return [type, name].filter(val => val).join(' ')
+  return [operationType, operationName].filter(val => val).join(' ')
 }
 
 module.exports = [

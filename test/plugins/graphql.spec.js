@@ -731,7 +731,7 @@ describe('Plugin', () => {
             .catch(done)
 
           try {
-            graphql.execute({}, document)
+            graphql.execute(null, document)
           } catch (e) {
             error = e
           }
@@ -939,6 +939,43 @@ describe('Plugin', () => {
 
           graphql.graphql(schema, source).catch(done)
         })
+
+        // it('should not disable signature with invalid arguments', done => {
+        //   agent
+        //     .use(traces => {
+        //       const spans = sort(traces[0])
+
+        //       console.log(spans.map(span => `${span.name} | ${span.resource}`))
+        //       const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
+
+        //       expect(spans[0]).to.have.property('service', 'test-graphql')
+        //       expect(spans[0]).to.have.property('name', 'graphql.execute')
+        //       expect(spans[0]).to.have.property('resource', resource)
+        //       expect(spans[0].meta).to.have.property('graphql.source', source)
+        //       expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+        //       expect(spans[0].meta).to.have.property('graphql.operation.name', 'WithFragments')
+        //     })
+        //     .then(done)
+        //     .catch(done)
+
+        //   const source = `{ human { address } }`
+
+        //   const rootValue = {
+        //     hello: () => 'world'
+        //   }
+
+        //   const contextValue = {}
+        //   const document = graphql.parse(source)
+
+        //   // graphql.graphql({ schema, source, rootValue, contextValue })
+        //   //   .then(() => graphql.graphql({ schema, source, rootValue, contextValue }))
+        //   //   .then(() => done())
+        //   //   .catch(done)
+
+        //   Promise.resolve(graphql.execute(schema, 'invalid', rootValue))
+        //     .catch(() => graphql.execute(schema, document, rootValue))
+        //     .catch(done)
+        // })
       })
 
       describe('with configuration', () => {
