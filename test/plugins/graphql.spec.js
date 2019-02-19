@@ -259,7 +259,7 @@ describe('Plugin', () => {
               expect(spans[1].meta).to.have.property('graphql.field.name', 'hello')
               expect(spans[1].meta).to.have.property('graphql.field.path', 'hello')
               expect(spans[1].meta).to.have.property('graphql.field.type', 'String')
-              expect(spans[1].meta).to.have.property('graphql.field.source', 'hello(name: "world")')
+              expect(spans[1].meta).to.have.property('graphql.source', 'hello(name: "world")')
             })
             .then(done)
             .catch(done)

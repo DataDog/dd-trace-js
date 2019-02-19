@@ -214,6 +214,10 @@ function addExecutionTags (span, operation, document, operationName) {
     'graphql.operation.name': name
   }
 
+  if (name) {
+    tags['graphql.operation.name'] = name
+  }
+
   if (operation.loc) {
     tags['graphql.source'] = source.substring(operation.loc.start, operation.loc.end)
   }
@@ -269,7 +273,7 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
 
   if (fieldNode) {
     if (document) {
-      span.setTag('graphql.field.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
+      span.setTag('graphql.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
     }
 
     if (config.variables) {
