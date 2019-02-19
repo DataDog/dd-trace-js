@@ -45,6 +45,8 @@ function wrapMiddleware (middleware) {
 }
 
 function wrapFn (fn) {
+  if (Array.isArray(fn)) return wrapMiddleware(fn)
+
   return function (req, res, next) {
     return web.reactivate(req, () => fn.apply(this, arguments))
   }

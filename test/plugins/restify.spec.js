@@ -146,6 +146,31 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should support array middleware', done => {
+          const server = restify.createServer()
+
+          server.get('/user/:id', [(req, res, next) => {
+            res.send(200)
+            return next()
+          }])
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+        })
       })
     })
   })
