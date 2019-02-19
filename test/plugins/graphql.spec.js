@@ -781,20 +781,17 @@ describe('Plugin', () => {
           const operationName = 'SecondQuery'
           const variableValues = { who: 'world' }
 
-          Promise
-            .all([
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('service', 'test-graphql')
-                  expect(spans[0]).to.have.property('name', 'graphql.execute')
-                  expect(spans[0]).to.have.property('resource', 'query SecondQuery{hello(name:"")}')
-                  expect(spans[0].meta).to.have.property('graphql.source', `query SecondQuery { hello(name: "world") }`)
-                  expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-                  expect(spans[0].meta).to.have.property('graphql.operation.name', 'SecondQuery')
-                })
-            ])
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[0]).to.have.property('resource', 'query SecondQuery{hello(name:"")}')
+              expect(spans[0].meta).to.have.property('graphql.source', `query SecondQuery { hello(name: "world") }`)
+              expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+              expect(spans[0].meta).to.have.property('graphql.operation.name', 'SecondQuery')
+            })
             .then(() => done())
             .catch(done)
 
