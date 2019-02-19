@@ -91,16 +91,8 @@ function patch (http, methodName, tracer, config) {
     }
   }
 
-  function finish (req, span, config, error) {
+  function finish (req, span, config) {
     addRequestHeaders(req, span, config)
-
-    if (error) {
-      span.addTags({
-        'error.type': error.name,
-        'error.msg': error.message,
-        'error.stack': error.stack
-      })
-    }
 
     span.finish()
   }
