@@ -1077,6 +1077,39 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with signature calculation disabled', () => {
+        before(() => {
+          tracer = require('../..')
+
+          return agent.load(plugin, 'graphql', { signature: false })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should fallback to the operation type and name', done => {
+          const source = `query WithoutSignature { friends { name } }`
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[0]).to.have.property('resource', 'query WithoutSignature')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
+        })
+      })
+
       withVersions(plugin, 'apollo-server-core', apolloVersion => {
         let runQuery
         let mergeSchemas

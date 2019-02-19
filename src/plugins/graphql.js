@@ -198,18 +198,18 @@ function normalizeArgs (args) {
 function startExecutionSpan (tracer, config, operation, args) {
   const span = startSpan(tracer, config, 'execute')
 
-  addExecutionTags(span, operation, args.document, args.operationName)
+  addExecutionTags(span, config, operation, args.document, args.operationName)
   addVariableTags(tracer, config, span, args.variableValues)
 
   return span
 }
 
-function addExecutionTags (span, operation, document, operationName) {
+function addExecutionTags (span, config, operation, document, operationName) {
   const type = operation.operation
   const name = operation.name && operation.name.value
   const source = document._datadog_source
   const tags = {
-    'resource.name': getSignature(document, operationName),
+    'resource.name': getSignature(document, operationName, config.signature),
     'graphql.operation.type': type,
     'graphql.operation.name': name
   }
@@ -393,8 +393,8 @@ function getVariablesFilter (config) {
   return null
 }
 
-function getSignature (document, operationName) {
-  if (tools !== false) {
+function getSignature (document, operationName, calculate) {
+  if (calculate !== false && tools !== false) {
     try {
       tools = tools || require('apollo-graphql')
       return tools.defaultEngineReportingSignature(document, operationName)
