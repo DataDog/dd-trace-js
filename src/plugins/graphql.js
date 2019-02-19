@@ -32,9 +32,9 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         value: { source, span, fields: {} }
       })
 
-      return call(execute, span, this, [args], (err, span) => {
+      return call(execute, span, this, [args], (err, res) => {
         finishResolvers(contextValue)
-        finish(err, span)
+        finish(err || (res && res.errors && res.errors[0]), span)
       })
     }
   }
@@ -73,16 +73,26 @@ function createWrapParse (tracer, config) {
 function createWrapValidate (tracer, config) {
   return function wrapValidate (validate) {
     return function validateWithTrace (schema, document, rules, typeInfo) {
-      if (!document.loc) return validate.apply(this, arguments)
+      const startTime = platform.now()
 
-      const span = startSpan(tracer, config, 'validate')
-      const errors = validate.apply(this, arguments)
+      let error
 
-      addDocumentTags(span, document)
+      try {
+        const errors = validate.apply(this, arguments)
 
-      finish(errors[0], span)
+        error = errors[0]
 
-      return errors
+        return errors
+      } catch (e) {
+        throw error = e
+      } finally {
+        // skip schema stitching nested validation
+        if (error || document.loc) {
+          const span = startSpan(tracer, config, 'validate', { startTime })
+          addDocumentTags(span, document)
+          finish(error, span)
+        }
+      }
     }
   }
 }
@@ -147,16 +157,16 @@ function call (fn, span, thisArg, args, callback) {
 
     if (result && typeof result.then === 'function') {
       result.then(
-        () => callback(null, span),
-        err => callback(err, span)
+        res => callback(null, res),
+        err => callback(err)
       )
     } else {
-      callback(null, span)
+      callback(null, result)
     }
 
     return result
   } catch (e) {
-    callback(e, span)
+    callback(e)
     throw e
   }
 }
@@ -199,6 +209,7 @@ function startExecutionSpan (tracer, config, operation, args) {
   const span = startSpan(tracer, config, 'execute')
 
   addExecutionTags(span, config, operation, args.document, args.operationName)
+  addDocumentTags(span, args.document)
   addVariableTags(tracer, config, span, args.variableValues)
 
   return span
@@ -207,7 +218,6 @@ function startExecutionSpan (tracer, config, operation, args) {
 function addExecutionTags (span, config, operation, document, operationName) {
   const type = operation.operation
   const name = operation.name && operation.name.value
-  const source = document._datadog_source
   const tags = {
     'resource.name': getSignature(document, operationName, config.signature),
     'graphql.operation.type': type,
@@ -218,17 +228,13 @@ function addExecutionTags (span, config, operation, document, operationName) {
     tags['graphql.operation.name'] = name
   }
 
-  if (operation.loc) {
-    tags['graphql.source'] = source.substring(operation.loc.start, operation.loc.end)
-  }
-
   span.addTags(tags)
 }
 
 function addDocumentTags (span, document) {
   const tags = {}
 
-  if (document._datadog_source) {
+  if (document && document._datadog_source) {
     tags['graphql.source'] = document._datadog_source
   }
 
@@ -248,11 +254,12 @@ function addVariableTags (tracer, config, span, variableValues) {
   span.addTags(tags)
 }
 
-function startSpan (tracer, config, name, childOf) {
-  childOf = childOf || tracer.scope().active()
+function startSpan (tracer, config, name, options) {
+  options = options || {}
 
   return tracer.startSpan(`graphql.${name}`, {
-    childOf,
+    childOf: options.childOf || tracer.scope().active(),
+    startTime: options.startTime,
     tags: {
       'service.name': getService(tracer, config)
     }
@@ -260,7 +267,7 @@ function startSpan (tracer, config, name, childOf) {
 }
 
 function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
-  const span = startSpan(tracer, config, 'resolve', childOf)
+  const span = startSpan(tracer, config, 'resolve', { childOf })
   const document = contextValue._datadog_graphql.source
   const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
 

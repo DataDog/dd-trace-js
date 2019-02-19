@@ -637,7 +637,79 @@ describe('Plugin', () => {
           graphql.execute(schema, document)
         })
 
-        it('should handle executor exceptions', done => {
+        it('should handle parsing exceptions', done => {
+          let error
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(1)
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.parse')
+              expect(spans[0]).to.have.property('error', 1)
+              expect(spans[0].meta).to.have.property('error.type', error.name)
+              expect(spans[0].meta).to.have.property('error.msg', error.message)
+              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+            })
+            .then(done)
+            .catch(done)
+
+          try {
+            graphql.parse('invalid')
+          } catch (e) {
+            error = e
+          }
+        })
+
+        it('should handle validation exceptions', done => {
+          let error
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(1)
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.validate')
+              expect(spans[0]).to.have.property('error', 1)
+              expect(spans[0].meta).to.have.property('error.type', error.name)
+              expect(spans[0].meta).to.have.property('error.msg', error.message)
+              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+            })
+            .then(done)
+            .catch(done)
+
+          try {
+            graphql.validate()
+          } catch (e) {
+            error = e
+          }
+        })
+
+        it('should handle validation errors', done => {
+          const source = `{ human { address } }`
+          const document = graphql.parse(source)
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(1)
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.validate')
+              expect(spans[0]).to.have.property('error', 1)
+              expect(spans[0].meta).to.have.property('error.type', errors[0].name)
+              expect(spans[0].meta).to.have.property('error.msg', errors[0].message)
+              expect(spans[0].meta).to.have.property('error.stack', errors[0].stack)
+            })
+            .then(done)
+            .catch(done)
+
+          const errors = graphql.validate(schema, document)
+        })
+
+        it('should handle execution exceptions', done => {
           const source = `{ hello }`
           const document = graphql.parse(source)
 
@@ -663,6 +735,45 @@ describe('Plugin', () => {
           } catch (e) {
             error = e
           }
+        })
+
+        it('should handle execution errors', done => {
+          const source = `{ hello }`
+          const document = graphql.parse(source)
+
+          const schema = graphql.buildSchema(`
+            type Query {
+              hello: String
+            }
+          `)
+
+          const rootValue = {
+            hello: () => {
+              throw new Error('test')
+            }
+          }
+
+          let error
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(2)
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[0]).to.have.property('error', 1)
+              expect(spans[0].meta).to.have.property('error.type', error.name)
+              expect(spans[0].meta).to.have.property('error.msg', error.message)
+              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+            })
+            .then(done)
+            .catch(done)
+
+          Promise.resolve(graphql.execute(schema, document, rootValue))
+            .then(res => {
+              error = res.errors[0]
+            })
         })
 
         it('should handle resolver exceptions', done => {
@@ -788,7 +899,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('service', 'test-graphql')
               expect(spans[0]).to.have.property('name', 'graphql.execute')
               expect(spans[0]).to.have.property('resource', 'query SecondQuery{hello(name:"")}')
-              expect(spans[0].meta).to.have.property('graphql.source', `query SecondQuery { hello(name: "world") }`)
+              expect(spans[0].meta).to.have.property('graphql.source', source)
               expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
               expect(spans[0].meta).to.have.property('graphql.operation.name', 'SecondQuery')
             })
@@ -796,6 +907,37 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source, variableValues, operationName }).catch(done)
+        })
+
+        it('should include used fragments in the source', done => {
+          const source = `
+            query WithFragments {
+              human {
+                ...firstFields
+              }
+            }
+            fragment firstFields on Human {
+              name
+            }
+          `
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
+
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(spans[0]).to.have.property('resource', resource)
+              expect(spans[0].meta).to.have.property('graphql.source', source)
+              expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+              expect(spans[0].meta).to.have.property('graphql.operation.name', 'WithFragments')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
         })
       })
 
