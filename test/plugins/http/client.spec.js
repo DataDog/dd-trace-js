@@ -460,16 +460,22 @@ describe('Plugin', () => {
 
         it('should handle connection errors', done => {
           getPort().then(port => {
+            let error
+
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-                expect(traces[0][0].meta).to.have.property('error.msg', `connect ECONNREFUSED 127.0.0.1:${port}`)
-                expect(traces[0][0].meta).to.have.property('error.stack')
+                expect(traces[0][0].meta).to.have.property('error.type', error.name)
+                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
               })
               .then(done)
               .catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user`)
+
+            req.on('error', err => {
+              error = err
+            })
 
             req.end()
           })

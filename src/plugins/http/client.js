@@ -53,48 +53,66 @@ function patch (http, methodName, tracer, config) {
 
       callback = scope.bind(callback, childOf)
 
-      const req = scope.bind(request, span).call(this, options, function (res) {
-        scope.bind(res)
+      const req = scope.bind(request, span).call(this, options, callback)
+      const emit = req.emit
 
-        span.setTag(HTTP_STATUS_CODE, res.statusCode)
+      req.emit = function (eventName, arg) {
+        switch (eventName) {
+          case 'response': {
+            const res = arg
 
-        addResponseHeaders(res, span, config)
+            scope.bind(res)
 
-        if (!config.validateStatus(res.statusCode)) {
-          span.setTag('error', 1)
+            span.setTag(HTTP_STATUS_CODE, res.statusCode)
+
+            addResponseHeaders(res, span, config)
+
+            if (!config.validateStatus(res.statusCode)) {
+              span.setTag('error', 1)
+            }
+
+            res.on('end', () => finish(req, span, config))
+
+            break
+          }
+          case 'error':
+            addError(span, arg)
+          case 'abort': // eslint-disable-line no-fallthrough
+          case 'close': // eslint-disable-line no-fallthrough
+            finish(req, span, config)
         }
 
-        res.on('end', () => finish(req, span, config))
-
-        // empty the data stream when no other listener exists to consume it
-        if (callback) {
-          return callback.apply(this, arguments)
-        } else if (req.listenerCount('response') === 0) {
-          res.resume()
-        }
-      })
+        return emit.apply(this, arguments)
+      }
 
       scope.bind(req)
-
-      req.on('abort', () => finish(req, span, config))
-      req.on('error', err => {
-        span.addTags({
-          'error.type': err.name,
-          'error.msg': err.message,
-          'error.stack': err.stack
-        })
-
-        finish(req, span, config)
-      })
 
       return req
     }
   }
 
-  function finish (req, span, config) {
+  function finish (req, span, config, error) {
     addRequestHeaders(req, span, config)
 
+    if (error) {
+      span.addTags({
+        'error.type': error.name,
+        'error.msg': error.message,
+        'error.stack': error.stack
+      })
+    }
+
     span.finish()
+  }
+
+  function addError (span, error) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
+
+    return error
   }
 
   function addRequestHeaders (req, span, config) {
