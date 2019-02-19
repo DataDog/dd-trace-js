@@ -416,7 +416,7 @@ function getSignature (document, operationName, operationType, calculate) {
 
       return tools.defaultEngineReportingSignature(document, operationName)
     } catch (e) {
-      // older Node/GraphQL versions are not supported
+      // safety net
     }
   }
 
