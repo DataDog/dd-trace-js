@@ -43,6 +43,7 @@
     "lodash.kebabcase": "^4.1.1",
     "lodash.memoize": "^4.1.2",
     "lodash.pick": "^4.4.0",
+    "lodash.sortby": "^4.7.0",
     "lodash.truncate": "^4.4.2",
     "lodash.uniq": "^4.5.0",
     "methods": "^1.1.2",
@@ -83,8 +84,5 @@
     "sinon-chai": "^2.14.0",
     "tape": "^4.9.1",
     "v8-coverage": "^1.0.8"
-  },
-  "optionalDependencies": {
-    "apollo-graphql": "^0.1.1"
   }
 }

@@ -408,7 +408,7 @@ function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
       try {
-        tools = tools || require('apollo-graphql')
+        tools = tools || require('./graphql/tools')
       } catch (e) {
         tools = false
         throw e
