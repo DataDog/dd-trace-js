@@ -33,19 +33,19 @@ const httpOptions = {
   blacklist: ['url', /url/, url => true],
   validateStatus: code => code < 400,
   headers: ['host']
-}
+};
 
 const httpServerOptions = {
   ...httpOptions,
   hooks: {
     request: (span, req, res) => {}
   }
-}
+};
 
 const httpClientOptions = {
   ...httpOptions,
   splitByDomain: true
-}
+};
 
 const graphqlOptions = {
   service: 'test',
@@ -53,7 +53,7 @@ const graphqlOptions = {
   variables: ({ foo, baz }) => ({ foo }),
   collapse: false,
   signature: false
-}
+};
 
 tracer.use('amqp10');
 tracer.use('amqplib');
@@ -95,8 +95,8 @@ tracer.use('winston');
 tracer.inject(span || span.context(), HTTP_HEADERS, {});
 context = tracer.extract(HTTP_HEADERS, {});
 
-traceId = context.toTraceId()
-spanId = context.toSpanId()
+traceId = context.toTraceId();
+spanId = context.toSpanId();
 
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
@@ -134,7 +134,7 @@ const emitter = {
   off (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
   addListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
   removeListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {}
-}
+};
 
 scope.bind(emitter);
 scope.bind(emitter, span);
