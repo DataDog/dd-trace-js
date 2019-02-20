@@ -341,6 +341,35 @@ jobs:
           - SERVICES=
           - PLUGINS=winston
 
+  typescript:
+    docker:
+      - image: node:8
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Versions
+          command: yarn versions
+      - &restore-yarn-cache
+        restore_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+      - run:
+          name: Install dependencies
+          command: yarn install
+      - &save-yarn-cache
+        save_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+            - ./yarn.lock
+      - run:
+          name: Test API documentation
+          command: yarn type:test
+      - run:
+          name: Build API documentation
+          command: yarn type:doc
+
 workflows:
   version: 2
   build:

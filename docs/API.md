@@ -190,15 +190,12 @@ See the [API documentation](./Scope.html) for more details.
 
 <h2 id="integrations">Integrations</h2>
 
-APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. This behavior can be changed by setting the `plugins` option to `false` in the [tracer settings](#tracer-settings).
+APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
 
-Built-in plugins can be enabled by name and configured individually:
+Built-in plugins can be configured individually:
 
 ```javascript
-const tracer = require('dd-trace').init({ plugins: false })
-
-// enable express integration
-tracer.use('express')
+const tracer = require('dd-trace').init()
 
 // enable and configure postgresql integration
 tracer.use('pg', {

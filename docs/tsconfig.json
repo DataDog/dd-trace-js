@@ -2,9 +2,9 @@
   "compilerOptions": {
     "moduleResolution": "node",
     "module": "commonjs",
-    "baseUrl": ".."
+    "baseUrl": "."
   },
   "files": [
-    "../index.d.ts"
+    "./index.d.ts"
   ]
 }
