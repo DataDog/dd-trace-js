@@ -2,12 +2,41 @@ import { IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
+export declare interface SpanOptions extends SpanOptions {}
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
 export declare interface Tracer extends opentracing.Tracer {
+  /**
+   * Starts and returns a new Span representing a logical unit of work.
+   * @param {string} name The name of the operation.
+   * @param {SpanOptions} [options] Options for the newly created span.
+   * @returns {Span} A new Span object.
+   */
   startSpan(name: string, options?: SpanOptions): Span;
+
+  /**
+   * Injects the given SpanContext instance for cross-process propagation
+   * within `carrier`
+   * @param  {SpanContext} spanContext The SpanContext to inject into the
+   *         carrier object. As a convenience, a Span instance may be passed
+   *         in instead (in which case its .context() is used for the
+   *         inject()).
+   * @param  {string} format The format of the carrier.
+   * @param  {any} carrier The carrier object.
+   */
   inject(spanContext: SpanContext | Span, format: string, carrier: any): void;
+
+  /**
+   * Returns a SpanContext instance extracted from `carrier` in the given
+   * `format`.
+   * @param  {string} format The format of the carrier.
+   * @param  {any} carrier The carrier object.
+   * @return {SpanContext}
+   *         The extracted SpanContext, or null if no such SpanContext could
+   *         be found in `carrier`
+   */
   extract(format: string, carrier: any): SpanContext | null;
 
   /**
@@ -61,7 +90,10 @@ export declare interface SpanContext extends opentracing.SpanContext {
   toSpanId(): string;
 }
 
-interface TracerOptions {
+/**
+ * List of options available to the tracer.
+ */
+export declare interface TracerOptions {
   /**
    * Whether to enable the tracer.
    * @default true
@@ -107,7 +139,7 @@ interface TracerOptions {
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */
-  experimental?: ExperimentalOptions | boolean;
+  experimental?: {} | boolean;
 
   /**
    * Whether to load all built-in plugins.
@@ -131,10 +163,9 @@ interface TracerOptions {
   tags?: { [key: string]: any };
 }
 
-interface ExperimentalOptions {}
-
+/** @hidden */
 interface EventEmitter {
-  emit?(eventName: string | symbol, ...args: any[]): any;
+  emit(eventName: string | symbol, ...args: any[]): any;
   on?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;

@@ -1,4 +1,4 @@
-import ddTrace, { tracer, Tracer, Span, SpanContext, Scope } from '..';
+import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope } from '..';
 import { HTTP_HEADERS } from '../ext/formats';
 
 let span: Span;
@@ -15,8 +15,8 @@ tracer.init({
   experimental: true,
   hostname: 'agent',
   logger: {
-    error () {},
-    debug () {}
+    error (message: string) {},
+    debug (message: string | Error) {}
   },
   plugins: false,
   port: 7777,
