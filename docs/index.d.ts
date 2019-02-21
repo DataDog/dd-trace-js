@@ -154,7 +154,7 @@ export declare interface TracerOptions {
    */
   logger?: {
     debug: (message: string) => void;
-    error: (err: Error) => void;
+    error: (err: Error | string) => void;
   };
 
   /**
