@@ -370,7 +370,7 @@ jobs:
           name: Build API documentation
           command: yarn type:doc
       - store_artifacts:
-          path: /docs/out
+          path: ./docs/out
 
 workflows:
   version: 2
