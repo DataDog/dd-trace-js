@@ -13,9 +13,9 @@ if (!msg) {
 
 exec('yarn install', { cwd: './docs' })
 exec('rm -rf ./out', { cwd: './docs' })
-exec('git clone -b gh-pages --single-branch git@github.com:DataDog/dd-trace-js.git docs/out')
-exec('rm -rf ./docs/out')
 exec('yarn type:doc')
+exec('git init', { cwd: './docs/out' })
+exec('git remote add origin git@github.com:DataDog/dd-trace-js.git', { cwd: './docs/out' })
 exec('git add -A', { cwd: './docs/out' })
 exec(`git commit -m "${msg}"`, { cwd: './docs/out' })
-exec('git push', { cwd: './docs/out' })
+exec('git push -f master:gh-pages', { cwd: './docs/out' })
