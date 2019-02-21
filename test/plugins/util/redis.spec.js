@@ -34,11 +34,11 @@ describe('plugins/util/redis', () => {
 
       const parent = tracer.startSpan('parent')
 
-      tracer.scopeManager().activate(parent)
+      tracer.scope().activate(parent, () => {
+        span = redis.instrument(tracer, config, '1', 'ping', [])
 
-      span = redis.instrument(tracer, config, '1', 'ping', [])
-
-      expect(span.context()._parentId.toString()).to.equal(parent.context()._spanId.toString())
+        expect(span.context()._parentId.toString()).to.equal(parent.context()._spanId.toString())
+      })
     })
 
     it('should trim command arguments if yoo long', () => {

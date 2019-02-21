@@ -6,7 +6,9 @@ function createWrapSend (tracer, config) {
       const span = startSendSpan(tracer, config, this)
 
       try {
-        const promise = send.apply(this, arguments)
+        const promise = tracer.scope().activate(span, () => {
+          return send.apply(this, arguments)
+        })
 
         return wrapPromise(promise, span)
       } catch (e) {
@@ -26,16 +28,9 @@ function createWrapMessageReceived (tracer, config) {
 
       const span = startReceiveSpan(tracer, config, this)
 
-      process.nextTick(() => {
-        const scope = tracer.scopeManager().activate(span, true)
-
-        try {
-          messageReceived.apply(this, arguments)
-        } finally {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
-            scope.close()
-          }
-        }
+      return tracer.scope().activate(span, () => {
+        messageReceived.apply(this, arguments)
+        span.finish()
       })
     }
   }

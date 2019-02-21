@@ -5,17 +5,20 @@ const Buffer = require('safe-buffer').Buffer
 function createWrapOperation (tracer, config, operationName) {
   return function wrapOperation (operation) {
     return function operationWithTrace (ns, ops, options, callback) {
-      const parentScope = tracer.scopeManager().active()
-      const span = tracer.startSpan('mongodb.query', {
-        childOf: parentScope && parentScope.span()
-      })
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const span = tracer.startSpan('mongodb.query', { childOf })
 
       addTags(span, tracer, config, ns, ops, this, operationName)
 
       if (typeof options === 'function') {
-        return operation.call(this, ns, ops, wrapCallback(tracer, span, options))
+        return scope
+          .bind(operation, span)
+          .call(this, ns, ops, wrapCallback(tracer, span, options))
       } else {
-        return operation.call(this, ns, ops, options, wrapCallback(tracer, span, callback))
+        return scope
+          .bind(operation, span)
+          .call(this, ns, ops, options, wrapCallback(tracer, span, callback))
       }
     }
   }
@@ -24,10 +27,9 @@ function createWrapOperation (tracer, config, operationName) {
 function createWrapNext (tracer, config) {
   return function wrapNext (next) {
     return function nextWithTrace (cb) {
-      const parentScope = tracer.scopeManager().active()
-      const span = tracer.startSpan('mongodb.query', {
-        childOf: parentScope && parentScope.span()
-      })
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const span = tracer.startSpan('mongodb.query', { childOf })
 
       addTags(span, tracer, config, this.ns, this.cmd, this.topology)
 
@@ -37,7 +39,7 @@ function createWrapNext (tracer, config) {
         })
       }
 
-      next.call(this, wrapCallback(tracer, span, cb, this))
+      scope.bind(next, span).call(this, wrapCallback(tracer, span, cb, this))
     }
   }
 }
@@ -72,7 +74,7 @@ function addHost (span, topology) {
 }
 
 function wrapCallback (tracer, span, done, cursor) {
-  return (err, res) => {
+  return tracer.scope().bind((err, res) => {
     if (err) {
       span.addTags({
         'error.type': err.name,
@@ -90,7 +92,7 @@ function wrapCallback (tracer, span, done, cursor) {
     if (done) {
       done(err, res)
     }
-  }
+  })
 }
 
 function getQuery (cmd) {

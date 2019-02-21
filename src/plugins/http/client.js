@@ -1,12 +1,19 @@
 'use strict'
 
 const url = require('url')
-const opentracing = require('opentracing')
 const semver = require('semver')
 const log = require('../../log')
+const tags = require('../../../ext/tags')
+const kinds = require('../../../ext/kinds')
+const formats = require('../../../ext/formats')
+const urlFilter = require('../util/urlfilter')
 
-const Tags = opentracing.Tags
-const FORMAT_HTTP_HEADERS = opentracing.FORMAT_HTTP_HEADERS
+const HTTP_HEADERS = formats.HTTP_HEADERS
+const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const SPAN_KIND = tags.SPAN_KIND
+const CLIENT = kinds.CLIENT
 
 function patch (http, methodName, tracer, config) {
   config = normalizeConfig(tracer, config)
@@ -17,7 +24,8 @@ function patch (http, methodName, tracer, config) {
       const args = normalizeArgs.apply(null, arguments)
       const uri = args.uri
       const options = args.options
-      const callback = args.callback
+
+      let callback = args.callback
 
       if (!config.filter(uri)) {
         return request.call(this, options, callback)
@@ -25,12 +33,12 @@ function patch (http, methodName, tracer, config) {
 
       const method = (options.method || 'GET').toUpperCase()
 
-      const parentScope = tracer.scopeManager().active()
-      const parent = parentScope && parentScope.span()
+      const scope = tracer.scope()
+      const childOf = scope.active()
       const span = tracer.startSpan('http.request', {
-        childOf: parent,
+        childOf,
         tags: {
-          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
+          [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(tracer, config, options),
           'resource.name': method,
           'span.type': 'web',
@@ -40,40 +48,83 @@ function patch (http, methodName, tracer, config) {
       })
 
       if (!hasAmazonSignature(options)) {
-        tracer.inject(span, FORMAT_HTTP_HEADERS, options.headers)
+        tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
-      const req = request.call(this, options, callback)
+      callback = scope.bind(callback, childOf)
 
-      req.on('socket', () => {
-        // empty the data stream when no other listener exists to consume it
-        if (req.listenerCount('response') === 1) {
-          req.on('response', res => res.resume())
+      const req = scope.bind(request, span).call(this, options, callback)
+      const emit = req.emit
+
+      req.emit = function (eventName, arg) {
+        switch (eventName) {
+          case 'response': {
+            const res = arg
+
+            scope.bind(res)
+
+            span.setTag(HTTP_STATUS_CODE, res.statusCode)
+
+            addResponseHeaders(res, span, config)
+
+            if (!config.validateStatus(res.statusCode)) {
+              span.setTag('error', 1)
+            }
+
+            res.on('end', () => finish(req, span, config))
+
+            break
+          }
+          case 'error':
+            addError(span, arg)
+          case 'abort': // eslint-disable-line no-fallthrough
+          case 'close': // eslint-disable-line no-fallthrough
+            finish(req, span, config)
         }
-      })
 
-      req.on('response', res => {
-        span.setTag(Tags.HTTP_STATUS_CODE, res.statusCode)
+        return emit.apply(this, arguments)
+      }
 
-        if (!config.validateStatus(res.statusCode)) {
-          span.setTag('error', 1)
-        }
-
-        res.on('end', () => span.finish())
-      })
-
-      req.on('error', err => {
-        span.addTags({
-          'error.type': err.name,
-          'error.msg': err.message,
-          'error.stack': err.stack
-        })
-
-        span.finish()
-      })
+      scope.bind(req)
 
       return req
     }
+  }
+
+  function finish (req, span, config) {
+    addRequestHeaders(req, span, config)
+
+    span.finish()
+  }
+
+  function addError (span, error) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
+
+    return error
+  }
+
+  function addRequestHeaders (req, span, config) {
+    config.headers.forEach(key => {
+      const value = req.getHeader(key)
+
+      if (value) {
+        span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
+      }
+    })
+  }
+
+  function addResponseHeaders (res, span, config) {
+    config.headers.forEach(key => {
+      const value = res.headers[key]
+
+      if (value) {
+        span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
+      }
+    })
   }
 
   function extractUrl (options) {
@@ -164,38 +215,41 @@ function getStatusValidator (config) {
 }
 
 function getFilter (tracer, config) {
-  const whitelist = config.whitelist || /.*/
-  const blacklist = [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
+  config = Object.assign({}, config, {
+    blacklist: [`${tracer._url.href}/v0.4/traces`].concat(config.blacklist || [])
+  })
 
-  return uri => applyFilter(whitelist, uri) && !applyFilter(blacklist, uri)
-
-  function applyFilter (filter, uri) {
-    if (typeof filter === 'function') {
-      return filter(uri)
-    } else if (filter instanceof RegExp) {
-      return filter.test(uri)
-    } else if (filter instanceof Array) {
-      return filter.some(filter => applyFilter(filter, uri))
-    }
-
-    return filter === uri
-  }
+  return urlFilter.getFilter(config)
 }
 
 function normalizeConfig (tracer, config) {
+  config = config.client || config
+
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
+  const headers = getHeaders(config)
 
   return Object.assign({}, config, {
     validateStatus,
-    filter
+    filter,
+    headers
   })
+}
+
+function getHeaders (config) {
+  if (!Array.isArray(config.headers)) return []
+
+  return config.headers
+    .filter(key => typeof key === 'string')
+    .map(key => key.toLowerCase())
 }
 
 module.exports = [
   {
     name: 'http',
     patch: function (http, tracer, config) {
+      if (config.client === false) return
+
       patch.call(this, http, 'request', tracer, config)
       if (semver.satisfies(process.version, '>=8')) {
         /**
@@ -210,6 +264,8 @@ module.exports = [
   {
     name: 'https',
     patch: function (http, tracer, config) {
+      if (config.client === false) return
+
       if (semver.satisfies(process.version, '>=9')) {
         patch.call(this, http, 'request', tracer, config)
         patch.call(this, http, 'get', tracer, config)

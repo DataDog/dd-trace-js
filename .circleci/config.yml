@@ -15,7 +15,7 @@ node-core-base: &node-core-base
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
-        command: yarn install
+        command: yarn install --ignore-engines
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
@@ -166,6 +166,14 @@ jobs:
           - SERVICES=
           - PLUGINS=bunyan
 
+  node-dns:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=dns
+
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
@@ -185,6 +193,14 @@ jobs:
         environment:
           - SERVICES=
           - PLUGINS=express
+
+  node-generic-pool:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=generic-pool
 
   node-graphql:
     <<: *node-plugin-base
@@ -250,6 +266,14 @@ jobs:
         environment:
           - MONGODB_REPLICA_SET_MODE=primary
           - MONGODB_ADVERTISED_HOSTNAME=localhost
+
+  node-net:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=
+          - PLUGINS=net
 
   node-pino:
     <<: *node-plugin-base
@@ -317,11 +341,43 @@ jobs:
           - SERVICES=
           - PLUGINS=winston
 
+  typescript:
+    docker:
+      - image: node:8
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Versions
+          command: yarn versions
+      - &restore-yarn-cache
+        restore_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+      - run:
+          name: Install dependencies
+          command: yarn install
+      - &save-yarn-cache
+        save_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+            - ./yarn.lock
+      - run:
+          name: Test API documentation
+          command: yarn type:test
+      - run:
+          name: Build API documentation
+          command: yarn type:doc
+      - store_artifacts:
+          path: ./docs/out
+
 workflows:
   version: 2
   build:
     jobs:
       - lint
+      - typescript
       - node-leaks
       - node-core-4
       - node-core-6
@@ -332,8 +388,10 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-dns
       - node-elasticsearch
       - node-express
+      - node-generic-pool
       - node-graphql
       - node-hapi
       - node-http
@@ -341,6 +399,7 @@ workflows:
       - node-memcached
       - node-mongodb-core
       - node-mysql
+      - node-net
       - node-pino
       - node-postgres
       - node-q
@@ -366,8 +425,10 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-dns
       - node-elasticsearch
       - node-express
+      - node-generic-pool
       - node-graphql
       - node-hapi
       - node-http
@@ -375,6 +436,7 @@ workflows:
       - node-memcached
       - node-mongodb-core
       - node-mysql
+      - node-net
       - node-pino
       - node-postgres
       - node-q

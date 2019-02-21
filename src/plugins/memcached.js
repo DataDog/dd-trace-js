@@ -3,9 +3,10 @@
 function createWrapCommand (tracer, config) {
   return function wrapCommand (command) {
     return function commandWithTrace (queryCompiler, server) {
-      const scope = tracer.scopeManager().active()
+      const scope = tracer.scope()
+      const childOf = scope.active()
       const span = tracer.startSpan('memcached.command', {
-        childOf: scope && scope.span(),
+        childOf,
         tags: {
           'span.kind': 'client',
           'span.type': 'memcached',
@@ -13,14 +14,16 @@ function createWrapCommand (tracer, config) {
         }
       })
 
-      queryCompiler = wrapQueryCompiler(queryCompiler, this, server, span)
+      queryCompiler = wrapQueryCompiler(queryCompiler, this, server, scope, span)
 
-      return command.call(this, queryCompiler, server)
+      return scope.bind(command, span).call(this, queryCompiler, server)
     }
   }
 }
 
-function wrapQueryCompiler (original, client, server, span) {
+function wrapQueryCompiler (original, client, server, scope, span) {
+  const parent = scope.active()
+
   return function () {
     const query = original.apply(this, arguments)
     const callback = query.callback
@@ -32,13 +35,13 @@ function wrapQueryCompiler (original, client, server, span) {
 
     addHost(span, client, server, query)
 
-    query.callback = function (err) {
+    query.callback = scope.bind(function (err) {
       addError(span, err)
 
       span.finish()
 
       return callback.apply(this, arguments)
-    }
+    }, parent)
 
     return query
   }

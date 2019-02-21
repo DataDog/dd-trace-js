@@ -35,10 +35,11 @@ describe('dd-trace', () => {
   })
 
   it('should record and send a trace to the agent', done => {
-    let span
-    const options = {
-      resource: '/hello/:name'
-    }
+    const span = tracer.startSpan('hello', {
+      tags: {
+        'resource.name': '/hello/:name'
+      }
+    })
 
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
     agent.put('/v0.4/traces', (req, res) => {
@@ -61,9 +62,6 @@ describe('dd-trace', () => {
       done()
     })
 
-    tracer.trace('hello', options, current => {
-      span = current
-      current.finish()
-    })
+    span.finish()
   })
 })

@@ -116,8 +116,7 @@ module.exports = {
 
   // Return the current active span.
   currentSpan () {
-    const scope = tracer.scopeManager().active()
-    return scope ? scope.span() : null
+    return tracer.scope().active()
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.

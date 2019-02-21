@@ -8,11 +8,11 @@ const nock = require('nock')
 const semver = require('semver')
 const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
-const ScopeManager = require('../../src/scope/scope_manager')
+const Scope = require('../../src/scope/new/scope')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
-const scopeManager = new ScopeManager()
+const scope = new Scope()
 
 chai.use(sinonChai)
 
@@ -25,25 +25,9 @@ global.withVersions = withVersions
 
 platform.use(node)
 
-after(() => {
-  scopeManager._disable()
-})
-
 afterEach(() => {
   agent.reset()
 })
-
-function withoutScope (fn) {
-  return function () {
-    let active
-
-    while ((active = scopeManager.active())) {
-      active.close()
-    }
-
-    return fn.apply(this, arguments)
-  }
-}
 
 function wrapIt () {
   const it = global.it
@@ -55,24 +39,10 @@ function wrapIt () {
 
     if (fn.length > 0) {
       return it.call(this, title, function (done) {
-        arguments[0] = withoutScope(agent.wrap(done))
-
-        return withoutScope(fn).apply(this, arguments)
+        return scope.bind(fn, null).call(this, scope.bind(done, null))
       })
     } else {
-      return it.call(this, title, function () {
-        const result = withoutScope(fn).apply(this, arguments)
-
-        if (result && result.then) {
-          return result
-            .then(withoutScope(res => res))
-            .catch(withoutScope(err => Promise.reject(err)))
-            .then(() => agent.promise())
-        }
-
-        return agent.promise()
-          .then(() => result)
-      })
+      return it.call(this, title, scope.bind(fn, null))
     }
   }
 }

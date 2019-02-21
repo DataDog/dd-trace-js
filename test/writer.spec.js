@@ -21,7 +21,10 @@ describe('Writer', () => {
     }
 
     span = {
-      context: sinon.stub().returns({ _trace: trace })
+      context: sinon.stub().returns({
+        _trace: trace,
+        _sampling: {}
+      })
     }
 
     response = JSON.stringify({
@@ -98,6 +101,23 @@ describe('Writer', () => {
 
       expect(writer.length).to.equal(1000)
       expect(writer._queue).to.deep.include('encoded')
+    })
+  })
+
+  describe('drop', () => {
+    beforeEach(() => {
+      span.context = sinon.stub().returns({
+        _trace: trace,
+        _sampling: {
+          drop: true
+        }
+      })
+    })
+
+    it('should not append if being dropped', () => {
+      writer.append(span)
+
+      expect(writer._queue).to.be.empty
     })
   })
 

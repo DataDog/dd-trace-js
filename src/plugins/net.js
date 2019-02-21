@@ -5,6 +5,7 @@ const tx = require('./util/tx')
 function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
     return function connectWithTrace () {
+      const scope = tracer.scope()
       const options = getOptions(arguments)
 
       if (!options) return connect.apply(this, arguments)
@@ -16,7 +17,7 @@ function createWrapConnect (tracer, config) {
       this.once('connect', tx.wrap(span))
       this.once('error', tx.wrap(span))
 
-      return connect.apply(this, arguments)
+      return scope.bind(connect, span).apply(this, arguments)
     }
   }
 }
@@ -61,14 +62,18 @@ function wrapIpc (tracer, config, socket, options) {
 }
 
 function startSpan (tracer, config, protocol, tags) {
-  const scope = tracer.scopeManager().active()
+  const childOf = tracer.scope().active()
   const span = tracer.startSpan(`${protocol}.connect`, {
-    childOf: scope && scope.span(),
+    childOf,
     tags: Object.assign({
       'span.kind': 'client',
       'service.name': config.service || `${tracer._service}-${protocol}`
     }, tags)
   })
+
+  if (!childOf) {
+    span.context()._sampled = false
+  }
 
   return span
 }
@@ -105,5 +110,3 @@ module.exports = {
     this.unwrap(net.Socket.prototype, 'connect')
   }
 }
-
-module.exports = [] // disable this integration for the upcoming release

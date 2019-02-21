@@ -1,10 +1,12 @@
 Component,Origin,License,Copyright
+require,@types/node,MIT,Copyright Authors
 require,async-hook-jl,MIT,Copyright 2015 Andreas Madsen
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
 require,lodash.memoize,MIT,Copyright JS Foundation and other contributors
 require,lodash.pick,MIT,Copyright JS Foundation and other contributors
+require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lodash.truncate,MIT,Copyright JS Foundation and other contributors
 require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
@@ -32,6 +34,7 @@ dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
 dev,eventemitter3,MIT,Copyright 2014 Arnout Kazemier
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
+dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz

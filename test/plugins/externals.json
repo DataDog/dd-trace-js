@@ -1,4 +1,10 @@
 {
+  "generic-pool": [
+    {
+      "name": "generic-pool",
+      "versions": [">=3"]
+    }
+  ],
   "graphql": [
     {
       "name": "apollo-server-core",

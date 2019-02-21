@@ -17,7 +17,7 @@ test('graphql plugin should not leak', t => {
 
   const source = `{ hello }`
 
-  profile(t, operation)
+  profile(t, operation, 2000)
 
   function operation (done) {
     graphql.graphql(schema, source).then(done)

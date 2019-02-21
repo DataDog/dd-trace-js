@@ -31,50 +31,171 @@ The following tags are available to override Datadog specific options:
 
 <h3 id="scope-manager">Scope Manager</h3>
 
-In order to provide context propagation, this library includes a scope manager. A scope is basically a wrapper around a span that can cross both synchronous and asynchronous contexts.
+In order to provide context propagation, this library includes a scope manager.
+A scope is basically a wrapper around a span that can cross both synchronous and
+asynchronous contexts.
 
-For example:
+The scope manager contains 3 APIs available on `tracer.scope()`:
+
+<h4>scope.active()</h4>
+
+This method returns the active span from the current scope.
+
+<h4>scope.activate(span, fn)</h4>
+
+This method activates the provided span in a new scope available in the
+provided function. Any asynchronous context created from whithin that function
+will also have the same scope.
 
 ```javascript
-const tracer = require('dd-trace').init({ plugins: false })
-const express = require('express')
-const app = express()
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
 
-app.use((req, res, next) => {
-  const span = tracer.startSpan('web.request')
-  const scope = tracer.scopeManager().activate(span)
+const requestSpan = tracer.startSpan('web.request')
+const promise = Promise.resolve()
 
-  next()
-})
+scope.activate(requestSpan, () => {
+  log(scope.active()) // requestSpan because in new scope
 
-app.get('/hello', (req, res, next) => {
+  someFunction() // requestSpan because called in scope
+
   setTimeout(() => {
-    const scope = tracer.scopeManager().active() // the scope activated earlier
-    const span = scope.span() // the span wrapped by the scope
+    log(scope.active()) // requestSpan because setTimeout called in scope
+  })
 
-    span.finish()
-    scope.close() // optional as the scope is automatically closed at the end of the current asynchronous context.
-
-    res.status(200).send()
-  }, 100)
+  promise.then(() => {
+    log(scope.active()) // requestSpan because then() called in scope
+  })
 })
 
-app.listen(3000)
+function someFunction () {
+  log(scope.active())
+}
+
+log(scope.active()) // null
+
+someFunction() // null because called outside the scope
 ```
 
-See the [API documentation](./ScopeManager.html) for usage.
+<h4>scope.bind(target, [span])</h4>
+
+This method binds a target to the specified span, or to the active span if
+unspecified. It supports binding functions, promises and event emitters.
+
+When a span is provided, the target is always bound to that span. Explicitly
+passing `null` as the span will actually bind to `null` or no span. When a span
+is not provided, the binding uses the following rules:
+
+* Functions are bound to the span that is active when `scope.bind(fn)` is called.
+* Promise handlers are bound to the active span in the scope where `.then()` was
+called. This also applies to any equivalent method such as `.catch()`.
+* Event emitter listeners are bound to the active span in the scope where
+`.addEventListener()` was called. This also applies to any equivalent method
+such as `.on()`
+
+**Note**: Native promises and promises from `bluebird`, `q` and `when` are
+already bound by default and don't need to be explicitly bound.
+
+<h5>Examples</h5>
+
+<h6>Function binding</h6>
+
+```javascript
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
+
+const outerSpan = tracer.startSpan('web.request')
+
+scope.activate(outerSpan, () => {
+  const innerSpan = tracer.startSpan('web.middleware')
+
+  const boundToInner = scope.bind(() => {
+    log(scope.active())
+  }, innerSpan)
+
+  const boundToOuter = scope.bind(() => {
+    log(scope.active())
+  })
+
+  boundToInner() // innerSpan because explicitly bound
+  boundToOuter() // outerSpan because implicitly bound
+})
+```
+
+<h6>Promise binding</h6>
+
+```javascript
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
+
+const outerSpan = tracer.startSpan('web.request')
+const innerPromise = Promise.resolve()
+const outerPromise = Promise.resolve()
+
+scope.activate(outerSpan, () => {
+  const innerSpan = tracer.startSpan('web.middleware')
+
+  scope.bind(innerPromise, innerSpan)
+  scope.bind(outerPromise)
+
+  innerPromise.then(() => {
+    log(scope.active()) // innerSpan because explicitly bound
+  })
+
+  outerPromise.then(() => {
+    log(scope.active()) // outerSpan because implicitly bound on `then()` call
+  })
+})
+```
+
+**Note**: `async/await` cannot be bound and always execute in the scope where
+`await` was called. If binding `async/await` is needed, the promise must be
+wrapped by a function.
+
+<h6>Event emitter binding</h6>
+
+```javascript
+const tracer = require('dd-trace').init()
+const scope = tracer.scope()
+const log = console.log
+const EventEmitter = require('events').EventEmitter
+
+const outerSpan = tracer.startSpan('web.request')
+const innerEmitter = new EventEmitter()
+const outerEmitter = new EventEmitter()
+
+scope.activate(outerSpan, async () => {
+  const innerSpan = tracer.startSpan('web.middleware')
+
+  scope.bind(innerEmitter, innerSpan)
+  scope.bind(outerEmitter)
+
+  innerEmitter.on('request', () => {
+    log(scope.active()) // innerSpan because explicitly bound
+  })
+
+  outerEmitter.on('request', () => {
+    log(scope.active()) // outerSpan because implicitly bound on `then()` call
+  })
+})
+
+innerEmitter.emit('request')
+outerEmitter.emit('request')
+```
+
+See the [API documentation](./Scope.html) for more details.
 
 <h2 id="integrations">Integrations</h2>
 
-APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. This behavior can be changed by setting the `plugins` option to `false` in the [tracer settings](#tracer-settings).
+APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
 
-Built-in plugins can be enabled by name and configured individually:
+Built-in plugins can be configured individually:
 
 ```javascript
-const tracer = require('dd-trace').init({ plugins: false })
-
-// enable express integration
-tracer.use('express')
+const tracer = require('dd-trace').init()
 
 // enable and configure postgresql integration
 tracer.use('pg', {
@@ -82,299 +203,83 @@ tracer.use('pg', {
 })
 ```
 
-Each integration also has its own list of default tags. These tags get automatically added to the span created by the integration.
-
-<h3 id="amqplib">amqplib</h3>
-
-<h5 id="amqplib-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| out.host         | The host of the AMQP server.                              |
-| out.port         | The port of the AMQP server.                              |
-| span.kind        | Set to either `producer` or `consumer` where it applies.  |
-| amqp.queue       | The queue targeted by the command (when available).       |
-| amqp.exchange    | The exchange targeted by the command (when available).    |
-| amqp.routingKey  | The routing key targeted by the command (when available). |
-| amqp.consumerTag | The consumer tag (when available).                        |
-| amqp.source      | The source exchange of the binding (when available).      |
-| amqp.destination | The destination exchange of the binding (when available). |
-
-<h5 id="amqplib-config">Configuration Options</h5>
-
-| Option           | Default                   | Description                            |
-|------------------|---------------------------|----------------------------------------|
-| service          | *Service name of the app* | The service name for this integration. |
-
-<h3 id="elasticsearch">elasticsearch</h3>
-
-<h5 id="elasticsearch-tags">Tags</h5>
-
-| Tag                  | Description                                           |
-|----------------------|-------------------------------------------------------|
-| db.type              | Always set to `elasticsearch`.                        |
-| out.host             | The host of the Elasticsearch server.                 |
-| out.port             | The port of the Elasticsearch server.                 |
-| span.kind            | Always set to `client`.                               |
-| elasticsearch.method | The underlying HTTP request verb.                     |
-| elasticsearch.url    | The underlying HTTP request URL path.                 |
-| elasticsearch.body   | The body of the query.                                |
-| elasticsearch.params | The parameters of the query.                          |
-
-<h5 id="elasticsearch-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | elasticsearch    | The service name for this integration. |
-
-<h3 id="express">express</h3>
-
-<h5 id="express-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| http.url         | The complete URL of the request.                          |
-| http.method      | The HTTP method of the request.                           |
-| http.status_code | The HTTP status code of the response.                     |
-| http.headers.*   | A recorded HTTP header.                                   |
-
-<h5 id="express-config">Configuration Options</h5>
-
-| Option           | Default                   | Description                            |
-|------------------|---------------------------|----------------------------------------|
-| service          | *Service name of the app* | The service name for this integration. |
-| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
-| headers          | `[]`                      | An array of headers to include in the span metadata. |
-
-<h3 id="graphql">graphql</h3>
-
-The `graphql` integration uses the operation name as the span resource name. If no operation name is set, the resource name will always be just `query`, `mutation` or `subscription`.
-
-For example:
-
-```graphql
-# good, the resource name will be `query HelloWorld`
-query HelloWorld {
-  hello
-  world
-}
-
-# bad, the resource name will be `query`
-{
-  hello
-  world
-}
-```
-
-<h5 id="graphql-tags">Tags</h5>
-
-| Tag                 | Description                                               |
-|---------------------|-----------------------------------------------------------|
-| graphql.document    | The original GraphQL document.                            |
-| graphql.variables.* | The variables applied to the document.                    |
-
-<h5 id="graphql-config">Configuration Options</h5>
-
-| Option          | Default                                          | Description                                                            |
-|-----------------|--------------------------------------------------|------------------------------------------------------------------------|
-| service         | *Service name of the app suffixed with -graphql* | The service name for this integration.                                 |
-| variables       | []                                               | An array of variable names to record. Can also be a callback that returns the key/value pairs to record. For example, using `variables => variables` would record all variables. |
-| depth           | -1                                               | The maximum depth of fields/resolvers to instrument. Set to `0` to only instrument the operation or to -1 to instrument all fields/resolvers. |
-| collapse        | true                                             | Whether to collapse list items into a single element. (i.e. single `users.*.name` span instead of `users.0.name`, `users.1.name`, etc) |
-
-<h3 id="hapi">hapi</h3>
-
-<h5 id="hapi-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| http.url         | The complete URL of the request.                          |
-| http.method      | The HTTP method of the request.                           |
-| http.status_code | The HTTP status code of the response.                     |
-| http.headers.*   | A recorded HTTP header.                                   |
-
-<h5 id="hapi-config">Configuration Options</h5>
-
-| Option           | Default                   | Description                            |
-|------------------|---------------------------|----------------------------------------|
-| service          | *Service name of the app* | The service name for this integration. |
-| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
-| headers          | `[]`                      | An array of headers to include in the span metadata. |
-
-<h3 id="http">http / https</h3>
-
-<h5 id="http-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| http.url         | The complete URL of the request.                          |
-| http.method      | The HTTP method of the request.                           |
-| http.status_code | The HTTP status code of the response.                     |
-
-<h5 id="http-config">Configuration Options</h5>
-
-| Option           | Default                               | Description       |
-|------------------|---------------------------------------|-------------------|
-| service          | http-client                           | The service name for this integration. |
-| splitByDomain    | false                                 | Use the remote endpoint host as the service name instead of the default. |
-| validateStatus   | `code => code < 400 || code >= 500`   | Callback function to determine if an HTTP response should be recorded as an error. It should take a status code as its only parameter and return `true` for success or `false` for errors.
-| blacklist        | []                                    | List of URLs that should not be instrumented. Can be a string, RegExp, callback that takes the URL as a parameter, or an array of any of these.
-| whitelist        | /.*/                                  | List of URLs that should be instrumented. If this is set, other URLs will not be instrumented. Can be a string, RegExp, callback that takes the URL as a parameter, or an array of any of these.
-
-<h3 id="ioredis">ioredis</h3>
-
-<h5 id="ioredis-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| db.name          | The index of the queried database.                        |
-| out.host         | The host of the Redis server.                             |
-| out.port         | The port of the Redis server.                             |
-
-<h5 id="ioredis-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | redis            | The service name for this integration. |
-
-<h3 id="koa">koa</h3>
-
-<h5 id="koa-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| http.url         | The complete URL of the request.                          |
-| http.method      | The HTTP method of the request.                           |
-| http.status_code | The HTTP status code of the response.                     |
-| http.headers.*   | A recorded HTTP header.                                   |
-
-<h5 id="koa-config">Configuration Options</h5>
-
-| Option           | Default                   | Description                            |
-|------------------|---------------------------|----------------------------------------|
-| service          | *Service name of the app* | The service name for this integration. |
-| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
-| headers          | `[]`                      | An array of headers to include in the span metadata. |
-
-<h3 id="memcached">memcached</h3>
-
-<h5 id="memcached-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| memcached.query  | The query sent to the server.                             |
-| out.host         | The host of the Memcached server.                         |
-| out.port         | The port of the Memcached server.                         |
-
-<h5 id="memcached-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | memcached        | The service name for this integration. |
-
-<h3 id="mongodb-core">mongodb-core</h3>
-
-<h5 id="mongodb-core-tags">Tags</h5>
-
-| Tag                  | Description                                           |
-|----------------------|-------------------------------------------------------|
-| db.name              | The qualified name of the queried collection.         |
-| out.host             | The host of the MongoDB server.                       |
-| out.port             | The port of the MongoDB server.                       |
-| mongodb.cursor.index | When using a cursor, the current index of the cursor. |
-
-<h5 id="mongodb-core-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | mongodb          | The service name for this integration. |
-
-<h3 id="mysql">mysql</h3>
-
-<h5 id="mysql-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| db.name          | The name of the queried database.                         |
-| db.user          | The user who made the query.                              |
-| out.host         | The host of the MySQL server.                             |
-| out.port         | The port of the MySQL server.                             |
-
-<h5 id="mysql-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | mysql            | The service name for this integration. |
-
-<h3 id="mysql2">mysql2</h3>
-
-<h5 id="mysql2-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| db.name          | The name of the queried database.                         |
-| db.user          | The user who made the query.                              |
-| out.host         | The host of the MySQL server.                             |
-| out.port         | The port of the MySQL server.                             |
-
-<h5 id="mysql2-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | mysql            | The service name for this integration. |
-
-<h3 id="pg">pg</h3>
-
-<h5 id="pg-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| db.name          | The name of the queried database.                         |
-| db.user          | The user who made the query.                              |
-| out.host         | The host of the PostgreSQL server.                        |
-| out.port         | The port of the PostgreSQL server.                        |
-
-<h5 id="pg-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | postgres         | The service name for this integration. |
-
-<h3 id="redis">redis</h3>
-
-<h5 id="redis-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| db.name          | The index of the queried database.                        |
-| out.host         | The host of the Redis server.                             |
-| out.port         | The port of the Redis server.                             |
-
-<h5 id="redis-config">Configuration Options</h5>
-
-| Option           | Default          | Description                            |
-|------------------|------------------|----------------------------------------|
-| service          | redis            | The service name for this integration. |
-
-<h3 id="restify">restify</h3>
-
-<h5 id="restify-tags">Tags</h5>
-
-| Tag              | Description                                               |
-|------------------|-----------------------------------------------------------|
-| http.url         | The complete URL of the request.                          |
-| http.method      | The HTTP method of the request.                           |
-| http.status_code | The HTTP status code of the response.                     |
-| http.headers.*   | A recorded HTTP header.                                   |
-
-<h5 id="restify-config">Configuration Options</h5>
-
-| Option           | Default                   | Description                            |
-|------------------|---------------------------|----------------------------------------|
-| service          | *Service name of the app* | The service name for this integration. |
-| validateStatus   | `code => code < 500`      | Callback function to determine if there was an error. It should take a status code as its only parameter and return `true` for success or `false` for errors. |
-| headers          | `[]`                      | An array of headers to include in the span metadata. |
-
+<h5 id="amqplib"></h5>
+<h5 id="amqplib-tags"></h5>
+<h5 id="amqplib-config"></h5>
+<h5 id="bunyan"></h5>
+<h5 id="dns"></h5>
+<h5 id="elasticsearch"></h5>
+<h5 id="elasticsearch-tags"></h5>
+<h5 id="elasticsearch-config"></h5>
+<h5 id="express"></h5>
+<h5 id="express-tags"></h5>
+<h5 id="express-config"></h5>
+<h5 id="generic-pool"></h5>
+<h5 id="graphql"></h5>
+<h5 id="graphql-tags"></h5>
+<h5 id="graphql-config"></h5>
+<h5 id="hapi"></h5>
+<h5 id="hapi-tags"></h5>
+<h5 id="hapi-config"></h5>
+<h5 id="http"></h5>
+<h5 id="http-tags"></h5>
+<h5 id="http-config"></h5>
+<h5 id="ioredis"></h5>
+<h5 id="ioredis-tags"></h5>
+<h5 id="ioredis-config"></h5>
+<h5 id="koa"></h5>
+<h5 id="koa-tags"></h5>
+<h5 id="koa-config"></h5>
+<h5 id="memcached"></h5>
+<h5 id="memcached-tags"></h5>
+<h5 id="memcached-config"></h5>
+<h5 id="mongodb-core"></h5>
+<h5 id="mongodb-core-tags"></h5>
+<h5 id="mongodb-core-config"></h5>
+<h5 id="mysql"></h5>
+<h5 id="mysql-tags"></h5>
+<h5 id="mysql-config"></h5>
+<h5 id="mysql2"></h5>
+<h5 id="mysql2-tags"></h5>
+<h5 id="mysql2-config"></h5>
+<h5 id="net"></h5>
+<h5 id="pino"></h5>
+<h5 id="pg"></h5>
+<h5 id="pg-tags"></h5>
+<h5 id="pg-config"></h5>
+<h5 id="redis"></h5>
+<h5 id="redis-tags"></h5>
+<h5 id="redis-config"></h5>
+<h5 id="restify"></h5>
+<h5 id="restify-tags"></h5>
+<h5 id="restify-config"></h5>
+<h5 id="when"></h5>
+<h5 id="winston"></h5>
+<h3 id="integrations-list">Available Plugins</h3>
+
+* [amqp10](./interfaces/plugins.amqp10.html)
+* [amqplib](./interfaces/plugins.amqplib.html)
+* [bluebird](./interfaces/plugins.bluebird.html)
+* [bunyan](./interfaces/plugins.bunyan.html)
+* [dns](./interfaces/plugins.dns.html)
+* [elasticsearch](./interfaces/plugins.elasticsearch.html)
+* [express](./interfaces/plugins.express.html)
+* [generic-pool](./interfaces/plugins.generic_pool.html)
+* [graphql](./interfaces/plugins.graphql.html)
+* [hapi](./interfaces/plugins.hapi.html)
+* [http](./interfaces/plugins.http.html)
+* [ioredis](./interfaces/plugins.ioredis.html)
+* [mongodb-core](./interfaces/plugins.mongodb_core.html)
+* [mysql](./interfaces/plugins.mysql.html)
+* [mysql2](./interfaces/plugins.mysql2.html)
+* [net](./interfaces/plugins.net.html)
+* [pino](./interfaces/plugins.pino.html)
+* [pg](./interfaces/plugins.pg.html)
+* [q](./interfaces/plugins.q.html)
+* [redis](./interfaces/plugins.redis.html)
+* [restify](./interfaces/plugins.restify.html)
+* [when](./interfaces/plugins.when.html)
+* [winston](./interfaces/plugins.winston.html)
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 

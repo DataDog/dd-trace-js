@@ -18,15 +18,14 @@ const tx = {
 }
 
 function wrapCallback (span, callback) {
-  const scopeManager = span.tracer().scopeManager()
-  const scope = scopeManager.active()
+  const scope = span.tracer().scope()
+  const previous = scope.active()
 
   return function (err) {
     finish(span, err)
 
     if (callback) {
-      scopeManager.activate(scope ? scope.span() : null)
-      callback.apply(this, arguments)
+      return scope.activate(previous, () => callback.apply(this, arguments))
     }
   }
 }

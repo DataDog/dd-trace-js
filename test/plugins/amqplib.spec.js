@@ -193,7 +193,7 @@ describe('Plugin', () => {
                 if (err) return done(err)
 
                 channel.consume(ok.queue, () => {}, {}, () => {
-                  expect(tracer.scopeManager().active()).to.be.null
+                  expect(tracer.scope().active()).to.be.null
                   done()
                 })
               })
@@ -207,7 +207,7 @@ describe('Plugin', () => {
 
                 channel.sendToQueue(ok.queue, Buffer.from('content'))
                 channel.consume(ok.queue, () => {
-                  expect(tracer.scopeManager().active()).to.not.be.null
+                  expect(tracer.scope().active()).to.not.be.null
                   done()
                 }, {}, err => err && done(err))
               })
@@ -228,7 +228,7 @@ describe('Plugin', () => {
 
             channel.assertQueue('test', {})
               .then(() => {
-                expect(tracer.scopeManager().active()).to.be.null
+                expect(tracer.scope().active()).to.be.null
                 done()
               })
               .catch(done)

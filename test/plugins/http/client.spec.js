@@ -5,8 +5,12 @@ const agent = require('../agent')
 const semver = require('semver')
 const fs = require('fs')
 const path = require('path')
+const tags = require('../../../ext/tags')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
+
+const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
+const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 wrapIt()
 
@@ -419,7 +423,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                expect(tracer.scopeManager().active()).to.be.null
+                expect(tracer.scope().active()).to.be.null
                 done()
               })
 
@@ -440,9 +444,11 @@ describe('Plugin', () => {
           getPort().then(port => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                const span = tracer.scope().active()
+
                 res.on('data', () => {})
                 res.on('end', () => {
-                  expect(tracer.scopeManager().active()).to.be.null
+                  expect(tracer.scope().active()).to.equal(span)
                   done()
                 })
               })
@@ -454,16 +460,22 @@ describe('Plugin', () => {
 
         it('should handle connection errors', done => {
           getPort().then(port => {
+            let error
+
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-                expect(traces[0][0].meta).to.have.property('error.msg', `connect ECONNREFUSED 127.0.0.1:${port}`)
-                expect(traces[0][0].meta).to.have.property('error.stack')
+                expect(traces[0][0].meta).to.have.property('error.type', error.name)
+                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
               })
               .then(done)
               .catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user`)
+
+            req.on('error', err => {
+              error = err
+            })
 
             req.end()
           })
@@ -543,20 +555,43 @@ describe('Plugin', () => {
               // Activate a new parent span so we capture any double counting that may happen, otherwise double-counts
               // would be siblings and our test would only capture 1 as a false positive.
               const span = tracer.startSpan('http-test')
-              tracer.scopeManager().activate(span)
+              tracer.scope().activate(span, () => {
+                // Test `http(s).request
+                const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
+                  res.on('data', () => {})
+                })
+                req.end()
 
-              // Test `http(s).request
-              const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
-                res.on('data', () => {})
+                // Test `http(s).get`
+                http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
+                  res.on('data', () => {})
+                })
+
+                span.finish()
               })
-              req.end()
+            })
+          })
+        })
 
-              // Test `http(s).get`
-              http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
-                res.on('data', () => {})
+        it('should record when the request was aborted', done => {
+          const app = express()
+
+          app.get('/abort', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-http-client')
               })
+              .then(done)
+              .catch(done)
 
-              span.finish()
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/abort`)
+
+              req.abort()
             })
           })
         })
@@ -567,7 +602,10 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            service: 'custom'
+            server: false,
+            client: {
+              service: 'custom'
+            }
           }
 
           return agent.load(plugin, 'http', config)
@@ -608,7 +646,10 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            validateStatus: status => status < 500
+            server: false,
+            client: {
+              validateStatus: status => status < 500
+            }
           }
 
           return agent.load(plugin, 'http', config)
@@ -649,7 +690,10 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            splitByDomain: true
+            server: false,
+            client: {
+              splitByDomain: true
+            }
           }
 
           return agent.load(plugin, 'http', config)
@@ -679,6 +723,82 @@ describe('Plugin', () => {
                 res.on('data', () => {})
               })
 
+              req.end()
+            })
+          })
+        })
+      })
+
+      describe('with headers configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              headers: ['host', 'x-foo']
+            }
+          }
+
+          return agent.load(plugin, 'http', config)
+            .then(() => {
+              http = require(protocol)
+              express = require('express')
+            })
+        })
+
+        it('should add tags for the configured headers', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.setHeader('x-foo', 'bar')
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const meta = traces[0][0].meta
+
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
+                expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+
+              req.end()
+            })
+          })
+        })
+
+        it('should support adding request headers', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const meta = traces[0][0].meta
+
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+
+              req.setHeader('x-foo', 'bar')
               req.end()
             })
           })
