@@ -172,20 +172,33 @@ interface EventEmitter {
   removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
 }
 
+/**
+ * The Datadog Scope Manager. This is used for context propagation.
+ */
 export declare interface Scope {
   /**
    * Get the current active span or null if there is none.
+   *
+   * @returns {Span} The active span.
    */
   active(): Span | null;
 
   /**
-   * Activate a new span in the scope of the function.
+   * Activate a span in the scope of a function.
    *
-   * @param span The span for which to activate the new scope.
-   * @param finishSpanOnClose Whether to automatically finish the span when the scope is closed.
+   * @param {Span} span The span to activate.
+   * @param {Function} fn Function that will have the span activated on its scope.
+   * @returns The return value of the provided function.
    */
-  activate<T>(span: opentracing.Span, fn: ((...args: any[]) => T | void)): Scope;
+  activate<T>(span: Span, fn: ((...args: any[]) => T | void)): Scope;
 
+  /**
+   * Binds a target to the provided span, or the active span if omitted.
+   *
+   * @param {Function|Promise|EventEmitter} target Target that will have the span activated on its scope.
+   * @param {Span} [span=scope.active()] The span to activate.
+   * @returns The bound target.
+   */
   bind<T>(fn: ((...args: any[]) => T | void), span?: Span | null): ((...args: any[]) => T | void);
   bind<T>(fn: Promise<T>, span?: Span | null): Promise<T>;
   bind(emitter: EventEmitter, span?: Span | null): EventEmitter;

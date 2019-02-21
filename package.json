@@ -7,7 +7,7 @@
   "scripts": {
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
-    "type:test": "cd docs && yarn test",
+    "type:test": "cd docs && yarn && yarn test",
     "lint": "eslint . && node scripts/check_licenses.js",
     "services": "node ./scripts/install_plugin_modules && node test/setup/services",
     "tdd": "yarn services && NO_DEPRECATION=* mocha --watch 'test/setup/**/*.js'",
