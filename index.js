@@ -7,3 +7,5 @@ const TracerProxy = require('./src/proxy')
 platform.use(node)
 
 module.exports = new TracerProxy()
+module.exports.default = module.exports
+module.exports.tracer = module.exports
