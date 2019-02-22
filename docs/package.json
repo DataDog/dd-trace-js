@@ -4,7 +4,7 @@
   "main": "typedoc.js",
   "scripts": {
     "build": "typedoc",
-    "test": "tsc --noEmit test"
+    "test": "tsc test && node test"
   },
   "license": "BSD-3-Clause",
   "private": true,

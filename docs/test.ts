@@ -3,7 +3,6 @@ import { HTTP_HEADERS } from '../ext/formats';
 
 let span: Span;
 let context: SpanContext;
-let scope: Scope;
 let traceId: string;
 let spanId: string;
 
@@ -92,12 +91,6 @@ tracer.use('router');
 tracer.use('when');
 tracer.use('winston');
 
-tracer.inject(span || span.context(), HTTP_HEADERS, {});
-context = tracer.extract(HTTP_HEADERS, {});
-
-traceId = context.toTraceId();
-spanId = context.toSpanId();
-
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
 span = tracer.startSpan('test', {
@@ -108,6 +101,16 @@ span = tracer.startSpan('test', {
     foo: 'bar'
   }
 });
+
+const carrier = {}
+
+tracer.inject(span || span.context(), HTTP_HEADERS, carrier);
+context = tracer.extract(HTTP_HEADERS, carrier);
+
+traceId = context.toTraceId();
+spanId = context.toSpanId();
+
+const scope = tracer.scope()
 
 span = scope.active();
 
