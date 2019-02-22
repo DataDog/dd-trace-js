@@ -49,9 +49,30 @@ describe('Tracer', () => {
       })
     })
 
-    it('should run activate the span', () => {
+    it('should activate the span', () => {
       tracer.trace('name', {}, span => {
         expect(tracer.scope().active()).to.equal(span)
+      })
+    })
+
+    it('should start the span as a child of the active span', () => {
+      const childOf = tracer.startSpan('parent')
+
+      tracer.scope().activate(childOf, () => {
+        tracer.trace('name', {}, span => {
+          expect(span.context()._parentId.toString()).to.equal(childOf.context().toSpanId())
+        })
+      })
+    })
+
+    it('should allow overriding the parent span', () => {
+      const root = tracer.startSpan('root')
+      const childOf = tracer.startSpan('parent')
+
+      tracer.scope().activate(root, () => {
+        tracer.trace('name', { childOf }, span => {
+          expect(span.context()._parentId.toString()).to.equal(childOf.context().toSpanId())
+        })
       })
     })
 
