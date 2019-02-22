@@ -12,11 +12,26 @@ describe('NoopTracer', () => {
   })
 
   describe('trace', () => {
-    it('should return a noop span', done => {
-      tracer.trace('test', {}, span => {
+    it('should provide a span and done function', () => {
+      tracer.trace('test', {}, (span, done) => {
         expect(span).to.be.instanceof(Span)
-        done()
+        expect(done).to.be.a('function')
+        expect(done).to.not.throw()
       })
+    })
+
+    it('should return the return value of the function', () => {
+      const result = tracer.trace('test', {}, () => 'test')
+
+      expect(result).to.equal('test')
+    })
+  })
+
+  describe('wrap', () => {
+    it('should return the function', () => {
+      const fn = () => {}
+
+      expect(tracer.wrap('test', {}, fn)).to.equal(fn)
     })
   })
 

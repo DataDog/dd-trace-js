@@ -24,13 +24,51 @@ class DatadogTracer extends Tracer {
     this._scope = new Scope()
   }
 
-  trace (name, options, callback) {
-    if (!callback) {
-      callback = options
-      options = {}
-    }
+  trace (name, options, fn) {
+    if (typeof fn !== 'function') return
 
-    callback(noop)
+    options = Object.assign({}, options, {
+      childOf: this.scope().active()
+    })
+
+    const span = this.startSpan(name, options)
+
+    try {
+      if (fn.length > 1) {
+        return this.scope().activate(span, () => fn(span, err => {
+          addError(span, err)
+          span.finish()
+        }))
+      }
+
+      const result = this.scope().activate(span, () => fn(span))
+
+      if (result && typeof result.then === 'function') {
+        result.then(
+          () => span.finish(),
+          err => {
+            addError(span, err)
+            span.finish()
+          }
+        )
+      } else {
+        span.finish()
+      }
+
+      return result
+    } catch (e) {
+      addError(span, e)
+      span.finish()
+      throw e
+    }
+  }
+
+  wrap (name, options, fn) {
+    const tracer = this
+
+    return function () {
+      return tracer.trace(name, options, () => fn.apply(this, arguments))
+    }
   }
 
   scopeManager () {
@@ -43,6 +81,16 @@ class DatadogTracer extends Tracer {
 
   currentSpan () {
     return noop // return a noop span instead of null to avoid crashing the app
+  }
+}
+
+function addError (span, error) {
+  if (error && error instanceof Error) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
   }
 }
 

@@ -55,6 +55,29 @@ export declare interface Tracer extends opentracing.Tracer {
    * Returns a reference to the current scope.
    */
   scope(): Scope;
+
+  /**
+   * Instrument a function by automatically creating a span and activating the
+   * span on the function scope.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its second parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   */
+  trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T>(name: string, options: SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+
+  /**
+   * Wrap a function to automatically call tracer.tracer() when it's called.
+   */
+  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: SpanOptions, fn: T): T;
 }
 
 /**

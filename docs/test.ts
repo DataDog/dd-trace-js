@@ -5,6 +5,7 @@ let span: Span;
 let context: SpanContext;
 let traceId: string;
 let spanId: string;
+let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
@@ -102,6 +103,19 @@ span = tracer.startSpan('test', {
   }
 });
 
+tracer.trace('test', () => {})
+tracer.trace('test', { tags: { foo: 'bar' }}, () => {})
+tracer.trace('test', (span: Span) => {})
+tracer.trace('test', (span: Span, fn: () => void) => {})
+tracer.trace('test', (span: Span, fn: (err: Error) => string) => {})
+
+promise = tracer.trace('test', () => Promise.resolve())
+
+tracer.wrap('test', () => {})
+tracer.wrap('test', (foo: string) => 'test')
+
+promise = tracer.wrap('test', () => Promise.resolve())()
+
 const carrier = {}
 
 tracer.inject(span || span.context(), HTTP_HEADERS, carrier);
@@ -119,7 +133,7 @@ scope.activate(span, () => {});
 scope.bind((arg1: string, arg2: number): string => 'test');
 scope.bind((arg1: string, arg2: number): string => 'test', span);
 
-const promise = Promise.resolve();
+Promise.resolve();
 
 scope.bind(promise);
 scope.bind(promise, span);

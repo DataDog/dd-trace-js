@@ -16,7 +16,8 @@ describe('TracerProxy', () => {
   beforeEach(() => {
     tracer = {
       use: sinon.stub().returns('tracer'),
-      trace: sinon.stub().returns('span'),
+      trace: sinon.stub().returns('test'),
+      wrap: sinon.stub().returns('fn'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
@@ -26,7 +27,8 @@ describe('TracerProxy', () => {
 
     noop = {
       use: sinon.stub().returns('tracer'),
-      trace: sinon.stub().returns('span'),
+      trace: sinon.stub().returns('test'),
+      wrap: sinon.stub().returns('fn'),
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
@@ -117,42 +119,35 @@ describe('TracerProxy', () => {
 
     describe('trace', () => {
       it('should call the underlying NoopTracer', () => {
-        const returnValue = proxy.trace('a', 'b', 'c')
+        const callback = () => 'test'
+        const returnValue = proxy.trace('a', 'b', callback)
 
-        expect(noop.trace).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('span')
+        expect(noop.trace).to.have.been.calledWith('a', 'b', callback)
+        expect(returnValue).to.equal('test')
       })
 
-      it('should return a promise if a callback is not provided', () => {
-        const promise = proxy.trace('a', 'b')
-
-        expect(noop.trace).to.have.been.calledWith('a', 'b')
-
-        noop.trace.firstCall.args[2]('span')
-
-        return promise.then(span => {
-          expect(span).to.equal('span')
-        })
-      })
-
-      it('should work without options for callbacks', () => {
-        const callback = () => {}
+      it('should work without options', () => {
+        const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        expect(noop.trace).to.have.been.calledWith('a', callback)
-        expect(returnValue).to.equal('span')
+        expect(noop.trace).to.have.been.calledWith('a', {}, callback)
+        expect(returnValue).to.equal('test')
+      })
+    })
+
+    describe('wrap', () => {
+      it('should call the underlying NoopTracer', () => {
+        const returnValue = proxy.wrap('a', 'b', 'fn')
+
+        expect(noop.wrap).to.have.been.calledWith('a', 'b', 'fn')
+        expect(returnValue).to.equal('fn')
       })
 
-      it('should work without options for promises', () => {
-        const promise = proxy.trace('a')
+      it('should work without options', () => {
+        const returnValue = proxy.wrap('a', 'fn')
 
-        expect(noop.trace).to.have.been.calledWith('a')
-
-        noop.trace.firstCall.args[1]('span')
-
-        return promise.then(span => {
-          expect(span).to.equal('span')
-        })
+        expect(noop.wrap).to.have.been.calledWith('a', {}, 'fn')
+        expect(returnValue).to.equal('fn')
       })
     })
 
@@ -218,42 +213,35 @@ describe('TracerProxy', () => {
 
     describe('trace', () => {
       it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.trace('a', 'b', 'c')
+        const callback = () => 'test'
+        const returnValue = proxy.trace('a', 'b', callback)
 
-        expect(tracer.trace).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('span')
-      })
-
-      it('should return a promise if a callback is not provided', () => {
-        const promise = proxy.trace('a', 'b')
-
-        expect(tracer.trace).to.have.been.calledWith('a', 'b')
-
-        tracer.trace.firstCall.args[2]('span')
-
-        return promise.then(span => {
-          expect(span).to.equal('span')
-        })
+        expect(tracer.trace).to.have.been.calledWith('a', 'b', callback)
+        expect(returnValue).to.equal('test')
       })
 
       it('should work without options', () => {
-        const callback = () => {}
+        const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        expect(tracer.trace).to.have.been.calledWith('a', callback)
-        expect(returnValue).to.equal('span')
+        expect(tracer.trace).to.have.been.calledWith('a', {}, callback)
+        expect(returnValue).to.equal('test')
+      })
+    })
+
+    describe('wrap', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.wrap('a', 'b', 'fn')
+
+        expect(tracer.wrap).to.have.been.calledWith('a', 'b', 'fn')
+        expect(returnValue).to.equal('fn')
       })
 
-      it('should work without options for promises', () => {
-        const promise = proxy.trace('a')
+      it('should work without options', () => {
+        const returnValue = proxy.wrap('a', 'fn')
 
-        expect(tracer.trace).to.have.been.calledWith('a')
-
-        tracer.trace.firstCall.args[1]('span')
-
-        return promise.then(span => {
-          expect(span).to.equal('span')
-        })
+        expect(tracer.wrap).to.have.been.calledWith('a', {}, 'fn')
+        expect(returnValue).to.equal('fn')
       })
     })
 
