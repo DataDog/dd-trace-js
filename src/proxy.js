@@ -55,6 +55,10 @@ class Tracer extends BaseTracer {
       options = {}
     }
 
+    if (typeof fn !== 'function') return
+
+    options = options || {}
+
     return this._tracer.trace(name, options, fn)
   }
 
@@ -63,6 +67,10 @@ class Tracer extends BaseTracer {
       fn = options
       options = {}
     }
+
+    if (typeof fn !== 'function') return fn
+
+    options = options || {}
 
     return this._tracer.wrap(name, options, fn)
   }

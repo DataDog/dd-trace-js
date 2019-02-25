@@ -133,21 +133,36 @@ describe('TracerProxy', () => {
         expect(noop.trace).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('test')
       })
+
+      it('should ignore calls without an invalid callback', () => {
+        proxy.wrap('a', 'b')
+
+        expect(noop.trace).to.not.have.been.called
+      })
     })
 
     describe('wrap', () => {
       it('should call the underlying NoopTracer', () => {
-        const returnValue = proxy.wrap('a', 'b', 'fn')
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', 'b', callback)
 
-        expect(noop.wrap).to.have.been.calledWith('a', 'b', 'fn')
+        expect(noop.wrap).to.have.been.calledWith('a', 'b', callback)
         expect(returnValue).to.equal('fn')
       })
 
       it('should work without options', () => {
-        const returnValue = proxy.wrap('a', 'fn')
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', callback)
 
-        expect(noop.wrap).to.have.been.calledWith('a', {}, 'fn')
+        expect(noop.wrap).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('fn')
+      })
+
+      it('should ignore calls without an invalid callback', () => {
+        const returnValue = proxy.wrap('a', 'b')
+
+        expect(noop.wrap).to.not.have.been.called
+        expect(returnValue).to.equal('b')
       })
     })
 
@@ -231,16 +246,18 @@ describe('TracerProxy', () => {
 
     describe('wrap', () => {
       it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.wrap('a', 'b', 'fn')
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', 'b', callback)
 
-        expect(tracer.wrap).to.have.been.calledWith('a', 'b', 'fn')
+        expect(tracer.wrap).to.have.been.calledWith('a', 'b', callback)
         expect(returnValue).to.equal('fn')
       })
 
       it('should work without options', () => {
-        const returnValue = proxy.wrap('a', 'fn')
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', callback)
 
-        expect(tracer.wrap).to.have.been.calledWith('a', {}, 'fn')
+        expect(tracer.wrap).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('fn')
       })
     })
