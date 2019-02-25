@@ -5,6 +5,7 @@ const constants = require('./constants')
 const log = require('./log')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const ORIGIN_KEY = constants.ORIGIN_KEY
 
 const map = {
   'service.name': 'service',
@@ -40,6 +41,7 @@ function formatSpan (span) {
 }
 
 function extractTags (trace, span) {
+  const origin = span.context()._trace.origin
   const tags = span.context()._tags
 
   Object.keys(tags).forEach(tag => {
@@ -62,6 +64,10 @@ function extractTags (trace, span) {
         addTag(trace.meta, tag, tags[tag])
     }
   })
+
+  if (origin) {
+    addTag(trace.meta, ORIGIN_KEY, origin)
+  }
 }
 
 function extractError (trace, span) {

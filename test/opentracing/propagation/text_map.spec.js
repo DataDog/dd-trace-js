@@ -74,6 +74,21 @@ describe('TextMapPropagator', () => {
 
       expect(carrier).to.have.property('x-datadog-sampling-priority', '0')
     })
+
+    it('should inject the origin', () => {
+      const carrier = {}
+      const spanContext = new SpanContext({
+        traceId: new platform.Uint64BE(0, 123),
+        spanId: new platform.Uint64BE(-456),
+        trace: {
+          origin: 'synthetics'
+        }
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-datadog-origin', 'synthetics')
+    })
   })
 
   describe('extract', () => {
@@ -108,6 +123,14 @@ describe('TextMapPropagator', () => {
         },
         baggageItems
       }))
+    })
+
+    it('should extract the origin', () => {
+      textMap['x-datadog-origin'] = 'synthetics'
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._trace).to.have.property('origin', 'synthetics')
     })
   })
 })
