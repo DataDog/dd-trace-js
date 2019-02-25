@@ -2,6 +2,7 @@
 !ext/**/*
 !lib/**/*
 !src/**/*
+!docs/**/*.d.ts
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
