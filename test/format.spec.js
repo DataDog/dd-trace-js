@@ -4,6 +4,7 @@ const Int64BE = require('int64-buffer').Int64BE
 const constants = require('../src/constants')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const ORIGIN_KEY = constants.ORIGIN_KEY
 
 const id = new Int64BE(0x02345678, 0x12345678)
 
@@ -21,6 +22,7 @@ describe('format', () => {
       _tags: {},
       _metrics: {},
       _sampling: {},
+      _trace: {},
       _name: 'operation'
     }
 
@@ -99,6 +101,14 @@ describe('format', () => {
       expect(trace.meta['error.msg']).to.equal('boom')
       expect(trace.meta['error.type']).to.equal('Error')
       expect(trace.meta['error.stack']).to.equal(span._error.stack)
+    })
+
+    it('should extract the origin', () => {
+      spanContext._trace.origin = 'synthetics'
+
+      trace = format(span)
+
+      expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
     describe('when there is an `error` tag ', () => {

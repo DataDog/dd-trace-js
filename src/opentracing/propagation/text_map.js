@@ -7,16 +7,18 @@ const log = require('../../log')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
+const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
-const logKeys = [traceKey, spanKey, samplingKey]
+const logKeys = [traceKey, spanKey, samplingKey, originKey]
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
     carrier[traceKey] = spanContext.toTraceId()
     carrier[spanKey] = spanContext.toSpanId()
 
+    this._injectOrigin(spanContext, carrier)
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
 
@@ -33,12 +35,21 @@ class TextMapPropagator {
       spanId: new platform.Uint64BE(carrier[spanKey], 10)
     })
 
+    this._extractOrigin(carrier, spanContext)
     this._extractBaggageItems(carrier, spanContext)
     this._extractSamplingPriority(carrier, spanContext)
 
     log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     return spanContext
+  }
+
+  _injectOrigin (spanContext, carrier) {
+    const origin = spanContext._trace.origin
+
+    if (origin) {
+      carrier[originKey] = origin
+    }
   }
 
   _injectSamplingPriority (spanContext, carrier) {
@@ -53,6 +64,14 @@ class TextMapPropagator {
     spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
+  }
+
+  _extractOrigin (carrier, spanContext) {
+    const origin = carrier[originKey]
+
+    if (typeof carrier[originKey] === 'string') {
+      spanContext._trace.origin = origin
+    }
   }
 
   _extractBaggageItems (carrier, spanContext) {
