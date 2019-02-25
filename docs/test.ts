@@ -1,5 +1,8 @@
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope } from '..';
 import { HTTP_HEADERS } from '../ext/formats';
+import * as opentracing from 'opentracing';
+
+opentracing.initGlobalTracer(tracer);
 
 let span: Span;
 let context: SpanContext;

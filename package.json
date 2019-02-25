@@ -51,7 +51,7 @@
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
-    "opentracing": "0.14.1",
+    "opentracing": ">=0.12.1",
     "parent-module": "^0.1.0",
     "path-to-regexp": "^2.2.1",
     "performance-now": "^2.1.0",
