@@ -38,6 +38,9 @@ describe('Tracer', () => {
 
     it('should accept options', () => {
       const options = {
+        service: 'service',
+        resource: 'resource',
+        type: 'type',
         tags: {
           foo: 'bar'
         }
@@ -46,6 +49,11 @@ describe('Tracer', () => {
       tracer.trace('name', options, span => {
         expect(span).to.be.instanceof(Span)
         expect(span.context()._tags).to.include(options.tags)
+        expect(span.context()._tags).to.include({
+          'service.name': 'service',
+          'resource.name': 'resource',
+          'span.type': 'type'
+        })
       })
     })
 
@@ -243,12 +251,6 @@ describe('Tracer', () => {
       sinon.spy(tracer, 'trace')
 
       fn(() => {})
-    })
-  })
-
-  describe('currentSpan', () => {
-    it('should return a noop span', () => {
-      expect(tracer.currentSpan()).to.not.be.null
     })
   })
 })

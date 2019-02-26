@@ -1,14 +1,11 @@
 'use strict'
 
-const opentracing = require('opentracing')
 const Tracer = require('./opentracing/tracer')
 const tags = require('../ext/tags')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
-
-const noop = new opentracing.Span()
 
 class DatadogTracer extends Tracer {
   constructor (config) {
@@ -98,7 +95,7 @@ class DatadogTracer extends Tracer {
   }
 
   currentSpan () {
-    return noop // return a noop span instead of null to avoid crashing the app
+    return this.scope().active()
   }
 }
 
@@ -115,9 +112,9 @@ function addError (span, error) {
 function addTags (span, options) {
   const tags = {}
 
-  if (options.type) {
-    tags['span.type'] = options.type
-  }
+  if (options.type) tags[SPAN_TYPE] = options.type
+  if (options.service) tags[SERVICE_NAME] = options.service
+  if (options.resource) tags[RESOURCE_NAME] = options.resource
 
   span.addTags(tags)
 }

@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
-export declare interface SpanOptions extends SpanOptions {}
+export { SpanOptions };
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -71,7 +71,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * which case the span will finish at the end of the function execution.
    */
   trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
-  trace<T>(name: string, options: SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+  trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -88,7 +88,26 @@ export declare interface Tracer extends opentracing.Tracer {
    * which case the span will finish at the end of the function execution.
    */
   wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
+}
+
+export declare interface TraceOptions {
+  /**
+   * The resource you are tracing. The resource name must not be longer than
+   * 5000 characters.
+   */
+  resource?: string,
+
+  /**
+   * The service you are tracing. The service name must not be longer than
+   * 100 characters.
+   */
+  service?: string,
+
+  /**
+   * The type of request.
+   */
+  type?: string
 }
 
 /**
