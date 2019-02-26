@@ -757,6 +757,32 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should support capturing groups in routes', done => {
+          const app = express()
+
+          app.get('/:path(*)', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
       })
 
       describe('with configuration', () => {

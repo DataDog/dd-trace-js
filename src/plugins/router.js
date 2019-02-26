@@ -24,7 +24,7 @@ function createWrapProcessParams (tracer, config) {
       if (web.active(req) && matchers) {
         // Try to guess which path actually matched
         for (let i = 0; i < matchers.length; i++) {
-          if (matchers[i].test(layer.path)) {
+          if (matchers[i].test(layer)) {
             web.enterRoute(req, matchers[i].path)
 
             break
@@ -87,7 +87,7 @@ function wrapNext (layer, req, next) {
   const originalNext = next
 
   return function (error) {
-    if (!error && layer.path && !isFastStar(layer)) {
+    if (!error && layer.path && !isFastStar(layer) && !isFastSlash(layer)) {
       web.exitRoute(req)
     }
 
@@ -128,7 +128,7 @@ function extractMatchers (fn) {
 
   return arg.map(pattern => ({
     path: pattern instanceof RegExp ? `(${pattern})` : pattern,
-    test: path => pathToRegExp(pattern).test(path)
+    test: layer => !isFastStar(layer) && !isFastSlash(layer) && pathToRegExp(pattern).test(layer.path)
   }))
 }
 
@@ -138,6 +138,14 @@ function isFastStar (layer) {
   }
 
   return layer._datadog_matchers.some(matcher => matcher.path === '*')
+}
+
+function isFastSlash (layer) {
+  if (layer.regexp.fast_slash !== undefined) {
+    return layer.regexp.fast_slash
+  }
+
+  return layer._datadog_matchers.some(matcher => matcher.path === '/')
 }
 
 function flatten (arr) {
