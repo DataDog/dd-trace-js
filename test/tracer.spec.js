@@ -221,6 +221,29 @@ describe('Tracer', () => {
       expect(tracer.trace).to.have.been.calledWith('name', {})
       expect(result).to.equal('test')
     })
+
+    it('should wait for the callback to be called before finishing the span', done => {
+      const fn = tracer.wrap('name', {}, sinon.spy(function (cb) {
+        const span = tracer.scope().active()
+
+        sinon.spy(span, 'finish')
+
+        setImmediate(() => {
+          expect(span.finish).to.not.have.been.called
+        })
+
+        setImmediate(() => cb())
+
+        setImmediate(() => {
+          expect(span.finish).to.have.been.called
+          done()
+        })
+      }))
+
+      sinon.spy(tracer, 'trace')
+
+      fn(() => {})
+    })
   })
 
   describe('currentSpan', () => {

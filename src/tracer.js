@@ -2,6 +2,11 @@
 
 const opentracing = require('opentracing')
 const Tracer = require('./opentracing/tracer')
+const tags = require('../ext/tags')
+
+const SPAN_TYPE = tags.SPAN_TYPE
+const RESOURCE_NAME = tags.RESOURCE_NAME
+const SERVICE_NAME = tags.SERVICE_NAME
 
 const noop = new opentracing.Span()
 
@@ -30,6 +35,8 @@ class DatadogTracer extends Tracer {
     }, options)
 
     const span = this.startSpan(name, options)
+
+    addTags(span, options)
 
     try {
       if (fn.length > 1) {
@@ -65,7 +72,20 @@ class DatadogTracer extends Tracer {
     const tracer = this
 
     return function () {
-      return tracer.trace(name, options, () => fn.apply(this, arguments))
+      const cb = arguments[arguments.length - 1]
+
+      if (typeof cb === 'function') {
+        return tracer.trace(name, options, (span, done) => {
+          arguments[arguments.length - 1] = function (err) {
+            done(err)
+            return cb.apply(this, arguments)
+          }
+
+          fn.apply(this, arguments)
+        })
+      } else {
+        return tracer.trace(name, options, () => fn.apply(this, arguments))
+      }
     }
   }
 
@@ -90,6 +110,16 @@ function addError (span, error) {
       'error.stack': error.stack
     })
   }
+}
+
+function addTags (span, options) {
+  const tags = {}
+
+  if (options.type) {
+    tags['span.type'] = options.type
+  }
+
+  span.addTags(tags)
 }
 
 module.exports = DatadogTracer
