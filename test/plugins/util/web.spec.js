@@ -438,6 +438,24 @@ describe('plugins/util/web', () => {
 
       web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
     })
+
+    it('should add an error if provided', (done) => {
+      const fn = () => {
+        const span = tracer.scope().active()
+        const error = new Error('boom')
+
+        sinon.spy(span, 'finish')
+        web.finish(req, error)
+
+        expect(span.context()._tags['error.type']).to.equal(error.name)
+        expect(span.context()._tags['error.msg']).to.equal(error.message)
+        expect(span.context()._tags['error.stack']).to.equal(error.stack)
+
+        done()
+      }
+
+      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
+    })
   })
 
   describe('patch', () => {
