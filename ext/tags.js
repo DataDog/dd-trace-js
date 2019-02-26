@@ -7,6 +7,7 @@ module.exports = {
   SPAN_TYPE: 'span.type',
   SPAN_KIND: 'span.kind',
   SAMPLING_PRIORITY: 'sampling.priority',
+  ANALYTICS_SAMPLE_RATE: '_dd1.sr.eausr',
   ERROR: 'error',
 
   // HTTP

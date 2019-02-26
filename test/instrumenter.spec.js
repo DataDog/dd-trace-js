@@ -8,15 +8,12 @@ describe('Instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
-  let tracerConfig
   let shimmer
 
   beforeEach(() => {
     tracer = {
       _tracer: 'tracer'
     }
-
-    tracerConfig = { enabled: true }
 
     integrations = {
       http: {
@@ -64,7 +61,7 @@ describe('Instrumenter', () => {
       './plugins/mysql-mock': integrations.mysql
     })
 
-    instrumenter = new Instrumenter(tracer, tracerConfig)
+    instrumenter = new Instrumenter(tracer)
   })
 
   afterEach(() => {
@@ -100,7 +97,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
 
       it('should reapply the require hook when called multiple times', () => {
@@ -156,7 +153,7 @@ describe('Instrumenter', () => {
         instrumenter.use('express-mock')
 
         expect(integrations.express.patch).to.have.been.called
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
 
       it('should not patch twice already loaded modules', () => {
@@ -168,6 +165,78 @@ describe('Instrumenter', () => {
 
         expect(integrations.express.patch).to.have.been.calledOnce
       })
+
+      it('should have a default for analytics', () => {
+        instrumenter.use('express-mock')
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {
+          analytics: {}
+        })
+      })
+
+      it('should support analytics configuration on the tracer', () => {
+        const analytics = {
+          enabled: true
+        }
+
+        tracer._tracer = { _analytics: true }
+
+        instrumenter.use('express-mock')
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, tracer._tracer, {
+          analytics
+        })
+      })
+
+      it('should support analytics configuration on the plugin', () => {
+        const analytics = {
+          enabled: true,
+          sampleRate: 0.5,
+          sampleRates: {
+            'express.request': 0.1
+          }
+        }
+
+        instrumenter.use('express-mock', { analytics })
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {
+          analytics
+        })
+      })
+
+      it('should prioritize the analytics configuration from the plugin', () => {
+        const analytics = {
+          enabled: true
+        }
+
+        tracer._tracer = {
+          _analytics: false
+        }
+
+        instrumenter.use('express-mock', { analytics })
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, tracer._tracer, {
+          analytics
+        })
+      })
+
+      it('should support shorthand syntax to enable analytics', () => {
+        instrumenter.use('express-mock', { analytics: true })
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, tracer._tracer, {
+          analytics: { enabled: true }
+        })
+      })
     })
 
     describe('patch', () => {
@@ -176,7 +245,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
 
       it('should only patch a module if its version is supported by the plugin ', () => {
@@ -185,7 +254,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer', {})
+        expect(integrations.express.patch).to.not.have.been.calledWithMatch(express, 'tracer', {})
       })
 
       it('should patch native modules when they are loaded', () => {
@@ -194,7 +263,7 @@ describe('Instrumenter', () => {
         const http = require('http')
 
         expect(integrations.http.patch).to.have.been.called
-        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', {})
+        expect(integrations.http.patch).to.have.been.calledWithMatch(http, 'tracer', {})
       })
 
       it('should support patching multiple files', () => {
@@ -207,8 +276,8 @@ describe('Instrumenter', () => {
 
         expect(mysql).to.deep.equal({ name: 'mysql' })
 
-        expect(integrations.mysql[0].patch).to.have.been.calledWith(Connection, 'tracer', {})
-        expect(integrations.mysql[1].patch).to.have.been.calledWith(Pool, 'tracer', {})
+        expect(integrations.mysql[0].patch).to.have.been.calledWithMatch(Connection, 'tracer', {})
+        expect(integrations.mysql[1].patch).to.have.been.calledWithMatch(Pool, 'tracer', {})
       })
     })
 
@@ -284,7 +353,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', {})
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
     })
 
@@ -294,7 +363,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
-        expect(integrations.express.patch).to.not.have.been.calledWith(express, 'tracer', {})
+        expect(integrations.express.patch).to.not.have.been.calledWithMatch(express, 'tracer', {})
       })
     })
   })
@@ -302,8 +371,6 @@ describe('Instrumenter', () => {
   describe('with the instrumenter disabled', () => {
     describe('use', () => {
       it('should not patch modules when they are loaded when the tracer is disabled', () => {
-        tracerConfig.enabled = false
-
         instrumenter.patch()
 
         require('express-mock')
@@ -314,8 +381,6 @@ describe('Instrumenter', () => {
 
     describe('patch', () => {
       it('should not patch if the tracer is disabled', () => {
-        tracerConfig.enabled = false
-
         instrumenter.use('express-mock')
 
         require('express-mock')

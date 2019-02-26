@@ -1,6 +1,7 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
+const analyticsSampler = require('../analytics_sampler')
 
 const OPERATION_NAME = 'pg.query'
 
@@ -18,6 +19,8 @@ function patch (pg, tracer, config) {
           'db.type': 'postgres'
         }
       })
+
+      analyticsSampler.sample(span, config.analytics)
 
       const retval = scope.bind(query, span).apply(this, arguments)
       const pgQuery = this.queryQueue[this.queryQueue.length - 1] || this.activeQuery

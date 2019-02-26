@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../analytics_sampler')
+
 function createWrapSend (tracer, config) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, options) {
@@ -53,6 +55,8 @@ function startSendSpan (tracer, config, link) {
 
   addTags(tracer, config, span, link)
 
+  analyticsSampler.sample(span, config.analytics)
+
   return span
 }
 
@@ -68,6 +72,8 @@ function startReceiveSpan (tracer, config, link) {
   })
 
   addTags(tracer, config, span, link)
+
+  analyticsSampler.sample(span, config.analytics, true)
 
   return span
 }

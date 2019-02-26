@@ -11,6 +11,7 @@ ddTrace.init();
 tracer.init({
   debug: true,
   enabled: true,
+  analytics: true,
   env: 'test',
   experimental: true,
   hostname: 'agent',
@@ -92,6 +93,11 @@ tracer.use('router');
 tracer.use('when');
 tracer.use('winston');
 
+tracer.use('express', { service: 'name' });
+tracer.use('express', { analytics: true });
+tracer.use('express', { analytics: { enabled: true, sampleRate: 0.5 } });
+tracer.use('express', { analytics: { sampleRates: { 'express.request': 0.5 } } });
+
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
 span = tracer.startSpan('test', {
@@ -106,6 +112,8 @@ span = tracer.startSpan('test', {
 tracer.trace('test', () => {})
 tracer.trace('test', { tags: { foo: 'bar' }}, () => {})
 tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
+tracer.trace('test', { analytics: true }, () => {})
+tracer.trace('test', { analytics: 0.5 }, () => {})
 tracer.trace('test', (span: Span) => {})
 tracer.trace('test', (span: Span, fn: () => void) => {})
 tracer.trace('test', (span: Span, fn: (err: Error) => string) => {})

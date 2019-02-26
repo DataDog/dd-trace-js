@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../analytics_sampler')
 const tx = require('./util/tx')
 
 const rrtypes = {
@@ -95,6 +96,8 @@ function startSpan (tracer, config, operation, tags) {
       'service.name': config.service || `${tracer._service}-dns`
     }, tags)
   })
+
+  analyticsSampler.sample(span, config.analytics)
 
   return span
 }

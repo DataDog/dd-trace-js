@@ -6,6 +6,7 @@ const tags = require('../ext/tags')
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
+const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
 
 class DatadogTracer extends Tracer {
   constructor (config) {
@@ -115,6 +116,12 @@ function addTags (span, options) {
   if (options.type) tags[SPAN_TYPE] = options.type
   if (options.service) tags[SERVICE_NAME] = options.service
   if (options.resource) tags[RESOURCE_NAME] = options.resource
+
+  if (typeof options.analytics === 'number' && options.analytics >= 0 && options.analytics <= 1) {
+    tags[ANALYTICS_SAMPLE_RATE] = options.analytics
+  } else if (typeof options.analytics === 'boolean') {
+    tags[ANALYTICS_SAMPLE_RATE] = options.analytics ? 1 : 0
+  }
 
   span.addTags(tags)
 }
