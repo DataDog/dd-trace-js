@@ -22,8 +22,12 @@ class NoopTracer extends Tracer {
     this._scope = new Scope()
   }
 
-  trace (operationName, options, callback) {
-    callback(this.startSpan())
+  trace (name, options, fn) {
+    return fn(span, () => {})
+  }
+
+  wrap (name, options, fn) {
+    return fn
   }
 
   scopeManager () {

@@ -1,9 +1,11 @@
 'use strict'
 
-const opentracing = require('opentracing')
 const Tracer = require('./opentracing/tracer')
+const tags = require('../ext/tags')
 
-const noop = new opentracing.Span()
+const SPAN_TYPE = tags.SPAN_TYPE
+const RESOURCE_NAME = tags.RESOURCE_NAME
+const SERVICE_NAME = tags.SERVICE_NAME
 
 class DatadogTracer extends Tracer {
   constructor (config) {
@@ -24,13 +26,64 @@ class DatadogTracer extends Tracer {
     this._scope = new Scope()
   }
 
-  trace (name, options, callback) {
-    if (!callback) {
-      callback = options
-      options = {}
-    }
+  trace (name, options, fn) {
+    options = Object.assign({}, {
+      childOf: this.scope().active()
+    }, options)
 
-    callback(noop)
+    const span = this.startSpan(name, options)
+
+    addTags(span, options)
+
+    try {
+      if (fn.length > 1) {
+        return this.scope().activate(span, () => fn(span, err => {
+          addError(span, err)
+          span.finish()
+        }))
+      }
+
+      const result = this.scope().activate(span, () => fn(span))
+
+      if (result && typeof result.then === 'function') {
+        result.then(
+          () => span.finish(),
+          err => {
+            addError(span, err)
+            span.finish()
+          }
+        )
+      } else {
+        span.finish()
+      }
+
+      return result
+    } catch (e) {
+      addError(span, e)
+      span.finish()
+      throw e
+    }
+  }
+
+  wrap (name, options, fn) {
+    const tracer = this
+
+    return function () {
+      const cb = arguments[arguments.length - 1]
+
+      if (typeof cb === 'function') {
+        return tracer.trace(name, options, (span, done) => {
+          arguments[arguments.length - 1] = function (err) {
+            done(err)
+            return cb.apply(this, arguments)
+          }
+
+          fn.apply(this, arguments)
+        })
+      } else {
+        return tracer.trace(name, options, () => fn.apply(this, arguments))
+      }
+    }
   }
 
   scopeManager () {
@@ -42,8 +95,28 @@ class DatadogTracer extends Tracer {
   }
 
   currentSpan () {
-    return noop // return a noop span instead of null to avoid crashing the app
+    return this.scope().active()
   }
+}
+
+function addError (span, error) {
+  if (error && error instanceof Error) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
+  }
+}
+
+function addTags (span, options) {
+  const tags = {}
+
+  if (options.type) tags[SPAN_TYPE] = options.type
+  if (options.service) tags[SERVICE_NAME] = options.service
+  if (options.resource) tags[RESOURCE_NAME] = options.resource
+
+  span.addTags(tags)
 }
 
 module.exports = DatadogTracer

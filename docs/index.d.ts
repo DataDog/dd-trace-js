@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
-export declare interface SpanOptions extends SpanOptions {}
+export { SpanOptions };
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -55,6 +55,59 @@ export declare interface Tracer extends opentracing.Tracer {
    * Returns a reference to the current scope.
    */
   scope(): Scope;
+
+  /**
+   * Instruments a function by automatically creating a span activated on its
+   * scope.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its second parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   */
+  trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+
+  /**
+   * Wrap a function to automatically create a span activated on its
+   * scope when it's called.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its last parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   */
+  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
+}
+
+export declare interface TraceOptions {
+  /**
+   * The resource you are tracing. The resource name must not be longer than
+   * 5000 characters.
+   */
+  resource?: string,
+
+  /**
+   * The service you are tracing. The service name must not be longer than
+   * 100 characters.
+   */
+  service?: string,
+
+  /**
+   * The type of request.
+   */
+  type?: string
 }
 
 /**

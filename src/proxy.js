@@ -49,22 +49,30 @@ class Tracer extends BaseTracer {
     return this
   }
 
-  trace (operationName, options, callback) {
-    this._deprecate('trace')
-
-    if (callback) {
-      return this._tracer.trace(operationName, options, callback)
-    } else if (options instanceof Function) {
-      return this._tracer.trace(operationName, options)
-    } else if (options) {
-      return new Promise((resolve, reject) => {
-        this._tracer.trace(operationName, options, span => resolve(span))
-      })
-    } else {
-      return new Promise((resolve, reject) => {
-        this._tracer.trace(operationName, span => resolve(span))
-      })
+  trace (name, options, fn) {
+    if (!fn) {
+      fn = options
+      options = {}
     }
+
+    if (typeof fn !== 'function') return
+
+    options = options || {}
+
+    return this._tracer.trace(name, options, fn)
+  }
+
+  wrap (name, options, fn) {
+    if (!fn) {
+      fn = options
+      options = {}
+    }
+
+    if (typeof fn !== 'function') return fn
+
+    options = options || {}
+
+    return this._tracer.wrap(name, options, fn)
   }
 
   startSpan () {
