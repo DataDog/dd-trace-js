@@ -57,8 +57,8 @@ export declare interface Tracer extends opentracing.Tracer {
   scope(): Scope;
 
   /**
-   * Instrument a function by automatically creating a span and activating the
-   * span on the function scope.
+   * Instruments a function by automatically creating a span activated on its
+   * scope.
    *
    * The span will automatically be finished when one of these conditions is
    * met:
@@ -74,7 +74,18 @@ export declare interface Tracer extends opentracing.Tracer {
   trace<T>(name: string, options: SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
 
   /**
-   * Wrap a function to automatically call tracer.tracer() when it's called.
+   * Wrap a function to automatically create a span activated on its
+   * scope when it's called.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its last parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
    */
   wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
   wrap<T = (...args: any[]) => any>(name: string, options: SpanOptions, fn: T): T;
