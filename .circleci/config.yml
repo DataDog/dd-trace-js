@@ -305,6 +305,9 @@ jobs:
       - *restore-yarn-cache
       - *yarn-install
       - *save-yarn-cache
+      - run:
+          name: Rebuild native extensions
+          command: npm rebuild
       - *unit-tests
       - *leak-tests
 
