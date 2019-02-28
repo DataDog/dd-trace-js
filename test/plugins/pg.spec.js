@@ -36,7 +36,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(done => {
-            pg = require(`../../versions/pg@${version}`).get()
+            pg = require(`../../versions/${implementation}@${version}`).get()
 
             const Client = clients[implementation](pg)
 
@@ -140,7 +140,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(done => {
-            pg = require(`../../versions/pg@${version}`).get()
+            pg = require(`../../versions/${implementation}@${version}`).get()
 
             client = new pg.Client({
               user: 'postgres',
