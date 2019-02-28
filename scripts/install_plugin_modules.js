@@ -108,6 +108,7 @@ function assertWorkspace () {
 
 function install () {
   exec('yarn', { cwd: folder() })
+  exec('npm rebuild', { cwd: folder() })
 }
 
 function addFolder (name, version) {
