@@ -50,7 +50,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'http')
+                expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
@@ -84,7 +84,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'http')
+                expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
@@ -120,7 +120,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'http')
+                expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/app/user/1`)
