@@ -7,11 +7,11 @@ const plugin = require('../../src/plugins/pg')
 wrapIt()
 
 const clients = {
-  default: pg => pg.Client
+  pg: pg => pg.Client
 }
 
 if (process.env.PG_TEST_NATIVE === 'true') {
-  clients.native = pg => pg.native.Client
+  clients['pg-native'] = pg => pg.native.Client
 }
 
 describe('Plugin', () => {
@@ -19,13 +19,13 @@ describe('Plugin', () => {
   let client
   let tracer
 
-  describe('pg', () => {
-    withVersions(plugin, 'pg', version => {
-      beforeEach(() => {
-        tracer = require('../..')
-      })
+  Object.keys(clients).forEach(implementation => {
+    describe(implementation, () => {
+      withVersions(plugin, implementation, version => {
+        beforeEach(() => {
+          tracer = require('../..')
+        })
 
-      Object.keys(clients).forEach(implementation => {
         describe(`when using the ${implementation} client`, () => {
           before(() => {
             return agent.load(plugin, 'pg')
@@ -129,41 +129,41 @@ describe('Plugin', () => {
             })
           })
         })
-      })
 
-      describe('with configuration', () => {
-        before(() => {
-          return agent.load(plugin, 'pg', { service: 'custom' })
-        })
-
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(done => {
-          pg = require(`../../versions/pg@${version}`).get()
-
-          client = new pg.Client({
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres'
+        describe('with configuration', () => {
+          before(() => {
+            return agent.load(plugin, 'pg', { service: 'custom' })
           })
 
-          client.connect(err => done(err))
-        })
-
-        it('should be configured with the correct values', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom')
-
-            done()
+          after(() => {
+            return agent.close()
           })
 
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
-            if (err) throw err
+          beforeEach(done => {
+            pg = require(`../../versions/pg@${version}`).get()
 
-            client.end((err) => {
+            client = new pg.Client({
+              user: 'postgres',
+              password: 'postgres',
+              database: 'postgres'
+            })
+
+            client.connect(err => done(err))
+          })
+
+          it('should be configured with the correct values', done => {
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('service', 'custom')
+
+              done()
+            })
+
+            client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
               if (err) throw err
+
+              client.end((err) => {
+                if (err) throw err
+              })
             })
           })
         })
