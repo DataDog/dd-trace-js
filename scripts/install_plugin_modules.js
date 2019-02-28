@@ -108,7 +108,7 @@ function assertWorkspace () {
 
 function install () {
   exec('yarn', { cwd: folder() })
-  exec('npm rebuild', { cwd: folder() })
+  exec('npm rebuild --scripts-prepend-node-path=true', { cwd: folder() })
 }
 
 function addFolder (name, version) {
