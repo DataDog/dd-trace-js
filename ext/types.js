@@ -1,5 +1,6 @@
 'use strict'
 
 module.exports = {
-  HTTP: 'http'
+  HTTP: 'http',
+  WEB: 'web'
 }

@@ -7,7 +7,7 @@ const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 
-const HTTP = types.HTTP
+const WEB = types.WEB
 const SERVER = kinds.SERVER
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
@@ -227,7 +227,7 @@ function addRequestTags (req) {
     [HTTP_URL]: url,
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: HTTP
+    [SPAN_TYPE]: WEB
   })
 
   addHeaders(req)
