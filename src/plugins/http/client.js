@@ -41,7 +41,7 @@ function patch (http, methodName, tracer, config) {
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(tracer, config, options),
           'resource.name': method,
-          'span.type': 'web',
+          'span.type': 'http',
           'http.method': method,
           'http.url': uri
         }
