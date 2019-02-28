@@ -75,7 +75,7 @@ module.exports = [
   },
   {
     name: 'pg-native',
-    versions: ['>=2.0.0'],
+    versions: ['>=1.7.2'],
     patch (Client, tracer, config) {
       this.wrap(Client.prototype, 'query', createWrapQuery(tracer, config))
     },
