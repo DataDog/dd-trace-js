@@ -6,6 +6,14 @@ const plugin = require('../../src/plugins/pg')
 
 wrapIt()
 
+const clients = {
+  default: pg => pg.Client
+}
+
+if (process.env.PG_TEST_NATIVE === 'true') {
+  clients.native = pg => pg.native.Client
+}
+
 describe('Plugin', () => {
   let pg
   let client
@@ -17,52 +25,32 @@ describe('Plugin', () => {
         tracer = require('../..')
       })
 
-      describe('when using a client', () => {
-        before(() => {
-          return agent.load(plugin, 'pg')
-        })
-
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(done => {
-          pg = require(`../../versions/pg@${version}`).get()
-
-          client = new pg.Client({
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres',
-            application_name: 'test'
+      Object.keys(clients).forEach(implementation => {
+        describe(`when using the ${implementation} client`, () => {
+          before(() => {
+            return agent.load(plugin, 'pg')
           })
 
-          client.connect(err => done(err))
-        })
-
-        it('should do automatic instrumentation when using callbacks', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'test-postgres')
-            expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-            expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-            expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
-            expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-
-            done()
+          after(() => {
+            return agent.close()
           })
 
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
-            if (err) throw err
+          beforeEach(done => {
+            pg = require(`../../versions/pg@${version}`).get()
 
-            client.end((err) => {
-              if (err) throw err
+            const Client = clients[implementation](pg)
+
+            client = new Client({
+              user: 'postgres',
+              password: 'postgres',
+              database: 'postgres',
+              application_name: 'test'
             })
-          })
-        })
 
-        if (semver.intersects(version, '>=5.1')) { // initial promise support
-          it('should do automatic instrumentation when using promises', done => {
+            client.connect(err => done(err))
+          })
+
+          it('should do automatic instrumentation when using callbacks', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-postgres')
               expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
@@ -75,45 +63,69 @@ describe('Plugin', () => {
               done()
             })
 
-            client.query('SELECT $1::text as message', ['Hello world!'])
-              .then(() => client.end())
-              .catch(done)
-          })
-        }
-
-        it('should handle errors', done => {
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('error.type', 'error')
-            expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
-            expect(traces[0][0].meta).to.have.property('error.stack')
-
-            done()
-          })
-
-          client.query('INVALID', (err, result) => {
-            expect(err).to.be.an('error')
-
-            client.end((err) => {
+            client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
               if (err) throw err
+
+              client.end((err) => {
+                if (err) throw err
+              })
             })
           })
-        })
 
-        it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+          if (semver.intersects(version, '>=5.1')) { // initial promise support
+            it('should do automatic instrumentation when using promises', done => {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-postgres')
+                expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+                expect(traces[0][0]).to.have.property('type', 'sql')
+                expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
+                expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
 
-          const span = {}
+                done()
+              })
 
-          tracer.scope().activate(span, () => {
-            const span = tracer.scope().active()
+              client.query('SELECT $1::text as message', ['Hello world!'])
+                .then(() => client.end())
+                .catch(done)
+            })
+          }
 
-            client.query('SELECT $1::text as message', ['Hello World!'], () => {
-              expect(tracer.scope().active()).to.equal(span)
+          it('should handle errors', done => {
+            agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('error.type', 'error')
+              expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
+              expect(traces[0][0].meta).to.have.property('error.stack')
+
               done()
             })
 
-            client.end((err) => {
-              if (err) throw err
+            client.query('INVALID', (err, result) => {
+              expect(err).to.be.an('error')
+
+              client.end((err) => {
+                if (err) throw err
+              })
+            })
+          })
+
+          it('should run the callback in the parent context', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+            const span = {}
+
+            tracer.scope().activate(span, () => {
+              const span = tracer.scope().active()
+
+              client.query('SELECT $1::text as message', ['Hello World!'], () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+
+              client.end((err) => {
+                if (err) throw err
+              })
             })
           })
         })

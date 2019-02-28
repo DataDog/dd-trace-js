@@ -36,13 +36,15 @@ node-plugin-base: &node-plugin-base
   resource_class: small
   steps:
     - checkout
-    - run:
+    - &versions
+      run:
         name: Versions
         command: yarn versions
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
+    - &yarn-install
+      run:
         name: Install dependencies
         command: yarn install
     - &save-yarn-cache
@@ -51,10 +53,12 @@ node-plugin-base: &node-plugin-base
         paths:
           - ./node_modules
           - ./yarn.lock
-    - run:
+    - &unit-tests
+      run:
         name: Unit tests
         command: yarn test:plugins
-    - run:
+    - &leak-tests
+      run:
         name: Memory leak tests
         command: yarn leak:plugins
 
@@ -290,7 +294,19 @@ jobs:
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
+          - PG_TEST_NATIVE=true
       - image: postgres:9.5
+    steps:
+      - checkout
+      - run:
+          name: Install Postgres
+          command: apt-get install libpq-dev g++ make
+      - *versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *unit-tests
+      - *leak-tests
 
   node-q:
     <<: *node-plugin-base
