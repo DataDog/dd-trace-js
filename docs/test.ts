@@ -92,6 +92,9 @@ tracer.use('router');
 tracer.use('when');
 tracer.use('winston');
 
+tracer.use('express', false)
+tracer.use('express', { enabled: false })
+
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
 span = tracer.startSpan('test', {
