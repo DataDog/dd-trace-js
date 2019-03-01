@@ -174,6 +174,8 @@ jobs:
           - SERVICES=scylla
           - PLUGINS=cassandra-driver
       - image: scylladb/scylla:3.0.3
+        environment:
+          - SCYLLA_LISTEN_ADDRESS=127.0.0.1
 
   node-dns:
     <<: *node-plugin-base

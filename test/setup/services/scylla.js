@@ -14,7 +14,6 @@ function waitForCassandra () {
       })
 
       client.connect(err => {
-        if (err) console.error(err.innerErrors)
         if (operation.retry(err)) return
         if (err) return reject(err)
 
