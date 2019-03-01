@@ -173,7 +173,7 @@ jobs:
         environment:
           - SERVICES=scylla
           - PLUGINS=cassandra-driver
-      - image: scylladb/scylla:3
+      - image: scylladb/scylla:3.0.3
 
   node-dns:
     <<: *node-plugin-base
