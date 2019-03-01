@@ -397,6 +397,7 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-cassandra
       - node-dns
       - node-elasticsearch
       - node-express
@@ -434,6 +435,7 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-cassandra
       - node-dns
       - node-elasticsearch
       - node-express
