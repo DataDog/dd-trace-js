@@ -263,6 +263,7 @@ interface Plugins {
   "amqplib": plugins.amqplib;
   "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
+  "cassandra-driver": plugins.cassandra_driver,
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
@@ -402,6 +403,12 @@ declare namespace plugins {
    * on the tracer.
    */
   interface bunyan extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
+   */
+  interface cassandra_driver extends Integration {}
 
   /**
    * This plugin automatically instruments the

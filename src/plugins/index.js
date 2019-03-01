@@ -5,6 +5,7 @@ module.exports = {
   'amqplib': require('./amqplib'),
   'bluebird': require('./bluebird'),
   'bunyan': require('./bunyan'),
+  'cassandra-driver': require('./cassandra-driver'),
   'dns': require('./dns'),
   'elasticsearch': require('./elasticsearch'),
   'express': require('./express'),

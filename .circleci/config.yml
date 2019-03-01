@@ -166,6 +166,15 @@ jobs:
           - SERVICES=
           - PLUGINS=bunyan
 
+  node-cassandra:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=scylla
+          - PLUGINS=cassandra-driver
+      - image: scylladb/scylla:3
+
   node-dns:
     <<: *node-plugin-base
     docker:

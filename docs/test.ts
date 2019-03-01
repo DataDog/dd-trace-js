@@ -59,6 +59,7 @@ tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('bluebird');
 tracer.use('bunyan');
+tracer.use('cassandra-driver');
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('express');
