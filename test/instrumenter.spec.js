@@ -168,6 +168,22 @@ describe('Instrumenter', () => {
 
         expect(integrations.express.patch).to.have.been.calledOnce
       })
+
+      it('should not patch disabled plugins', () => {
+        instrumenter.use('express-mock', { enabled: false })
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.not.have.been.called
+      })
+
+      it('should not patch disabled plugins using shorthand', () => {
+        instrumenter.use('express-mock', false)
+
+        require('express-mock')
+
+        expect(integrations.express.patch).to.not.have.been.called
+      })
     })
 
     describe('patch', () => {

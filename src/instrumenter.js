@@ -22,6 +22,10 @@ class Instrumenter {
   }
 
   use (name, config) {
+    if (typeof config === 'boolean') {
+      config = { enabled: config }
+    }
+
     config = config || {}
 
     try {
@@ -130,7 +134,11 @@ class Instrumenter {
             .filter(instrumentation => moduleName === filename(instrumentation))
             .filter(instrumentation => matchVersion(moduleVersion, instrumentation.versions))
             .forEach(instrumentation => {
-              this._patch(instrumentation, moduleExports, this._plugins.get(plugin).config)
+              const config = this._plugins.get(plugin).config
+
+              if (config.enabled !== false) {
+                this._patch(instrumentation, moduleExports, config)
+              }
             })
         } catch (e) {
           log.error(e)
