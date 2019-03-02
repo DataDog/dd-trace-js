@@ -290,7 +290,7 @@ jobs:
   node-postgres:
     <<: *node-plugin-base
     docker:
-      - image: node:6.9
+      - image: node:6
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
