@@ -5,7 +5,7 @@ const cassandra = require('../../../versions/cassandra-driver').get()
 
 function waitForCassandra () {
   return new Promise((resolve, reject) => {
-    const operation = new RetryOperation('scylla')
+    const operation = new RetryOperation('cassandra')
 
     operation.attempt(currentAttempt => {
       const client = new cassandra.Client({
