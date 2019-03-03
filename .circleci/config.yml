@@ -36,15 +36,13 @@ node-plugin-base: &node-plugin-base
   resource_class: small
   steps:
     - checkout
-    - &versions
-      run:
+    - run:
         name: Versions
         command: yarn versions
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - &yarn-install
-      run:
+    - run:
         name: Install dependencies
         command: yarn install
     - &save-yarn-cache
@@ -53,12 +51,10 @@ node-plugin-base: &node-plugin-base
         paths:
           - ./node_modules
           - ./yarn.lock
-    - &unit-tests
-      run:
+    - run:
         name: Unit tests
         command: yarn test:plugins
-    - &leak-tests
-      run:
+    - run:
         name: Memory leak tests
         command: yarn leak:plugins
 
@@ -296,14 +292,6 @@ jobs:
           - PLUGINS=pg
           - PG_TEST_NATIVE=true
       - image: postgres:9.5
-    steps:
-      - checkout
-      - *versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *unit-tests
-      - *leak-tests
 
   node-q:
     <<: *node-plugin-base
