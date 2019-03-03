@@ -298,9 +298,6 @@ jobs:
       - image: postgres:9.5
     steps:
       - checkout
-      - run:
-          name: Install Postgres
-          command: apt-get install libpq-dev g++ make
       - *versions
       - *restore-yarn-cache
       - *yarn-install
