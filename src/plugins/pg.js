@@ -20,7 +20,9 @@ function createWrapQuery (tracer, config) {
       })
 
       const retval = scope.bind(query, span).apply(this, arguments)
-      const pgQuery = this.queryQueue[this.queryQueue.length - 1] || this.activeQuery
+      const queryQueue = this.queryQueue || this._queryQueue
+      const activeQuery = this.activeQuery || this._activeQuery
+      const pgQuery = queryQueue[queryQueue.length - 1] || activeQuery
 
       if (!pgQuery) {
         return retval
@@ -68,19 +70,21 @@ module.exports = [
     versions: ['>=4'],
     patch (pg, tracer, config) {
       this.wrap(pg.Client.prototype, 'query', createWrapQuery(tracer, config))
+
+      try {
+        this.wrap(pg.native.Client.prototype, 'query', createWrapQuery(tracer, config))
+      } catch (e) {
+        // skip native
+      }
     },
     unpatch (pg) {
       this.unwrap(pg.Client.prototype, 'query')
-    }
-  },
-  {
-    name: 'pg-native',
-    versions: ['>=2.0.0'],
-    patch (Client, tracer, config) {
-      this.wrap(Client.prototype, 'query', createWrapQuery(tracer, config))
-    },
-    unpatch (Client) {
-      this.unwrap(Client.prototype, 'query')
+
+      try {
+        this.unwrap(pg.native.Client, 'query')
+      } catch (e) {
+        // skip native
+      }
     }
   }
 ]

@@ -11,7 +11,7 @@ const clients = {
 }
 
 if (process.env.PG_TEST_NATIVE === 'true') {
-  clients['pg-native'] = Client => Client
+  clients['pg.native'] = pg => pg.native.Client
 }
 
 describe('Plugin', () => {
@@ -19,14 +19,14 @@ describe('Plugin', () => {
   let client
   let tracer
 
-  Object.keys(clients).forEach(implementation => {
-    describe(implementation, () => {
-      withVersions(plugin, implementation, version => {
-        beforeEach(() => {
-          tracer = require('../..')
-        })
+  describe('pg', () => {
+    withVersions(plugin, 'pg', version => {
+      beforeEach(() => {
+        tracer = require('../..')
+      })
 
-        describe(`when using the ${implementation} client`, () => {
+      Object.keys(clients).forEach(implementation => {
+        describe(`when using ${implementation}.Client`, () => {
           before(() => {
             return agent.load(plugin, 'pg')
           })
@@ -36,7 +36,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(done => {
-            pg = require(`../../versions/${implementation}@${version}`).get()
+            pg = require(`../../versions/pg@${version}`).get()
 
             const Client = clients[implementation](pg)
 
@@ -93,16 +93,18 @@ describe('Plugin', () => {
           }
 
           it('should handle errors', done => {
+            let error
+
             agent.use(traces => {
-              expect(traces[0][0].meta).to.have.property('error.type', 'error')
-              expect(traces[0][0].meta).to.have.property('error.msg', 'syntax error at or near "INVALID"')
-              expect(traces[0][0].meta).to.have.property('error.stack')
+              expect(traces[0][0].meta).to.have.property('error.type', error.name)
+              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
 
               done()
             })
 
             client.query('INVALID', (err, result) => {
-              expect(err).to.be.an('error')
+              error = err
 
               client.end((err) => {
                 if (err) throw err
@@ -129,43 +131,41 @@ describe('Plugin', () => {
             })
           })
         })
+      })
 
-        describe('with configuration', () => {
-          before(() => {
-            return agent.load(plugin, 'pg', { service: 'custom' })
+      describe('with configuration', () => {
+        before(() => {
+          return agent.load(plugin, 'pg', { service: 'custom' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          pg = require(`../../versions/pg@${version}`).get()
+
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
           })
 
-          after(() => {
-            return agent.close()
+          client.connect(err => done(err))
+        })
+
+        it('should be configured with the correct values', done => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom')
+
+            done()
           })
 
-          beforeEach(done => {
-            pg = require(`../../versions/${implementation}@${version}`).get()
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) throw err
 
-            const Client = clients[implementation](pg)
-
-            client = new Client({
-              user: 'postgres',
-              password: 'postgres',
-              database: 'postgres'
-            })
-
-            client.connect(err => done(err))
-          })
-
-          it('should be configured with the correct values', done => {
-            agent.use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
-
-              done()
-            })
-
-            client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            client.end((err) => {
               if (err) throw err
-
-              client.end((err) => {
-                if (err) throw err
-              })
             })
           })
         })
