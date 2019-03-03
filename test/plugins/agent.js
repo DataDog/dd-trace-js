@@ -120,11 +120,7 @@ module.exports = {
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
-  close (wipe) {
-    if (wipe !== false) {
-      this.wipe()
-    }
-
+  close () {
     listener.close()
     listener = null
     agent = null
