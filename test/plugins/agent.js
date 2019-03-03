@@ -120,8 +120,10 @@ module.exports = {
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
-  close () {
-    this.wipe()
+  close (wipe) {
+    if (wipe !== false) {
+      this.wipe()
+    }
 
     listener.close()
     listener = null
@@ -141,9 +143,11 @@ module.exports = {
   // Wipe the require cache.
   wipe () {
     const basedir = path.join(__dirname, '..', '..', 'versions')
+    const exceptions = ['/libpq/']
 
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
+      .filter(name => [].concat(exceptions).reduce((prev, next) => name.indexOf(next) === -1, true))
       .forEach(name => {
         delete require.cache[name]
       })

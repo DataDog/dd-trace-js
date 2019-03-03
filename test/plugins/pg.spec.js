@@ -11,7 +11,7 @@ const clients = {
 }
 
 if (process.env.PG_TEST_NATIVE === 'true') {
-  clients['pg-native'] = pg => pg.native.Client
+  clients['pg-native'] = Client => Client
 }
 
 describe('Plugin', () => {
@@ -142,7 +142,9 @@ describe('Plugin', () => {
           beforeEach(done => {
             pg = require(`../../versions/${implementation}@${version}`).get()
 
-            client = new pg.Client({
+            const Client = clients[implementation](pg)
+
+            client = new Client({
               user: 'postgres',
               password: 'postgres',
               database: 'postgres'
