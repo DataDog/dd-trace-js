@@ -171,10 +171,11 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=scylla
+          - SERVICES=cassandra
           - PLUGINS=cassandra-driver
-      - image: scylladb/scylla:3.0.3
-        command: --listen-address 127.0.0.1
+      - image: spotify/cassandra
+        environment:
+          - CASSANDRA_TOKEN=-9223372036854775808
 
   node-dns:
     <<: *node-plugin-base

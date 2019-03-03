@@ -13,6 +13,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'cassandra-driver', version => {
       beforeEach(() => {
         tracer = require('../..')
+        global.tracer = tracer
       })
 
       describe('without configuration', () => {
@@ -34,8 +35,6 @@ describe('Plugin', () => {
             localDataCenter: 'datacenter1',
             keyspace: 'system'
           })
-
-          client.keyspace
 
           client.connect(done)
         })
@@ -120,7 +119,7 @@ describe('Plugin', () => {
           const childOf = tracer.startSpan('test')
 
           scope.activate(childOf, () => {
-            client.batch(['SELECT now() FROM local;'], () => {
+            client.batch([`UPDATE test.test SET test='test' WHERE id='1234';`], () => {
               expect(tracer.scope().active()).to.equal(childOf)
               done()
             })

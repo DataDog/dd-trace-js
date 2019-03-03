@@ -17,18 +17,30 @@ function createWrapInnerExecute (tracer, config) {
   }
 }
 
-function createWrapSendOnConnection (tracer, config) {
-  return function wrapSendOnConnection (sendOnConnection) {
-    return function sendOnConnectionWithTrace () {
+function createWrapExecutionStart (tracer, config) {
+  return function wrapExecutionStart (start) {
+    return function startWithTrace (getHostCallback) {
       const span = tracer.scope().active()
-      const connection = this._connection || this.connection
+      const execution = this
 
-      if (span && connection) {
-        addTag(span, 'out.host', connection.address)
-        addTag(span, 'out.port', connection.port)
-      }
+      return start.call(this, function () {
+        addHost(span, execution._connection)
+        return getHostCallback.apply(this, arguments)
+      })
+    }
+  }
+}
 
-      return sendOnConnection.apply(this, arguments)
+function createWrapSend (tracer, config) {
+  return function wrapSend (send) {
+    return function sendWithTrace (request, options, callback) {
+      const span = tracer.scope().active()
+      const handler = this
+
+      return send.call(this, request, options, function () {
+        addHost(span, handler.connection)
+        return callback.apply(this, arguments)
+      })
     }
   }
 }
@@ -94,6 +106,13 @@ function addTag (span, key, value) {
   }
 }
 
+function addHost (span, connection) {
+  if (span && connection) {
+    addTag(span, 'out.host', connection.address)
+    addTag(span, 'out.port', connection.port)
+  }
+}
+
 function addError (span, error) {
   if (error && error instanceof Error) {
     span.addTags({
@@ -138,32 +157,21 @@ module.exports = [
     versions: ['>=3.3.0'],
     file: 'lib/request-execution.js',
     patch (RequestExecution, tracer, config) {
-      this.wrap(RequestExecution.prototype, '_sendOnConnection', createWrapSendOnConnection(tracer, config))
+      this.wrap(RequestExecution.prototype, 'start', createWrapExecutionStart(tracer, config))
     },
     unpatch (RequestExecution) {
-      this.unwrap(RequestExecution.prototype, '_sendOnConnection')
+      this.unwrap(RequestExecution.prototype, 'start')
     }
   },
   {
     name: 'cassandra-driver',
-    versions: ['3.2'],
+    versions: ['3 - 3.2'],
     file: 'lib/request-handler.js',
     patch (RequestHandler, tracer, config) {
-      this.wrap(RequestHandler.prototype, '_sendOnConnection', createWrapSendOnConnection(tracer, config))
+      this.wrap(RequestHandler.prototype, 'send', createWrapSend(tracer, config))
     },
     unpatch (RequestHandler) {
-      this.unwrap(RequestHandler.prototype, '_sendOnConnection')
-    }
-  },
-  {
-    name: 'cassandra-driver',
-    versions: ['3 - 3.1'],
-    file: 'lib/request-handler.js',
-    patch (RequestHandler, tracer, config) {
-      this.wrap(RequestHandler.prototype, 'sendOnConnection', createWrapSendOnConnection(tracer, config))
-    },
-    unpatch (RequestHandler) {
-      this.unwrap(RequestHandler.prototype, 'sendOnConnection')
+      this.unwrap(RequestHandler.prototype, 'send')
     }
   }
 ]
