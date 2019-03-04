@@ -265,7 +265,8 @@ function startSpan (tracer, config, name, options) {
     childOf: options.childOf || tracer.scope().active(),
     startTime: options.startTime,
     tags: {
-      'service.name': getService(tracer, config)
+      'service.name': getService(tracer, config),
+      'span.type': 'graphql'
     }
   })
 }
