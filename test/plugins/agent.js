@@ -141,7 +141,7 @@ module.exports = {
   // Wipe the require cache.
   wipe () {
     const basedir = path.join(__dirname, '..', '..', 'versions')
-    const exceptions = ['/libpq/']
+    const exceptions = ['/libpq/'] // wiping native modules result in errors
 
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
