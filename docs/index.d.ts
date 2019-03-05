@@ -167,6 +167,11 @@ export declare interface TracerOptions {
    * Global tags that should be assigned to every span.
    */
   tags?: { [key: string]: any };
+
+  /**
+   * Additional headers for requests to the trace agent.
+   */
+  requestHeaders?: { [key:string]: any  }
 }
 
 /** @hidden */

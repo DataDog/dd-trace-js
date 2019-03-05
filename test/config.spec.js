@@ -29,6 +29,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('tags', {})
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
+    expect(config).to.have.deep.property('requestHeaders', {})
   })
 
   it('should initialize from the default service', () => {
@@ -79,6 +80,7 @@ describe('Config', () => {
   it('should initialize from the options', () => {
     const logger = {}
     const tags = { foo: 'bar' }
+    const headers = { 'X-Extra-Header': 'header value' }
     const config = new Config({
       enabled: false,
       debug: true,
@@ -90,7 +92,8 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
-      plugins: false
+      plugins: false,
+      requestHeaders: headers
     })
 
     expect(config).to.have.property('enabled', false)
@@ -105,6 +108,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('tags', tags)
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('plugins', false)
+    expect(config).to.have.deep.property('requestHeaders', headers)
   })
 
   it('should initialize from the options with url taking precedence', () => {

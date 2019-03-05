@@ -69,7 +69,7 @@ describe('Writer', () => {
       './encode': encode,
       '../lib/version': 'tracerVersion'
     })
-    writer = new Writer(prioritySampler, url, 3)
+    writer = new Writer(prioritySampler, url, 3, { 'X-Extra-Header': 'extra-header' })
   })
 
   describe('length', () => {
@@ -157,7 +157,8 @@ describe('Writer', () => {
           'Datadog-Meta-Lang-Version': 'version',
           'Datadog-Meta-Lang-Interpreter': 'interpreter',
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          'X-Datadog-Trace-Count': '2'
+          'X-Datadog-Trace-Count': '2',
+          'X-Extra-Header': 'extra-header'
         },
         data: 'prefixed'
       })

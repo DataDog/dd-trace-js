@@ -7,11 +7,12 @@ const encode = require('./encode')
 const tracerVersion = require('../lib/version')
 
 class Writer {
-  constructor (prioritySampler, url, size) {
+  constructor (prioritySampler, url, size, requestHeaders) {
     this._queue = []
     this._prioritySampler = prioritySampler
     this._url = url
     this._size = size
+    this._requestHeaders = requestHeaders
   }
 
   get length () {
@@ -61,14 +62,14 @@ class Writer {
       port: this._url.port,
       path: '/v0.4/traces',
       method: 'PUT',
-      headers: {
+      headers: Object.assign({
         'Content-Type': 'application/msgpack',
         'Datadog-Meta-Lang': platform.name(),
         'Datadog-Meta-Lang-Version': platform.version(),
         'Datadog-Meta-Lang-Interpreter': platform.engine(),
         'Datadog-Meta-Tracer-Version': tracerVersion,
         'X-Datadog-Trace-Count': String(count)
-      }
+      }, this._requestHeaders)
     }
 
     log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)

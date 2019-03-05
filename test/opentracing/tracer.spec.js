@@ -73,7 +73,8 @@ describe('Tracer', () => {
       sampleRate: 0.5,
       logger: 'logger',
       tags: {},
-      debug: false
+      debug: false,
+      requestHeaders: {}
     }
 
     log = {
@@ -99,7 +100,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(Writer).to.have.been.called
-    expect(Writer).to.have.been.calledWith(prioritySampler, config.url, config.bufferSize)
+    expect(Writer).to.have.been.calledWith(prioritySampler, config.url, config.bufferSize, config.requestHeaders)
     expect(Recorder).to.have.been.calledWith(writer, config.flushInterval)
     expect(recorder.init).to.have.been.called
   })

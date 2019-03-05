@@ -302,6 +302,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 | flushInterval |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | experimental  |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
 | plugins       |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
+| requestHeaders |                             | {}        | Additional headers for requests to the trace agent. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 
