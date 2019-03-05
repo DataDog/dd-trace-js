@@ -26,11 +26,13 @@ class Tracer extends BaseTracer {
     if (this._tracer === noop) {
       try {
         const service = platform.service()
-        const config = new Config(service, options)
+        const runtimeId = platform.uuid()
+        const config = new Config(service, runtimeId, options)
 
         if (config.enabled) {
           platform.validate()
           platform.configure(config)
+          platform.metrics().start()
 
           this._tracer = new DatadogTracer(config)
           this._instrumenter.enable()

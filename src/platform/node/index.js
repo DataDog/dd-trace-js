@@ -2,12 +2,14 @@
 
 const EventEmitter = require('events')
 const id = require('./id')
+const uuid = require('./uuid')
 const now = require('./now')
 const env = require('./env')
 const validate = require('./validate')
 const service = require('./service')
 const request = require('./request')
 const msgpack = require('./msgpack')
+const metrics = require('./metrics')
 const Uint64BE = require('./uint64be')
 
 const emitter = new EventEmitter()
@@ -21,12 +23,14 @@ const platform = {
     this._config = config
   },
   id,
+  uuid,
   now,
   env,
   validate,
   service,
   request,
   msgpack,
+  metrics,
   Uint64BE,
   on: emitter.on.bind(emitter),
   once: emitter.once.bind(emitter),

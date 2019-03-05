@@ -86,6 +86,18 @@ describe('Platform', () => {
       })
     })
 
+    describe('uuid', () => {
+      let uuid
+
+      beforeEach(() => {
+        uuid = require('../../../src/platform/node/uuid')
+      })
+
+      it('should return a random 63bit ID', () => {
+        expect(uuid()).to.match(/^[a-f0-9]{16}$/)
+      })
+    })
+
     describe('now', () => {
       let now
       let performanceNow
@@ -324,6 +336,73 @@ describe('Platform', () => {
 
           expect(prefixed.length).to.equal(length + 1)
           expect(prefixed[0]).to.deep.equal(Buffer.from([0xdd, 0x00, 0x01, 0x00, 0x00]))
+        })
+      })
+    })
+
+    describe('metrics', () => {
+      let metrics
+      let clock
+      let client
+      let ctx
+      let StatsD
+
+      beforeEach(() => {
+        StatsD = sinon.spy(function () {
+          return client
+        })
+
+        client = {
+          gauge: sinon.spy()
+        }
+
+        metrics = proxyquire('../src/platform/node/metrics', {
+          'hot-shots': StatsD
+        })
+
+        clock = sinon.useFakeTimers()
+
+        ctx = {
+          _config: {
+            service: 'service',
+            env: 'test',
+            hostname: 'localhost',
+            runtimeId: '1234'
+          }
+        }
+      })
+
+      describe('start', () => {
+        it('it should initialize the StatsD client with the correct options', () => {
+          metrics().start.apply(ctx)
+
+          expect(StatsD).to.have.been.calledWithMatch({
+            host: 'localhost',
+            globalTags: {
+              'service': 'service',
+              'env': 'test',
+              'runtime-id': '1234'
+            }
+          })
+        })
+
+        it('should start collecting metrics every second', () => {
+          metrics().start.apply(ctx)
+
+          clock.tick(1000)
+
+          expect(client.gauge).to.have.been.calledWith('cpu.system')
+        })
+      })
+
+      describe('stop', () => {
+        it('should stop collecting metrics every second', () => {
+          metrics().start.apply(ctx)
+          metrics().stop()
+
+          clock.tick(1000)
+
+          expect(client.gauge).to.not.have.been.called
         })
       })
     })

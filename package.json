@@ -40,6 +40,7 @@
   "dependencies": {
     "@types/node": "^10.12.18",
     "async-hook-jl": "^1.7.6",
+    "hot-shots": "^6.1.1",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",
@@ -86,5 +87,9 @@
     "sinon-chai": "^2.14.0",
     "tape": "^4.9.1",
     "v8-coverage": "^1.0.8"
+  },
+  "optionalDependencies": {
+    "event-loop-stats": "^1.1.0",
+    "gc-stats": "^1.2.1"
   }
 }
