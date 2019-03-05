@@ -290,6 +290,7 @@ jobs:
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
+          - PG_TEST_NATIVE=true
       - image: postgres:9.5
 
   node-q:

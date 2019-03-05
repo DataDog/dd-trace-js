@@ -47,9 +47,9 @@ export declare interface Tracer extends opentracing.Tracer {
   /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
-   * @param config Configuration options.
+   * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P]): this;
+  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
@@ -306,6 +306,11 @@ declare namespace plugins {
      * The service name to be used for this plugin.
      */
     service?: string;
+
+    /** Whether to enable the plugin.
+     * @default true
+     */
+    enabled?: boolean;
 
     /**
      * Trace Analytics configuration.
