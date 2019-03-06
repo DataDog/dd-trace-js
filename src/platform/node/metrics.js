@@ -31,6 +31,7 @@ let counters
 const gcTypes = {
   1: 'Scavenge',
   2: 'MarkSweepCompact',
+  3: 'All', // Node 4
   4: 'IncrementalMarking',
   8: 'ProcessWeakCallbacks',
   15: 'All'
@@ -67,6 +68,8 @@ module.exports = function () {
         captureCounters()
         captureEventLoop()
       }, 1000)
+
+      interval.unref()
     },
 
     stop: () => {
@@ -185,7 +188,11 @@ function captureEventLoop () {
 }
 
 function onGcStats (stats) {
-  client.gauge('gc.pause', stats.pause / 1e6, {
+  client.gauge('gc.pause.time', stats.pause / 1e6, {
+    'gc.type': gcTypes[stats.gctype]
+  })
+
+  client.increment('gc.pause.count', {
     'gc.type': gcTypes[stats.gctype]
   })
 }
