@@ -2,6 +2,12 @@
 
 const Span = require('opentracing').Span
 const Config = require('../src/config')
+const tags = require('../ext/tags')
+
+const SPAN_TYPE = tags.SPAN_TYPE
+const RESOURCE_NAME = tags.RESOURCE_NAME
+const SERVICE_NAME = tags.SERVICE_NAME
+const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
 
 wrapIt()
 
@@ -50,10 +56,28 @@ describe('Tracer', () => {
         expect(span).to.be.instanceof(Span)
         expect(span.context()._tags).to.include(options.tags)
         expect(span.context()._tags).to.include({
-          'service.name': 'service',
-          'resource.name': 'resource',
-          'span.type': 'type'
+          [SERVICE_NAME]: 'service',
+          [RESOURCE_NAME]: 'resource',
+          [SPAN_TYPE]: 'type'
         })
+      })
+    })
+
+    it('should support analytics', () => {
+      tracer.trace('name', { analytics: true }, span => {
+        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '1')
+      })
+
+      tracer.trace('name', { analytics: false }, span => {
+        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '0')
+      })
+
+      tracer.trace('name', { analytics: 0.5 }, span => {
+        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '0.5')
+      })
+
+      tracer.trace('name', { analytics: 2 }, span => {
+        expect(span.context()._tags).to.not.have.property(ANALYTICS_SAMPLE_RATE)
       })
     })
 

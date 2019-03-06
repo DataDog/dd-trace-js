@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
 const tags = require('../../../ext/tags')
@@ -52,6 +53,8 @@ const web = {
       span.setTag(SERVICE_NAME, config.service)
     }
 
+    analyticsSampler.sample(span, config.analytics, true)
+
     wrapEnd(req)
     wrapEvents(req)
 
@@ -84,6 +87,8 @@ const web = {
     span.addTags({
       [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
     })
+
+    analyticsSampler.sample(span, req._datadog.config.analytics)
 
     req._datadog.middleware.push(span)
 

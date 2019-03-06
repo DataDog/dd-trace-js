@@ -7,6 +7,7 @@ const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../util/urlfilter')
+const analyticsSampler = require('../../analytics_sampler')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -50,6 +51,8 @@ function patch (http, methodName, tracer, config) {
       if (!hasAmazonSignature(options)) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
       }
+
+      analyticsSampler.sample(span, config.analytics)
 
       callback = scope.bind(callback, childOf)
 

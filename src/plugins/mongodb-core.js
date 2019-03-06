@@ -1,6 +1,7 @@
 'use strict'
 
 const Buffer = require('safe-buffer').Buffer
+const analyticsSampler = require('../analytics_sampler')
 
 function createWrapOperation (tracer, config, operationName) {
   return function wrapOperation (operation) {
@@ -10,6 +11,8 @@ function createWrapOperation (tracer, config, operationName) {
       const span = tracer.startSpan('mongodb.query', { childOf })
 
       addTags(span, tracer, config, ns, ops, this, operationName)
+
+      analyticsSampler.sample(span, config.analytics)
 
       if (typeof options === 'function') {
         return scope

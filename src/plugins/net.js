@@ -1,6 +1,7 @@
 'use strict'
 
 const tx = require('./util/tx')
+const analyticsSampler = require('../analytics_sampler')
 
 function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
@@ -13,6 +14,8 @@ function createWrapConnect (tracer, config) {
       const span = options.path
         ? wrapIpc(tracer, config, this, options)
         : wrapTcp(tracer, config, this, options)
+
+      analyticsSampler.sample(span, config.analytics)
 
       this.once('connect', tx.wrap(span))
       this.once('error', tx.wrap(span))

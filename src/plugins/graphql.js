@@ -3,6 +3,7 @@
 const pick = require('lodash.pick')
 const platform = require('../platform')
 const log = require('../log')
+const analyticsSampler = require('../analytics_sampler')
 
 let tools
 
@@ -46,6 +47,8 @@ function createWrapParse (tracer, config) {
   return function wrapParse (parse) {
     return function parseWithTrace (source) {
       const span = startSpan(tracer, config, 'parse')
+
+      analyticsSampler.sample(span, config.analytics)
 
       try {
         const document = parse.apply(this, arguments)
@@ -92,6 +95,7 @@ function createWrapValidate (tracer, config) {
         if (error || document.loc) {
           const span = startSpan(tracer, config, 'validate', { startTime })
           addDocumentTags(span, document)
+          analyticsSampler.sample(span, config.analytics)
           finish(error, span)
         }
       }
@@ -214,6 +218,8 @@ function startExecutionSpan (tracer, config, operation, args) {
   addDocumentTags(span, args.document)
   addVariableTags(tracer, config, span, args.variableValues)
 
+  analyticsSampler.sample(span, config.analytics, true)
+
   return span
 }
 
@@ -300,6 +306,8 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
         })
     }
   }
+
+  analyticsSampler.sample(span, config.analytics)
 
   return span
 }

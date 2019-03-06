@@ -107,7 +107,13 @@ export declare interface TraceOptions {
   /**
    * The type of request.
    */
-  type?: string
+  type?: string,
+
+  /**
+   * Set the sample rate for Trace Analytics. Setting to `true` or `false` will
+   * set the rate to `1` and `0` respectively.
+   */
+  analytics?: boolean | number
 }
 
 /**
@@ -158,6 +164,12 @@ export declare interface TracerOptions {
    * @default false
    */
   debug?: boolean;
+
+  /**
+   * Enable Trace Analytics.
+   * @default false
+   */
+  analytics?: boolean;
 
   /**
    * The service name to be used for this program. If not set, the service name
@@ -295,11 +307,43 @@ declare namespace plugins {
      */
     service?: string;
 
-    /**
-     * Whether to enable the plugin.
+    /** Whether to enable the plugin.
      * @default true
      */
     enabled?: boolean;
+
+    /**
+     * Trace Analytics configuration.
+     * @default false
+     */
+    analytics?: boolean | {
+      /**
+       * Whether to enable Trace Analytics.
+       * @default false
+       */
+      enabled?: boolean;
+
+      /**
+       * Global sample rate.
+       * @default 1
+       */
+      sampleRate?: number;
+
+      /**
+       * Sample rate by operation name.
+       *
+       * For example:
+       *
+       * ```javascript
+       * sampleRates: {
+       *   'express.request': 0.1
+       * }
+       * ```
+       */
+      sampleRates?: {
+        [key: string]: number;
+      }
+    };
   }
 
   /** @hidden */

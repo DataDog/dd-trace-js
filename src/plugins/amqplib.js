@@ -1,6 +1,7 @@
 'use strict'
 
 const kebabCase = require('lodash.kebabcase')
+const analyticsSampler = require('../analytics_sampler')
 
 let methods = {}
 
@@ -27,6 +28,8 @@ function createWrapDispatchMessage (tracer, config) {
 
       addTags(this, tracer, config, span, 'basic.deliver', fields)
 
+      analyticsSampler.sample(span, config.analytics, true)
+
       tracer.scope().activate(span, () => {
         try {
           dispatchMessage.apply(this, arguments)
@@ -45,6 +48,8 @@ function sendWithTrace (send, channel, args, tracer, config, method, fields) {
   const span = tracer.startSpan('amqp.command', { childOf })
 
   addTags(channel, tracer, config, span, method, fields)
+
+  analyticsSampler.sample(span, config.analytics)
 
   return tracer.scope().activate(span, () => {
     try {

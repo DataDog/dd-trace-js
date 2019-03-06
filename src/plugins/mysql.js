@@ -1,6 +1,7 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
+const analyticsSampler = require('../analytics_sampler')
 
 function createWrapQuery (tracer, config) {
   return function wrapQuery (query) {
@@ -23,6 +24,8 @@ function createWrapQuery (tracer, config) {
       if (this.config.database) {
         span.setTag('db.name', this.config.database)
       }
+
+      analyticsSampler.sample(span, config.analytics)
 
       const sequence = scope.bind(query, span).call(this, sql, values, cb)
 
