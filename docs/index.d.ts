@@ -178,6 +178,12 @@ export declare interface TracerOptions {
   service?: string;
 
   /**
+   * The url of the trace agent that the tracer will submit to.
+   * Takes priority over hostname and port, if set.
+   */
+  url?: string;
+
+  /**
    * The address of the trace agent that the tracer will submit to.
    * @default 'localhost'
    */

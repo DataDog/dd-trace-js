@@ -47,7 +47,7 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'koa.request')
               expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'http')
+              expect(spans[0]).to.have.property('type', 'web')
               expect(spans[0]).to.have.property('resource', 'GET')
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
@@ -82,7 +82,7 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'koa.request')
               expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'http')
+              expect(spans[0]).to.have.property('type', 'web')
               expect(spans[0]).to.have.property('resource', 'GET')
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)

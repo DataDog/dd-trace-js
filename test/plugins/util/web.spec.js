@@ -6,7 +6,7 @@ const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
 const tags = require('../../../ext/tags')
 
-const HTTP = types.HTTP
+const WEB = types.WEB
 const SERVER = kinds.SERVER
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
@@ -153,7 +153,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           expect(span.context()._tags).to.include({
-            [SPAN_TYPE]: HTTP,
+            [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER
