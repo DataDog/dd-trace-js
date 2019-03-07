@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../analytics_sampler')
+
 function createWrapCommand (tracer, config) {
   return function wrapCommand (command) {
     return function commandWithTrace (queryCompiler, server) {
@@ -13,6 +15,8 @@ function createWrapCommand (tracer, config) {
           'service.name': config.service || `${tracer._service}-memcached`
         }
       })
+
+      analyticsSampler.sample(span, config.analytics)
 
       queryCompiler = wrapQueryCompiler(queryCompiler, this, server, scope, span)
 

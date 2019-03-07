@@ -2,8 +2,12 @@
 
 const Int64BE = require('int64-buffer').Int64BE
 const constants = require('../src/constants')
+const tags = require('../ext/tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const ANALYTICS_SAMPLE_RATE_KEY = constants.ANALYTICS_SAMPLE_RATE_KEY
+const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
+const ORIGIN_KEY = constants.ORIGIN_KEY
 
 const id = new Int64BE(0x02345678, 0x12345678)
 
@@ -21,6 +25,7 @@ describe('format', () => {
       _tags: {},
       _metrics: {},
       _sampling: {},
+      _trace: {},
       _name: 'operation'
     }
 
@@ -101,6 +106,14 @@ describe('format', () => {
       expect(trace.meta['error.stack']).to.equal(span._error.stack)
     })
 
+    it('should extract the origin', () => {
+      spanContext._trace.origin = 'synthetics'
+
+      trace = format(span)
+
+      expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
+    })
+
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
         spanContext._tags['error'] = true
@@ -178,6 +191,12 @@ describe('format', () => {
       spanContext._tags['foo'].baz = spanContext._tags['foo']
       trace = format(span)
       expect(trace.meta).to.not.have.property('foo')
+    })
+
+    it('should include the analytics sample rate', () => {
+      spanContext._tags[ANALYTICS_SAMPLE_RATE] = '0.5'
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_SAMPLE_RATE_KEY]).to.equal(0.5)
     })
   })
 })

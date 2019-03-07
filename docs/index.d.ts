@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
-export declare interface SpanOptions extends SpanOptions {}
+export { SpanOptions };
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -47,14 +47,73 @@ export declare interface Tracer extends opentracing.Tracer {
   /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
-   * @param config Configuration options.
+   * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P]): this;
+  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
    */
   scope(): Scope;
+
+  /**
+   * Instruments a function by automatically creating a span activated on its
+   * scope.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its second parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   */
+  trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+
+  /**
+   * Wrap a function to automatically create a span activated on its
+   * scope when it's called.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its last parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   */
+  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
+}
+
+export declare interface TraceOptions {
+  /**
+   * The resource you are tracing. The resource name must not be longer than
+   * 5000 characters.
+   */
+  resource?: string,
+
+  /**
+   * The service you are tracing. The service name must not be longer than
+   * 100 characters.
+   */
+  service?: string,
+
+  /**
+   * The type of request.
+   */
+  type?: string,
+
+  /**
+   * Set the sample rate for Trace Analytics. Setting to `true` or `false` will
+   * set the rate to `1` and `0` respectively.
+   */
+  analytics?: boolean | number
 }
 
 /**
@@ -105,6 +164,12 @@ export declare interface TracerOptions {
    * @default false
    */
   debug?: boolean;
+
+  /**
+   * Enable Trace Analytics.
+   * @default false
+   */
+  analytics?: boolean;
 
   /**
    * The service name to be used for this program. If not set, the service name
@@ -216,6 +281,7 @@ interface Plugins {
   "amqplib": plugins.amqplib;
   "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
+  "cassandra-driver": plugins.cassandra_driver,
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
@@ -247,6 +313,44 @@ declare namespace plugins {
      * The service name to be used for this plugin.
      */
     service?: string;
+
+    /** Whether to enable the plugin.
+     * @default true
+     */
+    enabled?: boolean;
+
+    /**
+     * Trace Analytics configuration.
+     * @default false
+     */
+    analytics?: boolean | {
+      /**
+       * Whether to enable Trace Analytics.
+       * @default false
+       */
+      enabled?: boolean;
+
+      /**
+       * Global sample rate.
+       * @default 1
+       */
+      sampleRate?: number;
+
+      /**
+       * Sample rate by operation name.
+       *
+       * For example:
+       *
+       * ```javascript
+       * sampleRates: {
+       *   'express.request': 0.1
+       * }
+       * ```
+       */
+      sampleRates?: {
+        [key: string]: number;
+      }
+    };
   }
 
   /** @hidden */
@@ -349,6 +453,12 @@ declare namespace plugins {
    * on the tracer.
    */
   interface bunyan extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
+   */
+  interface cassandra_driver extends Integration {}
 
   /**
    * This plugin automatically instruments the

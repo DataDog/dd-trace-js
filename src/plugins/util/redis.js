@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../../analytics_sampler')
 const tx = require('./tx')
 
 const redis = {
@@ -21,6 +22,8 @@ const redis = {
     })
 
     span.setTag('service.name', config.service || `${span.context()._tags['service.name']}-redis`)
+
+    analyticsSampler.sample(span, config.analytics)
 
     return span
   }

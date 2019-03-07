@@ -2,9 +2,13 @@
 
 const Int64BE = require('int64-buffer').Int64BE
 const constants = require('./constants')
+const tags = require('../ext/tags')
 const log = require('./log')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
+const ANALYTICS_SAMPLE_RATE_KEY = constants.ANALYTICS_SAMPLE_RATE_KEY
+const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
+const ORIGIN_KEY = constants.ORIGIN_KEY
 
 const map = {
   'service.name': 'service',
@@ -40,6 +44,7 @@ function formatSpan (span) {
 }
 
 function extractTags (trace, span) {
+  const origin = span.context()._trace.origin
   const tags = span.context()._tags
 
   Object.keys(tags).forEach(tag => {
@@ -48,6 +53,8 @@ function extractTags (trace, span) {
       case 'span.type':
       case 'resource.name':
         addTag(trace, map[tag], tags[tag])
+        break
+      case ANALYTICS_SAMPLE_RATE:
         break
       case 'error':
         if (tags[tag]) {
@@ -62,6 +69,10 @@ function extractTags (trace, span) {
         addTag(trace.meta, tag, tags[tag])
     }
   })
+
+  if (origin) {
+    addTag(trace.meta, ORIGIN_KEY, origin)
+  }
 }
 
 function extractError (trace, span) {
@@ -76,6 +87,7 @@ function extractError (trace, span) {
 
 function extractMetrics (trace, span) {
   const spanContext = span.context()
+  const analyticsSampleRate = parseFloat(spanContext._tags[ANALYTICS_SAMPLE_RATE])
 
   Object.keys(spanContext._metrics).forEach(metric => {
     if (typeof spanContext._metrics[metric] === 'number') {
@@ -85,6 +97,10 @@ function extractMetrics (trace, span) {
 
   if (spanContext._sampling.priority !== undefined) {
     trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
+  }
+
+  if (analyticsSampleRate >= 0 && analyticsSampleRate <= 1) {
+    trace.metrics[ANALYTICS_SAMPLE_RATE_KEY] = analyticsSampleRate
   }
 }
 

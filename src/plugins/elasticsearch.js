@@ -1,6 +1,7 @@
 'use strict'
 
 const Tags = require('opentracing').Tags
+const analyticsSampler = require('../analytics_sampler')
 
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
@@ -23,6 +24,8 @@ function createWrapRequest (tracer, config) {
       if (JSON.stringify(params.body)) {
         span.setTag('elasticsearch.body', JSON.stringify(params.body))
       }
+
+      analyticsSampler.sample(span, config.analytics)
 
       cb = tracer.scope().bind(cb, childOf)
 

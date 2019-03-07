@@ -45,3 +45,9 @@ services:
     image: memcached:1.5-alpine
     ports:
       - "11211:11211"
+  cassandra:
+    image: spotify/cassandra
+    environment:
+      - CASSANDRA_TOKEN=-9223372036854775808
+    ports:
+      - "127.0.0.1:9042:9042"

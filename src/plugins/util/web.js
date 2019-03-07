@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
 const tags = require('../../../ext/tags')
@@ -52,6 +53,8 @@ const web = {
       span.setTag(SERVICE_NAME, config.service)
     }
 
+    analyticsSampler.sample(span, config.analytics, true)
+
     wrapEnd(req)
     wrapEvents(req)
 
@@ -82,8 +85,10 @@ const web = {
     const span = tracer.startSpan(name, { childOf })
 
     span.addTags({
-      [RESOURCE_NAME]: middleware.name || '<anonymous>'
+      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
     })
+
+    analyticsSampler.sample(span, req._datadog.config.analytics)
 
     req._datadog.middleware.push(span)
 
@@ -91,12 +96,22 @@ const web = {
   },
 
   // Finish the active middleware span.
-  finish (req) {
+  finish (req, error) {
     if (!this.active(req)) return
 
     const span = req._datadog.middleware.pop()
 
-    span && span.finish()
+    if (span) {
+      if (error) {
+        span.addTags({
+          'error.type': error.name,
+          'error.msg': error.message,
+          'error.stack': error.stack
+        })
+      }
+
+      span.finish()
+    }
   },
 
   // Register a callback to run before res.end() is called.

@@ -21,9 +21,7 @@ function createWrapUse (tracer, config) {
       const result = use.apply(this, arguments)
       const fn = this.middleware.pop()
 
-      this.middleware.push(function (ctx, next) {
-        return web.reactivate(ctx.req, () => fn.apply(this, arguments))
-      })
+      this.middleware.push(wrapMiddleware(fn))
 
       return result
     }
@@ -39,17 +37,41 @@ function createWrapRegister (tracer, config) {
 
       route.stack = route.stack.map(middleware => {
         return function (ctx, next) {
-          if (web.active(ctx.req)) {
-            web.exitRoute(ctx.req)
-            web.enterRoute(ctx.req, route.path)
-          }
+          if (!web.active(ctx.req)) return middleware.apply(this, arguments)
 
-          return middleware.apply(this, arguments)
+          web.exitRoute(ctx.req)
+          web.enterRoute(ctx.req, route.path)
+
+          return wrapMiddleware(middleware).apply(this, arguments)
         }
       })
 
       return route
     }
+  }
+}
+
+function wrapMiddleware (fn) {
+  return function (ctx, next) {
+    return web.wrapMiddleware(ctx.req, fn, 'koa.middleware', () => {
+      try {
+        const result = fn.apply(this, arguments)
+
+        if (result && typeof result.then === 'function') {
+          result.then(
+            () => web.finish(ctx.req),
+            err => web.finish(ctx.req, err)
+          )
+        } else {
+          web.finish(ctx.req)
+        }
+
+        return result
+      } catch (e) {
+        web.finish(ctx.req, e)
+        throw e
+      }
+    })
   }
 }
 

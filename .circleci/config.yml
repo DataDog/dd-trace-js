@@ -166,6 +166,17 @@ jobs:
           - SERVICES=
           - PLUGINS=bunyan
 
+  node-cassandra:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=cassandra
+          - PLUGINS=cassandra-driver
+      - image: spotify/cassandra
+        environment:
+          - CASSANDRA_TOKEN=-9223372036854775808
+
   node-dns:
     <<: *node-plugin-base
     docker:
@@ -290,6 +301,7 @@ jobs:
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
+          - PG_TEST_NATIVE=true
       - image: postgres:9.5
 
   node-q:
@@ -388,6 +400,7 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-cassandra
       - node-dns
       - node-elasticsearch
       - node-express
@@ -425,6 +438,7 @@ workflows:
       - node-amqp10
       - node-bluebird
       - node-bunyan
+      - node-cassandra
       - node-dns
       - node-elasticsearch
       - node-express

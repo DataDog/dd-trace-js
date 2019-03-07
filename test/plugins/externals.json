@@ -30,5 +30,11 @@
       "name": "bson",
       "versions": ["4.0.0"]
     }
+  ],
+  "pg": [
+    {
+      "name": "pg-native",
+      "versions": ["3.0.0"]
+    }
   ]
 }

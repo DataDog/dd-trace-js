@@ -42,6 +42,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
+    platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_ENV').returns('test')
 
@@ -49,6 +50,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('analytics', true)
     expect(config).to.have.nested.property('url.protocol', 'http:')
     expect(config).to.have.nested.property('url.hostname', 'agent')
     expect(config).to.have.nested.property('url.port', '6218')
@@ -82,6 +84,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: false,
       debug: true,
+      analytics: true,
       hostname: 'agent',
       port: 6218,
       service: 'service',
@@ -95,6 +98,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('analytics', true)
     expect(config).to.have.nested.property('url.protocol', 'http:')
     expect(config).to.have.nested.property('url.hostname', 'agent')
     expect(config).to.have.nested.property('url.port', '6218')
@@ -154,12 +158,14 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
+    platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_ENV').returns('test')
 
     const config = new Config({
       enabled: true,
       debug: false,
+      analytics: false,
       protocol: 'https',
       hostname: 'server',
       port: 7777,
@@ -169,6 +175,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
+    expect(config).to.have.property('analytics', false)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '6218')
