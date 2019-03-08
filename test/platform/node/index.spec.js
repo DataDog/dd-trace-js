@@ -344,7 +344,6 @@ describe('Platform', () => {
       let metrics
       let clock
       let client
-      let ctx
       let StatsD
 
       beforeEach(() => {
@@ -353,7 +352,8 @@ describe('Platform', () => {
         })
 
         client = {
-          gauge: sinon.spy()
+          gauge: sinon.spy(),
+          increment: sinon.spy()
         }
 
         metrics = proxyquire('../src/platform/node/metrics', {
@@ -362,7 +362,7 @@ describe('Platform', () => {
 
         clock = sinon.useFakeTimers()
 
-        ctx = {
+        platform = {
           _config: {
             service: 'service',
             env: 'test',
@@ -374,7 +374,7 @@ describe('Platform', () => {
 
       describe('start', () => {
         it('it should initialize the StatsD client with the correct options', () => {
-          metrics().start.apply(ctx)
+          metrics.apply(platform).start()
 
           expect(StatsD).to.have.been.calledWithMatch({
             host: 'localhost',
@@ -387,7 +387,7 @@ describe('Platform', () => {
         })
 
         it('should start collecting metrics every second', () => {
-          metrics().start.apply(ctx)
+          metrics.apply(platform).start()
 
           clock.tick(1000)
 
@@ -397,8 +397,8 @@ describe('Platform', () => {
 
       describe('stop', () => {
         it('should stop collecting metrics every second', () => {
-          metrics().start.apply(ctx)
-          metrics().stop()
+          metrics.apply(platform).start()
+          metrics.apply(platform).stop()
 
           clock.tick(1000)
 

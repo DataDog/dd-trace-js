@@ -4,16 +4,16 @@ const v8 = require('v8')
 const StatsD = require('hot-shots')
 const log = require('../../log')
 
-let eventLoopStats = null
+let nativeMetrics = null
 let gcStats = null
 
 // TODO: test for this binding
 // TODO: test for cpuUsage
 
 try {
-  eventLoopStats = require('event-loop-stats')
+  nativeMetrics = require('../../../build/Release/metrics')
 } catch (e) {
-  log.error('Unable to load event-loop-stats. Event loop metrics will not be available.')
+  log.error('Unable to load native metrics module. Some metrics will not be available.')
 }
 
 try {
@@ -177,14 +177,14 @@ function captureCounters () {
 }
 
 function captureEventLoop () {
-  if (!eventLoopStats) return
+  if (!nativeMetrics) return
 
-  const stats = eventLoopStats.sense()
+  const stats = nativeMetrics.stats()
 
   client.gauge('event_loop.tick.max', stats.max)
   client.gauge('event_loop.tick.min', stats.min)
-  client.gauge('event_loop.tick.avg', stats.sum / stats.num)
-  client.gauge('event_loop.tick.count', stats.num)
+  client.gauge('event_loop.tick.avg', stats.avg)
+  client.gauge('event_loop.tick.count', stats.count)
 }
 
 function onGcStats (stats) {

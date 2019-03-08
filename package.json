@@ -5,6 +5,8 @@
   "main": "index.js",
   "typings": "docs/index.d.ts",
   "scripts": {
+    "rebuild": "node-gyp rebuild",
+    "install": "node-gyp rebuild || echo '\nCompilation of native modules failed. Falling back to JavaScript only. Some functionalities may not be available.\n'",
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
@@ -89,7 +91,6 @@
     "v8-coverage": "^1.0.8"
   },
   "optionalDependencies": {
-    "event-loop-stats": "^1.1.0",
     "gc-stats": "^1.2.1"
   }
 }
