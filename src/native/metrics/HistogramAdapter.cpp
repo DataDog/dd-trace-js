@@ -1,4 +1,5 @@
 #include "HistogramAdapter.hpp"
+#include "Object.hpp"
 
 using namespace v8;
 
@@ -7,39 +8,15 @@ namespace datadog {
     histogram_ = histogram;
   }
 
-  Local<Object> HistogramAdapter::to_object() {
-    Local<Object> obj = Nan::New<Object>();
+  v8::Local<v8::Object> HistogramAdapter::to_object() {
+    Object obj;
 
-    Nan::Set(
-      obj,
-      Nan::New("min").ToLocalChecked(),
-      Nan::New<Number>(histogram_->min())
-    );
+    obj.set("min", histogram_->min());
+    obj.set("max", histogram_->max());
+    obj.set("sum", histogram_->sum());
+    obj.set("avg", histogram_->avg());
+    obj.set("count", histogram_->count());
 
-    Nan::Set(
-      obj,
-      Nan::New("max").ToLocalChecked(),
-      Nan::New<Number>(histogram_->max())
-    );
-
-    Nan::Set(
-      obj,
-      Nan::New("sum").ToLocalChecked(),
-      Nan::New<Number>(histogram_->sum())
-    );
-
-    Nan::Set(
-      obj,
-      Nan::New("avg").ToLocalChecked(),
-      Nan::New<Number>(histogram_->avg())
-    );
-
-    Nan::Set(
-      obj,
-      Nan::New("count").ToLocalChecked(),
-      Nan::New<Number>(histogram_->count())
-    );
-
-    return obj;
+    return obj.to_json();
   }
 }

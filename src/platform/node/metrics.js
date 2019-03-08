@@ -12,6 +12,7 @@ let gcStats = null
 
 try {
   nativeMetrics = require('../../../build/Release/metrics')
+  nativeMetrics.start()
 } catch (e) {
   log.error('Unable to load native metrics module. Some metrics will not be available.')
 }
@@ -181,10 +182,11 @@ function captureEventLoop () {
 
   const stats = nativeMetrics.stats()
 
-  client.gauge('event_loop.tick.max', stats.max)
-  client.gauge('event_loop.tick.min', stats.min)
-  client.gauge('event_loop.tick.avg', stats.avg)
-  client.gauge('event_loop.tick.count', stats.count)
+  client.gauge('event_loop.tick.max', stats.eventLoop.max)
+  client.gauge('event_loop.tick.min', stats.eventLoop.min)
+  client.gauge('event_loop.tick.sum', stats.eventLoop.sum)
+  client.gauge('event_loop.tick.avg', stats.eventLoop.avg)
+  client.gauge('event_loop.tick.count', stats.eventLoop.count)
 }
 
 function onGcStats (stats) {
