@@ -56,9 +56,6 @@ class Writer {
 
   _request (data, count) {
     const options = {
-      protocol: this._url.protocol,
-      hostname: this._url.hostname,
-      port: this._url.port,
       path: '/v0.4/traces',
       method: 'PUT',
       headers: {
@@ -69,6 +66,14 @@ class Writer {
         'Datadog-Meta-Tracer-Version': tracerVersion,
         'X-Datadog-Trace-Count': String(count)
       }
+    }
+
+    if (this._url.protocol === 'unix:') {
+      options.socketPath = this._url.pathname
+    } else {
+      options.protocol = this._url.protocol
+      options.hostname = this._url.hostname
+      options.port = this._url.port
     }
 
     log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)

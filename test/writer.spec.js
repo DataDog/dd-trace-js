@@ -1,5 +1,7 @@
 'use strict'
 
+const URL = require('url-parse')
+
 describe('Writer', () => {
   let Writer
   let writer
@@ -174,6 +176,22 @@ describe('Writer', () => {
       setTimeout(() => {
         expect(log.error).to.have.been.calledWith(error)
         done()
+      })
+    })
+
+    context('with the url as a unix socket', () => {
+      beforeEach(() => {
+        url = new URL('unix:/path/to/somesocket.sock')
+        writer = new Writer(prioritySampler, url, 3)
+      })
+
+      it('should make a request to the socket', () => {
+        writer.append(span)
+        writer.flush()
+
+        expect(platform.request).to.have.been.calledWithMatch({
+          socketPath: url.pathname
+        })
       })
     })
   })
