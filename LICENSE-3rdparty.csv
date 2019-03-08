@@ -12,6 +12,7 @@ require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
+require,nan,MIT,Copyright 2018 NAN contributors
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,parent-module,MIT,Copyright Sindre Sorhus
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey

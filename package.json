@@ -89,8 +89,5 @@
     "sinon-chai": "^2.14.0",
     "tape": "^4.9.1",
     "v8-coverage": "^1.0.8"
-  },
-  "optionalDependencies": {
-    "gc-stats": "^1.2.1"
   }
 }
