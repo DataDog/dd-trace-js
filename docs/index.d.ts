@@ -261,7 +261,7 @@ export declare interface Scope {
    * @param {Function} fn Function that will have the span activated on its scope.
    * @returns The return value of the provided function.
    */
-  activate<T>(span: Span, fn: ((...args: any[]) => T | void)): Scope;
+  activate<T>(span: Span, fn: ((...args: any[]) => T | void)): T | void;
 
   /**
    * Binds a target to the provided span, or the active span if omitted.
