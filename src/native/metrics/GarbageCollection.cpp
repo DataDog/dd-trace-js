@@ -2,10 +2,6 @@
 
 namespace datadog {
   GarbageCollection::GarbageCollection() {
-    pause_[v8::GCType::kGCTypeScavenge] = Histogram();
-    pause_[v8::GCType::kGCTypeMarkSweepCompact] = Histogram();
-    pause_[v8::GCType::kGCTypeIncrementalMarking] = Histogram();
-    pause_[v8::GCType::kGCTypeProcessWeakCallbacks] = Histogram();
     pause_[v8::GCType::kGCTypeAll] = Histogram();
   }
 
@@ -16,6 +12,10 @@ namespace datadog {
   void GarbageCollection::after(v8::GCType type) {
     uint64_t usage = uv_hrtime() - start_time_;
 
+    if (pause_.find(type) == pause_.end()) {
+      pause_[type] = Histogram();
+    }
+
     pause_[type].add(usage);
     pause_[v8::GCType::kGCTypeAll].add(usage);
   }
@@ -23,18 +23,11 @@ namespace datadog {
   void GarbageCollection::inject(Object carrier) {
     Object value;
 
-    value.set("scavenge", pause_[v8::GCType::kGCTypeScavenge]);
-    value.set("mark_sweep_compact", pause_[v8::GCType::kGCTypeMarkSweepCompact]);
-    value.set("incremental_marking", pause_[v8::GCType::kGCTypeIncrementalMarking]);
-    value.set("process_weak_callbacks", pause_[v8::GCType::kGCTypeProcessWeakCallbacks]);
-    value.set("all", pause_[v8::GCType::kGCTypeAll]);
+    for (std::map<v8::GCType, Histogram>::iterator it = pause_.begin(); it != pause_.end(); ++it) {
+      value.set(types_[it->first], it->second);
+      it->second.reset();
+    }
 
     carrier.set("gc", value);
-
-    pause_[v8::GCType::kGCTypeScavenge].reset();
-    pause_[v8::GCType::kGCTypeMarkSweepCompact].reset();
-    pause_[v8::GCType::kGCTypeIncrementalMarking].reset();
-    pause_[v8::GCType::kGCTypeProcessWeakCallbacks].reset();
-    pause_[v8::GCType::kGCTypeAll].reset();
   }
 }
