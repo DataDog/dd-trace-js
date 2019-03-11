@@ -1,19 +1,11 @@
 'use strict'
 
 const v8 = require('v8')
-const StatsD = require('hot-shots')
 const log = require('../../log')
 
 let nativeMetrics = null
 
 // TODO: test for cpuUsage
-
-try {
-  nativeMetrics = require('../../../build/Release/metrics')
-  nativeMetrics.start()
-} catch (e) {
-  log.error('Unable to load native metrics module. Some metrics will not be available.')
-}
 
 let interval
 let client
@@ -26,6 +18,15 @@ reset()
 module.exports = function () {
   return {
     start: () => {
+      const StatsD = require('hot-shots')
+
+      try {
+        nativeMetrics = require('../../../build/Release/metrics')
+        nativeMetrics.start()
+      } catch (e) {
+        log.error('Unable to load native metrics module. Some metrics will not be available.')
+      }
+
       client = new StatsD({
         host: this._config.hostname,
         port: 8125, // TODO: allow to configure this
@@ -59,6 +60,10 @@ module.exports = function () {
     },
 
     stop: () => {
+      if (nativeMetrics) {
+        nativeMetrics.stop()
+      }
+
       clearInterval(interval)
       reset()
     },

@@ -32,7 +32,10 @@ class Tracer extends BaseTracer {
         if (config.enabled) {
           platform.validate()
           platform.configure(config)
-          platform.metrics().start()
+
+          if (config.experimental.runtimeMetrics) {
+            platform.metrics().start()
+          }
 
           this._tracer = new DatadogTracer(config)
           this._instrumenter.enable()

@@ -40,7 +40,14 @@ class Config {
     this.analytics = String(analytics) === 'true'
     this.runtimeId = coalesce(runtimeId, '')
     this.tags = Object.assign({ 'runtime-id': this.runtimeId }, options.tags)
+    this.experimental = {
+      runtimeMetrics: isFlagEnabled(options.experimental, 'runtimeMetrics')
+    }
   }
+}
+
+function isFlagEnabled (obj, prop) {
+  return obj === true || (typeof obj === 'object' && obj !== null && obj[prop])
 }
 
 module.exports = Config
