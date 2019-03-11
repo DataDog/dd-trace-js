@@ -33,18 +33,6 @@ namespace datadog {
     info.GetReturnValue().Set(obj.to_json());
   }
 
-  static NAN_GC_CALLBACK(before_gc) {
-    if (GCBinder::_instance) {
-      GCBinder::_instance->_gcStart();
-    }
-  }
-
-  static NAN_GC_CALLBACK(after_gc) {
-    if (GCBinder::_instance) {
-      GCBinder::_instance->_gcEnd(type);
-    }
-  }
-
   NAN_MODULE_INIT(init) {
     Object obj = Object(target);
 
