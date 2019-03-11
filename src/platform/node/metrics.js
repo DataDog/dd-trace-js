@@ -184,10 +184,10 @@ function captureNativeMetrics () {
   client.gauge('event_loop.tick.count', stats.eventLoop.count)
 
   Object.keys(stats.gc).forEach(type => {
-    client.gauge(`gc.${type}.min`, stats.gc[type].max)
+    client.gauge(`gc.${type}.min`, stats.gc[type].min)
     client.gauge(`gc.${type}.max`, stats.gc[type].max)
-    client.gauge(`gc.${type}.sum`, stats.gc[type].max)
-    client.gauge(`gc.${type}.avg`, stats.gc[type].max)
-    client.gauge(`gc.${type}.count`, stats.gc[type].max)
+    client.gauge(`gc.${type}.sum`, stats.gc[type].sum)
+    client.gauge(`gc.${type}.avg`, stats.gc[type].avg)
+    client.gauge(`gc.${type}.count`, stats.gc[type].count)
   })
 }
