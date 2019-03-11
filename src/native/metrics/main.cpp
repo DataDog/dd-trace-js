@@ -1,31 +1,48 @@
 #include <nan.h>
 
+#include "Collector.hpp"
 #include "EventLoop.hpp"
-#include "HistogramAdapter.hpp"
+#include "GarbageCollection.hpp"
 #include "Object.hpp"
-
-using namespace v8;
+#include "Process.hpp"
 
 namespace datadog {
-  EventLoop* eventLoop = new EventLoop();
-  HistogramAdapter* histogramAdapter = new HistogramAdapter(eventLoop);
+  Collector* eventLoop = new EventLoop();
+  Collector* gc = new GarbageCollection();
+  Collector* process = new Process();
 
   static NAN_METHOD(start) {
     eventLoop->enable();
+    gc->enable();
+    process->enable();
   }
 
   static NAN_METHOD(stop) {
     eventLoop->disable();
+    gc->disable();
+    process->disable();
   }
 
   static NAN_METHOD(stats) {
     Object obj;
 
-    obj.set("eventLoop", histogramAdapter->to_object());
+    eventLoop->inject(obj);
+    gc->inject(obj);
+    process->inject(obj);
 
     info.GetReturnValue().Set(obj.to_json());
+  }
 
-    eventLoop->reset();
+  static NAN_GC_CALLBACK(before_gc) {
+    if (GCBinder::_instance) {
+      GCBinder::_instance->_gcStart();
+    }
+  }
+
+  static NAN_GC_CALLBACK(after_gc) {
+    if (GCBinder::_instance) {
+      GCBinder::_instance->_gcEnd(type);
+    }
   }
 
   NAN_MODULE_INIT(init) {

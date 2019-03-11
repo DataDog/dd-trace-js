@@ -1,11 +1,11 @@
 #include "Histogram.hpp"
 
 namespace datadog {
-  uint64_t Histogram::min () { return min_; }
-  uint64_t Histogram::max () { return max_; }
-  uint64_t Histogram::sum () { return sum_; }
-  uint64_t Histogram::avg () { return count_ == 0 ? 0 : sum_ / count_; }
-  uint64_t Histogram::count () { return count_; }
+  uint64_t Histogram::min() { return min_; }
+  uint64_t Histogram::max() { return max_; }
+  uint64_t Histogram::sum() { return sum_; }
+  uint64_t Histogram::avg() { return count_ == 0 ? 0 : sum_ / count_; }
+  uint64_t Histogram::count() { return count_; }
 
   void Histogram::reset() {
     min_ = 0;

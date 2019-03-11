@@ -33,6 +33,14 @@ namespace datadog {
     );
   }
 
+  void Object::set(std::string key, Object value) {
+    Nan::Set(
+      target_,
+      Nan::New(key).ToLocalChecked(),
+      value.to_json()
+    );
+  }
+
   void Object::set(std::string key, Nan::FunctionCallback value) {
     Nan::Set(
       target_,
