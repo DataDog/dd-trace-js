@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nan.h>
+#include <stdint.h>
 #include <string>
 #include <functional>
 

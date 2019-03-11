@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <stdint.h>
 
 namespace datadog {
   class Histogram {
