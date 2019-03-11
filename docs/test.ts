@@ -143,7 +143,8 @@ const scope = tracer.scope()
 
 span = scope.active();
 
-const activateType: string | void = scope.activate(span, () => 'test');
+const activateStringType: string | void = scope.activate(span, () => 'test');
+const activateVoidType: void = scope.activate(span, () => {});
 
 scope.bind((arg1: string, arg2: number): string => 'test');
 scope.bind((arg1: string, arg2: number): string => 'test', span);
