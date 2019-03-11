@@ -143,11 +143,12 @@ const scope = tracer.scope()
 
 span = scope.active();
 
-const activateStringType: string | void = scope.activate(span, () => 'test');
+const activateStringType: string = scope.activate(span, () => 'test');
 const activateVoidType: void = scope.activate(span, () => {});
 
-scope.bind((arg1: string, arg2: number): string => 'test');
-scope.bind((arg1: string, arg2: number): string => 'test', span);
+const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bind((arg1: string, arg2: number): string => 'test');
+const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
+const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
 
 Promise.resolve();
 
