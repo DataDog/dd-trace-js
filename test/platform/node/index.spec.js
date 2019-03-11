@@ -340,77 +340,79 @@ describe('Platform', () => {
       })
     })
 
-    describe('metrics', () => {
-      let metrics
-      let clock
-      let client
-      let StatsD
+    if (semver.gte(process.version, '6.0.0')) {
+      describe('metrics', () => {
+        let metrics
+        let clock
+        let client
+        let StatsD
 
-      beforeEach(() => {
-        StatsD = sinon.spy(function () {
-          return client
-        })
+        beforeEach(() => {
+          StatsD = sinon.spy(function () {
+            return client
+          })
 
-        client = {
-          gauge: sinon.spy(),
-          increment: sinon.spy()
-        }
-
-        metrics = proxyquire('../src/platform/node/metrics', {
-          'hot-shots': StatsD
-        })
-
-        clock = sinon.useFakeTimers()
-
-        platform = {
-          _config: {
-            service: 'service',
-            env: 'test',
-            hostname: 'localhost',
-            runtimeId: '1234'
+          client = {
+            gauge: sinon.spy(),
+            increment: sinon.spy()
           }
-        }
-      })
 
-      afterEach(() => {
-        clock.restore()
-      })
+          metrics = proxyquire('../src/platform/node/metrics', {
+            'hot-shots': StatsD
+          })
 
-      describe('start', () => {
-        it('it should initialize the StatsD client with the correct options', () => {
-          metrics.apply(platform).start()
+          clock = sinon.useFakeTimers()
 
-          expect(StatsD).to.have.been.calledWithMatch({
-            host: 'localhost',
-            globalTags: {
-              'service': 'service',
-              'env': 'test',
-              'runtime-id': '1234'
+          platform = {
+            _config: {
+              service: 'service',
+              env: 'test',
+              hostname: 'localhost',
+              runtimeId: '1234'
             }
+          }
+        })
+
+        afterEach(() => {
+          clock.restore()
+        })
+
+        describe('start', () => {
+          it('it should initialize the StatsD client with the correct options', () => {
+            metrics.apply(platform).start()
+
+            expect(StatsD).to.have.been.calledWithMatch({
+              host: 'localhost',
+              globalTags: {
+                'service': 'service',
+                'env': 'test',
+                'runtime-id': '1234'
+              }
+            })
+          })
+
+          it('should start collecting metrics every second', () => {
+            metrics.apply(platform).start()
+
+            clock.tick(1000)
+
+            expect(client.gauge).to.have.been.calledWith('cpu.user')
+            expect(client.gauge).to.have.been.calledWith('cpu.system')
+            expect(client.gauge).to.have.been.calledWith('cpu.total')
           })
         })
 
-        it('should start collecting metrics every second', () => {
-          metrics.apply(platform).start()
+        describe('stop', () => {
+          it('should stop collecting metrics every second', () => {
+            metrics.apply(platform).start()
+            metrics.apply(platform).stop()
 
-          clock.tick(1000)
+            clock.tick(1000)
 
-          expect(client.gauge).to.have.been.calledWith('cpu.user')
-          expect(client.gauge).to.have.been.calledWith('cpu.system')
-          expect(client.gauge).to.have.been.calledWith('cpu.total')
+            expect(client.gauge).to.not.have.been.called
+          })
         })
       })
-
-      describe('stop', () => {
-        it('should stop collecting metrics every second', () => {
-          metrics.apply(platform).start()
-          metrics.apply(platform).stop()
-
-          clock.tick(1000)
-
-          expect(client.gauge).to.not.have.been.called
-        })
-      })
-    })
+    }
   })
 })

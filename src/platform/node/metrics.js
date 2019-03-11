@@ -1,11 +1,10 @@
 'use strict'
 
 const v8 = require('v8')
+const semver = require('semver')
 const log = require('../../log')
 
 let nativeMetrics = null
-
-// TODO: test for cpuUsage
 
 let interval
 let client
@@ -18,6 +17,10 @@ reset()
 module.exports = function () {
   return {
     start: () => {
+      if (semver.lt(process.version, '6.0.0')) {
+        return log.warn('Runtime metrics are only available in Node >=6 and have been disabled.')
+      }
+
       const StatsD = require('hot-shots')
 
       try {
