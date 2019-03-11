@@ -12,10 +12,14 @@ namespace datadog {
 
   void EventLoop::check_cb (uv_check_t* handle) {
     EventLoop* self = (EventLoop*)handle->data;
-    uint64_t usage = self->usage();
+    self->tick();
+  }
 
-    self->histogram_.add(usage - self->check_usage_);
-    self->check_usage_ = usage;
+  void EventLoop::tick () {
+    uint64_t usage = this->usage();
+
+    histogram_.add(usage - check_usage_);
+    check_usage_ = usage;
   }
 
   void EventLoop::enable() {
@@ -31,23 +35,11 @@ namespace datadog {
     uv_rusage_t usage;
     uv_getrusage(&usage);
 
-    return (
-      (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1e6 +
-      (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec)
-    );
+    return time_to_micro(usage.ru_utime) + time_to_micro(usage.ru_stime);
   }
 
   void EventLoop::inject(Object carrier) {
-    Object value;
-
-    value.set("min", histogram_.min());
-    value.set("max", histogram_.max());
-    value.set("sum", histogram_.sum());
-    value.set("avg", histogram_.avg());
-    value.set("count", histogram_.count());
-
-    carrier.set("eventLoop", value);
-
+    carrier.set("eventLoop", histogram_);
     histogram_.reset();
   }
 }

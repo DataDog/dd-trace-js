@@ -13,6 +13,7 @@ namespace datadog {
 
       void enable();
       void disable();
+      void tick();
       void inject(Object carrier);
     protected:
       static void check_cb (uv_check_t* handle);

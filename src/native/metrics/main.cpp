@@ -7,28 +7,38 @@
 #include "Process.hpp"
 
 namespace datadog {
-  Collector* eventLoop = new EventLoop();
-  Collector* gc = new GarbageCollection();
-  Collector* process = new Process();
+  EventLoop eventLoop;
+  GarbageCollection gc;
+  Process process;
 
-  static NAN_METHOD(start) {
-    eventLoop->enable();
-    gc->enable();
-    process->enable();
+  NAN_GC_CALLBACK(before_gc) {
+    gc.before(type);
   }
 
-  static NAN_METHOD(stop) {
-    eventLoop->disable();
-    gc->disable();
-    process->disable();
+  NAN_GC_CALLBACK(after_gc) {
+    gc.after(type);
   }
 
-  static NAN_METHOD(stats) {
+  NAN_METHOD(start) {
+    eventLoop.enable();
+
+    Nan::AddGCPrologueCallback(before_gc);
+    Nan::AddGCEpilogueCallback(after_gc);
+  }
+
+  NAN_METHOD(stop) {
+    eventLoop.disable();
+
+    Nan::RemoveGCPrologueCallback(before_gc);
+    Nan::RemoveGCEpilogueCallback(after_gc);
+  }
+
+  NAN_METHOD(stats) {
     Object obj;
 
-    eventLoop->inject(obj);
-    gc->inject(obj);
-    process->inject(obj);
+    eventLoop.inject(obj);
+    gc.inject(obj);
+    process.inject(obj);
 
     info.GetReturnValue().Set(obj.to_json());
   }

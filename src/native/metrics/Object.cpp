@@ -41,6 +41,22 @@ namespace datadog {
     );
   }
 
+  void Object::set(std::string key, Histogram value) {
+    Object obj;
+
+    obj.set("min", value.min());
+    obj.set("max", value.max());
+    obj.set("sum", value.sum());
+    obj.set("avg", value.avg());
+    obj.set("count", value.count());
+
+    Nan::Set(
+      target_,
+      Nan::New(key).ToLocalChecked(),
+      obj.to_json()
+    );
+  }
+
   void Object::set(std::string key, Nan::FunctionCallback value) {
     Nan::Set(
       target_,

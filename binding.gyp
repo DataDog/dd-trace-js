@@ -2,6 +2,7 @@
   "targets": [{
     "target_name": "metrics",
     "sources": [
+      "src/native/metrics/Collector.cpp",
       "src/native/metrics/EventLoop.cpp",
       "src/native/metrics/GarbageCollection.cpp",
       "src/native/metrics/Histogram.cpp",

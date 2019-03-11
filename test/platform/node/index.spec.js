@@ -391,7 +391,9 @@ describe('Platform', () => {
 
           clock.tick(1000)
 
+          expect(client.gauge).to.have.been.calledWith('cpu.user')
           expect(client.gauge).to.have.been.calledWith('cpu.system')
+          expect(client.gauge).to.have.been.calledWith('cpu.total')
         })
       })
 

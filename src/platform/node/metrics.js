@@ -5,9 +5,7 @@ const StatsD = require('hot-shots')
 const log = require('../../log')
 
 let nativeMetrics = null
-let gcStats = null
 
-// TODO: test for this binding
 // TODO: test for cpuUsage
 
 try {
@@ -17,26 +15,11 @@ try {
   log.error('Unable to load native metrics module. Some metrics will not be available.')
 }
 
-try {
-  gcStats = require('gc-stats')()
-} catch (e) {
-  log.error('Unable to load gc-stats. Garbage collection metrics will not be available.')
-}
-
 let interval
 let client
 let time
 let cpuUsage
 let counters
-
-const gcTypes = {
-  1: 'Scavenge',
-  2: 'MarkSweepCompact',
-  3: 'All', // Node 4
-  4: 'IncrementalMarking',
-  8: 'ProcessWeakCallbacks',
-  15: 'All'
-}
 
 reset()
 
@@ -58,16 +41,18 @@ module.exports = function () {
       time = process.hrtime()
       cpuUsage = process.cpuUsage()
 
-      gcStats && gcStats.addListener('stats', onGcStats)
-
       interval = setInterval(() => {
-        captureCpuUsage()
         captureMemoryUsage()
         captureProcess()
         captureHeapStats()
         captureHeapSpace()
         captureCounters()
-        captureEventLoop()
+
+        if (nativeMetrics) {
+          captureNativeMetrics()
+        } else {
+          captureCpuUsage()
+        }
       }, 1000)
 
       interval.unref()
@@ -106,7 +91,6 @@ function reset () {
   time = null
   cpuUsage = null
   counters = {}
-  gcStats && gcStats.removeListener('stats', onGcStats)
 }
 
 function captureCpuUsage () {
@@ -177,24 +161,33 @@ function captureCounters () {
   })
 }
 
-function captureEventLoop () {
-  if (!nativeMetrics) return
-
+function captureNativeMetrics () {
   const stats = nativeMetrics.stats()
+  const elapsedTime = process.hrtime(time)
+
+  time = process.hrtime()
+  cpuUsage = process.cpuUsage()
+
+  const elapsedUs = elapsedTime[0] * 1e6 + elapsedTime[1] / 1e3
+  const userPercent = 100 * stats.cpu.user / elapsedUs
+  const systemPercent = 100 * stats.cpu.system / elapsedUs
+  const totalPercent = userPercent + systemPercent
+
+  client.gauge('cpu.system', systemPercent.toFixed(2))
+  client.gauge('cpu.user', userPercent.toFixed(2))
+  client.gauge('cpu.total', totalPercent.toFixed(2))
 
   client.gauge('event_loop.tick.max', stats.eventLoop.max)
   client.gauge('event_loop.tick.min', stats.eventLoop.min)
   client.gauge('event_loop.tick.sum', stats.eventLoop.sum)
   client.gauge('event_loop.tick.avg', stats.eventLoop.avg)
   client.gauge('event_loop.tick.count', stats.eventLoop.count)
-}
 
-function onGcStats (stats) {
-  client.gauge('gc.pause.time', stats.pause / 1e6, {
-    'gc.type': gcTypes[stats.gctype]
-  })
-
-  client.increment('gc.pause.count', {
-    'gc.type': gcTypes[stats.gctype]
+  Object.keys(stats.gc).forEach(type => {
+    client.gauge(`gc.${type}.min`, stats.gc[type].max)
+    client.gauge(`gc.${type}.max`, stats.gc[type].max)
+    client.gauge(`gc.${type}.sum`, stats.gc[type].max)
+    client.gauge(`gc.${type}.avg`, stats.gc[type].max)
+    client.gauge(`gc.${type}.count`, stats.gc[type].max)
   })
 }
