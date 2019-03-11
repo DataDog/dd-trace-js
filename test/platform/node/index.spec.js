@@ -372,6 +372,10 @@ describe('Platform', () => {
         }
       })
 
+      afterEach(() => {
+        clock.restore()
+      })
+
       describe('start', () => {
         it('it should initialize the StatsD client with the correct options', () => {
           metrics.apply(platform).start()
