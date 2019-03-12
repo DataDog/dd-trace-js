@@ -8,8 +8,8 @@ steps:
 - bash: yarn install
   displayName: Install dependencies
 
-# - bash: yarn rebuild
-#   displayName: Compile native code
+- bash: yarn rebuild
+  displayName: Compile native code
 
 - bash: yarn test:core
   displayName: Test Core

@@ -395,37 +395,34 @@ describe('Platform', () => {
             })
           })
 
-          // TODO: make it work on Windows
-          if (process.platform !== 'win32' && process.platform !== 'win64') {
-            it('should start collecting metrics every 10 seconds', () => {
-              metrics.apply(platform).start()
+          it('should start collecting metrics every 10 seconds', () => {
+            metrics.apply(platform).start()
 
-              clock.tick(10000)
+            clock.tick(10000)
 
-              expect(client.gauge).to.have.been.calledWith('cpu.user')
-              expect(client.gauge).to.have.been.calledWith('cpu.system')
-              expect(client.gauge).to.have.been.calledWith('cpu.total')
+            expect(client.gauge).to.have.been.calledWith('cpu.user')
+            expect(client.gauge).to.have.been.calledWith('cpu.system')
+            expect(client.gauge).to.have.been.calledWith('cpu.total')
 
-              expect(client.gauge).to.have.been.calledWith('mem.rss')
-              expect(client.gauge).to.have.been.calledWith('mem.heap_total')
-              expect(client.gauge).to.have.been.calledWith('mem.heap_used')
+            expect(client.gauge).to.have.been.calledWith('mem.rss')
+            expect(client.gauge).to.have.been.calledWith('mem.heap_total')
+            expect(client.gauge).to.have.been.calledWith('mem.heap_used')
 
-              expect(client.gauge).to.have.been.calledWith('process.uptime')
+            expect(client.gauge).to.have.been.calledWith('process.uptime')
 
-              expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
-              expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
-              expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
-              expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
-              expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
-              expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
+            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
+            expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
+            expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
+            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+            expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
 
-              expect(client.gauge).to.have.been.calledWith('event_loop.tick.max')
-              expect(client.gauge).to.have.been.calledWith('event_loop.tick.min')
-              expect(client.gauge).to.have.been.calledWith('event_loop.tick.sum')
-              expect(client.gauge).to.have.been.calledWith('event_loop.tick.avg')
-              expect(client.gauge).to.have.been.calledWith('event_loop.tick.count')
-            })
-          }
+            expect(client.gauge).to.have.been.calledWith('event_loop.tick.max')
+            expect(client.gauge).to.have.been.calledWith('event_loop.tick.min')
+            expect(client.gauge).to.have.been.calledWith('event_loop.tick.sum')
+            expect(client.gauge).to.have.been.calledWith('event_loop.tick.avg')
+            expect(client.gauge).to.have.been.calledWith('event_loop.tick.count')
+          })
         })
 
         describe('stop', () => {
