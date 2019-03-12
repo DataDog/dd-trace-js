@@ -373,7 +373,8 @@ describe('Platform', () => {
               env: 'test',
               hostname: 'localhost',
               runtimeId: '1234'
-            }
+            },
+            name: sinon.stub().returns('nodejs')
           }
         })
 
