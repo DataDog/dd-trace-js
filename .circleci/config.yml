@@ -3,8 +3,6 @@ version: 2
 node-core-base: &node-core-base
   docker:
     - image: node:8
-      environment:
-        - DD_NATIVE_METRICS=true
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
@@ -17,7 +15,7 @@ node-core-base: &node-core-base
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
-        command: yarn install --ignore-engines
+        command: DD_NATIVE_METRICS=true yarn install --ignore-engines
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
