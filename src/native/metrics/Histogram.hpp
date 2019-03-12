@@ -5,6 +5,7 @@
 #include <algorithm>
 #undef min
 #undef max
+#undef NOMINMAX
 
 #include <stdint.h>
 
