@@ -15,13 +15,16 @@ node-core-base: &node-core-base
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
-        command: DD_NATIVE_METRICS=true yarn install --ignore-engines
+        command: yarn install --ignore-engines
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
         paths:
           - ./node_modules
           - ./yarn.lock
+    - run:
+        name: Compile native code
+        command: yarn rebuild
     - run:
         name: Unit tests
         command: yarn test:core
