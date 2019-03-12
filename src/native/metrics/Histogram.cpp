@@ -18,8 +18,8 @@ namespace datadog {
     if (count_ == 0) {
       min_ = max_ = value;
     } else {
-      min_ = std::min(min_, value);
-      max_ = std::max(max_, value);
+      min_ = (std::min)(min_, value);
+      max_ = (std::max)(max_, value);
     }
 
     count_ += 1;
