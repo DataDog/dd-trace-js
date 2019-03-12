@@ -2,10 +2,10 @@
 !ext/**/*
 !lib/**/*
 !src/**/*
-!docs/**/*.d.ts
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
 !index.js
+!index.d.ts
 !package.json
 !README.md
