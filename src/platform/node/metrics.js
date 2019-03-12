@@ -40,7 +40,9 @@ module.exports = function () {
           'env': this._config.env,
           'service': this._config.service,
           'runtime-id': this._config.runtimeId,
-          'language': this.name()
+          'runtime_name': this.name(),
+          'runtime_version': this.version(),
+          'runtime_engine': this.engine()
         },
         errorHandler: () => {}
       })

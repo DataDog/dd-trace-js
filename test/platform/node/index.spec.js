@@ -374,7 +374,9 @@ describe('Platform', () => {
               hostname: 'localhost',
               runtimeId: '1234'
             },
-            name: sinon.stub().returns('nodejs')
+            name: sinon.stub().returns('nodejs'),
+            version: sinon.stub().returns('10.0.0'),
+            engine: sinon.stub().returns('v8')
           }
         })
 
