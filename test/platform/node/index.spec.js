@@ -431,6 +431,40 @@ describe('Platform', () => {
             expect(client.gauge).to.not.have.been.called
           })
         })
+
+        describe('without native metrics', () => {
+          beforeEach(() => {
+            metrics = proxyquire('../src/platform/node/metrics', {
+              'hot-shots': StatsD,
+              '../../../build/Release/metrics': null
+            })
+          })
+
+          it('should fallback to only metrics available to JavaScript code', () => {
+            metrics.apply(platform).start()
+
+            clock.tick(10000)
+
+            if (semver.gte(process.version, '6.1.0')) {
+              expect(client.gauge).to.have.been.calledWith('cpu.user')
+              expect(client.gauge).to.have.been.calledWith('cpu.system')
+              expect(client.gauge).to.have.been.calledWith('cpu.total')
+            }
+
+            expect(client.gauge).to.have.been.calledWith('mem.rss')
+            expect(client.gauge).to.have.been.calledWith('mem.heap_total')
+            expect(client.gauge).to.have.been.calledWith('mem.heap_used')
+
+            expect(client.gauge).to.have.been.calledWith('process.uptime')
+
+            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
+            expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
+            expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
+            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+            expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
+          })
+        })
       })
     }
   })
