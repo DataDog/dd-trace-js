@@ -93,8 +93,12 @@ describe('Platform', () => {
         uuid = require('../../../src/platform/node/uuid')
       })
 
-      it('should return a random 63bit ID', () => {
-        expect(uuid()).to.match(/^[a-f0-9]{16}$/)
+      it('should return a random UUID', () => {
+        expect(uuid()).to.match(/^[a-f0-9]{32}$/)
+      })
+
+      it('should return part of a random UUID', () => {
+        expect(uuid(8)).to.match(/^[a-f0-9]{16}$/)
       })
     })
 
