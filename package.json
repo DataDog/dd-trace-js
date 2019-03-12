@@ -6,7 +6,7 @@
   "typings": "docs/index.d.ts",
   "scripts": {
     "rebuild": "node-gyp rebuild",
-    "install": "node-gyp rebuild || echo '\nCompilation of native modules failed. Falling back to JavaScript only. Some functionalities may not be available.\n'",
+    "install": "node scripts/post_install.js",
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",

@@ -340,7 +340,7 @@ describe('Platform', () => {
       })
     })
 
-    if (semver.gte(process.version, '6.0.0')) {
+    if (process.env.DD_NATIVE_METRICS === 'true' && semver.gte(process.version, '6.0.0')) {
       describe('metrics', () => {
         let metrics
         let clock

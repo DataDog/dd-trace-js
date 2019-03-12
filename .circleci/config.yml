@@ -3,6 +3,8 @@ version: 2
 node-core-base: &node-core-base
   docker:
     - image: node:8
+      environment:
+        - DD_NATIVE_METRICS=true
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
