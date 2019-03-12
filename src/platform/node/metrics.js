@@ -4,6 +4,8 @@ const v8 = require('v8')
 const semver = require('semver')
 const log = require('../../log')
 
+const INTERVAL = 10 * 1000
+
 let nativeMetrics = null
 
 let interval
@@ -43,21 +45,20 @@ module.exports = function () {
       })
 
       time = process.hrtime()
-      cpuUsage = process.cpuUsage()
 
-      interval = setInterval(() => {
-        captureMemoryUsage()
-        captureProcess()
-        captureHeapStats()
-        captureHeapSpace()
-        captureCounters()
-
-        if (nativeMetrics) {
+      if (nativeMetrics) {
+        interval = setInterval(() => {
+          captureCommonMetrics()
           captureNativeMetrics()
-        } else {
+        }, INTERVAL)
+      } else {
+        cpuUsage = process.cpuUsage()
+
+        interval = setInterval(() => {
+          captureCommonMetrics()
           captureCpuUsage()
-        }
-      }, 1000)
+        }, INTERVAL)
+      }
 
       interval.unref()
     },
@@ -169,12 +170,19 @@ function captureCounters () {
   })
 }
 
+function captureCommonMetrics () {
+  captureMemoryUsage()
+  captureProcess()
+  captureHeapStats()
+  captureHeapSpace()
+  captureCounters()
+}
+
 function captureNativeMetrics () {
   const stats = nativeMetrics.stats()
   const elapsedTime = process.hrtime(time)
 
   time = process.hrtime()
-  cpuUsage = process.cpuUsage()
 
   const elapsedUs = elapsedTime[0] * 1e6 + elapsedTime[1] / 1e3
   const userPercent = 100 * stats.cpu.user / elapsedUs
