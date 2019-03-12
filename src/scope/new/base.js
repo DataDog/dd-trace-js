@@ -36,7 +36,7 @@ class Scope {
   }
 
   _activate (span, callback) {
-    return null
+    return callback && callback()
   }
 
   _bindFn (fn, span) {
