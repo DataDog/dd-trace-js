@@ -1,6 +1,11 @@
 #pragma once
 
+// windows.h defines min and max macros.
+#define NOMINMAX
 #include <algorithm>
+#undef min
+#undef max
+
 #include <stdint.h>
 
 namespace datadog {
