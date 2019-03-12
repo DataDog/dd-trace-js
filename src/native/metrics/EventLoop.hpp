@@ -10,6 +10,7 @@ namespace datadog {
   class EventLoop : public Collector {
     public:
       EventLoop();
+      ~EventLoop();
 
       void enable();
       void disable();

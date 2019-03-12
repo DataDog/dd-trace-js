@@ -10,6 +10,10 @@ namespace datadog {
     check_usage_ = usage();
   }
 
+  EventLoop::~EventLoop() {
+    uv_check_stop(&check_handle_);
+  }
+
   void EventLoop::check_cb (uv_check_t* handle) {
     EventLoop* self = (EventLoop*)handle->data;
     self->tick();

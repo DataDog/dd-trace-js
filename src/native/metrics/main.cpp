@@ -7,40 +7,42 @@
 #include "Process.hpp"
 
 namespace datadog {
-  EventLoop eventLoop;
-  GarbageCollection gc;
-  Process process;
+  namespace {
+    EventLoop eventLoop;
+    GarbageCollection gc;
+    Process process;
 
-  NAN_GC_CALLBACK(before_gc) {
-    gc.before(type);
-  }
+    NAN_GC_CALLBACK(before_gc) {
+      gc.before(type);
+    }
 
-  NAN_GC_CALLBACK(after_gc) {
-    gc.after(type);
-  }
+    NAN_GC_CALLBACK(after_gc) {
+      gc.after(type);
+    }
 
-  NAN_METHOD(start) {
-    eventLoop.enable();
+    NAN_METHOD(start) {
+      eventLoop.enable();
 
-    Nan::AddGCPrologueCallback(before_gc);
-    Nan::AddGCEpilogueCallback(after_gc);
-  }
+      Nan::AddGCPrologueCallback(before_gc);
+      Nan::AddGCEpilogueCallback(after_gc);
+    }
 
-  NAN_METHOD(stop) {
-    eventLoop.disable();
+    NAN_METHOD(stop) {
+      eventLoop.disable();
 
-    Nan::RemoveGCPrologueCallback(before_gc);
-    Nan::RemoveGCEpilogueCallback(after_gc);
-  }
+      Nan::RemoveGCPrologueCallback(before_gc);
+      Nan::RemoveGCEpilogueCallback(after_gc);
+    }
 
-  NAN_METHOD(stats) {
-    Object obj;
+    NAN_METHOD(stats) {
+      Object obj;
 
-    eventLoop.inject(obj);
-    gc.inject(obj);
-    process.inject(obj);
+      eventLoop.inject(obj);
+      gc.inject(obj);
+      process.inject(obj);
 
-    info.GetReturnValue().Set(obj.to_json());
+      info.GetReturnValue().Set(obj.to_json());
+    }
   }
 
   NAN_MODULE_INIT(init) {
