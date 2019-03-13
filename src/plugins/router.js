@@ -9,7 +9,7 @@ function createWrapHandle (tracer, config) {
     return function handleWithTracer (req, res, done) {
       web.patch(req)
 
-      return handle.call(this, req, res, wrapDone(done, req))
+      return handle.apply(this, arguments)
     }
   }
 }
@@ -91,31 +91,15 @@ function wrapNext (layer, req, next) {
       web.exitRoute(req)
     }
 
-    addError(web.active(req), error)
-
-    web.finish(req)
+    web.finish(req, error)
 
     originalNext.apply(null, arguments)
   }
 }
 
-function wrapDone (original, req) {
-  return function done (error) {
-    const span = web.root(req)
-
-    addError(span, error)
-
-    return original.apply(this, arguments)
-  }
-}
-
 function callHandle (layer, handle, req, args) {
   return web.wrapMiddleware(req, handle, 'express.middleware', () => {
-    try {
-      return handle.apply(layer, args)
-    } catch (e) {
-      throw addError(web.active(req), e)
-    }
+    return handle.apply(layer, args)
   })
 }
 
@@ -150,18 +134,6 @@ function isFastSlash (layer) {
 
 function flatten (arr) {
   return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
-}
-
-function addError (span, error) {
-  if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
-  }
-
-  return error
 }
 
 module.exports = {
