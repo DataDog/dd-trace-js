@@ -2,6 +2,13 @@
 
 namespace datadog {
   GarbageCollection::GarbageCollection() {
+    types_[1] = "scavenge";
+    types_[2] = "mark_sweep_compact";
+    types_[3] = "all";
+    types_[4] = "incremental_marking";
+    types_[8] = "process_weak_callbacks";
+    types_[15] = "all";
+
     pause_[v8::GCType::kGCTypeAll] = Histogram();
   }
 

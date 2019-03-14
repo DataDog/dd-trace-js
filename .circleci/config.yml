@@ -387,6 +387,23 @@ jobs:
       - store_artifacts:
           path: ./docs/out
 
+  prebuild-linux-x64:
+    docker:
+      - image: node:10
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Versions
+          command: yarn versions
+      - run:
+          name: Install dependencies
+          command: yarn install
+      - run:
+          name: Build native addons
+          command: yarn prebuild
+
 workflows:
   version: 2
   build:
@@ -423,6 +440,7 @@ workflows:
       - node-restify
       - node-when
       - node-winston
+      - prebuild-linux-x64
   nightly:
     triggers:
       - schedule:

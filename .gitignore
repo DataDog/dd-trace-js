@@ -101,5 +101,6 @@ yarn.lock
 out
 versions
 build
+prebuilds
 docs/test.js
 !test/node_modules
