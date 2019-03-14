@@ -30,13 +30,11 @@ module.exports = function () {
       client = new StatsD({
         host: this._config.hostname,
         port: 8125, // TODO: allow to configure this
-        prefix: 'datadog.tracer.runtime.',
+        prefix: 'datadog.tracer.node.',
         globalTags: {
           'env': this._config.env,
           'service': this._config.service,
-          'runtime-id': this._config.runtimeId,
-          'language': 'javascript',
-          'runtime': 'node'
+          'runtime-id': this._config.runtimeId
         },
         errorHandler: () => {}
       })
