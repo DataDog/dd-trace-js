@@ -344,163 +344,161 @@ describe('Platform', () => {
       })
     })
 
-    if (semver.gte(process.version, '6.0.0')) {
-      describe('metrics', () => {
-        let metrics
-        let clock
-        let client
-        let StatsD
+    describe('metrics', () => {
+      let metrics
+      let clock
+      let client
+      let StatsD
 
+      beforeEach(() => {
+        StatsD = sinon.spy(function () {
+          return client
+        })
+
+        client = {
+          gauge: sinon.spy(),
+          increment: sinon.spy()
+        }
+
+        metrics = proxyquire('../src/platform/node/metrics', {
+          'hot-shots': StatsD
+        })
+
+        clock = sinon.useFakeTimers()
+
+        platform = {
+          _config: {
+            service: 'service',
+            env: 'test',
+            hostname: 'localhost',
+            runtimeId: '1234'
+          },
+          name: sinon.stub().returns('nodejs'),
+          version: sinon.stub().returns('10.0.0'),
+          engine: sinon.stub().returns('v8')
+        }
+      })
+
+      afterEach(() => {
+        clock.restore()
+      })
+
+      describe('start', () => {
+        it('it should initialize the StatsD client with the correct options', () => {
+          metrics.apply(platform).start()
+
+          expect(StatsD).to.have.been.calledWithMatch({
+            host: 'localhost',
+            globalTags: {
+              'service': 'service',
+              'env': 'test',
+              'runtime-id': '1234'
+            }
+          })
+        })
+
+        it('should start collecting metrics every 10 seconds', () => {
+          metrics.apply(platform).start()
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('cpu.user')
+          expect(client.gauge).to.have.been.calledWith('cpu.system')
+          expect(client.gauge).to.have.been.calledWith('cpu.total')
+
+          expect(client.gauge).to.have.been.calledWith('mem.rss')
+          expect(client.gauge).to.have.been.calledWith('mem.heap_total')
+          expect(client.gauge).to.have.been.calledWith('mem.heap_used')
+
+          expect(client.gauge).to.have.been.calledWith('process.uptime')
+
+          expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+          expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
+          expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
+          expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
+          expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+          expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
+
+          if (semver.gte(process.version, '7.2.0')) {
+            expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
+            expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
+          }
+
+          expect(client.gauge).to.have.been.calledWith('event_loop.tick.max')
+          expect(client.gauge).to.have.been.calledWith('event_loop.tick.min')
+          expect(client.gauge).to.have.been.calledWith('event_loop.tick.sum')
+          expect(client.gauge).to.have.been.calledWith('event_loop.tick.avg')
+          expect(client.gauge).to.have.been.calledWith('event_loop.tick.count')
+
+          expect(client.gauge).to.have.been.calledWith('gc.all.max')
+          expect(client.gauge).to.have.been.calledWith('gc.all.min')
+          expect(client.gauge).to.have.been.calledWith('gc.all.sum')
+          expect(client.gauge).to.have.been.calledWith('gc.all.avg')
+          expect(client.gauge).to.have.been.calledWith('gc.all.count')
+
+          expect(client.gauge).to.have.been.calledWith('heap.space_size')
+          expect(client.gauge).to.have.been.calledWith('heap.space_used_size')
+          expect(client.gauge).to.have.been.calledWith('heap.space_available_size')
+          expect(client.gauge).to.have.been.calledWith('heap.physical_space_size')
+        })
+      })
+
+      describe('stop', () => {
+        it('should stop collecting metrics every 10 seconds', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).stop()
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.not.have.been.called
+        })
+      })
+
+      describe('without native metrics', () => {
         beforeEach(() => {
-          StatsD = sinon.spy(function () {
-            return client
-          })
-
-          client = {
-            gauge: sinon.spy(),
-            increment: sinon.spy()
-          }
-
           metrics = proxyquire('../src/platform/node/metrics', {
-            'hot-shots': StatsD
+            'hot-shots': StatsD,
+            '../../../build/Release/metrics': null
           })
-
-          clock = sinon.useFakeTimers()
-
-          platform = {
-            _config: {
-              service: 'service',
-              env: 'test',
-              hostname: 'localhost',
-              runtimeId: '1234'
-            },
-            name: sinon.stub().returns('nodejs'),
-            version: sinon.stub().returns('10.0.0'),
-            engine: sinon.stub().returns('v8')
-          }
         })
 
-        afterEach(() => {
-          clock.restore()
-        })
+        it('should fallback to only metrics available to JavaScript code', () => {
+          metrics.apply(platform).start()
 
-        describe('start', () => {
-          it('it should initialize the StatsD client with the correct options', () => {
-            metrics.apply(platform).start()
+          clock.tick(10000)
 
-            expect(StatsD).to.have.been.calledWithMatch({
-              host: 'localhost',
-              globalTags: {
-                'service': 'service',
-                'env': 'test',
-                'runtime-id': '1234'
-              }
-            })
-          })
-
-          it('should start collecting metrics every 10 seconds', () => {
-            metrics.apply(platform).start()
-
-            clock.tick(10000)
-
+          if (semver.gte(process.version, '6.1.0')) {
             expect(client.gauge).to.have.been.calledWith('cpu.user')
             expect(client.gauge).to.have.been.calledWith('cpu.system')
             expect(client.gauge).to.have.been.calledWith('cpu.total')
+          }
 
-            expect(client.gauge).to.have.been.calledWith('mem.rss')
-            expect(client.gauge).to.have.been.calledWith('mem.heap_total')
-            expect(client.gauge).to.have.been.calledWith('mem.heap_used')
+          expect(client.gauge).to.have.been.calledWith('mem.rss')
+          expect(client.gauge).to.have.been.calledWith('mem.heap_total')
+          expect(client.gauge).to.have.been.calledWith('mem.heap_used')
 
-            expect(client.gauge).to.have.been.calledWith('process.uptime')
+          expect(client.gauge).to.have.been.calledWith('process.uptime')
 
-            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
-            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
-            expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
-            expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
-            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
-            expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
+          expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+          expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
+          expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
+          expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
+          expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
+          expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
 
-            if (semver.gte(process.version, '7.2.0')) {
-              expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
-              expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
-            }
+          if (semver.gte(process.version, '7.2.0')) {
+            expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
+            expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
+          }
 
-            expect(client.gauge).to.have.been.calledWith('event_loop.tick.max')
-            expect(client.gauge).to.have.been.calledWith('event_loop.tick.min')
-            expect(client.gauge).to.have.been.calledWith('event_loop.tick.sum')
-            expect(client.gauge).to.have.been.calledWith('event_loop.tick.avg')
-            expect(client.gauge).to.have.been.calledWith('event_loop.tick.count')
-
-            expect(client.gauge).to.have.been.calledWith('gc.all.max')
-            expect(client.gauge).to.have.been.calledWith('gc.all.min')
-            expect(client.gauge).to.have.been.calledWith('gc.all.sum')
-            expect(client.gauge).to.have.been.calledWith('gc.all.avg')
-            expect(client.gauge).to.have.been.calledWith('gc.all.count')
-
+          if (semver.gte(process.version, '6.0.0')) {
             expect(client.gauge).to.have.been.calledWith('heap.space_size')
             expect(client.gauge).to.have.been.calledWith('heap.space_used_size')
             expect(client.gauge).to.have.been.calledWith('heap.space_available_size')
             expect(client.gauge).to.have.been.calledWith('heap.physical_space_size')
-          })
-        })
-
-        describe('stop', () => {
-          it('should stop collecting metrics every 10 seconds', () => {
-            metrics.apply(platform).start()
-            metrics.apply(platform).stop()
-
-            clock.tick(10000)
-
-            expect(client.gauge).to.not.have.been.called
-          })
-        })
-
-        describe('without native metrics', () => {
-          beforeEach(() => {
-            metrics = proxyquire('../src/platform/node/metrics', {
-              'hot-shots': StatsD,
-              '../../../build/Release/metrics': null
-            })
-          })
-
-          it('should fallback to only metrics available to JavaScript code', () => {
-            metrics.apply(platform).start()
-
-            clock.tick(10000)
-
-            if (semver.gte(process.version, '6.1.0')) {
-              expect(client.gauge).to.have.been.calledWith('cpu.user')
-              expect(client.gauge).to.have.been.calledWith('cpu.system')
-              expect(client.gauge).to.have.been.calledWith('cpu.total')
-            }
-
-            expect(client.gauge).to.have.been.calledWith('mem.rss')
-            expect(client.gauge).to.have.been.calledWith('mem.heap_total')
-            expect(client.gauge).to.have.been.calledWith('mem.heap_used')
-
-            expect(client.gauge).to.have.been.calledWith('process.uptime')
-
-            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
-            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size_executable')
-            expect(client.gauge).to.have.been.calledWith('heap.total_physical_size')
-            expect(client.gauge).to.have.been.calledWith('heap.total_available_size')
-            expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
-            expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
-
-            if (semver.gte(process.version, '7.2.0')) {
-              expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
-              expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
-            }
-
-            if (semver.gte(process.version, '6.0.0')) {
-              expect(client.gauge).to.have.been.calledWith('heap.space_size')
-              expect(client.gauge).to.have.been.calledWith('heap.space_used_size')
-              expect(client.gauge).to.have.been.calledWith('heap.space_available_size')
-              expect(client.gauge).to.have.been.calledWith('heap.physical_space_size')
-            }
-          })
+          }
         })
       })
-    }
+    })
   })
 })
