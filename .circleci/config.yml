@@ -69,6 +69,9 @@ prebuild-linux-base: &prebuild-linux-base
   steps:
     - checkout
     - run:
+        name: Install compilation dependencies
+        command: apt-get install g++multilib
+    - run:
         name: Versions
         command: yarn versions
     - run:
