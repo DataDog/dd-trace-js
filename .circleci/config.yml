@@ -61,6 +61,23 @@ node-plugin-base: &node-plugin-base
         name: Memory leak tests
         command: yarn leak:plugins
 
+prebuild-linux-base: &prebuild-linux-base
+  docker:
+    - image: node:10
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - run:
+        name: Versions
+        command: yarn versions
+    - run:
+        name: Install dependencies
+        command: yarn install
+    - run:
+        name: Build native addons
+        command: yarn prebuild
+
 jobs:
   # Linting
 
@@ -388,21 +405,14 @@ jobs:
           path: ./docs/out
 
   prebuild-linux-x64:
-    docker:
-      - image: node:10
-    working_directory: ~/dd-trace-js
-    resource_class: small
-    steps:
-      - checkout
-      - run:
-          name: Versions
-          command: yarn versions
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - run:
-          name: Build native addons
-          command: yarn prebuild
+    <<: *prebuild-linux-base
+    environment:
+      - ARCH=x64
+
+  prebuild-linux-x32:
+    <<: *prebuild-linux-base
+    environment:
+      - ARCH=x32
 
 workflows:
   version: 2
