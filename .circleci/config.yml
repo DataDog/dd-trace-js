@@ -89,9 +89,6 @@ prebuild-mac-base: &prebuild-mac-base
   steps:
     - checkout
     - run:
-        name: Install Node
-        command: brew install node@10 && brew install yarn
-    - run:
         name: Versions
         command: yarn versions
     - run:
