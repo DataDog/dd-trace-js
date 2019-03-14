@@ -485,6 +485,8 @@ workflows:
       - node-winston
       - prebuild-linux-x64
       - prebuild-linux-x32
+      - prebuild-mac-x64
+      - prebuild-mac-x32
   nightly:
     triggers:
       - schedule:
