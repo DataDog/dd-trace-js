@@ -81,6 +81,26 @@ prebuild-linux-base: &prebuild-linux-base
         name: Build native addons
         command: yarn prebuild
 
+prebuild-mac-base: &prebuild-mac-base
+  macos:
+    xcode: "10.2.0"
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - run:
+        name: Install Node
+        command: brew install node@10 && brew install yarn
+    - run:
+        name: Versions
+        command: yarn versions
+    - run:
+        name: Install dependencies
+        command: yarn install
+    - run:
+        name: Build native addons
+        command: yarn prebuild
+
 jobs:
   # Linting
 
@@ -414,6 +434,16 @@ jobs:
 
   prebuild-linux-x32:
     <<: *prebuild-linux-base
+    environment:
+      - ARCH=x32
+
+  prebuild-mac-x64:
+    <<: *prebuild-mac-base
+    environment:
+      - ARCH=x64
+
+  prebuild-mac-x32:
+    <<: *prebuild-mac-base
     environment:
       - ARCH=x32
 
