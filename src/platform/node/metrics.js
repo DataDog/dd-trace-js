@@ -1,7 +1,6 @@
 'use strict'
 
 const v8 = require('v8')
-const semver = require('semver')
 const log = require('../../log')
 
 const INTERVAL = 10 * 1000
