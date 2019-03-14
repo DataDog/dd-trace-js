@@ -12,10 +12,10 @@ namespace datadog {
 
       if (isolate->GetHeapSpaceStatistics(&stats, i)) {
         space.set("space_name", stats.space_name());
-        space.set("space_size", static_cast<uint64_t>(stats.space_size()));
-        space.set("space_used_size", static_cast<uint64_t>(stats.space_used_size()));
-        space.set("space_available_size", static_cast<uint64_t>(stats.space_available_size()));
-        space.set("physical_space_size", static_cast<uint64_t>(stats.physical_space_size()));
+        space.set("space_size", stats.space_size());
+        space.set("space_used_size", stats.space_used_size());
+        space.set("space_available_size", stats.space_available_size());
+        space.set("physical_space_size", stats.physical_space_size());
 
         spaces.push_back(space);
       }

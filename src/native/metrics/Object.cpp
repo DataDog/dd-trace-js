@@ -17,6 +17,14 @@ namespace datadog {
     );
   }
 
+  void Object::set(std::string key, char* value) {
+    Nan::Set(
+      target_,
+      Nan::New(key).ToLocalChecked(),
+      Nan::New(value).ToLocalChecked()
+    );
+  }
+
   void Object::set(std::string key, uint64_t value) {
     Nan::Set(
       target_,
