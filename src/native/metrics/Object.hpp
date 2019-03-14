@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string>
 #include <functional>
+#include <vector>
 
 #include "Histogram.hpp"
 
@@ -18,6 +19,7 @@ namespace datadog {
       void set(std::string key, uint64_t value);
       void set(std::string key, v8::Local<v8::Object> value);
       void set(std::string key, Object value);
+      void set(std::string key, std::vector<Object> value);
       void set(std::string key, Histogram value);
       void set(std::string key, Nan::FunctionCallback value);
 

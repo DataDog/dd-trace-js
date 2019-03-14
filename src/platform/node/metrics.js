@@ -59,6 +59,7 @@ module.exports = function () {
         interval = setInterval(() => {
           captureCommonMetrics()
           captureCpuUsage()
+          captureHeapSpace()
         }, INTERVAL)
       }
 
@@ -176,12 +177,12 @@ function captureCommonMetrics () {
   captureMemoryUsage()
   captureProcess()
   captureHeapStats()
-  captureHeapSpace()
   captureCounters()
 }
 
 function captureNativeMetrics () {
   const stats = nativeMetrics.stats()
+  const spaces = stats.heap.spaces
   const elapsedTime = process.hrtime(time)
 
   time = process.hrtime()
@@ -208,4 +209,13 @@ function captureNativeMetrics () {
     client.gauge(`gc.${type}.avg`, stats.gc[type].avg)
     client.gauge(`gc.${type}.count`, stats.gc[type].count)
   })
+
+  for (let i = 0, l = spaces.length; i < l; i++) {
+    const tags = { 'heap.space': spaces[i].space_name }
+
+    client.gauge('heap.space_size', spaces[i].space_size, tags)
+    client.gauge('heap.space_used_size', spaces[i].space_used_size, tags)
+    client.gauge('heap.space_available_size', spaces[i].space_available_size, tags)
+    client.gauge('heap.physical_space_size', spaces[i].physical_space_size, tags)
+  }
 }

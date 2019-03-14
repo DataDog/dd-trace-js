@@ -41,6 +41,20 @@ namespace datadog {
     );
   }
 
+  void Object::set(std::string key, std::vector<Object> value) {
+    v8::Local<v8::Array> array = Nan::New<v8::Array>(value.size());
+
+    for (unsigned int i = 0; i < array->Length(); i++) {
+      Nan::Set(array, i, value.at(i).to_json());
+    }
+
+    Nan::Set(
+      target_,
+      Nan::New(key).ToLocalChecked(),
+      array
+    );
+  }
+
   void Object::set(std::string key, Histogram value) {
     Object obj;
 

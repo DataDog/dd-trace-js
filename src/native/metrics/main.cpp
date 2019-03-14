@@ -3,6 +3,7 @@
 #include "Collector.hpp"
 #include "EventLoop.hpp"
 #include "GarbageCollection.hpp"
+#include "Heap.hpp"
 #include "Object.hpp"
 #include "Process.hpp"
 
@@ -10,6 +11,7 @@ namespace datadog {
   namespace {
     EventLoop eventLoop;
     GarbageCollection gc;
+    Heap heap;
     Process process;
 
     NAN_GC_CALLBACK(before_gc) {
@@ -40,6 +42,7 @@ namespace datadog {
       eventLoop.inject(obj);
       gc.inject(obj);
       process.inject(obj);
+      heap.inject(obj);
 
       info.GetReturnValue().Set(obj.to_json());
     }
