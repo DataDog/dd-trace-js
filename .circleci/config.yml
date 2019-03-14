@@ -70,7 +70,7 @@ prebuild-linux-base: &prebuild-linux-base
     - checkout
     - run:
         name: Install compilation dependencies
-        command: apt-get install gcc-multilib
+        command: apt-get update && apt-get install gcc-multilib
     - run:
         name: Versions
         command: yarn versions
