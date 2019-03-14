@@ -83,7 +83,7 @@ prebuild-linux-base: &prebuild-linux-base
 
 prebuild-mac-base: &prebuild-mac-base
   macos:
-    xcode: "10.2.0"
+    xcode: "9.4.1"
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
