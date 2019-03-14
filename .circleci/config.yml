@@ -95,7 +95,7 @@ prebuild-mac-base: &prebuild-mac-base
         name: Install dependencies
         command: yarn install
     - run:
-        name: Build native addons
+        name: Compile prebuilt binaries
         command: yarn prebuild
 
 jobs:
