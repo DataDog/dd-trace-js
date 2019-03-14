@@ -11,7 +11,7 @@ namespace datadog {
       v8::HeapSpaceStatistics stats;
 
       if (isolate->GetHeapSpaceStatistics(&stats, i)) {
-        space.set("space_name", stats.space_name());
+        space.set("space_name", std::string(stats.space_name()));
         space.set("space_size", stats.space_size());
         space.set("space_used_size", stats.space_used_size());
         space.set("space_available_size", stats.space_available_size());

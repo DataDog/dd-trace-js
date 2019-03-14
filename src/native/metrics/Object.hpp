@@ -16,7 +16,6 @@ namespace datadog {
       Object(v8::Local<v8::Object> target);
 
       void set(std::string key, std::string value);
-      void set(std::string key, char* value);
       void set(std::string key, uint64_t value);
       void set(std::string key, v8::Local<v8::Object> value);
       void set(std::string key, Object value);
