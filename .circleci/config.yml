@@ -451,6 +451,7 @@ workflows:
       - node-when
       - node-winston
       - prebuild-linux-x64
+      - prebuild-linux-x32
   nightly:
     triggers:
       - schedule:
