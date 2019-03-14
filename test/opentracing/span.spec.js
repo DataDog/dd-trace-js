@@ -161,11 +161,11 @@ describe('Span', () => {
       expect(span.context()._tags).to.have.property('foo', 'bar')
     })
 
-    it('should ensure tags are strings', () => {
+    it('should store the original values', () => {
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
       span.addTags({ foo: 123 })
 
-      expect(span.context()._tags).to.have.property('foo', '123')
+      expect(span.context()._tags).to.have.property('foo', 123)
     })
 
     it('should handle errors', () => {

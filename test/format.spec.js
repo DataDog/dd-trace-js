@@ -97,13 +97,14 @@ describe('format', () => {
     })
 
     it('should extract errors', () => {
-      span._error = new Error('boom')
+      const error = new Error('boom')
 
+      spanContext._tags['error'] = error
       trace = format(span)
 
-      expect(trace.meta['error.msg']).to.equal('boom')
-      expect(trace.meta['error.type']).to.equal('Error')
-      expect(trace.meta['error.stack']).to.equal(span._error.stack)
+      expect(trace.meta['error.msg']).to.equal(error.message)
+      expect(trace.meta['error.type']).to.equal(error.name)
+      expect(trace.meta['error.stack']).to.equal(error.stack)
     })
 
     it('should extract the origin', () => {
