@@ -14,6 +14,8 @@ jobs:
 
   - bash: yarn install
     displayName: Install dependencies
+    env:
+      DD_NATIVE_METRICS: "false"
 
   - bash: yarn prebuild
     displayName: Compile prebuilt binaries

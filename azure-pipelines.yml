@@ -7,6 +7,8 @@ steps:
 
 - bash: yarn install
   displayName: Install dependencies
+  env:
+    DD_NATIVE_METRICS: "false"
 
 - bash: yarn rebuild
   displayName: Compile native code
