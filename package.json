@@ -5,9 +5,10 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
-    "rebuild": "node-gyp-build",
+    "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
     "install": "node scripts/post_install.js",
+    "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",

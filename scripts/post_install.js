@@ -21,7 +21,7 @@ if (process.env.DD_NATIVE_METRICS !== 'false') {
     }
 
     try {
-      execSync('npm run rebuild --scripts-prepend-node-path', { stdio: [0, 1, 2] })
+      execSync('npm run install:rebuild --scripts-prepend-node-path', { stdio: [0, 1, 2] })
     } catch (e) {
       console.log()
       console.log([
@@ -35,15 +35,21 @@ if (process.env.DD_NATIVE_METRICS !== 'false') {
 }
 
 function download (cb) {
+  const folder = path.join(__dirname, '..', 'prebuilds')
   const name = `${os.platform()}-${os.arch()}`
-  const file = fs.createWriteStream(path.join(__dirname, '..', 'prebuilds', `addons-${name}.zip`))
-  const url = `https://github.com/DataDog/dd-trace-js/releases/download/v${pkg.version}/addons-${name}.zip`
+  const version = ~pkg.version.indexOf('beta') ? 'latest' : `v${pkg.version}`
+  const url = `https://github.com/DataDog/dd-trace-js/releases/download/${version}/addons-${name}.zip`
 
   const req = https.get(url, res => {
     if (res.statusCode !== 200) {
       return cb(new Error('Server replied with not OK status code.'))
     }
 
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder)
+    }
+
+    const file = fs.createWriteStream(path.join(__dirname, '..', 'prebuilds', `addons-${name}.zip`))
     const stream = res.pipe(file)
 
     stream.on('finish', () => cb())
