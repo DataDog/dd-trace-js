@@ -78,11 +78,8 @@ prebuild-linux-base: &prebuild-linux-base
         name: Install dependencies
         command: yarn install
     - run:
-        name: Build native addons
+        name: Compile prebuild binaries
         command: yarn prebuild
-    - run:
-        name: Zip native addons
-        command: tar -zcvf linux-$ARCH.tar.gz -C prebuilds linux-$ARCH
 
 prebuild-darwin-base: &prebuild-darwin-base
   macos:
