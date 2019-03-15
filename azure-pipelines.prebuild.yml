@@ -5,9 +5,9 @@ jobs:
     strategy:
       matrix:
         x32:
-          ARCH: x32
+          arch: x32
         x64:
-          ARCH: x64
+          arch: x64
     steps:
     - bash: yarn versions
       displayName: Versions
@@ -17,3 +17,5 @@ jobs:
 
     - bash: yarn prebuild
       displayName: Compile prebuilt binaries
+      env:
+        ARCH: $(arch)
