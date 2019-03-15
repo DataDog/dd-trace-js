@@ -1,5 +1,5 @@
 jobs:
-  - job: prebuild-win32
+  - job: win32
     pool:
       vmImage: vs2017-win2016
     strategy:
