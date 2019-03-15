@@ -1,12 +1,19 @@
-pool:
-  vmImage: vs2017-win2016
+jobs:
+  - job: prebuild-win32
+    pool:
+      vmImage: vs2017-win2016
+    strategy:
+      matrix:
+        x32:
+          ARCH: x32
+        x64:
+          ARCH: x64
+    steps:
+    - bash: yarn versions
+      displayName: Versions
 
-steps:
-- bash: yarn versions
-  displayName: Versions
+    - bash: yarn install
+      displayName: Install dependencies
 
-- bash: yarn install
-  displayName: Install dependencies
-
-- bash: yarn prebuild
-  displayName: Compile prebuilt binaries
+    - bash: yarn prebuild
+      displayName: Compile prebuilt binaries

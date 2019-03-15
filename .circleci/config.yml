@@ -81,7 +81,7 @@ prebuild-linux-base: &prebuild-linux-base
         name: Build native addons
         command: yarn prebuild
 
-prebuild-mac-base: &prebuild-mac-base
+prebuild-darwin-base: &prebuild-darwin-base
   macos:
     xcode: "9.4.1"
   working_directory: ~/dd-trace-js
@@ -434,13 +434,13 @@ jobs:
     environment:
       - ARCH=x32
 
-  prebuild-mac-x64:
-    <<: *prebuild-mac-base
+  prebuild-darwin-x64:
+    <<: *prebuild-darwin-base
     environment:
       - ARCH=x64
 
-  prebuild-mac-x32:
-    <<: *prebuild-mac-base
+  prebuild-darwin-x32:
+    <<: *prebuild-darwin-base
     environment:
       - ARCH=x32
 
@@ -482,8 +482,8 @@ workflows:
       # - node-winston
       - prebuild-linux-x64
       - prebuild-linux-x32
-      - prebuild-mac-x64
-      - prebuild-mac-x32
+      - prebuild-darwin-x64
+      - prebuild-darwin-x32
   nightly:
     triggers:
       - schedule:
