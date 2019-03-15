@@ -17,7 +17,7 @@ const opts = {
 const cb = err => {
   if (err) throw err
 
-  const output = fs.createWriteStream(path.join('prebuilds', `addons-${name}.zip`))
+  const output = fs.createWriteStream(path.join(__dirname, '..', 'prebuilds', `addons-${name}.zip`))
   const archive = archiver('zip', {
     zlib: { level: 9 }
   })
@@ -27,7 +27,7 @@ const cb = err => {
   })
 
   archive.pipe(output)
-  archive.directory(path.join('prebuilds', name), name)
+  archive.directory(path.join(__dirname, '..', 'prebuilds', name), name)
   archive.finalize()
 }
 

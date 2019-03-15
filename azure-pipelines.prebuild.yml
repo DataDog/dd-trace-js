@@ -19,3 +19,7 @@ jobs:
     displayName: Compile prebuilt binaries
     env:
       ARCH: $(arch)
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'prebuilds-$(arch)'
+      targetPath: 'prebuilds'

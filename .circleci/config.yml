@@ -80,6 +80,8 @@ prebuild-linux-base: &prebuild-linux-base
     - run:
         name: Compile prebuild binaries
         command: yarn prebuild
+    - store_artifacts:
+        path: ./prebuilds
 
 prebuild-darwin-base: &prebuild-darwin-base
   macos:
@@ -97,9 +99,8 @@ prebuild-darwin-base: &prebuild-darwin-base
     - run:
         name: Compile prebuilt binaries
         command: yarn prebuild
-    - run:
-        name: Zip native addons
-        command: tar -zcvf darwin-$ARCH.tar.gz -C prebuilds darwin-$ARCH
+    - store_artifacts:
+        path: ./prebuilds
 
 jobs:
   # Linting
