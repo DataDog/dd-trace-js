@@ -20,11 +20,6 @@ jobs:
     #   env:
     #     ARCH: $(arch)
 
-    - bash: zip --help
-      displayName: Test zip
-      env:
-        ARCH: $(arch)
-
     - bash: tar --help
       displayName: Test gzip
       env:
