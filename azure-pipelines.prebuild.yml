@@ -4,8 +4,8 @@ jobs:
       vmImage: vs2017-win2016
     strategy:
       matrix:
-        x32:
-          arch: x32
+        ia32:
+          arch: ia32
         x64:
           arch: x64
     steps:
