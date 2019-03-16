@@ -153,6 +153,16 @@ describe('Span', () => {
     })
   })
 
+  describe('setTag(\'force.keep\')', () => {
+    it('should set the sampling priority to USER_KEEP', () => {
+      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span.setTag('force.keep')
+
+      expect(span.context()._tags).to.not.have.property('force.keep')
+      expect(span.context()._sampling.priority).to.equal(2)
+    })
+  })
+
   describe('addTags', () => {
     it('should add tags', () => {
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })

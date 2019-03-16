@@ -9,6 +9,7 @@ const log = require('../log')
 const constants = require('../constants')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
+const PRIORITY_USER_KEEP = constants.PRIORITY_USER_KEEP
 
 class DatadogSpan extends Span {
   constructor (tracer, recorder, sampler, prioritySampler, fields) {
@@ -133,6 +134,14 @@ class DatadogSpan extends Span {
       .forEach(child => {
         log.error(`Parent span ${this} was finished before child span ${child}.`)
       })
+  }
+
+  setTag (key, value) {
+    if (key === 'force.keep') {
+      this._spanContext._sampling.priority = PRIORITY_USER_KEEP
+    } else {
+      super.setTag(key, value)
+    }
   }
 }
 
