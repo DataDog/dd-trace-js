@@ -7,6 +7,7 @@ const https = require('https')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
+const tar = require('tar')
 const pkg = require('../package.json')
 
 const name = `${os.platform()}-${os.arch()}`
@@ -67,11 +68,22 @@ function download (tag) {
 }
 
 function extract () {
-  // TODO
+  console.log('Extracting prebuilt binaries.')
+
+  const promise = tar.extract({
+    file: `addons-${name}.tgz`,
+    cwd: path.join(__dirname, '..', 'prebuilds')
+  })
+
+  promise.catch(() => {
+    console.log('Extraction of prebuilt binaries failed.')
+  })
+
+  return promise
 }
 
 function cleanup () {
-  // TODO
+  fs.unlink(`addons-${name}.tgz`, () => {})
 }
 
 function getReleaseTag () {
@@ -79,7 +91,7 @@ function getReleaseTag () {
     return Promise.resolve(`v${pkg.version}`)
   }
 
-  return new Promise((resolve, reject) => {
+  const promise = new Promise((resolve, reject) => {
     const req = https.get(`https://github.com/DataDog/dd-trace-js/releases/latest`, res => {
       let data = ''
 
@@ -102,4 +114,10 @@ function getReleaseTag () {
 
     req.on('error', reject)
   })
+
+  promise.catch(() => {
+    console.log('Unable to determine prebuilt binaries download location.')
+  })
+
+  return promise
 }
