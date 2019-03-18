@@ -1,6 +1,5 @@
 Component,Origin,License,Copyright
 require,@types/node,MIT,Copyright Authors
-require,archiver,MIT,Copyright 2012-2014 Chris Talkington, contributors
 require,async-hook-jl,MIT,Copyright 2015 Andreas Madsen
 require,hot-shots,MIT,Copyright 2011 Steve Ivy
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
@@ -24,6 +23,7 @@ require,read-pkg-up,MIT,Copyright Sindre Sorhus
 require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,safe-buffer,MIT,Copyright Feross Aboukhadijeh
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
+require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
