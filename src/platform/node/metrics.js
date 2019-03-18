@@ -189,11 +189,11 @@ function captureNativeMetrics () {
   client.gauge('cpu.user', userPercent.toFixed(2))
   client.gauge('cpu.total', totalPercent.toFixed(2))
 
-  client.gauge('event_loop.tick.max', stats.eventLoop.max)
-  client.gauge('event_loop.tick.min', stats.eventLoop.min)
-  client.gauge('event_loop.tick.sum', stats.eventLoop.sum)
-  client.gauge('event_loop.tick.avg', stats.eventLoop.avg)
-  client.gauge('event_loop.tick.count', stats.eventLoop.count)
+  client.gauge('event_loop.latency.max', stats.eventLoop.max)
+  client.gauge('event_loop.latency.min', stats.eventLoop.min)
+  client.gauge('event_loop.latency.sum', stats.eventLoop.sum)
+  client.gauge('event_loop.latency.avg', stats.eventLoop.avg)
+  client.gauge('event_loop.latency.count', stats.eventLoop.count)
 
   Object.keys(stats.gc).forEach(type => {
     client.gauge(`gc.${type}.min`, stats.gc[type].min)
