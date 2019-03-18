@@ -65,15 +65,15 @@ describe('Tracer', () => {
 
     it('should support analytics', () => {
       tracer.trace('name', { analytics: true }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '1')
+        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, 1)
       })
 
       tracer.trace('name', { analytics: false }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '0')
+        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, 0)
       })
 
       tracer.trace('name', { analytics: 0.5 }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '0.5')
+        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, 0.5)
       })
 
       tracer.trace('name', { analytics: 2 }, span => {

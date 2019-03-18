@@ -3,7 +3,7 @@
   "version": "0.11.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
-  "typings": "docs/index.d.ts",
+  "typings": "index.d.ts",
   "scripts": {
     "rebuild": "node-gyp rebuild",
     "install": "node scripts/post_install.js",

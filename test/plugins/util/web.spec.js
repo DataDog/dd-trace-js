@@ -300,7 +300,7 @@ describe('plugins/util/web', () => {
         res.end()
 
         expect(span.context()._tags).to.include({
-          [ERROR]: 'true'
+          [ERROR]: true
         })
       })
 
@@ -310,7 +310,7 @@ describe('plugins/util/web', () => {
         res.end()
 
         expect(span.context()._tags).to.include({
-          [ERROR]: 'true'
+          [ERROR]: true
         })
       })
 
