@@ -6,7 +6,7 @@ const path = require('path')
 const os = require('os')
 const tar = require('tar')
 
-const name = `${process.env.ARCH || os.platform()}-${os.arch()}`
+const name = `${os.platform()}-${process.env.ARCH || os.arch()}`
 
 const cb = err => {
   if (err) throw err
