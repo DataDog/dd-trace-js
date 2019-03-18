@@ -43,7 +43,6 @@
   },
   "dependencies": {
     "@types/node": "^10.12.18",
-    "archiver": "^3.0.0",
     "async-hook-jl": "^1.7.6",
     "hot-shots": "^5.0.0",
     "int64-buffer": "^0.1.9",
@@ -68,6 +67,7 @@
     "safe-buffer": "^5.1.1",
     "semver": "^5.5.0",
     "shimmer": "^1.2.0",
+    "tar": "^4.4.8",
     "url-parse": "^1.4.3"
   },
   "devDependencies": {
