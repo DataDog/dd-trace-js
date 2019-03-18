@@ -27,6 +27,7 @@ platform.use(node)
 
 afterEach(() => {
   agent.reset()
+  platform.metrics().stop()
 })
 
 function wrapIt () {

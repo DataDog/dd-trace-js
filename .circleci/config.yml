@@ -23,6 +23,9 @@ node-core-base: &node-core-base
           - ./node_modules
           - ./yarn.lock
     - run:
+        name: Compile native code
+        command: yarn rebuild
+    - run:
         name: Unit tests
         command: yarn test:core
     - run:

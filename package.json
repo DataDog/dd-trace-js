@@ -5,6 +5,8 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
+    "rebuild": "node-gyp rebuild",
+    "install": "node scripts/post_install.js",
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
@@ -40,6 +42,7 @@
   "dependencies": {
     "@types/node": "^10.12.18",
     "async-hook-jl": "^1.7.6",
+    "hot-shots": "^5.0.0",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",
@@ -51,6 +54,7 @@
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
+    "nan": "^2.12.1",
     "opentracing": ">=0.12.1",
     "parent-module": "^0.1.0",
     "path-to-regexp": "^0.1.2",

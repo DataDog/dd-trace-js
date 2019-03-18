@@ -18,7 +18,7 @@ const Writer = proxyquire('../src/writer', {
 const Sampler = require('../src/sampler')
 const format = require('../src/format')
 const encode = require('../src/encode')
-const config = new Config({ service: 'benchmark' })
+const config = new Config('benchmark', '', { service: 'benchmark' })
 
 const suite = benchmark('core')
 
