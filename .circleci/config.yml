@@ -460,38 +460,38 @@ workflows:
   version: 2
   build:
     jobs:
-      # - lint
-      # - typescript
-      # - node-leaks
-      # - node-core-4
-      # - node-core-6
-      # - node-core-8
-      # - node-core-10
-      # - node-core-latest
-      # - node-amqplib
-      # - node-amqp10
-      # - node-bluebird
-      # - node-bunyan
-      # - node-cassandra
-      # - node-dns
-      # - node-elasticsearch
-      # - node-express
-      # - node-generic-pool
-      # - node-graphql
-      # - node-hapi
-      # - node-http
-      # - node-koa
-      # - node-memcached
-      # - node-mongodb-core
-      # - node-mysql
-      # - node-net
-      # - node-pino
-      # - node-postgres
-      # - node-q
-      # - node-redis
-      # - node-restify
-      # - node-when
-      # - node-winston
+      - lint
+      - typescript
+      - node-leaks
+      - node-core-4
+      - node-core-6
+      - node-core-8
+      - node-core-10
+      - node-core-latest
+      - node-amqplib
+      - node-amqp10
+      - node-bluebird
+      - node-bunyan
+      - node-cassandra
+      - node-dns
+      - node-elasticsearch
+      - node-express
+      - node-generic-pool
+      - node-graphql
+      - node-hapi
+      - node-http
+      - node-koa
+      - node-memcached
+      - node-mongodb-core
+      - node-mysql
+      - node-net
+      - node-pino
+      - node-postgres
+      - node-q
+      - node-redis
+      - node-restify
+      - node-when
+      - node-winston
       - prebuild-linux-x64
       - prebuild-linux-x32
       - prebuild-darwin-x64
