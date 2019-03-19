@@ -81,6 +81,23 @@ describe('Plugin', () => {
           client.batch(queries, { prepare: true }, err => err && done(err))
         })
 
+        it('should support batch queries without a callback', done => {
+          const id = '1234'
+          const queries = [
+            { query: 'INSERT INTO test.test (id) VALUES (?)', params: [id] },
+            `UPDATE test.test SET test='test' WHERE id='${id}';`
+          ]
+
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
+            })
+            .then(done)
+            .catch(done)
+
+          client.batch(queries, { prepare: true })
+        })
+
         it('should handle errors', done => {
           let error
 
