@@ -12,25 +12,34 @@ namespace datadog {
     prepare_handle_.data = (void*)this;
 
     check_time_ = uv_hrtime();
-    prepare_time_ = uv_hrtime();
   }
 
   EventLoop::~EventLoop() {
     uv_check_stop(&check_handle_);
+    uv_prepare_stop(&prepare_handle_);
   }
 
   void EventLoop::check_cb (uv_check_t* handle) {
     EventLoop* self = (EventLoop*)handle->data;
-    self->check_time_ = uv_hrtime();
+
+    uint64_t check_time = uv_hrtime();
+    uint64_t poll_time = check_time - self->prepare_time_;
+    uint64_t latency = self->prepare_time_ - self->check_time_;
+    uint64_t timeout = self->timeout_ * 1e6;
+
+    if (poll_time > timeout) {
+      latency += poll_time - timeout;
+    }
+
+    self->histogram_.add(latency);
+    self->check_time_ = check_time;
   }
 
   void EventLoop::prepare_cb (uv_prepare_t* handle) {
     EventLoop* self = (EventLoop*)handle->data;
 
-    if (self->check_time_ != 0) {
-      self->histogram_.add(uv_hrtime() - self->check_time_);
-      self->check_time_ = 0;
-    }
+    self->prepare_time_ = uv_hrtime();
+    self->timeout_ = uv_backend_timeout(uv_default_loop());
   }
 
   void EventLoop::enable() {

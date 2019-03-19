@@ -23,6 +23,7 @@ namespace datadog {
       uv_prepare_t prepare_handle_;
       uint64_t check_time_;
       uint64_t prepare_time_;
+      uint64_t timeout_;
       Histogram histogram_;
 
       uint64_t usage();
