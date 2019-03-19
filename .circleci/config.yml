@@ -155,7 +155,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=bluebird
 
   node-bunyan:
@@ -163,7 +162,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=bunyan
 
   node-cassandra:
@@ -182,7 +180,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=dns
 
   node-elasticsearch:
@@ -202,7 +199,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=express
 
   node-generic-pool:
@@ -210,7 +206,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=generic-pool
 
   node-graphql:
@@ -218,7 +213,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=graphql
 
   node-hapi:
@@ -226,7 +220,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=hapi
 
   node-http:
@@ -234,7 +227,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=http
 
   node-koa:
@@ -242,7 +234,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=koa
 
   node-memcached:
@@ -283,7 +274,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=net
 
   node-pino:
@@ -291,7 +281,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=pino
 
   node-postgres:
@@ -309,7 +298,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=q
 
   node-redis:
@@ -326,7 +314,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=restify
 
   node-router:
@@ -334,7 +321,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=router
 
   node-when:
@@ -342,7 +328,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=when
 
   node-winston:
@@ -350,7 +335,6 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=
           - PLUGINS=winston
 
   typescript:
