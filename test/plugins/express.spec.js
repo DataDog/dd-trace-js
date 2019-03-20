@@ -701,6 +701,39 @@ describe('Plugin', () => {
           })
         })
 
+        it('should only handle errors for configured status codes', done => {
+          const app = express()
+
+          app.use((req, res, next) => {
+            next()
+          })
+
+          app.get('/user', (req, res) => {
+            res.statusCode = 400
+            throw new Error('boom')
+          })
+
+          getPort().then(port => {
+            agent.use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('error', 0)
+              expect(spans[0]).to.have.property('resource', 'GET /user')
+              expect(spans[0].meta).to.have.property('http.status_code', '400')
+
+              done()
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 400
+                })
+                .catch(done)
+            })
+          })
+        })
+
         it('should handle request errors', done => {
           const app = express()
           const error = new Error('boom')

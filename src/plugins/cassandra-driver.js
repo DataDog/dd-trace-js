@@ -56,7 +56,10 @@ function createWrapBatch (tracer, config) {
 
       return scope.bind(batch, span).call(this, queries, options, function (err) {
         finish(span, err)
-        return callback && callback.apply(this, arguments)
+
+        if (typeof callback === 'function') {
+          return callback.apply(this, arguments)
+        }
       })
     }
   }
