@@ -424,11 +424,11 @@ describe('Platform', () => {
             expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
           }
 
-          expect(client.gauge).to.have.been.calledWith('event_loop.tick.max')
-          expect(client.gauge).to.have.been.calledWith('event_loop.tick.min')
-          expect(client.gauge).to.have.been.calledWith('event_loop.tick.sum')
-          expect(client.gauge).to.have.been.calledWith('event_loop.tick.avg')
-          expect(client.gauge).to.have.been.calledWith('event_loop.tick.count')
+          expect(client.gauge).to.have.been.calledWith('event_loop.latency.max')
+          expect(client.gauge).to.have.been.calledWith('event_loop.latency.min')
+          expect(client.gauge).to.have.been.calledWith('event_loop.latency.sum')
+          expect(client.gauge).to.have.been.calledWith('event_loop.latency.avg')
+          expect(client.gauge).to.have.been.calledWith('event_loop.latency.count')
 
           expect(client.gauge).to.have.been.calledWith('gc.all.max')
           expect(client.gauge).to.have.been.calledWith('gc.all.min')
