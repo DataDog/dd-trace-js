@@ -16,6 +16,8 @@ node-core-base: &node-core-base
     - run:
         name: Install dependencies
         command: yarn install --ignore-engines
+        environment:
+          DD_NATIVE_METRICS: "false"
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
@@ -48,6 +50,8 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Install dependencies
         command: yarn install
+        environment:
+          DD_NATIVE_METRICS: "false"
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
@@ -60,6 +64,51 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Memory leak tests
         command: yarn leak:plugins
+
+prebuild-linux-base: &prebuild-linux-base
+  docker:
+    - image: node:10
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - run:
+        name: Install compilation dependencies
+        command: apt-get update && apt-get install -y g++-multilib
+    - run:
+        name: Versions
+        command: yarn versions
+    - run:
+        name: Install dependencies
+        command: yarn install
+        environment:
+          DD_NATIVE_METRICS: "false"
+    - run:
+        name: Compile prebuild binaries
+        command: yarn prebuild
+    - store_artifacts:
+        path: ./prebuilds
+
+prebuild-darwin-base: &prebuild-darwin-base
+  macos:
+    xcode: "9.4.1"
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - run:
+        name: Versions
+        command: yarn versions
+    - run:
+        name: Install dependencies
+        command: yarn install
+        environment:
+          DD_NATIVE_METRICS: "false"
+    - run:
+        name: Compile prebuilt binaries
+        command: yarn prebuild
+    - store_artifacts:
+        path: ./prebuilds
 
 jobs:
   # Linting
@@ -371,6 +420,26 @@ jobs:
       - store_artifacts:
           path: ./docs/out
 
+  prebuild-linux-x64:
+    <<: *prebuild-linux-base
+    environment:
+      - ARCH=x64
+
+  prebuild-linux-x32:
+    <<: *prebuild-linux-base
+    environment:
+      - ARCH=x32
+
+  prebuild-darwin-x64:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x64
+
+  prebuild-darwin-x32:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x32
+
 workflows:
   version: 2
   build:
@@ -407,6 +476,10 @@ workflows:
       - node-restify
       - node-when
       - node-winston
+      - prebuild-linux-x64
+      - prebuild-linux-x32
+      - prebuild-darwin-x64
+      - prebuild-darwin-x32
   nightly:
     triggers:
       - schedule:

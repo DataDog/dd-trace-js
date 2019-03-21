@@ -1,6 +1,7 @@
 'use strict'
 
 const v8 = require('v8')
+const path = require('path')
 const log = require('../../log')
 
 const INTERVAL = 10 * 1000
@@ -21,7 +22,7 @@ module.exports = function () {
       const StatsD = require('hot-shots')
 
       try {
-        nativeMetrics = require('../../../build/Release/metrics')
+        nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
         nativeMetrics.start()
       } catch (e) {
         log.error('Unable to load native metrics module. Some metrics will not be available.')
