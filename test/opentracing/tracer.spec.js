@@ -69,7 +69,6 @@ describe('Tracer', () => {
       service: 'service',
       url: 'http://test:7777',
       flushInterval: 2000,
-      bufferSize: 1000,
       sampleRate: 0.5,
       logger: 'logger',
       tags: {},
@@ -99,7 +98,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(Writer).to.have.been.called
-    expect(Writer).to.have.been.calledWith(prioritySampler, config.url, config.bufferSize)
+    expect(Writer).to.have.been.calledWith(prioritySampler, config.url)
     expect(Recorder).to.have.been.calledWith(writer, config.flushInterval)
     expect(recorder.init).to.have.been.called
   })

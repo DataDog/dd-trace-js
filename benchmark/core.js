@@ -70,7 +70,7 @@ suite
   })
   .add('Writer#append', {
     onStart () {
-      writer = new Writer({}, 1000000)
+      writer = new Writer({}, {})
     },
     fn () {
       writer.append(spanStub)

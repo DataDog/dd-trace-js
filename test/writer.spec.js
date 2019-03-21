@@ -69,7 +69,7 @@ describe('Writer', () => {
       './encode': encode,
       '../lib/version': 'tracerVersion'
     })
-    writer = new Writer(prioritySampler, url, 3)
+    writer = new Writer(prioritySampler, url)
   })
 
   describe('length', () => {
@@ -95,26 +95,17 @@ describe('Writer', () => {
       expect(writer._queue).to.be.empty
     })
 
-    it('should replace a random trace when full', () => {
-      writer._queue = new Array(1000)
+    it('should flush when full', () => {
+      writer.append(span)
+      writer._size = 8 * 1024 * 1024
       writer.append(span)
 
-      expect(writer.length).to.equal(1000)
+      expect(writer.length).to.equal(1)
       expect(writer._queue).to.deep.include('encoded')
     })
-  })
 
-  describe('drop', () => {
-    beforeEach(() => {
-      span.context = sinon.stub().returns({
-        _trace: trace,
-        _sampling: {
-          drop: true
-        }
-      })
-    })
-
-    it('should not append if being dropped', () => {
+    it('should not append if the span was dropped', () => {
+      span.context()._sampling.drop = true
       writer.append(span)
 
       expect(writer._queue).to.be.empty
