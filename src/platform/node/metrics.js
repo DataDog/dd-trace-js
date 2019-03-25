@@ -25,6 +25,7 @@ module.exports = function () {
         nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
         nativeMetrics.start()
       } catch (e) {
+        console.log(e) // eslint-disable-line no-console
         log.error('Unable to load native metrics module. Some metrics will not be available.')
       }
 
