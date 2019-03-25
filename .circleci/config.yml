@@ -73,7 +73,7 @@ prebuild-linux-base: &prebuild-linux-base
   steps:
     - checkout
     - run:
-        name: Install compilation dependencies
+        name: Install job dependencies
         command: apt-get update && apt-get install -y g++-multilib
     - run:
         name: Versions
@@ -88,6 +88,10 @@ prebuild-linux-base: &prebuild-linux-base
         command: yarn prebuild
     - store_artifacts:
         path: ./prebuilds
+    - save_cache:
+        key: prebuilds-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+        paths:
+          - ./prebuilds
 
 prebuild-darwin-base: &prebuild-darwin-base
   macos:
@@ -440,6 +444,55 @@ jobs:
     environment:
       - ARCH=x32
 
+  alpine:
+    docker:
+      - image: node:10-alpine
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apk add g++ git make python
+      - checkout
+      - run:
+          name: Versions
+          command: yarn versions
+      - run:
+          name: Install dependencies
+          command: yarn install
+          environment:
+            DD_NATIVE_METRICS: "false"
+      - run:
+          name: Compile prebuild binaries
+          command: yarn prebuild
+      - run:
+          name: Unit tests
+          command: yarn test:core
+
+  alpine-prebuilt:
+    docker:
+      - image: node:10-alpine
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apk add git
+      - checkout
+      - run:
+          name: Versions
+          command: yarn versions
+      - run:
+          name: Install dependencies
+          command: yarn install
+          environment:
+            DD_NATIVE_METRICS: "false"
+      - restore_cache:
+          key: prebuilds-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+      - run:
+          name: Unit tests
+          command: yarn test:core
+
 workflows:
   version: 2
   build:
@@ -480,6 +533,8 @@ workflows:
       - prebuild-linux-x32
       - prebuild-darwin-x64
       - prebuild-darwin-x32
+      - alpine
+      - alpine-prebuilt
   nightly:
     triggers:
       - schedule:
