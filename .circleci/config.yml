@@ -26,7 +26,8 @@ node-core-base: &node-core-base
         paths:
           - ./node_modules
           - ./yarn.lock
-    - run:
+    - &yarn-rebuild
+      run:
         name: Compile native code
         command: yarn rebuild
     - &yarn-test-core
@@ -459,7 +460,7 @@ jobs:
       - *restore-yarn-cache
       - *yarn-install
       - *save-yarn-cache
-      - *yarn-prebuild
+      - *yarn-rebuild
       - *yarn-test-core
 
   alpine-prebuilt:
