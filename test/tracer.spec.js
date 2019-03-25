@@ -64,20 +64,8 @@ describe('Tracer', () => {
     })
 
     it('should support analytics', () => {
-      tracer.trace('name', { analytics: true }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS, 1)
-      })
-
-      tracer.trace('name', { analytics: false }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS, 0)
-      })
-
       tracer.trace('name', { analytics: 0.5 }, span => {
         expect(span.context()._tags).to.have.property(ANALYTICS, 0.5)
-      })
-
-      tracer.trace('name', { analytics: 2 }, span => {
-        expect(span.context()._tags).to.not.have.property(ANALYTICS)
       })
     })
 
