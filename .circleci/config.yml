@@ -74,10 +74,10 @@ prebuild-linux-base: &prebuild-linux-base
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
     - run:
         name: Install job dependencies
         command: apt-get update && apt-get install -y g++-multilib
+    - checkout
     - *yarn-versions
     - *restore-yarn-cache
     - *yarn-install
