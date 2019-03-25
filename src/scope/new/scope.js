@@ -8,7 +8,7 @@ const platform = require('../../platform')
 let singleton = null
 
 class Scope extends Base {
-  constructor (debug) {
+  constructor (options) {
     if (singleton) return singleton
 
     super()
@@ -24,7 +24,7 @@ class Scope extends Base {
 
     this._hook.enable()
 
-    if (debug) {
+    if (options && options.debug) {
       this._debug()
     }
   }
