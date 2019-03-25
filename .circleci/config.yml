@@ -462,7 +462,7 @@ jobs:
     environment:
       - ARCH=x32
 
-  alpine-build:
+  alpine:
     docker:
       - image: node:10-alpine
     working_directory: ~/dd-trace-js
@@ -475,20 +475,13 @@ jobs:
       - run:
           name: Versions
           command: yarn versions
-      - &restore-yarn-cache
-        restore_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+      - *restore-yarn-cache
       - run:
           name: Install dependencies
           command: yarn install
           environment:
             DD_NATIVE_METRICS: "false"
-      - &save-yarn-cache
-        save_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-          paths:
-            - ./node_modules
-            - ./yarn.lock
+      - *save-yarn-cache
       - run:
           name: Compile prebuild binaries
           command: yarn prebuild
@@ -509,16 +502,15 @@ jobs:
       - run:
           name: Versions
           command: yarn versions
+      - *restore-yarn-cache
       - run:
           name: Install dependencies
           command: yarn install
           environment:
             DD_NATIVE_METRICS: "false"
+      - *save-yarn-cache
       - restore_cache:
           key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
-      - run:
-          name: Check prebuilds
-          command: ls prebuilds
       - run:
           name: Unit tests
           command: yarn test:core
@@ -533,7 +525,7 @@ workflows:
       # - node-core-4
       # - node-core-6
       # - node-core-8
-      # - node-core-10
+      - node-core-10
       # - node-core-latest
       # - node-amqplib
       # - node-amqp10
