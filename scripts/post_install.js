@@ -13,8 +13,10 @@ const pkg = require('../package.json')
 const name = `${os.platform()}-${os.arch()}`
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
-  getReleaseTag()
+  download(`v${pkg.version}`)
+    .catch(getLatestTag)
     .then(download)
+    .then(persist)
     .then(extract)
     .then(cleanup)
     .catch(rebuild)
@@ -34,28 +36,60 @@ function rebuild () {
   }
 }
 
-function download (tag) {
-  console.log('Downloading prebuilt binaries for native addons.')
-
+function locate (url) {
   const promise = new Promise((resolve, reject) => {
-    const url = `https://github.com/DataDog/dd-trace-js/releases/download/${tag}/addons-${name}.zip`
     const req = https.get(url, res => {
-      if (res.statusCode !== 200) {
-        return reject(new Error('Server replied with not OK status code.'))
+      res.resume()
+
+      if (!res.headers.location) {
+        reject(new Error('Unable to determine prebuilt binaries download location.'))
       }
 
-      const file = fs.createWriteStream(path.join(__dirname, '..', `addons-${name}.zip`))
-      const stream = res.pipe(file)
-
-      stream.on('error', reject)
-      stream.on('finish', () => resolve())
+      resolve(res.headers.location)
     })
 
     req.on('error', reject)
   })
 
+  return promise
+}
+
+function download (tag) {
+  console.log(`Downloading prebuilt binaries for ${tag} native addons.`)
+
+  const promise = locate(`https://github.com/DataDog/dd-trace-js/releases/download/${tag}/addons-${name}.tgz`)
+    .then(url => {
+      return new Promise((resolve, reject) => {
+        const req = https.get(url, res => {
+          if (res.statusCode !== 200) {
+            return reject(new Error('Server replied with not OK status code.'))
+          }
+
+          resolve(res)
+        })
+
+        req.on('error', reject)
+      })
+    })
+
+  promise.catch((e) => {
+    console.log(`Download of prebuilt binaries for ${tag} failed.`)
+  })
+
+  return promise
+}
+
+function persist (res) {
+  const promise = new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(path.join(__dirname, '..', `addons-${name}.tgz`))
+    const stream = res.pipe(file)
+
+    stream.on('error', reject)
+    stream.on('finish', () => resolve())
+  })
+
   promise.catch(() => {
-    console.log('Download of prebuilt binaries failed.')
+    console.log('Writing prebuilt binaries to disk failed.')
   })
 
   return promise
@@ -86,30 +120,18 @@ function cleanup () {
   fs.unlink(`addons-${name}.tgz`, () => {})
 }
 
-function getReleaseTag () {
-  if (/^\d+\.\d+\.\d+$/.test(pkg.version)) { // official release
-    return Promise.resolve(`v${pkg.version}`)
-  }
-
+function getLatestTag () {
   const promise = new Promise((resolve, reject) => {
     const req = https.get(`https://github.com/DataDog/dd-trace-js/releases/latest`, res => {
-      let data = ''
+      const match = res.headers.location && res.headers.location.match(/^.+\/(.+)$/)
 
-      if (res.statusCode !== 200) {
-        return reject(new Error('Server replied with not OK status code.'))
+      res.resume()
+
+      if (!match || !match[1]) {
+        return reject(new Error('Could not get the latest release tag.'))
       }
 
-      res.on('data', chunk => {
-        data += chunk
-      })
-
-      res.on('finish', () => {
-        try {
-          resolve(JSON.parse(data).tag_name)
-        } catch (e) {
-          reject(e)
-        }
-      })
+      resolve(match[1])
     })
 
     req.on('error', reject)
