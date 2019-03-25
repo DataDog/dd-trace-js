@@ -8,6 +8,7 @@ const INTERVAL = 10 * 1000
 
 let nativeMetrics = null
 
+let metrics
 let interval
 let client
 let time
@@ -17,7 +18,7 @@ let counters
 reset()
 
 module.exports = function () {
-  return {
+  return metrics || (metrics = { // cache the metrics instance
     start: () => {
       const StatsD = require('hot-shots')
 
@@ -69,26 +70,18 @@ module.exports = function () {
       reset()
     },
 
-    increment: (name) => {
+    increment: (name, count) => {
       if (!client) return
 
-      if (counters[name] !== undefined) {
-        counters[name]++
-      } else {
-        counters[name] = 1
-      }
+      counters[name] = (counters[name] || 0) + (count || 1)
     },
 
-    decrement: (name) => {
+    decrement: (name, count) => {
       if (!client) return
 
-      if (counters[name] !== undefined) {
-        counters[name]--
-      } else {
-        counters[name] = -1
-      }
+      counters[name] = (counters[name] || 0) - (count || 1)
     }
-  }
+  })
 }
 
 function reset () {

@@ -3,11 +3,12 @@
 const asyncHooks = require('../async_hooks')
 const executionAsyncId = asyncHooks.executionAsyncId
 const Base = require('./base')
+const platform = require('../../platform')
 
 let singleton = null
 
 class Scope extends Base {
-  constructor () {
+  constructor (debug) {
     if (singleton) return singleton
 
     super()
@@ -22,6 +23,10 @@ class Scope extends Base {
     })
 
     this._hook.enable()
+
+    if (debug) {
+      this._debug()
+    }
   }
 
   _active () {
@@ -61,10 +66,40 @@ class Scope extends Base {
     if (span) {
       this._spans[asyncId] = span
     }
+
+    platform.metrics().increment('async.resources')
   }
 
   _destroy (asyncId) {
     delete this._spans[asyncId]
+
+    platform.metrics().decrement('async.resources')
+  }
+
+  _debug () {
+    asyncHooks.createHook({
+      init: this._debugInit.bind(this),
+      destroy: this._debugDestroy.bind(this),
+      promiseResolve: this._debugDestroy.bind(this)
+    }).enable()
+
+    this._types = Object.create(null)
+  }
+
+  _debugInit (asyncId, type) {
+    this._types[asyncId] = type
+
+    platform.metrics().increment(`async.resources.${type}`)
+  }
+
+  _debugDestroy (asyncId) {
+    const type = this._types[asyncId]
+
+    if (type) {
+      platform.metrics().decrement(`async.resources.${type}`)
+    }
+
+    delete this._types[asyncId]
   }
 }
 

@@ -1,5 +1,7 @@
 'use strict'
 
+const asyncWrap = process.binding('async_wrap')
+
 let asyncHook
 
 try {
@@ -12,13 +14,19 @@ try {
 
 const stack = []
 
+const providers = Object.keys(asyncWrap.Providers)
+  .reduce((prev, next) => {
+    prev[asyncWrap.Providers[next]] = next
+    return prev
+  }, {})
+
 module.exports = {
   createHook (callbacks) {
     const hooks = {}
 
     if (callbacks.init) {
       hooks.init = (uid, handle, provider, parentUid, parentHandle) => {
-        callbacks.init(uid)
+        callbacks.init(uid, providers[provider])
       }
     }
 
