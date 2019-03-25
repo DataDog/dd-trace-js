@@ -26,7 +26,8 @@ node-core-base: &node-core-base
         paths:
           - ./node_modules
           - ./yarn.lock
-    - run:
+    - &yarn-rebuild
+      run:
         name: Compile native code
         command: yarn rebuild
     - &yarn-test-core
@@ -67,46 +68,6 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Memory leak tests
         command: yarn leak:plugins
-
-prebuild-linux-base: &prebuild-linux-base
-  docker:
-    - image: node:10
-  working_directory: ~/dd-trace-js
-  resource_class: small
-  steps:
-    - run:
-        name: Install job dependencies
-        command: apt-get update && apt-get install -y g++-multilib
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - &yarn-prebuild
-      run:
-        name: Compile prebuilt binaries
-        command: yarn prebuild
-    - store_artifacts:
-        path: ./prebuilds
-    - save_cache:
-        key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
-        paths:
-          - ./prebuilds
-
-prebuild-darwin-base: &prebuild-darwin-base
-  macos:
-    xcode: "9.4.1"
-  working_directory: ~/dd-trace-js
-  resource_class: small
-  steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - *yarn-prebuild
-    - store_artifacts:
-        path: ./prebuilds
 
 jobs:
   # Linting
@@ -408,24 +369,82 @@ jobs:
           path: ./docs/out
 
   prebuild-linux-x64:
-    <<: *prebuild-linux-base
+    docker:
+      - image: node:10
+    working_directory: ~/dd-trace-js
+    resource_class: small
     environment:
       - ARCH=x64
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - &yarn-prebuild
+        run:
+          name: Compile prebuilt binaries
+          command: yarn prebuild
+      - store_artifacts:
+          path: ./addons-linux-x64.tgz
+      - save_cache:
+          key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
+          paths:
+            - ./prebuilds
 
   prebuild-linux-x32:
-    <<: *prebuild-linux-base
+    docker:
+      - image: node:10
+    working_directory: ~/dd-trace-js
+    resource_class: small
     environment:
       - ARCH=x32
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apt-get update && apt-get install -y g++-multilib
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - store_artifacts:
+          path: ./addons-linux-x32.tgz
 
   prebuild-darwin-x64:
-    <<: *prebuild-darwin-base
+    macos:
+      xcode: "9.4.1"
+    working_directory: ~/dd-trace-js
+    resource_class: small
     environment:
       - ARCH=x64
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - store_artifacts:
+          path: ./addons-darwin-x64.tgz
 
   prebuild-darwin-x32:
-    <<: *prebuild-darwin-base
+    macos:
+      xcode: "9.4.1"
+    working_directory: ~/dd-trace-js
+    resource_class: small
     environment:
       - ARCH=x32
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - store_artifacts:
+          path: ./addons-darwin-x32.tgz
 
   alpine:
     docker:
@@ -441,7 +460,7 @@ jobs:
       - *restore-yarn-cache
       - *yarn-install
       - *save-yarn-cache
-      - *yarn-prebuild
+      - *yarn-rebuild
       - *yarn-test-core
 
   alpine-prebuilt:
