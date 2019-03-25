@@ -78,11 +78,20 @@ prebuild-linux-base: &prebuild-linux-base
     - run:
         name: Versions
         command: yarn versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
         command: yarn install
         environment:
           DD_NATIVE_METRICS: "false"
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
     - run:
         name: Compile prebuild binaries
         command: yarn prebuild
@@ -103,11 +112,20 @@ prebuild-darwin-base: &prebuild-darwin-base
     - run:
         name: Versions
         command: yarn versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
         command: yarn install
         environment:
           DD_NATIVE_METRICS: "false"
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
     - run:
         name: Compile prebuilt binaries
         command: yarn prebuild
@@ -490,6 +508,9 @@ jobs:
       - restore_cache:
           key: prebuilds-{{ arch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
       - run:
+          name: Check prebuilds
+          command: ls prebuilds
+      - run:
           name: Unit tests
           command: yarn test:core
 
@@ -497,42 +518,42 @@ workflows:
   version: 2
   build:
     jobs:
-      - lint
-      - typescript
-      - node-leaks
-      - node-core-4
-      - node-core-6
-      - node-core-8
-      - node-core-10
-      - node-core-latest
-      - node-amqplib
-      - node-amqp10
-      - node-bluebird
-      - node-bunyan
-      - node-cassandra
-      - node-dns
-      - node-elasticsearch
-      - node-express
-      - node-generic-pool
-      - node-graphql
-      - node-hapi
-      - node-http
-      - node-koa
-      - node-memcached
-      - node-mongodb-core
-      - node-mysql
-      - node-net
-      - node-pino
-      - node-postgres
-      - node-q
-      - node-redis
-      - node-restify
-      - node-when
-      - node-winston
+      # - lint
+      # - typescript
+      # - node-leaks
+      # - node-core-4
+      # - node-core-6
+      # - node-core-8
+      # - node-core-10
+      # - node-core-latest
+      # - node-amqplib
+      # - node-amqp10
+      # - node-bluebird
+      # - node-bunyan
+      # - node-cassandra
+      # - node-dns
+      # - node-elasticsearch
+      # - node-express
+      # - node-generic-pool
+      # - node-graphql
+      # - node-hapi
+      # - node-http
+      # - node-koa
+      # - node-memcached
+      # - node-mongodb-core
+      # - node-mysql
+      # - node-net
+      # - node-pino
+      # - node-postgres
+      # - node-q
+      # - node-redis
+      # - node-restify
+      # - node-when
+      # - node-winston
       - prebuild-linux-x64
-      - prebuild-linux-x32
-      - prebuild-darwin-x64
-      - prebuild-darwin-x32
+      # - prebuild-linux-x32
+      # - prebuild-darwin-x64
+      # - prebuild-darwin-x32
       - alpine
       - alpine-prebuilt:
           requires:
