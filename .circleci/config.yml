@@ -89,7 +89,7 @@ prebuild-linux-base: &prebuild-linux-base
     - store_artifacts:
         path: ./prebuilds
     - save_cache:
-        key: prebuilds-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+        key: prebuilds-{{ arch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
         paths:
           - ./prebuilds
 
@@ -488,7 +488,7 @@ jobs:
           environment:
             DD_NATIVE_METRICS: "false"
       - restore_cache:
-          key: prebuilds-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+          key: prebuilds-{{ arch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
       - run:
           name: Unit tests
           command: yarn test:core
@@ -534,7 +534,9 @@ workflows:
       - prebuild-darwin-x64
       - prebuild-darwin-x32
       - alpine
-      - alpine-prebuilt
+      - alpine-prebuilt:
+          requires:
+            - prebuild-linux-x64
   nightly:
     triggers:
       - schedule:
