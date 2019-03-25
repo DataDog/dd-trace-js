@@ -454,15 +454,9 @@ jobs:
           name: Install job dependencies
           command: apk add git
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
+      - *yarn-versions
       - *restore-yarn-cache
-      - run:
-          name: Install dependencies
-          command: yarn install
-          environment:
-            DD_NATIVE_METRICS: "false"
+      - *yarn-install
       - *save-yarn-cache
       - restore_cache:
           key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
@@ -474,58 +468,62 @@ workflows:
   version: 2
   build:
     jobs:
-      # - lint
-      # - typescript
-      # - node-leaks
-      # - node-core-4
-      # - node-core-6
-      # - node-core-8
+      - lint
+      - typescript
+      - node-leaks
+      - node-core-4
+      - node-core-6
+      - node-core-8
       - node-core-10
-      # - node-core-latest
-      # - node-amqplib
-      # - node-amqp10
-      # - node-bluebird
-      # - node-bunyan
-      # - node-cassandra
-      # - node-dns
-      # - node-elasticsearch
-      # - node-express
-      # - node-generic-pool
-      # - node-graphql
-      # - node-hapi
-      # - node-http
-      # - node-koa
-      # - node-memcached
-      # - node-mongodb-core
-      # - node-mysql
-      # - node-net
-      # - node-pino
-      # - node-postgres
-      # - node-q
-      # - node-redis
-      # - node-restify
-      # - node-when
-      # - node-winston
+      - node-core-latest
+      - node-amqplib
+      - node-amqp10
+      - node-bluebird
+      - node-bunyan
+      - node-cassandra
+      - node-dns
+      - node-elasticsearch
+      - node-express
+      - node-generic-pool
+      - node-graphql
+      - node-hapi
+      - node-http
+      - node-koa
+      - node-memcached
+      - node-mongodb-core
+      - node-mysql
+      - node-net
+      - node-pino
+      - node-postgres
+      - node-q
+      - node-redis
+      - node-restify
+      - node-when
+      - node-winston
       - prebuild-linux-x64:
-          filters: &prebuild-filter
+          filters:
             branches:
               only:
                 - master
                 - /v\d+\.\d+\.\d+/
       - prebuild-linux-x32:
-          <<: *prebuild-filter
-      # - prebuild-darwin-x64:
-      #     filters:
-      #       branches:
-      #         only:
-      #           - master
-      #           - /v\d+\.\d+\.\d+/
-      # - prebuild-darwin-x32:
-      #     filters:
-      #       branches:
-      #         only:
-      #           - master
-      #           - /v\d+\.\d+\.\d+/
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
+      - prebuild-darwin-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
+      - prebuild-darwin-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
       - alpine
       - alpine-prebuilt:
           requires:
