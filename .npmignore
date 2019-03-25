@@ -2,6 +2,7 @@
 !ext/**/*
 !lib/**/*
 !src/**/*
+!scripts/post_install.js
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
