@@ -14,8 +14,7 @@ const name = `${os.platform()}-${os.arch()}`
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
   download(`v${pkg.version}`)
-    .catch(getLatestTag)
-    .then(download)
+    .catch(() => getLatestTag().then(download))
     .then(persist)
     .then(extract)
     .then(cleanup)
@@ -55,6 +54,7 @@ function locate (url) {
 }
 
 function download (tag) {
+  console.log(tag)
   console.log(`Downloading prebuilt binaries for ${tag} native addons.`)
 
   const promise = locate(`https://github.com/DataDog/dd-trace-js/releases/download/${tag}/addons-${name}.tgz`)

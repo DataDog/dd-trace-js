@@ -1,12 +1,13 @@
 *
 !ext/**/*
 !lib/**/*
-!src/**/*
 !scripts/post_install.js
+!src/**/*
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
+!README.md
+!binding.gyp
 !index.js
 !index.d.ts
 !package.json
-!README.md
