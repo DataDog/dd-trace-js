@@ -7,13 +7,15 @@ node-core-base: &node-core-base
   resource_class: small
   steps:
     - checkout
-    - run:
+    - &yarn-versions
+      run:
         name: Versions
         command: yarn versions
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
+    - &yarn-install
+      run:
         name: Install dependencies
         command: yarn install --ignore-engines
         environment:
@@ -27,7 +29,8 @@ node-core-base: &node-core-base
     - run:
         name: Compile native code
         command: yarn rebuild
-    - run:
+    - &yarn-test-core
+      run:
         name: Unit tests
         command: yarn test:core
     - run:
@@ -71,23 +74,24 @@ prebuild-linux-base: &prebuild-linux-base
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
     - run:
-        name: Install compilation dependencies
+        name: Install job dependencies
         command: apt-get update && apt-get install -y g++-multilib
-    - run:
-        name: Versions
-        command: yarn versions
-    - run:
-        name: Install dependencies
-        command: yarn install
-        environment:
-          DD_NATIVE_METRICS: "false"
-    - run:
-        name: Compile prebuild binaries
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - &yarn-prebuild
+      run:
+        name: Compile prebuilt binaries
         command: yarn prebuild
     - store_artifacts:
         path: ./prebuilds
+    - save_cache:
+        key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
+        paths:
+          - ./prebuilds
 
 prebuild-darwin-base: &prebuild-darwin-base
   macos:
@@ -96,17 +100,11 @@ prebuild-darwin-base: &prebuild-darwin-base
   resource_class: small
   steps:
     - checkout
-    - run:
-        name: Versions
-        command: yarn versions
-    - run:
-        name: Install dependencies
-        command: yarn install
-        environment:
-          DD_NATIVE_METRICS: "false"
-    - run:
-        name: Compile prebuilt binaries
-        command: yarn prebuild
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - *yarn-prebuild
     - store_artifacts:
         path: ./prebuilds
 
@@ -396,21 +394,10 @@ jobs:
     resource_class: small
     steps:
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
-      - &restore-yarn-cache
-        restore_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - &save-yarn-cache
-        save_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-          paths:
-            - ./node_modules
-            - ./yarn.lock
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
       - run:
           name: Test API documentation
           command: yarn type:test
@@ -439,6 +426,43 @@ jobs:
     <<: *prebuild-darwin-base
     environment:
       - ARCH=x32
+
+  alpine:
+    docker:
+      - image: node:10-alpine
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apk add g++ git make python
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - *yarn-test-core
+
+  alpine-prebuilt:
+    docker:
+      - image: node:10-alpine
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apk add git
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - restore_cache:
+          key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+      - run:
+          name: Unit tests
+          command: yarn test:core
 
 workflows:
   version: 2
@@ -476,10 +500,34 @@ workflows:
       - node-restify
       - node-when
       - node-winston
-      - prebuild-linux-x64
-      - prebuild-linux-x32
-      - prebuild-darwin-x64
-      - prebuild-darwin-x32
+      - prebuild-linux-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
+      - prebuild-linux-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
+      - prebuild-darwin-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
+      - prebuild-darwin-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+/
+      - alpine
+      - alpine-prebuilt:
+          requires:
+            - prebuild-linux-x64
   nightly:
     triggers:
       - schedule:
