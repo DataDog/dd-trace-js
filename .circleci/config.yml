@@ -98,7 +98,7 @@ prebuild-linux-base: &prebuild-linux-base
     - store_artifacts:
         path: ./prebuilds
     - save_cache:
-        key: {{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+        key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
         paths:
           - ./prebuilds
 
