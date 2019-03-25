@@ -98,7 +98,7 @@ prebuild-linux-base: &prebuild-linux-base
     - store_artifacts:
         path: ./prebuilds
     - save_cache:
-        key: prebuilds-{{ arch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+        key: {{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
         paths:
           - ./prebuilds
 
@@ -462,7 +462,7 @@ jobs:
     environment:
       - ARCH=x32
 
-  alpine:
+  alpine-build:
     docker:
       - image: node:10-alpine
     working_directory: ~/dd-trace-js
@@ -475,11 +475,20 @@ jobs:
       - run:
           name: Versions
           command: yarn versions
+      - &restore-yarn-cache
+        restore_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
       - run:
           name: Install dependencies
           command: yarn install
           environment:
             DD_NATIVE_METRICS: "false"
+      - &save-yarn-cache
+        save_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+            - ./yarn.lock
       - run:
           name: Compile prebuild binaries
           command: yarn prebuild
@@ -506,7 +515,7 @@ jobs:
           environment:
             DD_NATIVE_METRICS: "false"
       - restore_cache:
-          key: prebuilds-{{ arch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+          key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
       - run:
           name: Check prebuilds
           command: ls prebuilds
