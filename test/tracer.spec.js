@@ -7,7 +7,7 @@ const tags = require('../ext/tags')
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
-const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
+const ANALYTICS = tags.ANALYTICS
 
 wrapIt()
 
@@ -65,19 +65,19 @@ describe('Tracer', () => {
 
     it('should support analytics', () => {
       tracer.trace('name', { analytics: true }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '1')
+        expect(span.context()._tags).to.have.property(ANALYTICS, 1)
       })
 
       tracer.trace('name', { analytics: false }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '0')
+        expect(span.context()._tags).to.have.property(ANALYTICS, 0)
       })
 
       tracer.trace('name', { analytics: 0.5 }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS_SAMPLE_RATE, '0.5')
+        expect(span.context()._tags).to.have.property(ANALYTICS, 0.5)
       })
 
       tracer.trace('name', { analytics: 2 }, span => {
-        expect(span.context()._tags).to.not.have.property(ANALYTICS_SAMPLE_RATE)
+        expect(span.context()._tags).to.not.have.property(ANALYTICS)
       })
     })
 
