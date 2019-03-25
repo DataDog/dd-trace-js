@@ -24,4 +24,4 @@ jobs:
   - task: PublishPipelineArtifact@0
     inputs:
       artifactName: 'prebuilds-$(arch)'
-      targetPath: 'prebuilds'
+      targetPath: 'addons-win32-$(arch).tgz'
