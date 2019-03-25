@@ -2,17 +2,16 @@
 
 const Scope = require('../../src/scope/new/scope')
 const Span = require('opentracing').Span
+const platform = require('../../src/platform')
 
 wrapIt()
 
 describe('Scope', () => {
   let scope
   let span
-  let platform
   let metrics
 
   beforeEach(() => {
-    platform = require('../../src/platform')
     metrics = platform.metrics()
 
     sinon.spy(metrics, 'increment')
