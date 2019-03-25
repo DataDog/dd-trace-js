@@ -7,13 +7,15 @@ node-core-base: &node-core-base
   resource_class: small
   steps:
     - checkout
-    - run:
+    - &yarn-versions
+      run:
         name: Versions
         command: yarn versions
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
+    - &yarn-install
+      run:
         name: Install dependencies
         command: yarn install --ignore-engines
         environment:
@@ -27,7 +29,8 @@ node-core-base: &node-core-base
     - run:
         name: Compile native code
         command: yarn rebuild
-    - run:
+    - &yarn-test-core
+      run:
         name: Unit tests
         command: yarn test:core
     - run:
@@ -75,18 +78,13 @@ prebuild-linux-base: &prebuild-linux-base
     - run:
         name: Install job dependencies
         command: apt-get update && apt-get install -y g++-multilib
-    - run:
-        name: Versions
-        command: yarn versions
+    - *yarn-versions
     - *restore-yarn-cache
-    - run:
-        name: Install dependencies
-        command: yarn install
-        environment:
-          DD_NATIVE_METRICS: "false"
+    - *yarn-install
     - *save-yarn-cache
-    - run:
-        name: Compile prebuild binaries
+    - &yarn-prebuild
+      run:
+        name: Compile prebuilt binaries
         command: yarn prebuild
     - store_artifacts:
         path: ./prebuilds
@@ -102,26 +100,11 @@ prebuild-darwin-base: &prebuild-darwin-base
   resource_class: small
   steps:
     - checkout
-    - run:
-        name: Versions
-        command: yarn versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
-        name: Install dependencies
-        command: yarn install
-        environment:
-          DD_NATIVE_METRICS: "false"
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
-    - run:
-        name: Compile prebuilt binaries
-        command: yarn prebuild
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - *yarn-prebuild
     - store_artifacts:
         path: ./prebuilds
 
@@ -411,21 +394,10 @@ jobs:
     resource_class: small
     steps:
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
-      - &restore-yarn-cache
-        restore_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - &save-yarn-cache
-        save_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-          paths:
-            - ./node_modules
-            - ./yarn.lock
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
       - run:
           name: Test API documentation
           command: yarn type:test
@@ -465,22 +437,12 @@ jobs:
           name: Install job dependencies
           command: apk add g++ git make python
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
+      - *yarn-versions
       - *restore-yarn-cache
-      - run:
-          name: Install dependencies
-          command: yarn install
-          environment:
-            DD_NATIVE_METRICS: "false"
+      - *yarn-install
       - *save-yarn-cache
-      - run:
-          name: Compile prebuild binaries
-          command: yarn prebuild
-      - run:
-          name: Unit tests
-          command: yarn test:core
+      - *yarn-prebuild
+      - *yarn-test-core
 
   alpine-prebuilt:
     docker:
