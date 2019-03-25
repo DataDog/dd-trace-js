@@ -78,20 +78,13 @@ prebuild-linux-base: &prebuild-linux-base
     - run:
         name: Versions
         command: yarn versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - *restore-yarn-cache
     - run:
         name: Install dependencies
         command: yarn install
         environment:
           DD_NATIVE_METRICS: "false"
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
+    - *save-yarn-cache
     - run:
         name: Compile prebuild binaries
         command: yarn prebuild
