@@ -87,7 +87,8 @@ function extractError (trace, span) {
 
 function extractMetrics (trace, span) {
   const spanContext = span.context()
-  const analytics = spanContext._tags[ANALYTICS]
+
+  let analytics = spanContext._tags[ANALYTICS]
 
   Object.keys(spanContext._metrics).forEach(metric => {
     if (typeof spanContext._metrics[metric] === 'number') {
@@ -100,7 +101,9 @@ function extractMetrics (trace, span) {
   }
 
   switch (typeof analytics) {
-    case 'number':
+    case 'string':
+      analytics = parseFloat(analytics)
+    case 'number': // eslint-disable-line no-fallthrough
       if (!isNaN(analytics)) {
         trace.metrics[ANALYTICS_KEY] = Math.max(Math.min(analytics, 1), 0)
       }
