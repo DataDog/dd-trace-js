@@ -435,11 +435,17 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('gc.all.sum')
           expect(client.gauge).to.have.been.calledWith('gc.all.avg')
           expect(client.gauge).to.have.been.calledWith('gc.all.count')
+        })
 
-          expect(client.gauge).to.have.been.calledWith('heap.space_size')
-          expect(client.gauge).to.have.been.calledWith('heap.space_used_size')
-          expect(client.gauge).to.have.been.calledWith('heap.space_available_size')
-          expect(client.gauge).to.have.been.calledWith('heap.physical_space_size')
+        it('should collect additional metrics in debug mode', () => {
+          metrics.apply(platform).start({ debug: true })
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('heap.space.size')
+          expect(client.gauge).to.have.been.calledWith('heap.space.used_size')
+          expect(client.gauge).to.have.been.calledWith('heap.space.available_size')
+          expect(client.gauge).to.have.been.calledWith('heap.space.physical_size')
         })
       })
 
@@ -532,12 +538,18 @@ describe('Platform', () => {
             expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
             expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
           }
+        })
+
+        it('should collect additional metrics in debug mode', () => {
+          metrics.apply(platform).start({ debug: true })
+
+          clock.tick(10000)
 
           if (semver.gte(process.version, '6.0.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.space_size')
-            expect(client.gauge).to.have.been.calledWith('heap.space_used_size')
-            expect(client.gauge).to.have.been.calledWith('heap.space_available_size')
-            expect(client.gauge).to.have.been.calledWith('heap.physical_space_size')
+            expect(client.gauge).to.have.been.calledWith('heap.space.size')
+            expect(client.gauge).to.have.been.calledWith('heap.space.used_size')
+            expect(client.gauge).to.have.been.calledWith('heap.space.available_size')
+            expect(client.gauge).to.have.been.calledWith('heap.space.physical_size')
           }
         })
       })

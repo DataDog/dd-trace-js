@@ -32,6 +32,8 @@ class DatadogSpan extends Span {
     this._spanContext._name = operationName
     this._spanContext._tags = tags
     this._spanContext._metrics = metrics
+
+    platform.metrics().track(this)
   }
 
   toString () {

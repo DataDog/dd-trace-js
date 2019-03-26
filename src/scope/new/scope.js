@@ -89,14 +89,14 @@ class Scope extends Base {
   _debugInit (asyncId, type) {
     this._types[asyncId] = type
 
-    platform.metrics().increment(`async.resources.${type}`)
+    platform.metrics().increment(`async.resource.${type}`)
   }
 
   _debugDestroy (asyncId) {
     const type = this._types[asyncId]
 
     if (type) {
-      platform.metrics().decrement(`async.resources.${type}`)
+      platform.metrics().decrement(`async.resource.${type}`)
     }
 
     delete this._types[asyncId]
