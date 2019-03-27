@@ -7,6 +7,7 @@
 #include "Collector.hpp"
 #include "Histogram.hpp"
 #include "Object.hpp"
+#include "utils.hpp"
 
 namespace datadog {
   class SpanTracker;
