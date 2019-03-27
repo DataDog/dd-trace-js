@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = {
+const tags = {
   // Common
   SERVICE_NAME: 'service.name',
   RESOURCE_NAME: 'resource.name',
@@ -18,3 +18,8 @@ module.exports = {
   HTTP_REQUEST_HEADERS: 'http.request.headers',
   HTTP_RESPONSE_HEADERS: 'http.response.headers'
 }
+
+// Deprecated
+tags.ANALYTICS_SAMPLE_RATE = tags.ANALYTICS
+
+module.exports = tags

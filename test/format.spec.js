@@ -222,5 +222,11 @@ describe('format', () => {
       trace = format(span)
       expect(trace.metrics[ANALYTICS_KEY]).to.equal(0)
     })
+
+    it('should accept strings for analytics', () => {
+      spanContext._tags[ANALYTICS] = '0.5'
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0.5)
+    })
   })
 })
