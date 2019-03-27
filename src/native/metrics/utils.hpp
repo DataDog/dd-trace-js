@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <node_version.h>
 #include <v8.h>
 
 namespace datadog {
