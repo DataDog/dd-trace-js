@@ -5,7 +5,7 @@ namespace datadog {
     #if NODE_MAJOR_VERSION >= 8
     return *v8::String::Utf8Value(isolate, handle);
     #else
-    return *v8::String::Utf8Value(handle));
+    return *v8::String::Utf8Value(handle);
     #endif
   }
 }
