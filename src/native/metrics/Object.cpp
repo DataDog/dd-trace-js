@@ -21,7 +21,7 @@ namespace datadog {
     Nan::Set(
       target_,
       Nan::New(key).ToLocalChecked(),
-      Nan::New<v8::Number>(value)
+      Nan::New<v8::Number>(static_cast<double>(value))
     );
   }
 
