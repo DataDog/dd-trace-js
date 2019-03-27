@@ -19,12 +19,14 @@ reset()
 
 module.exports = function () {
   return metrics || (metrics = { // cache the metrics instance
-    start: () => {
+    start: (options) => {
       const StatsD = require('hot-shots')
+
+      options = options || {}
 
       try {
         nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
-        nativeMetrics.start()
+        nativeMetrics.start(options.debug)
       } catch (e) {
         log.error('Unable to load native metrics module. Some metrics will not be available.')
       }
@@ -45,16 +47,16 @@ module.exports = function () {
 
       if (nativeMetrics) {
         interval = setInterval(() => {
-          captureCommonMetrics()
-          captureNativeMetrics()
+          captureCommonMetrics(options.debug)
+          captureNativeMetrics(options.debug)
         }, INTERVAL)
       } else {
         cpuUsage = process.cpuUsage()
 
         interval = setInterval(() => {
-          captureCommonMetrics()
-          captureCpuUsage()
-          captureHeapSpace()
+          captureCommonMetrics(options.debug)
+          captureCpuUsage(options.debug)
+          captureHeapSpace(options.debug)
         }, INTERVAL)
       }
 
@@ -68,6 +70,12 @@ module.exports = function () {
 
       clearInterval(interval)
       reset()
+    },
+
+    track (span) {
+      if (nativeMetrics) {
+        nativeMetrics.track(span)
+      }
     },
 
     increment: (name, count) => {
@@ -139,18 +147,18 @@ function captureHeapStats () {
   stats.peak_malloced_memory && client.gauge('heap.peak_malloced_memory', stats.peak_malloced_memory)
 }
 
-function captureHeapSpace () {
-  if (!v8.getHeapSpaceStatistics) return
+function captureHeapSpace (debug) {
+  if (!debug || !v8.getHeapSpaceStatistics) return
 
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
     const tags = { 'heap.space': stats[i].space_name }
 
-    client.gauge('heap.space_size', stats[i].space_size, tags)
-    client.gauge('heap.space_used_size', stats[i].space_used_size, tags)
-    client.gauge('heap.space_available_size', stats[i].space_available_size, tags)
-    client.gauge('heap.physical_space_size', stats[i].physical_space_size, tags)
+    client.gauge('heap.space.size', stats[i].space_size, tags)
+    client.gauge('heap.space.used_size', stats[i].space_used_size, tags)
+    client.gauge('heap.space.available_size', stats[i].space_available_size, tags)
+    client.gauge('heap.physical_size', stats[i].physical_space_size, tags)
   }
 }
 
@@ -167,7 +175,7 @@ function captureCommonMetrics () {
   captureCounters()
 }
 
-function captureNativeMetrics () {
+function captureNativeMetrics (debug) {
   const stats = nativeMetrics.stats()
   const spaces = stats.heap.spaces
   const elapsedTime = process.hrtime(time)
@@ -197,12 +205,22 @@ function captureNativeMetrics () {
     client.gauge(`gc.${type}.count`, stats.gc[type].count)
   })
 
-  for (let i = 0, l = spaces.length; i < l; i++) {
-    const tags = { 'heap.space': spaces[i].space_name }
+  client.gauge('spans', stats.spans.total)
 
-    client.gauge('heap.space_size', spaces[i].space_size, tags)
-    client.gauge('heap.space_used_size', spaces[i].space_used_size, tags)
-    client.gauge('heap.space_available_size', spaces[i].space_available_size, tags)
-    client.gauge('heap.physical_space_size', spaces[i].physical_space_size, tags)
+  if (debug) {
+    for (let i = 0, l = spaces.length; i < l; i++) {
+      const tags = { 'space.name': spaces[i].space_name }
+
+      client.gauge('heap.space.size', spaces[i].space_size, tags)
+      client.gauge('heap.space.used_size', spaces[i].space_used_size, tags)
+      client.gauge('heap.space.available_size', spaces[i].space_available_size, tags)
+      client.gauge('heap.space.physical_size', spaces[i].physical_space_size, tags)
+    }
+
+    if (stats.spans.operations) {
+      Object.keys(stats.spans.operations).forEach(name => {
+        client.gauge(`span.${name}`, stats.spans.operations[name])
+      })
+    }
   }
 }

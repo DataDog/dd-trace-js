@@ -9,6 +9,8 @@
       "src/native/metrics/Histogram.cpp",
       "src/native/metrics/Object.cpp",
       "src/native/metrics/Process.cpp",
+      "src/native/metrics/SpanTracker.cpp",
+      "src/native/metrics/utils.cpp",
       "src/native/metrics/main.cpp"
     ],
     "include_dirs": [

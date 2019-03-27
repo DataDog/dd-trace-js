@@ -128,10 +128,11 @@ describe('TracerProxy', () => {
 
       it('should start capturing metrics when configured', () => {
         config.experimental = { runtimeMetrics: true }
+        config.debug = true
 
         proxy.init()
 
-        expect(platform.metrics().start).to.have.been.called
+        expect(platform.metrics().start).to.have.been.calledWith({ debug: true })
       })
     })
 

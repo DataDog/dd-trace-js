@@ -25,7 +25,7 @@ namespace datadog {
     uint64_t check_time = uv_hrtime();
     uint64_t poll_time = check_time - self->prepare_time_;
     uint64_t latency = self->prepare_time_ - self->check_time_;
-    uint64_t timeout = self->timeout_ * 1e6;
+    uint64_t timeout = self->timeout_ * 1000 * 1000;
 
     if (poll_time > timeout) {
       latency += poll_time - timeout;
