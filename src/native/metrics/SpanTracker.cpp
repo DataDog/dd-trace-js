@@ -44,7 +44,7 @@ namespace datadog {
       v8::Local<v8::String> context_key = v8::String::NewFromUtf8(isolate, "_spanContext");
       v8::Local<v8::String> name_key = v8::String::NewFromUtf8(isolate, "_name");
       v8::Local<v8::Object> context = v8::Local<v8::Object>::Cast(span->Get(context_key));
-      std::string name = to_string(isolate, context->Get(name_key));
+      std::string name = to_string(context->Get(name_key));
 
       if (spans_.find(name) == spans_.end()) {
         spans_.insert(std::make_pair(name, 0));
