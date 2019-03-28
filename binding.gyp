@@ -25,6 +25,20 @@
         "-Wall",
         "-Werror"
       ]
-    }
+    },
+    "conditions": [
+      ["OS == 'linux'", {
+        "cflags": [
+          "-std=c++11",
+          "-Wall",
+          "-Werror"
+        ]
+      }],
+      ["OS == 'win'", {
+        "cflags": [
+          "/WX"
+        ]
+      }]
+    ]
   }]
 }
