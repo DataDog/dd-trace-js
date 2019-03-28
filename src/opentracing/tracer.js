@@ -61,10 +61,6 @@ class DatadogTracer extends Tracer {
       startTime: fields.startTime
     })
 
-    if (parent && parent.type() === opentracing.REFERENCE_CHILD_OF) {
-      parent.referencedContext()._children.push(span)
-    }
-
     return span
   }
 

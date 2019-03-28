@@ -130,12 +130,6 @@ class DatadogSpan extends Span {
     if (this._spanContext._sampled) {
       this._recorder.record(this)
     }
-
-    this._spanContext._children
-      .filter(child => !child.context()._isFinished)
-      .forEach(child => {
-        log.error(`Parent span ${this} was finished before child span ${child}.`)
-      })
   }
 }
 
