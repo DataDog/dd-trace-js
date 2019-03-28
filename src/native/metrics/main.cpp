@@ -28,7 +28,7 @@ namespace datadog {
       bool debug = false;
 
       if (info.Length() > 0 && info[0]->IsBoolean()) {
-        debug = info[0]->BooleanValue();
+        debug = v8::Local<v8::Boolean>::Cast(info[0])->Value();
       }
 
       eventLoop.enable();
