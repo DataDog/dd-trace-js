@@ -32,7 +32,7 @@ namespace datadog {
 
   void SpanTracker::enable(bool debug) {
     enabled_ = true;
-    debug_ = true;
+    debug_ = debug;
   }
 
   void SpanTracker::disable() {
