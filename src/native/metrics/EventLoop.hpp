@@ -11,6 +11,8 @@ namespace datadog {
     public:
       EventLoop();
       ~EventLoop();
+      EventLoop(const EventLoop&) = delete;
+      void operator=(const EventLoop&) = delete;
 
       void enable();
       void disable();

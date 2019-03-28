@@ -1,3 +1,5 @@
+#include <uv.h>
+
 #include "Object.hpp"
 
 namespace datadog {

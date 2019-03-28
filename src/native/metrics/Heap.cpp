@@ -1,3 +1,7 @@
+#include <string>
+#include <vector>
+#include <v8.h>
+
 #include "Heap.hpp"
 
 namespace datadog {

@@ -9,6 +9,7 @@ namespace datadog {
   class Collector {
     public:
       virtual void inject(Object carrier) = 0;
+      virtual ~Collector();
     protected:
       virtual uint64_t time_to_micro(uv_timeval_t timeval);
   };

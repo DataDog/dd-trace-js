@@ -1,9 +1,5 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <v8.h>
-
 #include "Collector.hpp"
 #include "Object.hpp"
 

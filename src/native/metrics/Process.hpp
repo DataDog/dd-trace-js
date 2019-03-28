@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stdint.h>
 #include <uv.h>
 
 #include "Collector.hpp"

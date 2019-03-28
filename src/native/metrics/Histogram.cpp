@@ -1,3 +1,10 @@
+// windows.h defines min and max macros.
+#define NOMINMAX
+#include <algorithm>
+#undef min
+#undef max
+#undef NOMINMAX
+
 #include "Histogram.hpp"
 
 namespace datadog {

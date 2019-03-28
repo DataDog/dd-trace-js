@@ -1,3 +1,5 @@
+#include <nan.h>
+
 #include "utils.hpp"
 
 namespace datadog {

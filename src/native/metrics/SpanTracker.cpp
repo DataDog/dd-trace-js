@@ -1,4 +1,5 @@
 #include "SpanTracker.hpp"
+#include "utils.hpp"
 
 namespace datadog {
   void SpanTracker::inject(Object carrier) {
@@ -13,12 +14,12 @@ namespace datadog {
       Object finished;
       Object unfinished;
 
-      for (auto it = finished_.begin(); it != finished_.end(); ++it) {
-        finished.set(it->first, it->second);
+      for (auto it : finished_) {
+        finished.set(it.first, it.second);
       }
 
-      for (auto it = unfinished_.begin(); it != unfinished_.end(); ++it) {
-        unfinished.set(it->first, it->second);
+      for (auto it : unfinished_) {
+        unfinished.set(it.first, it.second);
       }
 
       operations.set("finished", finished);

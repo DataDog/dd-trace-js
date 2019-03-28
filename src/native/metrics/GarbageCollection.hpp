@@ -3,7 +3,6 @@
 #include <map>
 #include <string>
 #include <stdint.h>
-#include <uv.h>
 #include <v8.h>
 
 #include "Collector.hpp"

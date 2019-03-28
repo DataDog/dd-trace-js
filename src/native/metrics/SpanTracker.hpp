@@ -1,13 +1,11 @@
 #pragma once
 
-#include <map>
+#include <unordered_map>
 #include <string>
 #include <v8.h>
 
 #include "Collector.hpp"
-#include "Histogram.hpp"
 #include "Object.hpp"
-#include "utils.hpp"
 
 namespace datadog {
   class SpanTracker;
@@ -31,8 +29,8 @@ namespace datadog {
 
       bool debug_;
       bool enabled_;
-      std::map<std::string, uint64_t> unfinished_;
-      std::map<std::string, uint64_t> finished_;
+      std::unordered_map<std::string, uint64_t> unfinished_;
+      std::unordered_map<std::string, uint64_t> finished_;
       uint64_t unfinished_total_;
       uint64_t finished_total_;
   };
