@@ -59,7 +59,16 @@ namespace datadog {
     }
 
     NAN_METHOD(track) {
-      tracker.track(v8::Local<v8::Object>::Cast(info[0]));
+      SpanHandle *handle = tracker.track(v8::Local<v8::Object>::Cast(info[0]));
+      v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+      info.GetReturnValue().Set(v8::External::New(isolate, handle));
+    }
+
+    NAN_METHOD(finish) {
+      SpanHandle *handle = static_cast<SpanHandle*>(v8::Local<v8::External>::Cast(info[0])->Value());
+
+      tracker.finish(handle);
     }
   }
 
@@ -70,6 +79,7 @@ namespace datadog {
     obj.set("stop", stop);
     obj.set("stats", stats);
     obj.set("track", track);
+    obj.set("finish", finish);
   }
 
   NODE_MODULE(metrics, init);

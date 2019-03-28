@@ -14,14 +14,16 @@ namespace datadog {
 
   struct SpanHandle {
     SpanTracker *tracker;
-    v8::Persistent<v8::Object> *span;
+    v8::Persistent<v8::Object> *context;
+    bool finished;
     std::string name;
   };
 
   class SpanTracker : Collector {
     public:
       void inject(Object carrier);
-      void track(const v8::Local<v8::Object> &span);
+      SpanHandle* track(const v8::Local<v8::Object> &span);
+      void finish(SpanHandle *handle);
       void enable(bool debug);
       void disable();
     private:
@@ -29,7 +31,9 @@ namespace datadog {
 
       bool debug_;
       bool enabled_;
-      std::map<std::string, uint64_t> spans_;
-      uint64_t total_;
+      std::map<std::string, uint64_t> unfinished_;
+      std::map<std::string, uint64_t> finished_;
+      uint64_t unfinished_total_;
+      uint64_t finished_total_;
   };
 }

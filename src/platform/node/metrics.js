@@ -74,8 +74,14 @@ module.exports = function () {
 
     track (span) {
       if (nativeMetrics) {
-        nativeMetrics.track(span)
+        const handle = nativeMetrics.track(span)
+
+        return {
+          finish: () => nativeMetrics.finish(handle)
+        }
       }
+
+      return { finish: () => {} }
     },
 
     increment: (name, count) => {
@@ -205,7 +211,8 @@ function captureNativeMetrics (debug) {
     client.gauge(`gc.${type}.count`, stats.gc[type].count)
   })
 
-  client.gauge('spans', stats.spans.total)
+  client.gauge('spans.finished', stats.spans.total.finished)
+  client.gauge('spans.unfinished', stats.spans.total.unfinished)
 
   if (debug) {
     for (let i = 0, l = spaces.length; i < l; i++) {
@@ -218,8 +225,14 @@ function captureNativeMetrics (debug) {
     }
 
     if (stats.spans.operations) {
-      Object.keys(stats.spans.operations).forEach(name => {
-        client.gauge(`span.${name}`, stats.spans.operations[name])
+      const operations = stats.spans.operations
+
+      Object.keys(operations.finished).forEach(name => {
+        client.gauge(`spans.${name}.finished`, operations.finished[name])
+      })
+
+      Object.keys(operations.unfinished).forEach(name => {
+        client.gauge(`spans.${name}.unfinished`, operations.unfinished[name])
       })
     }
   }
