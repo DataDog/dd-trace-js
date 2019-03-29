@@ -1,6 +1,5 @@
 #include <nan.h>
 
-#include "Collector.hpp"
 #include "EventLoop.hpp"
 #include "GarbageCollection.hpp"
 #include "Heap.hpp"
