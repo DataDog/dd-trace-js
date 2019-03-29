@@ -13,9 +13,16 @@ describe('Span', () => {
   let prioritySampler
   let sampler
   let platform
+  let handle
 
   beforeEach(() => {
-    platform = { id: sinon.stub() }
+    handle = { finish: sinon.spy() }
+    platform = {
+      id: sinon.stub(),
+      metrics: sinon.stub().returns({
+        track: sinon.stub().returns(handle)
+      })
+    }
     platform.id.onFirstCall().returns(new Uint64BE(123, 123))
     platform.id.onSecondCall().returns(new Uint64BE(456, 456))
 
@@ -95,6 +102,16 @@ describe('Span', () => {
 
   it('should set the sample rate metric from the sampler', () => {
     expect(span.context()._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
+  })
+
+  it('should keep track of its memory lifecycle', () => {
+    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+
+    expect(platform.metrics().track).to.have.been.calledWith(span)
+
+    span.finish()
+
+    expect(handle.finish).to.have.been.called
   })
 
   describe('tracer', () => {

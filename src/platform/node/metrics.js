@@ -84,16 +84,25 @@ module.exports = function () {
       return { finish: () => {} }
     },
 
-    increment: (name, count) => {
+    count (name, count, tag) {
       if (!client) return
+      if (!counters[name]) {
+        counters[name] = tag ? Object.create(null) : 0
+      }
 
-      counters[name] = (counters[name] || 0) + (count || 1)
+      if (tag) {
+        counters[name][tag] = (counters[name][tag] || 0) + count
+      } else {
+        counters[name] = (counters[name] || 0) + count
+      }
     },
 
-    decrement: (name, count) => {
-      if (!client) return
+    increment (name, tag) {
+      this.count(name, 1, tag)
+    },
 
-      counters[name] = (counters[name] || 0) - (count || 1)
+    decrement (name, tag) {
+      this.count(name, -1, tag)
     }
   })
 }
@@ -228,11 +237,15 @@ function captureNativeMetrics (debug) {
       const operations = stats.spans.operations
 
       Object.keys(operations.finished).forEach(name => {
-        client.gauge(`spans.${name}.finished`, operations.finished[name])
+        client.gauge('spans.finished.by.name', operations.finished[name], {
+          [name]: 'span.name'
+        })
       })
 
       Object.keys(operations.unfinished).forEach(name => {
-        client.gauge(`spans.${name}.unfinished`, operations.unfinished[name])
+        client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
+          [name]: 'span.name'
+        })
       })
     }
   }

@@ -461,17 +461,7 @@ describe('Platform', () => {
       })
 
       describe('increment', () => {
-        it('should increment a counter by the provided count', () => {
-          metrics.apply(platform).start()
-          metrics.apply(platform).increment('test', 1)
-          metrics.apply(platform).increment('test', 2)
-
-          clock.tick(10000)
-
-          expect(client.gauge).to.have.been.calledWith('test', 3)
-        })
-
-        it('should increment a counter by 1 without a count', () => {
+        it('should increment a counter', () => {
           metrics.apply(platform).start()
           metrics.apply(platform).increment('test')
 
@@ -482,17 +472,7 @@ describe('Platform', () => {
       })
 
       describe('decrement', () => {
-        it('should increment a counter by the provided count', () => {
-          metrics.apply(platform).start()
-          metrics.apply(platform).decrement('test', 1)
-          metrics.apply(platform).decrement('test', 2)
-
-          clock.tick(10000)
-
-          expect(client.gauge).to.have.been.calledWith('test', -3)
-        })
-
-        it('should increment a counter by 1 without a count', () => {
+        it('should increment a counter', () => {
           metrics.apply(platform).start()
           metrics.apply(platform).decrement('test')
 
