@@ -476,7 +476,7 @@ describe('Platform', () => {
 
           clock.tick(10000)
 
-          expect(client.gauge).to.have.been.calledWith('test', 1, 'foo:bar')
+          expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
         })
       })
 
@@ -496,7 +496,7 @@ describe('Platform', () => {
 
           clock.tick(10000)
 
-          expect(client.gauge).to.have.been.calledWith('test', -1, 'foo:bar')
+          expect(client.gauge).to.have.been.calledWith('test', -1, ['foo:bar'])
         })
       })
 

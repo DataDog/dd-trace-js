@@ -181,7 +181,7 @@ function captureCounters () {
   Object.keys(counters).forEach(name => {
     if (typeof counters[name] === 'object') {
       Object.keys(counters[name]).forEach(tag => {
-        client.gauge(name, counters[name][tag], tag)
+        client.gauge(name, counters[name][tag], [tag])
       })
     } else {
       client.gauge(name, counters[name])
