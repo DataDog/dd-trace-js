@@ -4,7 +4,7 @@ const v8 = require('v8')
 const path = require('path')
 const log = require('../../log')
 
-const INTERVAL = 10 * 1000
+const INTERVAL = 1 * 1000
 
 let nativeMetrics = null
 
@@ -179,7 +179,13 @@ function captureHeapSpace (debug) {
 
 function captureCounters () {
   Object.keys(counters).forEach(name => {
-    client.gauge(name, counters[name])
+    if (typeof counters[name] === 'object') {
+      Object.keys(counters[name]).forEach(tag => {
+        client.gauge(name, counters[name][tag], tag)
+      })
+    } else {
+      client.gauge(name, counters[name])
+    }
   })
 }
 

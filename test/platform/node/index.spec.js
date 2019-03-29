@@ -469,6 +469,15 @@ describe('Platform', () => {
 
           expect(client.gauge).to.have.been.calledWith('test', 1)
         })
+
+        it('should increment a counter with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).increment('test', 'foo:bar')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 1, 'foo:bar')
+        })
       })
 
       describe('decrement', () => {
@@ -479,6 +488,15 @@ describe('Platform', () => {
           clock.tick(10000)
 
           expect(client.gauge).to.have.been.calledWith('test', -1)
+        })
+
+        it('should decrement a counter with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).decrement('test', 'foo:bar')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', -1, 'foo:bar')
         })
       })
 
