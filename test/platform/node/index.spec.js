@@ -504,7 +504,7 @@ describe('Platform', () => {
         beforeEach(() => {
           metrics = proxyquire('../src/platform/node/metrics', {
             'hot-shots': StatsD,
-            '../../../build/Release/metrics': null
+            'node-gyp-build': sinon.stub().returns(null)
           })
         })
 

@@ -155,7 +155,6 @@ function captureHeapStats () {
   client.gauge('heap.total_heap_size_executable', stats.total_heap_size_executable)
   client.gauge('heap.total_physical_size', stats.total_physical_size)
   client.gauge('heap.total_available_size', stats.total_available_size)
-  client.gauge('heap.total_heap_size', stats.total_heap_size)
   client.gauge('heap.heap_size_limit', stats.heap_size_limit)
 
   stats.malloced_memory && client.gauge('heap.malloced_memory', stats.malloced_memory)
@@ -173,7 +172,7 @@ function captureHeapSpace (debug) {
     client.gauge('heap.space.size', stats[i].space_size, tags)
     client.gauge('heap.space.used_size', stats[i].space_used_size, tags)
     client.gauge('heap.space.available_size', stats[i].space_available_size, tags)
-    client.gauge('heap.physical_size', stats[i].physical_space_size, tags)
+    client.gauge('heap.space.physical_size', stats[i].physical_space_size, tags)
   }
 }
 
