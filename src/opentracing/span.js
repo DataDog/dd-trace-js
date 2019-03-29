@@ -33,7 +33,7 @@ class DatadogSpan extends Span {
     this._spanContext._tags = tags
     this._spanContext._metrics = metrics
 
-    platform.metrics().track(this)
+    this._handle = platform.metrics().track(this)
   }
 
   toString () {
@@ -125,16 +125,11 @@ class DatadogSpan extends Span {
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
     this._prioritySampler.sample(this)
+    this._handle.finish()
 
     if (this._spanContext._sampled) {
       this._recorder.record(this)
     }
-
-    this._spanContext._children
-      .filter(child => !child.context()._isFinished)
-      .forEach(child => {
-        log.error(`Parent span ${this} was finished before child span ${child}.`)
-      })
   }
 }
 

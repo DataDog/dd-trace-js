@@ -18,6 +18,6 @@ module.exports = title => {
       console.log(String(event.target))
     })
     .on('error', event => {
-      console.log(String(event.target.error))
+      throw event.target.error
     })
 }

@@ -1,10 +1,8 @@
 #pragma once
 
 #include <nan.h>
-#include <uv.h>
 #include <stdint.h>
 #include <string>
-#include <functional>
 #include <vector>
 
 #include "Histogram.hpp"

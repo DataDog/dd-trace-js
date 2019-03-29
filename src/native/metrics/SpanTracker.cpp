@@ -1,21 +1,33 @@
 #include "SpanTracker.hpp"
+#include "utils.hpp"
 
 namespace datadog {
   void SpanTracker::inject(Object carrier) {
     Object spans;
+    Object total;
 
-    spans.set("total", total_);
+    total.set("finished", finished_total_);
+    total.set("unfinished", unfinished_total_);
 
     if (debug_) {
       Object operations;
+      Object finished;
+      Object unfinished;
 
-      for (auto it = spans_.begin(); it != spans_.end(); ++it) {
-        operations.set(it->first, it->second);
+      for (auto it : finished_) {
+        finished.set(it.first, it.second);
       }
 
+      for (auto it : unfinished_) {
+        unfinished.set(it.first, it.second);
+      }
+
+      operations.set("finished", finished);
+      operations.set("unfinished", unfinished);
       spans.set("operations", operations);
     }
 
+    spans.set("total", total);
     carrier.set("spans", spans);
   };
 
@@ -26,50 +38,85 @@ namespace datadog {
 
   void SpanTracker::disable() {
     enabled_ = false;
+    debug_ = false;
+    finished_total_ = 0;
+    unfinished_total_ = 0;
+    finished_.clear();
+    unfinished_.clear();
   }
 
-  void SpanTracker::track(const v8::Local<v8::Object> &span) {
-    if (!enabled_) return;
+  SpanHandle* SpanTracker::track(const v8::Local<v8::Object> &span) {
+    if (!enabled_) return nullptr;
 
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
+    v8::Local<v8::String> context_key = v8::String::NewFromUtf8(isolate, "_spanContext");
+    v8::Local<v8::Object> context = v8::Local<v8::Object>::Cast(span->Get(context_key));
 
-    ++total_;
+    ++unfinished_total_;
 
     SpanHandle *handle = new SpanHandle();
 
     handle->tracker = this;
-    handle->span = new v8::Persistent<v8::Object>(isolate, span);
+    handle->context = new v8::Persistent<v8::Object>(isolate, context);
 
     if (debug_) {
-      v8::Local<v8::String> context_key = v8::String::NewFromUtf8(isolate, "_spanContext");
       v8::Local<v8::String> name_key = v8::String::NewFromUtf8(isolate, "_name");
-      v8::Local<v8::Object> context = v8::Local<v8::Object>::Cast(span->Get(context_key));
       std::string name = to_string(context->Get(name_key));
 
-      if (spans_.find(name) == spans_.end()) {
-        spans_.insert(std::make_pair(name, 0));
+      if (unfinished_.find(name) == unfinished_.end()) {
+        unfinished_.insert(std::make_pair(name, 0));
       }
 
-      ++spans_[name];
+      ++unfinished_[name];
 
       handle->name = name;
     }
 
-    handle->span->SetWeak(handle, callback, v8::WeakCallbackType::kParameter);
-  };
+    handle->context->SetWeak(handle, callback, v8::WeakCallbackType::kParameter);
+
+    return handle;
+  }
+
+  void SpanTracker::finish(SpanHandle *handle) {
+    if (!enabled_) return;
+
+    handle->finished = true;
+
+    --unfinished_total_;
+    ++finished_total_;
+
+    if (debug_) {
+      std::string name = handle->name;
+
+      if (finished_.find(name) == finished_.end()) {
+        finished_.insert(std::make_pair(name, 0));
+      }
+
+      --unfinished_[name];
+      ++finished_[name];
+    }
+  }
 
   void SpanTracker::callback(const v8::WeakCallbackInfo<SpanHandle> &data) {
     SpanHandle *handle = data.GetParameter();
 
-    --handle->tracker->total_;
-
-    handle->span->Reset();
-
-    if (handle->tracker->debug_) {
-      --handle->tracker->spans_[handle->name];
+    if (handle->finished) {
+      --handle->tracker->finished_total_;
+    } else {
+      --handle->tracker->unfinished_total_;
     }
 
-    delete handle->span;
+    handle->context->Reset();
+
+    if (handle->tracker->debug_) {
+      if (handle->finished) {
+        --handle->tracker->finished_[handle->name];
+      } else {
+        --handle->tracker->unfinished_[handle->name];
+      }
+    }
+
+    delete handle->context;
     delete handle;
   }
 }

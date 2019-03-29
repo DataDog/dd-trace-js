@@ -414,7 +414,7 @@ jobs:
 
   prebuild-darwin-x64:
     macos:
-      xcode: "9.4.1"
+      xcode: "10.2.0"
     working_directory: ~/dd-trace-js
     resource_class: small
     environment:
@@ -431,7 +431,7 @@ jobs:
 
   prebuild-darwin-x32:
     macos:
-      xcode: "9.4.1"
+      xcode: "10.2.0"
     working_directory: ~/dd-trace-js
     resource_class: small
     environment:

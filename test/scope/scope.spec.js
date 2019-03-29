@@ -34,6 +34,23 @@ describe('Scope', () => {
     expect(metrics.decrement).to.have.been.calledWith('async.resources')
   })
 
+  it('should keep track of asynchronous resource count by type', () => {
+    scope._debug()
+    scope._debugInit(0, 'TEST')
+    scope._debugDestroy(0)
+
+    expect(metrics.increment).to.have.been.calledWith('async.resources.by.type', 'resource.type:TEST')
+    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type', 'resource.type:TEST')
+  })
+
+  it('should only track destroys once', () => {
+    scope._init(0)
+    scope._destroy(0)
+    scope._destroy(0)
+
+    expect(metrics.decrement).to.have.been.calledOnce
+  })
+
   describe('active()', () => {
     it('should return null by default', () => {
       expect(scope.active()).to.be.null

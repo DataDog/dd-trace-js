@@ -4,7 +4,7 @@ const v8 = require('v8')
 const path = require('path')
 const log = require('../../log')
 
-const INTERVAL = 10 * 1000
+const INTERVAL = 1 * 1000
 
 let nativeMetrics = null
 
@@ -74,20 +74,35 @@ module.exports = function () {
 
     track (span) {
       if (nativeMetrics) {
-        nativeMetrics.track(span)
+        const handle = nativeMetrics.track(span)
+
+        return {
+          finish: () => nativeMetrics.finish(handle)
+        }
+      }
+
+      return { finish: () => {} }
+    },
+
+    count (name, count, tag) {
+      if (!client) return
+      if (!counters[name]) {
+        counters[name] = tag ? Object.create(null) : 0
+      }
+
+      if (tag) {
+        counters[name][tag] = (counters[name][tag] || 0) + count
+      } else {
+        counters[name] = (counters[name] || 0) + count
       }
     },
 
-    increment: (name, count) => {
-      if (!client) return
-
-      counters[name] = (counters[name] || 0) + (count || 1)
+    increment (name, tag) {
+      this.count(name, 1, tag)
     },
 
-    decrement: (name, count) => {
-      if (!client) return
-
-      counters[name] = (counters[name] || 0) - (count || 1)
+    decrement (name, tag) {
+      this.count(name, -1, tag)
     }
   })
 }
@@ -164,7 +179,13 @@ function captureHeapSpace (debug) {
 
 function captureCounters () {
   Object.keys(counters).forEach(name => {
-    client.gauge(name, counters[name])
+    if (typeof counters[name] === 'object') {
+      Object.keys(counters[name]).forEach(tag => {
+        client.gauge(name, counters[name][tag], tag)
+      })
+    } else {
+      client.gauge(name, counters[name])
+    }
   })
 }
 
@@ -205,7 +226,8 @@ function captureNativeMetrics (debug) {
     client.gauge(`gc.${type}.count`, stats.gc[type].count)
   })
 
-  client.gauge('spans', stats.spans.total)
+  client.gauge('spans.finished', stats.spans.total.finished)
+  client.gauge('spans.unfinished', stats.spans.total.unfinished)
 
   if (debug) {
     for (let i = 0, l = spaces.length; i < l; i++) {
@@ -218,8 +240,18 @@ function captureNativeMetrics (debug) {
     }
 
     if (stats.spans.operations) {
-      Object.keys(stats.spans.operations).forEach(name => {
-        client.gauge(`span.${name}`, stats.spans.operations[name])
+      const operations = stats.spans.operations
+
+      Object.keys(operations.finished).forEach(name => {
+        client.gauge('spans.finished.by.name', operations.finished[name], {
+          [name]: 'span.name'
+        })
+      })
+
+      Object.keys(operations.unfinished).forEach(name => {
+        client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
+          [name]: 'span.name'
+        })
       })
     }
   }

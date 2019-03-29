@@ -1,6 +1,8 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
+const platform = require('../src/platform')
+const node = require('../src/platform/node')
 const benchmark = require('./benchmark')
 
 const suite = benchmark('scope')
@@ -31,7 +33,8 @@ const asyncHooks = {
 }
 
 const Scope = proxyquire('../src/scope/new/scope', {
-  '../async_hooks': asyncHooks
+  '../async_hooks': asyncHooks,
+  '../../platform': platform
 })
 
 const scope = new Scope()
@@ -39,6 +42,8 @@ const scope = new Scope()
 let fn
 let promise
 let emitter
+
+platform.use(node)
 
 suite
   .add('Scope#activate', {

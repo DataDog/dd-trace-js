@@ -1,3 +1,5 @@
+#include <uv.h>
+
 #include "GarbageCollection.hpp"
 
 namespace datadog {
@@ -30,9 +32,9 @@ namespace datadog {
   void GarbageCollection::inject(Object carrier) {
     Object value;
 
-    for (std::map<v8::GCType, Histogram>::iterator it = pause_.begin(); it != pause_.end(); ++it) {
-      value.set(types_[it->first], it->second);
-      it->second.reset();
+    for (auto it : pause_) {
+      value.set(types_[it.first], it.second);
+      it.second.reset();
     }
 
     carrier.set("gc", value);

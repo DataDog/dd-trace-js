@@ -30,14 +30,14 @@ class Scope extends Base {
   }
 
   _active () {
-    return this._spans[executionAsyncId()]
+    return this._spans[executionAsyncId()] || null
   }
 
   _activate (span, callback) {
     const asyncId = executionAsyncId()
-    const oldSpan = this._spans[asyncId]
+    const oldSpan = this._spans[asyncId] || null
 
-    this._spans[asyncId] = span
+    this._spans[asyncId] = span || null
 
     try {
       return callback()
@@ -52,28 +52,24 @@ class Scope extends Base {
 
       throw e
     } finally {
-      if (oldSpan) {
-        this._spans[asyncId] = oldSpan
-      } else {
-        this._destroy(asyncId)
-      }
+      this._spans[asyncId] = oldSpan
     }
   }
 
   _init (asyncId) {
     const span = this._spans[executionAsyncId()]
 
-    if (span) {
-      this._spans[asyncId] = span
-    }
+    this._spans[asyncId] = span || null
 
     platform.metrics().increment('async.resources')
   }
 
   _destroy (asyncId) {
-    delete this._spans[asyncId]
+    if (this._spans[asyncId] === null) {
+      platform.metrics().decrement('async.resources')
+    }
 
-    platform.metrics().decrement('async.resources')
+    delete this._spans[asyncId]
   }
 
   _debug () {
@@ -89,14 +85,14 @@ class Scope extends Base {
   _debugInit (asyncId, type) {
     this._types[asyncId] = type
 
-    platform.metrics().increment(`async.resource.${type}`)
+    platform.metrics().increment('async.resources.by.type', `resource.type:${type}`)
   }
 
   _debugDestroy (asyncId) {
     const type = this._types[asyncId]
 
     if (type) {
-      platform.metrics().decrement(`async.resource.${type}`)
+      platform.metrics().decrement('async.resources.by.type', `resource.type:${type}`)
     }
 
     delete this._types[asyncId]
