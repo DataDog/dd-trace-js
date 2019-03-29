@@ -52,28 +52,24 @@ class Scope extends Base {
 
       throw e
     } finally {
-      if (oldSpan) {
-        this._spans[asyncId] = oldSpan
-      } else {
-        this._destroy(asyncId)
-      }
+      this._spans[asyncId] = oldSpan | null
     }
   }
 
   _init (asyncId) {
     const span = this._spans[executionAsyncId()]
 
-    if (span) {
-      this._spans[asyncId] = span
-    }
+    this._spans[asyncId] = span || null
 
     platform.metrics().increment('async.resources')
   }
 
   _destroy (asyncId) {
-    delete this._spans[asyncId]
+    if (this._spans[asyncId] === null) {
+      platform.metrics().decrement('async.resources')
+    }
 
-    platform.metrics().decrement('async.resources')
+    delete this._spans[asyncId]
   }
 
   _debug () {

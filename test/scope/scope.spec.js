@@ -34,6 +34,14 @@ describe('Scope', () => {
     expect(metrics.decrement).to.have.been.calledWith('async.resources')
   })
 
+  it('should only track destroys once', () => {
+    scope._init(0)
+    scope._destroy(0)
+    scope._destroy(0)
+
+    expect(metrics.decrement).to.have.been.calledOnce
+  })
+
   describe('active()', () => {
     it('should return null by default', () => {
       expect(scope.active()).to.be.null
