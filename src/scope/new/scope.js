@@ -30,14 +30,14 @@ class Scope extends Base {
   }
 
   _active () {
-    return this._spans[executionAsyncId()]
+    return this._spans[executionAsyncId()] || null
   }
 
   _activate (span, callback) {
     const asyncId = executionAsyncId()
-    const oldSpan = this._spans[asyncId]
+    const oldSpan = this._spans[asyncId] || null
 
-    this._spans[asyncId] = span
+    this._spans[asyncId] = span || null
 
     try {
       return callback()
@@ -52,7 +52,7 @@ class Scope extends Base {
 
       throw e
     } finally {
-      this._spans[asyncId] = oldSpan | null
+      this._spans[asyncId] = oldSpan
     }
   }
 
