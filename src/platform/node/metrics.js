@@ -4,7 +4,7 @@ const v8 = require('v8')
 const path = require('path')
 const log = require('../../log')
 
-const INTERVAL = 1 * 1000
+const INTERVAL = 10 * 1000
 
 let nativeMetrics = null
 
