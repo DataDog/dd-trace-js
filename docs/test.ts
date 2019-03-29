@@ -14,6 +14,7 @@ ddTrace.init();
 tracer.init({
   debug: true,
   enabled: true,
+  logInjection: true,
   analytics: true,
   env: 'test',
   experimental: {

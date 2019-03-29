@@ -6,8 +6,8 @@ const tags = require('../ext/tags')
 const log = require('./log')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const ANALYTICS_SAMPLE_RATE_KEY = constants.ANALYTICS_SAMPLE_RATE_KEY
-const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
+const ANALYTICS_KEY = constants.ANALYTICS_KEY
+const ANALYTICS = tags.ANALYTICS
 const ORIGIN_KEY = constants.ORIGIN_KEY
 
 const map = {
@@ -54,7 +54,7 @@ function extractTags (trace, span) {
       case 'resource.name':
         addTag(trace, map[tag], tags[tag])
         break
-      case ANALYTICS_SAMPLE_RATE:
+      case ANALYTICS:
         break
       case 'error':
         if (tags[tag]) {
@@ -87,7 +87,8 @@ function extractError (trace, span) {
 
 function extractMetrics (trace, span) {
   const spanContext = span.context()
-  const analyticsSampleRate = parseFloat(spanContext._tags[ANALYTICS_SAMPLE_RATE])
+
+  let analytics = spanContext._tags[ANALYTICS]
 
   Object.keys(spanContext._metrics).forEach(metric => {
     if (typeof spanContext._metrics[metric] === 'number') {
@@ -99,8 +100,17 @@ function extractMetrics (trace, span) {
     trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
   }
 
-  if (analyticsSampleRate >= 0 && analyticsSampleRate <= 1) {
-    trace.metrics[ANALYTICS_SAMPLE_RATE_KEY] = analyticsSampleRate
+  switch (typeof analytics) {
+    case 'string':
+      analytics = parseFloat(analytics)
+    case 'number': // eslint-disable-line no-fallthrough
+      if (!isNaN(analytics)) {
+        trace.metrics[ANALYTICS_KEY] = Math.max(Math.min(analytics, 1), 0)
+      }
+      break
+    case 'boolean':
+      trace.metrics[ANALYTICS_KEY] = analytics ? 1 : 0
+      break
   }
 }
 

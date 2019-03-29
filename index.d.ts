@@ -166,6 +166,13 @@ export declare interface TracerOptions {
   debug?: boolean;
 
   /**
+   * Whether to enable trace ID injection in log records to be able to correlate
+   * traces with logs.
+   * @default false
+   */
+  logInjection?: boolean,
+
+  /**
    * Enable Trace Analytics.
    * @default false
    */

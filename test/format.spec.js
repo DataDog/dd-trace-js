@@ -5,8 +5,8 @@ const constants = require('../src/constants')
 const tags = require('../ext/tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const ANALYTICS_SAMPLE_RATE_KEY = constants.ANALYTICS_SAMPLE_RATE_KEY
-const ANALYTICS_SAMPLE_RATE = tags.ANALYTICS_SAMPLE_RATE
+const ANALYTICS_KEY = constants.ANALYTICS_KEY
+const ANALYTICS = tags.ANALYTICS
 const ORIGIN_KEY = constants.ORIGIN_KEY
 
 const id = new Int64BE(0x02345678, 0x12345678)
@@ -195,9 +195,39 @@ describe('format', () => {
     })
 
     it('should include the analytics sample rate', () => {
-      spanContext._tags[ANALYTICS_SAMPLE_RATE] = '0.5'
+      spanContext._tags[ANALYTICS] = 0.5
       trace = format(span)
-      expect(trace.metrics[ANALYTICS_SAMPLE_RATE_KEY]).to.equal(0.5)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0.5)
+    })
+
+    it('should limit the min analytics sample rate', () => {
+      spanContext._tags[ANALYTICS] = -1
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0)
+    })
+
+    it('should limit the max analytics sample rate', () => {
+      spanContext._tags[ANALYTICS] = 2
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(1)
+    })
+
+    it('should accept boolean true for analytics', () => {
+      spanContext._tags[ANALYTICS] = true
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(1)
+    })
+
+    it('should accept boolean false for analytics', () => {
+      spanContext._tags[ANALYTICS] = false
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0)
+    })
+
+    it('should accept strings for analytics', () => {
+      spanContext._tags[ANALYTICS] = '0.5'
+      trace = format(span)
+      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0.5)
     })
   })
 })

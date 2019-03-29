@@ -1,6 +1,6 @@
 'use strict'
 
-const ANALYTICS_SAMPLE_RATE = require('../ext/tags').ANALYTICS_SAMPLE_RATE
+const ANALYTICS = require('../ext/tags').ANALYTICS
 
 module.exports = {
   sample (span, config, useDefault) {
@@ -8,9 +8,9 @@ module.exports = {
 
     if (useDefault) {
       if (config.sampleRate === undefined) {
-        span.setTag(ANALYTICS_SAMPLE_RATE, 1)
+        span.setTag(ANALYTICS, 1)
       } else if (config.sampleRate >= 0 && config.sampleRate <= 1) {
-        span.setTag(ANALYTICS_SAMPLE_RATE, config.sampleRate)
+        span.setTag(ANALYTICS, config.sampleRate)
       }
     }
 

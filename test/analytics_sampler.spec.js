@@ -1,6 +1,6 @@
 'use strict'
 
-const ANALYTICS_SAMPLE_RATE = require('../ext/tags').ANALYTICS_SAMPLE_RATE
+const ANALYTICS = require('../ext/tags').ANALYTICS
 
 describe('analyticsSampler', () => {
   let sampler
@@ -22,7 +22,7 @@ describe('analyticsSampler', () => {
         enabled: true
       }, true)
 
-      expect(span.setTag).to.have.been.calledWith(ANALYTICS_SAMPLE_RATE, 1)
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 1)
     })
 
     it('should sample a span with the provided rate', () => {
@@ -31,7 +31,7 @@ describe('analyticsSampler', () => {
         sampleRate: 0.5
       }, true)
 
-      expect(span.setTag).to.have.been.calledWith(ANALYTICS_SAMPLE_RATE, 0.5)
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0.5)
     })
 
     it('should sample only when enabled', () => {
@@ -59,7 +59,7 @@ describe('analyticsSampler', () => {
         }
       })
 
-      expect(span.setTag).to.have.been.calledWith(ANALYTICS_SAMPLE_RATE, 0.5)
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0.5)
     })
 
     it('should ignore invalid values', () => {
