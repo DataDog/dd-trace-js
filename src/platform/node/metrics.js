@@ -40,7 +40,8 @@ module.exports = function () {
         globalTags: {
           'env': this._config.env,
           'service': this._config.service,
-          'runtime-id': this._config.runtimeId
+          'runtime-id': this._config.runtimeId,
+          'language': 'javascript'
         },
         errorHandler: () => {}
       })

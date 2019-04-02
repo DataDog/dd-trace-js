@@ -395,7 +395,8 @@ describe('Platform', () => {
             globalTags: {
               'service': 'service',
               'env': 'test',
-              'runtime-id': '1234'
+              'runtime-id': '1234',
+              'language': 'javascript'
             }
           })
         })
