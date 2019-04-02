@@ -27,6 +27,9 @@ tracer.init({
   },
   plugins: false,
   port: 7777,
+  dogstatsd: {
+    port: 8888
+  },
   sampleRate: 0.1,
   service: 'test',
   tags: {

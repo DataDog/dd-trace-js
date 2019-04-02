@@ -23,10 +23,12 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'http:')
     expect(config).to.have.nested.property('url.hostname', 'localhost')
     expect(config).to.have.nested.property('url.port', '8126')
+    expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.deep.property('tags', {
-      'runtime-id': ''
+      'runtime-id': '',
+      'language': 'javascript'
     })
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
@@ -49,6 +51,7 @@ describe('Config', () => {
   it('should initialize from environment variables', () => {
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
+    platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
@@ -63,6 +66,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'http:')
     expect(config).to.have.nested.property('url.hostname', 'agent')
     expect(config).to.have.nested.property('url.port', '6218')
+    expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
   })
@@ -89,13 +93,20 @@ describe('Config', () => {
 
   it('should initialize from the options', () => {
     const logger = {}
-    const tags = { foo: 'bar' }
-    const config = new Config('test', '', {
+    const tags = {
+      'foo': 'bar',
+      'runtime-id': '5678',
+      'language': 'foo'
+    }
+    const config = new Config('test', '1234', {
       enabled: false,
       debug: true,
       analytics: true,
       hostname: 'agent',
       port: 6218,
+      dogstatsd: {
+        port: 5218
+      },
       service: 'service',
       env: 'test',
       sampleRate: 0.5,
@@ -111,6 +122,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'http:')
     expect(config).to.have.nested.property('url.hostname', 'agent')
     expect(config).to.have.nested.property('url.port', '6218')
+    expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -118,6 +130,11 @@ describe('Config', () => {
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('plugins', false)
+    expect(config).to.have.deep.property('tags', {
+      'foo': 'bar',
+      'runtime-id': '1234',
+      'language': 'javascript'
+    })
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -165,6 +182,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:6218')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
+    platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
@@ -178,6 +196,9 @@ describe('Config', () => {
       protocol: 'https',
       hostname: 'server',
       port: 7777,
+      dogstatsd: {
+        port: 8888
+      },
       service: 'test',
       env: 'development'
     })
@@ -188,6 +209,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '6218')
+    expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })

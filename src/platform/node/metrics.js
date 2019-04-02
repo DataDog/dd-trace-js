@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable camelcase */
+
 const v8 = require('v8')
 const path = require('path')
 const log = require('../../log')
@@ -33,7 +35,7 @@ module.exports = function () {
 
       client = new StatsD({
         host: this._config.hostname,
-        port: 8125, // TODO: allow to configure this
+        port: this._config.dogstatsd.port,
         prefix: 'runtime.node.',
         globalTags: {
           'env': this._config.env,
@@ -167,12 +169,12 @@ function captureHeapSpace (debug) {
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
-    const tags = { 'heap.space': stats[i].space_name }
+    const tags = { 'space': stats[i].space_name }
 
-    client.gauge('heap.space.size', stats[i].space_size, tags)
-    client.gauge('heap.space.used_size', stats[i].space_used_size, tags)
-    client.gauge('heap.space.available_size', stats[i].space_available_size, tags)
-    client.gauge('heap.space.physical_size', stats[i].physical_space_size, tags)
+    client.gauge('heap.size.by.space', stats[i].space_size, tags)
+    client.gauge('heap.used_size.by.space', stats[i].space_used_size, tags)
+    client.gauge('heap.available_size.by.space', stats[i].space_available_size, tags)
+    client.gauge('heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
 }
 
@@ -211,18 +213,14 @@ function captureNativeMetrics (debug) {
   client.gauge('cpu.user', userPercent.toFixed(2))
   client.gauge('cpu.total', totalPercent.toFixed(2))
 
-  client.gauge('event_loop.latency.max', stats.eventLoop.max)
-  client.gauge('event_loop.latency.min', stats.eventLoop.min)
-  client.gauge('event_loop.latency.sum', stats.eventLoop.sum)
-  client.gauge('event_loop.latency.avg', stats.eventLoop.avg)
-  client.gauge('event_loop.latency.count', stats.eventLoop.count)
+  histogram('event_loop.delay', stats.eventLoop)
 
-  Object.keys(stats.gc).forEach(type => {
-    client.gauge(`gc.${type}.min`, stats.gc[type].min)
-    client.gauge(`gc.${type}.max`, stats.gc[type].max)
-    client.gauge(`gc.${type}.sum`, stats.gc[type].sum)
-    client.gauge(`gc.${type}.avg`, stats.gc[type].avg)
-    client.gauge(`gc.${type}.count`, stats.gc[type].count)
+  Object.keys(stats.gc).forEach(gc_type => {
+    if (gc_type === 'all') {
+      histogram('gc.pause', stats.gc[gc_type])
+    } else {
+      histogram('gc.pause.by.type', stats.gc[gc_type], { gc_type })
+    }
   })
 
   client.gauge('spans.finished', stats.spans.total.finished)
@@ -230,28 +228,36 @@ function captureNativeMetrics (debug) {
 
   if (debug) {
     for (let i = 0, l = spaces.length; i < l; i++) {
-      const tags = { 'space.name': spaces[i].space_name }
+      const tags = { 'heap_space': spaces[i].space_name }
 
-      client.gauge('heap.space.size', spaces[i].space_size, tags)
-      client.gauge('heap.space.used_size', spaces[i].space_used_size, tags)
-      client.gauge('heap.space.available_size', spaces[i].space_available_size, tags)
-      client.gauge('heap.space.physical_size', spaces[i].physical_space_size, tags)
+      client.gauge('heap.size.by.space', spaces[i].space_size, tags)
+      client.gauge('heap.used_size.by.space', spaces[i].space_used_size, tags)
+      client.gauge('heap.available_size.by.space', spaces[i].space_available_size, tags)
+      client.gauge('heap.physical_size.by.space', spaces[i].physical_space_size, tags)
     }
 
     if (stats.spans.operations) {
       const operations = stats.spans.operations
 
-      Object.keys(operations.finished).forEach(name => {
-        client.gauge('spans.finished.by.name', operations.finished[name], {
-          [name]: 'span.name'
+      Object.keys(operations.finished).forEach(span_name => {
+        client.gauge('spans.finished.by.name', operations.finished[span_name], {
+          span_name
         })
       })
 
-      Object.keys(operations.unfinished).forEach(name => {
-        client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
-          [name]: 'span.name'
+      Object.keys(operations.unfinished).forEach(span_name => {
+        client.gauge('spans.unfinished.by.name', operations.unfinished[span_name], {
+          span_name
         })
       })
     }
   }
+}
+
+function histogram (name, stats) {
+  client.gauge(`${name}.min`, stats.min)
+  client.gauge(`${name}.max`, stats.max)
+  client.gauge(`${name}.sum`, stats.sum)
+  client.gauge(`${name}.avg`, stats.avg)
+  client.gauge(`${name}.count`, stats.count)
 }

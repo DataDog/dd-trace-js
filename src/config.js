@@ -24,6 +24,7 @@ class Config {
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     const plugins = coalesce(options.plugins, true)
     const analytics = coalesce(options.analytics, platform.env('DD_TRACE_ANALYTICS'))
+    const dogstatsd = options.dogstatsd || {}
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -38,7 +39,13 @@ class Config {
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
     this.runtimeId = coalesce(runtimeId, '')
-    this.tags = Object.assign({ 'runtime-id': this.runtimeId }, options.tags)
+    this.tags = Object.assign({}, options.tags, {
+      'runtime-id': this.runtimeId,
+      'language': 'javascript'
+    })
+    this.dogstatsd = {
+      port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
+    }
     this.experimental = {
       runtimeMetrics: isFlagEnabled(options.experimental, 'runtimeMetrics')
     }
