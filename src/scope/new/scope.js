@@ -37,7 +37,7 @@ class Scope extends Base {
     const asyncId = executionAsyncId()
     const oldSpan = this._get(asyncId)
 
-    this._spans[asyncId] = span
+    this._spans[asyncId] = span || null
 
     try {
       return callback()
