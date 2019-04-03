@@ -203,6 +203,17 @@ export declare interface TracerOptions {
   port?: number | string;
 
   /**
+   * Options specific for the Dogstatsd agent.
+   */
+  dogstatsd?: {
+    /**
+     * The port of the Dogstatsd agent that the metrics will submitted to.
+     * @default 8125
+     */
+    port?: number
+  };
+
+  /**
    * Set an application’s environment e.g. prod, pre-prod, stage.
    */
   env?: string;

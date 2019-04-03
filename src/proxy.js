@@ -26,8 +26,7 @@ class Tracer extends BaseTracer {
     if (this._tracer === noop) {
       try {
         const service = platform.service()
-        const runtimeId = platform.uuid()
-        const config = new Config(service, runtimeId, options)
+        const config = new Config(service, options)
 
         if (config.enabled) {
           platform.validate()

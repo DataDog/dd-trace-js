@@ -22,6 +22,13 @@ const platform = {
   configure (config) {
     this._config = config
   },
+  runtime () {
+    return {
+      id: () => {
+        return this._config._runtimeId || (this._config._runtimeId = this.uuid())
+      }
+    }
+  },
   id,
   uuid,
   now,

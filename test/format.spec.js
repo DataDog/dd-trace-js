@@ -16,6 +16,7 @@ describe('format', () => {
   let span
   let trace
   let spanContext
+  let platform
 
   beforeEach(() => {
     spanContext = {
@@ -31,11 +32,22 @@ describe('format', () => {
 
     span = {
       context: sinon.stub().returns(spanContext),
+      tracer: sinon.stub().returns({
+        _service: 'test'
+      }),
       _startTime: 1500000000000.123456,
       _duration: 100
     }
 
-    format = require('../src/format')
+    platform = {
+      runtime: sinon.stub().returns({
+        id: sinon.stub().returns('1234')
+      })
+    }
+
+    format = proxyquire('../src/format', {
+      './platform': platform
+    })
   })
 
   describe('format', () => {
@@ -113,6 +125,24 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
+    })
+
+    it('should add runtime tags', () => {
+      spanContext._tags['service.name'] = 'test'
+
+      trace = format(span)
+
+      expect(trace.meta['language']).to.equal('javascript')
+      expect(trace.meta['runtime-id']).to.equal('1234')
+    })
+
+    it('should add runtime tags only for the root service', () => {
+      spanContext._tags['service.name'] = 'other'
+
+      trace = format(span)
+
+      expect(trace.meta).to.not.have.property('language')
+      expect(trace.meta).to.not.have.property('runtime-id')
     })
 
     describe('when there is an `error` tag ', () => {

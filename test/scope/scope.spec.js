@@ -39,8 +39,8 @@ describe('Scope', () => {
     scope._debugInit(0, 'TEST')
     scope._debugDestroy(0)
 
-    expect(metrics.increment).to.have.been.calledWith('async.resources.by.type', 'resource.type:TEST')
-    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type', 'resource.type:TEST')
+    expect(metrics.increment).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
+    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
   })
 
   it('should only track destroys once', () => {
