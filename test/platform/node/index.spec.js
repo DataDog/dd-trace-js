@@ -344,6 +344,22 @@ describe('Platform', () => {
       })
     })
 
+    describe('runtime', () => {
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
+      })
+
+      describe('id', () => {
+        it('should return a UUID', () => {
+          expect(platform.runtime().id()).to.match(/^[a-f0-9]{32}$/)
+        })
+
+        it('should always return the same ID', () => {
+          expect(platform.runtime().id()).to.equal(platform.runtime().id())
+        })
+      })
+    })
+
     describe('metrics', () => {
       let metrics
       let clock
@@ -373,12 +389,14 @@ describe('Platform', () => {
             hostname: 'localhost',
             dogstatsd: {
               port: 8125
-            },
-            runtimeId: '1234'
+            }
           },
           name: sinon.stub().returns('nodejs'),
           version: sinon.stub().returns('10.0.0'),
-          engine: sinon.stub().returns('v8')
+          engine: sinon.stub().returns('v8'),
+          runtime: sinon.stub().returns({
+            id: sinon.stub().returns('1234')
+          })
         }
       })
 
@@ -395,8 +413,7 @@ describe('Platform', () => {
             globalTags: {
               'service': 'service',
               'env': 'test',
-              'runtime-id': '1234',
-              'language': 'javascript'
+              'runtime-id': '1234'
             }
           })
         })

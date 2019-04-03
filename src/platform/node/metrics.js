@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable camelcase */
-
 const v8 = require('v8')
 const path = require('path')
 const log = require('../../log')
@@ -23,6 +21,14 @@ module.exports = function () {
   return metrics || (metrics = { // cache the metrics instance
     start: (options) => {
       const StatsD = require('hot-shots')
+      const globalTags = {
+        'service': this._config.service,
+        'runtime-id': this.runtime().id()
+      }
+
+      if (this._config.env) {
+        globalTags.env = this._config.env
+      }
 
       options = options || {}
 
@@ -37,12 +43,7 @@ module.exports = function () {
         host: this._config.hostname,
         port: this._config.dogstatsd.port,
         prefix: 'runtime.node.',
-        globalTags: {
-          'env': this._config.env,
-          'service': this._config.service,
-          'runtime-id': this._config.runtimeId,
-          'language': 'javascript'
-        },
+        globalTags,
         errorHandler: () => {}
       })
 
@@ -216,11 +217,11 @@ function captureNativeMetrics (debug) {
 
   histogram('event_loop.delay', stats.eventLoop)
 
-  Object.keys(stats.gc).forEach(gc_type => {
-    if (gc_type === 'all') {
-      histogram('gc.pause', stats.gc[gc_type])
+  Object.keys(stats.gc).forEach(type => {
+    if (type === 'all') {
+      histogram('gc.pause', stats.gc[type])
     } else {
-      histogram('gc.pause.by.type', stats.gc[gc_type], { gc_type })
+      histogram('gc.pause.by.type', stats.gc[type], { gc_type: type })
     }
   })
 
@@ -240,15 +241,15 @@ function captureNativeMetrics (debug) {
     if (stats.spans.operations) {
       const operations = stats.spans.operations
 
-      Object.keys(operations.finished).forEach(span_name => {
-        client.gauge('spans.finished.by.name', operations.finished[span_name], {
-          span_name
+      Object.keys(operations.finished).forEach(name => {
+        client.gauge('spans.finished.by.name', operations.finished[name], {
+          span_name: name
         })
       })
 
-      Object.keys(operations.unfinished).forEach(span_name => {
-        client.gauge('spans.unfinished.by.name', operations.unfinished[span_name], {
-          span_name
+      Object.keys(operations.unfinished).forEach(name => {
+        client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
+          span_name: name
         })
       })
     }

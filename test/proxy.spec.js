@@ -51,7 +51,6 @@ describe('TracerProxy', () => {
 
     platform = {
       load: sinon.spy(),
-      uuid: sinon.stub().returns('1234'),
       metrics: sinon.stub().returns({
         start: sinon.spy()
       })
@@ -88,7 +87,7 @@ describe('TracerProxy', () => {
 
         proxy.init(options)
 
-        expect(Config).to.have.been.calledWith('dd-trace', '1234', options)
+        expect(Config).to.have.been.calledWith('dd-trace', options)
         expect(DatadogTracer).to.have.been.calledWith(config)
       })
 

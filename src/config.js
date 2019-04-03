@@ -5,7 +5,7 @@ const platform = require('./platform')
 const coalesce = require('koalas')
 
 class Config {
-  constructor (service, runtimeId, options) {
+  constructor (service, options) {
     options = options || {}
 
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
@@ -38,11 +38,7 @@ class Config {
     this.plugins = !!plugins
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
-    this.runtimeId = coalesce(runtimeId, '')
-    this.tags = Object.assign({}, options.tags, {
-      'runtime-id': this.runtimeId,
-      'language': 'javascript'
-    })
+    this.tags = Object.assign({}, options.tags)
     this.dogstatsd = {
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
