@@ -165,8 +165,8 @@ function captureHeapStats () {
   stats.peak_malloced_memory && client.gauge('heap.peak_malloced_memory', stats.peak_malloced_memory)
 }
 
-function captureHeapSpace (debug) {
-  if (!debug || !v8.getHeapSpaceStatistics) return
+function captureHeapSpace () {
+  if (!v8.getHeapSpaceStatistics) return
 
   const stats = v8.getHeapSpaceStatistics()
 
@@ -199,7 +199,7 @@ function captureCommonMetrics () {
   captureCounters()
 }
 
-function captureNativeMetrics (debug) {
+function captureNativeMetrics () {
   const stats = nativeMetrics.stats()
   const spaces = stats.heap.spaces
   const elapsedTime = process.hrtime(time)
@@ -228,31 +228,29 @@ function captureNativeMetrics (debug) {
   client.gauge('spans.finished', stats.spans.total.finished)
   client.gauge('spans.unfinished', stats.spans.total.unfinished)
 
-  if (debug) {
-    for (let i = 0, l = spaces.length; i < l; i++) {
-      const tags = { 'heap_space': spaces[i].space_name }
+  for (let i = 0, l = spaces.length; i < l; i++) {
+    const tags = { 'heap_space': spaces[i].space_name }
 
-      client.gauge('heap.size.by.space', spaces[i].space_size, tags)
-      client.gauge('heap.used_size.by.space', spaces[i].space_used_size, tags)
-      client.gauge('heap.available_size.by.space', spaces[i].space_available_size, tags)
-      client.gauge('heap.physical_size.by.space', spaces[i].physical_space_size, tags)
-    }
+    client.gauge('heap.size.by.space', spaces[i].space_size, tags)
+    client.gauge('heap.used_size.by.space', spaces[i].space_used_size, tags)
+    client.gauge('heap.available_size.by.space', spaces[i].space_available_size, tags)
+    client.gauge('heap.physical_size.by.space', spaces[i].physical_space_size, tags)
+  }
 
-    if (stats.spans.operations) {
-      const operations = stats.spans.operations
+  if (stats.spans.operations) {
+    const operations = stats.spans.operations
 
-      Object.keys(operations.finished).forEach(name => {
-        client.gauge('spans.finished.by.name', operations.finished[name], {
-          span_name: name
-        })
+    Object.keys(operations.finished).forEach(name => {
+      client.gauge('spans.finished.by.name', operations.finished[name], {
+        span_name: name
       })
+    })
 
-      Object.keys(operations.unfinished).forEach(name => {
-        client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
-          span_name: name
-        })
+    Object.keys(operations.unfinished).forEach(name => {
+      client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
+        span_name: name
       })
-    }
+    })
   }
 }
 
