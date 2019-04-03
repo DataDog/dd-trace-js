@@ -32,7 +32,7 @@ namespace datadog {
   void GarbageCollection::inject(Object carrier) {
     Object value;
 
-    for (auto it : pause_) {
+    for (auto &it : pause_) {
       value.set(types_[it.first], it.second);
       it.second.reset();
     }

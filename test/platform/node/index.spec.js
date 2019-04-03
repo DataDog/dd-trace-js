@@ -456,12 +456,6 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('gc.pause.sum')
           expect(client.gauge).to.have.been.calledWith('gc.pause.avg')
           expect(client.gauge).to.have.been.calledWith('gc.pause.count')
-        })
-
-        it('should collect additional metrics in debug mode', () => {
-          metrics.apply(platform).start({ debug: true })
-
-          clock.tick(10000)
 
           expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
@@ -557,12 +551,6 @@ describe('Platform', () => {
             expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
             expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
           }
-        })
-
-        it('should collect additional metrics in debug mode', () => {
-          metrics.apply(platform).start({ debug: true })
-
-          clock.tick(10000)
 
           if (semver.gte(process.version, '6.0.0')) {
             expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
