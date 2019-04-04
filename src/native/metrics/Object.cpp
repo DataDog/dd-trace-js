@@ -65,6 +65,8 @@ namespace datadog {
     obj.set("sum", value.sum());
     obj.set("avg", value.avg());
     obj.set("count", value.count());
+    obj.set("median", value.percentile(0.50));
+    obj.set("p95", value.percentile(0.95));
 
     Nan::Set(
       target_,

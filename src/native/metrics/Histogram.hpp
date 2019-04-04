@@ -9,14 +9,19 @@
 
 #include <stdint.h>
 
+#include "TDigest.h"
+
 namespace datadog {
   class Histogram {
     public:
+      Histogram();
+
       uint64_t min();
       uint64_t max();
       uint64_t sum();
       uint64_t avg();
       uint64_t count();
+      uint64_t percentile(double percentile);
 
       void reset();
       void add(uint64_t value);
@@ -25,5 +30,6 @@ namespace datadog {
       uint64_t max_;
       uint64_t sum_;
       uint64_t count_;
+      std::shared_ptr<tdigest::TDigest> digest_;
   };
 }
