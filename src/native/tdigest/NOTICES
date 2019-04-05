@@ -5,4 +5,4 @@ A number of small but very helpful changes have been contributed by Adrien Grand
 The C++ version herein is a derivative of the Java version.  It was written by Derrick R. Burns (https:://github.com/derrickburns).
 The main modifications are 1) higher performance multi- t-digest merging and 2) faster quantile() and cdf() computation.
 
-Debug logs have been removed by Datadog Inc.
+Dependencies have been removed and Windows compatibility has been added by Datadog Inc.
