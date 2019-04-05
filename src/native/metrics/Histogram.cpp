@@ -2,7 +2,7 @@
 
 namespace datadog {
   Histogram::Histogram() {
-    this->reset();
+    reset();
   }
 
   uint64_t Histogram::min() { return min_; }

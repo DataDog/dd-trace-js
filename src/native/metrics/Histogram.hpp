@@ -7,6 +7,8 @@
 #undef max
 #undef NOMINMAX
 
+#include <memory>
+
 #include <stdint.h>
 #include <tdigest/TDigest.h>
 
