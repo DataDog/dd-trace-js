@@ -10,7 +10,9 @@ namespace datadog {
   uint64_t Histogram::sum() { return sum_; }
   uint64_t Histogram::avg() { return count_ == 0 ? 0 : sum_ / count_; }
   uint64_t Histogram::count() { return count_; }
-  uint64_t Histogram::percentile(double value) { return digest_->quantile(value); }
+  uint64_t Histogram::percentile(double value) {
+    return std::round(digest_->quantile(value));
+  }
 
   void Histogram::reset() {
     min_ = 0;
