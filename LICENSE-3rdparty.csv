@@ -51,3 +51,4 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
 dev,v8-coverage,ISC,Copyright Eywek
+file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns

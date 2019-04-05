@@ -8,8 +8,7 @@
 #undef NOMINMAX
 
 #include <stdint.h>
-
-#include "TDigest.h"
+#include <tdigest/TDigest.h>
 
 namespace datadog {
   class Histogram {

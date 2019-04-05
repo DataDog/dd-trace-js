@@ -14,7 +14,7 @@
       "src/native/metrics/main.cpp"
     ],
     "include_dirs": [
-      "src",
+      "src/native",
       "<!(node -e \"require('nan')\")"
     ],
     "xcode_settings": {
