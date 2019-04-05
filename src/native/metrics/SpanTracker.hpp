@@ -22,12 +22,11 @@ namespace datadog {
       void inject(Object carrier);
       SpanHandle* track(const v8::Local<v8::Object> &span);
       void finish(SpanHandle *handle);
-      void enable(bool debug);
+      void enable();
       void disable();
     private:
       static void callback(const v8::WeakCallbackInfo<SpanHandle> &data);
 
-      bool debug_;
       bool enabled_;
       std::unordered_map<std::string, uint64_t> unfinished_;
       std::unordered_map<std::string, uint64_t> finished_;
