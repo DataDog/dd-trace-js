@@ -6,17 +6,18 @@ const log = {
   // Add trace identifiers from the current scope to a log record.
   correlate (tracer, record) {
     const span = tracer.scope().active()
+    const clone = {}
 
-    record = record || {}
+    Object.assign(clone, record)
 
     if (span) {
-      record.dd = {
+      clone.dd = {
         trace_id: span.context().toTraceId(),
         span_id: span.context().toSpanId()
       }
     }
 
-    return record
+    return clone
   }
 }
 
