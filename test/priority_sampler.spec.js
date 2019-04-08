@@ -4,6 +4,8 @@ const ext = require('../ext')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
+const MANUAL_KEEP = ext.tags.MANUAL_KEEP
+const MANUAL_DROP = ext.tags.MANUAL_DROP
 const USER_REJECT = ext.priority.USER_REJECT
 const AUTO_REJECT = ext.priority.AUTO_REJECT
 const AUTO_KEEP = ext.priority.AUTO_KEEP
@@ -84,6 +86,38 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
+    })
+
+    it('should support manual keep', () => {
+      context._tags[MANUAL_KEEP] = undefined
+
+      prioritySampler.sample(context)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+    })
+
+    it('should support manual drop', () => {
+      context._tags[MANUAL_DROP] = undefined
+
+      prioritySampler.sample(context)
+
+      expect(context._sampling.priority).to.equal(USER_REJECT)
+    })
+
+    it('should support opentracing keep', () => {
+      context._tags['sampling.priority'] = 1
+
+      prioritySampler.sample(context)
+
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+    })
+
+    it('should support opentracing drop', () => {
+      context._tags['sampling.priority'] = 0
+
+      prioritySampler.sample(context)
+
+      expect(context._sampling.priority).to.equal(USER_REJECT)
     })
   })
 

@@ -5,6 +5,8 @@ const ext = require('../ext')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
+const MANUAL_KEEP = ext.tags.MANUAL_KEEP
+const MANUAL_DROP = ext.tags.MANUAL_DROP
 const USER_REJECT = ext.priority.USER_REJECT
 const AUTO_REJECT = ext.priority.AUTO_REJECT
 const AUTO_KEEP = ext.priority.AUTO_KEEP
@@ -37,7 +39,7 @@ class PrioritySampler {
 
     if (context._sampling.priority !== undefined) return
 
-    const tag = parseInt(context._tags[SAMPLING_PRIORITY], 10)
+    const tag = this._getPriority(context._tags)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -68,6 +70,22 @@ class PrioritySampler {
 
   _getContext (span) {
     return typeof span.context === 'function' ? span.context() : span
+  }
+
+  _getPriority (tags) {
+    if (tags.hasOwnProperty(MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
+      return USER_KEEP
+    } else if (tags.hasOwnProperty(MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+      return USER_REJECT
+    } else {
+      const priority = parseInt(tags[SAMPLING_PRIORITY], 10)
+
+      if (priority === 1 || priority === 2) {
+        return USER_KEEP
+      } else if (priority === 0 || priority === -1) {
+        return USER_REJECT
+      }
+    }
   }
 }
 
