@@ -54,7 +54,10 @@ const httpServerOptions = {
 
 const httpClientOptions = {
   ...httpOptions,
-  splitByDomain: true
+  splitByDomain: true,
+  hooks: {
+    request: (span, req, res) => {}
+  }
 };
 
 const graphqlOptions = {
