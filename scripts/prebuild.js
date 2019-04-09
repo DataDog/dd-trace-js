@@ -22,6 +22,11 @@ const cb = err => {
     path.join(__dirname, '..', 'prebuilds', 'NOTICES')
   )
 
+  fs.copyFileSync(
+    path.join(__dirname, '..', 'src', 'native', 'tdigest', 'LICENSE-2.0.txt'),
+    path.join(__dirname, '..', 'prebuilds', 'LICENSE-2.0.txt')
+  )
+
   tar.create({
     gzip: true,
     sync: true,
