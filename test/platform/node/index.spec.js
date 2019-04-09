@@ -447,15 +447,19 @@ describe('Platform', () => {
 
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.max')
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.min')
-          expect(client.gauge).to.have.been.calledWith('event_loop.delay.sum')
+          expect(client.increment).to.have.been.calledWith('event_loop.delay.sum')
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.avg')
-          expect(client.gauge).to.have.been.calledWith('event_loop.delay.count')
+          expect(client.gauge).to.have.been.calledWith('event_loop.delay.median')
+          expect(client.gauge).to.have.been.calledWith('event_loop.delay.95percentile')
+          expect(client.increment).to.have.been.calledWith('event_loop.delay.count')
 
           expect(client.gauge).to.have.been.calledWith('gc.pause.max')
           expect(client.gauge).to.have.been.calledWith('gc.pause.min')
-          expect(client.gauge).to.have.been.calledWith('gc.pause.sum')
+          expect(client.increment).to.have.been.calledWith('gc.pause.sum')
           expect(client.gauge).to.have.been.calledWith('gc.pause.avg')
-          expect(client.gauge).to.have.been.calledWith('gc.pause.count')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.median')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.95percentile')
+          expect(client.increment).to.have.been.calledWith('gc.pause.count')
 
           expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')

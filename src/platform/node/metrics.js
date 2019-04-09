@@ -257,9 +257,9 @@ function captureNativeMetrics () {
 function histogram (name, stats) {
   client.gauge(`${name}.min`, stats.min)
   client.gauge(`${name}.max`, stats.max)
-  client.gauge(`${name}.sum`, stats.sum)
+  client.increment(`${name}.sum`, stats.sum)
   client.gauge(`${name}.avg`, stats.avg)
-  client.gauge(`${name}.count`, stats.count)
+  client.increment(`${name}.count`, stats.count)
   client.gauge(`${name}.median`, stats.median)
   client.gauge(`${name}.95percentile`, stats.p95)
 }
