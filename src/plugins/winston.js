@@ -5,7 +5,7 @@ const tx = require('./util/log')
 function createWrapWrite (tracer, config) {
   return function wrapWrite (write) {
     return function writeWithTrace (chunk, encoding, callback) {
-      tx.correlate(tracer, chunk)
+      arguments[0] = tx.correlate(tracer, chunk)
 
       return write.apply(this, arguments)
     }
@@ -22,7 +22,7 @@ function createWrapLog (tracer, config) {
       for (let i = 0, l = arguments.length; i < l; i++) {
         if (typeof arguments[i] !== 'object') continue
 
-        tx.correlate(tracer, arguments[i])
+        arguments[i] = tx.correlate(tracer, arguments[i])
 
         return log.apply(this, arguments)
       }

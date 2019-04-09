@@ -5,9 +5,7 @@ const tx = require('./util/log')
 function createWrapWrite (tracer, config) {
   return function wrapWrite (write) {
     return function writeWithTrace (obj, msg, num) {
-      arguments[0] = obj = obj || {}
-
-      tx.correlate(tracer, obj)
+      arguments[0] = tx.correlate(tracer, obj)
 
       return write.apply(this, arguments)
     }
@@ -28,7 +26,7 @@ function createWrapGenLog (tracer, config) {
           args.unshift({})
         }
 
-        tx.correlate(tracer, args[0])
+        args[0] = tx.correlate(tracer, args[0])
 
         return log.apply(this, args)
       }

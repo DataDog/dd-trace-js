@@ -13,11 +13,10 @@ describe('plugins/util/log', () => {
 
   describe('correlate', () => {
     it('should attach the current scope trace identifiers to the log record', () => {
-      const record = {}
       const span = tracer.startSpan('test')
 
       tracer.scope().activate(span, () => {
-        log.correlate(tracer, record)
+        const record = log.correlate(tracer, {})
 
         expect(record).to.have.deep.property('dd', {
           trace_id: span.context().toTraceId(),
@@ -40,7 +39,7 @@ describe('plugins/util/log', () => {
     })
 
     it('should do nothing if there is no active scope', () => {
-      const record = log.correlate(tracer)
+      const record = log.correlate(tracer, {})
 
       expect(record).to.not.have.property('dd')
     })
@@ -48,6 +47,18 @@ describe('plugins/util/log', () => {
     it('should do nothing if the active span is null', () => {
       tracer.scope().activate(null, () => {
         const record = log.correlate(tracer)
+
+        expect(record).to.be.undefined
+      })
+    })
+
+    it('should not alter the original object', () => {
+      const span = tracer.startSpan('test')
+
+      tracer.scope().activate(span, () => {
+        const record = {}
+
+        log.correlate(tracer, record)
 
         expect(record).to.not.have.property('dd')
       })
