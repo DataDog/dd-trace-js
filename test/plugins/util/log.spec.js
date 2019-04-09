@@ -39,7 +39,7 @@ describe('plugins/util/log', () => {
     })
 
     it('should do nothing if there is no active scope', () => {
-      const record = log.correlate(tracer)
+      const record = log.correlate(tracer, {})
 
       expect(record).to.not.have.property('dd')
     })
@@ -48,7 +48,7 @@ describe('plugins/util/log', () => {
       tracer.scope().activate(null, () => {
         const record = log.correlate(tracer)
 
-        expect(record).to.not.have.property('dd')
+        expect(record).to.be.undefined
       })
     })
 
