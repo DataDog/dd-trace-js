@@ -24,9 +24,7 @@ class DatadogTracer extends Tracer {
     }
 
     this._scopeManager = new ScopeManager()
-    this._scope = new Scope({
-      debug: config.debug
-    })
+    this._scope = new Scope()
   }
 
   trace (name, options, fn) {

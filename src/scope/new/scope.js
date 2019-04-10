@@ -16,6 +16,7 @@ class Scope extends Base {
     singleton = this
 
     this._spans = Object.create(null)
+    this._types = Object.create(null)
     this._hook = asyncHooks.createHook({
       init: this._init.bind(this),
       destroy: this._destroy.bind(this),
@@ -23,21 +24,17 @@ class Scope extends Base {
     })
 
     this._hook.enable()
-
-    if (options && options.debug) {
-      this._debug()
-    }
   }
 
   _active () {
-    return this._get(executionAsyncId())
+    return this._spans[executionAsyncId()] || null
   }
 
   _activate (span, callback) {
     const asyncId = executionAsyncId()
-    const oldSpan = this._get(asyncId)
+    const oldSpan = this._spans[asyncId]
 
-    this._spans[asyncId] = span || null
+    this._spans[asyncId] = span
 
     try {
       return callback()
@@ -52,51 +49,31 @@ class Scope extends Base {
 
       throw e
     } finally {
-      this._spans[asyncId] = oldSpan
+      if (oldSpan) {
+        this._spans[asyncId] = oldSpan
+      } else {
+        delete this._spans[asyncId]
+      }
     }
   }
 
-  _init (asyncId) {
+  _init (asyncId, type) {
     this._spans[asyncId] = this._active()
-
-    platform.metrics().increment('async.resources')
-  }
-
-  _destroy (asyncId) {
-    if (this._spans[asyncId] !== undefined) {
-      platform.metrics().decrement('async.resources')
-    }
-
-    delete this._spans[asyncId]
-  }
-
-  _get (asyncId) {
-    return this._spans[asyncId] || null
-  }
-
-  _debug () {
-    asyncHooks.createHook({
-      init: this._debugInit.bind(this),
-      destroy: this._debugDestroy.bind(this),
-      promiseResolve: this._debugDestroy.bind(this)
-    }).enable()
-
-    this._types = Object.create(null)
-  }
-
-  _debugInit (asyncId, type) {
     this._types[asyncId] = type
 
+    platform.metrics().increment('async.resources')
     platform.metrics().increment('async.resources.by.type', `resource_type:${type}`)
   }
 
-  _debugDestroy (asyncId) {
+  _destroy (asyncId) {
     const type = this._types[asyncId]
 
     if (type) {
+      platform.metrics().decrement('async.resources')
       platform.metrics().decrement('async.resources.by.type', `resource_type:${type}`)
     }
 
+    delete this._spans[asyncId]
     delete this._types[asyncId]
   }
 }
