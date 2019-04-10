@@ -24,14 +24,8 @@ namespace datadog {
     }
 
     NAN_METHOD(start) {
-      bool debug = false;
-
-      if (info.Length() > 0 && info[0]->IsBoolean()) {
-        debug = v8::Local<v8::Boolean>::Cast(info[0])->Value();
-      }
-
       eventLoop.enable();
-      tracker.enable(debug);
+      tracker.enable();
 
       Nan::AddGCPrologueCallback(before_gc);
       Nan::AddGCEpilogueCallback(after_gc);

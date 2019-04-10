@@ -46,8 +46,10 @@ dev,prebuildify,MIT,Copyright 2017 Mathias Buus
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,require-dir,MIT,2012-2015 Aseem Kishore
 dev,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
+dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
 dev,v8-coverage,ISC,Copyright Eywek
+file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns

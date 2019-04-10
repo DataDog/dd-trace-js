@@ -98,15 +98,9 @@ function persist (res) {
 function extract () {
   console.log('Extracting prebuilt binaries.')
 
-  const folder = path.join(__dirname, '..', 'prebuilds')
-
-  if (!fs.existsSync(folder)) {
-    fs.mkdirSync(folder)
-  }
-
   const promise = tar.extract({
     file: `addons-${name}.tgz`,
-    cwd: path.join(__dirname, '..', 'prebuilds')
+    cwd: path.join(__dirname, '..')
   })
 
   promise.catch(() => {

@@ -92,6 +92,7 @@
     "proxyquire": "^1.8.0",
     "require-dir": "^1.0.0",
     "retry": "^0.10.1",
+    "rimraf": "^2.6.3",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0",
     "tape": "^4.9.1",

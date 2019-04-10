@@ -9,36 +9,33 @@ namespace datadog {
     total.set("finished", finished_total_);
     total.set("unfinished", unfinished_total_);
 
-    if (debug_) {
-      Object operations;
-      Object finished;
-      Object unfinished;
+    Object operations;
+    Object finished;
+    Object unfinished;
 
-      for (auto it : finished_) {
-        finished.set(it.first, it.second);
-      }
-
-      for (auto it : unfinished_) {
-        unfinished.set(it.first, it.second);
-      }
-
-      operations.set("finished", finished);
-      operations.set("unfinished", unfinished);
-      spans.set("operations", operations);
+    for (auto it : finished_) {
+      finished.set(it.first, it.second);
     }
 
+    for (auto it : unfinished_) {
+      unfinished.set(it.first, it.second);
+    }
+
+    operations.set("finished", finished);
+    operations.set("unfinished", unfinished);
+
+    spans.set("operations", operations);
     spans.set("total", total);
+
     carrier.set("spans", spans);
   };
 
-  void SpanTracker::enable(bool debug) {
+  void SpanTracker::enable() {
     enabled_ = true;
-    debug_ = debug;
   }
 
   void SpanTracker::disable() {
     enabled_ = false;
-    debug_ = false;
     finished_total_ = 0;
     unfinished_total_ = 0;
     finished_.clear();
@@ -59,19 +56,16 @@ namespace datadog {
     handle->tracker = this;
     handle->context = new v8::Persistent<v8::Object>(isolate, context);
 
-    if (debug_) {
-      v8::Local<v8::String> name_key = v8::String::NewFromUtf8(isolate, "_name");
-      std::string name = to_string(context->Get(name_key));
+    v8::Local<v8::String> name_key = v8::String::NewFromUtf8(isolate, "_name");
+    std::string name = to_string(context->Get(name_key));
 
-      if (unfinished_.find(name) == unfinished_.end()) {
-        unfinished_.insert(std::make_pair(name, 0));
-      }
-
-      ++unfinished_[name];
-
-      handle->name = name;
+    if (unfinished_.find(name) == unfinished_.end()) {
+      unfinished_.insert(std::make_pair(name, 0));
     }
 
+    ++unfinished_[name];
+
+    handle->name = name;
     handle->context->SetWeak(handle, callback, v8::WeakCallbackType::kParameter);
 
     return handle;
@@ -85,16 +79,14 @@ namespace datadog {
     --unfinished_total_;
     ++finished_total_;
 
-    if (debug_) {
-      std::string name = handle->name;
+    std::string name = handle->name;
 
-      if (finished_.find(name) == finished_.end()) {
-        finished_.insert(std::make_pair(name, 0));
-      }
-
-      --unfinished_[name];
-      ++finished_[name];
+    if (finished_.find(name) == finished_.end()) {
+      finished_.insert(std::make_pair(name, 0));
     }
+
+    --unfinished_[name];
+    ++finished_[name];
   }
 
   void SpanTracker::callback(const v8::WeakCallbackInfo<SpanHandle> &data) {
@@ -108,12 +100,10 @@ namespace datadog {
 
     handle->context->Reset();
 
-    if (handle->tracker->debug_) {
-      if (handle->finished) {
-        --handle->tracker->finished_[handle->name];
-      } else {
-        --handle->tracker->unfinished_[handle->name];
-      }
+    if (handle->finished) {
+      --handle->tracker->finished_[handle->name];
+    } else {
+      --handle->tracker->unfinished_[handle->name];
     }
 
     delete handle->context;
