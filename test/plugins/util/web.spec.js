@@ -224,6 +224,20 @@ describe('plugins/util/web', () => {
           })
         })
       })
+
+      it('should remove the query string from the URL', () => {
+        req.method = 'GET'
+        req.url = '/user/123?foo=bar'
+        res.statusCode = '200'
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          res.end()
+
+          expect(span.context()._tags).to.include({
+            [HTTP_URL]: 'http://localhost/user/123'
+          })
+        })
+      })
     })
 
     describe('on request end', () => {
