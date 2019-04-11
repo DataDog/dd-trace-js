@@ -17,9 +17,8 @@ tracer.init({
   logInjection: true,
   analytics: true,
   env: 'test',
-  experimental: {
-    runtimeMetrics: true
-  },
+  runtimeMetrics: true,
+  experimental: {},
   hostname: 'agent',
   logger: {
     error (message: string) {},

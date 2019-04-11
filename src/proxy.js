@@ -32,8 +32,8 @@ class Tracer extends BaseTracer {
           platform.validate()
           platform.configure(config)
 
-          if (config.experimental.runtimeMetrics) {
-            platform.metrics().start({ debug: config.debug })
+          if (config.runtimeMetrics) {
+            platform.metrics().start()
           }
 
           this._tracer = new DatadogTracer(config)

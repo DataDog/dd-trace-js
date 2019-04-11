@@ -301,7 +301,8 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 | tags           |                              | {}        | Set global tags that should be applied to all spans. |
 | sampleRate     |                              | 1         | Percentage of spans to sample as a float between 0 and 1. |
 | flushInterval  |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Available experimental features: `runtimeMetrics`. |
+| runtimeMetrics | DD_RUNTIME_METRICS_ENABLED   | false     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
+| experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
 | plugins        |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 
 <h3 id="custom-logging">Custom Logging</h3>
