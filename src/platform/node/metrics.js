@@ -34,7 +34,7 @@ module.exports = function () {
 
       try {
         nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
-        nativeMetrics.start(options.debug)
+        nativeMetrics.start()
       } catch (e) {
         log.error('Unable to load native metrics module. Some metrics will not be available.')
       }
@@ -51,16 +51,16 @@ module.exports = function () {
 
       if (nativeMetrics) {
         interval = setInterval(() => {
-          captureCommonMetrics(options.debug)
-          captureNativeMetrics(options.debug)
+          captureCommonMetrics()
+          captureNativeMetrics()
         }, INTERVAL)
       } else {
         cpuUsage = process.cpuUsage()
 
         interval = setInterval(() => {
-          captureCommonMetrics(options.debug)
-          captureCpuUsage(options.debug)
-          captureHeapSpace(options.debug)
+          captureCommonMetrics()
+          captureCpuUsage()
+          captureHeapSpace()
         }, INTERVAL)
       }
 

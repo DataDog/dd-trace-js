@@ -25,6 +25,7 @@ class Config {
     const plugins = coalesce(options.plugins, true)
     const analytics = coalesce(options.analytics, platform.env('DD_TRACE_ANALYTICS'))
     const dogstatsd = options.dogstatsd || {}
+    const runtimeMetrics = coalesce(options.runtimeMetrics, platform.env('DD_RUNTIME_METRICS_ENABLED'), false)
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -42,14 +43,9 @@ class Config {
     this.dogstatsd = {
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
-    this.experimental = {
-      runtimeMetrics: isFlagEnabled(options.experimental, 'runtimeMetrics')
-    }
+    this.runtimeMetrics = String(runtimeMetrics) === 'true'
+    this.experimental = {}
   }
-}
-
-function isFlagEnabled (obj, prop) {
-  return obj === true || (typeof obj === 'object' && obj !== null && obj[prop])
 }
 
 module.exports = Config

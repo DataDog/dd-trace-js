@@ -225,16 +225,16 @@ export declare interface TracerOptions {
   sampleRate?: number;
 
   /**
+   * Whether to enable runtime metrics.
+   * @default false
+   */
+  runtimeMetrics?: boolean
+
+  /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */
-  experimental?: {
-    /**
-     * Whether to enable runtime metrics.
-     * @default false
-     */
-    runtimeMetrics?: boolean
-  } | boolean;
+  experimental?: {} | boolean;
 
   /**
    * Whether to load all built-in plugins.
