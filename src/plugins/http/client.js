@@ -74,7 +74,7 @@ function patch (http, methodName, tracer, config) {
               span.setTag('error', 1)
             }
 
-            res.on('end', () => finish(req, span, config))
+            res.on('end', () => finish(req, res, span, config))
 
             break
           }
@@ -82,7 +82,7 @@ function patch (http, methodName, tracer, config) {
             addError(span, arg)
           case 'abort': // eslint-disable-line no-fallthrough
           case 'close': // eslint-disable-line no-fallthrough
-            finish(req, span, config)
+            finish(req, null, span, config)
         }
 
         return emit.apply(this, arguments)
@@ -94,8 +94,10 @@ function patch (http, methodName, tracer, config) {
     }
   }
 
-  function finish (req, span, config) {
+  function finish (req, res, span, config) {
     addRequestHeaders(req, span, config)
+
+    config.hooks.request(span, req, res)
 
     span.finish()
   }
@@ -231,11 +233,13 @@ function normalizeConfig (tracer, config) {
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
   const headers = getHeaders(config)
+  const hooks = getHooks(config)
 
   return Object.assign({}, config, {
     validateStatus,
     filter,
-    headers
+    headers,
+    hooks
   })
 }
 
@@ -245,6 +249,13 @@ function getHeaders (config) {
   return config.headers
     .filter(key => typeof key === 'string')
     .map(key => key.toLowerCase())
+}
+
+function getHooks (config) {
+  const noop = () => {}
+  const request = (config.hooks && config.hooks.request) || noop
+
+  return { request }
 }
 
 module.exports = [

@@ -1,4 +1,4 @@
-import { IncomingMessage, ServerResponse } from "http";
+import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
@@ -451,6 +451,16 @@ declare namespace plugins {
      * @default code => code < 400
      */
     validateStatus?: (code: number) => boolean;
+
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the request span finishes.
+       */
+      request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
+    };
   }
 
   /**
@@ -590,6 +600,20 @@ declare namespace plugins {
      * Configuration for HTTP servers.
      */
     server?: HttpServer
+
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the request span finishes.
+       */
+      request?: (
+        span?: opentracing.Span,
+        req?: IncomingMessage | ClientRequest,
+        res?: ServerResponse | IncomingMessage
+      ) => any;
+    };
   }
 
   /**
