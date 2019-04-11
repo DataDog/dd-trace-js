@@ -7,7 +7,6 @@ const os = require('os')
 const tar = require('tar')
 const semver = require('semver')
 const fs = require('fs')
-const rm = require('rimraf')
 
 const name = `${os.platform()}-${process.env.ARCH || os.arch()}`
 const targets = abi.allTargets
@@ -34,8 +33,6 @@ const cb = err => {
     file: `addons-${name}.tgz`,
     cwd: path.join(__dirname, '..')
   }, ['prebuilds'])
-
-  rm.sync(path.join(__dirname, '..', 'prebuilds'))
 }
 
 prebuildify({
