@@ -364,20 +364,21 @@ describe('Platform', () => {
       let metrics
       let clock
       let client
-      let StatsD
+      let Client
 
       beforeEach(() => {
-        StatsD = sinon.spy(function () {
+        Client = sinon.spy(function () {
           return client
         })
 
         client = {
           gauge: sinon.spy(),
-          increment: sinon.spy()
+          increment: sinon.spy(),
+          flush: sinon.spy()
         }
 
         metrics = proxyquire('../src/platform/node/metrics', {
-          'hot-shots': StatsD
+          './dogstatsd': Client
         })
 
         clock = sinon.useFakeTimers()
@@ -405,16 +406,16 @@ describe('Platform', () => {
       })
 
       describe('start', () => {
-        it('it should initialize the StatsD client with the correct options', () => {
+        it('it should initialize the Dogstatsd client with the correct options', () => {
           metrics.apply(platform).start()
 
-          expect(StatsD).to.have.been.calledWithMatch({
+          expect(Client).to.have.been.calledWithMatch({
             host: 'localhost',
-            globalTags: {
-              'service': 'service',
-              'env': 'test',
-              'runtime-id': '1234'
-            }
+            tags: [
+              'service:service',
+              'runtime-id:1234',
+              'env:test'
+            ]
           })
         })
 
@@ -465,6 +466,8 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
+
+          expect(client.flush).to.have.been.called
         })
       })
 
@@ -522,7 +525,7 @@ describe('Platform', () => {
       describe('without native metrics', () => {
         beforeEach(() => {
           metrics = proxyquire('../src/platform/node/metrics', {
-            'hot-shots': StatsD,
+            './dogstatsd': Client,
             'node-gyp-build': sinon.stub().returns(null)
           })
         })
@@ -562,6 +565,8 @@ describe('Platform', () => {
             expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
             expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
           }
+
+          expect(client.flush).to.have.been.called
         })
       })
     })

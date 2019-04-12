@@ -44,7 +44,6 @@
   "dependencies": {
     "@types/node": "^10.12.18",
     "async-hook-jl": "^1.7.6",
-    "hot-shots": "^5.0.0",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",
