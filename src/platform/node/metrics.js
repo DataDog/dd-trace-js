@@ -47,12 +47,15 @@ module.exports = function () {
         errorHandler: () => {}
       })
 
+      client.maxBufferSize = Infinity // set after to prevent flush interval
+
       time = process.hrtime()
 
       if (nativeMetrics) {
         interval = setInterval(() => {
           captureCommonMetrics()
           captureNativeMetrics()
+          client.flushQueue()
         }, INTERVAL)
       } else {
         cpuUsage = process.cpuUsage()
@@ -61,6 +64,7 @@ module.exports = function () {
           captureCommonMetrics()
           captureCpuUsage()
           captureHeapSpace()
+          client.flushQueue()
         }, INTERVAL)
       }
 
