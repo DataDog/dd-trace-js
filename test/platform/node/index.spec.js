@@ -373,7 +373,8 @@ describe('Platform', () => {
 
         client = {
           gauge: sinon.spy(),
-          increment: sinon.spy()
+          increment: sinon.spy(),
+          flushQueue: sinon.spy()
         }
 
         metrics = proxyquire('../src/platform/node/metrics', {
@@ -465,6 +466,8 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
+
+          expect(client.flushQueue).to.have.been.called
         })
       })
 
@@ -562,6 +565,8 @@ describe('Platform', () => {
             expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
             expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
           }
+
+          expect(client.flushQueue).to.have.been.called
         })
       })
     })
