@@ -11,7 +11,7 @@ namespace datadog {
   uint64_t Histogram::avg() { return count_ == 0 ? 0 : sum_ / count_; }
   uint64_t Histogram::count() { return count_; }
   uint64_t Histogram::percentile(double value) {
-    return static_cast<uint64_t>(std::round(digest_->quantile(value)));
+    return count_ == 0 ? 0 : static_cast<uint64_t>(std::round(digest_->quantile(value)));
   }
 
   void Histogram::reset() {
