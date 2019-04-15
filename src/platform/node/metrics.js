@@ -1,7 +1,10 @@
 'use strict'
 
+// TODO: capture every second and flush every 10 seconds
+
 const v8 = require('v8')
 const path = require('path')
+const Client = require('./dogstatsd')
 const log = require('../../log')
 
 const INTERVAL = 10 * 1000
@@ -20,14 +23,13 @@ reset()
 module.exports = function () {
   return metrics || (metrics = { // cache the metrics instance
     start: (options) => {
-      const StatsD = require('hot-shots')
-      const globalTags = {
-        'service': this._config.service,
-        'runtime-id': this.runtime().id()
-      }
+      const tags = [
+        `service:${this._config.service}`,
+        `runtime-id:${this.runtime().id()}`
+      ]
 
       if (this._config.env) {
-        globalTags.env = this._config.env
+        tags.push(`env:${this._config.env}`)
       }
 
       options = options || {}
@@ -39,12 +41,11 @@ module.exports = function () {
         log.error('Unable to load native metrics module. Some metrics will not be available.')
       }
 
-      client = new StatsD({
+      client = new Client({
         host: this._config.hostname,
         port: this._config.dogstatsd.port,
         prefix: 'runtime.node.',
-        globalTags,
-        errorHandler: () => {}
+        tags
       })
 
       time = process.hrtime()
@@ -53,6 +54,7 @@ module.exports = function () {
         interval = setInterval(() => {
           captureCommonMetrics()
           captureNativeMetrics()
+          client.flush()
         }, INTERVAL)
       } else {
         cpuUsage = process.cpuUsage()
@@ -61,6 +63,7 @@ module.exports = function () {
           captureCommonMetrics()
           captureCpuUsage()
           captureHeapSpace()
+          client.flush()
         }, INTERVAL)
       }
 
@@ -171,7 +174,7 @@ function captureHeapSpace () {
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
-    const tags = { 'space': stats[i].space_name }
+    const tags = [`space:${stats[i].space_name}`]
 
     client.gauge('heap.size.by.space', stats[i].space_size, tags)
     client.gauge('heap.used_size.by.space', stats[i].space_used_size, tags)
@@ -229,7 +232,7 @@ function captureNativeMetrics () {
   client.gauge('spans.unfinished', stats.spans.total.unfinished)
 
   for (let i = 0, l = spaces.length; i < l; i++) {
-    const tags = { 'heap_space': spaces[i].space_name }
+    const tags = [`heap_space:${spaces[i].space_name}`]
 
     client.gauge('heap.size.by.space', spaces[i].space_size, tags)
     client.gauge('heap.used_size.by.space', spaces[i].space_used_size, tags)
@@ -241,15 +244,11 @@ function captureNativeMetrics () {
     const operations = stats.spans.operations
 
     Object.keys(operations.finished).forEach(name => {
-      client.gauge('spans.finished.by.name', operations.finished[name], {
-        span_name: name
-      })
+      client.gauge('spans.finished.by.name', operations.finished[name], [`span_name:${name}`])
     })
 
     Object.keys(operations.unfinished).forEach(name => {
-      client.gauge('spans.unfinished.by.name', operations.unfinished[name], {
-        span_name: name
-      })
+      client.gauge('spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
     })
   }
 }
