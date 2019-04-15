@@ -4,6 +4,7 @@
 
 const v8 = require('v8')
 const path = require('path')
+const DatadogClient = require('./dogapi')
 const Client = require('./dogstatsd')
 const log = require('../../log')
 
@@ -41,9 +42,16 @@ module.exports = function () {
         log.error('Unable to load native metrics module. Some metrics will not be available.')
       }
 
-      client = new Client({
+      // client = new Client({
+      //   host: this._config.hostname,
+      //   port: this._config.dogstatsd.port,
+      //   prefix: 'runtime.node.',
+      //   tags
+      // })
+
+      client = new DatadogClient({
         host: this._config.hostname,
-        port: this._config.dogstatsd.port,
+        port: this._config.port,
         prefix: 'runtime.node.',
         tags
       })

@@ -33,6 +33,7 @@ class Config {
     this.env = env
     this.url = url ? new URL(url) : new URL(`${protocol}://${hostname || 'localhost'}:${port}`)
     this.hostname = hostname || this.url.hostname
+    this.port = port
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger
