@@ -46,11 +46,14 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
     Instrumenter = sinon.stub().returns(instrumenter)
 
-    config = { enabled: true }
+    config = { enabled: true, experimental: {} }
     Config = sinon.stub().returns(config)
 
     platform = {
-      load: sinon.spy()
+      load: sinon.spy(),
+      metrics: sinon.stub().returns({
+        start: sinon.spy()
+      })
     }
 
     Proxy = proxyquire('../src/proxy', {
@@ -114,6 +117,20 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(instrumenter.patch).to.have.been.calledAfter(DatadogTracer)
+      })
+
+      it('should not capture metrics by default', () => {
+        proxy.init()
+
+        expect(platform.metrics().start).to.not.have.been.called
+      })
+
+      it('should start capturing metrics when configured', () => {
+        config.runtimeMetrics = true
+
+        proxy.init()
+
+        expect(platform.metrics().start).to.have.been.called
       })
     })
 

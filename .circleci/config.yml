@@ -7,22 +7,31 @@ node-core-base: &node-core-base
   resource_class: small
   steps:
     - checkout
-    - run:
+    - &yarn-versions
+      run:
         name: Versions
         command: yarn versions
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
+    - &yarn-install
+      run:
         name: Install dependencies
         command: yarn install --ignore-engines
+        environment:
+          DD_NATIVE_METRICS: "false"
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
         paths:
           - ./node_modules
           - ./yarn.lock
-    - run:
+    - &yarn-rebuild
+      run:
+        name: Compile native code
+        command: yarn rebuild
+    - &yarn-test-core
+      run:
         name: Unit tests
         command: yarn test:core
     - run:
@@ -45,6 +54,8 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Install dependencies
         command: yarn install
+        environment:
+          DD_NATIVE_METRICS: "false"
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
@@ -264,7 +275,7 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
-      - image: bitnami/mongodb:3.6
+      - image: bitnami/mongodb:3.6.11
         environment:
           - MONGODB_REPLICA_SET_MODE=primary
           - MONGODB_ADVERTISED_HOSTNAME=localhost
@@ -344,21 +355,10 @@ jobs:
     resource_class: small
     steps:
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
-      - &restore-yarn-cache
-        restore_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - &save-yarn-cache
-        save_cache:
-          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-          paths:
-            - ./node_modules
-            - ./yarn.lock
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
       - run:
           name: Test API documentation
           command: yarn type:test
@@ -367,6 +367,121 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
+
+  prebuild-linux-x64:
+    docker:
+      - image: node:10
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    environment:
+      - ARCH=x64
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - &yarn-prebuild
+        run:
+          name: Compile prebuilt binaries
+          command: yarn prebuild
+      - store_artifacts:
+          path: ./addons-linux-x64.tgz
+      - save_cache:
+          key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
+          paths:
+            - ./prebuilds
+
+  prebuild-linux-x32:
+    docker:
+      - image: node:10
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    environment:
+      - ARCH=x32
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apt-get update && apt-get install -y g++-multilib
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - store_artifacts:
+          path: ./addons-linux-x32.tgz
+
+  prebuild-darwin-x64:
+    macos:
+      xcode: "10.2.0"
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    environment:
+      - ARCH=x64
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - store_artifacts:
+          path: ./addons-darwin-x64.tgz
+
+  prebuild-darwin-x32:
+    macos:
+      xcode: "10.2.0"
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    environment:
+      - ARCH=x32
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-prebuild
+      - store_artifacts:
+          path: ./addons-darwin-x32.tgz
+
+  alpine:
+    docker:
+      - image: node:10-alpine
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apk add g++ git make python
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - *yarn-rebuild
+      - *yarn-test-core
+
+  alpine-prebuilt:
+    docker:
+      - image: node:10-alpine
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - run:
+          name: Install job dependencies
+          command: apk add git
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - restore_cache:
+          key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+      - run:
+          name: Unit tests
+          command: yarn test:core
 
 workflows:
   version: 2
@@ -404,6 +519,34 @@ workflows:
       - node-restify
       - node-when
       - node-winston
+      - prebuild-linux-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-linux-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-darwin-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-darwin-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - alpine
+      - alpine-prebuilt:
+          requires:
+            - prebuild-linux-x64
   nightly:
     triggers:
       - schedule:

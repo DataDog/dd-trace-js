@@ -61,11 +61,11 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'ipc.connect',
             service: 'test-ipc',
-            resource: '/tmp/dd-trace.sock',
-            meta: {
-              'span.kind': 'client',
-              'ipc.path': '/tmp/dd-trace.sock'
-            }
+            resource: '/tmp/dd-trace.sock'
+          })
+          expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
+            'ipc.path': '/tmp/dd-trace.sock'
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })
@@ -85,18 +85,18 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'tcp.connect',
             service: 'test-tcp',
-            resource: `localhost:${port}`,
-            meta: {
-              'span.kind': 'client',
-              'tcp.family': 'IPv4',
-              'tcp.remote.host': 'localhost',
-              'tcp.remote.address': '127.0.0.1',
-              'tcp.remote.port': `${port}`,
-              'tcp.local.address': '127.0.0.1',
-              'tcp.local.port': `${socket.localPort}`,
-              'out.host': 'localhost',
-              'out.port': `${port}`
-            }
+            resource: `localhost:${port}`
+          })
+          expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
+            'tcp.family': 'IPv4',
+            'tcp.remote.host': 'localhost',
+            'tcp.remote.address': '127.0.0.1',
+            'tcp.remote.port': `${port}`,
+            'tcp.local.address': '127.0.0.1',
+            'tcp.local.port': `${socket.localPort}`,
+            'out.host': 'localhost',
+            'out.port': `${port}`
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })
@@ -116,18 +116,18 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'tcp.connect',
             service: 'test-tcp',
-            resource: `localhost:${port}`,
-            meta: {
-              'span.kind': 'client',
-              'tcp.family': 'IPv4',
-              'tcp.remote.host': 'localhost',
-              'tcp.remote.address': '127.0.0.1',
-              'tcp.remote.port': `${port}`,
-              'tcp.local.address': '127.0.0.1',
-              'tcp.local.port': `${socket.localPort}`,
-              'out.host': 'localhost',
-              'out.port': `${port}`
-            }
+            resource: `localhost:${port}`
+          })
+          expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
+            'tcp.family': 'IPv4',
+            'tcp.remote.host': 'localhost',
+            'tcp.remote.address': '127.0.0.1',
+            'tcp.remote.port': `${port}`,
+            'tcp.local.address': '127.0.0.1',
+            'tcp.local.port': `${socket.localPort}`,
+            'out.host': 'localhost',
+            'out.port': `${port}`
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })
@@ -148,11 +148,11 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'ipc.connect',
             service: 'test-ipc',
-            resource: '/tmp/dd-trace.sock',
-            meta: {
-              'span.kind': 'client',
-              'ipc.path': '/tmp/dd-trace.sock'
-            }
+            resource: '/tmp/dd-trace.sock'
+          })
+          expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
+            'ipc.path': '/tmp/dd-trace.sock'
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })

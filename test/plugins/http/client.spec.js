@@ -829,6 +829,56 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with hooks configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              hooks: {
+                request: (span, req, res) => {
+                  span.setTag('resource.name', `${req.method} ${req._route}`)
+                }
+              }
+            }
+          }
+
+          return agent.load(plugin, 'http', config)
+            .then(() => {
+              http = require(protocol)
+              express = require('express')
+            })
+        })
+
+        it('should run the request hook before the span is finished', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /user')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+
+              req._route = '/user'
+
+              req.end()
+            })
+          })
+        })
+      })
     })
   })
 })

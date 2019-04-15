@@ -1,4 +1,4 @@
-import { IncomingMessage, ServerResponse } from "http";
+import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
@@ -203,6 +203,17 @@ export declare interface TracerOptions {
   port?: number | string;
 
   /**
+   * Options specific for the Dogstatsd agent.
+   */
+  dogstatsd?: {
+    /**
+     * The port of the Dogstatsd agent that the metrics will submitted to.
+     * @default 8125
+     */
+    port?: number
+  };
+
+  /**
    * Set an application’s environment e.g. prod, pre-prod, stage.
    */
   env?: string;
@@ -212,6 +223,12 @@ export declare interface TracerOptions {
    * @default 1
    */
   sampleRate?: number;
+
+  /**
+   * Whether to enable runtime metrics.
+   * @default false
+   */
+  runtimeMetrics?: boolean
 
   /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
@@ -434,6 +451,16 @@ declare namespace plugins {
      * @default code => code < 400
      */
     validateStatus?: (code: number) => boolean;
+
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the request span finishes.
+       */
+      request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
+    };
   }
 
   /**
@@ -573,6 +600,20 @@ declare namespace plugins {
      * Configuration for HTTP servers.
      */
     server?: HttpServer
+
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the request span finishes.
+       */
+      request?: (
+        span?: opentracing.Span,
+        req?: IncomingMessage | ClientRequest,
+        res?: ServerResponse | IncomingMessage
+      ) => any;
+    };
   }
 
   /**

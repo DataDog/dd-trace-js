@@ -3,11 +3,12 @@
 const asyncHooks = require('../async_hooks')
 const executionAsyncId = asyncHooks.executionAsyncId
 const Base = require('./base')
+const platform = require('../../platform')
 
 let singleton = null
 
 class Scope extends Base {
-  constructor () {
+  constructor (options) {
     if (singleton) return singleton
 
     super()
@@ -15,6 +16,7 @@ class Scope extends Base {
     singleton = this
 
     this._spans = Object.create(null)
+    this._types = Object.create(null)
     this._hook = asyncHooks.createHook({
       init: this._init.bind(this),
       destroy: this._destroy.bind(this),
@@ -25,7 +27,7 @@ class Scope extends Base {
   }
 
   _active () {
-    return this._spans[executionAsyncId()]
+    return this._spans[executionAsyncId()] || null
   }
 
   _activate (span, callback) {
@@ -50,21 +52,29 @@ class Scope extends Base {
       if (oldSpan) {
         this._spans[asyncId] = oldSpan
       } else {
-        this._destroy(asyncId)
+        delete this._spans[asyncId]
       }
     }
   }
 
-  _init (asyncId) {
-    const span = this._spans[executionAsyncId()]
+  _init (asyncId, type) {
+    this._spans[asyncId] = this._active()
+    this._types[asyncId] = type
 
-    if (span) {
-      this._spans[asyncId] = span
-    }
+    platform.metrics().increment('async.resources')
+    platform.metrics().increment('async.resources.by.type', `resource_type:${type}`)
   }
 
   _destroy (asyncId) {
+    const type = this._types[asyncId]
+
+    if (type) {
+      platform.metrics().decrement('async.resources')
+      platform.metrics().decrement('async.resources.by.type', `resource_type:${type}`)
+    }
+
     delete this._spans[asyncId]
+    delete this._types[asyncId]
   }
 }
 

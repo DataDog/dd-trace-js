@@ -9,6 +9,8 @@ const tags = {
   SAMPLING_PRIORITY: 'sampling.priority',
   ANALYTICS: '_dd1.sr.eausr',
   ERROR: 'error',
+  MANUAL_KEEP: 'manual.keep',
+  MANUAL_DROP: 'manual.drop',
 
   // HTTP
   HTTP_URL: 'http.url',

@@ -13,9 +13,16 @@ describe('Span', () => {
   let prioritySampler
   let sampler
   let platform
+  let handle
 
   beforeEach(() => {
-    platform = { id: sinon.stub() }
+    handle = { finish: sinon.spy() }
+    platform = {
+      id: sinon.stub(),
+      metrics: sinon.stub().returns({
+        track: sinon.stub().returns(handle)
+      })
+    }
     platform.id.onFirstCall().returns(new Uint64BE(123, 123))
     platform.id.onSecondCall().returns(new Uint64BE(456, 456))
 
@@ -97,6 +104,16 @@ describe('Span', () => {
     expect(span.context()._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
+  it('should keep track of its memory lifecycle', () => {
+    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+
+    expect(platform.metrics().track).to.have.been.calledWith(span)
+
+    span.finish()
+
+    expect(handle.finish).to.have.been.called
+  })
+
   describe('tracer', () => {
     it('should return its parent tracer', () => {
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
@@ -159,6 +176,13 @@ describe('Span', () => {
       span.addTags({ foo: 'bar' })
 
       expect(span.context()._tags).to.have.property('foo', 'bar')
+    })
+
+    it('should store the original values', () => {
+      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span.addTags({ foo: 123 })
+
+      expect(span.context()._tags).to.have.property('foo', 123)
     })
 
     it('should handle errors', () => {

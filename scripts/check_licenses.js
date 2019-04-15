@@ -20,8 +20,13 @@ const lineReader = readline.createInterface({
 
 lineReader.on('line', line => {
   if (index !== 0) {
-    const license = line.split(',')[1]
-    licenses.push(license)
+    const columns = line.split(',')
+    const type = columns[0]
+    const license = columns[1]
+
+    if (type === 'require' || type === 'dev') {
+      licenses.push(license)
+    }
   }
 
   index++

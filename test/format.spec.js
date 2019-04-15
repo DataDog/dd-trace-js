@@ -16,6 +16,7 @@ describe('format', () => {
   let span
   let trace
   let spanContext
+  let platform
 
   beforeEach(() => {
     spanContext = {
@@ -31,11 +32,22 @@ describe('format', () => {
 
     span = {
       context: sinon.stub().returns(spanContext),
+      tracer: sinon.stub().returns({
+        _service: 'test'
+      }),
       _startTime: 1500000000000.123456,
       _duration: 100
     }
 
-    format = require('../src/format')
+    platform = {
+      runtime: sinon.stub().returns({
+        id: sinon.stub().returns('1234')
+      })
+    }
+
+    format = proxyquire('../src/format', {
+      './platform': platform
+    })
   })
 
   describe('format', () => {
@@ -97,13 +109,14 @@ describe('format', () => {
     })
 
     it('should extract errors', () => {
-      span._error = new Error('boom')
+      const error = new Error('boom')
 
+      spanContext._tags['error'] = error
       trace = format(span)
 
-      expect(trace.meta['error.msg']).to.equal('boom')
-      expect(trace.meta['error.type']).to.equal('Error')
-      expect(trace.meta['error.stack']).to.equal(span._error.stack)
+      expect(trace.meta['error.msg']).to.equal(error.message)
+      expect(trace.meta['error.type']).to.equal(error.name)
+      expect(trace.meta['error.stack']).to.equal(error.stack)
     })
 
     it('should extract the origin', () => {
@@ -112,6 +125,40 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
+    })
+
+    it('should extract objects', () => {
+      spanContext._tags['root'] = {
+        level1: {
+          level2: {
+            level3: {}
+          },
+          array: ['hello']
+        }
+      }
+
+      trace = format(span)
+
+      expect(trace.meta['root.level1.level2']).to.equal('[object Object]')
+      expect(trace.meta['root.level1.array']).to.equal('hello')
+    })
+
+    it('should add runtime tags', () => {
+      spanContext._tags['service.name'] = 'test'
+
+      trace = format(span)
+
+      expect(trace.meta['language']).to.equal('javascript')
+      expect(trace.meta['runtime-id']).to.equal('1234')
+    })
+
+    it('should add runtime tags only for the root service', () => {
+      spanContext._tags['service.name'] = 'other'
+
+      trace = format(span)
+
+      expect(trace.meta).to.not.have.property('language')
+      expect(trace.meta).to.not.have.property('runtime-id')
     })
 
     describe('when there is an `error` tag ', () => {
@@ -153,7 +200,8 @@ describe('format', () => {
     it('should sanitize the input', () => {
       spanContext._name = null
       spanContext._tags = {
-        'foo.bar': null
+        'foo.bar': null,
+        'baz.qux': undefined
       }
       span._startTime = NaN
       span._duration = NaN
@@ -162,7 +210,8 @@ describe('format', () => {
 
       expect(trace.name).to.equal('null')
       expect(trace.resource).to.equal('null')
-      expect(trace.meta['foo.bar']).to.equal('null')
+      expect(trace.meta).to.not.have.property('foo.bar')
+      expect(trace.meta).to.not.have.property('baz.qux')
       expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.duration).to.be.instanceof(Int64BE)
     })
@@ -174,23 +223,17 @@ describe('format', () => {
     })
 
     it('should support objects without a toString implementation', () => {
-      spanContext._tags['foo'] = Object.create(null)
+      spanContext._tags['foo'] = []
+      spanContext._tags['foo'].toString = null
       trace = format(span)
-      expect(trace.meta['foo']).to.equal('{}')
+      expect(trace.meta['foo']).to.equal('[]')
     })
 
     it('should support objects with a non-function toString property', () => {
-      spanContext._tags['foo'] = Object.create(null)
+      spanContext._tags['foo'] = []
       spanContext._tags['foo'].toString = 'baz'
       trace = format(span)
-      expect(trace.meta['foo']).to.equal('{"toString":"baz"}')
-    })
-
-    it('should ignore complex objects with circular references', () => {
-      spanContext._tags['foo'] = Object.create(null)
-      spanContext._tags['foo'].baz = spanContext._tags['foo']
-      trace = format(span)
-      expect(trace.meta).to.not.have.property('foo')
+      expect(trace.meta['foo']).to.equal('[]')
     })
 
     it('should include the analytics sample rate', () => {

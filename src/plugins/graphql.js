@@ -286,7 +286,7 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
     'resource.name': `${info.fieldName}:${info.returnType}`,
     'graphql.field.name': info.fieldName,
     'graphql.field.path': path.join('.'),
-    'graphql.field.type': info.returnType
+    'graphql.field.type': info.returnType.name
   })
 
   if (fieldNode) {

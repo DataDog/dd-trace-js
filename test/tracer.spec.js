@@ -19,7 +19,7 @@ describe('Tracer', () => {
   let Instrumenter
 
   beforeEach(() => {
-    config = new Config({ service: 'service' })
+    config = new Config('test', { service: 'service' })
 
     instrumenter = {
       use: sinon.spy(),

@@ -2,16 +2,54 @@
 
 const Scope = require('../../src/scope/new/scope')
 const Span = require('opentracing').Span
+const platform = require('../../src/platform')
 
 wrapIt()
 
 describe('Scope', () => {
   let scope
   let span
+  let metrics
 
   beforeEach(() => {
+    metrics = platform.metrics()
+
+    sinon.spy(metrics, 'increment')
+    sinon.spy(metrics, 'decrement')
+
     scope = new Scope()
     span = new Span()
+  })
+
+  afterEach(() => {
+    metrics.increment.restore()
+    metrics.decrement.restore()
+  })
+
+  it('should keep track of asynchronous resource count', () => {
+    scope._init(0, 'TEST')
+    scope._destroy(0)
+
+    expect(metrics.increment).to.have.been.calledWith('async.resources')
+    expect(metrics.decrement).to.have.been.calledWith('async.resources')
+  })
+
+  it('should keep track of asynchronous resource count by type', () => {
+    scope._init(0, 'TEST')
+    scope._destroy(0)
+
+    expect(metrics.increment).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
+    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
+  })
+
+  it('should only track destroys once', () => {
+    scope._init(0, 'TEST')
+    scope._destroy(0)
+    scope._destroy(0)
+
+    expect(metrics.decrement).to.have.been.calledTwice
+    expect(metrics.decrement).to.have.been.calledWith('async.resources')
+    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type')
   })
 
   describe('active()', () => {

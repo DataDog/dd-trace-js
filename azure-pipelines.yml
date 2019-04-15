@@ -2,8 +2,16 @@ pool:
   vmImage: vs2017-win2016
 
 steps:
-- script: yarn versions && yarn install
+- bash: yarn versions
+  displayName: Versions
+
+- bash: yarn install
   displayName: Install dependencies
+  env:
+    DD_NATIVE_METRICS: "false"
+
+- bash: yarn rebuild
+  displayName: Compile native code
 
 - bash: yarn test:core
   displayName: Test Core

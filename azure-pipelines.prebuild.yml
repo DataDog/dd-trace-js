@@ -1,0 +1,27 @@
+jobs:
+- job: win32
+  pool:
+    vmImage: vs2017-win2016
+  strategy:
+    matrix:
+      ia32:
+        arch: ia32
+      x64:
+        arch: x64
+  steps:
+  - bash: yarn versions
+    displayName: Versions
+
+  - bash: yarn install
+    displayName: Install dependencies
+    env:
+      DD_NATIVE_METRICS: "false"
+
+  - bash: yarn prebuild
+    displayName: Compile prebuilt binaries
+    env:
+      ARCH: $(arch)
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'prebuilds-$(arch)'
+      targetPath: 'addons-win32-$(arch).tgz'

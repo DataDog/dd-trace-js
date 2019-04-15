@@ -4,6 +4,7 @@ const Int64BE = require('int64-buffer').Int64BE
 const constants = require('./constants')
 const tags = require('../ext/tags')
 const log = require('./log')
+const platform = require('./platform')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -73,12 +74,17 @@ function extractTags (trace, span) {
   if (origin) {
     addTag(trace.meta, ORIGIN_KEY, origin)
   }
+
+  if (span.tracer()._service === tags['service.name']) {
+    addTag(trace.meta, 'runtime-id', platform.runtime().id())
+    addTag(trace.meta, 'language', 'javascript')
+  }
 }
 
 function extractError (trace, span) {
-  const error = span._error
+  const error = span.context()._tags['error']
 
-  if (error) {
+  if (error instanceof Error) {
     trace.meta['error.msg'] = error.message
     trace.meta['error.type'] = error.name
     trace.meta['error.stack'] = error.stack
@@ -114,11 +120,26 @@ function extractMetrics (trace, span) {
   }
 }
 
-function addTag (meta, key, value) {
-  value = serialize(value)
+function addTag (meta, key, value, depth) {
+  depth = depth || 0
 
-  if (typeof value === 'string') {
-    meta[key] = value
+  switch (typeof value) {
+    case 'string':
+      meta[key] = value
+      break
+    case 'undefined':
+      break
+    case 'object':
+      if (value === null) break
+
+      if (!Array.isArray(value) && depth < 2) {
+        Object.keys(value).forEach(prop => {
+          addTag(meta, `${key}.${prop}`, value[prop], depth + 1)
+        })
+        break
+      }
+    default: // eslint-disable-line no-fallthrough
+      addTag(meta, key, serialize(value))
   }
 }
 

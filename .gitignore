@@ -91,10 +91,6 @@ typings/
 
 ### VisualStudioCode ###
 .vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 .history
 
 
@@ -104,5 +100,7 @@ package-lock.json
 yarn.lock
 out
 versions
+build
+prebuilds
 docs/test.js
 !test/node_modules

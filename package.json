@@ -1,10 +1,14 @@
 {
   "name": "dd-trace",
-  "version": "0.10.4",
+  "version": "0.11.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
-  "typings": "docs/index.d.ts",
+  "typings": "index.d.ts",
   "scripts": {
+    "rebuild": "node-gyp rebuild",
+    "prebuild": "node scripts/prebuild.js",
+    "install": "node scripts/post_install.js",
+    "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
@@ -51,6 +55,8 @@
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
+    "nan": "^2.12.1",
+    "node-gyp-build": "^3.8.0",
     "opentracing": ">=0.12.1",
     "parent-module": "^0.1.0",
     "path-to-regexp": "^0.1.2",
@@ -60,6 +66,7 @@
     "safe-buffer": "^5.1.1",
     "semver": "^5.5.0",
     "shimmer": "^1.2.0",
+    "tar": "^4.4.8",
     "url-parse": "^1.4.3"
   },
   "devDependencies": {
@@ -79,6 +86,8 @@
     "graphql": "0.13.2",
     "mocha": "^5.2.0",
     "nock": "^9.6.1",
+    "node-abi": "^2.7.1",
+    "prebuildify": "^2.11.0",
     "proxyquire": "^1.8.0",
     "require-dir": "^1.0.0",
     "retry": "^0.10.1",
