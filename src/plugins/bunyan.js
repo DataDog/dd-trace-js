@@ -5,7 +5,7 @@ const tx = require('./util/log')
 function createWrapEmit (tracer, config) {
   return function wrapEmit (emit) {
     return function emitWithTrace (rec, noemit) {
-      tx.correlate(tracer, rec)
+      arguments[0] = tx.correlate(tracer, rec)
 
       return emit.apply(this, arguments)
     }

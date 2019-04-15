@@ -7,16 +7,14 @@ const log = {
   correlate (tracer, record) {
     const span = tracer.scope().active()
 
-    record = record || {}
+    if (!span) return record
 
-    if (span) {
-      record.dd = {
+    return Object.assign({}, record, {
+      dd: {
         trace_id: span.context().toTraceId(),
         span_id: span.context().toSpanId()
       }
-    }
-
-    return record
+    })
   }
 }
 

@@ -143,6 +143,31 @@ describe('Plugin', () => {
           })
         })
 
+        it('should remove the query string from the URL', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
+                res.on('data', () => {})
+              })
+
+              req.end()
+            })
+          })
+        })
+
         if (semver.satisfies(process.version, '>=10')) {
           it('should support a string URL and an options object, which merges and takes precedence', done => {
             const app = express()

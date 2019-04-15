@@ -1,5 +1,7 @@
 'use strict'
 
+const tx = require('./util/tx')
+
 function createWrapInnerExecute (tracer, config) {
   return function wrapInnerExecute (_innerExecute) {
     return function _innerExecuteWithTrace (query, params, execOptions, callback) {
@@ -51,16 +53,20 @@ function createWrapBatch (tracer, config) {
       const query = combine(queries)
       const span = start(tracer, config, this, query)
       const scope = tracer.scope()
+      const fn = scope.bind(batch, span)
 
-      callback = scope.bind(callback || options)
-
-      return scope.bind(batch, span).call(this, queries, options, function (err) {
-        finish(span, err)
-
+      try {
         if (typeof callback === 'function') {
-          return callback.apply(this, arguments)
+          return fn.call(this, queries, options, tx.wrap(span, callback))
+        } else if (typeof options === 'function') {
+          return fn.call(this, queries, tx.wrap(span, options))
+        } else {
+          return tx.wrap(span, fn.apply(this, arguments))
         }
-      })
+      } catch (e) {
+        finish(span, e)
+        throw e
+      }
     }
   }
 }

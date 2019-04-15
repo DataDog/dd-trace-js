@@ -23,9 +23,13 @@ class Config {
     const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     const plugins = coalesce(options.plugins, true)
-    const analytics = coalesce(options.analytics, platform.env('DD_TRACE_ANALYTICS'))
     const dogstatsd = options.dogstatsd || {}
     const runtimeMetrics = coalesce(options.runtimeMetrics, platform.env('DD_RUNTIME_METRICS_ENABLED'), false)
+    const analytics = coalesce(
+      options.analytics,
+      platform.env('DD_TRACE_ANALYTICS_ENABLED'),
+      platform.env('DD_TRACE_ANALYTICS')
+    )
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'

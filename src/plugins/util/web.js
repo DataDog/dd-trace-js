@@ -239,7 +239,7 @@ function addRequestTags (req) {
   const span = req._datadog.span
 
   span.addTags({
-    [HTTP_URL]: url,
+    [HTTP_URL]: url.split('?')[0],
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB

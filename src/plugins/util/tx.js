@@ -35,6 +35,8 @@ function wrapPromise (span, promise) {
     () => finish(span),
     err => finish(span, err)
   )
+
+  return promise
 }
 
 function finish (span, error) {
