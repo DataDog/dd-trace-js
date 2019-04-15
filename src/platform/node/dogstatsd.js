@@ -17,8 +17,8 @@ class Client {
     this._queue = []
     this._buffer = ''
     this._offset = 0
-    this._udp4 = dgram.createSocket('udp4')
-    this._udp6 = dgram.createSocket('udp6')
+    this._udp4 = this._socket('udp4')
+    this._udp6 = this._socket('udp6')
   }
 
   gauge (stat, value, tags) {
@@ -80,6 +80,15 @@ class Client {
     }
 
     return this._queue
+  }
+
+  _socket (type) {
+    const socket = dgram.createSocket(type)
+
+    socket.on('error', () => {})
+    socket.unref()
+
+    return socket
   }
 }
 

@@ -14,11 +14,15 @@ describe('Platform', () => {
 
       beforeEach(() => {
         udp6 = {
-          send: sinon.spy()
+          send: sinon.spy(),
+          on: sinon.stub().returns(udp6),
+          unref: sinon.stub().returns(udp6)
         }
 
         udp4 = {
-          send: sinon.spy()
+          send: sinon.spy(),
+          on: sinon.stub().returns(udp4),
+          unref: sinon.stub().returns(udp4)
         }
 
         dgram = {
