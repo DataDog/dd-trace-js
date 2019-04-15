@@ -127,6 +127,22 @@ describe('format', () => {
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
+    it('should extract objects', () => {
+      spanContext._tags['root'] = {
+        level1: {
+          level2: {
+            level3: {}
+          },
+          array: ['hello']
+        }
+      }
+
+      trace = format(span)
+
+      expect(trace.meta['root.level1.level2']).to.equal('[object Object]')
+      expect(trace.meta['root.level1.array']).to.equal('hello')
+    })
+
     it('should add runtime tags', () => {
       spanContext._tags['service.name'] = 'test'
 
@@ -184,7 +200,8 @@ describe('format', () => {
     it('should sanitize the input', () => {
       spanContext._name = null
       spanContext._tags = {
-        'foo.bar': null
+        'foo.bar': null,
+        'baz.qux': undefined
       }
       span._startTime = NaN
       span._duration = NaN
@@ -193,7 +210,8 @@ describe('format', () => {
 
       expect(trace.name).to.equal('null')
       expect(trace.resource).to.equal('null')
-      expect(trace.meta['foo.bar']).to.equal('null')
+      expect(trace.meta).to.not.have.property('foo.bar')
+      expect(trace.meta).to.not.have.property('baz.qux')
       expect(trace.start).to.be.instanceof(Int64BE)
       expect(trace.duration).to.be.instanceof(Int64BE)
     })
@@ -205,23 +223,17 @@ describe('format', () => {
     })
 
     it('should support objects without a toString implementation', () => {
-      spanContext._tags['foo'] = Object.create(null)
+      spanContext._tags['foo'] = []
+      spanContext._tags['foo'].toString = null
       trace = format(span)
-      expect(trace.meta['foo']).to.equal('{}')
+      expect(trace.meta['foo']).to.equal('[]')
     })
 
     it('should support objects with a non-function toString property', () => {
-      spanContext._tags['foo'] = Object.create(null)
+      spanContext._tags['foo'] = []
       spanContext._tags['foo'].toString = 'baz'
       trace = format(span)
-      expect(trace.meta['foo']).to.equal('{"toString":"baz"}')
-    })
-
-    it('should ignore complex objects with circular references', () => {
-      spanContext._tags['foo'] = Object.create(null)
-      spanContext._tags['foo'].baz = spanContext._tags['foo']
-      trace = format(span)
-      expect(trace.meta).to.not.have.property('foo')
+      expect(trace.meta['foo']).to.equal('[]')
     })
 
     it('should include the analytics sample rate', () => {

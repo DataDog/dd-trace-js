@@ -120,11 +120,26 @@ function extractMetrics (trace, span) {
   }
 }
 
-function addTag (meta, key, value) {
-  value = serialize(value)
+function addTag (meta, key, value, depth) {
+  depth = depth || 0
 
-  if (typeof value === 'string') {
-    meta[key] = value
+  switch (typeof value) {
+    case 'string':
+      meta[key] = value
+      break
+    case 'undefined':
+      break
+    case 'object':
+      if (value === null) break
+
+      if (!Array.isArray(value) && depth < 2) {
+        Object.keys(value).forEach(prop => {
+          addTag(meta, `${key}.${prop}`, value[prop], depth + 1)
+        })
+        break
+      }
+    default: // eslint-disable-line no-fallthrough
+      addTag(meta, key, serialize(value))
   }
 }
 
