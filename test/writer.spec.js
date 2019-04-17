@@ -61,7 +61,8 @@ describe('Writer', () => {
     }
 
     prioritySampler = {
-      update: sinon.stub()
+      update: sinon.stub(),
+      sample: sinon.stub()
     }
 
     Writer = proxyquire('../src/writer', {
@@ -111,6 +112,12 @@ describe('Writer', () => {
       writer.append(span)
 
       expect(writer._queue).to.be.empty
+    })
+
+    it('should generate sampling priority', () => {
+      writer.append(span)
+
+      expect(prioritySampler.sample).to.have.been.calledWith(span.context())
     })
   })
 
