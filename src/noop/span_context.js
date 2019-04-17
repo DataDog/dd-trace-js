@@ -1,15 +1,8 @@
 'use strict'
 
-const SpanContext = require('opentracing').SpanContext
+const SpanContext = require('../opentracing/span_context')
 
-class NoopSpanContext extends SpanContext {
-  toTraceId () {
-    return '0'
-  }
-
-  toSpanId () {
-    return '0'
-  }
-}
-
-module.exports = new NoopSpanContext()
+module.exports = new SpanContext({
+  traceId: 0,
+  spanId: 0
+})
