@@ -5,7 +5,6 @@ describe('TracerProxy', () => {
   let proxy
   let DatadogTracer
   let tracer
-  let NoopTracer
   let noop
   let Instrumenter
   let instrumenter
