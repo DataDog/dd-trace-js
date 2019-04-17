@@ -231,6 +231,13 @@ jobs:
         environment:
           - PLUGINS=graphql
 
+  node-grpc:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=grpc
+
   node-hapi:
     <<: *node-plugin-base
     docker:
@@ -511,6 +518,7 @@ workflows:
       - node-express
       - node-generic-pool
       - node-graphql
+      - node-grpc
       - node-hapi
       - node-http
       - node-koa
@@ -578,6 +586,7 @@ workflows:
       - node-express
       - node-generic-pool
       - node-graphql
+      - node-grpc
       - node-hapi
       - node-http
       - node-koa

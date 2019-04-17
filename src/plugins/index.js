@@ -11,6 +11,7 @@ module.exports = {
   'express': require('./express'),
   'generic-pool': require('./generic-pool'),
   'graphql': require('./graphql'),
+  'grpc': require('./grpc'),
   'hapi': require('./hapi'),
   'http': require('./http'),
   'ioredis': require('./ioredis'),
