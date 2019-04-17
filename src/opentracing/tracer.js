@@ -15,6 +15,8 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const formats = require('../../ext/formats')
 const log = require('../log')
+const noopSpan = require('../noop/span')
+const noopContext = require('../noop/span_context')
 
 class DatadogTracer extends Tracer {
   constructor (config) {
@@ -42,10 +44,14 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  // TODO: move references handling to the Span class
   _startSpan (name, fields) {
     const references = getReferences(fields.references)
-    const parent = getParent(references)
+    const reference = getParent(references)
+    const parent = reference && reference.referencedContext()
+
+    if (parent && parent === noopContext) return noopSpan
+    if (!parent && !this._sampler.isSampled()) return noopSpan
+
     const tags = {
       'service.name': this._service
     }
@@ -56,7 +62,7 @@ class DatadogTracer extends Tracer {
 
     const span = new Span(this, this._recorder, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
-      parent: parent && parent.referencedContext(),
+      parent,
       tags: Object.assign(tags, this._tags, fields.tags),
       startTime: fields.startTime
     })
@@ -65,6 +71,8 @@ class DatadogTracer extends Tracer {
   }
 
   _inject (spanContext, format, carrier) {
+    if (spanContext === noopContext) return this
+
     try {
       this._prioritySampler.sample(spanContext)
       this._propagators[format].inject(spanContext, carrier)
@@ -96,7 +104,7 @@ function getReferences (references) {
 
     const spanContext = ref.referencedContext()
 
-    if (!(spanContext instanceof SpanContext)) {
+    if (spanContext !== noopContext && !(spanContext instanceof SpanContext)) {
       log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
       return false
     }

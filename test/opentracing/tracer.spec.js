@@ -1,6 +1,8 @@
 'use strict'
 
 const opentracing = require('opentracing')
+const noopSpan = require('../../src/noop/span')
+const noopContext = require('../../src/noop/span_context')
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
@@ -263,6 +265,41 @@ describe('Tracer', () => {
         }
       })
     })
+
+    it('should return a noop span when not sampled', () => {
+      sampler.isSampled.returns(false)
+
+      tracer = new Tracer(config)
+
+      expect(tracer.startSpan('name', fields)).to.equal(noopSpan)
+    })
+
+    it('should return a noop span when the parent is not sampled', () => {
+      const parent = noopContext
+
+      fields.references = [
+        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
+      ]
+
+      tracer = new Tracer(config)
+
+      expect(tracer.startSpan('name', fields)).to.equal(noopSpan)
+    })
+
+    it('should always start a new span when the parent is sampled', () => {
+      const parent = new SpanContext()
+
+      fields.references = [
+        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
+      ]
+
+      sampler.isSampled.returns(false)
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.called
+    })
   })
 
   describe('inject', () => {
@@ -306,6 +343,15 @@ describe('Tracer', () => {
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
+    })
+
+    it('should skip injection for noop context', () => {
+      TextMapPropagator.returns(propagator)
+
+      tracer = new Tracer(config)
+      tracer.inject(noopContext, opentracing.FORMAT_TEXT_MAP, carrier)
+
+      expect(propagator.inject).to.not.have.been.called
     })
   })
 

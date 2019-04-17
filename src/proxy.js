@@ -1,14 +1,12 @@
 'use strict'
 
 const BaseTracer = require('opentracing').Tracer
-const NoopTracer = require('./noop/tracer')
+const noop = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
 const log = require('./log')
-
-const noop = new NoopTracer()
 
 class Tracer extends BaseTracer {
   constructor () {

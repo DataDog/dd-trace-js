@@ -61,7 +61,6 @@ class DatadogSpan extends Span {
         traceId: parent._traceId,
         spanId: platform.id(),
         parentId: parent._spanId,
-        sampled: parent._sampled,
         sampling: parent._sampling,
         baggageItems: parent._baggageItems,
         trace: {
@@ -74,8 +73,7 @@ class DatadogSpan extends Span {
       const spanId = platform.id()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId,
-        sampled: this._sampler.isSampled(this)
+        spanId
       })
     }
 
@@ -126,10 +124,7 @@ class DatadogSpan extends Span {
     this._spanContext._isFinished = true
     this._prioritySampler.sample(this)
     this._handle.finish()
-
-    if (this._spanContext._sampled) {
-      this._recorder.record(this)
-    }
+    this._recorder.record(this)
   }
 }
 

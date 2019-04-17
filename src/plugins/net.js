@@ -2,6 +2,7 @@
 
 const tx = require('./util/tx')
 const analyticsSampler = require('../analytics_sampler')
+const noopSpan = require('../noop/span')
 
 function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
@@ -66,6 +67,9 @@ function wrapIpc (tracer, config, socket, options) {
 
 function startSpan (tracer, config, protocol, tags) {
   const childOf = tracer.scope().active()
+
+  if (!childOf || childOf === noopSpan) return noopSpan
+
   const span = tracer.startSpan(`${protocol}.connect`, {
     childOf,
     tags: Object.assign({
@@ -73,10 +77,6 @@ function startSpan (tracer, config, protocol, tags) {
       'service.name': config.service || `${tracer._service}-${protocol}`
     }, tags)
   })
-
-  if (!childOf) {
-    span.context()._sampled = false
-  }
 
   return span
 }

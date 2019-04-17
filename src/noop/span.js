@@ -1,9 +1,7 @@
 'use strict'
 
 const Span = require('opentracing').Span
-const SpanContext = require('./span_context')
-
-const context = new SpanContext()
+const context = require('./span_context')
 
 class NoopSpan extends Span {
   _context () {
@@ -11,4 +9,4 @@ class NoopSpan extends Span {
   }
 }
 
-module.exports = NoopSpan
+module.exports = new NoopSpan()

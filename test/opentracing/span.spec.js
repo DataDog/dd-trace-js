@@ -29,8 +29,7 @@ describe('Span', () => {
     tracer = {}
 
     sampler = {
-      rate: sinon.stub().returns(1),
-      isSampled: sinon.stub().returns(true)
+      rate: sinon.stub().returns(1)
     }
 
     recorder = {
@@ -63,7 +62,6 @@ describe('Span', () => {
     const parent = {
       _traceId: new Uint64BE(123, 123),
       _spanId: new Uint64BE(456, 456),
-      _sampled: false,
       _baggageItems: { foo: 'bar' },
       _trace: {
         started: ['span'],
@@ -85,7 +83,6 @@ describe('Span', () => {
     const parent = {
       _traceId: new Uint64BE(123, 123),
       _spanId: new Uint64BE(456, 456),
-      _sampled: false,
       _baggageItems: { foo: 'bar' },
       _trace: {
         started: ['span'],
@@ -136,7 +133,6 @@ describe('Span', () => {
       const parent = {
         traceId: new Uint64BE(123, 123),
         spanId: new Uint64BE(456, 456),
-        _sampled: false,
         _baggageItems: {},
         _trace: {
           started: ['span'],
@@ -202,23 +198,13 @@ describe('Span', () => {
       expect(span.context()._trace.finished).to.deep.equal([span])
     })
 
-    it('should record the span if sampled', () => {
+    it('should record the span', () => {
       recorder.record.returns(Promise.resolve())
 
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
       span.finish()
 
       expect(recorder.record).to.have.been.calledWith(span)
-    })
-
-    it('should not record the span if not sampled', () => {
-      recorder.record.returns(Promise.resolve())
-      sampler.isSampled.returns(false)
-
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
-      span.finish()
-
-      expect(recorder.record).to.not.have.been.called
     })
 
     it('should not record the span if already finished', () => {

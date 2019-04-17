@@ -12,4 +12,4 @@ class NoopSpanContext extends SpanContext {
   }
 }
 
-module.exports = NoopSpanContext
+module.exports = new NoopSpanContext()
