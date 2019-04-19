@@ -9,5 +9,5 @@
 !README.md
 !binding.gyp
 !index.js
-!index.d.ts
+!*.d.ts
 !package.json
