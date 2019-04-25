@@ -1,8 +1,8 @@
 declare const kinds: {
-  SERVER: string
-  CLIENT: string
-  PRODUCER: string
-  CONSUMER: string
+  SERVER: 'server'
+  CLIENT: 'client'
+  PRODUCER: 'producer'
+  CONSUMER: 'consumer'
 }
 
 export = kinds

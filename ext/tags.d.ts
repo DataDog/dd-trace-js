@@ -1,19 +1,19 @@
 declare const tags: {
-  SERVICE_NAME: string
-  RESOURCE_NAME: string
-  SPAN_TYPE: string
-  SPAN_KIND: string
-  SAMPLING_PRIORITY: string
-  ANALYTICS: string
-  ERROR: string
-  MANUAL_KEEP: string
-  MANUAL_DROP: string
-  HTTP_URL: string
-  HTTP_METHOD: string
-  HTTP_STATUS_CODE: string
-  HTTP_ROUTE: string
-  HTTP_REQUEST_HEADERS: string
-  HTTP_RESPONSE_HEADERS: string
+  SERVICE_NAME: 'service.name'
+  RESOURCE_NAME: 'resource.name'
+  SPAN_TYPE: 'span.type'
+  SPAN_KIND: 'span.kind'
+  SAMPLING_PRIORITY: 'sampling.priority'
+  ANALYTICS: '_dd1.sr.eausr'
+  ERROR: 'error'
+  MANUAL_KEEP: 'manual.keep'
+  MANUAL_DROP: 'manual.drop'
+  HTTP_URL: 'http.url'
+  HTTP_METHOD: 'http.method'
+  HTTP_STATUS_CODE: 'http.status_code'
+  HTTP_ROUTE: 'http.route'
+  HTTP_REQUEST_HEADERS: 'http.request.headers'
+  HTTP_RESPONSE_HEADERS: 'http.response.headers'
 }
 
 export = tags

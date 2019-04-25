@@ -1,6 +1,6 @@
 declare const types: {
-  HTTP: string
-  WEB: string
+  HTTP: 'http'
+  WEB: 'web'
 }
 
 export = types
