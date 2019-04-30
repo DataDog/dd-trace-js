@@ -66,7 +66,6 @@ function wrapIpc (tracer, config, socket, options) {
 
 function startSpan (tracer, config, protocol, tags) {
   const childOf = tracer.scope().active()
-
   const span = tracer.startSpan(`${protocol}.connect`, {
     childOf,
     tags: Object.assign({
