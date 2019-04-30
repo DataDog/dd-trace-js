@@ -13,10 +13,14 @@ const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
+const NoopSpan = require('../noop/span')
 const formats = require('../../ext/formats')
 const log = require('../log')
-const noopSpan = require('../noop/span')
-const noopContext = require('../noop/span_context')
+const constants = require('../constants')
+
+const REFERENCE_NOOP = constants.REFERENCE_NOOP
+const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
+const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 
 class DatadogTracer extends Tracer {
   constructor (config) {
@@ -25,6 +29,7 @@ class DatadogTracer extends Tracer {
     log.use(config.logger)
     log.toggle(config.debug)
 
+    this._noopSpan = new NoopSpan(this)
     this._service = config.service
     this._url = config.url
     this._env = config.env
@@ -47,9 +52,12 @@ class DatadogTracer extends Tracer {
   _startSpan (name, fields) {
     const references = getReferences(fields.references)
     const reference = getParent(references)
+    const type = reference && reference.type()
     const parent = reference && reference.referencedContext()
+    const noopSpan = this._noopSpan
 
-    if (parent && parent === noopContext) return noopSpan
+    if (type === REFERENCE_NOOP) return noopSpan
+    if (parent && parent === noopSpan.context()) return noopSpan
     if (!parent && !this._sampler.isSampled()) return noopSpan
 
     const tags = {
@@ -71,7 +79,7 @@ class DatadogTracer extends Tracer {
   }
 
   _inject (spanContext, format, carrier) {
-    if (spanContext === noopContext) return this
+    if (spanContext === this._noopSpan.context()) return this
 
     try {
       this._prioritySampler.sample(spanContext)
@@ -104,7 +112,7 @@ function getReferences (references) {
 
     const spanContext = ref.referencedContext()
 
-    if (spanContext !== noopContext && !(spanContext instanceof SpanContext)) {
+    if (ref.type() !== REFERENCE_NOOP && !(spanContext instanceof SpanContext)) {
       log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
       return false
     }
@@ -118,11 +126,12 @@ function getParent (references) {
 
   for (let i = 0; i < references.length; i++) {
     const ref = references[i]
+    const type = ref.type()
 
-    if (ref.type() === opentracing.REFERENCE_CHILD_OF) {
+    if (type === REFERENCE_CHILD_OF || type === REFERENCE_NOOP) {
       parent = ref
       break
-    } else if (ref.type() === opentracing.REFERENCE_FOLLOWS_FROM) {
+    } else if (type === REFERENCE_FOLLOWS_FROM) {
       if (!parent) {
         parent = ref
       }

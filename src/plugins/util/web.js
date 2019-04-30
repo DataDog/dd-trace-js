@@ -45,6 +45,8 @@ const web = {
     this.patch(req)
 
     const span = startSpan(tracer, config, req, res, name)
+
+    // TODO: replace this with a REFERENCE_NOOP after we split http/express/etc
     if (!config.filter(req.url)) {
       span.context()._sampling.drop = true
     }
