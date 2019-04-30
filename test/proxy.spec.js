@@ -4,6 +4,7 @@ describe('TracerProxy', () => {
   let Proxy
   let proxy
   let DatadogTracer
+  let NoopTracer
   let tracer
   let noop
   let Instrumenter
@@ -42,6 +43,7 @@ describe('TracerProxy', () => {
     }
 
     DatadogTracer = sinon.stub().returns(tracer)
+    NoopTracer = sinon.stub().returns(noop)
     Instrumenter = sinon.stub().returns(instrumenter)
 
     config = { enabled: true, experimental: {} }
@@ -56,7 +58,7 @@ describe('TracerProxy', () => {
 
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
-      './noop/tracer': noop,
+      './noop/tracer': NoopTracer,
       './instrumenter': Instrumenter,
       './config': Config,
       './platform': platform

@@ -3,10 +3,12 @@
 const Span = require('opentracing').Span
 
 describe('NoopTracer', () => {
+  let NoopTracer
   let tracer
 
   beforeEach(() => {
-    tracer = require('../src/noop/tracer')
+    NoopTracer = require('../src/noop/tracer')
+    tracer = new NoopTracer()
   })
 
   describe('trace', () => {
