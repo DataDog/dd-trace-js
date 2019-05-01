@@ -46,8 +46,7 @@ namespace datadog {
     if (!enabled_) return nullptr;
 
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
-    v8::Local<v8::String> context_key = v8::String::NewFromUtf8(isolate, "_spanContext");
-    v8::Local<v8::Object> context = v8::Local<v8::Object>::Cast(span->Get(context_key));
+    v8::Local<v8::Object> context = value<v8::Object>(span, "_spanContext");
 
     ++unfinished_total_;
 
@@ -56,8 +55,7 @@ namespace datadog {
     handle->tracker = this;
     handle->context = new v8::Persistent<v8::Object>(isolate, context);
 
-    v8::Local<v8::String> name_key = v8::String::NewFromUtf8(isolate, "_name");
-    std::string name = to_string(context->Get(name_key));
+    std::string name = to_string(value<v8::String>(context, "_name"));
 
     if (unfinished_.find(name) == unfinished_.end()) {
       unfinished_.insert(std::make_pair(name, 0));

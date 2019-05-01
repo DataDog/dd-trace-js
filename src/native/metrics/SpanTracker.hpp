@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <string>
+#include <nan.h>
 #include <v8.h>
 
 #include "Collector.hpp"
