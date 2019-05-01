@@ -275,7 +275,7 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
-      - image: bitnami/mongodb:3.6.11
+      - image: bitnami/mongodb:3.6.8
         environment:
           - MONGODB_REPLICA_SET_MODE=primary
           - MONGODB_ADVERTISED_HOSTNAME=localhost
