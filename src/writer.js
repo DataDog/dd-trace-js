@@ -25,6 +25,8 @@ class Writer {
     const trace = spanContext._trace
 
     if (trace.started.length === trace.finished.length) {
+      this._prioritySampler.sample(spanContext)
+
       const formattedTrace = trace.finished.map(format)
 
       if (spanContext._sampling.drop === true) {
