@@ -113,6 +113,11 @@ jobs:
     docker:
       - image: node:10
 
+  node-core-12:
+    <<: *node-core-base
+    docker:
+      - image: node:12
+
   node-core-latest:
     <<: *node-core-base
     docker:
@@ -494,6 +499,7 @@ workflows:
       - node-core-6
       - node-core-8
       - node-core-10
+      - node-core-12
       - node-core-latest
       - node-amqplib
       - node-amqp10
@@ -560,6 +566,7 @@ workflows:
       - node-core-6
       - node-core-8
       - node-core-10
+      - node-core-12
       - node-core-latest
       - node-amqplib
       - node-amqp10
