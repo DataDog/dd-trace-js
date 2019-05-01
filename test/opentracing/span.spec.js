@@ -230,15 +230,5 @@ describe('Span', () => {
 
       expect(recorder.record).to.have.been.calledOnce
     })
-
-    it('should generate sampling priority', () => {
-      prioritySampler.sample = span => {
-        span.context()._sampling.priority = 2
-      }
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
-      span.finish()
-
-      expect(span.context()._sampling.priority).to.equal(2)
-    })
   })
 })
