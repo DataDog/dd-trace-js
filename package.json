@@ -39,7 +39,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": "^4.7 || ^6.9 || >=8"
+    "node": ">=4"
   },
   "dependencies": {
     "@types/node": "^10.12.18",
