@@ -66,7 +66,12 @@ function wrapLayerHandle (layer, handle) {
 
 function wrapStack (stack, offset, matchers) {
   [].concat(stack).slice(offset).forEach(layer => {
-    layer.handle = wrapLayerHandle(layer, layer.handle)
+    if (layer.__handle) { // express-async-errors
+      layer.__handle = wrapLayerHandle(layer, layer.__handle)
+    } else {
+      layer.handle = wrapLayerHandle(layer, layer.handle)
+    }
+
     layer._datadog_matchers = matchers
 
     if (layer.route) {
