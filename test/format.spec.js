@@ -280,7 +280,7 @@ describe('format', () => {
     it('should accept boolean false for analytics', () => {
       spanContext._tags[ANALYTICS] = false
       trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0)
+      expect(trace.metrics[ANALYTICS_KEY]).to.be.undefined
     })
 
     it('should accept strings for analytics', () => {

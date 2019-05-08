@@ -24,6 +24,7 @@ function format (span) {
   extractError(formatted, span)
   extractTags(formatted, span)
   extractMetrics(formatted, span)
+  extractAnalytics(formatted, span)
 
   return formatted
 }
@@ -99,8 +100,6 @@ function extractError (trace, span) {
 function extractMetrics (trace, span) {
   const spanContext = span.context()
 
-  let analytics = spanContext._tags[ANALYTICS]
-
   Object.keys(spanContext._metrics).forEach(metric => {
     if (typeof spanContext._metrics[metric] === 'number') {
       trace.metrics[metric] = spanContext._metrics[metric]
@@ -110,18 +109,19 @@ function extractMetrics (trace, span) {
   if (spanContext._sampling.priority !== undefined) {
     trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
   }
+}
 
-  switch (typeof analytics) {
-    case 'string':
-      analytics = parseFloat(analytics)
-    case 'number': // eslint-disable-line no-fallthrough
-      if (!isNaN(analytics)) {
-        trace.metrics[ANALYTICS_KEY] = Math.max(Math.min(analytics, 1), 0)
-      }
-      break
-    case 'boolean':
-      trace.metrics[ANALYTICS_KEY] = analytics ? 1 : 0
-      break
+function extractAnalytics (trace, span) {
+  let analytics = span.context()._tags[ANALYTICS]
+
+  if (analytics === true) {
+    analytics = 1
+  } else {
+    analytics = parseFloat(analytics)
+  }
+
+  if (!isNaN(analytics)) {
+    trace.metrics[ANALYTICS_KEY] = Math.max(Math.min(analytics, 1), 0)
   }
 }
 

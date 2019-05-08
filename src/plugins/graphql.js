@@ -218,7 +218,7 @@ function startExecutionSpan (tracer, config, operation, args) {
   addDocumentTags(span, args.document)
   addVariableTags(tracer, config, span, args.variableValues)
 
-  analyticsSampler.sample(span, config.analytics, true)
+  analyticsSampler.sample(span, config.analytics)
 
   return span
 }
@@ -306,8 +306,6 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
         })
     }
   }
-
-  analyticsSampler.sample(span, config.analytics)
 
   return span
 }

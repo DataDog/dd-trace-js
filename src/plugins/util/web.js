@@ -92,8 +92,6 @@ const web = {
       [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
     })
 
-    analyticsSampler.sample(span, req._datadog.config.analytics)
-
     req._datadog.middleware.push(span)
 
     return tracer.scope().activate(span, fn)
