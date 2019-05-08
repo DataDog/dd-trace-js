@@ -1,5 +1,26 @@
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope } from '..';
-import { HTTP_HEADERS } from '../ext/formats';
+import { formats, kinds, priority, tags, types } from '../ext';
+import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
+import { SERVER, CLIENT, PRODUCER, CONSUMER } from '../ext/kinds'
+import { USER_REJECT, AUTO_REJECT, AUTO_KEEP, USER_KEEP } from '../ext/priority'
+import {
+  ANALYTICS,
+  ERROR,
+  HTTP_METHOD,
+  HTTP_REQUEST_HEADERS,
+  HTTP_RESPONSE_HEADERS,
+  HTTP_ROUTE,
+  HTTP_STATUS_CODE,
+  HTTP_URL,
+  MANUAL_DROP,
+  MANUAL_KEEP,
+  RESOURCE_NAME,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  SPAN_KIND,
+  SPAN_TYPE,
+} from '../ext/tags'
+import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
 
 opentracing.initGlobalTracer(tracer);

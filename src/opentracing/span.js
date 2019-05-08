@@ -122,7 +122,6 @@ class DatadogSpan extends Span {
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
-    this._prioritySampler.sample(this)
     this._handle.finish()
     this._recorder.record(this)
   }
