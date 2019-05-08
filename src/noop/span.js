@@ -2,6 +2,9 @@
 
 const Span = require('opentracing').Span
 const SpanContext = require('../opentracing/span_context')
+const priority = require('../../ext/priority')
+
+const USER_REJECT = priority.USER_REJECT
 
 class NoopSpan extends Span {
   constructor (tracer) {
@@ -16,7 +19,10 @@ class NoopSpan extends Span {
       _noopContext: {
         value: new SpanContext({
           traceId: 0,
-          spanId: 0
+          spanId: 0,
+          sampling: {
+            priority: USER_REJECT
+          }
         })
       }
     })

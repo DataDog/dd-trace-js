@@ -340,15 +340,6 @@ describe('Tracer', () => {
 
       expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
     })
-
-    it('should skip injection for noop context', () => {
-      TextMapPropagator.returns(propagator)
-
-      tracer = new Tracer(config)
-      tracer.inject(tracer._noopSpan, opentracing.FORMAT_TEXT_MAP, carrier)
-
-      expect(propagator.inject).to.not.have.been.called
-    })
   })
 
   describe('extract', () => {
