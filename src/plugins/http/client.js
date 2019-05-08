@@ -2,12 +2,16 @@
 
 const url = require('url')
 const semver = require('semver')
+const opentracing = require('opentracing')
 const log = require('../../log')
+const constants = require('../../constants')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../util/urlfilter')
 const analyticsSampler = require('../../analytics_sampler')
+
+const Reference = opentracing.Reference
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -15,6 +19,8 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
+const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
+const REFERENCE_NOOP = constants.REFERENCE_NOOP
 
 function patch (http, methodName, tracer, config) {
   config = normalizeConfig(tracer, config)
@@ -28,16 +34,15 @@ function patch (http, methodName, tracer, config) {
 
       let callback = args.callback
 
-      if (!config.filter(uri)) {
-        return request.call(this, options, callback)
-      }
-
       const method = (options.method || 'GET').toUpperCase()
 
       const scope = tracer.scope()
       const childOf = scope.active()
+      const type = config.filter(uri) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
       const span = tracer.startSpan('http.request', {
-        childOf,
+        references: [
+          new Reference(type, childOf)
+        ],
         tags: {
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(tracer, config, options),

@@ -4,8 +4,6 @@ const Tracer = require('opentracing').Tracer
 const Scope = require('../scope/new/base')
 const Span = require('./span')
 
-const span = new Span()
-
 class NoopTracer extends Tracer {
   constructor (config) {
     super(config)
@@ -20,10 +18,11 @@ class NoopTracer extends Tracer {
 
     this._scopeManager = new ScopeManager()
     this._scope = new Scope()
+    this._span = new Span(this)
   }
 
   trace (name, options, fn) {
-    return fn(span, () => {})
+    return fn(this._span, () => {})
   }
 
   wrap (name, options, fn) {
@@ -43,7 +42,7 @@ class NoopTracer extends Tracer {
   }
 
   _startSpan (name, options) {
-    return span
+    return this._span
   }
 }
 

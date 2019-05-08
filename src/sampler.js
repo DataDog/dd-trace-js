@@ -9,7 +9,7 @@ class Sampler {
     return this._rate
   }
 
-  isSampled (span) {
+  isSampled () {
     return this._rate === 1 || Math.random() < this._rate
   }
 }

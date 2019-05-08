@@ -74,10 +74,6 @@ function startSpan (tracer, config, protocol, tags) {
     }, tags)
   })
 
-  if (!childOf) {
-    span.context()._sampled = false
-  }
-
   return span
 }
 

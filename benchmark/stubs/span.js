@@ -28,7 +28,6 @@ const span = {
     _metrics: {
       [SAMPLE_RATE_METRIC_KEY]: 1
     },
-    _sampled: true,
     _sampling: {},
     _name: 'operation'
   }),
