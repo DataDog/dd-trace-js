@@ -390,6 +390,17 @@ describe('plugins/util/web', () => {
       expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
       expect(span.context()._tags).to.have.property(HTTP_ROUTE, '/foo/bar')
     })
+
+    it('should only add valid route segments to the span resource name', () => {
+      req.method = 'GET'
+
+      web.enterRoute(req)
+      web.enterRoute(req, 1337)
+      res.end()
+
+      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET')
+      expect(span.context()._tags).to.not.have.property(HTTP_ROUTE)
+    })
   })
 
   describe('exitRoute', () => {
