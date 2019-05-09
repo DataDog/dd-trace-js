@@ -215,6 +215,41 @@ describe('Plugin', () => {
           })
         })
 
+        withVersions(plugin, 'koa-route', routerVersion => {
+          let koaRouter
+
+          beforeEach(() => {
+            koaRouter = require(`../../versions/koa-route@${routerVersion}`).get()
+          })
+
+          it('should do automatic instrumentation on koa-route', done => {
+            const app = new Koa()
+
+            const getUser = (ctx, id) => {
+              ctx.body = ''
+            }
+
+            app
+              .use(koaRouter.get('/user/:id', getUser))
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', (e) => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+        })
+
         withVersions(plugin, 'koa-router', routerVersion => {
           let Router
 
@@ -237,7 +272,6 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = sort(traces[0])
-
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
 

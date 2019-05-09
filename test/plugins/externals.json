@@ -17,6 +17,10 @@
   ],
   "koa": [
     {
+      "name": "koa-route",
+      "versions": [">=3.2"]
+    },
+    {
       "name": "koa-websocket",
       "versions": ["5.0.1"]
     },
