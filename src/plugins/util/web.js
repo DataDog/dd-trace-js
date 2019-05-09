@@ -68,7 +68,9 @@ const web = {
 
   // Add a route segment that will be used for the resource name.
   enterRoute (req, path) {
-    req._datadog.paths.push(path)
+    if (typeof path === 'string') {
+      req._datadog.paths.push(path)
+    }
   },
 
   // Remove the current route segment.
