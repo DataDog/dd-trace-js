@@ -26,6 +26,7 @@ describe('Tracer', () => {
   let propagator
   let config
   let log
+  let platform
 
   beforeEach(() => {
     fields = {}
@@ -78,6 +79,10 @@ describe('Tracer', () => {
       toggle: sinon.spy()
     }
 
+    platform = {
+      hostname: sinon.stub().returns('my_hostname')
+    }
+
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
@@ -88,7 +93,8 @@ describe('Tracer', () => {
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
-      '../log': log
+      '../log': log,
+      '../platform': platform
     })
   })
 
@@ -129,7 +135,8 @@ describe('Tracer', () => {
           'foo': 'bar',
           'service.name': 'service'
         },
-        startTime: fields.startTime
+        startTime: fields.startTime,
+        hostname: undefined
       })
 
       expect(testSpan).to.equal(span)
@@ -165,6 +172,27 @@ describe('Tracer', () => {
         operationName: 'name',
         parent
       })
+    })
+
+    it('should start a span with the system hostname if reportHostname is enabled', () => {
+      fields.tags = { foo: 'bar' }
+      fields.startTime = 1234567890000000000
+      config.reportHostname = true
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWith(tracer, recorder, sampler, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        tags: {
+          'foo': 'bar',
+          'service.name': 'service'
+        },
+        startTime: fields.startTime,
+        hostname: 'my_hostname'
+      })
+
+      expect(testSpan).to.equal(span)
     })
 
     it('should ignore additional follow references', () => {

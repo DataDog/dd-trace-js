@@ -10,6 +10,7 @@ const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
 const ORIGIN_KEY = constants.ORIGIN_KEY
+const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
 const map = {
   'service.name': 'service',
@@ -47,6 +48,7 @@ function formatSpan (span) {
 function extractTags (trace, span) {
   const origin = span.context()._trace.origin
   const tags = span.context()._tags
+  const hostname = span.context()._hostname
 
   Object.keys(tags).forEach(tag => {
     switch (tag) {
@@ -55,6 +57,7 @@ function extractTags (trace, span) {
       case 'resource.name':
         addTag(trace, map[tag], tags[tag])
         break
+      case HOSTNAME_KEY:
       case ANALYTICS:
         break
       case 'error':
@@ -79,6 +82,8 @@ function extractTags (trace, span) {
     addTag(trace.meta, 'runtime-id', platform.runtime().id())
     addTag(trace.meta, 'language', 'javascript')
   }
+
+  addTag(trace.meta, HOSTNAME_KEY, hostname)
 }
 
 function extractError (trace, span) {

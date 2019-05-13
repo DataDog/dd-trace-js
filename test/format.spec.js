@@ -8,6 +8,7 @@ const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
 const ORIGIN_KEY = constants.ORIGIN_KEY
+const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
 const id = new Int64BE(0x02345678, 0x12345678)
 
@@ -42,7 +43,8 @@ describe('format', () => {
     platform = {
       runtime: sinon.stub().returns({
         id: sinon.stub().returns('1234')
-      })
+      }),
+      hostname: sinon.stub().returns('my_hostname')
     }
 
     format = proxyquire('../src/format', {
@@ -76,6 +78,21 @@ describe('format', () => {
       expect(trace.service).to.equal('service')
       expect(trace.type).to.equal('type')
       expect(trace.resource).to.equal('resource')
+    })
+
+    it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
+      spanContext._tags[HOSTNAME_KEY] = 'some_hostname'
+
+      trace = format(span)
+
+      expect(trace.meta[HOSTNAME_KEY]).to.be.undefined
+    })
+
+    it('should include the real hostname of the system if reportHostname is true', () => {
+      spanContext._hostname = 'my_hostname'
+      trace = format(span)
+
+      expect(trace.meta[HOSTNAME_KEY]).to.equal('my_hostname')
     })
 
     it('should only extract tags that are not Datadog specific to meta', () => {

@@ -21,6 +21,7 @@ class DatadogSpan extends Span {
     const metrics = {
       [SAMPLE_RATE_METRIC_KEY]: sampler.rate()
     }
+    const hostname = fields.hostname
 
     this._parentTracer = tracer
     this._sampler = sampler
@@ -32,6 +33,7 @@ class DatadogSpan extends Span {
     this._spanContext._name = operationName
     this._spanContext._tags = tags
     this._spanContext._metrics = metrics
+    this._spanContext._hostname = hostname
 
     this._handle = platform.metrics().track(this)
   }

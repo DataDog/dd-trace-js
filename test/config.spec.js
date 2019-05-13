@@ -30,6 +30,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('tags', {})
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
+    expect(config).to.have.property('reportHostname', false)
   })
 
   it('should initialize from the default service', () => {
@@ -47,6 +48,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
+    platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
 
     const config = new Config()
@@ -58,8 +60,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.hostname', 'agent')
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
-    expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('service', 'service')
+    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
   })
 
@@ -104,6 +107,7 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       runtimeMetrics: true,
+      reportHostname: true,
       plugins: false
     })
 
@@ -121,6 +125,7 @@ describe('Config', () => {
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
@@ -178,6 +183,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
+    platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
 
     const config = new Config('test', {
@@ -191,6 +197,7 @@ describe('Config', () => {
         port: 8888
       },
       runtimeMetrics: false,
+      reportHostname: false,
       service: 'test',
       env: 'development'
     })
@@ -203,6 +210,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })
