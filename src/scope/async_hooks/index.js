@@ -2,7 +2,7 @@
 
 const semver = require('semver')
 
-if (process && semver.gte(process.versions.node, '8.0.0')) {
+if (process && semver.gte(process.versions.node, '8.15.0')) {
   module.exports = require('./async_hooks')
 } else {
   module.exports = require('./async_wrap')
