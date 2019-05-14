@@ -11,6 +11,7 @@ const request = require('./request')
 const msgpack = require('./msgpack')
 const metrics = require('./metrics')
 const Uint64BE = require('./uint64be')
+const hostname = require('./hostname')
 
 const emitter = new EventEmitter()
 
@@ -39,6 +40,7 @@ const platform = {
   msgpack,
   metrics,
   Uint64BE,
+  hostname,
   on: emitter.on.bind(emitter),
   once: emitter.once.bind(emitter),
   off: emitter.removeListener.bind(emitter)

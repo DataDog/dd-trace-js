@@ -30,6 +30,7 @@ class Config {
       platform.env('DD_TRACE_ANALYTICS_ENABLED'),
       platform.env('DD_TRACE_ANALYTICS')
     )
+    const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -49,6 +50,7 @@ class Config {
     }
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
     this.experimental = {}
+    this.reportHostname = String(reportHostname) === 'true'
   }
 }
 
