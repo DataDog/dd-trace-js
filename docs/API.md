@@ -302,7 +302,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 | sampleRate     |                              | 1         | Percentage of spans to sample as a float between 0 and 1. |
 | flushInterval  |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | runtimeMetrics | DD_RUNTIME_METRICS_ENABLED   | false     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
-| reportHostname | DD_TRACE_REPORT_HOSTNAME     | false     | Whether or not to report the system's hostname as a tag in every trace |
+| reportHostname | DD_TRACE_REPORT_HOSTNAME     | false     | Report the system's hostname as a tag in every trace. |
 | experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
 | plugins        |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 
