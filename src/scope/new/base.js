@@ -131,11 +131,11 @@ function wrapAddListener (addListener, scope, span) {
 
     const events = this._datadog_events[eventName]
 
-    if (!events[id]) {
-      events[id] = []
+    if (!events[listener._datadog_id]) {
+      events[listener._datadog_id] = []
     }
 
-    events[id].push(bound)
+    events[listener._datadog_id].push(bound)
 
     return addListener.call(this, eventName, bound)
   }
