@@ -99,11 +99,11 @@ function setupListeners (socket, span, protocol) {
   }
 
   const cleanupListener = () => {
-    socket.off('connect', localListener)
+    socket.removeListener('connect', localListener)
 
     events.forEach(event => {
-      socket.off(event, wrapListener)
-      socket.off(event, cleanupListener)
+      socket.removeListener(event, wrapListener)
+      socket.removeListener(event, cleanupListener)
     })
   }
 
