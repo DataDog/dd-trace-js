@@ -5,7 +5,7 @@ const analyticsSampler = require('../analytics_sampler')
 
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
-    return function requestWithTrace (params, cb) {
+    return function requestWithTrace (params, options, cb) {
       const childOf = tracer.scope().active()
       const span = tracer.startSpan('elasticsearch.query', {
         childOf,
@@ -17,21 +17,27 @@ function createWrapRequest (tracer, config) {
           'span.type': 'elasticsearch',
           'elasticsearch.url': params.path,
           'elasticsearch.method': params.method,
-          'elasticsearch.params': JSON.stringify(params.query)
+          'elasticsearch.params': JSON.stringify(params.querystring || params.query)
         }
       })
 
-      if (JSON.stringify(params.body)) {
+      if (params.body) {
         span.setTag('elasticsearch.body', JSON.stringify(params.body))
       }
 
       analyticsSampler.sample(span, config.analytics)
 
-      cb = tracer.scope().bind(cb, childOf)
+      cb = request.length === 2 || typeof options === 'function'
+        ? tracer.scope().bind(options, childOf)
+        : tracer.scope().bind(cb, childOf)
 
       return tracer.scope().activate(span, () => {
-        if (typeof cb === 'function') {
-          return request.call(this, params, wrapCallback(tracer, span, cb))
+        if (typeof cb === 'function' || typeof options === 'function') {
+          if (request.length === 2) {
+            return request.call(this, params, wrapCallback(tracer, span, cb))
+          } else {
+            return request.call(this, params, options, wrapCallback(tracer, span, cb))
+          }
         } else {
           const promise = request.apply(this, arguments)
 
@@ -72,6 +78,17 @@ module.exports = [
     name: 'elasticsearch',
     file: 'src/lib/transport.js',
     versions: ['>=10'],
+    patch (Transport, tracer, config) {
+      this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
+    },
+    unpatch (Transport) {
+      this.unwrap(Transport.prototype, 'request')
+    }
+  },
+  {
+    name: '@elastic/elasticsearch',
+    file: 'lib/Transport.js',
+    versions: ['>=5.6.16'], // initial version of this module
     patch (Transport, tracer, config) {
       this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
     },

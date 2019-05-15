@@ -2,11 +2,10 @@
 
 const fs = require('fs')
 const path = require('path')
-const requireDir = require('require-dir')
 const crypto = require('crypto')
 const semver = require('semver')
 const exec = require('./helpers/exec')
-const plugins = requireDir('../src/plugins')
+const plugins = require('../src/plugins')
 const externals = require('../test/plugins/externals')
 
 const workspaces = new Set()
@@ -66,6 +65,10 @@ function assertModules (name, version) {
 function assertFolder (name, version) {
   if (!fs.existsSync(folder())) {
     fs.mkdirSync(folder())
+  }
+
+  if (name && name.includes(path.sep)) {
+    name.split(path.sep).reduce(parent => assertFolder(parent))
   }
 
   if (!fs.existsSync(folder(name, version))) {
