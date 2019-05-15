@@ -315,6 +315,7 @@ interface Plugins {
   "hapi": plugins.hapi;
   "http": plugins.http;
   "ioredis": plugins.ioredis;
+  "knex": plugins.knex;
   "koa": plugins.koa;
   "memcached": plugins.memcached;
   "mongodb-core": plugins.mongodb_core;
@@ -621,6 +622,12 @@ declare namespace plugins {
    * [ioredis](https://github.com/luin/ioredis) module.
    */
   interface ioredis extends Integration {}
+
+  /**
+   * This plugin patches the [knex](https://knexjs.org/)
+   * module to bind the promise callback the the caller context.
+   */
+  interface knex extends Integration {}
 
   /**
    * This plugin automatically instruments the
