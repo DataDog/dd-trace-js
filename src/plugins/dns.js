@@ -25,7 +25,9 @@ function createWrapLookup (tracer, config) {
         'dns.hostname': hostname
       })
 
-      wrapArgs(span, arguments)
+      wrapArgs(span, arguments, (e, address) => {
+        span.setTag('dns.address', address)
+      })
 
       return tracer.scope().activate(span, () => lookup.apply(this, arguments))
     }
@@ -102,8 +104,13 @@ function startSpan (tracer, config, operation, tags) {
   return span
 }
 
-function wrapArgs (span, args) {
-  args[args.length - 1] = tx.wrap(span, args[args.length - 1])
+function wrapArgs (span, args, callback) {
+  const original = args[args.length - 1]
+
+  args[args.length - 1] = function () {
+    callback && callback.apply(null, arguments)
+    return tx.wrap(span, original).apply(this, arguments)
+  }
 }
 
 function wrapResolver (tracer, config, rrtype, args) {
