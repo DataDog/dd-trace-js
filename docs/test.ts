@@ -109,6 +109,7 @@ tracer.use('http', {
   client: httpClientOptions
 });
 tracer.use('ioredis');
+tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('memcached');
