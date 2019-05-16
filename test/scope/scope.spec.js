@@ -291,6 +291,13 @@ describe('Scope', () => {
         emitter.on('test', listener2)
         emitter.on('test', listener2)
 
+        emitter.removeListener('test', listener)
+        emitter.removeListener('test', listener2)
+
+        emitter.on('test', listener)
+        emitter.on('test', listener2)
+        emitter.on('test', listener2)
+
         emitter.removeListener('test', listener2)
 
         emitter.on('test', () => {
