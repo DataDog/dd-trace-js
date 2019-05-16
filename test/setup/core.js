@@ -75,13 +75,12 @@ function withVersions (plugin, modules, range, cb) {
       .forEach(instrumentation => {
         instrumentation.versions
           .forEach(version => {
-            console.log(moduleName, version)
             try {
               const min = semver.coerce(version).version
               require(`../../versions/${moduleName}@${min}`).get()
               testVersions.set(min, { range: version, test: min })
             } catch (e) {
-            // skip unsupported version
+              // skip unsupported version
             }
 
             agent.wipe()
@@ -91,7 +90,7 @@ function withVersions (plugin, modules, range, cb) {
               require(`../../versions/${moduleName}@${version}`).get()
               testVersions.set(max, { range: version, test: version })
             } catch (e) {
-            // skip unsupported version
+              // skip unsupported version
             }
 
             agent.wipe()
