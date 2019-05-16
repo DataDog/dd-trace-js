@@ -172,7 +172,7 @@ class Instrumenter {
     const instrumentations = [].concat(plugin)
 
     for (let i = 0; i < instrumentations.length; i++) {
-      if (instrumentations[i].name !== moduleName) continue
+      if (moduleName.indexOf(instrumentations[i].name) !== 0) continue
       if (instrumentations[i].versions && !matchVersion(moduleVersion, instrumentations[i].versions)) continue
       if (instrumentations[i].file && !exists(moduleBaseDir, instrumentations[i].file)) {
         this._fail(plugin)

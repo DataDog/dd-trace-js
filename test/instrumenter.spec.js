@@ -295,6 +295,21 @@ describe('Instrumenter', () => {
         expect(integrations.mysql[0].patch).to.have.been.calledWithMatch(Connection, 'tracer', {})
         expect(integrations.mysql[1].patch).to.have.been.calledWithMatch(Pool, 'tracer', {})
       })
+
+      it('should support patching multiple modules with different files', () => {
+        integrations.mysql[1].name = '@mysql/mock'
+        integrations.mysql[1].file = 'invalid.js'
+
+        const Connection = require('mysql-mock/lib/connection')
+
+        instrumenter.patch()
+
+        const mysql = require('mysql-mock')
+
+        expect(mysql).to.deep.equal({ name: 'mysql' })
+
+        expect(integrations.mysql[0].patch).to.have.been.calledWithMatch(Connection, 'tracer', {})
+      })
     })
 
     describe('unpatch', () => {

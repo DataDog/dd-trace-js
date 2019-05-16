@@ -32,7 +32,7 @@ function createWrapRequest (tracer, config) {
         : tracer.scope().bind(cb, childOf)
 
       return tracer.scope().activate(span, () => {
-        if (typeof cb === 'function' || typeof options === 'function') {
+        if (typeof cb === 'function') {
           if (request.length === 2) {
             return request.call(this, params, wrapCallback(tracer, span, cb))
           } else {
