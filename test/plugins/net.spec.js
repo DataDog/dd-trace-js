@@ -164,35 +164,6 @@ describe('Plugin', () => {
       })
     })
 
-    it('should instrument close', done => {
-      const socket = new net.Socket()
-
-      agent
-        .use(traces => {
-          expect(traces[0][0]).to.deep.include({
-            name: 'tcp.connect',
-            service: 'test-tcp',
-            resource: `localhost:${port}`
-          })
-          expect(traces[0][0].meta).to.deep.include({
-            'span.kind': 'client',
-            'tcp.family': 'IPv4',
-            'tcp.remote.host': 'localhost',
-            'tcp.remote.port': `${port}`,
-            'out.host': 'localhost',
-            'out.port': `${port}`
-          })
-          expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
-        })
-        .then(done)
-        .catch(done)
-
-      tracer.scope().activate(parent, () => {
-        socket.connect({ port })
-        socket.destroy()
-      })
-    })
-
     it('should instrument error', done => {
       const socket = new net.Socket()
 
