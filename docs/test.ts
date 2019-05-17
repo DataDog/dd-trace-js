@@ -118,6 +118,7 @@ tracer.use('mysql2');
 tracer.use('net');
 tracer.use('pg');
 tracer.use('pino');
+tracer.use('promise');
 tracer.use('q');
 tracer.use('redis');
 tracer.use('restify');

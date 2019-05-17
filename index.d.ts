@@ -323,6 +323,7 @@ interface Plugins {
   "net": plugins.net;
   "pg": plugins.pg;
   "pino": plugins.pino;
+  "promise": plugins.promise;
   "q": plugins.q;
   "redis": plugins.redis;
   "restify": plugins.restify;
@@ -671,6 +672,12 @@ declare namespace plugins {
    * on the tracer.
    */
   interface pino extends Integration {}
+
+  /**
+   * This plugin patches the [promise](https://github.com/then/promise)
+   * module to bind the promise callback the the caller context.
+   */
+  interface promise extends Integration {}
 
   /**
    * This plugin patches the [q](https://github.com/kriskowal/q)
