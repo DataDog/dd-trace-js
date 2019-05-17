@@ -125,7 +125,7 @@ class Instrumenter {
       .filter(plugin => [].concat(plugin).some(instrumentation =>
         filename(instrumentation) === moduleName && matchVersion(moduleVersion, instrumentation.versions)
       ))
-      .forEach(plugin => this._validate(plugin, moduleBaseDir, moduleVersion))
+      .forEach(plugin => this._validate(plugin, moduleName, moduleBaseDir, moduleVersion))
 
     this._plugins
       .forEach((meta, plugin) => {
@@ -167,11 +167,12 @@ class Instrumenter {
     this._load(plugin, meta)
   }
 
-  _validate (plugin, moduleBaseDir, moduleVersion) {
+  _validate (plugin, moduleName, moduleBaseDir, moduleVersion) {
     const meta = this._plugins.get(plugin)
     const instrumentations = [].concat(plugin)
 
     for (let i = 0; i < instrumentations.length; i++) {
+      if (moduleName.indexOf(instrumentations[i].name) !== 0) continue
       if (instrumentations[i].versions && !matchVersion(moduleVersion, instrumentations[i].versions)) continue
       if (instrumentations[i].file && !exists(moduleBaseDir, instrumentations[i].file)) {
         this._fail(plugin)
