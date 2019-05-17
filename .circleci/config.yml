@@ -309,6 +309,13 @@ jobs:
           - PG_TEST_NATIVE=true
       - image: postgres:9.5
 
+  node-promise-js:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=promise-js
+
   node-promise:
     <<: *node-plugin-base
     docker:
@@ -527,6 +534,7 @@ workflows:
       - node-net
       - node-pino
       - node-postgres
+      - node-promise-js
       - node-promise
       - node-q
       - node-redis
@@ -595,6 +603,7 @@ workflows:
       - node-net
       - node-pino
       - node-postgres
+      - node-promise-js
       - node-promise
       - node-q
       - node-redis
