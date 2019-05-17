@@ -4,7 +4,7 @@ const retry = require('retry')
 const BaseRetryOperation = require('retry/lib/retry_operation')
 
 const options = {
-  retries: 300,
+  retries: 60,
   factor: 1,
   minTimeout: 1000,
   maxTimeout: 1000,
