@@ -118,6 +118,7 @@ tracer.use('mysql2');
 tracer.use('net');
 tracer.use('pg');
 tracer.use('pino');
+tracer.use('promise-js');
 tracer.use('promise');
 tracer.use('q');
 tracer.use('redis');
