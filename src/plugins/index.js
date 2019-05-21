@@ -22,6 +22,7 @@ module.exports = {
   'net': require('./net'),
   'pg': require('./pg'),
   'pino': require('./pino'),
+  'promise': require('./promise'),
   'q': require('./q'),
   'redis': require('./redis'),
   'restify': require('./restify'),
