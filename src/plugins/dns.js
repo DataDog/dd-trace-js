@@ -126,6 +126,22 @@ function wrapResolver (tracer, config, rrtype, args) {
   return span
 }
 
+function patchResolveShorthands (tracer, config, shim, prototype) {
+  Object.keys(rrtypes)
+    .filter(method => !!prototype[method])
+    .forEach(method => {
+      shim.wrap(prototype, method, createWrapResolver(tracer, config, rrtypes[method]))
+    })
+}
+
+function unpatchResolveShorthands (shim, prototype) {
+  Object.keys(rrtypes)
+    .filter(method => !!prototype[method])
+    .forEach(method => {
+      shim.unwrap(prototype, method)
+    })
+}
+
 module.exports = [
   {
     name: 'dns',
@@ -135,17 +151,13 @@ module.exports = [
       this.wrap(dns, 'resolve', createWrapResolve(tracer, config))
       this.wrap(dns, 'reverse', createWrapReverse(tracer, config))
 
-      Object.keys(rrtypes).forEach(method => {
-        this.wrap(dns, method, createWrapResolver(tracer, config, rrtypes[method]))
-      })
+      patchResolveShorthands(tracer, config, this, dns)
 
       if (dns.Resolver) {
         this.wrap(dns.Resolver.prototype, 'resolve', createWrapResolve(tracer, config))
         this.wrap(dns.Resolver.prototype, 'reverse', createWrapReverse(tracer, config))
 
-        Object.keys(rrtypes).forEach(method => {
-          this.wrap(dns.Resolver.prototype, method, createWrapResolver(tracer, config, rrtypes[method]))
-        })
+        patchResolveShorthands(tracer, config, this, dns.Resolver.prototype)
       }
     },
     unpatch (dns) {
@@ -156,9 +168,7 @@ module.exports = [
         'reverse'
       ])
 
-      Object.keys(rrtypes).forEach(method => {
-        this.unwrap(dns, method)
-      })
+      unpatchResolveShorthands(this, dns)
 
       if (dns.Resolver) {
         this.unwrap(dns.prototype.Resolver, [
@@ -166,9 +176,7 @@ module.exports = [
           'reverse'
         ])
 
-        Object.keys(rrtypes).forEach(method => {
-          this.unwrap(dns.prototype.Resolver, method)
-        })
+        unpatchResolveShorthands(this, dns.Resolver.prototype)
       }
     }
   }
