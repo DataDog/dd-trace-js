@@ -141,11 +141,12 @@ module.exports = {
   // Wipe the require cache.
   wipe () {
     const basedir = path.join(__dirname, '..', '..', 'versions')
-    const exceptions = ['/libpq/'] // wiping native modules results in errors
+    const exceptions = ['/libpq/', '/sqlite3/'] // wiping native modules results in errors
+      .map(exception => new RegExp(exception))
 
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
-      .filter(name => [].concat(exceptions).reduce((prev, next) => name.indexOf(next) === -1, true))
+      .filter(name => !exceptions.some(exception => exception.test(name)))
       .forEach(name => {
         delete require.cache[name]
       })

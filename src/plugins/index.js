@@ -14,6 +14,7 @@ module.exports = {
   'hapi': require('./hapi'),
   'http': require('./http'),
   'ioredis': require('./ioredis'),
+  'knex': require('./knex'),
   'koa': require('./koa'),
   'memcached': require('./memcached'),
   'mongodb-core': require('./mongodb-core'),

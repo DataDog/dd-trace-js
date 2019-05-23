@@ -31,6 +31,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'dns.hostname': 'localhost',
+            'dns.address': '127.0.0.1',
             'span.kind': 'client'
           })
         })

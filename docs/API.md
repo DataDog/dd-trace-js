@@ -1,14 +1,14 @@
 <h1 id="home">Datadog JavaScript Tracer API</h1>
 
-This is the API documentation for the Datadog JavaScript Tracer. If you are just looking to get started, check out the [tracing setup documentation](https://docs.datadoghq.com/tracing/setup/javascript/).
+This is the API documentation for the Datadog JavaScript Tracer. If you are just looking to get started, check out the [tracing setup documentation](https://docs.datadoghq.com/tracing/setup/nodejs/).
 
 <h2 id="overview">Overview</h2>
 
-The module exported by this library is an instance of the [Tracer](./Tracer.html) class.
+The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 
-If you aren’t using supported library instrumentation (see [Compatibility](#compatibility)), you may want to manually instrument your code.
+If you aren’t using supported library instrumentation (see [Compatibility](https://docs.datadoghq.com/tracing/setup/nodejs/#compatibility)), you may want to manually instrument your code.
 
 This can be done using the [OpenTracing API](#opentracing-api) and the [Scope Manager](#scope-manager).
 
@@ -186,7 +186,7 @@ innerEmitter.emit('request')
 outerEmitter.emit('request')
 ```
 
-See the [API documentation](./Scope.html) for more details.
+See the [API documentation](./interfaces/scope.html) for more details.
 
 <h2 id="integrations">Integrations</h2>
 
@@ -285,7 +285,7 @@ tracer.use('pg', {
 
 <h3 id="tracer-settings">Tracer settings</h3>
 
-Options can be configured as a parameter to the [init()](https://datadog.github.io/dd-trace-js/Tracer.html#init__anchor) method or as environment variables.
+Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables.
 
 | Config         | Environment Variable         | Default   | Description |
 | -------------- | ---------------------------- | --------- | ----------- |
@@ -308,7 +308,7 @@ Options can be configured as a parameter to the [init()](https://datadog.github.
 
 <h3 id="custom-logging">Custom Logging</h3>
 
-By default, logging from this library is disabled. In order to get debbuging information and errors sent to logs, the `debug` options should be set to `true` in the [init()](https://datadog.github.io/dd-trace-js/Tracer.html#init__anchor) method.
+By default, logging from this library is disabled. In order to get debbuging information and errors sent to logs, the `debug` options should be set to `true` in the [init()](./interfaces/tracer.html#init) method.
 
 The tracer will then log debug information to `console.log()` and errors to `console.error()`. This behavior can be changed by passing a custom logger to the tracer. The logger should contain a `debug()` and `error()` methods that can handle messages and errors, respectively.
 
