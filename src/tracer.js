@@ -1,30 +1,24 @@
 'use strict'
 
+const semver = require('semver')
 const Tracer = require('./opentracing/tracer')
 const tags = require('../ext/tags')
+const scopes = require('../ext/scopes')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const ANALYTICS = tags.ANALYTICS
+const ASYNC_HOOKS = scopes.ASYNC_HOOKS
+const ASYNC_LISTENER = scopes.ASYNC_LISTENER
+const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
-    let ScopeManager
-    let Scope
-
-    if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
-      ScopeManager = require('./scope/noop/scope_manager')
-      Scope = require('./scope/new/base')
-    } else {
-      ScopeManager = require('./scope/scope_manager')
-      Scope = require('./scope/new/scope')
-    }
-
-    this._scopeManager = new ScopeManager()
-    this._scope = new Scope()
+    this._scopeManager = getScopeManager(config)
+    this._scope = getScope(config)
   }
 
   trace (name, options, fn) {
@@ -120,6 +114,36 @@ function addTags (span, options) {
   tags[ANALYTICS] = options.analytics
 
   span.addTags(tags)
+}
+
+function getScopeManager () {
+  let ScopeManager
+
+  if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
+    ScopeManager = require('./scope/noop/scope_manager')
+  } else {
+    ScopeManager = require('./scope/scope_manager')
+  }
+
+  return new ScopeManager()
+}
+
+function getScope (config) {
+  let Scope
+
+  if (config.scope === NOOP) {
+    Scope = require('./scope/base')
+  } else if (config.scope === ASYNC_HOOKS) {
+    Scope = require('./scope/async_hooks')
+  } else if (config.scope === ASYNC_LISTENER) {
+    Scope = require('./scope/async-listener')
+  } else if (semver.satisfies(process.version, '^4.7.1 || ^6.9.2 || >=7.5')) {
+    Scope = require('./scope/async_hooks')
+  } else {
+    Scope = require('./scope/async-listener')
+  }
+
+  return new Scope()
 }
 
 module.exports = DatadogTracer

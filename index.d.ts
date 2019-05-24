@@ -256,6 +256,13 @@ export declare interface TracerOptions {
    * Global tags that should be assigned to every span.
    */
   tags?: { [key: string]: any };
+
+  /**
+   * Which scope implementation to use. The default is to use the best
+   * implementation for the runtime. Only change this if you know what you are
+   * doing.
+   */
+  scope?: 'async_hooks' | 'async-listener' | 'noop'
 }
 
 /** @hidden */

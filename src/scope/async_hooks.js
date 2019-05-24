@@ -1,14 +1,14 @@
 'use strict'
 
-const asyncHooks = require('../async_hooks')
-const executionAsyncId = asyncHooks.executionAsyncId
+const asyncHooks = require('./async_hooks/')
+const eid = asyncHooks.executionAsyncId
 const Base = require('./base')
-const platform = require('../../platform')
+const platform = require('../platform')
 
 let singleton = null
 
 class Scope extends Base {
-  constructor (options) {
+  constructor () {
     if (singleton) return singleton
 
     super()
@@ -27,33 +27,20 @@ class Scope extends Base {
   }
 
   _active () {
-    return this._spans[executionAsyncId()] || null
+    return this._spans[eid()]
   }
 
-  _activate (span, callback) {
-    const asyncId = executionAsyncId()
-    const oldSpan = this._spans[asyncId]
+  _enter (span) {
+    this._spans[eid()] = span
+  }
 
-    this._spans[asyncId] = span
+  _exit (span) {
+    const asyncId = eid()
 
-    try {
-      return callback()
-    } catch (e) {
-      if (span && typeof span.addTags === 'function') {
-        span.addTags({
-          'error.type': e.name,
-          'error.msg': e.message,
-          'error.stack': e.stack
-        })
-      }
-
-      throw e
-    } finally {
-      if (oldSpan) {
-        this._spans[asyncId] = oldSpan
-      } else {
-        delete this._spans[asyncId]
-      }
+    if (span) {
+      this._spans[asyncId] = span
+    } else {
+      delete this._spans[asyncId]
     }
   }
 
