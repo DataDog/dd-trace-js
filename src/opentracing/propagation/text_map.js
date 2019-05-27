@@ -12,11 +12,17 @@ const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const logKeys = [traceKey, spanKey, samplingKey, originKey]
+const idExpr = /^[1-9][0-9]*$/
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
-    carrier[traceKey] = spanContext.toTraceId()
-    carrier[spanKey] = spanContext.toSpanId()
+    const traceId = spanContext.toTraceId()
+    const spanId = spanContext.toSpanId()
+
+    if (!this._validate(traceId, spanId)) return
+
+    carrier[traceKey] = traceId
+    carrier[spanKey] = spanId
 
     this._injectOrigin(spanContext, carrier)
     this._injectSamplingPriority(spanContext, carrier)
@@ -26,7 +32,7 @@ class TextMapPropagator {
   }
 
   extract (carrier) {
-    if (!carrier[traceKey] || !carrier[spanKey]) {
+    if (!this._validate(carrier[traceKey], carrier[spanKey])) {
       return null
     }
 
@@ -90,6 +96,10 @@ class TextMapPropagator {
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = parseInt(carrier[samplingKey], 10)
     }
+  }
+
+  _validate (traceId, spanId) {
+    return idExpr.test(traceId) && idExpr.test(spanId)
   }
 }
 

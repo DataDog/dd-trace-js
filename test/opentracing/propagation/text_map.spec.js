@@ -89,6 +89,16 @@ describe('TextMapPropagator', () => {
 
       expect(carrier).to.have.property('x-datadog-origin', 'synthetics')
     })
+
+    it('should skip injection for dropped traces', () => {
+      const carrier = {}
+      const spanContext = new SpanContext()
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.not.have.property('x-datadog-trace-id')
+      expect(carrier).to.not.have.property('x-datadog-parent-id')
+    })
   })
 
   describe('extract', () => {
@@ -131,6 +141,15 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext._trace).to.have.property('origin', 'synthetics')
+    })
+
+    it('should skip extraction for empty traces', () => {
+      const spanContext = new SpanContext()
+      const carrier = textMap
+
+      carrier['x-datadog-trace-id'] = spanContext.toTraceId()
+
+      expect(propagator.extract(carrier)).to.be.null
     })
   })
 })

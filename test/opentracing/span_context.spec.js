@@ -46,8 +46,8 @@ describe('SpanContext', () => {
 
   it('should have the correct default values', () => {
     const expected = {
-      traceId: '123',
-      spanId: '456',
+      traceId: null,
+      spanId: null,
       parentId: null,
       name: undefined,
       isFinished: false,
@@ -67,8 +67,8 @@ describe('SpanContext', () => {
     })
 
     expect(spanContext).to.deep.equal({
-      _traceId: '123',
-      _spanId: '456',
+      _traceId: 0,
+      _spanId: 0,
       _parentId: null,
       _name: undefined,
       _isFinished: false,

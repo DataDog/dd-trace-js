@@ -8,8 +8,8 @@ class DatadogSpanContext extends SpanContext {
 
     props = props || {}
 
-    this._traceId = props.traceId
-    this._spanId = props.spanId
+    this._traceId = props.traceId || 0
+    this._spanId = props.spanId || 0
     this._parentId = props.parentId || null
     this._name = props.name
     this._isFinished = props.isFinished || false
