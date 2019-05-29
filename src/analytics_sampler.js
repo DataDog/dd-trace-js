@@ -2,27 +2,22 @@
 
 const ANALYTICS = require('../ext/tags').ANALYTICS
 
+let enabled = false
+
 module.exports = {
-  sample (span, config, useDefault) {
-    if (!config || config.enabled !== true) return
+  enable () {
+    enabled = true
+  },
 
-    if (useDefault) {
-      if (config.sampleRate === undefined) {
-        span.setTag(ANALYTICS, 1)
-      } else if (config.sampleRate >= 0 && config.sampleRate <= 1) {
-        span.setTag(ANALYTICS, config.sampleRate)
-      }
-    }
+  disable () {
+    enabled = false
+  },
 
-    if (config.sampleRates && typeof config.sampleRates === 'object') {
-      const name = span.context()._name
-
-      if (config.sampleRates.hasOwnProperty(name)) {
-        this.sample(span, {
-          enabled: true,
-          sampleRate: config.sampleRates[name]
-        }, true)
-      }
+  sample (span, rate, inherit) {
+    if (rate !== undefined) {
+      span.setTag(ANALYTICS, rate)
+    } else if (inherit && enabled) {
+      span.setTag(ANALYTICS, 1)
     }
   }
 }

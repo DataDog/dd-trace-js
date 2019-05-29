@@ -17,69 +17,29 @@ describe('analyticsSampler', () => {
   })
 
   describe('sample', () => {
-    it('should use a sample rate of 1 by default', () => {
-      sampler.sample(span, {
-        enabled: true
-      }, true)
+    it('should sample a span', () => {
+      sampler.sample(span, true)
 
-      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 1)
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, true)
     })
 
     it('should sample a span with the provided rate', () => {
-      sampler.sample(span, {
-        enabled: true,
-        sampleRate: 0.5
-      }, true)
+      sampler.sample(span, 0)
 
-      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0.5)
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0)
     })
 
-    it('should sample only when enabled', () => {
-      sampler.sample(span, {
-        sampleRate: 0.5
-      }, true)
+    it('should not set a rate by default', () => {
+      sampler.sample(span, undefined)
 
       expect(span.setTag).to.not.have.been.called
     })
 
-    it('should sample only with the flag to use the default', () => {
-      sampler.sample(span, {
-        enabled: true,
-        sampleRate: 0.5
-      })
+    it('should inherit from global setting when unset', () => {
+      sampler.enable()
+      sampler.sample(span, undefined, true)
 
-      expect(span.setTag).to.not.have.been.called
-    })
-
-    it('should sample a span with the operation specific rate', () => {
-      sampler.sample(span, {
-        enabled: true,
-        sampleRates: {
-          'web.request': 0.5
-        }
-      })
-
-      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0.5)
-    })
-
-    it('should ignore invalid values', () => {
-      sampler.sample(span)
-      sampler.sample(span, 2)
-      sampler.sample(span, -1)
-      sampler.sample(span, 'foo')
-
-      expect(span.setTag).to.not.have.been.called
-    })
-
-    it('should ignore rates for different operation names', () => {
-      sampler.sample(span, {
-        enabled: true,
-        sampleRates: {
-          'other.request': 0.5
-        }
-      })
-
-      expect(span.setTag).to.not.have.been.called
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 1)
     })
   })
 })
