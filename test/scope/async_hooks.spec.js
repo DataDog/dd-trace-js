@@ -50,5 +50,16 @@ describe('Scope', () => {
     expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type')
   })
 
+  it('should work around the HTTP keep-alive bug in Node', () => {
+    const resource = {}
+
+    sinon.spy(scope, '_destroy')
+
+    scope._init(1, 'TCPWRAP', 0, resource)
+    scope._init(1, 'TCPWRAP', 0, resource)
+
+    expect(scope._destroy).to.have.been.called
+  })
+
   testScope(() => scope)
 })
