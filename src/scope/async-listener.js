@@ -15,23 +15,23 @@ class Scope extends Base {
 
     this._stack = []
     this._listener = asyncListener.addAsyncListener({
-      create: () => this._active(),
+      create: (storage) => this._active(),
       before: (context, storage) => this._enter(storage),
       after: (context, storage) => this._exit(),
-      error: (storage) => this._exit()
+      error: (storage, error) => this._exit()
     })
   }
 
   _active () {
-    return this._stack[this._stack.length - 1]
+    return this._span
   }
 
   _enter (span) {
-    this._stack.push(span)
+    this._span = span
   }
 
-  _exit () {
-    this._stack.pop()
+  _exit (span) {
+    this._span = span
   }
 }
 
