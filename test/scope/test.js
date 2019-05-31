@@ -110,6 +110,20 @@ module.exports = factory => {
 
       scope.activate(span, () => {})
     })
+
+    it('should handle errors', () => {
+      const error = new Error('boom')
+
+      sinon.spy(span, 'setTag')
+
+      try {
+        scope.activate(span, () => {
+          throw error
+        })
+      } catch (e) {
+        expect(span.setTag).to.have.been.calledWith('error', e)
+      }
+    })
   })
 
   describe('bind()', () => {
