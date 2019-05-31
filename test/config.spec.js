@@ -31,6 +31,7 @@ describe('Config', () => {
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
+    expect(config).to.have.property('scope', undefined)
   })
 
   it('should initialize from the default service', () => {
@@ -108,7 +109,8 @@ describe('Config', () => {
       flushInterval: 5000,
       runtimeMetrics: true,
       reportHostname: true,
-      plugins: false
+      plugins: false,
+      scope: 'noop'
     })
 
     expect(config).to.have.property('enabled', false)
@@ -127,6 +129,7 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
+    expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
     })

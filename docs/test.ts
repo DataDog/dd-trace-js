@@ -54,7 +54,8 @@ tracer.init({
   service: 'test',
   tags: {
     foo: 'bar'
-  }
+  },
+  scope: 'noop'
 });
 
 const httpOptions = {

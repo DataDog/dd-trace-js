@@ -8,11 +8,13 @@ const nock = require('nock')
 const semver = require('semver')
 const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
-const Scope = require('../../src/scope/new/scope')
+const AsyncHooksScope = require('../../src/scope/async_hooks')
+const AsyncListenerScope = require('../../src/scope/async-listener')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
-const scope = new Scope()
+const asyncHooksScope = new AsyncHooksScope()
+const asyncListenerScope = new AsyncListenerScope()
 
 chai.use(sinonChai)
 
@@ -34,16 +36,22 @@ function wrapIt () {
   const it = global.it
 
   global.it = function (title, fn) {
-    if (!fn) {
-      return it.apply(this, arguments)
-    }
+    if (!fn) return it.apply(this, arguments)
 
-    if (fn.length > 0) {
+    const length = fn.length
+
+    fn = asyncHooksScope.bind(fn, null)
+    fn = asyncListenerScope.bind(fn, null)
+
+    if (length > 0) {
       return it.call(this, title, function (done) {
-        return scope.bind(fn, null).call(this, scope.bind(done, null))
+        done = asyncHooksScope.bind(done, null)
+        done = asyncListenerScope.bind(done, null)
+
+        return fn.call(this, done)
       })
     } else {
-      return it.call(this, title, scope.bind(fn, null))
+      return it.call(this, title, fn)
     }
   }
 }
