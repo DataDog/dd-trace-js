@@ -116,10 +116,10 @@ function addTags (span, options) {
   span.addTags(tags)
 }
 
-function getScopeManager () {
+function getScopeManager (config) {
   let ScopeManager
 
-  if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
+  if (config.scope === NOOP) {
     ScopeManager = require('./scope/noop/scope_manager')
   } else {
     ScopeManager = require('./scope/scope_manager')
