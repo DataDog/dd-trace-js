@@ -258,7 +258,7 @@ export declare interface TracerOptions {
   tags?: { [key: string]: any };
 
   /**
-   * Which scope implementation to use. The default is to use the best
+   * Specifies which scope implementation to use. The default is to use the best
    * implementation for the runtime. Only change this if you know what you are
    * doing.
    */
