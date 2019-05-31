@@ -13,7 +13,6 @@ class Scope extends Base {
 
     singleton = this
 
-    this._stack = []
     this._listener = asyncListener.addAsyncListener({
       create: (storage) => this._active(),
       before: (context, storage) => this._enter(storage),
