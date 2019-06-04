@@ -21,6 +21,7 @@ module.exports = {
   'mysql': require('./mysql'),
   'mysql2': require('./mysql2'),
   'net': require('./net'),
+  'paperplane': require('./paperplane'),
   'pg': require('./pg'),
   'pino': require('./pino'),
   'q': require('./q'),
