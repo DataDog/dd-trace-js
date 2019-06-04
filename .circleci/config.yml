@@ -525,6 +525,7 @@ workflows:
       - node-mongodb-core
       - node-mysql
       - node-net
+      - node-paperplane
       - node-pino
       - node-postgres
       - node-q
@@ -592,6 +593,7 @@ workflows:
       - node-mongodb-core
       - node-mysql
       - node-net
+      - node-paperplane
       - node-pino
       - node-postgres
       - node-q

@@ -244,6 +244,8 @@ tracer.use('pg', {
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
 <h5 id="paperplane"></h5>
+<h5 id="paperplane-tags"></h5>
+<h5 id="paperplane-config"></h5>
 <h5 id="pino"></h5>
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
