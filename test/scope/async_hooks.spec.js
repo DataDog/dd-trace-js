@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const Scope = require('../../src/scope/async_hooks')
 const platform = require('../../src/platform')
 const testScope = require('./test')
@@ -49,6 +50,19 @@ describe('Scope', () => {
     expect(metrics.decrement).to.have.been.calledWith('async.resources')
     expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type')
   })
+
+  if (!semver.satisfies(process.version, '^8.13 || >=10.14.2')) {
+    it('should work around the HTTP keep-alive bug in Node', () => {
+      const resource = {}
+
+      sinon.spy(scope, '_destroy')
+
+      scope._init(1, 'TCPWRAP', 0, resource)
+      scope._init(1, 'TCPWRAP', 0, resource)
+
+      expect(scope._destroy).to.have.been.called
+    })
+  }
 
   testScope(() => scope)
 })
