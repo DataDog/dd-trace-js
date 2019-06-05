@@ -22,7 +22,7 @@ describe('Plugin', () => {
   let tracer
 
   ['http', 'https'].forEach(protocol => {
-    describe(protocol, () => {
+    describe(`http2, protocol: ${protocol}`, () => {
       function server (app, port, listener) {
         let server
         if (protocol === 'https') {
