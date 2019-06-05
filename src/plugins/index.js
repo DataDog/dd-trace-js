@@ -13,6 +13,7 @@ module.exports = {
   'graphql': require('./graphql'),
   'hapi': require('./hapi'),
   'http': require('./http'),
+  'http2': require('./http2'),
   'ioredis': require('./ioredis'),
   'knex': require('./knex'),
   'koa': require('./koa'),

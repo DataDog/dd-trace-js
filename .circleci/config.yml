@@ -245,6 +245,13 @@ jobs:
         environment:
           - PLUGINS=http
 
+  node-http2:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=http2
+
   node-koa:
     <<: *node-plugin-base
     docker:
@@ -527,6 +534,7 @@ workflows:
       - node-graphql
       - node-hapi
       - node-http
+      - node-http2
       - node-koa
       - node-memcached
       - node-mongodb-core
@@ -596,6 +604,7 @@ workflows:
       - node-graphql
       - node-hapi
       - node-http
+      - node-http2
       - node-koa
       - node-memcached
       - node-mongodb-core

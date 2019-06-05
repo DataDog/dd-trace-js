@@ -321,6 +321,7 @@ interface Plugins {
   "graphql": plugins.graphql;
   "hapi": plugins.hapi;
   "http": plugins.http;
+  "http2": plugins.http2;
   "ioredis": plugins.ioredis;
   "knex": plugins.knex;
   "koa": plugins.koa;
@@ -471,6 +472,37 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
     };
+  }
+
+  /** @hidden */
+  interface Http2Client extends Http {
+    /**
+     * Use the remote endpoint host as the service name instead of the default.
+     *
+     * @default false
+     */
+    splitByDomain?: boolean;
+
+    /**
+     * Callback function to determine if there was an error. It should take a
+     * status code as its only parameter and return `true` for success or `false`
+     * for errors.
+     *
+     * @default code => code < 400
+     */
+    validateStatus?: (code: number) => boolean;
+  }
+
+  /** @hidden */
+  interface Http2Server extends Http {
+    /**
+     * Callback function to determine if there was an error. It should take a
+     * status code as its only parameter and return `true` for success or `false`
+     * for errors.
+     *
+     * @default code => code < 500
+     */
+    validateStatus?: (code: number) => boolean;
   }
 
   /**
@@ -624,6 +656,26 @@ declare namespace plugins {
         res?: ServerResponse | IncomingMessage
       ) => any;
     };
+  }
+
+  /**
+   * This plugin automatically instruments the
+   * [http](https://nodejs.org/api/http.html) module.
+   *
+   * By default any option set at the root will apply to both clients and
+   * servers. To configure only one or the other, use the `client` and `server`
+   * options.
+   */
+  interface http2 extends Http2Client, Http2Server {
+    /**
+     * Configuration for HTTP clients.
+     */
+    client?: Http2Client,
+
+    /**
+     * Configuration for HTTP servers.
+     */
+    server?: Http2Server
   }
 
   /**
