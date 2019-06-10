@@ -54,7 +54,8 @@ tracer.init({
   service: 'test',
   tags: {
     foo: 'bar'
-  }
+  },
+  scope: 'noop'
 });
 
 const httpOptions = {
@@ -117,8 +118,12 @@ tracer.use('mongodb-core');
 tracer.use('mysql');
 tracer.use('mysql2');
 tracer.use('net');
+tracer.use('paperplane');
+tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');
 tracer.use('pino');
+tracer.use('promise-js');
+tracer.use('promise');
 tracer.use('q');
 tracer.use('redis');
 tracer.use('restify');

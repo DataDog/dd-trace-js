@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -42,6 +42,7 @@
     "node": ">=4"
   },
   "dependencies": {
+    "@datadog/async-listener": "^0.1.0",
     "@types/node": "^10.12.18",
     "async-hook-jl": "^1.7.6",
     "int64-buffer": "^0.1.9",

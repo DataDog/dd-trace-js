@@ -17,6 +17,7 @@ const NoopSpan = require('../noop/span')
 const formats = require('../../ext/formats')
 const log = require('../log')
 const constants = require('../constants')
+const platform = require('../platform')
 
 const REFERENCE_NOOP = constants.REFERENCE_NOOP
 const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
@@ -47,6 +48,9 @@ class DatadogTracer extends Tracer {
       [formats.BINARY]: new BinaryPropagator(),
       [formats.LOG]: new LogPropagator()
     }
+    if (config.reportHostname) {
+      this._hostname = platform.hostname()
+    }
   }
 
   _startSpan (name, fields) {
@@ -72,7 +76,8 @@ class DatadogTracer extends Tracer {
       operationName: fields.operationName || name,
       parent,
       tags: Object.assign(tags, this._tags, fields.tags),
-      startTime: fields.startTime
+      startTime: fields.startTime,
+      hostname: this._hostname
     })
 
     return span

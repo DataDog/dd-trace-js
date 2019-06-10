@@ -243,6 +243,9 @@ tracer.use('pg', {
 <h5 id="mysql2-tags"></h5>
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
+<h5 id="paperplane"></h5>
+<h5 id="paperplane-tags"></h5>
+<h5 id="paperplane-config"></h5>
 <h5 id="pino"></h5>
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
@@ -273,6 +276,7 @@ tracer.use('pg', {
 * [mysql](./interfaces/plugins.mysql.html)
 * [mysql2](./interfaces/plugins.mysql2.html)
 * [net](./interfaces/plugins.net.html)
+* [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)
 * [pg](./interfaces/plugins.pg.html)
 * [q](./interfaces/plugins.q.html)
@@ -297,11 +301,12 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | port           | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
 | dogstatsd.port | DD_DOGSTATSD_PORT            | 8125      | The port of the Dogstatsd agent that metrics will be submitted to. |
 | env            | DD_ENV                       |           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
-| logInjection   | DD_LOGS_INJECTION            | false     | Enable automatic injection of trace IDs in logs for supported logging libraries.
+| logInjection   | DD_LOGS_INJECTION            | false     | Enable automatic injection of trace IDs in logs for supported logging libraries. |
 | tags           |                              | {}        | Set global tags that should be applied to all spans. |
 | sampleRate     |                              | 1         | Percentage of spans to sample as a float between 0 and 1. |
 | flushInterval  |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | runtimeMetrics | DD_RUNTIME_METRICS_ENABLED   | false     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
+| reportHostname | DD_TRACE_REPORT_HOSTNAME     | false     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
 | experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
 | plugins        |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 

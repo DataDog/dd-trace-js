@@ -292,6 +292,13 @@ jobs:
         environment:
           - PLUGINS=net
 
+  node-paperplane:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=paperplane
+
   node-pino:
     <<: *node-plugin-base
     docker:
@@ -308,6 +315,20 @@ jobs:
           - PLUGINS=pg
           - PG_TEST_NATIVE=true
       - image: postgres:9.5
+
+  node-promise-js:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=promise-js
+
+  node-promise:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=promise
 
   node-q:
     <<: *node-plugin-base
@@ -518,8 +539,11 @@ workflows:
       - node-mongodb-core
       - node-mysql
       - node-net
+      - node-paperplane
       - node-pino
       - node-postgres
+      - node-promise-js
+      - node-promise
       - node-q
       - node-redis
       - node-restify
@@ -585,8 +609,11 @@ workflows:
       - node-mongodb-core
       - node-mysql
       - node-net
+      - node-paperplane
       - node-pino
       - node-postgres
+      - node-promise-js
+      - node-promise
       - node-q
       - node-redis
       - node-restify

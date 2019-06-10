@@ -1,4 +1,5 @@
 Component,Origin,License,Copyright
+require,@datadog/async-listener,BSD-2-Clause,Copyright 2013-2017 Forrest L Norvell 2019 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
 require,async-hook-jl,MIT,Copyright 2015 Andreas Madsen
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
@@ -9,7 +10,7 @@ require,lodash.pick,MIT,Copyright JS Foundation and other contributors
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lodash.truncate,MIT,Copyright JS Foundation and other contributors
 require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
-require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk 2013-2014 TJ Holowaychuk
+require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,nan,MIT,Copyright 2018 NAN contributors

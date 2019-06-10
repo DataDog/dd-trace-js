@@ -8,6 +8,9 @@ function createWrapUse (tracer, config) {
   function ddTrace (ctx, next) {
     web.instrument(tracer, config, ctx.req, ctx.res, 'koa.request')
 
+    web.beforeEnd(ctx.req, () => {
+      web.enterRoute(ctx.req, ctx.routePath)
+    })
     return next()
   }
 

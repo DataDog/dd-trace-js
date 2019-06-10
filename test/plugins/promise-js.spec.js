@@ -2,4 +2,4 @@
 
 const assertPromise = require('./promise')
 
-assertPromise('bluebird')
+assertPromise('promise-js')

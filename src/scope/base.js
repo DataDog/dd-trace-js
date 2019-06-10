@@ -36,8 +36,26 @@ class Scope {
   }
 
   _activate (span, callback) {
-    return typeof callback === 'function' && callback()
+    const active = this._active()
+
+    this._enter(span)
+
+    try {
+      return callback()
+    } catch (e) {
+      if (span && typeof span.setTag === 'function') {
+        span.setTag('error', e)
+      }
+
+      throw e
+    } finally {
+      this._exit(active)
+    }
   }
+
+  _enter () {}
+
+  _exit () {}
 
   _bindFn (fn, span) {
     const scope = this

@@ -70,7 +70,9 @@ const web = {
 
   // Add a route segment that will be used for the resource name.
   enterRoute (req, path) {
-    req._datadog.paths.push(path)
+    if (typeof path === 'string') {
+      req._datadog.paths.push(path)
+    }
   },
 
   // Remove the current route segment.
@@ -89,8 +91,6 @@ const web = {
     span.addTags({
       [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
     })
-
-    analyticsSampler.sample(span, req._datadog.config.analytics)
 
     req._datadog.middleware.push(span)
 

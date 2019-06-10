@@ -155,14 +155,6 @@ class Instrumenter {
   }
 
   _set (plugin, meta) {
-    const analytics = {}
-
-    if (typeof this._tracer._tracer._analytics === 'boolean') {
-      analytics.enabled = this._tracer._tracer._analytics
-    }
-
-    meta.config.analytics = Object.assign(analytics, normalizeAnalyticsConfig(meta.config.analytics))
-
     this._plugins.set(plugin, meta)
     this._load(plugin, meta)
   }
@@ -239,17 +231,6 @@ class Instrumenter {
         log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
       }
     }
-  }
-}
-
-function normalizeAnalyticsConfig (config) {
-  switch (typeof config) {
-    case 'boolean':
-      return { enabled: config }
-    case 'object':
-      if (config) return config
-    default: // eslint-disable-line no-fallthrough
-      return {}
   }
 }
 

@@ -256,6 +256,13 @@ export declare interface TracerOptions {
    * Global tags that should be assigned to every span.
    */
   tags?: { [key: string]: any };
+
+  /**
+   * Specifies which scope implementation to use. The default is to use the best
+   * implementation for the runtime. Only change this if you know what you are
+   * doing.
+   */
+  scope?: 'async_hooks' | 'async-listener' | 'noop'
 }
 
 /** @hidden */
@@ -322,8 +329,11 @@ interface Plugins {
   "mysql": plugins.mysql;
   "mysql2": plugins.mysql2;
   "net": plugins.net;
+  "paperplane": plugins.paperplane;
   "pg": plugins.pg;
   "pino": plugins.pino;
+  "promise-js": plugins.promise_js;
+  "promise": plugins.promise;
   "q": plugins.q;
   "redis": plugins.redis;
   "restify": plugins.restify;
@@ -667,6 +677,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [paperplane](https://github.com/articulate/paperplane) module.
+   */
+  interface paperplane extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
    * [pg](https://node-postgres.com/) module.
    */
   interface pg extends Integration {}
@@ -678,6 +694,18 @@ declare namespace plugins {
    * on the tracer.
    */
   interface pino extends Integration {}
+
+  /**
+   * This plugin patches the [promise-js](https://github.com/kevincennis/promise)
+   * module to bind the promise callback the the caller context.
+   */
+  interface promise_js extends Integration {}
+
+  /**
+   * This plugin patches the [promise](https://github.com/then/promise)
+   * module to bind the promise callback the the caller context.
+   */
+  interface promise extends Integration {}
 
   /**
    * This plugin patches the [q](https://github.com/kriskowal/q)

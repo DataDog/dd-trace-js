@@ -26,7 +26,7 @@ module.exports = {
 
     if (callbacks.init) {
       hooks.init = (uid, handle, provider, parentUid, parentHandle) => {
-        callbacks.init(uid, providers[provider])
+        callbacks.init(uid, providers[provider], parentUid, handle)
       }
     }
 

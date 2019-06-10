@@ -3,6 +3,7 @@
 const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
+const scopes = require('../ext/scopes')
 
 class Config {
   constructor (service, options) {
@@ -30,6 +31,8 @@ class Config {
       platform.env('DD_TRACE_ANALYTICS_ENABLED'),
       platform.env('DD_TRACE_ANALYTICS')
     )
+    const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
+    const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -49,6 +52,8 @@ class Config {
     }
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
     this.experimental = {}
+    this.reportHostname = String(reportHostname) === 'true'
+    this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope
   }
 }
 
