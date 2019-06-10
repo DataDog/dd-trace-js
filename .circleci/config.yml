@@ -292,6 +292,13 @@ jobs:
         environment:
           - PLUGINS=net
 
+  node-paperplane:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=paperplane
+
   node-pino:
     <<: *node-plugin-base
     docker:
@@ -532,6 +539,7 @@ workflows:
       - node-mongodb-core
       - node-mysql
       - node-net
+      - node-paperplane
       - node-pino
       - node-postgres
       - node-promise-js
@@ -601,6 +609,7 @@ workflows:
       - node-mongodb-core
       - node-mysql
       - node-net
+      - node-paperplane
       - node-pino
       - node-postgres
       - node-promise-js

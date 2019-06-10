@@ -118,6 +118,8 @@ tracer.use('mongodb-core');
 tracer.use('mysql');
 tracer.use('mysql2');
 tracer.use('net');
+tracer.use('paperplane');
+tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');
 tracer.use('pino');
 tracer.use('promise-js');

@@ -243,6 +243,9 @@ tracer.use('pg', {
 <h5 id="mysql2-tags"></h5>
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
+<h5 id="paperplane"></h5>
+<h5 id="paperplane-tags"></h5>
+<h5 id="paperplane-config"></h5>
 <h5 id="pino"></h5>
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
@@ -273,6 +276,7 @@ tracer.use('pg', {
 * [mysql](./interfaces/plugins.mysql.html)
 * [mysql2](./interfaces/plugins.mysql2.html)
 * [net](./interfaces/plugins.net.html)
+* [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)
 * [pg](./interfaces/plugins.pg.html)
 * [q](./interfaces/plugins.q.html)

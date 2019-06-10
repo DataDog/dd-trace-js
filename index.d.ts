@@ -329,6 +329,7 @@ interface Plugins {
   "mysql": plugins.mysql;
   "mysql2": plugins.mysql2;
   "net": plugins.net;
+  "paperplane": plugins.paperplane;
   "pg": plugins.pg;
   "pino": plugins.pino;
   "promise-js": plugins.promise_js;
@@ -673,6 +674,12 @@ declare namespace plugins {
    * [net](https://nodejs.org/api/net.html) module.
    */
   interface net extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [paperplane](https://github.com/articulate/paperplane) module.
+   */
+  interface paperplane extends HttpServer {}
 
   /**
    * This plugin automatically instruments the
