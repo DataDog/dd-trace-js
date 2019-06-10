@@ -304,7 +304,7 @@ function addResponseTags (req) {
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
-  web.addStatusError(req, req._datadog.res.statusCode)
+  web.addStatusError(req, res.statusCode)
 }
 
 function addResourceTag (req) {

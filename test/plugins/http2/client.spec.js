@@ -15,25 +15,24 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 wrapIt()
 
 describe('Plugin', () => {
-  let http2
   let plugin
-  let client
+  let http2
   let appListener
   let tracer
 
   ['http', 'https'].forEach(protocol => {
-    describe(`http2, protocol: ${protocol}`, () => {
+    describe(`http2/client, protocol ${protocol}`, () => {
       function server (app, port, listener) {
         let server
         if (protocol === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-          const options = { key, cert }
-          server = require('http2').createSecureServer(options)
+          server = require('http2').createSecureServer({ key, cert })
         } else {
           server = require('http2').createServer()
         }
         server.on('stream', app)
-        return server.listen(port, 'localhost', listener)
+        server.listen(port, 'localhost', listener)
+        return server
       }
 
       beforeEach(() => {
@@ -43,7 +42,9 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        appListener && appListener.close()
+        if (appListener) {
+          appListener.close()
+        }
         return agent.close()
       })
 
@@ -77,12 +78,80 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, (err) => {
-              client = http2.connect(`${protocol}://localhost:${port}`)
-
-              client
-                .request({ ':path': '/user' })
+            appListener = server(app, port, () => {
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
                 .on('error', done)
+
+              const req = client.request({ ':path': '/user', ':method': 'GET' })
+              req.on('error', done)
+
+              req.end()
+            })
+          })
+        })
+
+        it(`should support request configuration without a path and method`, done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({})
+              req.on('error', done)
+
+              req.end()
+            })
+          })
+        })
+
+        it('should support connect configuration with a URL object', done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            const uri = {
+              protocol: `${protocol}:`,
+              hostname: 'localhost',
+              port
+            }
+
+            appListener = server(app, port, () => {
+              const client = http2
+                .connect(uri)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/user' })
+              req.on('error', done)
+
+              req.end()
             })
           })
         })
@@ -103,16 +172,96 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = server(app, port, (err) => {
-              client = http2.connect(`${protocol}://localhost:${port}`)
-
-              client
-                .request({ ':path': '/user?foo=bar' })
+            appListener = server(app, port, () => {
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
                 .on('error', done)
-                .end()
+
+              const req = client.request({ ':path': '/user?foo=bar' })
+              req.on('error', done)
+
+              req.end()
             })
           })
         })
+
+        if (semver.satisfies(process.version, '>=10')) {
+          it('should support a string URL and an options object, which merges, with the string URL taking precedence', done => {
+            const app = (stream, headers) => {
+              stream.respond({
+                ':status': 200
+              })
+              stream.end()
+            }
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                })
+                .then(done)
+                .catch(done)
+
+              const uri = {
+                protocol: `${protocol}:`,
+                hostname: 'localhost',
+                port
+              }
+
+              const options = {
+                protocol: 'ssh:',
+                host: 'remotehost',
+                port: 1337
+              }
+
+              appListener = server(app, port, () => {
+                const client = http2
+                  .connect(uri, options)
+                  .on('error', done)
+
+                const req = client.request({ ':path': '/user' })
+                req.on('error', done)
+
+                req.end()
+              })
+            })
+          })
+
+          it('should support a URL object and an options object, with the string URL taking precedence', done => {
+            const app = (stream, headers) => {
+              stream.respond({
+                ':status': 200
+              })
+              stream.end()
+            }
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                })
+                .then(done)
+                .catch(done)
+
+              const options = {
+                protocol: 'ssh',
+                port: 1337,
+                host: 'remotehost'
+              }
+
+              appListener = server(app, port, () => {
+                const client = http2
+                  .connect(`${protocol}://localhost:${port}`, options)
+                  .on('error', done)
+
+                const req = client.request({ ':path': '/user' })
+                req.on('error', done)
+
+                req.end()
+              })
+            })
+          })
+        }
 
         it('should use the correct defaults when not specified', done => {
           const app = (stream, headers) => {
@@ -130,41 +279,19 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
+            const uri = {
+              protocol: `${protocol}:`,
+              port
+            }
+
             appListener = server(app, port, () => {
-              client = http2.connect({
-                protocol: `${protocol}:`,
-                port
-              })
-
-              client
-                .request({})
+              const client = http2
+                .connect(uri)
                 .on('error', done)
-                .end()
-            })
-          })
-        })
 
-        it('should wait for other listeners before resuming the response stream', done => {
-          const app = (stream, headers) => {
-            stream.respond({
-              ':status': 200
-            })
-            stream.end()
-          }
+              const req = client.request({})
+              req.on('error', done)
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              client = http2.connect(`${protocol}://localhost:${port}`)
-
-              const req = client.request({ ':path': '/user' })
-
-              req
-                .on('response', (headers, flags) => {
-                  setTimeout(() => {
-                    req.on('data', () => done())
-                  })
-                })
-                .on('error', done)
               req.end()
             })
           })
@@ -174,6 +301,7 @@ describe('Plugin', () => {
           const app = (stream, headers) => {
             expect(headers['x-datadog-trace-id']).to.be.a('string')
             expect(headers['x-datadog-parent-id']).to.be.a('string')
+
             stream.respond({
               ':status': 200
             })
@@ -189,12 +317,14 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              client = http2.connect(`${protocol}://localhost:${port}`)
-
-              client
-                .request({})
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
                 .on('error', done)
-                .end()
+
+              const req = client.request({})
+              req.on('error', done)
+
+              req.end()
             })
           })
         })
@@ -204,10 +334,12 @@ describe('Plugin', () => {
             try {
               expect(headers['x-datadog-trace-id']).to.be.undefined
               expect(headers['x-datadog-parent-id']).to.be.undefined
+
               stream.respond({
                 ':status': 200
               })
               stream.end()
+
               done()
             } catch (e) {
               done(e)
@@ -216,43 +348,49 @@ describe('Plugin', () => {
 
           getPort().then(port => {
             appListener = server(app, port, () => {
-              client = http2.connect({
-                protocol: `${protocol}:`,
-                port
-              })
-
-              client
-                .request({ 'Authorization': 'AWS4-HMAC-SHA256 ...' })
+              const headers = {
+                Authorization: 'AWS4-HMAC-SHA256 ...'
+              }
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
                 .on('error', done)
-                .end()
+
+              const req = client.request(headers)
+              req.on('error', done)
+
+              req.end()
             })
           })
         })
 
         it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
+          const app = (stream, headers) => {
             try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
+              expect(headers['x-datadog-trace-id']).to.be.undefined
+              expect(headers['x-datadog-parent-id']).to.be.undefined
 
-              res.status(200).send()
+              stream.respond({
+                ':status': 200
+              })
+              stream.end()
 
               done()
             } catch (e) {
               done(e)
             }
-          })
+          }
 
           getPort().then(port => {
             appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                headers: {
-                  Authorization: ['AWS4-HMAC-SHA256 ...']
-                }
-              })
+              const headers = {
+                Authorization: ['AWS4-HMAC-SHA256 ...']
+              }
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request(headers)
+              req.on('error', done)
 
               req.end()
             })
@@ -260,29 +398,33 @@ describe('Plugin', () => {
         })
 
         it('should skip injecting if the X-Amz-Signature header is set', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
+          const app = (stream, headers) => {
             try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
+              expect(headers['x-datadog-trace-id']).to.be.undefined
+              expect(headers['x-datadog-parent-id']).to.be.undefined
 
-              res.status(200).send()
+              stream.respond({
+                ':status': 200
+              })
+              stream.end()
 
               done()
             } catch (e) {
               done(e)
             }
-          })
+          }
 
           getPort().then(port => {
             appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                headers: {
-                  'X-Amz-Signature': 'abc123'
-                }
-              })
+              const headers = {
+                'X-Amz-Signature': 'abc123'
+              }
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request(headers)
+              req.on('error', done)
 
               req.end()
             })
@@ -290,27 +432,30 @@ describe('Plugin', () => {
         })
 
         it('should skip injecting if the X-Amz-Signature query param is set', done => {
-          const app = express()
-
-          app.get('/', (req, res) => {
+          const app = (stream, headers) => {
             try {
-              expect(req.get('x-datadog-trace-id')).to.be.undefined
-              expect(req.get('x-datadog-parent-id')).to.be.undefined
+              expect(headers['x-datadog-trace-id']).to.be.undefined
+              expect(headers['x-datadog-parent-id']).to.be.undefined
 
-              res.status(200).send()
+              stream.respond({
+                ':status': 200
+              })
+              stream.end()
 
               done()
             } catch (e) {
               done(e)
             }
-          })
+          }
 
           getPort().then(port => {
             appListener = server(app, port, () => {
-              const req = http.request({
-                port,
-                path: '/?X-Amz-Signature=abc123'
-              })
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/?X-Amz-Signature=abc123' })
+              req.on('error', done)
 
               req.end()
             })
@@ -320,46 +465,32 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send('OK')
-          })
-
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                expect(tracer.scope().active()).to.be.null
-                done()
-              })
-
-              req.end()
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
             })
-          })
-        })
-
-        it('should run the event listeners in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send('OK')
-          })
+            stream.end()
+          }
 
           getPort().then(port => {
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                const span = tracer.scope().active()
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
 
-                res.on('data', () => {})
-                res.on('end', () => {
+              const span = {}
+
+              tracer.scope().activate(span, () => {
+                const req = client.request({ ':path': '/user' })
+                req.on('response', (headers, flags) => {
                   expect(tracer.scope().active()).to.equal(span)
                   done()
                 })
-              })
 
-              req.end()
+                req.on('error', done)
+
+                req.end()
+              })
             })
           })
         })
@@ -377,22 +508,23 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            const req = http.request(`${protocol}://localhost:${port}/user`)
+            const client = http2.connect(`${protocol}://localhost:${port}`)
+              .on('error', (err) => {})
 
-            req.on('error', err => {
-              error = err
-            })
+            const req = client.request({ ':path': '/user' })
+              .on('error', (err) => { error = err })
 
             req.end()
           })
         })
 
         it('should not record HTTP 5XX responses as errors by default', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(500).send()
-          })
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 500
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
@@ -403,9 +535,12 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/' })
+              req.on('error', done)
 
               req.end()
             })
@@ -413,11 +548,12 @@ describe('Plugin', () => {
         })
 
         it('should record HTTP 4XX responses as errors by default', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(400).send()
-          })
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 400
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
@@ -428,9 +564,12 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/' })
+              req.on('error', done)
 
               req.end()
             })
@@ -438,15 +577,13 @@ describe('Plugin', () => {
         })
 
         it('should only record a request once', done => {
-          // Make sure both plugins are loaded, which could cause double-counting.
-          require('http')
-          require('https')
-
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
+          require('http2')
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
@@ -462,42 +599,19 @@ describe('Plugin', () => {
               // would be siblings and our test would only capture 1 as a false positive.
               const span = tracer.startSpan('http-test')
               tracer.scope().activate(span, () => {
-                // Test `http(s).request
-                const req = http.request(`${protocol}://localhost:${port}/user?test=request`, res => {
-                  res.on('data', () => {})
-                })
-                req.end()
+                const client = http2.connect(`${protocol}://localhost:${port}`)
+                  .on('error', done)
 
-                // Test `http(s).get`
-                http.get(`${protocol}://localhost:${port}/user?test=get`, res => {
-                  res.on('data', () => {})
-                })
+                client.request({ ':path': '/test-1' })
+                  .on('error', done)
+                  .end()
+
+                client.request({ ':path': `/user?test=2` })
+                  .on('error', done)
+                  .end()
 
                 span.finish()
               })
-            })
-          })
-        })
-
-        it('should record when the request was aborted', done => {
-          const app = express()
-
-          app.get('/abort', (req, res) => {
-            res.status(200).send()
-          })
-
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-http-client')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/abort`)
-
-              req.abort()
             })
           })
         })
@@ -514,19 +628,19 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load(plugin, 'http2', config)
             .then(() => {
-              http = require(protocol)
-              express = require('express')
+              http2 = require('http2')
             })
         })
 
         it('should be configured with the correct values', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
@@ -537,9 +651,12 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/user' })
+              req.on('error', done)
 
               req.end()
             })
@@ -558,19 +675,19 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load(plugin, 'http2', config)
             .then(() => {
-              http = require(protocol)
-              express = require('express')
+              http2 = require('http2')
             })
         })
 
         it('should use the supplied function to decide if a response is an error', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(500).send()
-          })
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 500
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
@@ -581,9 +698,12 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/user' })
+              req.on('error', done)
 
               req.end()
             })
@@ -602,19 +722,19 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load(plugin, 'http2', config)
             .then(() => {
-              http = require(protocol)
-              express = require('express')
+              http2 = require('http2')
             })
         })
 
         it('should use the remote endpoint as the service name', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
@@ -625,11 +745,12 @@ describe('Plugin', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
+              const client = http2.connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
 
-              req.end()
+              client.request({ ':path': '/user' })
+                .on('error', done)
+                .end()
             })
           })
         })
@@ -642,120 +763,43 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo']
+              headers: [':path', 'x-foo']
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load(plugin, 'http2', config)
             .then(() => {
-              http = require(protocol)
-              express = require('express')
+              http2 = require('http2')
             })
         })
 
         it('should add tags for the configured headers', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.setHeader('x-foo', 'bar')
-            res.status(200).send()
-          })
+          const app = (stream, headers) => {
+            stream.respond({
+              'x-foo': 'bar',
+              ':status': 200
+            })
+            stream.end()
+          }
 
           getPort().then(port => {
             agent
               .use(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.:path`, '/user')
                 expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
               })
               .then(done)
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
+              const client = http2.connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
 
-              req.end()
-            })
-          })
-        })
-
-        it('should support adding request headers', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
-
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                const meta = traces[0][0].meta
-
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar`)
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req.setHeader('x-foo', 'bar')
-              req.end()
-            })
-          })
-        })
-      })
-
-      describe('with hooks configuration', () => {
-        let config
-
-        beforeEach(() => {
-          config = {
-            server: false,
-            client: {
-              hooks: {
-                request: (span, req, res) => {
-                  span.setTag('resource.name', `${req.method} ${req._route}`)
-                }
-              }
-            }
-          }
-
-          return agent.load(plugin, 'http', config)
-            .then(() => {
-              http = require(protocol)
-              express = require('express')
-            })
-        })
-
-        it('should run the request hook before the span is finished', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
-
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /user')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => {})
-              })
-
-              req._route = '/user'
-
-              req.end()
+              client.request({ ':path': '/user' })
+                .on('error', done)
+                .end()
             })
           })
         })

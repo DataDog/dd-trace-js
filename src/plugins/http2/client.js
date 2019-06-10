@@ -45,9 +45,13 @@ function extractSessionDetails (authority, options) {
   return { protocol, port, host }
 }
 
+function getFormattedHostString (host, port) {
+  return [host, port].filter(val => val).join(':')
+}
+
 function getServiceName (tracer, config, sessionDetails) {
   if (config.splitByDomain) {
-    return sessionDetails.host
+    return getFormattedHostString(sessionDetails.host, sessionDetails.port)
   } else if (config.service) {
     return config.service
   }
@@ -101,13 +105,11 @@ function normalizeConfig (tracer, config) {
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
   const headers = getHeaders(config)
-  const hooks = getHooks(config)
 
   return Object.assign({}, config, {
     validateStatus,
     filter,
-    headers,
-    hooks
+    headers
   })
 }
 
@@ -140,13 +142,7 @@ function addRequestTags (headers, span, config) {
 }
 
 function addErrorTags (span, error) {
-  span.addTags({
-    'error.type': error.name,
-    'error.msg': error.message,
-    'error.stack': error.stack
-  })
-
-  return error
+  span.setTag('error', error)
 }
 
 function getHeaders (config) {
@@ -157,82 +153,84 @@ function getHeaders (config) {
     .map(key => key.toLowerCase())
 }
 
-function getHooks (config) {
-  const noop = () => { }
-  const request = (config.hooks && config.hooks.request) || noop
+function startSpan (tracer, config, headers, sessionDetails) {
+  const scope = tracer.scope()
+  const childOf = scope.active()
 
-  return { request }
+  const path = headers[HTTP2_HEADER_PATH] || '/'
+  const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
+  const url = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${path}`
+
+  const type = config.filter(url) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
+
+  const span = tracer.startSpan('http.request', {
+    references: [
+      new Reference(type, childOf)
+    ],
+    tags: {
+      [SPAN_KIND]: CLIENT,
+      'service.name': getServiceName(tracer, config, sessionDetails),
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      'http.url': url.split('?')[0]
+    }
+  })
+
+  if (!hasAmazonSignature(headers, path)) {
+    tracer.inject(span, HTTP_HEADERS, headers)
+  }
+
+  analyticsSampler.sample(span, config.analytics)
+  return span
 }
 
-function createWrapConnect (tracer, config) {
-  let span
-  let sessionDetails
-
-  config = normalizeConfig(tracer, config)
-
-  function wrapEmit (emit) {
-    return function emitWithTrace (event, args) {
-      if (event === 'response') {
-        const headers = args
-        addResponseTags(headers, span, config)
-      } else if (event === 'end') {
-        span.finish()
-      } else if (event === 'error') {
-        const error = args
-        addErrorTags(span, error)
+function createWrapEmit (tracer, config, span) {
+  return function wrapEmit (emit) {
+    return function emitWithTrace (event, ...args) {
+      switch (event) {
+        case 'response':
+          addResponseTags(args[0], span, config)
+          break
+        case 'error':
+          addErrorTags(span, args[0])
+        case 'close': // eslint-disable-line no-fallthrough
+          span.finish()
+          break
       }
       return emit.apply(this, arguments)
     }
   }
+}
 
-  function wrapRequest (request) {
+function createWrapRequest (tracer, config, sessionDetails) {
+  return function wrapRequest (request) {
     return function requestWithTrace (headers, options) {
       const scope = tracer.scope()
-      const childOf = scope.active()
+      const span = startSpan(tracer, config, headers, sessionDetails)
 
-      const path = headers[HTTP2_HEADER_PATH] || '/'
-      const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-      const url = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${path}`
-
-      const type = config.filter(url) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
-
-      span = tracer.startSpan('http.request', {
-        references: [
-          new Reference(type, childOf)
-        ],
-        tags: {
-          [SPAN_KIND]: CLIENT,
-          'service.name': getServiceName(tracer, config, sessionDetails),
-          'resource.name': method,
-          'span.type': 'http',
-          'http.method': method,
-          'http.url': url
-        }
-      })
-
-      if (!hasAmazonSignature(headers, path)) {
-        tracer.inject(span, HTTP_HEADERS, headers)
-      }
-
-      analyticsSampler.sample(span, config.analytics)
+      addRequestTags(headers, span, config)
 
       const req = scope.bind(request, span).apply(this, arguments)
 
-      shimmer.wrap(req, 'emit', wrapEmit)
-
+      shimmer.wrap(req, 'emit', createWrapEmit(tracer, config, span))
       scope.bind(req)
 
       return req
     }
   }
+}
+
+function createWrapConnect (tracer, config) {
+  config = normalizeConfig(tracer, config)
 
   return function wrapConnect (connect) {
     return function connectWithTrace (authority, options) {
       const session = connect.apply(this, arguments)
 
-      sessionDetails = extractSessionDetails(authority, options)
+      const sessionDetails = extractSessionDetails(authority, options)
 
-      shimmer.wrap(session, 'request', wrapRequest)
+      shimmer.wrap(session, 'request', createWrapRequest(tracer, config, sessionDetails))
       return session
     }
   }

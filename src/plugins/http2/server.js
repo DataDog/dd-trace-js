@@ -35,7 +35,6 @@ function createWrapCreateServer (tracer, config) {
 
   function wrapEmit (emit) {
     return function emitWithTrace (event, ...args) {
-      // console.log(`event:${event}`)
       if (event === 'stream') {
         const stream = args[0]
         const headers = args[1]
@@ -55,14 +54,11 @@ function createWrapCreateServer (tracer, config) {
   }
 
   return function wrapCreateServer (createServer) {
-    return function createServerWithTrace (options, onRequestHandler) {
-      const server = createServer.apply(this, options)
+    return function createServerWithTrace (args) {
+      const server = createServer.apply(this, arguments)
 
       shimmer.wrap(server, 'emit', wrapEmit)
 
-      if (onRequestHandler) {
-        server.on('request', onRequestHandler)
-      }
       return server
     }
   }
@@ -114,7 +110,6 @@ function wrapStreamEnd (stream) {
       const returnValue = end.apply(this, arguments)
 
       finishStream(stream)
-
       return returnValue
     }
   }
@@ -159,13 +154,13 @@ function addRequestHeaders (stream, headers) {
 function addResponseTags (stream) {
   const span = stream._datadog.span
   const headers = stream.sentHeaders
-  const headerStatus = headers[HTTP2_HEADER_STATUS]
+  const statusCode = headers[HTTP2_HEADER_STATUS]
 
   span.addTags({
-    [HTTP_STATUS_CODE]: headerStatus | 0 || HTTP_STATUS_OK
+    [HTTP_STATUS_CODE]: statusCode | 0 || HTTP_STATUS_OK
   })
 
-  web.addStatusError(stream, headerStatus)
+  web.addStatusError(stream, statusCode)
 }
 
 function addResponseHeaders (stream) {
