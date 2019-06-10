@@ -28,10 +28,8 @@ const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 
-function createWrapCreateServer (tracer, config) {
-  config = web.normalizeConfig(config)
-
-  function wrapEmit (emit) {
+function createWrapEmit (tracer, config) {
+  return function wrapEmit (emit) {
     return function emitWithTrace (event, ...args) {
       if (event === 'stream') {
         const stream = args[0]
@@ -50,12 +48,16 @@ function createWrapCreateServer (tracer, config) {
       }
     }
   }
+}
+
+function createWrapCreateServer (tracer, config) {
+  config = web.normalizeConfig(config)
 
   return function wrapCreateServer (createServer) {
     return function createServerWithTrace (args) {
       const server = createServer.apply(this, arguments)
 
-      shimmer.wrap(server, 'emit', wrapEmit)
+      shimmer.wrap(server, 'emit', createWrapEmit(tracer, config))
 
       return server
     }
