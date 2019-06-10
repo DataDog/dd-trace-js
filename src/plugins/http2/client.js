@@ -237,6 +237,7 @@ function createWrapConnect (tracer, config) {
 module.exports = [
   {
     name: 'http2',
+    versions: ['>=9.5'],
     patch: function (http2, tracer, config) {
       if (config.client === false) return
 
