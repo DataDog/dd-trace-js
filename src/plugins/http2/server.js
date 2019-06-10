@@ -193,7 +193,6 @@ function addResourceTags (stream, headers) {
 module.exports = [
   {
     name: 'http2',
-    versions: ['>=9.5'],
     patch (http2, tracer, config) {
       if (config.server === false) return
 

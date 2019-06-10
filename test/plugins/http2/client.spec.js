@@ -185,8 +185,7 @@ describe('Plugin', () => {
           })
         })
 
-        if (semver.satisfies(process.version, '>=10')) {
-          it('should support a string URL and an options object, which merges, with the string URL taking precedence', done => {
+          it('should support a string URL and an options object, with the string URL taking precedence', done => {
             const app = (stream, headers) => {
               stream.respond({
                 ':status': 200
@@ -227,7 +226,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should support a URL object and an options object, with the string URL taking precedence', done => {
+          it('should support a URL object and an options object, with the URL object taking precedence', done => {
             const app = (stream, headers) => {
               stream.respond({
                 ':status': 200
@@ -258,10 +257,8 @@ describe('Plugin', () => {
                 req.on('error', done)
 
                 req.end()
-              })
             })
           })
-        }
 
         it('should use the correct defaults when not specified', done => {
           const app = (stream, headers) => {

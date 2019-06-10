@@ -660,7 +660,7 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
-   * [http](https://nodejs.org/api/http.html) module.
+   * [http2](https://nodejs.org/api/http2.html) module.
    *
    * By default any option set at the root will apply to both clients and
    * servers. To configure only one or the other, use the `client` and `server`
