@@ -12,7 +12,6 @@ wrapIt()
 describe('Plugin', () => {
   let plugin
   let http2
-  let listener
   let app
   let appListener
   let tracer

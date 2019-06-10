@@ -2,7 +2,6 @@
 
 const getPort = require('get-port')
 const agent = require('../agent')
-const semver = require('semver')
 const fs = require('fs')
 const path = require('path')
 const tags = require('../../../ext/tags')

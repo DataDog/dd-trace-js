@@ -22,13 +22,9 @@ const CLIENT = kinds.CLIENT
 const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 const REFERENCE_NOOP = constants.REFERENCE_NOOP
 
-const HTTP2_HEADER_AUTHORITY = ':authority'
-const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
-
-const HTTP_STATUS_OK = 200
 const HTTP2_METHOD_GET = 'GET'
 
 function extractSessionDetails (authority, options) {

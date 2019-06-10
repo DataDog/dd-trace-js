@@ -7,7 +7,6 @@ const tags = require('../../../ext/tags')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const shimmer = require('shimmer')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -25,9 +24,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
-const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
-const HTTP2_HEADER_STATUS = ':status'
 
 const web = {
   // Ensure the configuration has the correct structure and defaults.

@@ -4,8 +4,6 @@ const web = require('../util/web')
 const shimmer = require('shimmer')
 
 const analyticsSampler = require('../../analytics_sampler')
-const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
-const log = require('../../log')
 const tags = require('../../../ext/tags')
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
