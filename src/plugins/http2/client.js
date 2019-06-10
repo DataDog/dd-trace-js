@@ -1,7 +1,6 @@
 'use strict'
 
-const url = require('url')
-const semver = require('semver')
+const URL = require('url').URL
 const opentracing = require('opentracing')
 const log = require('../../log')
 const constants = require('../../constants')
@@ -10,7 +9,6 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../util/urlfilter')
 const analyticsSampler = require('../../analytics_sampler')
-
 const shimmer = require('shimmer')
 
 const Reference = opentracing.Reference
