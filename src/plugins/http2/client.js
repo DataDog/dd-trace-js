@@ -31,10 +31,16 @@ function extractSessionDetails (authority, options) {
   if (typeof authority === 'string') {
     authority = new URL(authority)
   }
+
   const protocol = authority.protocol || options.protocol || 'https:'
-  const port = '' + (authority.port !== ''
+  let port = '' + (authority.port !== ''
     ? authority.port : (authority.protocol === 'http:' ? 80 : 443))
-  const host = authority.hostname || authority.host || 'localhost'
+  let host = authority.hostname || authority.host || 'localhost'
+
+  if (protocol === 'https:' && options) {
+    port = options.port || port
+    host = options.host || host
+  }
 
   return { protocol, port, host }
 }

@@ -90,7 +90,7 @@ describe('Plugin', () => {
           })
         })
 
-        it(`should support request configuration without a path and method`, done => {
+        it('should support request configuration without a path and method', done => {
           const app = (stream, headers) => {
             stream.respond({
               ':status': 200
@@ -113,7 +113,7 @@ describe('Plugin', () => {
                 .on('error', done)
 
               const req = client.request({})
-              req.on('error', done)
+                .on('error', done)
 
               req.end()
             })
@@ -184,6 +184,52 @@ describe('Plugin', () => {
           })
         })
 
+        it('should support a URL object and an options object, with the string URL taking precedence', done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            const correctConfig = {
+              protocol: `${protocol}:`,
+              host: 'localhost',
+              port
+            }
+
+            const incorrectConfig = {
+              protocol: `${protocol}:`,
+              host: 'remotehost',
+              port: 1337
+            }
+
+            appListener = server(app, port, () => {
+              let client
+              if (protocol === 'https') {
+                client = http2.connect(incorrectConfig, correctConfig)
+              } else {
+                client = http2.connect(correctConfig, incorrectConfig)
+              }
+
+              client.on('error', done)
+
+              const req = client.request({ ':path': '/user' })
+              req.on('error', done)
+
+              req.end()
+            })
+          })
+        })
+
         it('should support a string URL and an options object, with the string URL taking precedence', done => {
           const app = (stream, headers) => {
             stream.respond({
@@ -200,57 +246,27 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            const uri = {
+            const correctConfig = {
               protocol: `${protocol}:`,
-              hostname: 'localhost',
+              host: 'localhost',
               port
             }
 
-            const options = {
-              protocol: 'ssh:',
+            const incorrectConfig = {
+              protocol: `${protocol}:`,
               host: 'remotehost',
               port: 1337
             }
 
             appListener = server(app, port, () => {
-              const client = http2
-                .connect(uri, options)
-                .on('error', done)
+              let client
+              if (protocol === 'https') {
+                client = http2.connect(`${protocol}://remotehost:1337`, correctConfig)
+              } else {
+                client = http2.connect(`${protocol}://localhost:${port}`, incorrectConfig)
+              }
 
-              const req = client.request({ ':path': '/user' })
-              req.on('error', done)
-
-              req.end()
-            })
-          })
-        })
-
-        it('should support a URL object and an options object, with the URL object taking precedence', done => {
-          const app = (stream, headers) => {
-            stream.respond({
-              ':status': 200
-            })
-            stream.end()
-          }
-
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
-              })
-              .then(done)
-              .catch(done)
-
-            const options = {
-              protocol: 'ssh',
-              port: 1337,
-              host: 'remotehost'
-            }
-
-            appListener = server(app, port, () => {
-              const client = http2
-                .connect(`${protocol}://localhost:${port}`, options)
-                .on('error', done)
+              client.on('error', done)
 
               const req = client.request({ ':path': '/user' })
               req.on('error', done)
