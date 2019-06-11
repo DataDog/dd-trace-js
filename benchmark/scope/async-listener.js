@@ -3,7 +3,7 @@
 const proxyquire = require('proxyquire')
 const benchmark = require('../benchmark')
 
-const suite = benchmark('scope')
+const suite = benchmark('scope (async-listener)')
 
 const spanStub = require('../stubs/span')
 
@@ -18,7 +18,7 @@ const asyncListener = {
   }
 }
 
-const Scope = proxyquire('../../src/scope/async-listener', {
+const Scope = proxyquire('../../packages/dd-trace/src/scope/async-listener', {
   '@datadog/async-listener': asyncListener
 })
 

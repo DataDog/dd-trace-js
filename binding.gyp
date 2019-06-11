@@ -2,19 +2,19 @@
   "targets": [{
     "target_name": "metrics",
     "sources": [
-      "src/native/metrics/Collector.cpp",
-      "src/native/metrics/EventLoop.cpp",
-      "src/native/metrics/GarbageCollection.cpp",
-      "src/native/metrics/Heap.cpp",
-      "src/native/metrics/Histogram.cpp",
-      "src/native/metrics/Object.cpp",
-      "src/native/metrics/Process.cpp",
-      "src/native/metrics/SpanTracker.cpp",
-      "src/native/metrics/utils.cpp",
-      "src/native/metrics/main.cpp"
+      "packages/dd-trace/src/native/metrics/Collector.cpp",
+      "packages/dd-trace/src/native/metrics/EventLoop.cpp",
+      "packages/dd-trace/src/native/metrics/GarbageCollection.cpp",
+      "packages/dd-trace/src/native/metrics/Heap.cpp",
+      "packages/dd-trace/src/native/metrics/Histogram.cpp",
+      "packages/dd-trace/src/native/metrics/Object.cpp",
+      "packages/dd-trace/src/native/metrics/Process.cpp",
+      "packages/dd-trace/src/native/metrics/SpanTracker.cpp",
+      "packages/dd-trace/src/native/metrics/utils.cpp",
+      "packages/dd-trace/src/native/metrics/main.cpp"
     ],
     "include_dirs": [
-      "src/native",
+      "packages/dd-trace/src/native",
       "<!(node -e \"require('nan')\")"
     ],
     "xcode_settings": {

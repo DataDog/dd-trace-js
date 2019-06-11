@@ -5,8 +5,8 @@ const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
 const exec = require('./helpers/exec')
-const plugins = require('../src/plugins')
-const externals = require('../test/plugins/externals')
+const plugins = require('../packages/dd-trace/src/plugins')
+const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const workspaces = new Set()
 

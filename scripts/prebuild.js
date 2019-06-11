@@ -17,12 +17,12 @@ const cb = err => {
   if (err) throw err
 
   fs.copyFileSync(
-    path.join(__dirname, '..', 'src', 'native', 'tdigest', 'NOTICES'),
+    path.join(__dirname, '..', 'packages', 'dd-trace', 'src', 'native', 'tdigest', 'NOTICES'),
     path.join(__dirname, '..', 'prebuilds', 'NOTICES')
   )
 
   fs.copyFileSync(
-    path.join(__dirname, '..', 'src', 'native', 'tdigest', 'LICENSE-2.0.txt'),
+    path.join(__dirname, '..', 'packages', 'dd-trace', 'src', 'native', 'tdigest', 'LICENSE-2.0.txt'),
     path.join(__dirname, '..', 'prebuilds', 'LICENSE-2.0.txt')
   )
 

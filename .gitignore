@@ -103,4 +103,4 @@ versions
 build
 prebuilds
 docs/test.js
-!test/node_modules
+!packages/*/test/node_modules

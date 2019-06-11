@@ -1,6 +1,6 @@
 'use strict'
 
-const tracer = require('..').init()
+const tracer = require('../packages/dd-trace').init()
 const benchmark = require('./benchmark')
 
 const suite = benchmark('dd-trace')
