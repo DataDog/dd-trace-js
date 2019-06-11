@@ -44,6 +44,15 @@ function createWrapQuery (tracer, config) {
   }
 }
 
+function createWrapGetConnection (tracer, config) {
+  return function wrapGetConnection (getConnection) {
+    return function getConnectionWithTrace (cb) {
+      const scope = tracer.scope()
+      return scope.bind(getConnection).call(this, scope.bind(cb))
+    }
+  }
+}
+
 function wrapCallback (tracer, span, parent, done) {
   return tracer.scope().bind((err, res) => {
     if (err) {
@@ -68,6 +77,14 @@ function unpatchConnection (Connection) {
   this.unwrap(Connection.prototype, 'query')
 }
 
+function patchPool (Pool, tracer, config) {
+  this.wrap(Pool.prototype, 'getConnection', createWrapGetConnection(tracer, config))
+}
+
+function unpatchPool (Pool) {
+  this.unwrap(Pool.prototype, 'getConnection')
+}
+
 module.exports = [
   {
     name: 'mysql',
@@ -75,5 +92,12 @@ module.exports = [
     versions: ['>=2'],
     patch: patchConnection,
     unpatch: unpatchConnection
+  },
+  {
+    name: 'mysql',
+    file: 'lib/Pool.js',
+    versions: ['>=2'],
+    patch: patchPool,
+    unpatch: unpatchPool
   }
 ]
