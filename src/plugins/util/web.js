@@ -157,25 +157,15 @@ const web = {
     return req._datadog.middleware.slice(-1)[0]
   },
 
-  // Extract the parent span from
-  extractSpan (tracer, name, headers) {
+  // Extract the parent span from the headers and start a new span as its child
+  startChildSpan (tracer, name, headers) {
     const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
     const span = tracer.startSpan(name, { childOf })
 
     return span
   },
 
-  extractURL (req) {
-    const headers = req.headers
-
-    if (req.stream) {
-      return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
-    } else {
-      const protocol = req.connection.encrypted ? 'https' : 'http'
-      return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
-    }
-  },
-
+  // Validate a request's status code and then add error tags if necessary
   addStatusError (req, statusCode) {
     if (!req._datadog.config.validateStatus(statusCode)) {
       req._datadog.span.setTag(ERROR, true)
@@ -191,13 +181,11 @@ function startSpan (tracer, config, req, res, name) {
   if (req._datadog.span) {
     req._datadog.span.context()._name = name
     span = req._datadog.span
-    if (req.stream) {
-      configureDatadogObject(tracer, span, req, res)
-    }
   } else {
-    span = web.extractSpan(tracer, name, req.headers)
-    configureDatadogObject(tracer, span, req, res)
+    span = web.startChildSpan(tracer, name, req.headers)
   }
+
+  configureDatadogObject(tracer, span, req, res)
 
   return span
 }
@@ -276,7 +264,7 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (req) {
-  const url = web.extractURL(req)
+  const url = extractURL(req)
   const span = req._datadog.span
 
   span.addTags({
@@ -333,6 +321,17 @@ function addHeaders (req) {
       span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
+}
+
+function extractURL (req) {
+  const headers = req.headers
+
+  if (req.stream) {
+    return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
+  } else {
+    const protocol = req.connection.encrypted ? 'https' : 'http'
+    return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
+  }
 }
 
 function getHeadersToRecord (config) {

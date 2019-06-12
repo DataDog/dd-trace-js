@@ -30,16 +30,16 @@ const HTTP2_HEADER_STATUS = ':status'
 
 function createWrapEmit (tracer, config) {
   return function wrapEmit (emit) {
-    return function emitWithTrace (event, ...args) {
+    return function emitWithTrace (event, arg1, arg2) {
       if (event === 'stream') {
-        const stream = args[0]
-        const headers = args[1]
+        const stream = arg1
+        const headers = arg2
         return instrumentStream(tracer, config, stream, headers, 'http.request', () => {
           return emit.apply(this, arguments)
         })
       } else if (event === 'request') {
-        const req = args[0]
-        const res = args[1]
+        const req = arg1
+        const res = arg2
         return web.instrument(tracer, config, req, res, 'http.request', () => {
           return emit.apply(this, arguments)
         })
@@ -96,7 +96,7 @@ function startStreamSpan (tracer, config, stream, headers, name) {
     return stream._datadog.span
   }
 
-  const span = web.extractSpan(tracer, name, headers)
+  const span = web.startChildSpan(tracer, name, headers)
 
   stream._datadog.tracer = tracer
   stream._datadog.span = span

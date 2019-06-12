@@ -187,13 +187,13 @@ function startSpan (tracer, config, headers, sessionDetails) {
 
 function createWrapEmit (tracer, config, span) {
   return function wrapEmit (emit) {
-    return function emitWithTrace (event, ...args) {
+    return function emitWithTrace (event, arg1) {
       switch (event) {
         case 'response':
-          addResponseTags(args[0], span, config)
+          addResponseTags(arg1, span, config)
           break
         case 'error':
-          addErrorTags(span, args[0])
+          addErrorTags(span, arg1)
         case 'close': // eslint-disable-line no-fallthrough
           span.finish()
           break
