@@ -16,10 +16,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
   mongo:
-    image: bitnami/mongodb:3.6
-    environment:
-      - MONGODB_REPLICA_SET_MODE=primary
-      - MONGODB_ADVERTISED_HOSTNAME=localhost
+    image: circleci/mongo
     ports:
       - "127.0.0.1:27017:27017"
   elasticsearch:
