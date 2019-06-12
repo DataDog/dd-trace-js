@@ -34,6 +34,7 @@ function createWrapQuery (tracer, config) {
       if (sequence._callback) {
         sequence._callback = wrapCallback(tracer, span, childOf, sequence._callback)
       } else {
+        scope.bind(sequence)
         sequence.on('end', () => {
           span.finish()
         })
