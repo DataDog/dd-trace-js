@@ -177,7 +177,7 @@ describe('Plugin', () => {
           mysql2 = require(`../../versions/mysql2@${version}`).get()
 
           pool = mysql2.createPool({
-            connectionLimit: 10,
+            connectionLimit: 1,
             host: 'localhost',
             user: 'root'
           })
@@ -209,6 +209,27 @@ describe('Plugin', () => {
           pool.query('SELECT 1 + 1 AS solution', () => {
             expect(tracer.scope().active()).to.be.null
             done()
+          })
+        })
+
+        it('should propagate context to callbacks', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const span1 = tracer.startSpan('test1')
+          const span2 = tracer.startSpan('test2')
+
+          tracer.trace('test', () => {
+            tracer.scope().activate(span1, () => {
+              pool.query('SELECT 1 + 1 AS solution', () => {
+                expect(tracer.scope().active() === span1).to.eql(true)
+                tracer.scope().activate(span2, () => {
+                  pool.query('SELECT 1 + 1 AS solution', () => {
+                    expect(tracer.scope().active() === span2).to.eql(true)
+                    done()
+                  })
+                })
+              })
+            })
           })
         })
       })

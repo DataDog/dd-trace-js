@@ -29,12 +29,13 @@ function createWrapQuery (tracer, config) {
 
       const sequence = scope.bind(query, span).call(this, sql, values, cb)
 
+      scope.bind(sequence)
+
       span.setTag('resource.name', sequence.sql)
 
       if (sequence._callback) {
         sequence._callback = wrapCallback(tracer, span, childOf, sequence._callback)
       } else {
-        scope.bind(sequence)
         sequence.on('end', () => {
           span.finish()
         })
