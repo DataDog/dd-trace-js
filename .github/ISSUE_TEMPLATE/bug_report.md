@@ -11,7 +11,6 @@ assignees: ''
 <!-- What the bug is, how to reproduce, and the expected behavior. -->
 
 **Environment**
-<!-- Information about the environment. -->
 
 * **Operation system:**
 * **Node version:**
