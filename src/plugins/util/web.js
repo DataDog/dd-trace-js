@@ -22,6 +22,10 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
+const HTTP2_HEADER_AUTHORITY = ':authority'
+const HTTP2_HEADER_SCHEME = ':scheme'
+const HTTP2_HEADER_PATH = ':path'
+
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
@@ -125,6 +129,11 @@ const web = {
   patch (req) {
     if (req._datadog) return
 
+    if (req.stream) {
+      req._datadog = req.stream._datadog
+      return
+    }
+
     Object.defineProperty(req, '_datadog', {
       value: {
         span: null,
@@ -146,35 +155,54 @@ const web = {
     if (req._datadog.middleware.length === 0) return req._datadog.span || null
 
     return req._datadog.middleware.slice(-1)[0]
+  },
+
+  // Extract the parent span from the headers and start a new span as its child
+  startChildSpan (tracer, name, headers) {
+    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const span = tracer.startSpan(name, { childOf })
+
+    return span
+  },
+
+  // Validate a request's status code and then add error tags if necessary
+  addStatusError (req, statusCode) {
+    if (!req._datadog.config.validateStatus(statusCode)) {
+      req._datadog.span.setTag(ERROR, true)
+    }
   }
 }
 
 function startSpan (tracer, config, req, res, name) {
   req._datadog.config = config
 
+  let span
+
   if (req._datadog.span) {
     req._datadog.span.context()._name = name
-    return req._datadog.span
+    span = req._datadog.span
+  } else {
+    span = web.startChildSpan(tracer, name, req.headers)
   }
 
-  const childOf = tracer.extract(FORMAT_HTTP_HEADERS, req.headers)
-  const span = tracer.startSpan(name, { childOf })
-
-  req._datadog.tracer = tracer
-  req._datadog.span = span
-  req._datadog.res = res
+  configureDatadogObject(tracer, span, req, res)
 
   return span
 }
 
+function configureDatadogObject (tracer, span, req, res) {
+  req._datadog.tracer = tracer
+  req._datadog.span = span
+  req._datadog.res = res
+}
+
 function finish (req, res) {
-  if (req._datadog.finished) return
+  if (req._datadog.finished && !req.stream) return
 
   addRequestTags(req)
   addResponseTags(req)
 
   req._datadog.config.hooks.request(req._datadog.span, req, res)
-
   addResourceTag(req)
 
   req._datadog.span.finish()
@@ -236,8 +264,7 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (req) {
-  const protocol = req.connection.encrypted ? 'https' : 'http'
-  const url = `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
+  const url = extractURL(req)
   const span = req._datadog.span
 
   span.addTags({
@@ -262,7 +289,7 @@ function addResponseTags (req) {
     [HTTP_STATUS_CODE]: res.statusCode
   })
 
-  addStatusError(req)
+  web.addStatusError(req, res.statusCode)
 }
 
 function addResourceTag (req) {
@@ -296,9 +323,14 @@ function addHeaders (req) {
   })
 }
 
-function addStatusError (req) {
-  if (!req._datadog.config.validateStatus(req._datadog.res.statusCode)) {
-    req._datadog.span.setTag(ERROR, true)
+function extractURL (req) {
+  const headers = req.headers
+
+  if (req.stream) {
+    return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
+  } else {
+    const protocol = req.connection.encrypted ? 'https' : 'http'
+    return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
   }
 }
 
