@@ -10,17 +10,15 @@
 - [ ] Unit tests.
 - [ ] TypeScript [definitions][1].
 - [ ] TypeScript [tests][2].
-- [ ] Website [documentation][3].
-- [ ] API [documentation][4].
-- [ ] CircleCI [jobs/workflows][5].
-- [ ] Plugin is [exported][6].
+- [ ] API [documentation][3].
+- [ ] CircleCI [jobs/workflows][4].
+- [ ] Plugin is [exported][5].
 
 [1]: https://github.com/DataDog/dd-trace-js/blob/master/index.d.ts
 [2]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
-[3]: https://github.com/DataDog/documentation/blob/master/content/en/tracing/setup/nodejs.md
-[4]: https://github.com/DataDog/dd-trace-js/blob/master/docs/API.md
-[5]: https://github.com/DataDog/dd-trace-js/blob/master/.circleci/config.yml
-[6]: https://github.com/DataDog/dd-trace-js/blob/master/src/plugins/index.js
+[3]: https://github.com/DataDog/dd-trace-js/blob/master/docs/API.md
+[4]: https://github.com/DataDog/dd-trace-js/blob/master/.circleci/config.yml
+[5]: https://github.com/DataDog/dd-trace-js/blob/master/src/plugins/index.js
 
 
 ### Additional Notes
