@@ -13,12 +13,16 @@ const pkg = require('../package.json')
 const name = `${os.platform()}-${os.arch()}`
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
-  download(`v${pkg.version}`)
-    .catch(() => getLatestTag().then(download))
-    .then(persist)
-    .then(extract)
-    .then(cleanup)
-    .catch(rebuild)
+  if (process.env.DD_SKIP_DOWNLOAD !== 'true') {
+    download(`v${pkg.version}`)
+      .catch(() => getLatestTag().then(download))
+      .then(persist)
+      .then(extract)
+      .then(cleanup)
+      .catch(rebuild)
+  } else {
+    rebuild()
+  }
 }
 
 function rebuild () {
