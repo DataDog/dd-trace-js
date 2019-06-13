@@ -8,16 +8,7 @@ assignees: ''
 ---
 
 **Describe the bug**
-<!-- A clear and concise description of what the bug is. -->
-
-**To Reproduce**
-<!-- Steps to reproduce the behavior -->
-
-**Expected behavior**
-<!-- A clear and concise description of what you expected to happen. -->
-
-**Screenshots**
-<!-- If applicable, add screenshots to help explain your problem. -->
+<!-- What the bug is, how to reproduce, and the expected behavior. -->
 
 **Environment**
 <!-- Information about the environment. -->
@@ -26,6 +17,3 @@ assignees: ''
 * **Node version:**
 * **Tracer version:**
 * **Agent version:**
-
-**Additional context**
-<!-- Add any other context about the problem here. -->
