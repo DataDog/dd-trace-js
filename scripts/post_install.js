@@ -13,7 +13,7 @@ const pkg = require('../package.json')
 const name = `${os.platform()}-${os.arch()}`
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
-  if (process.env.DD_SKIP_DOWNLOAD !== 'true') {
+  if (process.env.DD_SKIP_PREBUILT_DOWNLOAD !== 'true') {
     download(`v${pkg.version}`)
       .catch(() => getLatestTag().then(download))
       .then(persist)
