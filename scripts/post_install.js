@@ -11,7 +11,6 @@ const tar = require('tar')
 const pkg = require('../package.json')
 
 const name = `${os.platform()}-${os.arch()}`
-const timeout = 2000
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
   download(`v${pkg.version}`)
@@ -37,20 +36,16 @@ function rebuild () {
 }
 
 function locate (url) {
-  const promise = new Promise((resolve, reject) => {
-    const req = https.get(url, { timeout }, res => {
+  const promise = fetch(url)
+    .then(res => {
       res.resume()
 
       if (!res.headers.location) {
-        reject(new Error('Unable to determine prebuilt binaries download location.'))
+        throw new Error('Unable to determine prebuilt binaries download location.')
       }
 
-      resolve(res.headers.location)
+      return res.headers.location
     })
-
-    req.on('timeout', reject)
-    req.on('error', reject)
-  })
 
   return promise
 }
@@ -60,19 +55,13 @@ function download (tag) {
   console.log(`Downloading prebuilt binaries for ${tag} native addons.`)
 
   const promise = locate(`https://github.com/DataDog/dd-trace-js/releases/download/${tag}/addons-${name}.tgz`)
-    .then(url => {
-      return new Promise((resolve, reject) => {
-        const req = https.get(url, { timeout }, res => {
-          if (res.statusCode !== 200) {
-            return reject(new Error('Server replied with not OK status code.'))
-          }
+    .then(fetch)
+    .then(res => {
+      if (res.statusCode !== 200) {
+        throw new Error('Server replied with not OK status code.')
+      }
 
-          resolve(res)
-        })
-
-        req.on('timeout', reject)
-        req.on('error', reject)
-      })
+      return res
     })
 
   promise.catch((e) => {
@@ -118,26 +107,35 @@ function cleanup () {
 }
 
 function getLatestTag () {
-  const promise = new Promise((resolve, reject) => {
-    const req = https.get(`https://github.com/DataDog/dd-trace-js/releases/latest`, { timeout }, res => {
+  const promise = fetch(`https://github.com/DataDog/dd-trace-js/releases/latest`)
+    .then(res => {
       const match = res.headers.location && res.headers.location.match(/^.+\/(.+)$/)
 
       res.resume()
 
       if (!match || !match[1]) {
-        return reject(new Error('Could not get the latest release tag.'))
+        throw new Error('Could not get the latest release tag.')
       }
 
-      resolve(match[1])
+      return match[1]
     })
-
-    req.on('timeout', reject)
-    req.on('error', reject)
-  })
 
   promise.catch(() => {
     console.log('Unable to determine prebuilt binaries download location.')
   })
 
   return promise
+}
+
+function fetch (url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { timeout: 2000 })
+
+    req.on('response', resolve)
+    req.on('error', reject)
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('Socket timeout.'))
+    })
+  })
 }
