@@ -1,7 +1,7 @@
 'use strict'
 
 const Uint64BE = require('int64-buffer').Uint64BE
-const constants = require('../../src/constants')
+const constants = require('../../packages/dd-trace/src/constants')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 

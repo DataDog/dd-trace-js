@@ -1,11 +1,11 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const platform = require('../../src/platform')
-const node = require('../../src/platform/node')
+const platform = require('../../packages/dd-trace/src/platform')
+const node = require('../../packages/dd-trace/src/platform/node')
 const benchmark = require('../benchmark')
 
-const suite = benchmark('scope')
+const suite = benchmark('scope (async_hooks)')
 
 const spanStub = require('../stubs/span')
 
@@ -32,7 +32,7 @@ const asyncHooks = {
   }
 }
 
-const Scope = proxyquire('../../src/scope/async_hooks', {
+const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
   './async_hooks/': asyncHooks,
   '../platform': platform
 })

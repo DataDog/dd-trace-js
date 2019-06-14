@@ -1,8 +1,8 @@
 'use strict'
 
 const benchmark = require('../benchmark')
-const platform = require('../../src/platform')
-const node = require('../../src/platform/node')
+const platform = require('../../packages/dd-trace/src/platform')
+const node = require('../../packages/dd-trace/src/platform/node')
 
 platform.use(node)
 

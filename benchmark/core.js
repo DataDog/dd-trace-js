@@ -3,21 +3,21 @@
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 const Uint64BE = require('int64-buffer').Uint64BE
-const platform = require('../src/platform')
-const node = require('../src/platform/node')
+const platform = require('../packages/dd-trace/src/platform')
+const node = require('../packages/dd-trace/src/platform/node')
 
 platform.use(node)
 
-const Config = require('../src/config')
-const DatadogTracer = require('../src/tracer')
-const DatadogSpanContext = require('../src/opentracing/span_context')
-const TextMapPropagator = require('../src/opentracing/propagation/text_map')
-const Writer = proxyquire('../src/writer', {
+const Config = require('../packages/dd-trace/src/config')
+const DatadogTracer = require('../packages/dd-trace/src/tracer')
+const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
+const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
+const Writer = proxyquire('../packages/dd-trace/src/writer', {
   './platform': { request: () => Promise.resolve() }
 })
-const Sampler = require('../src/sampler')
-const format = require('../src/format')
-const encode = require('../src/encode')
+const Sampler = require('../packages/dd-trace/src/sampler')
+const format = require('../packages/dd-trace/src/format')
+const encode = require('../packages/dd-trace/src/encode')
 const config = new Config('benchmark', { service: 'benchmark' })
 
 const suite = benchmark('core')
