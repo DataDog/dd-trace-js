@@ -107,7 +107,7 @@ function cleanup () {
 }
 
 function getLatestTag () {
-  const promise = fetch(`https://github.com/DataDog/dd-trace-js/releases/latest`)
+  const promise = fetch('https://github.com/DataDog/dd-trace-js/releases/latest')
     .then(res => {
       const match = res.headers.location && res.headers.location.match(/^.+\/(.+)$/)
 
