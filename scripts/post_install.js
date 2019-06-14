@@ -11,6 +11,7 @@ const tar = require('tar')
 const pkg = require('../package.json')
 
 const name = `${os.platform()}-${os.arch()}`
+const timeout = 2000
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
   download(`v${pkg.version}`)
@@ -37,7 +38,7 @@ function rebuild () {
 
 function locate (url) {
   const promise = new Promise((resolve, reject) => {
-    const req = https.get(url, res => {
+    const req = https.get(url, { timeout }, res => {
       res.resume()
 
       if (!res.headers.location) {
@@ -47,6 +48,7 @@ function locate (url) {
       resolve(res.headers.location)
     })
 
+    req.on('timeout', reject)
     req.on('error', reject)
   })
 
@@ -60,7 +62,7 @@ function download (tag) {
   const promise = locate(`https://github.com/DataDog/dd-trace-js/releases/download/${tag}/addons-${name}.tgz`)
     .then(url => {
       return new Promise((resolve, reject) => {
-        const req = https.get(url, res => {
+        const req = https.get(url, { timeout }, res => {
           if (res.statusCode !== 200) {
             return reject(new Error('Server replied with not OK status code.'))
           }
@@ -68,6 +70,7 @@ function download (tag) {
           resolve(res)
         })
 
+        req.on('timeout', reject)
         req.on('error', reject)
       })
     })
@@ -116,7 +119,7 @@ function cleanup () {
 
 function getLatestTag () {
   const promise = new Promise((resolve, reject) => {
-    const req = https.get(`https://github.com/DataDog/dd-trace-js/releases/latest`, res => {
+    const req = https.get(`https://github.com/DataDog/dd-trace-js/releases/latest`, { timeout }, res => {
       const match = res.headers.location && res.headers.location.match(/^.+\/(.+)$/)
 
       res.resume()
@@ -128,6 +131,7 @@ function getLatestTag () {
       resolve(match[1])
     })
 
+    req.on('timeout', reject)
     req.on('error', reject)
   })
 
