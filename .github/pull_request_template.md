@@ -5,7 +5,7 @@
 <!-- What inspired you to submit this pull request? -->
 
 ### Plugin Checklist
-<!-- Please fill this section if this PR is adding or updating a plugin. -->
+<!-- Fill this section if adding or updating a plugin. Remove otherwise. -->
 
 - [ ] Unit tests.
 - [ ] TypeScript [definitions][1].
@@ -19,7 +19,6 @@
 [3]: https://github.com/DataDog/dd-trace-js/blob/master/docs/API.md
 [4]: https://github.com/DataDog/dd-trace-js/blob/master/.circleci/config.yml
 [5]: https://github.com/DataDog/dd-trace-js/blob/master/src/plugins/index.js
-
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->
