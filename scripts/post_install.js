@@ -11,9 +11,10 @@ const tar = require('tar')
 const pkg = require('../package.json')
 
 const name = `${os.platform()}-${os.arch()}`
+const buildFromSource = process.env.npm_config_build_from_source
 
 if (process.env.DD_NATIVE_METRICS !== 'false') {
-  if (process.env.DD_SKIP_PREBUILT_DOWNLOAD !== 'true') {
+  if (buildFromSource !== 'true' && buildFromSource !== 'dd-trace') {
     download(`v${pkg.version}`)
       .catch(() => getLatestTag().then(download))
       .then(persist)
