@@ -256,7 +256,7 @@ function getModules (instrumentation) {
 
       pkg = require(`${basedir}/package.json`)
 
-      if (!id.endsWith(`/node_modules/${instrumentation.name}/${pkg.main}`)) continue
+      if (!id.endsWith(`/node_modules/${instrumentation.name}/${pkg.main || 'index.js'}`)) continue
     }
 
     if (!matchVersion(pkg.version, instrumentation.versions)) continue

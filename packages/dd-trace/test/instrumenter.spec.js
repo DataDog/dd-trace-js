@@ -42,7 +42,12 @@ describe('Instrumenter', () => {
           patch: sinon.spy(),
           unpatch: sinon.spy()
         }
-      ]
+      ],
+      other: {
+        name: 'other',
+        versions: ['1.x'],
+        patch: sinon.spy()
+      }
     }
 
     shimmer = sinon.spy()
@@ -54,11 +59,13 @@ describe('Instrumenter', () => {
       './plugins': {
         'http': integrations.http,
         'express-mock': integrations.express,
-        'mysql-mock': integrations.mysql
+        'mysql-mock': integrations.mysql,
+        'other': integrations.other
       },
       '../../datadog-plugin-http/src': integrations.http,
       '../../datadog-plugin-express-mock/src': integrations.express,
-      '../../datadog-plugin-mysql-mock/src': integrations.mysql
+      '../../datadog-plugin-mysql-mock/src': integrations.mysql,
+      '../../datadog-plugin-other/src': integrations.other
     })
 
     instrumenter = new Instrumenter(tracer)
@@ -180,6 +187,13 @@ describe('Instrumenter', () => {
         require('express-mock')
 
         expect(integrations.express.patch).to.not.have.been.called
+      })
+
+      it('should patch modules without declared entrypoint', () => {
+        instrumenter.use('other', true)
+        require('other')
+
+        expect(integrations.other.patch).to.have.been.called
       })
     })
 
