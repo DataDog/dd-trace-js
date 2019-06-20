@@ -81,15 +81,6 @@ const httpClientOptions = {
   }
 };
 
-const http2ServerOptions = {
-  ...httpOptions
-};
-
-const http2ClientOptions = {
-  ...httpOptions,
-  splitByDomain: true
-};
-
 const graphqlOptions = {
   service: 'test',
   depth: 2,
@@ -117,13 +108,6 @@ tracer.use('http', {
 });
 tracer.use('http', {
   client: httpClientOptions
-});
-tracer.use('http2');
-tracer.use('http2', {
-  server: http2ServerOptions
-});
-tracer.use('http2', {
-  client: http2ClientOptions
 });
 tracer.use('ioredis');
 tracer.use('knex');
