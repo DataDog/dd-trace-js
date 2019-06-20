@@ -84,14 +84,17 @@ class Writer {
 
     log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-    platform
-      .request(Object.assign({ data }, options))
-      .then(res => {
-        log.debug(`Response from the agent: ${res}`)
+    platform.request(Object.assign({ data }, options), (err, res) => {
+      if (err) return log.error(err)
 
+      log.debug(`Response from the agent: ${res}`)
+
+      try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
-      })
-      .catch(e => log.error(e))
+      } catch (e) {
+        log.error(err)
+      }
+    })
   }
 }
 

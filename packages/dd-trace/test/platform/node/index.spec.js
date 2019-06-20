@@ -225,7 +225,7 @@ describe('Platform', () => {
             'Content-Type': 'application/octet-stream'
           },
           data: Buffer.from(JSON.stringify({ foo: 'bar' }))
-        }).then(res => {
+        }, (err, res) => {
           expect(res).to.equal('OK')
         })
       })
@@ -250,7 +250,7 @@ describe('Platform', () => {
             'Content-Type': 'application/octet-stream'
           },
           data: [Buffer.from('fizz', 'utf-8'), Buffer.from('buzz', 'utf-8')]
-        }).then(res => {
+        }, (err, res) => {
           expect(res).to.equal('OK')
         })
       })
@@ -263,29 +263,27 @@ describe('Platform', () => {
         request({
           path: '/path',
           method: 'PUT'
+        }, err => {
+          expect(err).to.be.instanceof(Error)
+          expect(err.message).to.equal('Error from the agent: 400 Bad Request')
+          done()
         })
-          .catch(err => {
-            expect(err).to.be.instanceof(Error)
-            expect(err.message).to.equal('Error from the agent: 400 Bad Request')
-            done()
-          })
       })
 
-      it('should timeout after 5 seconds by default', done => {
+      it('should timeout after 2 seconds by default', done => {
         nock('http://localhost:80')
           .put('/path')
-          .socketDelay(5001)
+          .socketDelay(2001)
           .reply(200)
 
         request({
           path: '/path',
           method: 'PUT'
+        }, err => {
+          expect(err).to.be.instanceof(Error)
+          expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
+          done()
         })
-          .catch(err => {
-            expect(err).to.be.instanceof(Error)
-            expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
-            done()
-          })
       })
 
       it('should have a configurable timeout', done => {
@@ -298,12 +296,11 @@ describe('Platform', () => {
           path: '/path',
           method: 'PUT',
           timeout: 2000
+        }, err => {
+          expect(err).to.be.instanceof(Error)
+          expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
+          done()
         })
-          .catch(err => {
-            expect(err).to.be.instanceof(Error)
-            expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
-            done()
-          })
       })
     })
 
