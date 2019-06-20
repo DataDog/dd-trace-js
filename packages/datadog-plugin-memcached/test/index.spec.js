@@ -50,7 +50,7 @@ describe('Plugin', () => {
 
           memcached = new Memcached('localhost:11211', { retries: 0 })
 
-          const span = {}
+          const span = tracer.startSpan('web.request')
 
           tracer.scope().activate(span, () => {
             memcached.get('test', err => {

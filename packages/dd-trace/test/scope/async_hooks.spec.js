@@ -51,6 +51,35 @@ describe('Scope', () => {
     expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type')
   })
 
+  it('should have a safeguard against async resource leaks', done => {
+    const span = {}
+
+    scope.activate(span, () => {
+      setImmediate(() => {
+        expect(scope.active()).to.be.null
+        done()
+      })
+
+      scope._wipe(span)
+    })
+  })
+
+  it('should preserve the current scope even with the memory leak safeguard', done => {
+    const parent = {}
+    const child = {}
+
+    scope.activate(parent, () => {
+      setImmediate(() => {
+        scope.activate(child, () => {
+          scope._wipe(parent)
+
+          expect(scope.active()).to.equal(child)
+          done()
+        })
+      })
+    })
+  })
+
   if (!semver.satisfies(process.version, '^8.13 || >=10.14.2')) {
     it('should work around the HTTP keep-alive bug in Node', () => {
       const resource = {}

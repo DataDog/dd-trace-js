@@ -9,6 +9,9 @@ const id = new Uint64BE(0x12345678, 0x12345678)
 
 const span = {
   tracer: () => ({
+    scope: () => ({
+      _wipe: () => {}
+    }),
     _service: 'service'
   }),
   addTags: () => {},

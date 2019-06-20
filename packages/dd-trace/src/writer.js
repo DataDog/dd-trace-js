@@ -27,6 +27,10 @@ class Writer {
     if (trace.started.length === trace.finished.length) {
       this._prioritySampler.sample(spanContext)
 
+      if (trace.started.length > 1 || span.context()._tags['span.kind'] !== 'consumer') {
+        trace.started.forEach(span => span.tracer().scope()._wipe(span))
+      }
+
       const formattedTrace = trace.finished.map(format)
 
       if (spanContext._sampling.drop === true) {

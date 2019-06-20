@@ -57,6 +57,8 @@ class Scope {
 
   _exit () {}
 
+  _wipe () {}
+
   _bindFn (fn, span) {
     const scope = this
     const spanOrActive = this._spanOrActive(span)

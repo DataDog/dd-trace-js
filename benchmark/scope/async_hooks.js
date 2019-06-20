@@ -25,8 +25,15 @@ const asyncHooks = {
     this.destroy = hooks.destroy
     this.promiseResolve = hooks.promiseResolve
 
-    this.before = asyncId => ids.push(asyncId)
-    this.after = asyncId => ids.pop(asyncId)
+    this.before = asyncId => {
+      ids.push(asyncId)
+      hooks.before(asyncId)
+    }
+
+    this.after = asyncId => {
+      ids.pop(asyncId)
+      hooks.after(asyncId)
+    }
 
     return hook
   }
