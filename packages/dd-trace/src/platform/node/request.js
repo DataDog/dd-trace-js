@@ -14,31 +14,31 @@ function request (options, callback) {
 
   options.headers['Content-Length'] = byteLength(data)
 
-  return new Promise((resolve, reject) => {
-    const client = options.protocol === 'https:' ? https : http
-    const req = client.request(options, res => {
-      let data = ''
+  const client = options.protocol === 'https:' ? https : http
+  const req = client.request(options, res => {
+    let data = ''
 
-      res.on('data', chunk => { data += chunk })
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode <= 299) {
-          resolve(data)
-        } else {
-          const error = new Error(http.STATUS_CODES[res.statusCode])
-          error.status = res.statusCode
+    res.setTimeout(options.timeout)
 
-          reject(new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`))
-        }
-      })
+    res.on('data', chunk => { data += chunk })
+    res.on('end', () => {
+      if (res.statusCode >= 200 && res.statusCode <= 299) {
+        callback(null, data)
+      } else {
+        const error = new Error(http.STATUS_CODES[res.statusCode])
+        error.status = res.statusCode
+
+        callback(new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`))
+      }
     })
-
-    req.setTimeout(options.timeout, req.abort)
-    req.on('error', e => reject(new Error(`Network error trying to reach the agent: ${e.message}`)))
-
-    data.forEach(buffer => req.write(buffer))
-
-    req.end()
   })
+
+  req.setTimeout(options.timeout, req.abort)
+  req.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
+
+  data.forEach(buffer => req.write(buffer))
+
+  req.end()
 }
 
 function byteLength (data) {

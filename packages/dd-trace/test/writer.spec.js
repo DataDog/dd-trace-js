@@ -9,7 +9,6 @@ describe('Writer', () => {
   let trace
   let span
   let platform
-  let request
   let response
   let format
   let encode
@@ -35,13 +34,11 @@ describe('Writer', () => {
       }
     })
 
-    request = Promise.resolve(response)
-
     platform = {
       name: sinon.stub(),
       version: sinon.stub(),
       engine: sinon.stub(),
-      request: sinon.stub().returns(request),
+      request: sinon.stub().yields(null, response),
       msgpack: {
         prefix: sinon.stub()
       }
@@ -166,7 +163,7 @@ describe('Writer', () => {
     it('should log request errors', done => {
       const error = new Error('boom')
 
-      platform.request.returns(Promise.reject(error))
+      platform.request.yields(error)
 
       writer.append(span)
       writer.flush()
