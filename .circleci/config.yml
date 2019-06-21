@@ -571,7 +571,7 @@ workflows:
       - node-koa
       - node-memcached
       - node-mongodb-core'
-      - node-mssql
+      - node-tedious
       - node-mysql
       - node-net
       - node-paperplane
