@@ -64,7 +64,6 @@ describe('Plugin', () => {
         const span = tracer.startSpan('test')
 
         tracer.scope().activate(span, () => {
-          const span = tracer.scope().active()
           const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
             expect(tracer.scope().active()).to.equal(span)
             done(err)
