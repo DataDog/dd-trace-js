@@ -570,7 +570,7 @@ workflows:
       - node-knex
       - node-koa
       - node-memcached
-      - node-mongodb-core'
+      - node-mongodb-core
       - node-tedious
       - node-mysql
       - node-net

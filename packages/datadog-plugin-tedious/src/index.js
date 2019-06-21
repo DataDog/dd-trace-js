@@ -2,6 +2,7 @@
 
 const Tags = require('opentracing').Tags
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const tx = require('../../dd-trace/src/plugins/util/tx')
 
 function createWrapMakeRequest (tracer, config) {
   return function wrapMakeRequest (makeRequest) {
@@ -21,7 +22,7 @@ function createWrapMakeRequest (tracer, config) {
       })
 
       analyticsSampler.sample(span, config.analytics)
-      request.userCallback = wrapCallback(tracer, span, childOf, request.userCallback)
+      request.userCallback = tx.wrap(childOf, request.userCallback)
       const res = scope.bind(makeRequest, span).apply(this, arguments)
 
       addConnectionTags(span, connectionConfig)
@@ -33,7 +34,6 @@ function createWrapMakeRequest (tracer, config) {
 function addConnectionTags (span, connectionConfig) {
   span.setTag('out.host', connectionConfig.server)
 
-  // If instanceName is defined, the config.options.port is undefined and so we must find it
   const instanceName = connectionConfig.options.instanceName
   if (instanceName) {
     span.setTag('out.instance.name', instanceName)
@@ -55,23 +55,6 @@ function addConnectionTags (span, connectionConfig) {
 
   if (userName) {
     span.setTag('db.user', userName)
-  }
-}
-
-function wrapCallback (tracer, span, parent, callback) {
-  return function (err) {
-    if (err) {
-      span.addTags({
-        'error.type': err.name,
-        'error.msg': err.message,
-        'error.stack': err.stack
-      })
-    }
-
-    span.finish()
-    if (callback) {
-      return tracer.scope().activate(parent, () => callback.apply(this, arguments))
-    }
   }
 }
 
