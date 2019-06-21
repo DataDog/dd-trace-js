@@ -147,6 +147,7 @@ tracer.use('redis');
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('router');
+tracer.use('tedious');
 tracer.use('when');
 tracer.use('winston');
 

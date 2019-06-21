@@ -56,6 +56,7 @@
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
+    "mssql": "^5.1.0",
     "nan": "^2.12.1",
     "node-gyp-build": "^3.8.0",
     "opentracing": ">=0.12.1",

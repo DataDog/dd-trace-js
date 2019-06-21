@@ -32,6 +32,7 @@ module.exports = {
   'redis': require('../../../../packages/datadog-plugin-redis/src'),
   'restify': require('../../../../packages/datadog-plugin-restify/src'),
   'router': require('../../../../packages/datadog-plugin-router/src'),
+  'tedious': require('../../../../packages/datadog-plugin-tedious/src'),
   'when': require('../../../../packages/datadog-plugin-when/src'),
   'winston': require('../../../../packages/datadog-plugin-winston/src')
 }

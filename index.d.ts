@@ -340,6 +340,7 @@ interface Plugins {
   "redis": plugins.redis;
   "restify": plugins.restify;
   "router": plugins.router;
+  "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
 }
@@ -789,6 +790,13 @@ declare namespace plugins {
    * [router](https://github.com/pillarjs/router) module.
    */
   interface router extends Integration {}
+
+    /**
+   * This plugin automatically instruments the
+   * [tedious](https://github.com/tediousjs/tedious/) module.
+   */
+  interface tedious extends Integration {}
+
 
   /**
    * This plugin patches the [when](https://github.com/cujojs/when)
