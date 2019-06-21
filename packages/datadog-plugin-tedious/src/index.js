@@ -24,40 +24,26 @@ function createWrapMakeRequest (tracer, config) {
         }
       })
 
-      analyticsSampler.sample(span, config.analytics)
-      request.userCallback = tx.wrap(span, request.userCallback)
-      const res = scope.bind(makeRequest, span).apply(this, arguments)
-
       addConnectionTags(span, connectionConfig)
       addDatabaseTags(span, connectionConfig)
 
-      return res
+      analyticsSampler.sample(span, config.analytics)
+      request.userCallback = tx.wrap(span, request.userCallback)
+
+      return scope.bind(makeRequest, span).apply(this, arguments)
     }
   }
 }
 
 function addConnectionTags (span, connectionConfig) {
   span.setTag('out.host', connectionConfig.server)
-
-  const instanceName = connectionConfig.options.instanceName
-  if (instanceName) {
-    span.setTag('db.instance', instanceName)
-  } else {
-    span.setTag('out.port', connectionConfig.options.port)
-  }
+  span.setTag('out.port', connectionConfig.options.port)
 }
 
 function addDatabaseTags (span, connectionConfig) {
-  const userName = connectionConfig.userName || connectionConfig.authentication.options.userName
-
-  if (userName) {
-    span.setTag('db.user', userName)
-  }
-
-  const database = connectionConfig.options.database
-  if (database) {
-    span.setTag('db.name', database)
-  }
+  span.setTag('db.user', connectionConfig.userName || connectionConfig.authentication.options.userName)
+  span.setTag('db.name', connectionConfig.options.database)
+  span.setTag('db.instance', connectionConfig.options.instanceName)
 }
 
 module.exports = [
