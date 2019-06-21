@@ -22,6 +22,16 @@ describe('Plugin', () => {
       let config
 
       beforeEach(() => {
+        return agent.load(plugin, 'tedious').then(() => {
+          tds = require(`../../../versions/tedious@${version}`).get()
+        })
+      })
+
+      after(() => {
+        return agent.close()
+      })
+
+      beforeEach((done) => {
         config = {
           server: 'localhost',
           options: {
@@ -40,16 +50,6 @@ describe('Plugin', () => {
             type: 'default'
           }
         }
-        return agent.load(plugin, 'tedious').then(() => {
-          tds = require(`../../../versions/tedious@${version}`).get()
-        })
-      })
-
-      after(() => {
-        return agent.close()
-      })
-
-      beforeEach((done) => {
         connection = new tds.Connection(config)
           .on('connect', err => done(err))
       })
@@ -58,7 +58,7 @@ describe('Plugin', () => {
         connection.close()
       })
 
-      it('should propagate context to callbacks', done => {
+      it('should run the callback in the parent context', done => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         const span = tracer.startSpan('test')
@@ -73,23 +73,14 @@ describe('Plugin', () => {
         })
       })
 
-      it('should run the callback in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
-        const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
-          expect(tracer.scope().active()).to.be.null
-          done()
-        })
-        connection.execSql(request)
-      })
-
       it('should do automatic instrumentation', done => {
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            expect(traces[0][0]).to.have.property('type', 'tedious')
+            expect(traces[0][0]).to.have.property('type', 'sql')
+            expect(traces[0][0].meta).to.have.property('component', 'tedious')
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')

@@ -797,7 +797,6 @@ declare namespace plugins {
    */
   interface tedious extends Integration {}
 
-
   /**
    * This plugin patches the [when](https://github.com/cujojs/when)
    * module to bind the promise callback the the caller context.

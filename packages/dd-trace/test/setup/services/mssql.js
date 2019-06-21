@@ -3,7 +3,7 @@
 const RetryOperation = require('../operation')
 const tedious = require('../../../../../versions/tedious').get()
 
-function waitForMysql () {
+function waitForMssql () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('mysql')
 
@@ -23,4 +23,4 @@ function waitForMysql () {
   })
 }
 
-module.exports = waitForMysql
+module.exports = waitForMssql

@@ -11,7 +11,7 @@ services:
       - "SA_PASSWORD=DD_HUNTER2"
       - "MSSQL_PID=Express"
     ports:
-      - "1433:1433"
+      - "127.0.0.1:1433:1433"
   mysql:
     image: mysql:5.7
     environment:

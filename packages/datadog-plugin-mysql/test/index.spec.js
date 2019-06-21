@@ -42,27 +42,16 @@ describe('Plugin', () => {
           connection.end(done)
         })
 
-        it('should propagate context to callbacks', done => {
+        it('should run the callback in the parent context', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
-            const span = tracer.scope().active()
-
             connection.query('SELECT 1 + 1 AS solution', () => {
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
-          })
-        })
-
-        it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
-            done()
           })
         })
 
