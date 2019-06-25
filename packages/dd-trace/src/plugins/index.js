@@ -6,6 +6,7 @@ module.exports = {
   'bluebird': require('../../../../packages/datadog-plugin-bluebird/src'),
   'bunyan': require('../../../../packages/datadog-plugin-bunyan/src'),
   'cassandra-driver': require('../../../../packages/datadog-plugin-cassandra-driver/src'),
+  'connect': require('../../../../packages/datadog-plugin-connect/src'),
   'dns': require('../../../../packages/datadog-plugin-dns/src'),
   'elasticsearch': require('../../../../packages/datadog-plugin-elasticsearch/src'),
   'express': require('../../../../packages/datadog-plugin-express/src'),
