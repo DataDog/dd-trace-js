@@ -80,10 +80,9 @@ function createWrapGetRowStream (tracer) {
   return function wrapGetRowStream (getRowStream) {
     return function getRowStreamWithTrace () {
       const scope = tracer.scope()
-      const childOf = scope.active()
 
       const rowToPacketTransform = getRowStream.apply(this, arguments)
-      return scope.bind(rowToPacketTransform, childOf)
+      return scope.bind(rowToPacketTransform)
     }
   }
 }
