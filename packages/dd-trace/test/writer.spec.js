@@ -14,17 +14,29 @@ describe('Writer', () => {
   let encode
   let url
   let log
+  let tracer
+  let scope
 
   beforeEach(() => {
+    scope = {
+      _wipe: sinon.stub()
+    }
+
+    tracer = {
+      scope: sinon.stub().returns(scope)
+    }
+
     trace = {
-      started: [span],
-      finished: [span]
+      started: [],
+      finished: []
     }
 
     span = {
+      tracer: sinon.stub().returns(tracer),
       context: sinon.stub().returns({
         _trace: trace,
-        _sampling: {}
+        _sampling: {},
+        _tags: {}
       })
     }
 
@@ -89,6 +101,7 @@ describe('Writer', () => {
     })
 
     it('should skip traces with unfinished spans', () => {
+      trace.started = [span]
       trace.finished = []
       writer.append(span)
 
@@ -115,6 +128,26 @@ describe('Writer', () => {
       writer.append(span)
 
       expect(prioritySampler.sample).to.have.been.calledWith(span.context())
+    })
+
+    it('should remove spans from all scopes when the trace is finished', () => {
+      trace.started = [span, span]
+      trace.finished = [span, span]
+
+      writer.append(span)
+
+      expect(scope._wipe).to.have.been.calledTwice
+      expect(scope._wipe).to.have.been.calledWith(span)
+    })
+
+    it('should wait for more spans before removing for consumers', () => {
+      span.context()._tags['span.kind'] = 'consumer'
+      trace.started = [span]
+      trace.finished = [span]
+
+      writer.append(span)
+
+      expect(scope._wipe).to.not.have.been.called
     })
   })
 
