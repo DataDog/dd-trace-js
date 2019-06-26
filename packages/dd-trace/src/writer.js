@@ -27,6 +27,7 @@ class Writer {
     if (trace.started.length === trace.finished.length) {
       this._prioritySampler.sample(spanContext)
 
+      // Consumers are always finished before any child spans are started.
       if (trace.started.length > 1 || span.context()._tags['span.kind'] !== 'consumer') {
         trace.started.forEach(span => span.tracer().scope()._wipe(span))
       }
