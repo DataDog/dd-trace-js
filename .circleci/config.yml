@@ -560,24 +560,36 @@ workflows:
               only:
                 - master
                 - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - prebuild-linux-x32:
           filters:
             branches:
               only:
                 - master
                 - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - prebuild-darwin-x64:
           filters:
             branches:
               only:
                 - master
                 - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - prebuild-darwin-x32:
           filters:
             branches:
               only:
                 - master
                 - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - alpine
       - alpine-prebuilt:
           requires:
