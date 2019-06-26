@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
+const semver = require('semver')
 
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
@@ -38,10 +39,7 @@ describe('Plugin', () => {
             database: 'master'
           }
         }
-        if (version === '3.0.0') {
-          config.userName = MSSQL_USERNAME
-          config.password = MSSQL_PASSWORD
-        } else {
+        if (semver.intersects(version, '>=4.0.0')) {
           config.authentication = {
             options: {
               userName: MSSQL_USERNAME,
@@ -49,6 +47,9 @@ describe('Plugin', () => {
             },
             type: 'default'
           }
+        } else {
+          config.userName = MSSQL_USERNAME
+          config.password = MSSQL_PASSWORD
         }
         connection = new tds.Connection(config)
           .on('connect', err => done(err))
@@ -58,18 +59,44 @@ describe('Plugin', () => {
         connection.close()
       })
 
-      it('should run the callback in the parent context', done => {
+      it('should run the Request callback in the parent context', done => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const span = tracer.startSpan('test')
+        const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
+          expect(tracer.scope().active()).to.equal(span)
+          done(err)
+        })
 
+        tracer.scope().activate(span, () => {
+          connection.execSql(request)
+        })
+      })
+
+      it('should run the Request event listeners in the parent context', done => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const span = tracer.startSpan('test')
+        const request = new tds.Request('SELECT 1 + 1 AS solution')
+
+        tracer.scope().activate(span, () => {
+          request.on('requestCompleted', () => {
+            expect(tracer.scope().active()).to.equal(span)
+            done()
+          })
+        })
+        connection.execSql(request)
+      })
+
+      it('should run the Connection event listeners in the parent context', done => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
 
         tracer.scope().activate(span, () => {
-          const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
+          connection.on('end', () => {
             expect(tracer.scope().active()).to.equal(span)
-            done(err)
+            done()
           })
-          connection.execSql(request)
         })
+        connection.close()
       })
 
       it('should do automatic instrumentation', done => {
@@ -128,6 +155,107 @@ describe('Plugin', () => {
         })
         connection.execSql(request)
       })
+
+      if (semver.intersects(version, '>=1.5.4')) {
+        describe('instrument BulkLoad', () => {
+          beforeEach(done => {
+            const dropTestTable = new tds.Request('DROP TABLE IF EXISTS TEST_TABLE', (err) => done(err))
+            connection.execSql(dropTestTable)
+          })
+
+          it('should handle bulkload requests', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('name', 'tedious.request')
+                expect(traces[0][0]).to.have.property('resource', 'TEST_TABLE')
+              })
+              .then(done)
+              .catch(done)
+
+            let bulkLoad
+
+            // newBulkLoad function definition changed in v2.2.0
+            if (semver.intersects(version, '>=2.2.0')) {
+              const options = { keepNulls: true }
+              bulkLoad = connection.newBulkLoad('TEST_TABLE', options, (err) => {
+                if (err) done(err)
+              })
+            } else {
+              bulkLoad = connection.newBulkLoad('TEST_TABLE', (err) => {
+                if (err) done(err)
+              })
+            }
+
+            bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
+            bulkLoad.addRow({ num: 5 })
+
+            const createTestTable = new tds.Request(bulkLoad.getTableCreationSql(), (err) => {
+              if (err) done(err)
+              connection.execBulkLoad(bulkLoad)
+            })
+            connection.execSql(createTestTable)
+          })
+
+          if (semver.intersects(version, '>=4.2.0')) {
+            it('should handle bulkload requests with streaming', done => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('name', 'tedious.request')
+                  expect(traces[0][0]).to.have.property('resource', 'TEST_TABLE')
+                  expect()
+                })
+                .then(done)
+                .catch(done)
+
+              const bulkLoad = connection.newBulkLoad('TEST_TABLE', { keepNulls: true }, (err) => {
+                if (err) done(err)
+              })
+
+              bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
+
+              const rowStream = bulkLoad.getRowStream()
+              const createTestTable = new tds.Request(bulkLoad.getTableCreationSql(), (err) => {
+                if (err) done(err)
+                connection.execBulkLoad(bulkLoad)
+                rowStream.write([5], (err) => {
+                  if (err) done(err)
+                  rowStream.end()
+                })
+              })
+
+              connection.execSql(createTestTable)
+            })
+
+            it('should run the BulkLoad stream event listeners in the parent context', done => {
+              const span = tracer.startSpan('test')
+              const bulkLoad = connection.newBulkLoad('TEST_TABLE', { keepNulls: true }, (err) => {
+              })
+
+              bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
+
+              const rowStream = bulkLoad.getRowStream()
+
+              tracer.scope().activate(span, () => {
+                rowStream.on('finish', () => {
+                  expect(tracer.scope().active()).to.equal(span)
+                  done()
+                })
+              })
+
+              const createTestTable = new tds.Request(bulkLoad.getTableCreationSql(), (err) => {
+                if (err) done(err)
+                connection.execBulkLoad(bulkLoad)
+                rowStream.write([5], (err) => {
+                  if (err) done(err)
+                  rowStream.end()
+                })
+              })
+
+              connection.execSql(createTestTable)
+            })
+          }
+        })
+      }
     })
   })
 })
