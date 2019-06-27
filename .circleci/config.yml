@@ -554,6 +554,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-knex
       - node-koa
       - node-memcached
       - node-mongodb-core
@@ -639,6 +640,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-knex
       - node-koa
       - node-memcached
       - node-mongodb-core
