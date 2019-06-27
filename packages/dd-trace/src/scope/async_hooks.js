@@ -27,7 +27,7 @@ class Scope extends Base {
       before: this._before.bind(this),
       after: this._after.bind(this),
       destroy: this._destroy.bind(this),
-      promiseResolve: this._destroy.bind(this)
+      promiseResolve: this._promiseResolve.bind(this)
     })
 
     this._hook.enable()
@@ -80,16 +80,31 @@ class Scope extends Base {
     }
   }
 
-  _init (asyncId, type, triggerAsyncId, resource) {
+  _add (asyncId, type) {
     const span = this._active()
-
-    this._spans[asyncId] = span
-    this._types[asyncId] = type
 
     this._ref(span, asyncId)
 
+    this._spans[asyncId] = span
+    this._types[asyncId] = type
+  }
+
+  _delete (asyncId) {
+    const span = this._spans[asyncId]
+
+    this._unref(span, asyncId)
+
+    delete this._spans[asyncId]
+    delete this._types[asyncId]
+  }
+
+  _init (asyncId, type, triggerAsyncId, resource) {
+    this._add(asyncId, type)
+
+    this._first = this._first || asyncId
+
     if (hasKeepAliveBug && (type === 'TCPWRAP' || type === 'HTTPPARSER')) {
-      this._destroy(this._weaks.get(resource))
+      this._delete(this._weaks.get(resource))
       this._weaks.set(resource, asyncId)
     }
 
@@ -106,18 +121,18 @@ class Scope extends Base {
   }
 
   _destroy (asyncId) {
-    const span = this._spans[asyncId]
     const type = this._types[asyncId]
 
-    this._unref(span, asyncId)
+    this._delete(asyncId)
 
-    if (type) {
+    if (asyncId >= this._first) {
       platform.metrics().decrement('async.resources')
       platform.metrics().decrement('async.resources.by.type', `resource_type:${type}`)
     }
+  }
 
-    delete this._spans[asyncId]
-    delete this._types[asyncId]
+  _promiseResolve (asyncId) {
+    this._delete(asyncId)
   }
 }
 

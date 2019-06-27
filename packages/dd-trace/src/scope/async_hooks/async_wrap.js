@@ -26,34 +26,38 @@ module.exports = {
 
     if (callbacks.init) {
       hooks.init = (uid, handle, provider, parentUid, parentHandle) => {
-        callbacks.init(uid, providers[provider], parentUid, handle)
+        if (typeof parentUid === 'number') {
+          parentUid = -parentUid
+        }
+
+        callbacks.init(-uid, providers[provider], parentUid, handle)
       }
     }
 
     if (callbacks.before) {
       hooks.pre = (uid, handle) => {
-        callbacks.before(uid)
+        callbacks.before(-uid)
       }
     }
 
     if (callbacks.after) {
       hooks.post = (uid, handle, didThrow) => {
-        callbacks.after(uid)
+        callbacks.after(-uid)
       }
     }
 
     if (callbacks.destroy) {
       hooks.destroy = (uid) => {
-        callbacks.destroy(uid)
+        callbacks.destroy(-uid)
       }
     }
 
     asyncHook.addHooks({
       pre: (uid, handle) => {
-        stack.push(uid)
+        stack.push(-uid)
       },
       post: (uid, handle, didThrow) => {
-        if (uid === this.executionAsyncId()) {
+        if (-uid === this.executionAsyncId()) {
           stack.pop()
         }
       }
