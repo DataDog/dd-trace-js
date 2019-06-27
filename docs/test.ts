@@ -54,7 +54,8 @@ tracer.init({
   service: 'test',
   tags: {
     foo: 'bar'
-  }
+  },
+  scope: 'noop'
 });
 
 const httpOptions = {
@@ -78,6 +79,15 @@ const httpClientOptions = {
   hooks: {
     request: (span, req, res) => {}
   }
+};
+
+const http2ServerOptions = {
+  ...httpOptions
+};
+
+const http2ClientOptions = {
+  ...httpOptions,
+  splitByDomain: true
 };
 
 const graphqlOptions = {
@@ -108,6 +118,13 @@ tracer.use('http', {
 tracer.use('http', {
   client: httpClientOptions
 });
+tracer.use('http2');
+tracer.use('http2', {
+  server: http2ServerOptions
+});
+tracer.use('http2', {
+  client: http2ClientOptions
+});
 tracer.use('ioredis');
 tracer.use('knex');
 tracer.use('koa');
@@ -117,8 +134,12 @@ tracer.use('mongodb-core');
 tracer.use('mysql');
 tracer.use('mysql2');
 tracer.use('net');
+tracer.use('paperplane');
+tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');
 tracer.use('pino');
+tracer.use('promise-js');
+tracer.use('promise');
 tracer.use('q');
 tracer.use('redis');
 tracer.use('restify');

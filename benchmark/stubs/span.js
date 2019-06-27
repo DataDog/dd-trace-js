@@ -1,7 +1,7 @@
 'use strict'
 
 const Uint64BE = require('int64-buffer').Uint64BE
-const constants = require('../../src/constants')
+const constants = require('../../packages/dd-trace/src/constants')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
@@ -9,6 +9,9 @@ const id = new Uint64BE(0x12345678, 0x12345678)
 
 const span = {
   tracer: () => ({
+    scope: () => ({
+      _wipe: () => {}
+    }),
     _service: 'service'
   }),
   addTags: () => {},

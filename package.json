@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -13,13 +13,13 @@
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
     "lint": "eslint . && node scripts/check_licenses.js",
-    "services": "node ./scripts/install_plugin_modules && node test/setup/services",
-    "tdd": "yarn services && NO_DEPRECATION=* mocha --watch 'test/setup/**/*.js'",
-    "test": "SERVICES=* yarn services && NO_DEPRECATION=* cov8 --include \"src/**/*.js\" -- mocha --exit 'test/setup/all.js' 'test/**/*.spec.js'",
-    "test:core": "mocha --exit --exclude \"test/plugins/*.spec.js\" --exclude \"test/plugins/http/*.spec.js\" --file test/setup/core.js \"test/**/*.spec.js\"",
-    "test:plugins": "yarn services && NO_DEPRECATION=* cov8 --include \"src/**/*.js\" -- mocha --exit --file \"test/setup/all.js\" \"test/plugins/@($(echo $PLUGINS)).spec.js\" \"test/plugins/@($(echo $PLUGINS))/**/*.spec.js\"",
-    "leak:core": "node ./scripts/install_plugin_modules && (cd test/leak && yarn) && NODE_PATH=./test/leak/node_modules node --no-warnings ./node_modules/.bin/tape 'test/leak/{,!(node_modules|plugins)/**/}/*.js'",
-    "leak:plugins": "yarn services && (cd test/leak && yarn) && NODE_PATH=./test/leak/node_modules node --no-warnings ./node_modules/.bin/tape \"test/leak/plugins/@($(echo $PLUGINS)).js\""
+    "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
+    "tdd": "node scripts/tdd.js",
+    "test": "SERVICES=* yarn services && NO_DEPRECATION=* cov8 --include \"src/**/*.js\" -- mocha --exit 'packages/dd-trace/test/setup/all.js' 'packages/*/test/**/*.spec.js'",
+    "test:core": "mocha --exit --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
+    "test:plugins": "yarn services && NO_DEPRECATION=* cov8 --include \"packages/*/src/**/*.js\" -- mocha --exit --file \"packages/dd-trace/test/setup/all.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
+    "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
+    "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\""
   },
   "repository": {
     "type": "git",
@@ -42,6 +42,7 @@
     "node": ">=4"
   },
   "dependencies": {
+    "@datadog/async-listener": "^0.1.0",
     "@types/node": "^10.12.18",
     "async-hook-jl": "^1.7.6",
     "int64-buffer": "^0.1.9",

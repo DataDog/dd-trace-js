@@ -21,9 +21,9 @@ pkg.version = version
 
 exec(`git checkout -b v${version}`)
 write('package.json', JSON.stringify(pkg, null, 2) + '\n')
-write('lib/version.js', `module.exports = '${version}'\n`)
+write('packages/dd-trace/lib/version.js', `module.exports = '${version}'\n`)
 add('package.json')
-add('lib/version.js')
+add('packages/dd-trace/lib/version.js')
 exec(`git commit -m "v${version}"`)
 exec(`git push -u origin HEAD`)
 

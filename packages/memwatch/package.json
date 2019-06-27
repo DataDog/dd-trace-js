@@ -1,0 +1,9 @@
+{
+  "name": "memwatch",
+  "version": "1.0.0",
+  "license": "BSD-3-Clause",
+  "private": true,
+  "dependencies": {
+    "@airbnb/node-memwatch": "^1.0.2"
+  }
+}
