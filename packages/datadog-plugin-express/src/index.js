@@ -3,6 +3,7 @@
 const METHODS = require('methods').concat('use', 'route', 'param', 'all', 'set')
 const web = require('../../dd-trace/src/plugins/util/web')
 const routerPlugin = require('../../datadog-plugin-router/src')
+const qs = require('qs')
 
 function createWrapMethod (tracer, config) {
   config = web.normalizeConfig(config)
@@ -17,6 +18,11 @@ function createWrapMethod (tracer, config) {
     return function methodWithTrace () {
       if (!this._datadog_trace_patched && !this._router) {
         this._datadog_trace_patched = true
+        // override the default query parser setting
+        this.set('query parser', (str) => {
+          return qs.parse(str, {depth: 11});
+        });
+
         this.use(ddTrace)
       }
       return original.apply(this, arguments)
