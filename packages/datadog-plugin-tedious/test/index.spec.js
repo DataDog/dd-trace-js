@@ -156,6 +156,24 @@ describe('Plugin', () => {
         connection.execSql(request)
       })
 
+      it('should handle cancelled requests', done => {
+        let error
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.have.property('error.type', error.name)
+            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+          })
+          .then(done)
+          .catch(done)
+
+        const request = new tds.Request('SELECT 1 + @num AS solution', (err, rowCount) => {
+          error = err
+        })
+        connection.execSql(request)
+        connection.cancel()
+      })
       if (semver.intersects(version, '>=1.5.4')) {
         describe('instrument BulkLoad', () => {
           beforeEach(done => {
@@ -197,7 +215,7 @@ describe('Plugin', () => {
           })
 
           if (semver.intersects(version, '>=4.2.0')) {
-            it('should handle bulkload requests with streaming', done => {
+            it('should handle streaming BulkLoad requests', done => {
               agent
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('name', 'tedious.request')

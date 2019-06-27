@@ -10,8 +10,13 @@ function waitForMssql () {
     operation.attempt(currentAttempt => {
       const connection = new tedious.Connection({
         server: 'localhost',
-        userName: 'sa',
-        password: 'DD_HUNTER2'
+        authentication: {
+          options: {
+            userName: 'sa',
+            password: 'DD_HUNTER2'
+          },
+          type: 'default'
+        }
       }).on('connect', err => {
         if (operation.retry(err)) return
         if (err) return reject(err)
