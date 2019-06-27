@@ -1,6 +1,6 @@
 'use strict'
 
-const METHODS = require('methods').concat('use', 'route', 'param', 'all')
+const METHODS = require('methods').concat('use', 'route', 'param', 'all', 'set')
 const web = require('../../dd-trace/src/plugins/util/web')
 const routerPlugin = require('../../datadog-plugin-router/src')
 
