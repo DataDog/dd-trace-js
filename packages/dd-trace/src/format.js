@@ -33,9 +33,9 @@ function formatSpan (span) {
   const spanContext = span.context()
 
   return {
-    trace_id: spanContext._traceId,
-    span_id: spanContext._spanId,
-    parent_id: spanContext._parentId,
+    trace_id: spanContext._traceId.toUint64BE(),
+    span_id: spanContext._spanId.toUint64BE(),
+    parent_id: spanContext._parentId ? spanContext._parentId.toUint64BE() : null,
     name: serialize(spanContext._name),
     resource: serialize(spanContext._name),
     error: 0,

@@ -19,8 +19,8 @@ class LogPropagator {
     }
 
     const spanContext = new DatadogSpanContext({
-      traceId: new platform.Uint64BE(carrier.dd.trace_id, 10),
-      spanId: new platform.Uint64BE(carrier.dd.span_id, 10)
+      traceId: platform.id(carrier.dd.trace_id, 10),
+      spanId: platform.id(carrier.dd.span_id, 10)
     })
 
     return spanContext

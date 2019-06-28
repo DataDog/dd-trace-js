@@ -17,6 +17,8 @@ class DatadogSpanContext extends SpanContext {
     this._metrics = props.metrics || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
+    this._traceFlags = props.traceFlags || {}
+    this._traceFlags.sampled = this._traceFlags.sampled !== false
     this._trace = props.trace || {
       started: [],
       finished: []
@@ -24,11 +26,11 @@ class DatadogSpanContext extends SpanContext {
   }
 
   toTraceId () {
-    return this._traceId.toString()
+    return this._traceId.toString(10)
   }
 
   toSpanId () {
-    return this._spanId.toString()
+    return this._spanId.toString(10)
   }
 }
 

@@ -10,8 +10,19 @@ const spanKey = 'x-datadog-parent-id'
 const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
+const b3TraceKey = 'x-b3-traceid'
+const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
+const b3SpanKey = 'x-b3-spanid'
+const b3SpanExpr = /^[0-9a-f]{16}$/i
+const b3ParentKey = 'x-b3-parentspanid'
+const b3SampledKey = 'x-b3-sampled'
+const b3FlagsKey = 'x-b3-flags'
+const b3HeaderKey = 'b3'
+const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-)?[01d](-[0-9a-f]{16})?$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
-const logKeys = [traceKey, spanKey, samplingKey, originKey]
+const ddKeys = [traceKey, spanKey, samplingKey, originKey]
+const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
+const logKeys = ddKeys.concat(b3Keys)
 
 class TextMapPropagator {
   inject (spanContext, carrier) {
@@ -21,19 +32,15 @@ class TextMapPropagator {
     this._injectOrigin(spanContext, carrier)
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
+    this._injectB3(spanContext, carrier)
 
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
   extract (carrier) {
-    if (!carrier[traceKey] || !carrier[spanKey]) {
-      return null
-    }
+    const spanContext = this._extractSpanContext(carrier)
 
-    const spanContext = new DatadogSpanContext({
-      traceId: new platform.Uint64BE(carrier[traceKey], 10),
-      spanId: new platform.Uint64BE(carrier[spanKey], 10)
-    })
+    if (!spanContext) return spanContext
 
     this._extractOrigin(carrier, spanContext)
     this._extractBaggageItems(carrier, spanContext)
@@ -64,6 +71,75 @@ class TextMapPropagator {
     spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
+  }
+
+  _injectB3 (spanContext, carrier) {
+    carrier[b3TraceKey] = spanContext._traceId.toString('hex')
+    carrier[b3SpanKey] = spanContext._spanId.toString('hex')
+    carrier[b3SampledKey] = spanContext._traceFlags.sampled ? '1' : '0'
+
+    if (spanContext._parentId) {
+      carrier[b3ParentKey] = spanContext._parentId.toString('hex')
+    }
+  }
+
+  _extractSpanContext (carrier) {
+    const b3 = this._extractB3Headers(carrier)
+    const debug = carrier[b3FlagsKey] === '1'
+    const sampled = debug || carrier[b3SampledKey] === '1' || !carrier[b3SampledKey]
+    const traceFlags = {
+      sampled
+    }
+
+    if (b3) {
+      return new DatadogSpanContext({
+        traceId: platform.id(b3[b3TraceKey]),
+        spanId: platform.id(b3[b3SpanKey]),
+        traceFlags
+      })
+    } else if (carrier[traceKey] && carrier[spanKey]) {
+      return new DatadogSpanContext({
+        traceId: platform.id(carrier[traceKey], 10),
+        spanId: platform.id(carrier[spanKey], 10),
+        traceFlags
+      })
+    }
+
+    return null
+  }
+
+  _extractB3Headers (carrier) {
+    if (b3HeaderExpr.test(carrier[b3HeaderKey])) {
+      return this._extractB3SingleHeader(carrier)
+    } else if (b3TraceExpr.test(carrier[b3TraceKey]) && b3SpanExpr.test(carrier[b3SpanKey])) {
+      return carrier
+    }
+
+    return null
+  }
+
+  _extractB3SingleHeader (carrier) {
+    const parts = carrier[b3HeaderKey].split('-')
+
+    if (parts.length < 3) {
+      return {
+        [b3TraceKey]: '0000000000000000',
+        [b3SpanKey]: '0000000000000000',
+        [b3SampledKey]: parts[0]
+      }
+    } else {
+      const b3 = {
+        [b3TraceKey]: parts[0],
+        [b3SpanKey]: parts[1],
+        [b3SampledKey]: parts[2] !== '0' ? '1' : '0'
+      }
+
+      if (parts[2] === 'd') {
+        b3[b3FlagsKey] = '1'
+      }
+
+      return b3
+    }
   }
 
   _extractOrigin (carrier, spanContext) {

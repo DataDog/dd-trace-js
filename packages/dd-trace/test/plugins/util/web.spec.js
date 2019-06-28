@@ -125,8 +125,8 @@ describe('plugins/util/web', () => {
         }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          expect(span.context()._traceId.toString()).to.equal('123')
-          expect(span.context()._parentId.toString()).to.equal('456')
+          expect(span.context()._traceId.toString(10)).to.equal('123')
+          expect(span.context()._parentId.toString(10)).to.equal('456')
         })
       })
 

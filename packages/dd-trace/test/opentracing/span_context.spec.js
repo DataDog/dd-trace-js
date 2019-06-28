@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../src/platform')
 
 describe('SpanContext', () => {
   let SpanContext
@@ -20,6 +20,7 @@ describe('SpanContext', () => {
       metrics: {},
       sampling: { priority: 2 },
       baggageItems: { foo: 'bar' },
+      traceFlags: { sampled: false },
       trace: {
         started: ['span1', 'span2'],
         finished: ['span1']
@@ -37,6 +38,7 @@ describe('SpanContext', () => {
       _metrics: {},
       _sampling: { priority: 2 },
       _baggageItems: { foo: 'bar' },
+      _traceFlags: { sampled: false },
       _trace: {
         started: ['span1', 'span2'],
         finished: ['span1']
@@ -55,6 +57,7 @@ describe('SpanContext', () => {
       metrics: {},
       sampling: {},
       baggageItems: {},
+      traceFlags: { sampled: true },
       trace: {
         started: [],
         finished: []
@@ -76,6 +79,7 @@ describe('SpanContext', () => {
       _metrics: {},
       _sampling: {},
       _baggageItems: {},
+      _traceFlags: { sampled: true },
       _trace: {
         started: [],
         finished: []
@@ -86,8 +90,8 @@ describe('SpanContext', () => {
   describe('toTraceId()', () => {
     it('should return the trace ID as string', () => {
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(123),
-        spanId: new Uint64BE(456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('456', 10)
       })
 
       expect(spanContext.toTraceId()).to.equal('123')
@@ -97,8 +101,8 @@ describe('SpanContext', () => {
   describe('toSpanId()', () => {
     it('should return the span ID as string', () => {
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(123),
-        spanId: new Uint64BE(456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('456', 10)
       })
 
       expect(spanContext.toSpanId()).to.equal('456')

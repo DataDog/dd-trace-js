@@ -32,6 +32,7 @@ const span = {
       [SAMPLE_RATE_METRIC_KEY]: 1
     },
     _sampling: {},
+    _traceFlags: {},
     _name: 'operation'
   }),
   _startTime: 1500000000000.123456,
