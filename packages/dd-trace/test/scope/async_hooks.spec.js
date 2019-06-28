@@ -84,12 +84,12 @@ describe('Scope', () => {
     it('should work around the HTTP keep-alive bug in Node', () => {
       const resource = {}
 
-      sinon.spy(scope, '_delete')
+      sinon.spy(scope, '_destroy')
 
       scope._init(1, 'TCPWRAP', 0, resource)
       scope._init(1, 'TCPWRAP', 0, resource)
 
-      expect(scope._delete).to.have.been.called
+      expect(scope._destroy).to.have.been.called
     })
   }
 
