@@ -57,7 +57,7 @@ class Scope extends Base {
     }
   }
 
-  _ref (span, asyncId) {
+  _ref (asyncId, span) {
     this._spans[asyncId] = span
 
     if (span) {
@@ -71,7 +71,9 @@ class Scope extends Base {
     }
   }
 
-  _unref (span, asyncId) {
+  _unref (asyncId) {
+    const span = this._spans[asyncId]
+
     delete this._spans[asyncId]
 
     if (span) {
@@ -86,7 +88,7 @@ class Scope extends Base {
   _init (asyncId, type, triggerAsyncId, resource) {
     const span = this._active()
 
-    this._ref(span, asyncId)
+    this._ref(asyncId, span)
 
     this._types[asyncId] = type
 
@@ -108,10 +110,9 @@ class Scope extends Base {
   }
 
   _destroy (asyncId) {
-    const span = this._spans[asyncId]
     const type = this._types[asyncId]
 
-    this._unref(span, asyncId)
+    this._unref(asyncId)
 
     delete this._types[asyncId]
 
@@ -122,7 +123,7 @@ class Scope extends Base {
   }
 
   _promiseResolve (asyncId) {
-    delete this._spans[asyncId]
+    this._unref(asyncId)
   }
 }
 
