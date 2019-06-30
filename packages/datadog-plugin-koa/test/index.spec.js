@@ -175,7 +175,7 @@ describe('Plugin', () => {
                 expect(childSpan.finish).to.have.been.called
                 expect(parentSpan.finish).to.have.been.called
                 expect(parentSpan.finish).to.have.been.calledAfter(childSpan.finish)
-                expect(childSpan.context()._parentId.toString()).to.equal(parentSpan.context().toSpanId())
+                expect(childSpan.context()._parentId.toString(10)).to.equal(parentSpan.context().toSpanId())
                 expect(parentSpan.context()._parentId).to.not.be.null
                 done()
               } catch (e) {
