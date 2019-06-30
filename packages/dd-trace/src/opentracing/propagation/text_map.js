@@ -18,7 +18,7 @@ const b3ParentKey = 'x-b3-parentspanid'
 const b3SampledKey = 'x-b3-sampled'
 const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
-const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-)?[01d](-[0-9a-f]{16})?$/i
+const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-[01d](-[0-9a-f]{16})?|0)$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
@@ -125,7 +125,7 @@ class TextMapPropagator {
       return {
         [b3TraceKey]: '0000000000000000',
         [b3SpanKey]: '0000000000000000',
-        [b3SampledKey]: parts[0]
+        [b3SampledKey]: '0'
       }
     } else {
       const b3 = {
