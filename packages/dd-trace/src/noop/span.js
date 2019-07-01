@@ -8,7 +8,7 @@ const platform = require('../platform')
 const USER_REJECT = priority.USER_REJECT
 
 class NoopSpan extends Span {
-  constructor (tracer) {
+  constructor (tracer, parent) {
     super()
 
     // Avoid circular dependency
@@ -18,16 +18,7 @@ class NoopSpan extends Span {
       },
 
       _noopContext: {
-        value: new SpanContext({
-          traceId: platform.id('0', 10),
-          spanId: platform.id('0', 10),
-          traceFlags: {
-            sampled: false
-          },
-          sampling: {
-            priority: USER_REJECT
-          }
-        })
+        value: this._createContext(parent)
       }
     })
   }
@@ -38,6 +29,38 @@ class NoopSpan extends Span {
 
   _tracer () {
     return this._noopTracer
+  }
+
+  _createContext (parent) {
+    const spanId = platform.id()
+
+    let traceId
+    let parentId
+    let baggageItems
+
+    if (parent) {
+      traceId = parent._traceId
+      parentId = parent._traceId
+      baggageItems = parent._baggageItems
+    } else {
+      traceId = spanId
+      parentId = null
+      baggageItems = {}
+    }
+
+    return new SpanContext({
+      noop: this,
+      traceId,
+      spanId,
+      parentId,
+      baggageItems,
+      traceFlags: {
+        sampled: false
+      },
+      sampling: {
+        priority: USER_REJECT
+      }
+    })
   }
 }
 

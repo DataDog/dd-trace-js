@@ -10,6 +10,7 @@ describe('SpanContext', () => {
   })
 
   it('should instantiate with the given properties', () => {
+    const noop = {}
     const props = {
       traceId: '123',
       spanId: '456',
@@ -21,6 +22,7 @@ describe('SpanContext', () => {
       sampling: { priority: 2 },
       baggageItems: { foo: 'bar' },
       traceFlags: { sampled: false },
+      noop,
       trace: {
         started: ['span1', 'span2'],
         finished: ['span1']
@@ -39,6 +41,7 @@ describe('SpanContext', () => {
       _sampling: { priority: 2 },
       _baggageItems: { foo: 'bar' },
       _traceFlags: { sampled: false },
+      _noop: noop,
       _trace: {
         started: ['span1', 'span2'],
         finished: ['span1']
@@ -47,26 +50,9 @@ describe('SpanContext', () => {
   })
 
   it('should have the correct default values', () => {
-    const expected = {
-      traceId: '123',
-      spanId: '456',
-      parentId: null,
-      name: undefined,
-      isFinished: false,
-      tags: {},
-      metrics: {},
-      sampling: {},
-      baggageItems: {},
-      traceFlags: { sampled: true },
-      trace: {
-        started: [],
-        finished: []
-      }
-    }
-
     const spanContext = new SpanContext({
-      traceId: expected.traceId,
-      spanId: expected.spanId
+      traceId: '123',
+      spanId: '456'
     })
 
     expect(spanContext).to.deep.equal({
@@ -80,6 +66,7 @@ describe('SpanContext', () => {
       _sampling: {},
       _baggageItems: {},
       _traceFlags: { sampled: true },
+      _noop: null,
       _trace: {
         started: [],
         finished: []
