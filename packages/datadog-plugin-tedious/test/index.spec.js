@@ -75,12 +75,13 @@ describe('Plugin', () => {
       it('should run the Request event listeners in the parent context', done => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
-        const request = new tds.Request('SELECT 1 + 1 AS solution')
+        const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
+          done(err)
+        })
 
         tracer.scope().activate(span, () => {
           request.on('requestCompleted', () => {
             expect(tracer.scope().active()).to.equal(span)
-            done()
           })
         })
         connection.execSql(request)
@@ -100,12 +101,15 @@ describe('Plugin', () => {
       })
 
       it('should do automatic instrumentation', done => {
+        const query = 'SELECT 1 + 1 AS solution'
+
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
-            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
+            expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0]).to.have.property('type', 'sql')
+            expect(traces[0][0].meta).to.have.property('resource.type', 'query')
             expect(traces[0][0].meta).to.have.property('component', 'tedious')
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
@@ -115,27 +119,94 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
+        const request = new tds.Request(query, (err) => {
           if (err) done(err)
         })
         connection.execSql(request)
       })
 
       it('should handle parameterized queries', done => {
+        const query = 'SELECT 1 + @num AS solution'
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('name', 'tedious.request')
+            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('resource', query)
+            expect(traces[0][0].meta).to.have.property('resource.type', 'query')
+          })
+          .then(done)
+          .catch(done)
+
+        const request = new tds.Request(query, (err) => {
+          if (err) done(err)
+        })
+        request.addParameter('num', tds.TYPES.Int, 1)
+        connection.execSql(request)
+      })
+
+      it('should handle prepare requests', done => {
+        const query = 'SELECT 1 + @num AS solution'
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('name', 'tedious.request')
+            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('resource', query)
+            expect(traces[0][0].meta).to.have.property('resource.type', 'prepare')
+          })
+          .then(done)
+          .catch(done)
+
+        const request = new tds.Request(query, (err) => {
+          if (err) done(err)
+        })
+        request.addParameter('num', tds.TYPES.Int, 1)
+        connection.prepare(request)
+      })
+
+      it('should handle execute requests', done => {
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + @num AS solution')
+            expect(traces[0][0].meta).to.have.property('resource.type', 'execute')
           })
           .then(done)
           .catch(done)
 
         const request = new tds.Request('SELECT 1 + @num AS solution', (err) => {
           if (err) done(err)
+        }).on('prepared', () => {
+          connection.execute(request, { num: 5 })
         })
+
+        request.addParameter('num', tds.TYPES.Int)
+        connection.prepare(request)
+      })
+
+      it('should handle unprepare requests', done => {
+        const query = 'SELECT 1 + @num AS solution'
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('name', 'tedious.request')
+            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('resource', query)
+            expect(traces[0][0].meta).to.have.property('resource.type', 'unprepare')
+          })
+          .then(done)
+          .catch(done)
+
+        const request = new tds.Request(query, (err) => {
+          if (err) done(err)
+        }).on('prepared', () => {
+          connection.unprepare(request)
+        })
+
         request.addParameter('num', tds.TYPES.Int, 1)
-        connection.execSql(request)
+        connection.prepare(request)
       })
 
       it('should handle errors', done => {
@@ -157,10 +228,13 @@ describe('Plugin', () => {
       })
 
       it('should handle cancelled requests', done => {
+        const query = "SELECT 1 + 1 AS solution;waitfor delay '00:00:01'"
+
         let error
 
         agent
           .use(traces => {
+            expect(error.message).to.equal('Canceled.')
             expect(traces[0][0].meta).to.have.property('error.type', error.name)
             expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
             expect(traces[0][0].meta).to.have.property('error.msg', error.message)
@@ -168,108 +242,97 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        const request = new tds.Request('SELECT 1 + @num AS solution', (err, rowCount) => {
+        const request = new tds.Request(query, (err) => {
           error = err
         })
+
         connection.execSql(request)
-        connection.cancel()
+        setTimeout(() => connection.cancel(), 0)
       })
+
       if (semver.intersects(version, '>=1.5.4')) {
         describe('instrument BulkLoad', () => {
-          beforeEach(done => {
-            const dropTestTable = new tds.Request('DROP TABLE IF EXISTS TEST_TABLE', (err) => done(err))
-            connection.execSql(dropTestTable)
-          })
+          const tableName = 'TEST_TABLE'
 
-          it('should handle bulkload requests', done => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('name', 'tedious.request')
-                expect(traces[0][0]).to.have.property('resource', 'TEST_TABLE')
-              })
-              .then(done)
-              .catch(done)
-
+          function buildBulkLoad (callback) {
             let bulkLoad
 
             // newBulkLoad function definition changed in v2.2.0
             if (semver.intersects(version, '>=2.2.0')) {
-              const options = { keepNulls: true }
-              bulkLoad = connection.newBulkLoad('TEST_TABLE', options, (err) => {
-                if (err) done(err)
-              })
+              bulkLoad = connection.newBulkLoad(tableName, { keepNulls: true }, callback)
             } else {
-              bulkLoad = connection.newBulkLoad('TEST_TABLE', (err) => {
-                if (err) done(err)
-              })
+              bulkLoad = connection.newBulkLoad(tableName, callback)
             }
 
             bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
+            return bulkLoad
+          }
+
+          beforeEach(done => {
+            const dropTestTable = new tds.Request(`DROP TABLE IF EXISTS ${tableName}`, (err) => {
+              if (err) done(err)
+
+              const tableCreationSql = `CREATE TABLE ${tableName} ([num] int NOT NULL)`
+              const createTestTable = new tds.Request(tableCreationSql, done)
+              connection.execSql(createTestTable)
+            })
+            connection.execSql(dropTestTable)
+          })
+
+          it('should handle bulkload requests', done => {
+            const bulkLoad = buildBulkLoad(err => { if (err) done(err) })
             bulkLoad.addRow({ num: 5 })
 
-            const createTestTable = new tds.Request(bulkLoad.getTableCreationSql(), (err) => {
-              if (err) done(err)
-              connection.execBulkLoad(bulkLoad)
-            })
-            connection.execSql(createTestTable)
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('name', 'tedious.request')
+                expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
+                expect(traces[0][0].meta).to.have.property('resource.type', 'query')
+              })
+              .then(done)
+              .catch(done)
+
+            connection.execBulkLoad(bulkLoad)
           })
 
           if (semver.intersects(version, '>=4.2.0')) {
             it('should handle streaming BulkLoad requests', done => {
+              const bulkLoad = buildBulkLoad(err => { if (err) done(err) })
+              const rowStream = bulkLoad.getRowStream()
+
               agent
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('name', 'tedious.request')
-                  expect(traces[0][0]).to.have.property('resource', 'TEST_TABLE')
-                  expect()
+                  expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
+                  expect(traces[0][0].meta).to.have.property('resource.type', 'query')
                 })
                 .then(done)
                 .catch(done)
 
-              const bulkLoad = connection.newBulkLoad('TEST_TABLE', { keepNulls: true }, (err) => {
+              connection.execBulkLoad(bulkLoad)
+
+              rowStream.write([5], (err) => {
                 if (err) done(err)
+                rowStream.end()
               })
-
-              bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
-
-              const rowStream = bulkLoad.getRowStream()
-              const createTestTable = new tds.Request(bulkLoad.getTableCreationSql(), (err) => {
-                if (err) done(err)
-                connection.execBulkLoad(bulkLoad)
-                rowStream.write([5], (err) => {
-                  if (err) done(err)
-                  rowStream.end()
-                })
-              })
-
-              connection.execSql(createTestTable)
             })
 
             it('should run the BulkLoad stream event listeners in the parent context', done => {
               const span = tracer.startSpan('test')
-              const bulkLoad = connection.newBulkLoad('TEST_TABLE', { keepNulls: true }, (err) => {
-              })
-
-              bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
-
+              const bulkLoad = buildBulkLoad(done)
               const rowStream = bulkLoad.getRowStream()
 
               tracer.scope().activate(span, () => {
                 rowStream.on('finish', () => {
                   expect(tracer.scope().active()).to.equal(span)
-                  done()
                 })
               })
+              connection.execBulkLoad(bulkLoad)
 
-              const createTestTable = new tds.Request(bulkLoad.getTableCreationSql(), (err) => {
+              rowStream.write([5], (err) => {
                 if (err) done(err)
-                connection.execBulkLoad(bulkLoad)
-                rowStream.write([5], (err) => {
-                  if (err) done(err)
-                  rowStream.end()
-                })
+                rowStream.end()
               })
-
-              connection.execSql(createTestTable)
             })
           }
         })
