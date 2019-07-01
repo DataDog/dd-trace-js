@@ -254,14 +254,14 @@ describe('Plugin', () => {
         describe('instrument BulkLoad', () => {
           const tableName = 'TEST_TABLE'
 
-          function buildBulkLoad (callback) {
+          function buildBulkLoad () {
             let bulkLoad
 
             // newBulkLoad function definition changed in v2.2.0
             if (semver.intersects(version, '>=2.2.0')) {
-              bulkLoad = connection.newBulkLoad(tableName, { keepNulls: true }, callback)
+              bulkLoad = connection.newBulkLoad(tableName, { keepNulls: true }, () => {})
             } else {
-              bulkLoad = connection.newBulkLoad(tableName, callback)
+              bulkLoad = connection.newBulkLoad(tableName, () => {})
             }
 
             bulkLoad.addColumn('num', tds.TYPES.Int, { nullable: false })
@@ -280,7 +280,7 @@ describe('Plugin', () => {
           })
 
           it('should handle bulkload requests', done => {
-            const bulkLoad = buildBulkLoad(err => { if (err) done(err) })
+            const bulkLoad = buildBulkLoad()
             bulkLoad.addRow({ num: 5 })
 
             agent
@@ -297,7 +297,7 @@ describe('Plugin', () => {
 
           if (semver.intersects(version, '>=4.2.0')) {
             it('should handle streaming BulkLoad requests', done => {
-              const bulkLoad = buildBulkLoad(err => { if (err) done(err) })
+              const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
 
               agent
@@ -310,7 +310,6 @@ describe('Plugin', () => {
                 .catch(done)
 
               connection.execBulkLoad(bulkLoad)
-
               rowStream.write([5], (err) => {
                 if (err) done(err)
                 rowStream.end()
@@ -319,16 +318,17 @@ describe('Plugin', () => {
 
             it('should run the BulkLoad stream event listeners in the parent context', done => {
               const span = tracer.startSpan('test')
-              const bulkLoad = buildBulkLoad(done)
+              const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
 
               tracer.scope().activate(span, () => {
                 rowStream.on('finish', () => {
                   expect(tracer.scope().active()).to.equal(span)
+                  done()
                 })
               })
-              connection.execBulkLoad(bulkLoad)
 
+              connection.execBulkLoad(bulkLoad)
               rowStream.write([5], (err) => {
                 if (err) done(err)
                 rowStream.end()
