@@ -11,7 +11,7 @@ function createWrapConnect (tracer, config) {
     connect._datadog_wrapper = function () {
       const app = connect()
 
-      app.use = createWrapUse(tracer, config)(app.use)
+      app.use = createWrapUse()(app.use)
       app.handle = createWrapHandle(tracer, config)(app.handle)
 
       return app
