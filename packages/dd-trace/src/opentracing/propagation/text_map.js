@@ -12,14 +12,14 @@ const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const b3TraceKey = 'x-b3-traceid'
-const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
+const b3TraceExpr = /^\s*([0-9a-f]{16}){1,2}\s*$/i
 const b3SpanKey = 'x-b3-spanid'
-const b3SpanExpr = /^[0-9a-f]{16}$/i
+const b3SpanExpr = /^\s*[0-9a-f]{16}\s*$/i
 const b3ParentKey = 'x-b3-parentspanid'
 const b3SampledKey = 'x-b3-sampled'
 const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
-const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-[01d](-[0-9a-f]{16})?|0)$/i
+const b3HeaderExpr = /^\s*(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-[01d](-[0-9a-f]{16})?|0)\s*$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
@@ -131,14 +131,31 @@ class TextMapPropagator {
     if (b3HeaderExpr.test(carrier[b3HeaderKey])) {
       return this._extractB3SingleHeader(carrier)
     } else if (b3TraceExpr.test(carrier[b3TraceKey]) && b3SpanExpr.test(carrier[b3SpanKey])) {
-      return carrier
+      return this._extractB3MultipleHeaders(carrier)
     }
 
     return null
   }
 
+  _extractB3MultipleHeaders (carrier) {
+    const b3 = {
+      [b3TraceKey]: carrier[b3TraceKey],
+      [b3SpanKey]: carrier[b3SpanKey]
+    }
+
+    if (carrier[b3SampledKey]) {
+      b3[b3SampledKey] = carrier[b3SampledKey]
+    }
+
+    if (carrier[b3FlagsKey]) {
+      b3[b3FlagsKey] = carrier[b3FlagsKey]
+    }
+
+    return b3
+  }
+
   _extractB3SingleHeader (carrier) {
-    const parts = carrier[b3HeaderKey].split('-')
+    const parts = carrier[b3HeaderKey].trim().split('-')
 
     if (parts.length < 3) {
       return {

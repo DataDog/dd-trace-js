@@ -198,5 +198,21 @@ describe('TextMapPropagator', () => {
       expect(spanContext._spanId).to.match(idExpr)
       expect(spanContext._spanId).to.not.equal('0000000000000000')
     })
+
+    it('should accept B3 headers with whitespaces', () => {
+      textMap['b3'] = '  0000000000000123-0000000000000456-1-0000000000000789  '
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: platform.id('123', 16),
+        spanId: platform.id('456', 16),
+        baggageItems,
+        traceFlags: {
+          sampled: true
+        }
+      }))
+    })
   })
 })
