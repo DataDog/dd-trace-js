@@ -191,6 +191,13 @@ jobs:
         environment:
           - CASSANDRA_TOKEN=-9223372036854775808
 
+  node-connect:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=connect
+
   node-dns:
     <<: *node-plugin-base
     docker:
@@ -251,6 +258,13 @@ jobs:
       - image: node:10
         environment:
           - PLUGINS=http2
+
+  node-knex:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=knex
 
   node-koa:
     <<: *node-plugin-base
@@ -531,6 +545,7 @@ workflows:
       - node-bluebird
       - node-bunyan
       - node-cassandra
+      - node-connect
       - node-dns
       - node-elasticsearch
       - node-express
@@ -539,6 +554,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-knex
       - node-koa
       - node-memcached
       - node-mongodb-core
@@ -552,6 +568,7 @@ workflows:
       - node-q
       - node-redis
       - node-restify
+      - node-router
       - node-when
       - node-winston
       - prebuild-linux-x64:
@@ -614,6 +631,7 @@ workflows:
       - node-bluebird
       - node-bunyan
       - node-cassandra
+      - node-connect
       - node-dns
       - node-elasticsearch
       - node-express
@@ -622,6 +640,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-knex
       - node-koa
       - node-memcached
       - node-mongodb-core
@@ -635,5 +654,6 @@ workflows:
       - node-q
       - node-redis
       - node-restify
+      - node-router
       - node-when
       - node-winston

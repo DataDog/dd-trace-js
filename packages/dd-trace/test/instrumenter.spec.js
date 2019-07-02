@@ -46,7 +46,7 @@ describe('Instrumenter', () => {
       other: {
         name: 'other',
         versions: ['1.x'],
-        patch: sinon.spy()
+        patch: sinon.stub().returns('replacement')
       }
     }
 
@@ -251,6 +251,14 @@ describe('Instrumenter', () => {
         expect(mysql).to.deep.equal({ name: 'mysql' })
 
         expect(integrations.mysql[0].patch).to.have.been.calledWithMatch(Connection, 'tracer', {})
+      })
+
+      it('should replace the module exports with the return value of the plugin', () => {
+        instrumenter.patch()
+
+        const other = require('other')
+
+        expect(other).to.equal('replacement')
       })
     })
 

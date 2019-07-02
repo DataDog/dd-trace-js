@@ -103,6 +103,8 @@ tracer.use('amqplib');
 tracer.use('bluebird');
 tracer.use('bunyan');
 tracer.use('cassandra-driver');
+tracer.use('connect');
+tracer.use('connect', httpServerOptions);
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('express');
