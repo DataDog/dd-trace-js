@@ -27,12 +27,9 @@ class Writer {
     if (trace.started.length === trace.finished.length) {
       this._prioritySampler.sample(spanContext)
 
-      // Consumers are always finished before any child spans are started.
-      if (trace.started.length > 1 || span.context()._tags['span.kind'] !== 'consumer') {
-        trace.started.forEach(span => span.tracer().scope()._wipe(span))
-      }
-
       const formattedTrace = trace.finished.map(format)
+
+      this._erase(trace)
 
       if (spanContext._traceFlags.sampled === false) {
         log.debug(() => `Dropping trace due to user configured filtering: ${JSON.stringify(formattedTrace)}`)
@@ -100,6 +97,16 @@ class Writer {
         log.error(err)
       }
     })
+  }
+
+  _erase (trace) {
+    trace.finished.forEach(span => {
+      span.context()._tags = {}
+      span.context()._metrics = {}
+    })
+
+    trace.started = []
+    trace.finished = []
   }
 }
 

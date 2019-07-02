@@ -74,8 +74,7 @@ describe('Span', () => {
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
-    expect(span.context()._trace.started).to.deep.equal(['span', span])
-    expect(span.context()._trace.origin).to.equal('synthetics')
+    expect(span.context()._trace).to.equal(parent._trace)
   })
 
   it('should start a new trace if the parent trace is finished', () => {
