@@ -12,14 +12,6 @@ class NoopSpanContext extends DatadogSpanContext {
     this._traceFlags.sampled = false
     this._sampling.priority = USER_REJECT
   }
-
-  toTraceId () {
-    return this._traceId.toString(10)
-  }
-
-  toSpanId () {
-    return this._spanId.toString(10)
-  }
 }
 
 module.exports = NoopSpanContext
