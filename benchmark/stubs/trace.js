@@ -1,11 +1,13 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../packages/dd-trace/src/platform/node')
+
+const id = platform.id('1234567812345678')
 
 const trace = [
   {
-    trace_id: new Uint64BE(0x12345678, 0x9abcdef0),
-    span_id: new Uint64BE(0x12345678, 0x12345678),
+    trace_id: platform.id('123456789abcdef0'),
+    span_id: platform.id('1234567812345678'),
     parent_id: null,
     name: 'root',
     resource: '/',
@@ -18,9 +20,9 @@ const trace = [
     duration: 100000000
   },
   {
-    trace_id: new Uint64BE(0x12345678, 0x9abcdef0),
-    span_id: new Uint64BE(0x9abcdef0, 0x9abcdef0),
-    parent_id: new Uint64BE(0x12345678, 0x12345678),
+    trace_id: platform.id('123456789abcdef0'),
+    span_id: platform.id('9abcdef09abcdef0'),
+    parent_id: platform.id('1234567812345678'),
     name: 'child',
     resource: '/',
     service: 'benchmark',
