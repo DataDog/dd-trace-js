@@ -3,6 +3,7 @@
 const pick = require('lodash.pick')
 const platform = require('../../platform')
 const DatadogSpanContext = require('../span_context')
+const NoopSpanContext = require('../../noop/span_context')
 const log = require('../../log')
 
 const traceKey = 'x-datadog-trace-id'
@@ -84,6 +85,18 @@ class TextMapPropagator {
   }
 
   _extractSpanContext (carrier) {
+    const context = this._extractContext(carrier)
+
+    if (!context) return null
+
+    if (context.traceFlags.sampled) {
+      return new DatadogSpanContext(context)
+    } else {
+      return new NoopSpanContext(context)
+    }
+  }
+
+  _extractContext (carrier) {
     const b3 = this._extractB3Headers(carrier)
     const debug = carrier[b3FlagsKey] === '1'
     const sampled = debug || carrier[b3SampledKey] === '1' || !carrier[b3SampledKey]
@@ -92,17 +105,23 @@ class TextMapPropagator {
     }
 
     if (b3) {
-      return new DatadogSpanContext({
+      return {
         traceId: platform.id(b3[b3TraceKey]),
         spanId: platform.id(b3[b3SpanKey]),
         traceFlags
-      })
+      }
     } else if (carrier[traceKey] && carrier[spanKey]) {
-      return new DatadogSpanContext({
+      return {
         traceId: platform.id(carrier[traceKey], 10),
         spanId: platform.id(carrier[spanKey], 10),
         traceFlags
-      })
+      }
+    } else if (!sampled) {
+      return {
+        traceId: platform.id(),
+        spanId: platform.id(),
+        traceFlags
+      }
     }
 
     return null

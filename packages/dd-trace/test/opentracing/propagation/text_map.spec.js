@@ -185,5 +185,18 @@ describe('TextMapPropagator', () => {
         }
       }))
     })
+
+    it('should ensure unsampled traces always have a trace ID and span ID', () => {
+      textMap['b3'] = '0'
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+      const idExpr = /^[0-9a-f]{16}$/
+
+      expect(spanContext._traceId).to.match(idExpr)
+      expect(spanContext._traceId).to.not.equal('0000000000000000')
+      expect(spanContext._spanId).to.match(idExpr)
+      expect(spanContext._spanId).to.not.equal('0000000000000000')
+    })
   })
 })

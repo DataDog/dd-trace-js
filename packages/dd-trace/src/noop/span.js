@@ -1,11 +1,8 @@
 'use strict'
 
 const Span = require('opentracing').Span
-const SpanContext = require('../opentracing/span_context')
-const priority = require('../../../../ext/priority')
+const NoopSpanContext = require('../noop/span_context')
 const platform = require('../platform')
-
-const USER_REJECT = priority.USER_REJECT
 
 class NoopSpan extends Span {
   constructor (tracer, parent) {
@@ -34,33 +31,21 @@ class NoopSpan extends Span {
   _createContext (parent) {
     const spanId = platform.id()
 
-    let traceId
-    let parentId
-    let baggageItems
-
     if (parent) {
-      traceId = parent._traceId
-      parentId = parent._traceId
-      baggageItems = parent._baggageItems
+      return new NoopSpanContext({
+        noop: this,
+        traceId: parent._traceId,
+        spanId,
+        parentId: parent._spanId,
+        baggageItems: parent._baggageItems
+      })
     } else {
-      traceId = spanId
-      parentId = null
-      baggageItems = {}
+      return new NoopSpanContext({
+        noop: this,
+        traceId: spanId,
+        spanId
+      })
     }
-
-    return new SpanContext({
-      noop: this,
-      traceId,
-      spanId,
-      parentId,
-      baggageItems,
-      traceFlags: {
-        sampled: false
-      },
-      sampling: {
-        priority: USER_REJECT
-      }
-    })
   }
 }
 
