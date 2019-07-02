@@ -2,8 +2,6 @@
 
 const platform = require('../../packages/dd-trace/src/platform/node')
 
-const id = platform.id('1234567812345678')
-
 const trace = [
   {
     trace_id: platform.id('123456789abcdef0'),
