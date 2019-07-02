@@ -100,6 +100,7 @@ module.exports = [
     name: 'connect',
     versions: ['>=3'],
     patch (connect, tracer, config) {
+      // `connect` is a function so we return a wrapper that will replace its export.
       return createWrapConnect(tracer, config)(connect)
     },
     unpatch (connect) {
