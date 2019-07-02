@@ -12,14 +12,14 @@ const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
 const baggagePrefix = 'ot-baggage-'
 const b3TraceKey = 'x-b3-traceid'
-const b3TraceExpr = /^\s*([0-9a-f]{16}){1,2}\s*$/i
+const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
 const b3SpanKey = 'x-b3-spanid'
-const b3SpanExpr = /^\s*[0-9a-f]{16}\s*$/i
+const b3SpanExpr = /^[0-9a-f]{16}$/i
 const b3ParentKey = 'x-b3-parentspanid'
 const b3SampledKey = 'x-b3-sampled'
 const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
-const b3HeaderExpr = /^\s*(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-[01d](-[0-9a-f]{16})?|0)\s*$/i
+const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}-[01d](-[0-9a-f]{16})?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
@@ -89,7 +89,7 @@ class TextMapPropagator {
 
     if (!context) return null
 
-    if (context.traceFlags.sampled) {
+    if (context.traceFlags.sampled !== false) {
       return new DatadogSpanContext(context)
     } else {
       return new NoopSpanContext(context)
@@ -98,13 +98,12 @@ class TextMapPropagator {
 
   _extractContext (carrier) {
     const b3 = this._extractB3Headers(carrier)
-    const debug = carrier[b3FlagsKey] === '1'
-    const sampled = debug || carrier[b3SampledKey] === '1' || !carrier[b3SampledKey]
+    const sampled = this._isSampled(b3)
     const traceFlags = {
       sampled
     }
 
-    if (b3) {
+    if (b3[b3TraceKey] && b3[b3SpanKey]) {
       return {
         traceId: platform.id(b3[b3TraceKey]),
         spanId: platform.id(b3[b3SpanKey]),
@@ -116,10 +115,10 @@ class TextMapPropagator {
         spanId: platform.id(carrier[spanKey], 10),
         traceFlags
       }
-    } else if (!sampled) {
+    } else if (typeof sampled === 'boolean') {
       return {
         traceId: platform.id(),
-        spanId: platform.id(),
+        spanId: null,
         traceFlags
       }
     }
@@ -130,17 +129,17 @@ class TextMapPropagator {
   _extractB3Headers (carrier) {
     if (b3HeaderExpr.test(carrier[b3HeaderKey])) {
       return this._extractB3SingleHeader(carrier)
-    } else if (b3TraceExpr.test(carrier[b3TraceKey]) && b3SpanExpr.test(carrier[b3SpanKey])) {
+    } else {
       return this._extractB3MultipleHeaders(carrier)
     }
-
-    return null
   }
 
   _extractB3MultipleHeaders (carrier) {
-    const b3 = {
-      [b3TraceKey]: carrier[b3TraceKey],
-      [b3SpanKey]: carrier[b3SpanKey]
+    const b3 = {}
+
+    if (b3TraceExpr.test(carrier[b3TraceKey]) && b3SpanExpr.test(carrier[b3SpanKey])) {
+      b3[b3TraceKey] = carrier[b3TraceKey]
+      b3[b3SpanKey] = carrier[b3SpanKey]
     }
 
     if (carrier[b3SampledKey]) {
@@ -155,13 +154,16 @@ class TextMapPropagator {
   }
 
   _extractB3SingleHeader (carrier) {
-    const parts = carrier[b3HeaderKey].trim().split('-')
+    const parts = carrier[b3HeaderKey].split('-')
 
-    if (parts.length < 3) {
+    if (parts[0] === 'd') {
       return {
-        [b3TraceKey]: '0000000000000000',
-        [b3SpanKey]: '0000000000000000',
-        [b3SampledKey]: '0'
+        [b3SampledKey]: '1',
+        [b3FlagsKey]: '1'
+      }
+    } else if (parts.length === 1) {
+      return {
+        [b3SampledKey]: parts[0]
       }
     } else {
       const b3 = {
@@ -202,6 +204,16 @@ class TextMapPropagator {
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = parseInt(carrier[samplingKey], 10)
     }
+  }
+
+  _isSampled (carrier) {
+    if (carrier[b3FlagsKey] === '1' || carrier[b3SampledKey] === '1') {
+      return true
+    } else if (carrier[b3SampledKey] === '0') {
+      return false
+    }
+
+    return null
   }
 }
 

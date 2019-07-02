@@ -152,67 +152,138 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace).to.have.property('origin', 'synthetics')
     })
 
-    it('should extract the B3 multiple headers', () => {
-      textMap['x-b3-traceid'] = '0000000000000123'
-      textMap['x-b3-spanid'] = '0000000000000456'
-      textMap['x-b3-sampled'] = '1'
+    describe('with B3 propagation as multiple headers', () => {
+      it('should extract the headers', () => {
+        textMap['x-b3-traceid'] = '0000000000000123'
+        textMap['x-b3-spanid'] = '0000000000000456'
+        textMap['x-b3-sampled'] = '1'
 
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: platform.id('123', 16),
-        spanId: platform.id('456', 16),
-        baggageItems,
-        traceFlags: {
-          sampled: true
-        }
-      }))
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: platform.id('123', 16),
+          spanId: platform.id('456', 16),
+          baggageItems,
+          traceFlags: {
+            sampled: true
+          }
+        }))
+      })
+
+      it('should support unsampled traces', () => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+
+        textMap['x-b3-sampled'] = '0'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        const idExpr = /^[0-9a-f]{16}$/
+
+        expect(spanContext._traceId).to.match(idExpr)
+        expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
+        expect(spanContext._spanId).to.be.null
+        expect(spanContext._traceFlags.sampled).to.equal(false)
+      })
+
+      it('should support sampled traces', () => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+
+        textMap['x-b3-sampled'] = '1'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        const idExpr = /^[0-9a-f]{16}$/
+
+        expect(spanContext._traceId).to.match(idExpr)
+        expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
+        expect(spanContext._spanId).to.be.null
+        expect(spanContext._traceFlags.sampled).to.equal(true)
+      })
+
+      it('should support the debug flag', () => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+
+        textMap['x-b3-flags'] = '1'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        const idExpr = /^[0-9a-f]{16}$/
+
+        expect(spanContext._traceId).to.match(idExpr)
+        expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
+        expect(spanContext._spanId).to.be.null
+        expect(spanContext._traceFlags.sampled).to.equal(true)
+      })
     })
 
-    it('should extract the B3 single header', () => {
-      textMap['b3'] = '0000000000000123-0000000000000456-1-0000000000000789'
+    describe('with B3 propagation as a single header', () => {
+      it('should extract the header', () => {
+        textMap['b3'] = '0000000000000123-0000000000000456-1-0000000000000789'
 
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: platform.id('123', 16),
-        spanId: platform.id('456', 16),
-        baggageItems,
-        traceFlags: {
-          sampled: true
-        }
-      }))
-    })
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: platform.id('123', 16),
+          spanId: platform.id('456', 16),
+          baggageItems,
+          traceFlags: {
+            sampled: true
+          }
+        }))
+      })
 
-    it('should ensure unsampled traces always have a trace ID and span ID', () => {
-      textMap['b3'] = '0'
+      it('should support unsampled traces', () => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
 
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
-      const idExpr = /^[0-9a-f]{16}$/
+        textMap['b3'] = '0'
 
-      expect(spanContext._traceId).to.match(idExpr)
-      expect(spanContext._traceId).to.not.equal('0000000000000000')
-      expect(spanContext._spanId).to.match(idExpr)
-      expect(spanContext._spanId).to.not.equal('0000000000000000')
-    })
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        const idExpr = /^[0-9a-f]{16}$/
 
-    it('should accept B3 headers with whitespaces', () => {
-      textMap['b3'] = '  0000000000000123-0000000000000456-1-0000000000000789  '
+        expect(spanContext._traceId).to.match(idExpr)
+        expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
+        expect(spanContext._spanId).to.be.null
+        expect(spanContext._traceFlags.sampled).to.equal(false)
+      })
 
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
+      it('should support sampled traces', () => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
 
-      expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: platform.id('123', 16),
-        spanId: platform.id('456', 16),
-        baggageItems,
-        traceFlags: {
-          sampled: true
-        }
-      }))
+        textMap['b3'] = '1'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        const idExpr = /^[0-9a-f]{16}$/
+
+        expect(spanContext._traceId).to.match(idExpr)
+        expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
+        expect(spanContext._spanId).to.be.null
+        expect(spanContext._traceFlags.sampled).to.equal(true)
+      })
+
+      it('should support the debug flag', () => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+
+        textMap['b3'] = 'd'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        const idExpr = /^[0-9a-f]{16}$/
+
+        expect(spanContext._traceId).to.match(idExpr)
+        expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
+        expect(spanContext._spanId).to.be.null
+        expect(spanContext._traceFlags.sampled).to.equal(true)
+      })
     })
   })
 })
