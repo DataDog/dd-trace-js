@@ -103,16 +103,16 @@ class TextMapPropagator {
       sampled
     }
 
-    if (b3[b3TraceKey] && b3[b3SpanKey]) {
-      return {
-        traceId: platform.id(b3[b3TraceKey]),
-        spanId: platform.id(b3[b3SpanKey]),
-        traceFlags
-      }
-    } else if (carrier[traceKey] && carrier[spanKey]) {
+    if (carrier[traceKey] && carrier[spanKey]) {
       return {
         traceId: platform.id(carrier[traceKey], 10),
         spanId: platform.id(carrier[spanKey], 10),
+        traceFlags
+      }
+    } else if (b3[b3TraceKey] && b3[b3SpanKey]) {
+      return {
+        traceId: platform.id(b3[b3TraceKey]),
+        spanId: platform.id(b3[b3SpanKey]),
         traceFlags
       }
     } else if (typeof sampled === 'boolean') {
