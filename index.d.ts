@@ -603,11 +603,11 @@ declare namespace plugins {
     depth?: number;
 
     /**
-     * A callback to enable recording of variables. By default, no variables are
-     * recorded. For example, using `variables => variables` would record all
-     * variables.
+     * An array of variable names to record. Can also be a callback that returns
+     * the key/value pairs to record. For example, using
+     * `variables => variables` would record all variables.
      */
-    variables?: (variables: { [key: string]: any }) => { [key: string]: any };
+    variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
     /**
      * Whether to collapse list items into a single element. (i.e. single
