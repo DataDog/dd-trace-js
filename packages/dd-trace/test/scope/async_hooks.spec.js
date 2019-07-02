@@ -26,31 +26,25 @@ describe('Scope', () => {
   })
 
   it('should keep track of asynchronous resource count', () => {
-    const asyncId = scope._first + 1
-
-    scope._init(asyncId, 'TEST')
-    scope._destroy(asyncId)
+    scope._init(0, 'TEST')
+    scope._destroy(0)
 
     expect(metrics.increment).to.have.been.calledWith('async.resources')
     expect(metrics.decrement).to.have.been.calledWith('async.resources')
   })
 
   it('should keep track of asynchronous resource count by type', () => {
-    const asyncId = scope._first + 1
-
-    scope._init(asyncId, 'TEST')
-    scope._destroy(asyncId)
+    scope._init(0, 'TEST')
+    scope._destroy(0)
 
     expect(metrics.increment).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
     expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
   })
 
   it('should only track promise destroys once', () => {
-    const asyncId = scope._first + 1
-
-    scope._init(asyncId, 'TEST')
-    scope._promiseResolve(asyncId)
-    scope._destroy(asyncId)
+    scope._init(0, 'TEST')
+    scope._promiseResolve(0)
+    scope._destroy(0)
 
     expect(metrics.decrement).to.have.been.calledTwice
     expect(metrics.decrement).to.have.been.calledWith('async.resources')
@@ -90,12 +84,12 @@ describe('Scope', () => {
     it('should work around the HTTP keep-alive bug in Node', () => {
       const resource = {}
 
-      sinon.spy(scope, '_delete')
+      sinon.spy(scope, '_destroy')
 
       scope._init(1, 'TCPWRAP', 0, resource)
       scope._init(1, 'TCPWRAP', 0, resource)
 
-      expect(scope._delete).to.have.been.called
+      expect(scope._destroy).to.have.been.called
     })
   }
 
