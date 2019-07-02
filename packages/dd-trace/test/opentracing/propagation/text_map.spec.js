@@ -153,6 +153,11 @@ describe('TextMapPropagator', () => {
     })
 
     describe('with B3 propagation as multiple headers', () => {
+      beforeEach(() => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+      })
+
       it('should extract the headers', () => {
         textMap['x-b3-traceid'] = '0000000000000123'
         textMap['x-b3-spanid'] = '0000000000000456'
@@ -172,9 +177,6 @@ describe('TextMapPropagator', () => {
       })
 
       it('should support unsampled traces', () => {
-        delete textMap['x-datadog-trace-id']
-        delete textMap['x-datadog-parent-id']
-
         textMap['x-b3-sampled'] = '0'
 
         const carrier = textMap
@@ -188,9 +190,6 @@ describe('TextMapPropagator', () => {
       })
 
       it('should support sampled traces', () => {
-        delete textMap['x-datadog-trace-id']
-        delete textMap['x-datadog-parent-id']
-
         textMap['x-b3-sampled'] = '1'
 
         const carrier = textMap
@@ -204,9 +203,6 @@ describe('TextMapPropagator', () => {
       })
 
       it('should support the debug flag', () => {
-        delete textMap['x-datadog-trace-id']
-        delete textMap['x-datadog-parent-id']
-
         textMap['x-b3-flags'] = '1'
 
         const carrier = textMap
@@ -221,6 +217,11 @@ describe('TextMapPropagator', () => {
     })
 
     describe('with B3 propagation as a single header', () => {
+      beforeEach(() => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+      })
+
       it('should extract the header', () => {
         textMap['b3'] = '0000000000000123-0000000000000456-1-0000000000000789'
 
@@ -238,9 +239,6 @@ describe('TextMapPropagator', () => {
       })
 
       it('should support unsampled traces', () => {
-        delete textMap['x-datadog-trace-id']
-        delete textMap['x-datadog-parent-id']
-
         textMap['b3'] = '0'
 
         const carrier = textMap
@@ -254,9 +252,6 @@ describe('TextMapPropagator', () => {
       })
 
       it('should support sampled traces', () => {
-        delete textMap['x-datadog-trace-id']
-        delete textMap['x-datadog-parent-id']
-
         textMap['b3'] = '1'
 
         const carrier = textMap
@@ -270,9 +265,6 @@ describe('TextMapPropagator', () => {
       })
 
       it('should support the debug flag', () => {
-        delete textMap['x-datadog-trace-id']
-        delete textMap['x-datadog-parent-id']
-
         textMap['b3'] = 'd'
 
         const carrier = textMap
