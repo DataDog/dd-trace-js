@@ -21,7 +21,7 @@ function createWrapConnect (tracer, config) {
   }
 }
 
-function createWrapUse (tracer, config) {
+function createWrapUse () {
   return function wrapUse (use) {
     return function useWithTrace (route, fn) {
       const length = this.stack.length
@@ -110,7 +110,7 @@ module.exports = [
     name: 'connect',
     versions: ['2'],
     patch (connect, tracer, config) {
-      this.wrap(connect.proto, 'use', createWrapUse(tracer, config))
+      this.wrap(connect.proto, 'use', createWrapUse())
       this.wrap(connect.proto, 'handle', createWrapHandle(tracer, config))
     },
     unpatch (connect) {
