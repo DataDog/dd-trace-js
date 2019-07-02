@@ -2,9 +2,14 @@
 
 const Tags = require('../../../ext/tags')
 const Kinds = require('../../../ext/kinds')
-
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
+
+const sqlMapping = {
+  'sp_execute': 'execute',
+  'sp_prepare': 'prepare',
+  'sp_unprepare': 'unprepare'
+}
 
 function createWrapRequestClass (tracer) {
   return function wrapRequestClass (Request) {
@@ -99,12 +104,6 @@ function addDatabaseTags (span, connectionConfig) {
   span.setTag('db.user', connectionConfig.userName || connectionConfig.authentication.options.userName)
   span.setTag('db.name', connectionConfig.options.database)
   span.setTag('db.instance', connectionConfig.options.instanceName)
-}
-
-const sqlMapping = {
-  'sp_execute': 'execute',
-  'sp_prepare': 'prepare',
-  'sp_unprepare': 'unprepare'
 }
 
 function addQueryTags (span, request) {
