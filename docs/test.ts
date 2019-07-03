@@ -111,6 +111,7 @@ tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('generic-pool');
 tracer.use('graphql', graphqlOptions);
+tracer.use('graphql', { variables: ['foo', 'bar'] });
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
 tracer.use('http');
