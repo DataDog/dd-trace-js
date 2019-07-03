@@ -297,7 +297,7 @@ describe('Tracer', () => {
       span = tracer.startSpan('name', fields)
 
       expect(span.context()).to.have.property('_noop', span)
-      expect(span.context()).to.have.deep.property('_traceFlags', { sampled: false })
+      expect(span.context()._traceFlags).to.include({ sampled: false })
     })
 
     it('should return a noop when the parent is not sampled', () => {
@@ -312,7 +312,7 @@ describe('Tracer', () => {
       span = tracer.startSpan('name', fields)
 
       expect(span.context()).to.have.property('_noop', span)
-      expect(span.context()).to.have.deep.property('_traceFlags', { sampled: false })
+      expect(span.context()._traceFlags).to.include({ sampled: false })
     })
 
     it('should return the same instance when the parent is a noop', () => {
