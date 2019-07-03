@@ -5,11 +5,7 @@ const Kinds = require('../../../ext/kinds')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
 
-const sqlMapping = {
-  'sp_execute': 'execute',
-  'sp_prepare': 'prepare',
-  'sp_unprepare': 'unprepare'
-}
+const SQL_BATCH = 1
 
 function createWrapRequestClass (tracer) {
   return function wrapRequestClass (Request) {
@@ -46,7 +42,7 @@ function createWrapMakeRequest (tracer, config) {
       const query = getQuery(request)
 
       if (!query) {
-        return scope.activate(childOf, () => makeRequest.apply(this, arguments))
+        return makeRequest.apply(this, arguments)
       }
 
       const span = tracer.startSpan(`tedious.request`, {
@@ -63,7 +59,10 @@ function createWrapMakeRequest (tracer, config) {
 
       addConnectionTags(span, connectionConfig)
       addDatabaseTags(span, connectionConfig)
-      addQueryTags(span, request)
+
+      if (packetType !== SQL_BATCH) {
+        addProcIdTags(span, request)
+      }
 
       analyticsSampler.sample(span, config.analytics)
       request.callback = tx.wrap(span, request.callback)
@@ -106,10 +105,9 @@ function addDatabaseTags (span, connectionConfig) {
   span.setTag('db.instance', connectionConfig.options.instanceName)
 }
 
-function addQueryTags (span, request) {
+function addProcIdTags (span, request) {
   const transformedPacketType = request.sqlTextOrProcedure
-  const resourceType = sqlMapping[transformedPacketType] || 'query'
-  span.setTag('resource.type', resourceType)
+  span.setTag('request.procid', transformedPacketType)
 }
 
 module.exports = [
@@ -128,6 +126,10 @@ module.exports = [
     },
     unpatch (tedious) {
       this.unwrap(tedious.Connection.prototype, 'makeRequest')
+
+      if (tedious.BulkLoad && tedious.BulkLoad.prototype.getRowStream) {
+        this.unwrap(tedious.BulkLoad.prototype, 'getRowStream')
+      }
     }
   }
 ]

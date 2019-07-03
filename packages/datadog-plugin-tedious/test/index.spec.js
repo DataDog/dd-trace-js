@@ -109,7 +109,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('resource.type', 'query')
+            expect(traces[0][0].meta).to.have.property('request.procid', 'sp_executesql')
             expect(traces[0][0].meta).to.have.property('component', 'tedious')
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
@@ -133,7 +133,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('resource.type', 'query')
+            expect(traces[0][0].meta).to.have.property('request.procid', 'sp_executesql')
           })
           .then(done)
           .catch(done)
@@ -145,6 +145,26 @@ describe('Plugin', () => {
         connection.execSql(request)
       })
 
+      it('should handle batch queries', done => {
+        const query = 'SELECT 1 + 1 AS solution1;\n' +
+                      'SELECT 1 + 2 AS solution2'
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('name', 'tedious.request')
+            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('resource', query)
+            expect(traces[0][0].meta).to.not.have.property('request.procid')
+          })
+          .then(done)
+          .catch(done)
+
+        const request = new tds.Request(query, (err) => {
+          if (err) done(err)
+        })
+        connection.execSqlBatch(request)
+      })
+
       it('should handle prepare requests', done => {
         const query = 'SELECT 1 + @num AS solution'
 
@@ -153,7 +173,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('resource.type', 'prepare')
+            expect(traces[0][0].meta).to.have.property('request.procid', 'sp_prepare')
           })
           .then(done)
           .catch(done)
@@ -171,7 +191,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + @num AS solution')
-            expect(traces[0][0].meta).to.have.property('resource.type', 'execute')
+            expect(traces[0][0].meta).to.have.property('request.procid', 'sp_execute')
           })
           .then(done)
           .catch(done)
@@ -194,7 +214,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('resource.type', 'unprepare')
+            expect(traces[0][0].meta).to.have.property('request.procid', 'sp_unprepare')
           })
           .then(done)
           .catch(done)
@@ -287,7 +307,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'tedious.request')
                 expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
-                expect(traces[0][0].meta).to.have.property('resource.type', 'query')
+                expect(traces[0][0].meta).to.not.have.property('request.procid')
               })
               .then(done)
               .catch(done)
@@ -304,7 +324,7 @@ describe('Plugin', () => {
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('name', 'tedious.request')
                   expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
-                  expect(traces[0][0].meta).to.have.property('resource.type', 'query')
+                  expect(traces[0][0].meta).to.not.have.property('request.procid')
                 })
                 .then(done)
                 .catch(done)
