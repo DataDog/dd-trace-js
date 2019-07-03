@@ -77,24 +77,6 @@ describe('Span', () => {
     expect(span.context()._trace).to.equal(parent._trace)
   })
 
-  it('should start a new trace if the parent trace is finished', () => {
-    const parent = {
-      _traceId: '123',
-      _spanId: '456',
-      _baggageItems: { foo: 'bar' },
-      _trace: {
-        started: ['span'],
-        finished: ['span'],
-        origin: 'synthetics'
-      }
-    }
-
-    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
-
-    expect(span.context()._trace.started).to.deep.equal([span])
-    expect(span.context()._trace.origin).to.equal('synthetics')
-  })
-
   it('should set the sample rate metric from the sampler', () => {
     expect(span.context()._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
