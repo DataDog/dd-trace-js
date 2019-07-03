@@ -42,8 +42,8 @@ class DatadogTracer extends Tracer {
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
-      [formats.TEXT_MAP]: new TextMapPropagator(),
-      [formats.HTTP_HEADERS]: new HttpPropagator(),
+      [formats.TEXT_MAP]: new TextMapPropagator(config),
+      [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(),
       [formats.LOG]: new LogPropagator()
     }

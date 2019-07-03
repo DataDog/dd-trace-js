@@ -354,6 +354,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
+      expect(TextMapPropagator).to.have.been.calledWith(config)
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
 
@@ -363,6 +364,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_HTTP_HEADERS, carrier)
 
+      expect(HttpPropagator).to.have.been.calledWith(config)
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
 

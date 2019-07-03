@@ -42,7 +42,7 @@ suite
   })
   .add('TextMapPropagator#inject', {
     onStart () {
-      propagator = new TextMapPropagator()
+      propagator = new TextMapPropagator(config)
       carrier = {}
       spanContext = new DatadogSpanContext({
         traceId: platform.id('1234567812345678'),
@@ -56,7 +56,7 @@ suite
   })
   .add('TextMapPropagator#extract', {
     onStart () {
-      propagator = new TextMapPropagator()
+      propagator = new TextMapPropagator(config)
       carrier = {
         'x-datadog-trace-id': '1234567891234567',
         'x-datadog-parent-id': '1234567891234567',
