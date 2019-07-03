@@ -87,6 +87,10 @@ class TextMapPropagator {
     carrier[b3SpanKey] = spanContext._spanId.toString('hex')
     carrier[b3SampledKey] = spanContext._traceFlags.sampled ? '1' : '0'
 
+    if (spanContext._traceFlags.debug) {
+      carrier[b3FlagsKey] = '1'
+    }
+
     if (spanContext._parentId) {
       carrier[b3ParentKey] = spanContext._parentId.toString('hex')
     }
@@ -111,28 +115,27 @@ class TextMapPropagator {
   _extractDatadogContext (carrier) {
     const sampled = this._isSampled(carrier[sampleKey])
 
-    return this._extractGenericContext(carrier, traceKey, spanKey, sampled, 10)
+    return this._extractGenericContext(carrier, traceKey, spanKey, { sampled }, 10)
   }
 
   _extractB3Context (carrier) {
     if (!this._config.experimental.b3) return null
 
     const b3 = this._extractB3Headers(carrier)
-    const sampled = this._isSampled(b3[b3SampledKey], b3[b3FlagsKey] === '1')
+    const debug = b3[b3FlagsKey] === '1'
+    const sampled = this._isSampled(b3[b3SampledKey], debug)
 
-    return this._extractGenericContext(b3, b3TraceKey, b3SpanKey, sampled)
+    return this._extractGenericContext(b3, b3TraceKey, b3SpanKey, { sampled, debug })
   }
 
-  _extractGenericContext (carrier, traceKey, spanKey, sampled, radix) {
-    const traceFlags = { sampled }
-
+  _extractGenericContext (carrier, traceKey, spanKey, traceFlags, radix) {
     if (carrier[traceKey] && carrier[spanKey]) {
       return {
         traceId: platform.id(carrier[traceKey], radix),
         spanId: platform.id(carrier[spanKey], radix),
         traceFlags
       }
-    } else if (typeof sampled === 'boolean') {
+    } else if (typeof traceFlags.sampled === 'boolean') {
       return {
         traceId: platform.id(),
         spanId: null,

@@ -111,7 +111,8 @@ describe('TextMapPropagator', () => {
         spanId: platform.id('0000000000000456'),
         parentId: platform.id('0000000000000789'),
         traceFlags: {
-          sampled: true
+          sampled: true,
+          debug: true
         }
       })
 
@@ -123,6 +124,7 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-b3-spanid', '0000000000000456')
       expect(carrier).to.have.property('x-b3-parentspanid', '0000000000000789')
       expect(carrier).to.have.property('x-b3-sampled', '1')
+      expect(carrier).to.have.property('x-b3-flags', '1')
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {
