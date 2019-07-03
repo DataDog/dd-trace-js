@@ -276,6 +276,38 @@ describe('TextMapPropagator', () => {
       })
 
       it('should extract the header', () => {
+        textMap['b3'] = '0000000000000123-0000000000000456'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: platform.id('123', 16),
+          spanId: platform.id('456', 16),
+          baggageItems,
+          traceFlags: {
+            sampled: true
+          }
+        }))
+      })
+
+      it('should extract client sampling', () => {
+        textMap['b3'] = '0000000000000123-0000000000000456-1'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: platform.id('123', 16),
+          spanId: platform.id('456', 16),
+          baggageItems,
+          traceFlags: {
+            sampled: true
+          }
+        }))
+      })
+
+      it('should extract support the full syntax', () => {
         textMap['b3'] = '0000000000000123-0000000000000456-1-0000000000000789'
 
         const carrier = textMap
