@@ -103,7 +103,7 @@ function addDatabaseTags (span, connectionConfig) {
 }
 
 function addProcIdTags (span, request) {
-  if (!request.sqlTextOrProcedure.match(procnameRegex)) return
+  if (!procnameRegex.test(request.sqlTextOrProcedure)) return
   span.setTag('tds.proc.name', request.sqlTextOrProcedure)
 }
 
