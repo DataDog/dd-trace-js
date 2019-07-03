@@ -10,6 +10,7 @@ const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
 const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
+const sampleKey = 'x-datadog-sampled'
 const baggagePrefix = 'ot-baggage-'
 const b3TraceKey = 'x-b3-traceid'
 const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
@@ -26,9 +27,14 @@ const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3
 const logKeys = ddKeys.concat(b3Keys)
 
 class TextMapPropagator {
+  constructor (config) {
+    this._config = config
+  }
+
   inject (spanContext, carrier) {
     carrier[traceKey] = spanContext.toTraceId()
     carrier[spanKey] = spanContext.toSpanId()
+    carrier[sampleKey] = spanContext._traceFlags.sampled ? '1' : '0'
 
     this._injectOrigin(spanContext, carrier)
     this._injectSamplingPriority(spanContext, carrier)
@@ -75,6 +81,8 @@ class TextMapPropagator {
   }
 
   _injectB3 (spanContext, carrier) {
+    if (!this._config.experimental.b3) return
+
     carrier[b3TraceKey] = spanContext._traceId.toString('hex')
     carrier[b3SpanKey] = spanContext._spanId.toString('hex')
     carrier[b3SampledKey] = spanContext._traceFlags.sampled ? '1' : '0'
@@ -97,22 +105,31 @@ class TextMapPropagator {
   }
 
   _extractContext (carrier) {
+    return this._extractDatadogContext(carrier) || this._extractB3Context(carrier)
+  }
+
+  _extractDatadogContext (carrier) {
+    const sampled = this._isSampled(carrier[sampleKey])
+
+    return this._extractGenericContext(carrier, traceKey, spanKey, sampled, 10)
+  }
+
+  _extractB3Context (carrier) {
+    if (!this._config.experimental.b3) return null
+
     const b3 = this._extractB3Headers(carrier)
-    const sampled = this._isSampled(b3)
-    const traceFlags = {
-      sampled
-    }
+    const sampled = this._isSampled(b3[b3SampledKey], b3[b3FlagsKey] === '1')
+
+    return this._extractGenericContext(b3, b3TraceKey, b3SpanKey, sampled)
+  }
+
+  _extractGenericContext (carrier, traceKey, spanKey, sampled, radix) {
+    const traceFlags = { sampled }
 
     if (carrier[traceKey] && carrier[spanKey]) {
       return {
-        traceId: platform.id(carrier[traceKey], 10),
-        spanId: platform.id(carrier[spanKey], 10),
-        traceFlags
-      }
-    } else if (b3[b3TraceKey] && b3[b3SpanKey]) {
-      return {
-        traceId: platform.id(b3[b3TraceKey]),
-        spanId: platform.id(b3[b3SpanKey]),
+        traceId: platform.id(carrier[traceKey], radix),
+        spanId: platform.id(carrier[spanKey], radix),
         traceFlags
       }
     } else if (typeof sampled === 'boolean') {
@@ -206,10 +223,10 @@ class TextMapPropagator {
     }
   }
 
-  _isSampled (carrier) {
-    if (carrier[b3FlagsKey] === '1' || carrier[b3SampledKey] === '1') {
+  _isSampled (sampled, debug) {
+    if (debug || sampled === '1') {
       return true
-    } else if (carrier[b3SampledKey] === '0') {
+    } else if (sampled === '0') {
       return false
     }
 

@@ -39,7 +39,9 @@ tracer.init({
   analytics: true,
   env: 'test',
   runtimeMetrics: true,
-  experimental: {},
+  experimental: {
+    b3: true
+  },
   hostname: 'agent',
   logger: {
     error (message: string) {},

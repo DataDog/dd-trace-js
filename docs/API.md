@@ -307,7 +307,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | flushInterval  |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | runtimeMetrics | DD_RUNTIME_METRICS_ENABLED   | false     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | reportHostname | DD_TRACE_REPORT_HOSTNAME     | false     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. There are currently no experimental features available. |
+| experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins        |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 
 <h3 id="custom-logging">Custom Logging</h3>
