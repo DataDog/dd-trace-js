@@ -533,7 +533,6 @@ workflows:
     jobs:
       - lint
       - typescript
-      - node-leaks
       - node-core-4
       - node-core-6
       - node-core-8
