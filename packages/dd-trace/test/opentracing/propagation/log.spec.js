@@ -23,8 +23,8 @@ describe('LogPropagator', () => {
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: new platform.Uint64BE(0, 123),
-        spanId: new platform.Uint64BE(-456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('-456', 10)
       })
 
       propagator.inject(spanContext, carrier)
@@ -44,8 +44,8 @@ describe('LogPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: new platform.Uint64BE(0, 123),
-        spanId: new platform.Uint64BE(-456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('-456', 10)
       }))
     })
 

@@ -8,6 +8,36 @@ const randomBytes = require('crypto').randomBytes
 const hiSeed = randomBytes(4).readUInt32BE()
 const loSeed = randomBytes(4).readUInt32BE()
 
+// Internal representation of a trace or span ID.
+class Identifier {
+  constructor (value, radix) {
+    this._buffer = typeof radix === 'number'
+      ? new Uint64BE(value, radix).toBuffer()
+      : createBuffer(value)
+  }
+
+  toString (radix) {
+    return typeof radix === 'number'
+      ? this.toUint64BE().toString()
+      : this._buffer.toString('hex')
+  }
+
+  toUint64BE () {
+    return new Uint64BE(this._buffer.slice(-8))
+  }
+
+  toJSON () {
+    return this.toString()
+  }
+}
+
+// Create a buffer, using an optional hexadecimal value if provided.
+function createBuffer (value) {
+  if (value) return Buffer.from(value, 'hex')
+
+  return pseudoRandom()
+}
+
 // Simple pseudo-random 64-bit ID generator.
 function pseudoRandom () {
   const buffer = Buffer.allocUnsafe(8)
@@ -37,4 +67,4 @@ function writeUInt32BE (buffer, value, offset) {
   buffer[0 + offset] = value & 255
 }
 
-module.exports = () => new Uint64BE(pseudoRandom())
+module.exports = (value, radix) => new Identifier(value, radix)

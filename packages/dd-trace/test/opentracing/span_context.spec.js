@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../src/platform')
 
 describe('SpanContext', () => {
   let SpanContext
@@ -10,6 +10,7 @@ describe('SpanContext', () => {
   })
 
   it('should instantiate with the given properties', () => {
+    const noop = {}
     const props = {
       traceId: '123',
       spanId: '456',
@@ -20,6 +21,11 @@ describe('SpanContext', () => {
       metrics: {},
       sampling: { priority: 2 },
       baggageItems: { foo: 'bar' },
+      traceFlags: {
+        sampled: false,
+        debug: true
+      },
+      noop,
       trace: {
         started: ['span1', 'span2'],
         finished: ['span1']
@@ -37,6 +43,11 @@ describe('SpanContext', () => {
       _metrics: {},
       _sampling: { priority: 2 },
       _baggageItems: { foo: 'bar' },
+      _traceFlags: {
+        sampled: false,
+        debug: true
+      },
+      _noop: noop,
       _trace: {
         started: ['span1', 'span2'],
         finished: ['span1']
@@ -45,25 +56,9 @@ describe('SpanContext', () => {
   })
 
   it('should have the correct default values', () => {
-    const expected = {
-      traceId: '123',
-      spanId: '456',
-      parentId: null,
-      name: undefined,
-      isFinished: false,
-      tags: {},
-      metrics: {},
-      sampling: {},
-      baggageItems: {},
-      trace: {
-        started: [],
-        finished: []
-      }
-    }
-
     const spanContext = new SpanContext({
-      traceId: expected.traceId,
-      spanId: expected.spanId
+      traceId: '123',
+      spanId: '456'
     })
 
     expect(spanContext).to.deep.equal({
@@ -76,6 +71,11 @@ describe('SpanContext', () => {
       _metrics: {},
       _sampling: {},
       _baggageItems: {},
+      _traceFlags: {
+        sampled: true,
+        debug: false
+      },
+      _noop: null,
       _trace: {
         started: [],
         finished: []
@@ -86,8 +86,8 @@ describe('SpanContext', () => {
   describe('toTraceId()', () => {
     it('should return the trace ID as string', () => {
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(123),
-        spanId: new Uint64BE(456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('456', 10)
       })
 
       expect(spanContext.toTraceId()).to.equal('123')
@@ -97,8 +97,8 @@ describe('SpanContext', () => {
   describe('toSpanId()', () => {
     it('should return the span ID as string', () => {
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(123),
-        spanId: new Uint64BE(456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('456', 10)
       })
 
       expect(spanContext.toSpanId()).to.equal('456')

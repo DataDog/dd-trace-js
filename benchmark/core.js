@@ -2,7 +2,6 @@
 
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
-const Uint64BE = require('int64-buffer').Uint64BE
 const platform = require('../packages/dd-trace/src/platform')
 const node = require('../packages/dd-trace/src/platform/node')
 
@@ -43,11 +42,11 @@ suite
   })
   .add('TextMapPropagator#inject', {
     onStart () {
-      propagator = new TextMapPropagator()
+      propagator = new TextMapPropagator(config)
       carrier = {}
       spanContext = new DatadogSpanContext({
-        traceId: new Uint64BE(0x12345678, 0x12345678),
-        spanId: new Uint64BE(0x12345678, 0x12345678),
+        traceId: platform.id('1234567812345678'),
+        spanId: platform.id('1234567812345678'),
         baggageItems: { foo: 'bar' }
       })
     },
@@ -57,7 +56,7 @@ suite
   })
   .add('TextMapPropagator#extract', {
     onStart () {
-      propagator = new TextMapPropagator()
+      propagator = new TextMapPropagator(config)
       carrier = {
         'x-datadog-trace-id': '1234567891234567',
         'x-datadog-parent-id': '1234567891234567',

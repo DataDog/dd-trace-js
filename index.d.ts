@@ -234,7 +234,9 @@ export declare interface TracerOptions {
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */
-  experimental?: {} | boolean;
+  experimental?: boolean | {
+    b3?: boolean
+  };
 
   /**
    * Whether to load all built-in plugins.

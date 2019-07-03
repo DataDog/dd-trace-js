@@ -52,7 +52,7 @@ const web = {
 
     // TODO: replace this with a REFERENCE_NOOP after we split http/express/etc
     if (!config.filter(req.url)) {
-      span.context()._sampling.drop = true
+      span.context()._traceFlags.sampled = false
     }
 
     if (config.service) {

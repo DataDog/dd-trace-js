@@ -30,7 +30,6 @@ class DatadogTracer extends Tracer {
     log.use(config.logger)
     log.toggle(config.debug)
 
-    this._noopSpan = new NoopSpan(this)
     this._service = config.service
     this._url = config.url
     this._env = config.env
@@ -43,8 +42,8 @@ class DatadogTracer extends Tracer {
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
-      [formats.TEXT_MAP]: new TextMapPropagator(),
-      [formats.HTTP_HEADERS]: new HttpPropagator(),
+      [formats.TEXT_MAP]: new TextMapPropagator(config),
+      [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(),
       [formats.LOG]: new LogPropagator()
     }
@@ -58,11 +57,9 @@ class DatadogTracer extends Tracer {
     const reference = getParent(references)
     const type = reference && reference.type()
     const parent = reference && reference.referencedContext()
-    const noopSpan = this._noopSpan
 
-    if (type === REFERENCE_NOOP) return noopSpan
-    if (parent && parent === noopSpan.context()) return noopSpan
-    if (!parent && !this._sampler.isSampled()) return noopSpan
+    if (parent && parent._noop) return parent._noop
+    if (!isSampled(this._sampler, parent, type)) return new NoopSpan(this, parent)
 
     const tags = {
       'service.name': this._service
@@ -142,6 +139,14 @@ function getParent (references) {
   }
 
   return parent
+}
+
+function isSampled (sampler, parent, type) {
+  if (type === REFERENCE_NOOP) return false
+  if (parent && !parent._traceFlags.sampled) return false
+  if (!parent && !sampler.isSampled()) return false
+
+  return true
 }
 
 module.exports = DatadogTracer

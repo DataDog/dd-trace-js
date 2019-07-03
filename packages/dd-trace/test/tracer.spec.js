@@ -80,7 +80,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(childOf, () => {
         tracer.trace('name', {}, span => {
-          expect(span.context()._parentId.toString()).to.equal(childOf.context().toSpanId())
+          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })
@@ -91,7 +91,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(root, () => {
         tracer.trace('name', { childOf }, span => {
-          expect(span.context()._parentId.toString()).to.equal(childOf.context().toSpanId())
+          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })

@@ -6,7 +6,8 @@ const arg = process.argv[2]
 const target = arg ? `datadog-plugin-${arg}` : 'dd-trace'
 const globs = [
   'packages/dd-trace/test/setup/**/*.js',
-  `packages/${target}/test/**/*.spec.js`
+  `packages/${target}/test/**/*.spec.js`,
+  arg
 ].map(glob => `'${glob}'`)
 
 const options = { stdio: [0, 1, 2] }
