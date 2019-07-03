@@ -5,7 +5,7 @@ const Kinds = require('../../../ext/kinds')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
 
-const SQL_BATCH = 1
+const procnameRegex = /^sp_[a-z]+$/
 
 function createWrapRequestClass (tracer) {
   return function wrapRequestClass (Request) {
@@ -35,7 +35,7 @@ function createWrapConnectionClass (tracer) {
 
 function createWrapMakeRequest (tracer, config) {
   return function wrapMakeRequest (makeRequest) {
-    return function makeRequestWithTrace (request, packetType) {
+    return function makeRequestWithTrace (request) {
       const connectionConfig = this.config
       const scope = tracer.scope()
       const childOf = scope.active()
@@ -59,10 +59,7 @@ function createWrapMakeRequest (tracer, config) {
 
       addConnectionTags(span, connectionConfig)
       addDatabaseTags(span, connectionConfig)
-
-      if (packetType !== SQL_BATCH) {
-        addProcIdTags(span, request)
-      }
+      addProcIdTags(span, request)
 
       analyticsSampler.sample(span, config.analytics)
       request.callback = tx.wrap(span, request.callback)
@@ -106,8 +103,8 @@ function addDatabaseTags (span, connectionConfig) {
 }
 
 function addProcIdTags (span, request) {
-  const transformedPacketType = request.sqlTextOrProcedure
-  span.setTag('request.procid', transformedPacketType)
+  if (!request.sqlTextOrProcedure.match(procnameRegex)) return
+  span.setTag('tds.proc.name', request.sqlTextOrProcedure)
 }
 
 module.exports = [
@@ -117,7 +114,6 @@ module.exports = [
     patch (tedious, tracer, config) {
       this.wrap(tedious, 'Request', createWrapRequestClass(tracer))
       this.wrap(tedious, 'Connection', createWrapConnectionClass(tracer))
-
       this.wrap(tedious.Connection.prototype, 'makeRequest', createWrapMakeRequest(tracer, config))
 
       if (tedious.BulkLoad && tedious.BulkLoad.prototype.getRowStream) {
@@ -125,6 +121,8 @@ module.exports = [
       }
     },
     unpatch (tedious) {
+      this.unwrap(tedious, 'Request')
+      this.unwrap(tedious, 'Connection')
       this.unwrap(tedious.Connection.prototype, 'makeRequest')
 
       if (tedious.BulkLoad && tedious.BulkLoad.prototype.getRowStream) {
