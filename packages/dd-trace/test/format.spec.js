@@ -170,7 +170,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta['language']).to.equal('javascript')
-      expect(trace.meta['runtime-id']).to.equal('1234')
     })
 
     it('should add runtime tags only for the root service', () => {

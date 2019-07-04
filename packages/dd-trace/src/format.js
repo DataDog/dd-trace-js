@@ -80,7 +80,6 @@ function extractTags (trace, span) {
   }
 
   if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, 'runtime-id', platform.runtime().id())
     addTag(trace.meta, 'language', 'javascript')
   }
 

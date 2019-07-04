@@ -433,7 +433,6 @@ describe('Platform', () => {
             host: 'localhost',
             tags: [
               'service:service',
-              'runtime-id:1234',
               'env:test'
             ]
           })
