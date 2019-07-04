@@ -56,20 +56,13 @@ class DatadogSpan extends Span {
     let spanContext
 
     if (parent) {
-      const trace = parent._trace
-      const finished = trace.started.length === trace.finished.length
-
       spanContext = new SpanContext({
         traceId: parent._traceId,
         spanId: platform.id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
         baggageItems: parent._baggageItems,
-        trace: {
-          started: finished ? [] : trace.started,
-          finished: finished ? [] : trace.finished,
-          origin: trace.origin
-        }
+        trace: parent._trace
       })
     } else {
       const spanId = platform.id()

@@ -131,24 +131,16 @@ describe('Writer', () => {
       expect(prioritySampler.sample).to.have.been.calledWith(span.context())
     })
 
-    it('should remove spans from all scopes when the trace is finished', () => {
-      trace.started = [span, span]
-      trace.finished = [span, span]
-
-      writer.append(span)
-
-      expect(scope._wipe).to.have.been.calledTwice
-      expect(scope._wipe).to.have.been.calledWith(span)
-    })
-
-    it('should wait for more spans before removing for consumers', () => {
-      span.context()._tags['span.kind'] = 'consumer'
+    it('should erase the trace once finished', () => {
       trace.started = [span]
       trace.finished = [span]
 
       writer.append(span)
 
-      expect(scope._wipe).to.not.have.been.called
+      expect(trace).to.have.deep.property('started', [])
+      expect(trace).to.have.deep.property('finished', [])
+      expect(span.context()).to.have.deep.property('_tags', {})
+      expect(span.context()).to.have.deep.property('_metrics', {})
     })
   })
 

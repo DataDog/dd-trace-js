@@ -42,12 +42,13 @@ describe('plugins/util/tx', () => {
         const callback = sinon.spy()
         const error = new Error('boom')
         const wrapper = tx.wrap(span, callback)
+        const tags = span.context()._tags
 
         wrapper(error)
 
-        expect(span.context()._tags).to.have.property('error.msg', error.message)
-        expect(span.context()._tags).to.have.property('error.type', error.name)
-        expect(span.context()._tags).to.have.property('error.stack', error.stack)
+        expect(tags).to.have.property('error.msg', error.message)
+        expect(tags).to.have.property('error.type', error.name)
+        expect(tags).to.have.property('error.stack', error.stack)
       })
 
       it('should return a wrapper that runs in the current scope', done => {
@@ -82,14 +83,15 @@ describe('plugins/util/tx', () => {
       it('should set the error tags when the promise is rejected', () => {
         const error = new Error('boom')
         const promise = Promise.reject(error)
+        const tags = span.context()._tags
 
         tx.wrap(span, promise)
 
         return promise.catch(err => {
           expect(err).to.equal(error)
-          expect(span.context()._tags).to.have.property('error.msg', error.message)
-          expect(span.context()._tags).to.have.property('error.type', error.name)
-          expect(span.context()._tags).to.have.property('error.stack', error.stack)
+          expect(tags).to.have.property('error.msg', error.message)
+          expect(tags).to.have.property('error.type', error.name)
+          expect(tags).to.have.property('error.stack', error.stack)
         })
       })
     })

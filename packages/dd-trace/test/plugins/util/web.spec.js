@@ -30,6 +30,7 @@ describe('plugins/util/web', () => {
   let res
   let end
   let config
+  let tags
 
   beforeEach(() => {
     req = {
@@ -150,9 +151,11 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
           res.end()
 
-          expect(span.context()._tags).to.include({
+          expect(tags).to.include({
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
@@ -165,9 +168,11 @@ describe('plugins/util/web', () => {
         config.headers = ['host', 'server']
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
           res.end()
 
-          expect(span.context()._tags).to.include({
+          expect(tags).to.include({
             [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
             [`${HTTP_RESPONSE_HEADERS}.server`]: 'test'
           })
@@ -216,9 +221,11 @@ describe('plugins/util/web', () => {
 
         web.instrument(tracer, config, req, res, 'test.request', () => {
           web.instrument(tracer, override, req, res, 'test.request', span => {
+            const tags = span.context()._tags
+
             res.end()
 
-            expect(span.context()._tags).to.include({
+            expect(tags).to.include({
               [`${HTTP_REQUEST_HEADERS}.date`]: 'now'
             })
           })
@@ -231,9 +238,11 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
           res.end()
 
-          expect(span.context()._tags).to.include({
+          expect(tags).to.include({
             [HTTP_URL]: 'http://localhost/user/123'
           })
         })
@@ -244,6 +253,7 @@ describe('plugins/util/web', () => {
       beforeEach(() => {
         web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
           span = reqSpan
+          tags = span.context()._tags
         })
       })
 
@@ -302,7 +312,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context()._tags).to.include({
+        expect(tags).to.include({
           [RESOURCE_NAME]: 'GET',
           [HTTP_STATUS_CODE]: '200'
         })
@@ -313,7 +323,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context()._tags).to.include({
+        expect(tags).to.include({
           [ERROR]: true
         })
       })
@@ -323,7 +333,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context()._tags).to.include({
+        expect(tags).to.include({
           [ERROR]: true
         })
       })
@@ -333,7 +343,7 @@ describe('plugins/util/web', () => {
 
         res.end()
 
-        expect(span.context()._tags).to.include({
+        expect(tags).to.include({
           [HTTP_ROUTE]: '/custom/route'
         })
       })
@@ -366,7 +376,7 @@ describe('plugins/util/web', () => {
         web.instrument(tracer, config, req, res, 'test.request', span => {
           res.end()
 
-          expect(span.context()._tags).to.have.property('resource.name', 'GET /custom/route')
+          expect(tags).to.have.property('resource.name', 'GET /custom/route')
         })
       })
     })
@@ -377,6 +387,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
+        tags = span.context()._tags
       })
     })
 
@@ -387,8 +398,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, '/bar')
       res.end()
 
-      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
-      expect(span.context()._tags).to.have.property(HTTP_ROUTE, '/foo/bar')
+      expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
+      expect(tags).to.have.property(HTTP_ROUTE, '/foo/bar')
     })
 
     it('should only add valid route segments to the span resource name', () => {
@@ -398,8 +409,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, 1337)
       res.end()
 
-      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET')
-      expect(span.context()._tags).to.not.have.property(HTTP_ROUTE)
+      expect(tags).to.have.property(RESOURCE_NAME, 'GET')
+      expect(tags).to.not.have.property(HTTP_ROUTE)
     })
   })
 
@@ -408,6 +419,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
         span = reqSpan
+        tags = span.context()._tags
       })
     })
 
@@ -419,7 +431,7 @@ describe('plugins/util/web', () => {
       web.exitRoute(req)
       res.end()
 
-      expect(span.context()._tags).to.have.property(RESOURCE_NAME, 'GET /foo')
+      expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo')
     })
   })
 
@@ -428,6 +440,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
+        tags = span.context()._tags
       })
     })
 
@@ -446,6 +459,7 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
+        tags = span.context()._tags
       })
     })
 
@@ -467,14 +481,15 @@ describe('plugins/util/web', () => {
     it('should add an error if provided', (done) => {
       const fn = () => {
         const span = tracer.scope().active()
+        const tags = span.context()._tags
         const error = new Error('boom')
 
         sinon.spy(span, 'finish')
         web.finish(req, error)
 
-        expect(span.context()._tags['error.type']).to.equal(error.name)
-        expect(span.context()._tags['error.msg']).to.equal(error.message)
-        expect(span.context()._tags['error.stack']).to.equal(error.stack)
+        expect(tags['error.type']).to.equal(error.name)
+        expect(tags['error.msg']).to.equal(error.message)
+        expect(tags['error.stack']).to.equal(error.stack)
 
         done()
       }
