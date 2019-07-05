@@ -302,24 +302,24 @@ tracer.use('pg', {
 
 Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables.
 
-| Config         | Environment Variable         | Default   | Description |
-| -------------- | ---------------------------- | --------- | ----------- |
-| enabled        | DD_TRACE_ENABLED             | true      | Whether to enable the tracer. |
-| debug          | DD_TRACE_DEBUG               | false     | Enable debug logging in the tracer. |
-| service        | DD_SERVICE_NAME              |           | The service name to be used for this program. |
-| url            | DD_TRACE_AGENT_URL           |           | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
-| hostname       | DD_TRACE_AGENT_HOSTNAME      | localhost | The address of the agent that the tracer will submit to. |
-| port           | DD_TRACE_AGENT_PORT          | 8126      | The port of the trace agent that the tracer will submit to. |
-| dogstatsd.port | DD_DOGSTATSD_PORT            | 8125      | The port of the Dogstatsd agent that metrics will be submitted to. |
-| env            | DD_ENV                       |           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
-| logInjection   | DD_LOGS_INJECTION            | false     | Enable automatic injection of trace IDs in logs for supported logging libraries. |
-| tags           |                              | {}        | Set global tags that should be applied to all spans. |
-| sampleRate     |                              | 1         | Percentage of spans to sample as a float between 0 and 1. |
-| flushInterval  |                              | 2000      | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| runtimeMetrics | DD_RUNTIME_METRICS_ENABLED   | false     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
-| reportHostname | DD_TRACE_REPORT_HOSTNAME     | false     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| experimental   |                              | {}        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
-| plugins        |                              | true      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
+| Config         | Environment Variable           | Default     | Description |
+| -------------- | ------------------------------ | ----------- | ----------- |
+| enabled        | `DD_TRACE_ENABLED`             | `true`      | Whether to enable the tracer. |
+| debug          | `DD_TRACE_DEBUG`               | `false`     | Enable debug logging in the tracer. |
+| service        | `DD_SERVICE_NAME`              | -           | The service name to be used for this program. |
+| url            | `DD_TRACE_AGENT_URL`           | -           | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
+| hostname       | `DD_TRACE_AGENT_HOSTNAME`      | `localhost` | The address of the agent that the tracer will submit to. |
+| port           | `DD_TRACE_AGENT_PORT`          | `8126`      | The port of the trace agent that the tracer will submit to. |
+| dogstatsd.port | `DD_DOGSTATSD_PORT`            | `8125`      | The port of the Dogstatsd agent that metrics will be submitted to. |
+| env            | `DD_ENV`                       | -           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
+| logInjection   | `DD_LOGS_INJECTION`            | `false`     | Enable automatic injection of trace IDs in logs for supported logging libraries. |
+| tags           | -                              | `{}`        | Set global tags that should be applied to all spans. |
+| sampleRate     | -                              | `1`         | Percentage of spans to sample as a float between 0 and 1. |
+| flushInterval  | -                              | `2000`      | Interval in milliseconds at which the tracer will submit traces to the agent. |
+| runtimeMetrics | `DD_RUNTIME_METRICS_ENABLED`   | `false`     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
+| reportHostname | `DD_TRACE_REPORT_HOSTNAME`     | `false`     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
+| experimental   | -                              | `{}`        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
+| plugins        | -                              | `true`      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 
