@@ -43,9 +43,6 @@ describe('format', () => {
     }
 
     platform = {
-      runtime: sinon.stub().returns({
-        id: sinon.stub().returns('1234')
-      }),
       hostname: sinon.stub().returns('my_hostname')
     }
 
@@ -170,7 +167,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta['language']).to.equal('javascript')
-      expect(trace.meta['runtime-id']).to.equal('1234')
     })
 
     it('should add runtime tags only for the root service', () => {
@@ -179,7 +175,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta).to.not.have.property('language')
-      expect(trace.meta).to.not.have.property('runtime-id')
     })
 
     describe('when there is an `error` tag ', () => {

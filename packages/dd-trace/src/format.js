@@ -4,7 +4,6 @@ const Int64BE = require('int64-buffer').Int64BE
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
-const platform = require('./platform')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -80,7 +79,6 @@ function extractTags (trace, span) {
   }
 
   if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, 'runtime-id', platform.runtime().id())
     addTag(trace.meta, 'language', 'javascript')
   }
 

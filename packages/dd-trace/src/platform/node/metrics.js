@@ -24,8 +24,7 @@ module.exports = function () {
   return metrics || (metrics = { // cache the metrics instance
     start: (options) => {
       const tags = [
-        `service:${this._config.service}`,
-        `runtime-id:${this.runtime().id()}`
+        `service:${this._config.service}`
       ]
 
       if (this._config.env) {
