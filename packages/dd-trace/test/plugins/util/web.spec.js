@@ -548,6 +548,47 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('addError', () => {
+    beforeEach(() => {
+      config = web.normalizeConfig(config)
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+        tags = span.context()._tags
+      })
+    })
+
+    it('should add an error to the request span', () => {
+      const error = new Error('boom')
+
+      web.addError(req, error)
+
+      expect(tags).to.include({
+        [ERROR]: error
+      })
+    })
+  })
+
+  describe('addStatusError', () => {
+    beforeEach(() => {
+      config = web.normalizeConfig(config)
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+        tags = span.context()._tags
+      })
+    })
+
+    it('should not remove an existing error', () => {
+      const error = new Error('boom')
+
+      web.addError(req, error)
+      web.addStatusError(req, 500)
+
+      expect(tags).to.include({
+        [ERROR]: error
+      })
+    })
+  })
+
   describe('with an instrumented web server', done => {
     let express
     let app

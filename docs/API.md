@@ -215,6 +215,7 @@ tracer.use('pg', {
 <h5 id="express-tags"></h5>
 <h5 id="express-config"></h5>
 <h5 id="generic-pool"></h5>
+<h5 id="fastify"></h5>
 <h5 id="graphql"></h5>
 <h5 id="graphql-tags"></h5>
 <h5 id="graphql-config"></h5>
@@ -270,6 +271,7 @@ tracer.use('pg', {
 * [dns](./interfaces/plugins.dns.html)
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [express](./interfaces/plugins.express.html)
+* [fastify](./interfaces/plugins.fastify.html)
 * [generic-pool](./interfaces/plugins.generic_pool.html)
 * [graphql](./interfaces/plugins.graphql.html)
 * [hapi](./interfaces/plugins.hapi.html)
