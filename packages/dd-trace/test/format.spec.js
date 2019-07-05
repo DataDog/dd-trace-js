@@ -43,9 +43,6 @@ describe('format', () => {
     }
 
     platform = {
-      runtime: sinon.stub().returns({
-        id: sinon.stub().returns('1234')
-      }),
       hostname: sinon.stub().returns('my_hostname')
     }
 
