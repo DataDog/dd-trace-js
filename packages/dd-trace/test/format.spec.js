@@ -178,7 +178,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta).to.not.have.property('language')
-      expect(trace.meta).to.not.have.property('runtime-id')
     })
 
     describe('when there is an `error` tag ', () => {
