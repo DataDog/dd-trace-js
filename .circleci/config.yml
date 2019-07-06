@@ -73,6 +73,9 @@ node-plugin-base: &node-plugin-base
     - store_artifacts:
         path: ./coverage/lcov-report
     - run:
+        name: Code coverage
+        command: yarn codecov
+    - run:
         name: Memory leak tests
         command: yarn leak:plugins
 
