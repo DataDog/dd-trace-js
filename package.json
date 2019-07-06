@@ -15,11 +15,12 @@
     "lint": "eslint . && node scripts/check_licenses.js",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "tdd": "node scripts/tdd.js",
-    "test": "SERVICES=* yarn services && NO_DEPRECATION=* cov8 --include \"src/**/*.js\" -- mocha --exit 'packages/dd-trace/test/setup/all.js' 'packages/*/test/**/*.spec.js'",
-    "test:core": "mocha --exit --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
-    "test:plugins": "yarn services && NO_DEPRECATION=* cov8 --include \"packages/*/src/**/*.js\" -- mocha --exit --file \"packages/dd-trace/test/setup/all.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
+    "test": "SERVICES=* yarn services && mocha --exit 'packages/dd-trace/test/setup/all.js' 'packages/*/test/**/*.spec.js'",
+    "test:core": "NO_DEPRECATION=* nyc --include \"packages/dd-trace/src/**/*.js\" -- mocha --exit --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
+    "test:plugins": "yarn services && mocha --exit --file \"packages/dd-trace/test/setup/all.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
-    "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\""
+    "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
+    "codecov": "codecov"
   },
   "repository": {
     "type": "git",
@@ -72,6 +73,7 @@
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
     "chai": "^4.1.2",
+    "codecov": "^3.5.0",
     "eslint": "^4.15.0",
     "eslint-config-standard": "^11.0.0-beta.0",
     "eslint-plugin-import": "^2.8.0",
@@ -85,13 +87,13 @@
     "mocha": "^5.2.0",
     "nock": "^9.6.1",
     "node-abi": "^2.8.0",
+    "nyc": "^14.1.1",
     "prebuildify": "^2.11.0",
     "proxyquire": "^1.8.0",
     "require-dir": "^1.0.0",
     "retry": "^0.10.1",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0",
-    "tape": "^4.9.1",
-    "v8-coverage": "^1.0.8"
+    "tape": "^4.9.1"
   }
 }
