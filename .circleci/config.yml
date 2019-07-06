@@ -429,7 +429,7 @@ jobs:
     docker:
       - image: node:10
     working_directory: ~/dd-trace-js
-    resource_class: small
+    resource_class: medium
     environment:
       - ARCH=x64
     steps:
@@ -453,7 +453,7 @@ jobs:
     docker:
       - image: node:10
     working_directory: ~/dd-trace-js
-    resource_class: small
+    resource_class: medium
     environment:
       - ARCH=x32
     steps:
@@ -473,7 +473,7 @@ jobs:
     macos:
       xcode: "10.2.0"
     working_directory: ~/dd-trace-js
-    resource_class: small
+    resource_class: medium
     environment:
       - ARCH=x64
     steps:
@@ -490,7 +490,7 @@ jobs:
     macos:
       xcode: "10.2.0"
     working_directory: ~/dd-trace-js
-    resource_class: small
+    resource_class: medium
     environment:
       - ARCH=x32
     steps:
