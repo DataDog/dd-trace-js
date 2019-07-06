@@ -70,6 +70,8 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins
+    - store_artifacts:
+        path: ./coverage/lcov-report
     - run:
         name: Memory leak tests
         command: yarn leak:plugins
