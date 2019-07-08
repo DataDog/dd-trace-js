@@ -15,7 +15,6 @@ module.exports = {
   'graphql': require('../../../../packages/datadog-plugin-graphql/src'),
   'hapi': require('../../../../packages/datadog-plugin-hapi/src'),
   'http': require('../../../../packages/datadog-plugin-http/src'),
-  'http2': require('../../../../packages/datadog-plugin-http2/src'),
   'ioredis': require('../../../../packages/datadog-plugin-ioredis/src'),
   'knex': require('../../../../packages/datadog-plugin-knex/src'),
   'koa': require('../../../../packages/datadog-plugin-koa/src'),

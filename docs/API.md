@@ -276,7 +276,6 @@ tracer.use('pg', {
 * [graphql](./interfaces/plugins.graphql.html)
 * [hapi](./interfaces/plugins.hapi.html)
 * [http](./interfaces/plugins.http.html)
-* [http2](./interfaces/plugins.http2.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
