@@ -72,7 +72,7 @@ function unwrapFastify (fastify) {
 }
 
 function getReq (request) {
-  return request.req || request.raw || request
+  return request.req || request
 }
 
 function getRes (reply) {
