@@ -35,11 +35,10 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           fastify = require(`../../../versions/fastify@${version}`).get()
+          app = fastify()
         })
 
         it('should do automatic instrumentation on the app routes', done => {
-          app = fastify()
-
           app.get('/user', (request, reply) => {
             reply.send()
           })
@@ -70,8 +69,6 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation on route full syntax', done => {
-          app = fastify()
-
           app.route({
             method: 'GET',
             url: '/user/:id',
@@ -108,8 +105,6 @@ describe('Plugin', () => {
         it('should run handlers in the request scope', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
-          const app = fastify()
-
           app.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -132,8 +127,6 @@ describe('Plugin', () => {
         it('should run middleware in the request scope', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
-          const app = fastify()
-
           app.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -152,8 +145,6 @@ describe('Plugin', () => {
 
         it('should run hooks in the request scope', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
-          const app = fastify()
 
           app.addHook('onRequest', (request, reply, next) => {
             expect(tracer.scope().active()).to.not.be.null
@@ -178,8 +169,6 @@ describe('Plugin', () => {
 
         it('should handle reply errors', done => {
           let error
-
-          app = fastify()
 
           app.get('/user', (request, reply) => {
             reply.send(error = new Error('boom'))
