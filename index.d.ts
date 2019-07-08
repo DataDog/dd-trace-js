@@ -320,6 +320,7 @@ interface Plugins {
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
+  "fastify": plugins.fastify;
   "generic-pool": plugins.generic_pool;
   "graphql": plugins.graphql;
   "hapi": plugins.hapi;
@@ -565,6 +566,12 @@ declare namespace plugins {
    * [express](http://expressjs.com/) module.
    */
   interface express extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [fastify](https://www.fastify.io/) module.
+   */
+  interface fastify extends HttpServer {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)

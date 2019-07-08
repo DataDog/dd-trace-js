@@ -10,6 +10,7 @@ module.exports = {
   'dns': require('../../../../packages/datadog-plugin-dns/src'),
   'elasticsearch': require('../../../../packages/datadog-plugin-elasticsearch/src'),
   'express': require('../../../../packages/datadog-plugin-express/src'),
+  'fastify': require('../../../../packages/datadog-plugin-fastify/src'),
   'generic-pool': require('../../../../packages/datadog-plugin-generic-pool/src'),
   'graphql': require('../../../../packages/datadog-plugin-graphql/src'),
   'hapi': require('../../../../packages/datadog-plugin-hapi/src'),
