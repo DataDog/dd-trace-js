@@ -1,6 +1,5 @@
 'use strict'
 
-const Buffer = require('safe-buffer').Buffer
 const semver = require('semver')
 
 wrapIt()

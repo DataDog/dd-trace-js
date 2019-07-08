@@ -133,14 +133,8 @@ function getScope (config) {
 
   if (config.scope === NOOP) {
     Scope = require('./scope/base')
-  } else if (config.scope === ASYNC_HOOKS) {
-    Scope = require('./scope/async_hooks')
-  } else if (config.scope === ASYNC_LISTENER) {
-    Scope = require('./scope/async-listener')
-  } else if (semver.satisfies(process.version, '^4.7.1 || ^6.9.2 || >=7.5')) {
-    Scope = require('./scope/async_hooks')
   } else {
-    Scope = require('./scope/async-listener')
+    Scope = require('./scope/async_hooks')
   }
 
   return new Scope()
