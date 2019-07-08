@@ -7,8 +7,6 @@ const plugin = require('../src')
 
 wrapIt()
 
-const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
-
 describe('Plugin', () => {
   let tracer
   let fastify
@@ -46,7 +44,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                const spans = sort(traces[0])
+                const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'fastify.request')
                 expect(spans[0]).to.have.property('service', 'test')
@@ -80,7 +78,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                const spans = sort(traces[0])
+                const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'fastify.request')
                 expect(spans[0]).to.have.property('service', 'test')
@@ -177,11 +175,13 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                const spans = sort(traces[0])
+                const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'fastify.request')
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
               })
               .then(done)
               .catch(done)
