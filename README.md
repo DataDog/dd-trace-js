@@ -90,10 +90,9 @@ After installing the `circleci` CLI, simply run one of the following:
 ```sh
 $ circleci build --job lint
 $ circleci build --job node-leaks
-$ circleci build --job node-core-4
-$ circleci build --job node-core-6
 $ circleci build --job node-core-8
 $ circleci build --job node-core-10
+$ circleci build --job node-core-12
 $ circleci build --job node-core-latest
 ```
 

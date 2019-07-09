@@ -264,7 +264,7 @@ export declare interface TracerOptions {
    * implementation for the runtime. Only change this if you know what you are
    * doing.
    */
-  scope?: 'async_hooks' | 'async-listener' | 'noop'
+  scope?: 'async_hooks' | 'noop'
 }
 
 /** @hidden */

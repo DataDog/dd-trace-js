@@ -39,12 +39,10 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=4"
+    "node": ">=8"
   },
   "dependencies": {
-    "@datadog/async-listener": "^0.1.0",
     "@types/node": "^10.12.18",
-    "async-hook-jl": "^1.7.6",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
     "lodash.kebabcase": "^4.1.1",
@@ -64,7 +62,6 @@
     "performance-now": "^2.1.0",
     "read-pkg-up": "^3.0.0",
     "require-in-the-middle": "^2.2.2",
-    "safe-buffer": "^5.1.1",
     "semver": "^5.5.0",
     "shimmer": "^1.2.0",
     "tar": "^4.4.8",

@@ -1,6 +1,6 @@
 'use strict'
 
-const asyncHooks = require('./async_hooks/index')
+const asyncHooks = require('async_hooks')
 const eid = asyncHooks.executionAsyncId
 const Base = require('./base')
 const platform = require('../platform')

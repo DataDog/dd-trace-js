@@ -1,6 +1,5 @@
 'use strict'
 
-const Buffer = require('safe-buffer').Buffer
 const semver = require('semver')
 
 wrapIt()
@@ -460,10 +459,8 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
           expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
 
-          if (semver.gte(process.version, '7.2.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
-            expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
-          }
+          expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
+          expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
 
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.max')
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.min')
@@ -554,11 +551,9 @@ describe('Platform', () => {
 
           clock.tick(10000)
 
-          if (semver.gte(process.version, '6.1.0')) {
-            expect(client.gauge).to.have.been.calledWith('cpu.user')
-            expect(client.gauge).to.have.been.calledWith('cpu.system')
-            expect(client.gauge).to.have.been.calledWith('cpu.total')
-          }
+          expect(client.gauge).to.have.been.calledWith('cpu.user')
+          expect(client.gauge).to.have.been.calledWith('cpu.system')
+          expect(client.gauge).to.have.been.calledWith('cpu.total')
 
           expect(client.gauge).to.have.been.calledWith('mem.rss')
           expect(client.gauge).to.have.been.calledWith('mem.heap_total')
@@ -573,17 +568,13 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
           expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
 
-          if (semver.gte(process.version, '7.2.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
-            expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
-          }
+          expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
+          expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
 
-          if (semver.gte(process.version, '6.0.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
-            expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
-            expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
-            expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
-          }
+          expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
+          expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
+          expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
+          expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
 
           expect(client.flush).to.have.been.called
         })

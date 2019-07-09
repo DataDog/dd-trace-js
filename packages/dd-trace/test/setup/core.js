@@ -9,12 +9,10 @@ const semver = require('semver')
 const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
 const AsyncHooksScope = require('../../src/scope/async_hooks')
-const AsyncListenerScope = require('../../src/scope/async-listener')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
 const asyncHooksScope = new AsyncHooksScope()
-const asyncListenerScope = new AsyncListenerScope()
 
 chai.use(sinonChai)
 
@@ -41,12 +39,10 @@ function wrapIt () {
     const length = fn.length
 
     fn = asyncHooksScope.bind(fn, null)
-    fn = asyncListenerScope.bind(fn, null)
 
     if (length > 0) {
       return it.call(this, title, function (done) {
         done = asyncHooksScope.bind(done, null)
-        done = asyncListenerScope.bind(done, null)
 
         return fn.call(this, done)
       })

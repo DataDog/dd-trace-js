@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const Buffer = require('safe-buffer').Buffer
 const plugin = require('../src')
 
 wrapIt()

@@ -93,16 +93,6 @@ jobs:
 
   # Core tests
 
-  node-core-4:
-    <<: *node-core-base
-    docker:
-      - image: node:4
-
-  node-core-6:
-    <<: *node-core-base
-    docker:
-      - image: node:6
-
   node-core-8:
     <<: *node-core-base
     docker:
@@ -553,8 +543,6 @@ workflows:
     jobs:
       - lint
       - typescript
-      - node-core-4
-      - node-core-6
       - node-core-8
       - node-core-10
       - node-core-12
@@ -641,8 +629,6 @@ workflows:
               only:
                 - master
     jobs:
-      - node-core-4
-      - node-core-6
       - node-core-8
       - node-core-10
       - node-core-12
