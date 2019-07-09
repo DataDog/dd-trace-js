@@ -18,7 +18,7 @@ function createWrapGenLog (tracer, config) {
       const log = genLog(z)
 
       return function logWithTrace (a, b, c, d, e, f, g, h, i, j, k) {
-        const args = [a, b, c, d, e, f, g, h, i, j, k]
+        const args = [a, b, c, d, e, f, g, h, i, j, k].slice(0, arguments.length)
 
         if (!a) {
           args[0] = {}
