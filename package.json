@@ -16,8 +16,8 @@
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "tdd": "node scripts/tdd.js",
     "test": "SERVICES=* yarn services && mocha --exit 'packages/dd-trace/test/setup/all.js' 'packages/*/test/**/*.spec.js'",
-    "test:core": "NO_DEPRECATION=* nyc --include \"packages/dd-trace/src/**/*.js\" -- mocha --exit --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
-    "test:plugins": "yarn services && NO_DEPRECATION=* nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- mocha --exit --file \"packages/dd-trace/test/setup/all.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
+    "test:core": "nyc --include \"packages/dd-trace/src/**/*.js\" -- mocha --exit --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
+    "test:plugins": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- mocha --exit --file \"packages/dd-trace/test/setup/all.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
     "codecov": "codecov"
