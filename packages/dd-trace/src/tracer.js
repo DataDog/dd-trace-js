@@ -1,6 +1,5 @@
 'use strict'
 
-const semver = require('semver')
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
@@ -9,8 +8,6 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const ANALYTICS = tags.ANALYTICS
-const ASYNC_HOOKS = scopes.ASYNC_HOOKS
-const ASYNC_LISTENER = scopes.ASYNC_LISTENER
 const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
