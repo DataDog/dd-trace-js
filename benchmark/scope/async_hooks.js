@@ -33,7 +33,7 @@ const asyncHooks = {
 }
 
 const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
-  './async_hooks/index': asyncHooks,
+  'async_hooks': asyncHooks,
   '../platform': platform
 })
 
