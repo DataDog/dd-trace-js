@@ -2,10 +2,9 @@
 
 const http = require('http')
 const https = require('https')
-const getContainerInfo = require('container-info')
+const containerInfo = require('container-info').sync() || {}
 
-const containerInfo = getContainerInfo.sync()
-const containerId = containerInfo && containerInfo.containerId
+const containerId = containerInfo.containerId
 
 function request (options, callback) {
   options = Object.assign({
