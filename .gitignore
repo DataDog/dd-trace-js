@@ -92,7 +92,6 @@ typings/
 ### VisualStudioCode ###
 .vscode/*
 !.vscode/launch.json
-!.vscode/tasks.json
 .history
 
 
