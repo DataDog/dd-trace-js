@@ -10,13 +10,14 @@
       "name": "Test Plugin",
       "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
       "args": [
-        "packages/dd-trace/test/setup/*.js",
+        "${workspaceFolder}/packages/dd-trace/test/setup/*.js",
         "--timeout",
         "999999",
         "--colors",
-        "${workspaceFolder}/packages/datadog-plugin-${input:pluginName}/test/*.spec.js",
-        "--watch"
+        "--watch",
+        "${workspaceFolder}/packages/datadog-plugin-${input:pluginName}/test/**/*.spec.js"
       ],
+      "preLaunchTask": "Install Plugin Modules",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
     },
@@ -26,12 +27,14 @@
       "name": "Test Current File",
       "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
       "args": [
-        "packages/dd-trace/test/setup/*.js",
+        "${workspaceFolder}/packages/dd-trace/test/setup/*.js",
         "--timeout",
         "999999",
         "--colors",
-        "${file}"
+        "--watch",
+        "${file}",
       ],
+      "preLaunchTask": "Install Plugin Modules",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
     }
