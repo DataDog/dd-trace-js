@@ -24,7 +24,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Test Plugin",
+      "name": "Test Current File",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run-script",
