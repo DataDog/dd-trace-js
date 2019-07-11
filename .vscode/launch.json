@@ -8,36 +8,33 @@
       "type": "node",
       "request": "launch",
       "name": "Test Plugin",
-      "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
-      "args": [
-        "${workspaceFolder}/packages/dd-trace/test/setup/*.js",
-        "--timeout",
-        "999999",
-        "--colors",
-        "--watch",
-        "${workspaceFolder}/packages/datadog-plugin-${input:pluginName}/test/**/*.spec.js"
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run-script",
+        "tdd",
+        "${input:pluginName}"
       ],
-      "preLaunchTask": "Install Plugin Modules",
+      "env": {
+        "PLUGINS": "${input:pluginName}"
+      },
+      "port": 9229,
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "Test Current File",
-      "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
-      "args": [
-        "${workspaceFolder}/packages/dd-trace/test/setup/*.js",
-        "--timeout",
-        "999999",
-        "--colors",
-        "--watch",
-        "${file}",
+      "name": "Test Plugin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run-script",
+        "tdd",
+        "${file}"
       ],
-      "preLaunchTask": "Install Plugin Modules",
+      "port": 9229,
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
-    }
+    },
   ],
   "inputs": [
     {
