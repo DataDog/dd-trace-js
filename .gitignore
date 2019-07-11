@@ -91,6 +91,7 @@ typings/
 
 ### VisualStudioCode ###
 .vscode/*
+!.vscode/launch.json
 .history
 
 

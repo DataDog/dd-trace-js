@@ -1,0 +1,83 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Test Plugin",
+      "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
+      "args": [
+        "packages/dd-trace/test/setup/*.js",
+        "--timeout",
+        "999999",
+        "--colors",
+        "${workspaceFolder}/packages/datadog-plugin-${input:pluginName}/test/*.spec.js",
+        "--watch"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Test Current File",
+      "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
+      "args": [
+        "packages/dd-trace/test/setup/*.js",
+        "--timeout",
+        "999999",
+        "--colors",
+        "${file}"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pluginName",
+      "description": "The plugin name",
+      "type": "pickString",
+      "options": [
+        "amqp10",
+        "amqplib",
+        "bluebird",
+        "bunyan",
+        "cassandra-driver",
+        "connect",
+        "dns",
+        "elasticsearch",
+        "express",
+        "fastify",
+        "generic-pool",
+        "graphql",
+        "hapi",
+        "http",
+        "http2",
+        "ioredis",
+        "knex",
+        "koa",
+        "memcached",
+        "mongodb-core",
+        "mysql",
+        "mysql2",
+        "net",
+        "paperplane",
+        "pg",
+        "pino",
+        "promise-js",
+        "promise",
+        "q",
+        "redis",
+        "restify",
+        "router",
+        "tedious",
+        "when",
+        "winston"
+      ]
+    }
+  ]
+}
