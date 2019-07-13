@@ -15,7 +15,6 @@
 - [ ] Plugin is [exported][5].
 - [ ] Plugin is added to [debug configuration][6].
 
-
 [1]: https://github.com/DataDog/dd-trace-js/blob/master/index.d.ts
 [2]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
 [3]: https://github.com/DataDog/dd-trace-js/blob/master/docs/API.md
