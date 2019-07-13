@@ -14,9 +14,6 @@
         "tdd",
         "${input:pluginName}"
       ],
-      "env": {
-        "PLUGINS": "${input:pluginName}"
-      },
       "port": 9229,
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
@@ -39,7 +36,7 @@
   "inputs": [
     {
       "id": "pluginName",
-      "description": "The plugin name",
+      "description": "Select the plugin to test",
       "type": "pickString",
       "options": [
         "amqp10",
