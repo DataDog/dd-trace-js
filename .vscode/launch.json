@@ -8,9 +8,8 @@
       "type": "node",
       "request": "launch",
       "name": "Test Plugin",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "yarn",
       "runtimeArgs": [
-        "run-script",
         "tdd",
         "${input:pluginName}"
       ],
@@ -22,9 +21,8 @@
       "type": "node",
       "request": "launch",
       "name": "Test Current File",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "yarn",
       "runtimeArgs": [
-        "run-script",
         "tdd",
         "${file}"
       ],
