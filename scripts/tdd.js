@@ -10,7 +10,7 @@ const globs = [
 ].map(glob => `'${glob}'`).join(' ')
 
 let target
-const mappedArgs = process.argv.slice(2).map((arg) => {
+const args = process.argv.slice(2).map((arg) => {
   if (fs.existsSync(path.join(base, `datadog-plugin-${arg}`))) {
     target = arg
     return `'packages/datadog-plugin-${arg}/test/**/*.spec.js'`
@@ -22,7 +22,7 @@ const options = { stdio: [0, 1, 2] }
 const command = `yarn services && NO_DEPRECATION=* mocha --watch`
 
 if (target) {
-  execSync(`PLUGINS=${target} ${command} ${globs} ${mappedArgs}`, options)
+  execSync(`PLUGINS=${target} ${command} ${globs} ${args}`, options)
 } else {
-  execSync(`${command} ${globs} '${target}'`, options)
+  execSync(`${command} ${globs} ${args}`, options)
 }
