@@ -98,6 +98,27 @@ class DatadogSpan extends Span {
   }
 
   _addTags (keyValuePairs) {
+    if (typeof keyValuePairs === 'string') {
+      return this._addTags(
+        keyValuePairs
+          .split(',')
+          .filter(tag => tag.indexOf('=') !== -1)
+          .reduce((prev, next) => {
+            const tag = next.split('=')
+            const key = tag[0]
+            const value = tag.slice(1).join('=')
+
+            prev[key] = value
+
+            return prev
+          }, {})
+      )
+    }
+
+    if (Array.isArray(keyValuePairs)) {
+      return keyValuePairs.forEach(tags => this._addTags(tags))
+    }
+
     try {
       Object.keys(keyValuePairs).forEach(key => {
         this._spanContext._tags[key] = keyValuePairs[key]
