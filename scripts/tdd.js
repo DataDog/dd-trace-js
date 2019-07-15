@@ -4,17 +4,25 @@ const execSync = require('child_process').execSync
 const fs = require('fs')
 const path = require('path')
 
-const target = process.argv[2]
 const base = path.join(__dirname, '..', 'packages')
 const globs = [
   'packages/dd-trace/test/setup/*.js'
 ].map(glob => `'${glob}'`).join(' ')
 
-const options = { stdio: [0, 1, 2] }
-const command = `yarn services && NO_DEPRECATION=* mocha --watch --inspect`
+let target
+const mappedArgs = process.argv.slice(2).map((arg) => {
+  if (fs.existsSync(path.join(base, `datadog-plugin-${arg}`))) {
+    target = arg
+    return `'packages/datadog-plugin-${arg}/test/**/*.spec.js'`
+  }
+  return arg
+}).join(' ')
 
-if (fs.existsSync(path.join(base, `datadog-plugin-${target}`))) {
-  execSync(`PLUGINS=${target} ${command} ${globs} 'packages/datadog-plugin-${target}/test/**/*.spec.js'`, options)
+const options = { stdio: [0, 1, 2] }
+const command = `yarn services && NO_DEPRECATION=* mocha --watch`
+
+if (target) {
+  execSync(`PLUGINS=${target} ${command} ${globs} ${mappedArgs}`, options)
 } else {
   execSync(`${command} ${globs} '${target}'`, options)
 }
