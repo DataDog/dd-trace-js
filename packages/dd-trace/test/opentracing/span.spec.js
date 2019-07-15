@@ -158,10 +158,10 @@ describe('Span', () => {
     })
 
     it('should add tags as a string', () => {
-      span.addTags('foo:bar,baz:qux,invalid')
+      span.addTags('foo:bar,baz:qux:quxx,invalid')
 
       expect(span.context()._tags).to.have.property('foo', 'bar')
-      expect(span.context()._tags).to.have.property('baz', 'qux')
+      expect(span.context()._tags).to.have.property('baz', 'qux:quxx')
       expect(span.context()._tags).to.not.have.property('invalid')
     })
 

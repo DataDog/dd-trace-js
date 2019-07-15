@@ -106,7 +106,7 @@ class DatadogSpan extends Span {
           .reduce((prev, next) => {
             const tag = next.split(':')
             const key = tag[0]
-            const value = tag.slice(1).join('=')
+            const value = tag.slice(1).join(':')
 
             prev[key] = value
 
