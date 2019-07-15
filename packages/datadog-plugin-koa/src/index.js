@@ -18,7 +18,7 @@ function createWrapCallback (tracer, config) {
   }
 }
 
-function createWrapCreateContext (tracer, config) {
+function createWrapCreateContext () {
   return function wrapCreateContext (createContext) {
     return function createContextWithTrace (req, res) {
       const ctx = createContext.apply(this, arguments)
@@ -33,9 +33,7 @@ function createWrapCreateContext (tracer, config) {
   }
 }
 
-function createWrapUse (tracer, config) {
-  config = web.normalizeConfig(config)
-
+function createWrapUse () {
   return function wrapUse (use) {
     return function useWithTrace () {
       const result = use.apply(this, arguments)
