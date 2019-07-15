@@ -102,9 +102,9 @@ class DatadogSpan extends Span {
       return this._addTags(
         keyValuePairs
           .split(',')
-          .filter(tag => tag.indexOf('=') !== -1)
+          .filter(tag => tag.indexOf(':') !== -1)
           .reduce((prev, next) => {
-            const tag = next.split('=')
+            const tag = next.split(':')
             const key = tag[0]
             const value = tag.slice(1).join('=')
 
