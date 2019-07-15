@@ -31,7 +31,9 @@ describe('Tracer', () => {
   beforeEach(() => {
     fields = {}
 
-    span = {}
+    span = {
+      addTags: sinon.stub().returns(span)
+    }
     Span = sinon.stub().returns(span)
 
     prioritySampler = {
@@ -132,11 +134,14 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'foo': 'bar',
           'service.name': 'service'
         },
         startTime: fields.startTime,
         hostname: undefined
+      })
+
+      expect(span.addTags).to.have.been.calledWith({
+        'foo': 'bar'
       })
 
       expect(testSpan).to.equal(span)
@@ -185,7 +190,6 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'foo': 'bar',
           'service.name': 'service'
         },
         startTime: fields.startTime,
@@ -268,13 +272,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
-        tags: {
-          'foo': 'tracer',
-          'bar': 'span',
-          'baz': 'span'
-        }
-      })
+      expect(span.addTags).to.have.been.calledWith(config.tags)
+      expect(span.addTags).to.have.been.calledWith(fields.tags)
     })
 
     it('should add the env tag from the env option', () => {

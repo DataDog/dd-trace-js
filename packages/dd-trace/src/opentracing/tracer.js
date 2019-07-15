@@ -72,10 +72,13 @@ class DatadogTracer extends Tracer {
     const span = new Span(this, this._recorder, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent,
-      tags: Object.assign(tags, this._tags, fields.tags),
+      tags,
       startTime: fields.startTime,
       hostname: this._hostname
     })
+
+    span.addTags(this._tags)
+    span.addTags(fields.tags)
 
     return span
   }

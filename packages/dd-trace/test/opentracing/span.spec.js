@@ -147,23 +147,38 @@ describe('Span', () => {
   })
 
   describe('addTags', () => {
-    it('should add tags', () => {
+    beforeEach(() => {
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+    })
+
+    it('should add tags as an object', () => {
       span.addTags({ foo: 'bar' })
 
       expect(span.context()._tags).to.have.property('foo', 'bar')
     })
 
+    it('should add tags as a string', () => {
+      span.addTags('foo:bar,baz:qux:quxx,invalid')
+
+      expect(span.context()._tags).to.have.property('foo', 'bar')
+      expect(span.context()._tags).to.have.property('baz', 'qux:quxx')
+      expect(span.context()._tags).to.not.have.property('invalid')
+    })
+
+    it('should add tags as an array', () => {
+      span.addTags(['foo:bar', 'baz:qux'])
+
+      expect(span.context()._tags).to.have.property('foo', 'bar')
+      expect(span.context()._tags).to.have.property('baz', 'qux')
+    })
+
     it('should store the original values', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
       span.addTags({ foo: 123 })
 
       expect(span.context()._tags).to.have.property('foo', 123)
     })
 
     it('should handle errors', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
-
       expect(() => span.addTags()).not.to.throw()
     })
   })
