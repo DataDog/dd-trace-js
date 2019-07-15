@@ -11,7 +11,8 @@
       "runtimeExecutable": "yarn",
       "runtimeArgs": [
         "tdd",
-        "${input:pluginName}"
+        "${input:pluginName}",
+        "--inspect-brk=9229"
       ],
       "port": 9229,
       "console": "integratedTerminal",
@@ -24,7 +25,8 @@
       "runtimeExecutable": "yarn",
       "runtimeArgs": [
         "tdd",
-        "${file}"
+        "${file}",
+        "--inspect-brk=9229"
       ],
       "port": 9229,
       "console": "integratedTerminal",
