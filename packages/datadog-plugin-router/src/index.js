@@ -53,6 +53,8 @@ function wrapRouterMethod (original) {
 }
 
 function wrapLayerHandle (layer, handle) {
+  handle._name = handle._name || layer.name
+
   if (handle.length === 4) {
     return function (error, req, res, next) {
       return callHandle(layer, handle, req, [error, req, res, wrapNext(layer, req, next)])
