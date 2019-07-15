@@ -158,7 +158,6 @@ describe('Span', () => {
     })
 
     it('should add tags as a string', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
       span.addTags('foo=bar,baz=qux,invalid')
 
       expect(span.context()._tags).to.have.property('foo', 'bar')
