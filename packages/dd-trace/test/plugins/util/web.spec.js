@@ -561,6 +561,19 @@ describe('plugins/util/web', () => {
       const error = new Error('boom')
 
       web.addError(req, error)
+      web.addStatusError(req, 500)
+
+      expect(tags).to.include({
+        [ERROR]: error
+      })
+    })
+
+    it('should not override an existing error', () => {
+      const error = new Error('boom')
+
+      web.addError(req, error)
+      web.addError(req, new Error('prrr'))
+      web.addStatusError(req, 500)
 
       expect(tags).to.include({
         [ERROR]: error
@@ -577,15 +590,20 @@ describe('plugins/util/web', () => {
       })
     })
 
-    it('should not remove an existing error', () => {
-      const error = new Error('boom')
-
-      web.addError(req, error)
+    it('should flag the request as an error', () => {
       web.addStatusError(req, 500)
 
       expect(tags).to.include({
-        [ERROR]: error
+        [ERROR]: true
       })
+    })
+
+    it('should only flag requests as an error for configured status codes', () => {
+      config.validateStatus = () => true
+
+      web.addStatusError(req, 500)
+
+      expect(tags).to.not.have.property(ERROR)
     })
   })
 

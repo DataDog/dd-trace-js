@@ -168,18 +168,17 @@ const web = {
   // Validate a request's status code and then add error tags if necessary
   addStatusError (req, statusCode) {
     const span = req._datadog.span
+    const error = req._datadog.error
 
-    if (!span.context()._tags[ERROR] && !req._datadog.config.validateStatus(statusCode)) {
-      span.setTag(ERROR, true)
+    if (!req._datadog.config.validateStatus(statusCode)) {
+      span.setTag(ERROR, error || true)
     }
   },
 
   // Add an error to the request
   addError (req, error) {
-    const span = req._datadog.span
-
-    if (span && error instanceof Error) {
-      span.setTag(ERROR, error)
+    if (error instanceof Error) {
+      req._datadog.error = req._datadog.error || error
     }
   }
 }
