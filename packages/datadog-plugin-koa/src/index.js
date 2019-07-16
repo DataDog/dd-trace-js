@@ -2,25 +2,40 @@
 
 const web = require('../../dd-trace/src/plugins/util/web')
 
-function createWrapUse (tracer, config) {
+function createWrapCallback (tracer, config) {
   config = web.normalizeConfig(config)
 
-  function ddTrace (ctx, next) {
-    web.instrument(tracer, config, ctx.req, ctx.res, 'koa.request')
+  return function wrapCallback (callback) {
+    return function callbackWithTrace () {
+      const handleRequest = callback.apply(this, arguments)
 
-    web.beforeEnd(ctx.req, () => {
-      web.enterRoute(ctx.req, ctx.routePath)
-    })
-    return next()
+      return function handleRequestWithTrace (req, res) {
+        web.instrument(tracer, config, req, res, 'koa.request')
+
+        return handleRequest.apply(this, arguments)
+      }
+    }
   }
+}
 
+function createWrapCreateContext () {
+  return function wrapCreateContext (createContext) {
+    return function createContextWithTrace (req, res) {
+      const ctx = createContext.apply(this, arguments)
+
+      web.patch(req)
+      web.beforeEnd(req, () => {
+        web.enterRoute(ctx.req, ctx.routePath)
+      })
+
+      return ctx
+    }
+  }
+}
+
+function createWrapUse () {
   return function wrapUse (use) {
     return function useWithTrace () {
-      if (!this._datadog_trace_patched) {
-        this._datadog_trace_patched = true
-        use.call(this, ddTrace)
-      }
-
       const result = use.apply(this, arguments)
       const fn = this.middleware.pop()
 
@@ -83,9 +98,13 @@ module.exports = [
     name: 'koa',
     versions: ['>=2'],
     patch (Koa, tracer, config) {
+      this.wrap(Koa.prototype, 'callback', createWrapCallback(tracer, config))
+      this.wrap(Koa.prototype, 'createContext', createWrapCreateContext(tracer, config))
       this.wrap(Koa.prototype, 'use', createWrapUse(tracer, config))
     },
     unpatch (Koa) {
+      this.unwrap(Koa.prototype, 'callback')
+      this.unwrap(Koa.prototype, 'createContext')
       this.unwrap(Koa.prototype, 'use')
     }
   },
