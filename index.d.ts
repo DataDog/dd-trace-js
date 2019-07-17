@@ -524,7 +524,7 @@ declare namespace plugins {
   interface amqplib extends Integration {}
 
   /**
-   * This plugin patches the [bluebird](https://github.com/squaremo/amqp.node)
+   * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
    * module to bind the promise callback the the caller context.
    */
   interface bluebird extends Integration {}
