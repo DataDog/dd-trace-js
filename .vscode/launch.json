@@ -7,20 +7,6 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Test Plugin",
-      "runtimeExecutable": "yarn",
-      "runtimeArgs": [
-        "tdd",
-        "${input:pluginName}",
-        "--inspect-brk=9229"
-      ],
-      "port": 9229,
-      "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen"
-    },
-    {
-      "type": "node",
-      "request": "launch",
       "name": "Test Current File",
       "runtimeExecutable": "yarn",
       "runtimeArgs": [
@@ -32,49 +18,5 @@
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
     },
-  ],
-  "inputs": [
-    {
-      "id": "pluginName",
-      "description": "Select the plugin to test",
-      "type": "pickString",
-      "options": [
-        "amqp10",
-        "amqplib",
-        "bluebird",
-        "bunyan",
-        "cassandra-driver",
-        "connect",
-        "dns",
-        "elasticsearch",
-        "express",
-        "fastify",
-        "generic-pool",
-        "graphql",
-        "hapi",
-        "http",
-        "http2",
-        "ioredis",
-        "knex",
-        "koa",
-        "memcached",
-        "mongodb-core",
-        "mysql",
-        "mysql2",
-        "net",
-        "paperplane",
-        "pg",
-        "pino",
-        "promise-js",
-        "promise",
-        "q",
-        "redis",
-        "restify",
-        "router",
-        "tedious",
-        "when",
-        "winston"
-      ]
-    }
   ]
 }

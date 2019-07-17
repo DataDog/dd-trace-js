@@ -13,14 +13,12 @@
 - [ ] API [documentation][3].
 - [ ] CircleCI [jobs/workflows][4].
 - [ ] Plugin is [exported][5].
-- [ ] Plugin is added to [debug configuration][6].
 
 [1]: https://github.com/DataDog/dd-trace-js/blob/master/index.d.ts
 [2]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
 [3]: https://github.com/DataDog/dd-trace-js/blob/master/docs/API.md
 [4]: https://github.com/DataDog/dd-trace-js/blob/master/.circleci/config.yml
 [5]: https://github.com/DataDog/dd-trace-js/blob/master/src/plugins/index.js
-[6]: https://github.com/DataDog/dd-trace-js/blob/master/.vscode/launch.json
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->
