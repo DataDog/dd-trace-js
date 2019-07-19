@@ -26,7 +26,22 @@ const then = (x, f) =>
 describe('Plugin', () => {
   let paperplane
   let server
+  let span
   let tracer
+
+  const sandbox = sinon.createSandbox()
+
+  before(() => {
+    sandbox.spy(console, 'info')
+  })
+
+  afterEach(() => {
+    sandbox.resetHistory()
+  })
+
+  after(() => {
+    sandbox.restore()
+  })
 
   describe('paperplane', () => {
     withVersions(plugin, 'paperplane', version => {
@@ -412,6 +427,22 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should not alter the behavior of `logger`', done => {
+          span = tracer.startSpan('test')
+
+          tracer.scope().activate(span, () => {
+            paperplane.logger({ message: ':datadoge:' })
+
+            expect(console.info).to.have.been.called
+
+            const record = JSON.parse(console.info.firstCall.args[0])
+
+            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('message', ':datadoge:')
+            done()
+          })
+        })
       })
 
       describe('with configuration', () => {
@@ -428,6 +459,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
+          tracer._tracer._logInjection = true
           paperplane = require(`../../../versions/paperplane@${version}`).get()
         })
 
@@ -520,6 +552,60 @@ describe('Plugin', () => {
                 .catch(done)
             })
           })
+        })
+
+        it('should add the trace ids to logs', done => {
+          span = tracer.startSpan('test')
+
+          tracer.scope().activate(span, () => {
+            paperplane.logger({ message: ':datadoge:' })
+
+            expect(console.info).to.have.been.called
+
+            const record = JSON.parse(console.info.firstCall.args[0])
+
+            expect(record).to.have.deep.property('dd', {
+              trace_id: span.context().toTraceId(),
+              span_id: span.context().toSpanId()
+            })
+
+            expect(record).to.have.property('message', ':datadoge:')
+            done()
+          })
+        })
+
+        it('should add the trace ids to error logs', done => {
+          span = tracer.startSpan('test')
+
+          tracer.scope().activate(span, () => {
+            const err = new Error('Bad things happened')
+            paperplane.logger(err)
+
+            expect(console.info).to.have.been.called
+
+            const record = JSON.parse(console.info.firstCall.args[0])
+
+            expect(record).to.have.deep.property('dd', {
+              trace_id: span.context().toTraceId(),
+              span_id: span.context().toSpanId()
+            })
+
+            expect(record).to.have.property('message', 'Bad things happened')
+            expect(record).to.have.property('name', 'Error')
+            expect(record).to.have.property('stack')
+            done()
+          })
+        })
+
+        it('should not alter logs with no active span', () => {
+          paperplane.logger({ message: ':datadoge:' })
+
+          expect(console.info).to.have.been.called
+
+          const record = JSON.parse(console.info.firstCall.args[0])
+
+          expect(record).to.not.have.property('dd')
+          expect(record).to.have.property('message', ':datadoge:')
         })
       })
     })
