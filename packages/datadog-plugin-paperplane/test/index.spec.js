@@ -432,6 +432,7 @@ describe('Plugin', () => {
           span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
+            /* eslint-disable no-console */
             paperplane.logger({ message: ':datadoge:' })
 
             expect(console.info).to.have.been.called
@@ -441,6 +442,7 @@ describe('Plugin', () => {
             expect(record).to.not.have.property('dd')
             expect(record).to.have.property('message', ':datadoge:')
             done()
+            /* eslint-enable no-console */
           })
         })
       })
@@ -558,6 +560,7 @@ describe('Plugin', () => {
           span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
+            /* eslint-disable no-console */
             paperplane.logger({ message: ':datadoge:' })
 
             expect(console.info).to.have.been.called
@@ -571,6 +574,7 @@ describe('Plugin', () => {
 
             expect(record).to.have.property('message', ':datadoge:')
             done()
+            /* eslint-enable no-console */
           })
         })
 
@@ -578,6 +582,7 @@ describe('Plugin', () => {
           span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
+            /* eslint-disable no-console */
             const err = new Error('Bad things happened')
             paperplane.logger(err)
 
@@ -594,10 +599,12 @@ describe('Plugin', () => {
             expect(record).to.have.property('name', 'Error')
             expect(record).to.have.property('stack')
             done()
+            /* eslint-enable no-console */
           })
         })
 
         it('should not alter logs with no active span', () => {
+          /* eslint-disable no-console */
           paperplane.logger({ message: ':datadoge:' })
 
           expect(console.info).to.have.been.called
@@ -606,6 +613,7 @@ describe('Plugin', () => {
 
           expect(record).to.not.have.property('dd')
           expect(record).to.have.property('message', ':datadoge:')
+          /* eslint-enable no-console */
         })
       })
     })
