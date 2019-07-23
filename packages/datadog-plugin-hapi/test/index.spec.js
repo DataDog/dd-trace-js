@@ -16,7 +16,7 @@ describe('Plugin', () => {
   let handler
 
   describe('hapi', () => {
-    withVersions(plugin, 'hapi', version => {
+    withVersions(plugin, ['hapi', '@hapi/hapi'], (version, module) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
@@ -29,7 +29,7 @@ describe('Plugin', () => {
       before(() => {
         return agent.load(plugin, 'hapi')
           .then(() => {
-            Hapi = require(`../../../versions/hapi@${version}`).get()
+            Hapi = require(`../../../versions/${module}@${version}`).get()
           })
       })
 
