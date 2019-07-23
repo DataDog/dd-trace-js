@@ -51,18 +51,7 @@ function createWrapDispatch (tracer, config) {
 module.exports = [
   {
     name: '@hapi/hapi',
-    versions: ['>=18.2'],
-    file: 'lib/request.js',
-    patch (Request, tracer, config) {
-      this.wrap(Request, 'generate', createWrapGenerate(tracer, config))
-    },
-    unpatch (Request) {
-      this.unwrap(Request, 'generate')
-    }
-  },
-  {
-    name: '@hapi/hapi',
-    versions: ['>=17.9 <18'],
+    versions: ['>=17.9'],
     file: 'lib/request.js',
     patch (Request, tracer, config) {
       this.wrap(Request, 'generate', createWrapGenerate(tracer, config))
@@ -73,18 +62,7 @@ module.exports = [
   },
   {
     name: 'hapi',
-    versions: ['18 - 18.1'],
-    file: 'lib/request.js',
-    patch (Request, tracer, config) {
-      this.wrap(Request, 'generate', createWrapGenerate(tracer, config))
-    },
-    unpatch (Request) {
-      this.unwrap(Request, 'generate')
-    }
-  },
-  {
-    name: 'hapi',
-    versions: ['17.1 - 17.8'],
+    versions: ['>=17.1'],
     file: 'lib/request.js',
     patch (Request, tracer, config) {
       this.wrap(Request, 'generate', createWrapGenerate(tracer, config))
@@ -117,29 +95,7 @@ module.exports = [
   },
   {
     name: '@hapi/hapi',
-    versions: ['>=18.2'],
-    file: 'lib/core.js',
-    patch (Core, tracer, config) {
-      this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
-    },
-    unpatch (Core) {
-      this.unwrap(Core.prototype, '_dispatch')
-    }
-  },
-  {
-    name: '@hapi/hapi',
-    versions: ['>=17.9 <18'],
-    file: 'lib/core.js',
-    patch (Core, tracer, config) {
-      this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
-    },
-    unpatch (Core) {
-      this.unwrap(Core.prototype, '_dispatch')
-    }
-  },
-  {
-    name: 'hapi',
-    versions: ['18 - 18.1'],
+    versions: ['>=17.9'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
       this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
@@ -161,7 +117,7 @@ module.exports = [
   },
   {
     name: 'hapi',
-    versions: ['17 - 17.8'],
+    versions: ['>=17'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
       this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
