@@ -5,7 +5,7 @@ const fs = require('fs')
 const title = require('./helpers/title')
 const execSync = require('./helpers/exec')
 const git = require('./helpers/git')
-const harness = require('../packages/dd-trace/test/plugins/harness')
+const executeTest = require('../packages/dd-trace/test/plugins/harness')
 
 // Get the plugin whose external tests we want to run
 const plugin = process.argv[2]
@@ -34,6 +34,14 @@ for (let i = 0; i < testConfigs.length; ++i) {
   // Print out the test config name
   title(testConfig.name)
 
+  // Get the integration
+  const integrationPath = grabIntegration(testConfig)
+
+  // Execute tests through harness
+  executeTest(testConfig, integrationPath)
+}
+
+function grabIntegration (testConfig) {
   // Make a folder for the repos, if it doesn't already exist
   const basePath = path.join(__dirname, '..')
   execSync('mkdir -p "repos"', { cwd: basePath })
@@ -44,24 +52,19 @@ for (let i = 0; i < testConfigs.length; ++i) {
 
   // Get the repo name from the URL
   const integrationReposPath = path.join(baseReposPath, testConfig.integration)
-  git.cloneOrPull(testConfig.repo, { cwd: integrationReposPath })
+  git.cloneWithBranch(testConfig.repo, testConfig.branch, { cwd: integrationReposPath })
 
-  // Checkout the branch, if we have to
-  const currentRepoPath = path.join(integrationReposPath, git.getRepoName(testConfig.repo))
+  // CLone the repo, with the branch if it's set
+  let integrationDir
   if (testConfig.branch) {
-    git.checkout(testConfig.branch, { cwd: currentRepoPath })
+    integrationDir = `${git.getRepoName(testConfig.repo)}@${testConfig.branch}`
   } else {
-    git.checkoutDefault({ cwd: currentRepoPath })
+    integrationDir = git.getRepoName(testConfig.repo)
   }
 
-  // Execute mocha with setup code
-  switch (testConfig.testType) {
-    case 'mocha':
-      harness.executeMocha(testConfig.testArgs, { cwd: currentRepoPath })
-      break
-    default:
-      throw new Error(`'${testConfig.testType}' is an unsupported test framework`)
-  }
+  const currentIntegrationDir = path.join(integrationReposPath, integrationDir)
+
+  return currentIntegrationDir
 }
 
 function normalizeConfig (defaultConfig, testConfig) {
@@ -81,6 +84,7 @@ function normalizeConfig (defaultConfig, testConfig) {
     integration: testConfig.integration || defaultConfig.integration,
     repo: testConfig.repo || defaultConfig.repo,
     branch: testConfig.branch || defaultConfig.branch,
+    pretestCmd: testConfig.pretestCmd || defaultConfig.pretestCmd,
     testType: testConfig.testType || defaultConfig.testType,
     testArgs: testConfig.testArgs || defaultConfig.testArgs
   }

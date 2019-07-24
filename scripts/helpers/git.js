@@ -1,11 +1,19 @@
 'use strict'
 
 const execSync = require('child_process').execSync
+const fs = require('fs')
+const path = require('path')
 const basename = require('path').basename
 
-function cloneOrPull (repo, options) {
+function cloneWithBranch (repo, branch, options) {
   const repoName = getRepoName(repo)
-  return execSync(`git -C ${repoName} pull || git clone ${repo}`, options)
+  const dir = branch ? `${repoName}@${branch}` : repoName
+  const cwd = options.cwd || process.cwd()
+
+  if (fs.existsSync(path.join(cwd, dir))) {
+    return execSync(`git -C ${dir} pull`, options)
+  }
+  return execSync(`git clone -b ${branch} ${repo} '${repoName}@${branch}'`, options)
 }
 
 function checkoutDefault (options) {
@@ -22,7 +30,7 @@ function getRepoName (repo) {
 }
 
 module.exports = {
-  cloneOrPull,
+  cloneWithBranch,
   checkoutDefault,
   checkout,
   getRepoName
