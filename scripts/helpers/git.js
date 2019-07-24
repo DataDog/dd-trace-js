@@ -6,14 +6,23 @@ const path = require('path')
 const basename = require('path').basename
 
 function cloneWithBranch (repo, branch, options) {
-  const repoName = getRepoName(repo)
-  const dir = branch ? `${repoName}@${branch}` : repoName
   const cwd = options.cwd || process.cwd()
 
-  if (fs.existsSync(path.join(cwd, dir))) {
-    return execSync(`git -C ${dir} pull`, options)
+  const repoName = getRepoName(repo)
+  let dir
+  let branchArgs
+  if (branch) {
+    dir = `${repoName}@${branch}`
+    branchArgs = `-b ${branch} '${repoName}@${branch}'`
+  } else {
+    dir = repoName
+    branchArgs = ''
   }
-  return execSync(`git clone -b ${branch} ${repo} '${repoName}@${branch}'`, options)
+
+  if (fs.existsSync(path.join(cwd, dir))) {
+    return execSync(`git -C '${dir}' fetch --depth 1`, options)
+  }
+  return execSync(`git clone --depth 1 --single-branch ${repo} ${branchArgs}`, options)
 }
 
 function checkoutDefault (options) {

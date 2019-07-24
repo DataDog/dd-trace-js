@@ -13,10 +13,10 @@ const testConfigs = [
     branch: '2.30.2'
   },
   {
-    branch: '3.6.2'
+    branch: '3.0.0'
   },
   {
-    branch: 'master'
+    branch: undefined
   }
 ]
 

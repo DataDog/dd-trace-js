@@ -2,6 +2,7 @@
 
 const execSync = require('child_process').execSync
 const executeMocha = require('./mocha')
+const executeLab = require('./lab')
 
 function executeTest (testConfig, integrationPath) {
   // Execute pretest command, if any
@@ -13,6 +14,9 @@ function executeTest (testConfig, integrationPath) {
   switch (testConfig.testType) {
     case 'mocha':
       executeMocha(testConfig.testArgs, { cwd: integrationPath })
+      break
+    case 'lab':
+      executeLab(testConfig.testArgs, { cwd: integrationPath })
       break
     default:
       throw new Error(`'${testConfig.testType}' is an unsupported test framework`)
