@@ -98,6 +98,8 @@ class DatadogSpan extends Span {
   }
 
   _addTags (keyValuePairs) {
+    if (!keyValuePairs) return
+
     if (typeof keyValuePairs === 'string') {
       return this._addTags(
         keyValuePairs
