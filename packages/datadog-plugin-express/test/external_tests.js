@@ -5,7 +5,7 @@ const defaultConfig = {
   repo: 'https://github.com/expressjs/express',
   pretestCmd: 'npm install',
   testType: 'mocha',
-  testArgs: '--require test/support/env --reporter spec --bail --check-leaks test/ test/acceptance/'
+  testArgs: '--require test/support/env --reporter spec --check-leaks test/ test/acceptance/'
 }
 
 const testConfigs = [
