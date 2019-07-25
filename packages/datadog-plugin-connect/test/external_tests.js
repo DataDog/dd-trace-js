@@ -5,7 +5,7 @@ const defaultConfig = {
   repo: 'https://github.com/senchalabs/connect/',
   pretestCmd: 'npm install',
   testType: 'mocha',
-  testArgs: '--require test/support/env --reporter spec --bail --check-leaks test/'
+  testArgs: '--require test/support/env --reporter spec --check-leaks test/'
 }
 
 const testConfigs = [

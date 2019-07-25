@@ -2,9 +2,8 @@
 
 const path = require('path')
 const fs = require('fs')
-const title = require('./helpers/title')
-const execSync = require('./helpers/exec')
 const git = require('./helpers/git')
+const title = require('./helpers/title')
 const executeTest = require('../packages/dd-trace/test/plugins/harness')
 
 // Get the plugin whose external tests we want to run
@@ -44,27 +43,20 @@ for (let i = 0; i < testConfigs.length; ++i) {
 function grabIntegration (testConfig) {
   // Make a folder for the repos, if it doesn't already exist
   const basePath = path.join(__dirname, '..')
-  execSync('mkdir -p "repos"', { cwd: basePath })
 
-  // Make a folder for any repos for the integration
-  const baseReposPath = path.join(basePath, 'repos')
-  execSync(`mkdir -p '${testConfig.integration}'`, { cwd: baseReposPath })
-
-  // Get the repo name from the URL
-  const integrationReposPath = path.join(baseReposPath, testConfig.integration)
-  git.cloneWithBranch(testConfig.repo, testConfig.branch, { cwd: integrationReposPath })
-
-  // CLone the repo, with the branch if it's set
-  let integrationDir
+  // Set up the download path for the integration
+  let integrationVersionPath
   if (testConfig.branch) {
-    integrationDir = `${git.getRepoName(testConfig.repo)}@${testConfig.branch}`
+    integrationVersionPath = `${testConfig.integration}@${testConfig.branch}`
   } else {
-    integrationDir = git.getRepoName(testConfig.repo)
+    integrationVersionPath = testConfig.integration
   }
 
-  const currentIntegrationDir = path.join(integrationReposPath, integrationDir)
+  const integrationPath = path.join(basePath, 'repos', integrationVersionPath, 'node_modules', testConfig.integration)
 
-  return currentIntegrationDir
+  git.cloneWithBranch(testConfig.repo, integrationPath, testConfig.branch, { cwd: basePath })
+
+  return integrationPath
 }
 
 function normalizeConfig (defaultConfig, testConfig) {

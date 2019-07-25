@@ -7,4 +7,4 @@ const options = { stdio: [0, 1, 2] }
 execSync(`echo "${color.GRAY}# Injecting tracer ${color.NONE}"`, options)
 
 // Require the tracer before running any external tests
-require('../../../dd-trace')
+require('../../../dd-trace').init()
