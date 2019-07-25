@@ -115,7 +115,7 @@ function getReferences (references) {
 
     const spanContext = ref.referencedContext()
 
-    if (ref.type() !== REFERENCE_NOOP && !(spanContext instanceof SpanContext)) {
+    if (ref.type() !== REFERENCE_NOOP && spanContext && !(spanContext instanceof SpanContext)) {
       log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
       return false
     }
