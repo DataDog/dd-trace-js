@@ -5,6 +5,7 @@ const fs = require('fs')
 const git = require('./helpers/git')
 const title = require('./helpers/title')
 const executeTest = require('../packages/dd-trace/test/plugins/harness')
+const execSync = require('./helpers/exec')
 
 // Get the plugin whose external tests we want to run
 const plugin = process.argv[2]
@@ -34,10 +35,10 @@ for (let i = 0; i < testConfigs.length; ++i) {
   title(testConfig.name)
 
   // Get the integration
-  const integrationPath = grabIntegration(testConfig)
+  const executionPath = grabIntegration(testConfig)
 
   // Execute tests through harness
-  executeTest(testConfig, integrationPath)
+  executeTest(testConfig, executionPath)
 }
 
 function grabIntegration (testConfig) {
@@ -54,9 +55,15 @@ function grabIntegration (testConfig) {
 
   const integrationPath = path.join(basePath, 'repos', integrationVersionPath, 'node_modules', testConfig.integration)
 
+  // Clone the repo
   git.cloneWithBranch(testConfig.repo, integrationPath, testConfig.branch, { cwd: basePath })
 
-  return integrationPath
+  // Execute the build command, if it exists
+  if (testConfig.setup) {
+    testConfig.setup(integrationPath)
+  }
+
+  return testConfig.localCwd ? path.join(integrationPath, testConfig.localCwd) : integrationPath
 }
 
 function normalizeConfig (defaultConfig, testConfig) {
@@ -76,12 +83,14 @@ function normalizeConfig (defaultConfig, testConfig) {
     integration: testConfig.integration || defaultConfig.integration,
     repo: testConfig.repo || defaultConfig.repo,
     branch: testConfig.branch || defaultConfig.branch,
-    pretestCmd: testConfig.pretestCmd || defaultConfig.pretestCmd,
     testType: testConfig.testType || defaultConfig.testType,
-    testArgs: testConfig.testArgs || defaultConfig.testArgs
+    testArgs: testConfig.testArgs || defaultConfig.testArgs,
+    localCwd: testConfig.localCwd || defaultConfig.localCwd,
+    setup: testConfig.setup || defaultConfig.setup
   }
 
-  config.name = config.branch ? `${config.integration} (${config.branch})` : config.integration
+  config.name = testConfig.name || defaultConfig.name ||
+    config.branch ? `${config.integration} (${config.branch})` : config.integration
 
   return config
 }

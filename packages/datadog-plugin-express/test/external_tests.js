@@ -1,11 +1,15 @@
 'use strict'
 
+const execSync = require('child_process').execSync
+
 const defaultConfig = {
   integration: 'express',
   repo: 'https://github.com/expressjs/express',
-  pretestCmd: 'npm install',
   testType: 'mocha',
-  testArgs: '--require test/support/env --reporter spec --check-leaks test/ test/acceptance/'
+  testArgs: '--require test/support/env --reporter spec --check-leaks test/ test/acceptance/',
+  setup: function (cwd) {
+    execSync('npm install', { cwd })
+  }
 }
 
 const testConfigs = [
@@ -16,7 +20,7 @@ const testConfigs = [
     branch: '5.x'
   },
   {
-    branch: 'master'
+    branch: undefined
   }
 ]
 
