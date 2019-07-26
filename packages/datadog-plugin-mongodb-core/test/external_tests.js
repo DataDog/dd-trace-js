@@ -9,16 +9,13 @@ const defaultConfig = {
   repo: 'https://github.com/mongodb-js/mongodb-core',
   testType: 'custom',
   testFn: function (tracerSetupPath, options) {
-    const cwd = options.cwd
-    const tracerSetupFilename = path.basename(tracerSetupPath)
-    const tracerSetupFileLoc = path.join(cwd, 'test', 'tests', tracerSetupFilename)
-    if (fs.existsSync(tracerSetupFileLoc)) {
-      fs.copyFileSync(tracerSetupPath, tracerSetupFileLoc)
-    }
-    return execSync('npm run env -- mongodb-test-runner -t 60000 test/tests', options)
+    options.stdio = [0, 1, 2]
+    try {
+      execSync(`npm run env -- mongodb-test-runner -t 60000 '${tracerSetupPath}' test/tests`, options)
+    } catch (error) {} // eslint-disable-line no-empty
   },
   setup: function (cwd) {
-    execSync('npm install', { cwd })
+    return execSync('npm install', { cwd })
   }
 }
 

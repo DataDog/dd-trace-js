@@ -57,7 +57,7 @@ function grabIntegration (testConfig) {
   // Clone the repo
   git.cloneWithBranch(testConfig.repo, integrationPath, testConfig.branch, { cwd: basePath })
 
-  // Execute the build command, if it exists
+  // Execute the setup function, if it exists
   if (testConfig.setup) {
     testConfig.setup(integrationPath)
   }
