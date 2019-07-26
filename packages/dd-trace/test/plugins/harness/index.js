@@ -1,7 +1,8 @@
 'use strict'
 
-const executeMocha = require('./mocha')
 const executeLab = require('./lab')
+const executeMocha = require('./mocha')
+const executeTap = require('./tap')
 const executeCustom = require('./custom')
 
 function executeTest (testConfig, executionPath) {
@@ -9,11 +10,14 @@ function executeTest (testConfig, executionPath) {
 
   // Run the test framework harness
   switch (testConfig.testType) {
+    case 'lab':
+      executeLab(testConfig.testArgs, options)
+      break
     case 'mocha':
       executeMocha(testConfig.testArgs, options)
       break
-    case 'lab':
-      executeLab(testConfig.testArgs, options)
+    case 'tap':
+      executeTap(testConfig.testArgs, options)
       break
     case 'custom':
       executeCustom(testConfig, options)
