@@ -5,7 +5,6 @@ const fs = require('fs')
 const git = require('./helpers/git')
 const title = require('./helpers/title')
 const executeTest = require('../packages/dd-trace/test/plugins/harness')
-const execSync = require('./helpers/exec')
 
 // Get the plugin whose external tests we want to run
 const plugin = process.argv[2]
@@ -67,30 +66,39 @@ function grabIntegration (testConfig) {
 }
 
 function normalizeConfig (defaultConfig, testConfig) {
-  if (!defaultConfig.integration && !testConfig.integration) {
-    throw new Error('All test configurations must have an "integration" field')
-  }
-
-  if (!defaultConfig.repo && !testConfig.repo) {
-    throw new Error('All test configurations must have a "repo" field')
-  }
-
-  if (!defaultConfig.testType && !testConfig.testType) {
-    throw new Error('All test configurations must have an "testType" field')
-  }
-
   const config = {
     integration: testConfig.integration || defaultConfig.integration,
     repo: testConfig.repo || defaultConfig.repo,
     branch: testConfig.branch || defaultConfig.branch,
     testType: testConfig.testType || defaultConfig.testType,
-    testArgs: testConfig.testArgs || defaultConfig.testArgs,
     localCwd: testConfig.localCwd || defaultConfig.localCwd,
     setup: testConfig.setup || defaultConfig.setup
   }
 
   config.name = testConfig.name || defaultConfig.name ||
     config.branch ? `${config.integration} (${config.branch})` : config.integration
+
+  if (config.testType === 'custom') {
+    config.testFn = testConfig.testFn || defaultConfig.testFn
+  } else {
+    config.testArgs = testConfig.testArgs || defaultConfig.testArgs
+  }
+
+  if (!config.integration) {
+    throw new Error('All test configurations must have an "integration" field')
+  }
+
+  if (!config.repo) {
+    throw new Error('All test configurations must have a "repo" field')
+  }
+
+  if (!config.testType) {
+    throw new Error('All test configurations must have a "testType" field')
+  }
+
+  if (config.testType === 'custom' && !config.testFn) {
+    throw new Error('All "custom" test configurations must have a "testFn" field')
+  }
 
   return config
 }

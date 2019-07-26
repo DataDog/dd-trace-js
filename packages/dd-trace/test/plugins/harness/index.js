@@ -1,22 +1,22 @@
 'use strict'
 
-const execSync = require('child_process').execSync
 const executeMocha = require('./mocha')
 const executeLab = require('./lab')
+const executeCustom = require('./custom')
 
-function executeTest (testConfig, integrationPath) {
-  // Execute pretest command, if any
-  if (testConfig.pretestCmd) {
-    execSync(testConfig.pretestCmd, { cwd: integrationPath })
-  }
+function executeTest (testConfig, executionPath) {
+  const options = { cwd: executionPath }
 
   // Run the test framework harness
   switch (testConfig.testType) {
     case 'mocha':
-      executeMocha(testConfig.testArgs, { cwd: integrationPath })
+      executeMocha(testConfig.testArgs, options)
       break
     case 'lab':
-      executeLab(testConfig.testArgs, { cwd: integrationPath })
+      executeLab(testConfig.testArgs, options)
+      break
+    case 'custom':
+      executeCustom(testConfig, options)
       break
     default:
       throw new Error(`'${testConfig.testType}' is an unsupported test framework`)
