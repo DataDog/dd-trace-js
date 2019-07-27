@@ -255,10 +255,16 @@ describe('Plugin', () => {
         })
 
         it('should run the emitter in the scope of the caller', done => {
+          let emitter = null
+
           const client = buildClient({
-            getUnary: (emitter, callback) => {
-              emitter.on('cancelled', () => {
-                expect(tracer.scope().active()).to.not.be.null
+            getUnary: (call, callback) => {
+              const span = tracer.scope().active()
+
+              emitter = call
+              emitter.on('test', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                expect(span).to.not.be.null
                 done()
               })
 
@@ -266,7 +272,9 @@ describe('Plugin', () => {
             }
           })
 
-          client.getUnary({ first: 'foobar' }, () => {})
+          client.getUnary({ first: 'foobar' }, () => {
+            emitter.emit('test')
+          })
         })
       })
 
