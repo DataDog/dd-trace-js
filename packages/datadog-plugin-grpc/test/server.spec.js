@@ -137,7 +137,7 @@ describe('Plugin', () => {
         })
 
         it('should handle cancelled `unary` calls', done => {
-          let call // eslint-disable-line prefer-const
+          let call = null
           const client = buildClient({
             getUnary: () => call.cancel()
           })
@@ -153,7 +153,7 @@ describe('Plugin', () => {
         })
 
         it('should handle cancelled `stream` calls', done => {
-          let call // eslint-disable-line prefer-const
+          let call = null
           const client = buildClient({
             getStream: () => call.cancel()
           })
@@ -169,7 +169,7 @@ describe('Plugin', () => {
         })
 
         it('should handle cancelled `bidi` calls', done => {
-          let call // eslint-disable-line prefer-const
+          let call = null
           const client = buildClient({
             getBidi: () => call.cancel()
           })
