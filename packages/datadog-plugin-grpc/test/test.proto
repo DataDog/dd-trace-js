@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package test;
+
 service TestService {
   rpc getBidi (stream Request) returns (stream Empty) {}
   rpc getStream (Request) returns (stream Empty) {}

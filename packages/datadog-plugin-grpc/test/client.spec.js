@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const plugin = require('../src/client')
 const Readable = require('stream').Readable
+const kinds = require('../src/kinds')
 
 wrapIt()
 
@@ -11,6 +12,7 @@ describe('Plugin', () => {
   let grpc
   let port
   let server
+  let tracer
 
   function buildClient (service) {
     service = Object.assign({
@@ -21,7 +23,7 @@ describe('Plugin', () => {
 
     const loader = require('../../../versions/@grpc/proto-loader').get()
     const definition = loader.loadSync(`${__dirname}/test.proto`)
-    const TestService = grpc.loadPackageDefinition(definition).TestService
+    const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
     server = new grpc.Server()
 
@@ -48,12 +50,13 @@ describe('Plugin', () => {
         before(() => {
           return agent.load(plugin, 'grpc', { server: false })
             .then(() => {
+              tracer = require('../../dd-trace')
               grpc = require(`../../../versions/grpc@${version}`).get()
             })
         })
 
         after(() => {
-          agent.close()
+          return agent.close()
         })
 
         it('should handle `unary` calls', done => {
@@ -66,14 +69,16 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/TestService/getUnary',
+                resource: '/test.TestService/getUnary',
                 meta: {
                   'grpc.method.name': 'getUnary',
                   'grpc.method.service': 'TestService',
-                  'grpc.method.path': '/TestService/getUnary',
-                  'grpc.method.type': 'unary',
+                  'grpc.method.package': 'test',
+                  'grpc.method.path': '/test.TestService/getUnary',
+                  'grpc.method.kind': kinds.unary,
                   'grpc.status.code': '0',
-                  'span.kind': 'client'
+                  'span.kind': 'client',
+                  'component': 'grpc'
                 }
               })
             })
@@ -85,7 +90,9 @@ describe('Plugin', () => {
 
         it('should handle `stream` calls', done => {
           const client = buildClient({
-            getStream: stream => stream.end()
+            getStream: stream => {
+              stream.end()
+            }
           })
 
           agent
@@ -93,21 +100,25 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/TestService/getStream',
+                resource: '/test.TestService/getStream',
                 meta: {
                   'grpc.method.name': 'getStream',
                   'grpc.method.service': 'TestService',
-                  'grpc.method.path': '/TestService/getStream',
-                  'grpc.method.type': 'server_stream',
+                  'grpc.method.package': 'test',
+                  'grpc.method.path': '/test.TestService/getStream',
+                  'grpc.method.kind': kinds.server_stream,
                   'grpc.status.code': '0',
-                  'span.kind': 'client'
+                  'span.kind': 'client',
+                  'component': 'grpc'
                 }
               })
             })
             .then(done)
             .catch(done)
 
-          client.getStream({ first: 'foobar' }, () => {})
+          const call = client.getStream({ first: 'foobar' })
+
+          call.on('data', () => {})
         })
 
         it('should handle `bidi` calls', done => {
@@ -120,23 +131,25 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/TestService/getBidi'
+                resource: '/test.TestService/getBidi'
               })
               expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getBidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/TestService/getBidi')
-              expect(traces[0][0].meta).to.have.property('grpc.method.type', 'bidi')
+              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
+              expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.bidi)
               expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             })
             .then(done)
             .catch(done)
 
-          client.getBidi(new Readable(), () => {})
+          const call = client.getBidi(new Readable())
+
+          call.on('data', () => {})
         })
 
         it('should handle cancelled `unary` calls', done => {
-          let call // eslint-disable-line prefer-const
+          let call = null
           const client = buildClient({
             getUnary: () => call.cancel()
           })
@@ -152,7 +165,7 @@ describe('Plugin', () => {
         })
 
         it('should handle cancelled `stream` calls', done => {
-          let call // eslint-disable-line prefer-const
+          let call = null
           const client = buildClient({
             getStream: () => call.cancel()
           })
@@ -164,11 +177,12 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          call = client.getStream({ first: 'foobar' }, () => {})
+          call = client.getStream({ first: 'foobar' })
+          call.on('data', () => {})
         })
 
         it('should handle cancelled `bidi` calls', done => {
-          let call // eslint-disable-line prefer-const
+          let call = null
           const client = buildClient({
             getBidi: () => call.cancel()
           })
@@ -181,6 +195,7 @@ describe('Plugin', () => {
             .catch(done)
 
           call = client.getBidi(new Readable(), () => {})
+          call.on('data', () => {})
         })
 
         it('should handle errors', done => {
@@ -190,19 +205,20 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0]).to.deep.include({
-                error: 1,
-                meta: {
-                  'error.msg': 'foobar',
-                  'error.type': 'Error',
-                  'grpc.method.name': 'getUnary',
-                  'grpc.method.service': 'TestService',
-                  'grpc.method.path': '/TestService/getUnary',
-                  'grpc.method.type': 'unary',
-                  'grpc.status.code': '2',
-                  'span.kind': 'client'
-                }
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.include({
+                'error.msg': '2 UNKNOWN: foobar',
+                'error.type': 'Error',
+                'grpc.method.name': 'getUnary',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': kinds.unary,
+                'grpc.status.code': '2',
+                'span.kind': 'client',
+                'component': 'grpc'
               })
+              expect(traces[0][0].meta).to.have.property('error.stack')
             })
             .then(done)
             .catch(done)
@@ -224,6 +240,20 @@ describe('Plugin', () => {
 
           client.getUnary({ first: 'foobar' }, done)
         })
+
+        it('should propagate the parent scope to the callback', done => {
+          const span = {}
+          const client = buildClient({
+            getUnary: (call, callback) => callback()
+          })
+
+          tracer.scope().activate(span, () => {
+            client.getUnary({ first: 'foobar' }, (err, response) => {
+              expect(tracer.scope().active()).to.equal(span)
+              done(err)
+            })
+          })
+        })
       })
 
       describe('with service configuration', () => {
@@ -242,7 +272,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          agent.close()
+          return agent.close()
         })
 
         it('should be configured with the correct values', done => {
@@ -263,77 +293,6 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with a fields function', () => {
-        before(() => {
-          const config = {
-            client: {
-              fields: values => Object.assign({ extra: 'field' }, values)
-            },
-            server: false
-          }
-
-          return agent.load(plugin, 'grpc', config)
-            .then(() => {
-              grpc = require(`../../../versions/grpc@${version}`).get()
-            })
-        })
-
-        after(() => {
-          agent.close()
-        })
-
-        it('should handle a fields function', done => {
-          const client = buildClient({
-            getUnary: (_, callback) => callback()
-          })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.request.message.fields.extra', 'field')
-              expect(traces[0][0].meta).to.have.property('grpc.request.message.fields.first', 'foobar')
-            })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
-        })
-      })
-
-      describe('with a fields array', () => {
-        before(() => {
-          const config = {
-            client: {
-              fields: ['second']
-            },
-            server: false
-          }
-
-          return agent.load(plugin, 'grpc', config)
-            .then(() => {
-              grpc = require(`../../../versions/grpc@${version}`).get()
-            })
-        })
-
-        after(() => {
-          agent.close()
-        })
-
-        it('should handle a fields array', done => {
-          const client = buildClient({
-            getUnary: (_, callback) => callback()
-          })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.request.message.fields.second', '10')
-            })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar', second: 10 }, () => {})
-        })
-      })
-
       describe('with a metadata function', () => {
         before(() => {
           const config = {
@@ -350,7 +309,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          agent.close()
+          return agent.close()
         })
 
         it('should handle request metadata', done => {
@@ -410,7 +369,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          agent.close()
+          return agent.close()
         })
 
         it('should handle request metadata', done => {
@@ -423,8 +382,8 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.deep.include({
                 'grpc.method.name': 'getUnary',
                 'grpc.method.service': 'TestService',
-                'grpc.method.path': '/TestService/getUnary',
-                'grpc.method.type': 'unary',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': 'unary',
                 'grpc.request.metadata.foo': 'bar',
                 'span.kind': 'client'
               })
@@ -457,8 +416,8 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.deep.include({
                 'grpc.method.name': 'getUnary',
                 'grpc.method.service': 'TestService',
-                'grpc.method.path': '/TestService/getUnary',
-                'grpc.method.type': 'unary',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': 'unary',
                 'grpc.response.metadata.foo': 'bar',
                 'grpc.status.code': '0',
                 'span.kind': 'client'

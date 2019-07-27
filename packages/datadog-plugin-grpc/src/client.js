@@ -1,148 +1,173 @@
 'use strict'
 
-const log = require('../../dd-trace/src/log')
-const pick = require('lodash.pick')
 const Tags = require('../../../ext/tags')
 const TEXT_MAP = require('../../../ext/formats').TEXT_MAP
+const kinds = require('./kinds')
+const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
-function getFilter (config, filter) {
-  if (typeof config[filter] === 'function') {
-    return config[filter]
+function createWrapMakeClientConstructor (tracer, config, grpc) {
+  config = config.client || config
+
+  return function wrapMakeClientConstructor (makeClientConstructor) {
+    return function makeClientConstructorWithTrace (methods) {
+      const ServiceClient = makeClientConstructor.apply(this, arguments)
+      const proto = ServiceClient.prototype
+
+      Object.keys(methods)
+        .forEach(method => {
+          const originalName = methods[method].originalName
+
+          proto[method] = wrapMethod(proto[method], methods[method], tracer, config, grpc)
+
+          if (originalName) {
+            proto[originalName] = wrapMethod(proto[originalName], methods[originalName], tracer, config, grpc)
+          }
+        })
+
+      return ServiceClient
+    }
   }
-
-  if (config[filter] instanceof Array) {
-    return element => pick(element, config[filter])
-  }
-
-  if (config.hasOwnProperty(filter)) {
-    log.error(`Expected '${filter}' to be an array or function.`)
-  }
-
-  return null
 }
 
-function getMethodType (definition) {
-  if (definition.requestStream) {
-    if (definition.responseStream) {
-      return 'bidi'
+function wrapMethod (method, definition, tracer, config, grpc) {
+  if (typeof method !== 'function' || !definition.path) return method
+
+  const filter = getFilter(config, 'metadata')
+
+  const methodWithTrace = function methodWithTrace () {
+    const args = normalize(arguments, grpc)
+    const length = args.length
+    const metadata = args[1]
+    const callback = args[length - 1]
+    const scope = tracer.scope()
+    const span = startSpan(tracer, config, definition, filter)
+
+    addMetadataTags(span, metadata, filter, 'request')
+
+    inject(tracer, span, metadata)
+
+    if (!definition.responseStream) {
+      if (typeof callback === 'function') {
+        args[length - 1] = wrapCallback(span, callback)
+      } else {
+        args[length] = wrapCallback(span)
+      }
     }
 
-    return 'client_stream'
+    const call = scope.bind(method, span).apply(this, args)
+
+    call.once('error', err => span.setTag('error', err))
+    call.once('status', status => {
+      span.setTag('grpc.status.code', status.code)
+
+      addMetadataTags(span, status.metadata, filter, 'response')
+
+      span.finish()
+    })
+
+    return scope.bind(call)
+  }
+
+  Object.assign(methodWithTrace, method)
+
+  return methodWithTrace
+}
+
+function wrapCallback (span, callback) {
+  const scope = span.tracer().scope()
+  const parent = scope.active()
+
+  return function (err) {
+    err && span.setTag('error', err)
+
+    if (callback) {
+      return scope.bind(callback, parent).apply(this, arguments)
+    }
+  }
+}
+
+function startSpan (tracer, config, definition) {
+  const path = definition.path
+  const methodKind = getMethodKind(definition)
+  const scope = tracer.scope()
+  const childOf = scope.active()
+  const span = tracer.startSpan('grpc.request', {
+    childOf,
+    tags: {
+      [Tags.SPAN_KIND]: 'client',
+      'resource.name': path,
+      'service.name': config.service || `${tracer._service}-grpc-client`,
+      'component': 'grpc'
+    }
+  })
+
+  addMethodTags(span, path, methodKind)
+
+  return span
+}
+
+function normalize (args, grpc) {
+  const normalized = [args[0]]
+
+  if (!args[1] || args[1].constructor.name !== 'Metadata') {
+    normalized.push(new grpc.Metadata())
+  }
+
+  for (let i = 1; i < args.length; i++) {
+    normalized.push(args[i])
+  }
+
+  return normalized
+}
+
+function inject (tracer, span, metadata) {
+  const carrier = {}
+
+  tracer.inject(span, TEXT_MAP, carrier)
+
+  for (const key in carrier) {
+    metadata.set(key, carrier[key])
+  }
+}
+
+function getMethodKind (definition) {
+  if (definition.requestStream) {
+    if (definition.responseStream) {
+      return kinds.bidi
+    }
+
+    return kinds.client_stream
   }
 
   if (definition.responseStream) {
-    return 'server_stream'
+    return kinds.server_stream
   }
 
-  return 'unary'
+  return kinds.unary
 }
 
-function patch (grpc, tracer, config) {
-  if (config.client === false) return
-
-  config = config.client || config
-
-  const configFields = getFilter(config, 'fields')
-  const configMetadata = getFilter(config, 'metadata')
-
-  function datadogInterceptor (options, nextCall) {
-    const path = options.method_definition.path
-    const methodParts = path.split('/')
-    const methodType = getMethodType(options.method_definition)
-    const scope = tracer.scopeManager().active()
-    const span = tracer.startSpan('grpc.request', {
-      childOf: scope && scope.span(),
-      tags: {
-        [Tags.SPAN_KIND]: 'client',
-        'grpc.method.name': methodParts[2],
-        'grpc.method.service': methodParts[1],
-        'grpc.method.path': path,
-        'grpc.method.type': methodType,
-        'resource.name': path,
-        'service.name': config.service || `${tracer._service}-grpc-client`
-      }
-    })
-
-    tracer.scopeManager().activate(span)
-
-    return new grpc.InterceptingCall(nextCall(options), {
-      sendMessage: (message, next) => {
-        if (configFields) {
-          const values = configFields(message)
-
-          for (const key in values) {
-            span.setTag(`grpc.request.message.fields.${key}`, values[key])
-          }
-        }
-
-        next(message)
-      },
-
-      cancel: () => {
-        span.setTag('grpc.status.code', grpc.status.CANCELLED)
-        span.finish()
-      },
-
-      start: (metadata, _listener, next) => {
-        if (configMetadata && metadata) {
-          const values = configMetadata(metadata.getMap())
-
-          for (const key in values) {
-            span.setTag(`grpc.request.metadata.${key}`, values[key])
-          }
-        }
-
-        // Inject tracing headers into the grpc call's metadata.
-        const tracingMetadata = metadata || new grpc.Metadata()
-        const meta = {}
-
-        tracer.inject(span, TEXT_MAP, meta)
-
-        for (const key in meta) {
-          tracingMetadata.set(key, meta[key])
-        }
-
-        next(tracingMetadata, {
-          onReceiveStatus: (status, next) => {
-            if (status.code !== 0) {
-              span.addTags({
-                'error.msg': status.details,
-                'error.type': 'Error'
-              })
-            }
-
-            if (configMetadata) {
-              const values = configMetadata(status.metadata.getMap())
-
-              for (const key in values) {
-                span.setTag(`grpc.response.metadata.${key}`, values[key])
-              }
-            }
-
-            span.setTag('grpc.status.code', status.code)
-            span.finish()
-
-            next(status)
-          }
-        })
-      }
-    })
-  }
-
-  this.wrap(grpc.Client.prototype, 'resolveCallInterceptors', resolveCallInterceptors => {
-    return function resolveCallInterceptorsWithTrace () {
-      return [datadogInterceptor].concat(resolveCallInterceptors.call(this, arguments))
+module.exports = [
+  {
+    name: 'grpc',
+    versions: ['>=1.13'],
+    patch (grpc) {
+      grpc.Client._datadog = { grpc }
+    },
+    unpatch (grpc) {
+      delete grpc.Client._datadog
     }
-  })
-}
+  },
+  {
+    name: 'grpc',
+    versions: ['>=1.13'],
+    file: 'src/client.js',
+    patch (client, tracer, config) {
+      const grpc = client.Client._datadog.grpc
 
-function unpatch (grpc) {
-  this.unwrap(grpc.Client.prototype, 'resolveCallInterceptors')
-}
-
-module.exports = [{
-  name: 'grpc',
-  versions: ['>=1.13'],
-  patch,
-  unpatch
-}]
+      this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config, grpc))
+    },
+    unpatch (client) {
+      this.unwrap(client, 'makeClientConstructor')
+    }
+  }
+]
