@@ -109,7 +109,7 @@ function startSpan (tracer, config, definition) {
 function ensureMetadata (args, grpc) {
   const normalized = [args[0]]
 
-  if (!args[1] || args[1].constructor.name !== 'Metadata') {
+  if (!args[1] || !args[1].constructor || args[1].constructor.name !== 'Metadata') {
     normalized.push(new grpc.Metadata())
   }
 
