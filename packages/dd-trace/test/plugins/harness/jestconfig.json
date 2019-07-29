@@ -1,0 +1,10 @@
+{
+  "testMatch": ["**/test/!(helpers)/*.js"],
+  "testPathIgnorePatterns": ["<rootDir>/node_modules/"],
+  "bail": false,
+  "verbose": true,
+  "testEnvironment": "<rootDir>/dd-trace-env.js",
+  "haste": {
+    "providesModuleNodeModules": ["koa"]
+  }
+}
