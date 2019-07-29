@@ -3,6 +3,7 @@
 const axios = require('axios')
 const getPort = require('get-port')
 const http = require('http')
+const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -26,7 +27,22 @@ const then = (x, f) =>
 describe('Plugin', () => {
   let paperplane
   let server
+  let span
   let tracer
+
+  const sandbox = sinon.createSandbox()
+
+  before(() => {
+    sandbox.spy(console, 'info')
+  })
+
+  afterEach(() => {
+    sandbox.resetHistory()
+  })
+
+  after(() => {
+    sandbox.restore()
+  })
 
   describe('paperplane', () => {
     withVersions(plugin, 'paperplane', version => {
@@ -412,6 +428,26 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (semver.intersects(version, '>=2.3.1')) {
+          it('should not alter the behavior of `logger`', done => {
+            span = tracer.startSpan('test')
+
+            tracer.scope().activate(span, () => {
+              /* eslint-disable no-console */
+              paperplane.logger({ message: ':datadoge:' })
+
+              expect(console.info).to.have.been.called
+
+              const record = JSON.parse(console.info.firstCall.args[0])
+
+              expect(record).to.not.have.property('dd')
+              expect(record).to.have.property('message', ':datadoge:')
+              done()
+              /* eslint-enable no-console */
+            })
+          })
+        }
       })
 
       describe('with configuration', () => {
@@ -428,6 +464,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
+          tracer._tracer._logInjection = true
           paperplane = require(`../../../versions/paperplane@${version}`).get()
         })
 
@@ -521,6 +558,68 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (semver.intersects(version, '>=2.3.2')) {
+          it('should add the trace ids to logs', done => {
+            span = tracer.startSpan('test')
+
+            tracer.scope().activate(span, () => {
+              /* eslint-disable no-console */
+              paperplane.logger({ message: ':datadoge:' })
+
+              expect(console.info).to.have.been.called
+
+              const record = JSON.parse(console.info.firstCall.args[0])
+
+              expect(record).to.have.deep.property('dd', {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              })
+
+              expect(record).to.have.property('message', ':datadoge:')
+              done()
+              /* eslint-enable no-console */
+            })
+          })
+
+          it('should add the trace ids to error logs', done => {
+            span = tracer.startSpan('test')
+
+            tracer.scope().activate(span, () => {
+              /* eslint-disable no-console */
+              const err = new Error('Bad things happened')
+              paperplane.logger(err)
+
+              expect(console.info).to.have.been.called
+
+              const record = JSON.parse(console.info.firstCall.args[0])
+
+              expect(record).to.have.deep.property('dd', {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              })
+
+              expect(record).to.have.property('message', 'Bad things happened')
+              expect(record).to.have.property('name', 'Error')
+              expect(record).to.have.property('stack')
+              done()
+              /* eslint-enable no-console */
+            })
+          })
+
+          it('should not alter logs with no active span', () => {
+            /* eslint-disable no-console */
+            paperplane.logger({ message: ':datadoge:' })
+
+            expect(console.info).to.have.been.called
+
+            const record = JSON.parse(console.info.firstCall.args[0])
+
+            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('message', ':datadoge:')
+            /* eslint-enable no-console */
+          })
+        }
       })
     })
   })
