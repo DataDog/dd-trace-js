@@ -35,7 +35,7 @@ function wrapMethod (method, definition, tracer, config, grpc) {
   const filter = getFilter(config, 'metadata')
 
   const methodWithTrace = function methodWithTrace () {
-    const args = normalize(arguments, grpc)
+    const args = ensureMetadata(arguments, grpc)
     const length = args.length
     const metadata = args[1]
     const callback = args[length - 1]
@@ -106,7 +106,7 @@ function startSpan (tracer, config, definition) {
   return span
 }
 
-function normalize (args, grpc) {
+function ensureMetadata (args, grpc) {
   const normalized = [args[0]]
 
   if (!args[1] || args[1].constructor.name !== 'Metadata') {
