@@ -81,7 +81,7 @@ function normalizeConfig (defaultConfig, testConfig) {
   if (config.testType === 'custom') {
     config.testFn = testConfig.testFn || defaultConfig.testFn
   } else {
-    config.testArgs = testConfig.testArgs || defaultConfig.testArgs
+    config.testArgs = testConfig.testArgs || defaultConfig.testArgs || ''
   }
 
   if (!config.integration) {
