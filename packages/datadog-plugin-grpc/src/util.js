@@ -32,6 +32,7 @@ module.exports = {
     }
   },
 
+  // TODO: extract this to shared utils and add unit tests
   getFilter (config, filter) {
     if (typeof config[filter] === 'function') {
       return config[filter]
