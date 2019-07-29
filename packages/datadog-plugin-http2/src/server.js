@@ -71,7 +71,7 @@ function instrumentStream (tracer, config, stream, headers, name, callback) {
 
   // TODO: replace this with a REFERENCE_NOOP after we split http/express/etc
   if (!config.filter(headers[HTTP2_HEADER_PATH])) {
-    span.context()._sampling.drop = true
+    span.context()._traceFlags.sampled = false
   }
 
   if (config.service) {

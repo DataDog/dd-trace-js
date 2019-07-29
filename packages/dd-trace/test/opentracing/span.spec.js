@@ -1,6 +1,5 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
 const constants = require('../../src/constants')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
@@ -23,8 +22,8 @@ describe('Span', () => {
         track: sinon.stub().returns(handle)
       })
     }
-    platform.id.onFirstCall().returns(new Uint64BE(123, 123))
-    platform.id.onSecondCall().returns(new Uint64BE(456, 456))
+    platform.id.onFirstCall().returns('123')
+    platform.id.onSecondCall().returns('456')
 
     tracer = {}
 
@@ -48,8 +47,8 @@ describe('Span', () => {
   it('should have a default context', () => {
     span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
 
-    expect(span.context()._traceId).to.deep.equal(new Uint64BE(123, 123))
-    expect(span.context()._spanId).to.deep.equal(new Uint64BE(123, 123))
+    expect(span.context()._traceId).to.deep.equal('123')
+    expect(span.context()._spanId).to.deep.equal('123')
   })
 
   it('should add itself to the context trace started spans', () => {
@@ -60,8 +59,8 @@ describe('Span', () => {
 
   it('should use a parent context', () => {
     const parent = {
-      _traceId: new Uint64BE(123, 123),
-      _spanId: new Uint64BE(456, 456),
+      _traceId: '123',
+      _spanId: '456',
       _baggageItems: { foo: 'bar' },
       _trace: {
         started: ['span'],
@@ -72,29 +71,10 @@ describe('Span', () => {
 
     span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
 
-    expect(span.context()._traceId).to.deep.equal(new Uint64BE(123, 123))
-    expect(span.context()._parentId).to.deep.equal(new Uint64BE(456, 456))
+    expect(span.context()._traceId).to.deep.equal('123')
+    expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
-    expect(span.context()._trace.started).to.deep.equal(['span', span])
-    expect(span.context()._trace.origin).to.equal('synthetics')
-  })
-
-  it('should start a new trace if the parent trace is finished', () => {
-    const parent = {
-      _traceId: new Uint64BE(123, 123),
-      _spanId: new Uint64BE(456, 456),
-      _baggageItems: { foo: 'bar' },
-      _trace: {
-        started: ['span'],
-        finished: ['span'],
-        origin: 'synthetics'
-      }
-    }
-
-    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
-
-    expect(span.context()._trace.started).to.deep.equal([span])
-    expect(span.context()._trace.origin).to.equal('synthetics')
+    expect(span.context()._trace).to.equal(parent._trace)
   })
 
   it('should set the sample rate metric from the sampler', () => {
@@ -131,8 +111,8 @@ describe('Span', () => {
   describe('setBaggageItem', () => {
     it('should set a baggage item on the trace', () => {
       const parent = {
-        traceId: new Uint64BE(123, 123),
-        spanId: new Uint64BE(456, 456),
+        traceId: '123',
+        spanId: '456',
         _baggageItems: {},
         _trace: {
           started: ['span'],
@@ -167,23 +147,38 @@ describe('Span', () => {
   })
 
   describe('addTags', () => {
-    it('should add tags', () => {
+    beforeEach(() => {
       span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+    })
+
+    it('should add tags as an object', () => {
       span.addTags({ foo: 'bar' })
 
       expect(span.context()._tags).to.have.property('foo', 'bar')
     })
 
+    it('should add tags as a string', () => {
+      span.addTags('foo:bar,baz:qux:quxx,invalid')
+
+      expect(span.context()._tags).to.have.property('foo', 'bar')
+      expect(span.context()._tags).to.have.property('baz', 'qux:quxx')
+      expect(span.context()._tags).to.not.have.property('invalid')
+    })
+
+    it('should add tags as an array', () => {
+      span.addTags(['foo:bar', 'baz:qux'])
+
+      expect(span.context()._tags).to.have.property('foo', 'bar')
+      expect(span.context()._tags).to.have.property('baz', 'qux')
+    })
+
     it('should store the original values', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
       span.addTags({ foo: 123 })
 
       expect(span.context()._tags).to.have.property('foo', 123)
     })
 
     it('should handle errors', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
-
       expect(() => span.addTags()).not.to.throw()
     })
   })

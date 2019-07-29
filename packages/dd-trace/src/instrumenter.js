@@ -137,7 +137,7 @@ class Instrumenter {
               const config = this._plugins.get(plugin).config
 
               if (config.enabled !== false) {
-                this._patch(instrumentation, moduleExports, config)
+                moduleExports = this._patch(instrumentation, moduleExports, config) || moduleExports
               }
             })
         } catch (e) {
@@ -196,7 +196,7 @@ class Instrumenter {
 
     if (!instrumented.has(moduleExports)) {
       instrumented.add(moduleExports)
-      instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config)
+      return instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config)
     }
   }
 

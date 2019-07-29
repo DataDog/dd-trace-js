@@ -34,6 +34,11 @@ node-core-base: &node-core-base
       run:
         name: Unit tests
         command: yarn test:core
+    - store_artifacts:
+        path: ./coverage/lcov-report
+    - run:
+        name: Code coverage
+        command: yarn codecov
     - run:
         name: Benchmark
         command: yarn bench
@@ -65,6 +70,11 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins
+    - store_artifacts:
+        path: ./coverage/lcov-report
+    - run:
+        name: Code coverage
+        command: yarn codecov
     - run:
         name: Memory leak tests
         command: yarn leak:plugins
@@ -92,16 +102,6 @@ jobs:
           command: yarn lint
 
   # Core tests
-
-  node-core-4:
-    <<: *node-core-base
-    docker:
-      - image: node:4
-
-  node-core-6:
-    <<: *node-core-base
-    docker:
-      - image: node:6
 
   node-core-8:
     <<: *node-core-base
@@ -191,6 +191,13 @@ jobs:
         environment:
           - CASSANDRA_TOKEN=-9223372036854775808
 
+  node-connect:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=connect
+
   node-dns:
     <<: *node-plugin-base
     docker:
@@ -216,6 +223,13 @@ jobs:
       - image: node:8
         environment:
           - PLUGINS=express
+
+  node-fastify:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=fastify
 
   node-generic-pool:
     <<: *node-plugin-base
@@ -259,6 +273,13 @@ jobs:
         environment:
           - PLUGINS=http2
 
+  node-knex:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=knex
+
   node-koa:
     <<: *node-plugin-base
     docker:
@@ -274,6 +295,19 @@ jobs:
           - SERVICES=memcached
           - PLUGINS=memcached
       - image: memcached:1.5-alpine
+
+  node-tedious:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=mssql
+          - PLUGINS=tedious
+      - image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+        environment:
+          - "ACCEPT_EULA=Y"
+          - "SA_PASSWORD=DD_HUNTER2"
+          - "MSSQL_PID=Express"
 
   node-mysql:
     <<: *node-plugin-base
@@ -453,7 +487,7 @@ jobs:
     macos:
       xcode: "10.2.0"
     working_directory: ~/dd-trace-js
-    resource_class: small
+    resource_class: medium
     environment:
       - ARCH=x64
     steps:
@@ -470,7 +504,7 @@ jobs:
     macos:
       xcode: "10.2.0"
     working_directory: ~/dd-trace-js
-    resource_class: small
+    resource_class: medium
     environment:
       - ARCH=x32
     steps:
@@ -526,9 +560,6 @@ workflows:
     jobs:
       - lint
       - typescript
-      - node-leaks
-      - node-core-4
-      - node-core-6
       - node-core-8
       - node-core-10
       - node-core-12
@@ -538,18 +569,22 @@ workflows:
       - node-bluebird
       - node-bunyan
       - node-cassandra
+      - node-connect
       - node-dns
       - node-elasticsearch
       - node-express
+      - node-fastify
       - node-generic-pool
       - node-graphql
       - node-grpc
       - node-hapi
       - node-http
       - node-http2
+      - node-knex
       - node-koa
       - node-memcached
       - node-mongodb-core
+      - node-tedious
       - node-mysql
       - node-net
       - node-paperplane
@@ -560,6 +595,7 @@ workflows:
       - node-q
       - node-redis
       - node-restify
+      - node-router
       - node-when
       - node-winston
       - prebuild-linux-x64:
@@ -611,8 +647,6 @@ workflows:
               only:
                 - master
     jobs:
-      - node-core-4
-      - node-core-6
       - node-core-8
       - node-core-10
       - node-core-12
@@ -622,15 +656,18 @@ workflows:
       - node-bluebird
       - node-bunyan
       - node-cassandra
+      - node-connect
       - node-dns
       - node-elasticsearch
       - node-express
+      - node-fastify
       - node-generic-pool
       - node-graphql
       - node-grpc
       - node-hapi
       - node-http
       - node-http2
+      - node-knex
       - node-koa
       - node-memcached
       - node-mongodb-core
@@ -644,5 +681,7 @@ workflows:
       - node-q
       - node-redis
       - node-restify
+      - node-router
+      - node-tedious
       - node-when
       - node-winston

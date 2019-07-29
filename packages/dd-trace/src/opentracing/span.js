@@ -56,20 +56,13 @@ class DatadogSpan extends Span {
     let spanContext
 
     if (parent) {
-      const trace = parent._trace
-      const finished = trace.started.length === trace.finished.length
-
       spanContext = new SpanContext({
         traceId: parent._traceId,
         spanId: platform.id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
         baggageItems: parent._baggageItems,
-        trace: {
-          started: finished ? [] : trace.started,
-          finished: finished ? [] : trace.finished,
-          origin: trace.origin
-        }
+        trace: parent._trace
       })
     } else {
       const spanId = platform.id()
@@ -105,6 +98,29 @@ class DatadogSpan extends Span {
   }
 
   _addTags (keyValuePairs) {
+    if (!keyValuePairs) return
+
+    if (typeof keyValuePairs === 'string') {
+      return this._addTags(
+        keyValuePairs
+          .split(',')
+          .filter(tag => tag.indexOf(':') !== -1)
+          .reduce((prev, next) => {
+            const tag = next.split(':')
+            const key = tag[0]
+            const value = tag.slice(1).join(':')
+
+            prev[key] = value
+
+            return prev
+          }, {})
+      )
+    }
+
+    if (Array.isArray(keyValuePairs)) {
+      return keyValuePairs.forEach(tags => this._addTags(tags))
+    }
+
     try {
       Object.keys(keyValuePairs).forEach(key => {
         this._spanContext._tags[key] = keyValuePairs[key]

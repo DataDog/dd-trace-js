@@ -1,6 +1,5 @@
 'use strict'
 
-const semver = require('semver')
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
@@ -9,8 +8,6 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const ANALYTICS = tags.ANALYTICS
-const ASYNC_HOOKS = scopes.ASYNC_HOOKS
-const ASYNC_LISTENER = scopes.ASYNC_LISTENER
 const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
@@ -133,14 +130,8 @@ function getScope (config) {
 
   if (config.scope === NOOP) {
     Scope = require('./scope/base')
-  } else if (config.scope === ASYNC_HOOKS) {
-    Scope = require('./scope/async_hooks')
-  } else if (config.scope === ASYNC_LISTENER) {
-    Scope = require('./scope/async-listener')
-  } else if (semver.satisfies(process.version, '^4.7.1 || ^6.9.2 || >=7.5')) {
-    Scope = require('./scope/async_hooks')
   } else {
-    Scope = require('./scope/async-listener')
+    Scope = require('./scope/async_hooks')
   }
 
   return new Scope()

@@ -80,7 +80,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(childOf, () => {
         tracer.trace('name', {}, span => {
-          expect(span.context()._parentId.toString()).to.equal(childOf.context().toSpanId())
+          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })
@@ -91,7 +91,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(root, () => {
         tracer.trace('name', { childOf }, span => {
-          expect(span.context()._parentId.toString()).to.equal(childOf.context().toSpanId())
+          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })
@@ -115,16 +115,18 @@ describe('Tracer', () => {
 
     it('should handle exceptions', () => {
       let span
+      let tags
 
       try {
         tracer.trace('name', {}, _span => {
           span = _span
+          tags = span.context()._tags
           sinon.spy(span, 'finish')
           throw new Error('boom')
         })
       } catch (e) {
         expect(span.finish).to.have.been.called
-        expect(span.context()._tags).to.include({
+        expect(tags).to.include({
           'error.type': e.name,
           'error.msg': e.message,
           'error.stack': e.stack
@@ -153,10 +155,12 @@ describe('Tracer', () => {
       it('should handle errors', () => {
         const error = new Error('boom')
         let span
+        let tags
         let done
 
         tracer.trace('name', {}, (_span, _done) => {
           span = _span
+          tags = span.context()._tags
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -164,7 +168,7 @@ describe('Tracer', () => {
         done(error)
 
         expect(span.finish).to.have.been.called
-        expect(span.context()._tags).to.include({
+        expect(tags).to.include({
           'error.type': error.name,
           'error.msg': error.message,
           'error.stack': error.stack
@@ -200,16 +204,18 @@ describe('Tracer', () => {
 
       it('should handle rejected promises', done => {
         let span
+        let tags
 
         tracer
           .trace('name', {}, _span => {
             span = _span
+            tags = span.context()._tags
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
           .catch(e => {
             expect(span.finish).to.have.been.called
-            expect(span.context()._tags).to.include({
+            expect(tags).to.include({
               'error.type': e.name,
               'error.msg': e.message,
               'error.stack': e.stack

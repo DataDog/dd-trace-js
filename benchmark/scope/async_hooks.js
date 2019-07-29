@@ -25,22 +25,15 @@ const asyncHooks = {
     this.destroy = hooks.destroy
     this.promiseResolve = hooks.promiseResolve
 
-    this.before = asyncId => {
-      ids.push(asyncId)
-      hooks.before(asyncId)
-    }
-
-    this.after = asyncId => {
-      ids.pop(asyncId)
-      hooks.after(asyncId)
-    }
+    this.before = asyncId => ids.push(asyncId)
+    this.after = asyncId => ids.pop(asyncId)
 
     return hook
   }
 }
 
 const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
-  './async_hooks/index': asyncHooks,
+  'async_hooks': asyncHooks,
   '../platform': platform
 })
 

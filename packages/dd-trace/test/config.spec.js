@@ -32,6 +32,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
+    expect(config).to.have.nested.property('experimental.b3', false)
   })
 
   it('should initialize from the default service', () => {
@@ -110,7 +111,10 @@ describe('Config', () => {
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
-      scope: 'noop'
+      scope: 'noop',
+      experimental: {
+        b3: true
+      }
     })
 
     expect(config).to.have.property('enabled', false)
@@ -133,6 +137,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
     })
+    expect(config).to.have.nested.property('experimental.b3', true)
   })
 
   it('should initialize from the options with url taking precedence', () => {

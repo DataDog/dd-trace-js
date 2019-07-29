@@ -4,6 +4,7 @@
 [![npm (tag)](https://img.shields.io/npm/v/dd-trace/dev.svg)](https://www.npmjs.com/package/dd-trace/v/dev)
 [![CircleCI](https://circleci.com/gh/DataDog/dd-trace-js.svg?style=shield)](https://circleci.com/gh/DataDog/dd-trace-js)
 [![Build Status](https://dev.azure.com/datadog-apm/dd-trace-js/_apis/build/status/build-node-core-windows)](https://dev.azure.com/datadog-apm/dd-trace-js/_build/latest)
+[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
 **JavaScript APM Tracer**
 
@@ -90,10 +91,9 @@ After installing the `circleci` CLI, simply run one of the following:
 ```sh
 $ circleci build --job lint
 $ circleci build --job node-leaks
-$ circleci build --job node-core-4
-$ circleci build --job node-core-6
 $ circleci build --job node-core-8
 $ circleci build --job node-core-10
+$ circleci build --job node-core-12
 $ circleci build --job node-core-latest
 ```
 

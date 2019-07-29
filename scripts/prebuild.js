@@ -11,7 +11,7 @@ const fs = require('fs')
 const name = `${os.platform()}-${process.env.ARCH || os.arch()}`
 const targets = abi.allTargets
   .filter(target => target.runtime === 'node')
-  .filter(target => semver.satisfies(target.target, '>=4.0.0'))
+  .filter(target => semver.satisfies(target.target, '>=8.0.0'))
 
 const cb = err => {
   if (err) throw err

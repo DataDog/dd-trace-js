@@ -51,7 +51,9 @@ class Config {
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
-    this.experimental = {}
+    this.experimental = {
+      b3: !(!options.experimental || !options.experimental.b3)
+    }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope
   }

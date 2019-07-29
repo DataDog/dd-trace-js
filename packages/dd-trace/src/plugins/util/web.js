@@ -52,7 +52,7 @@ const web = {
 
     // TODO: replace this with a REFERENCE_NOOP after we split http/express/etc
     if (!config.filter(req.url)) {
-      span.context()._sampling.drop = true
+      span.context()._traceFlags.sampled = false
     }
 
     if (config.service) {
@@ -167,8 +167,18 @@ const web = {
 
   // Validate a request's status code and then add error tags if necessary
   addStatusError (req, statusCode) {
+    const span = req._datadog.span
+    const error = req._datadog.error
+
     if (!req._datadog.config.validateStatus(statusCode)) {
-      req._datadog.span.setTag(ERROR, true)
+      span.setTag(ERROR, error || true)
+    }
+  },
+
+  // Add an error to the request
+  addError (req, error) {
+    if (error instanceof Error) {
+      req._datadog.error = req._datadog.error || error
     }
   }
 }

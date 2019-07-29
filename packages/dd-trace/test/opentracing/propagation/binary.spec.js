@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../../src/platform')
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('BinaryPropagator', () => {
@@ -16,8 +16,8 @@ describe('BinaryPropagator', () => {
     it('should not be supported', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: new Uint64BE(0, 123),
-        spanId: new Uint64BE(0, 456)
+        traceId: platform.id('123', 10),
+        spanId: platform.id('456', 10)
       })
 
       propagator.inject(spanContext, carrier)

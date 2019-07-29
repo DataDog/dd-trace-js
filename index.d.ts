@@ -234,7 +234,9 @@ export declare interface TracerOptions {
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */
-  experimental?: {} | boolean;
+  experimental?: boolean | {
+    b3?: boolean
+  };
 
   /**
    * Whether to load all built-in plugins.
@@ -262,7 +264,7 @@ export declare interface TracerOptions {
    * implementation for the runtime. Only change this if you know what you are
    * doing.
    */
-  scope?: 'async_hooks' | 'async-listener' | 'noop'
+  scope?: 'async_hooks' | 'noop'
 }
 
 /** @hidden */
@@ -313,10 +315,12 @@ interface Plugins {
   "amqplib": plugins.amqplib;
   "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
-  "cassandra-driver": plugins.cassandra_driver,
+  "cassandra-driver": plugins.cassandra_driver;
+  "connect": plugins.connect;
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
+  "fastify": plugins.fastify;
   "generic-pool": plugins.generic_pool;
   "graphql": plugins.graphql;
   "hapi": plugins.hapi;
@@ -339,6 +343,7 @@ interface Plugins {
   "redis": plugins.redis;
   "restify": plugins.restify;
   "router": plugins.router;
+  "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
 }
@@ -519,7 +524,7 @@ declare namespace plugins {
   interface amqplib extends Integration {}
 
   /**
-   * This plugin patches the [bluebird](https://github.com/squaremo/amqp.node)
+   * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
    * module to bind the promise callback the the caller context.
    */
   interface bluebird extends Integration {}
@@ -540,6 +545,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [connect](https://github.com/senchalabs/connect) module.
+   */
+  interface connect extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
    * [dns](https://nodejs.org/api/dns.html) module.
    */
   interface dns extends Integration {}
@@ -555,6 +566,12 @@ declare namespace plugins {
    * [express](http://expressjs.com/) module.
    */
   interface express extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [fastify](https://www.fastify.io/) module.
+   */
+  interface fastify extends HttpServer {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
@@ -596,11 +613,11 @@ declare namespace plugins {
     depth?: number;
 
     /**
-     * A callback to enable recording of variables. By default, no variables are
-     * recorded. For example, using `variables => variables` would record all
-     * variables.
+     * An array of variable names to record. Can also be a callback that returns
+     * the key/value pairs to record. For example, using
+     * `variables => variables` would record all variables.
      */
-    variables?: (variables: { [key: string]: any }) => { [key: string]: any };
+    variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
     /**
      * Whether to collapse list items into a single element. (i.e. single
@@ -782,6 +799,12 @@ declare namespace plugins {
    * [router](https://github.com/pillarjs/router) module.
    */
   interface router extends Integration {}
+
+    /**
+   * This plugin automatically instruments the
+   * [tedious](https://github.com/tediousjs/tedious/) module.
+   */
+  interface tedious extends Integration {}
 
   /**
    * This plugin patches the [when](https://github.com/cujojs/when)

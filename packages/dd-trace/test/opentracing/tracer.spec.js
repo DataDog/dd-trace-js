@@ -31,7 +31,9 @@ describe('Tracer', () => {
   beforeEach(() => {
     fields = {}
 
-    span = {}
+    span = {
+      addTags: sinon.stub().returns(span)
+    }
     Span = sinon.stub().returns(span)
 
     prioritySampler = {
@@ -132,11 +134,14 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'foo': 'bar',
           'service.name': 'service'
         },
         startTime: fields.startTime,
         hostname: undefined
+      })
+
+      expect(span.addTags).to.have.been.calledWith({
+        'foo': 'bar'
       })
 
       expect(testSpan).to.equal(span)
@@ -185,7 +190,6 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'foo': 'bar',
           'service.name': 'service'
         },
         startTime: fields.startTime,
@@ -268,13 +272,8 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
-        tags: {
-          'foo': 'tracer',
-          'bar': 'span',
-          'baz': 'span'
-        }
-      })
+      expect(span.addTags).to.have.been.calledWith(config.tags)
+      expect(span.addTags).to.have.been.calledWith(fields.tags)
     })
 
     it('should add the env tag from the env option', () => {
@@ -294,20 +293,41 @@ describe('Tracer', () => {
       sampler.isSampled.returns(false)
 
       tracer = new Tracer(config)
+      span = tracer.startSpan('name', fields)
 
-      expect(tracer.startSpan('name', fields)).to.equal(tracer._noopSpan)
+      expect(span.context()).to.have.property('_noop', span)
+      expect(span.context()._traceFlags).to.include({ sampled: false })
     })
 
-    it('should return a noop span when the parent is not sampled', () => {
+    it('should return a noop when the parent is not sampled', () => {
       tracer = new Tracer(config)
 
-      const parent = tracer._noopSpan
+      const parent = new SpanContext({ traceFlags: { sampled: false } })
 
       fields.references = [
         new Reference(opentracing.REFERENCE_CHILD_OF, parent)
       ]
 
-      expect(tracer.startSpan('name', fields)).to.equal(tracer._noopSpan)
+      span = tracer.startSpan('name', fields)
+
+      expect(span.context()).to.have.property('_noop', span)
+      expect(span.context()._traceFlags).to.include({ sampled: false })
+    })
+
+    it('should return the same instance when the parent is a noop', () => {
+      tracer = new Tracer(config)
+
+      sampler.isSampled.returns(false)
+      const parent = tracer.startSpan('parent', fields)
+      sampler.isSampled.returns(true)
+
+      fields.references = [
+        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
+      ]
+
+      span = tracer.startSpan('name', fields)
+
+      expect(span).to.equal(parent)
     })
 
     it('should always start a new span when the parent is sampled', () => {
@@ -333,6 +353,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
+      expect(TextMapPropagator).to.have.been.calledWith(config)
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
 
@@ -342,6 +363,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_HTTP_HEADERS, carrier)
 
+      expect(HttpPropagator).to.have.been.calledWith(config)
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
 

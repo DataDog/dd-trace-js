@@ -39,7 +39,9 @@ tracer.init({
   analytics: true,
   env: 'test',
   runtimeMetrics: true,
-  experimental: {},
+  experimental: {
+    b3: true
+  },
   hostname: 'agent',
   logger: {
     error (message: string) {},
@@ -103,12 +105,17 @@ tracer.use('amqplib');
 tracer.use('bluebird');
 tracer.use('bunyan');
 tracer.use('cassandra-driver');
+tracer.use('connect');
+tracer.use('connect', httpServerOptions);
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('express');
 tracer.use('express', httpServerOptions);
+tracer.use('fastify');
+tracer.use('fastify', httpServerOptions);
 tracer.use('generic-pool');
 tracer.use('graphql', graphqlOptions);
+tracer.use('graphql', { variables: ['foo', 'bar'] });
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
 tracer.use('http');
@@ -145,6 +152,7 @@ tracer.use('redis');
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('router');
+tracer.use('tedious');
 tracer.use('when');
 tracer.use('winston');
 

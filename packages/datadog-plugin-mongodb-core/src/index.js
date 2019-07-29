@@ -1,11 +1,15 @@
 'use strict'
 
-const Buffer = require('safe-buffer').Buffer
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 function createWrapOperation (tracer, config, operationName) {
   return function wrapOperation (operation) {
-    return function operationWithTrace (ns, ops, options, callback) {
+    return function operationWithTrace (ns, ops) {
+      const index = arguments.length - 1
+      const callback = arguments[index]
+
+      if (typeof callback !== 'function') return operation.apply(this, arguments)
+
       const scope = tracer.scope()
       const childOf = scope.active()
       const span = tracer.startSpan('mongodb.query', { childOf })
@@ -14,15 +18,9 @@ function createWrapOperation (tracer, config, operationName) {
 
       analyticsSampler.sample(span, config.analytics)
 
-      if (typeof options === 'function') {
-        return scope
-          .bind(operation, span)
-          .call(this, ns, ops, wrapCallback(tracer, span, options))
-      } else {
-        return scope
-          .bind(operation, span)
-          .call(this, ns, ops, options, wrapCallback(tracer, span, callback))
-      }
+      arguments[index] = wrapCallback(tracer, span, callback)
+
+      return scope.bind(operation, span).apply(this, arguments)
     }
   }
 }

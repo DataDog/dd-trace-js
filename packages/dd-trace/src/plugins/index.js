@@ -6,9 +6,11 @@ module.exports = {
   'bluebird': require('../../../../packages/datadog-plugin-bluebird/src'),
   'bunyan': require('../../../../packages/datadog-plugin-bunyan/src'),
   'cassandra-driver': require('../../../../packages/datadog-plugin-cassandra-driver/src'),
+  'connect': require('../../../../packages/datadog-plugin-connect/src'),
   'dns': require('../../../../packages/datadog-plugin-dns/src'),
   'elasticsearch': require('../../../../packages/datadog-plugin-elasticsearch/src'),
   'express': require('../../../../packages/datadog-plugin-express/src'),
+  'fastify': require('../../../../packages/datadog-plugin-fastify/src'),
   'generic-pool': require('../../../../packages/datadog-plugin-generic-pool/src'),
   'graphql': require('../../../../packages/datadog-plugin-graphql/src'),
   'grpc': require('../../../../packages/datadog-plugin-grpc/src'),
@@ -32,6 +34,7 @@ module.exports = {
   'redis': require('../../../../packages/datadog-plugin-redis/src'),
   'restify': require('../../../../packages/datadog-plugin-restify/src'),
   'router': require('../../../../packages/datadog-plugin-router/src'),
+  'tedious': require('../../../../packages/datadog-plugin-tedious/src'),
   'when': require('../../../../packages/datadog-plugin-when/src'),
   'winston': require('../../../../packages/datadog-plugin-winston/src')
 }

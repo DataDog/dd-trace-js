@@ -1,8 +1,10 @@
 'use strict'
 
 const Int64BE = require('int64-buffer').Int64BE
+const Uint64BE = require('int64-buffer').Uint64BE
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
+const platform = require('../src/platform')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -10,7 +12,7 @@ const ANALYTICS = tags.ANALYTICS
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
-const id = new Int64BE(0x02345678, 0x12345678)
+const id = platform.id('0234567812345678')
 
 describe('format', () => {
   let format
@@ -21,8 +23,8 @@ describe('format', () => {
 
   beforeEach(() => {
     spanContext = {
-      traceId: id,
-      spanId: id,
+      _traceId: id,
+      _spanId: id,
       _parentId: id,
       _tags: {},
       _metrics: {},
@@ -41,9 +43,6 @@ describe('format', () => {
     }
 
     platform = {
-      runtime: sinon.stub().returns({
-        id: sinon.stub().returns('1234')
-      }),
       hostname: sinon.stub().returns('my_hostname')
     }
 
@@ -56,9 +55,11 @@ describe('format', () => {
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
-      expect(trace.trace_id).to.equal(span.context()._traceId)
-      expect(trace.span_id).to.equal(span.context()._spanId)
-      expect(trace.parent_id).to.equal(span.context()._parentId)
+      expect(trace.trace_id).to.be.instanceof(Uint64BE)
+      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString(10))
+      expect(trace.span_id).to.be.instanceof(Uint64BE)
+      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString(10))
+      expect(trace.parent_id.toString()).to.equal(span.context()._parentId.toString(10))
       expect(trace.name).to.equal(span.context()._name)
       expect(trace.resource).to.equal(span.context()._name)
       expect(trace.error).to.equal(0)
@@ -166,7 +167,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta['language']).to.equal('javascript')
-      expect(trace.meta['runtime-id']).to.equal('1234')
     })
 
     it('should add runtime tags only for the root service', () => {
@@ -175,7 +175,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta).to.not.have.property('language')
-      expect(trace.meta).to.not.have.property('runtime-id')
     })
 
     describe('when there is an `error` tag ', () => {

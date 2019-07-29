@@ -1,6 +1,5 @@
 'use strict'
 
-const Buffer = require('safe-buffer').Buffer
 const semver = require('semver')
 
 wrapIt()
@@ -82,7 +81,30 @@ describe('Platform', () => {
       it('should return a random 63bit ID', () => {
         Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
 
-        expect(id().toBuffer().toString('hex')).to.equal('7f00ff00ff00ff00')
+        expect(id().toString()).to.equal('7f00ff00ff00ff00')
+      })
+
+      it('should be serializable to an integer', () => {
+        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
+
+        expect(id().toString(10)).to.equal('9151594822560186112')
+      })
+
+      it('should be serializable to JSON', () => {
+        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
+
+        const json = JSON.stringify(id())
+
+        expect(json).to.equal('"7f00ff00ff00ff00"')
+      })
+
+      it('should be exportable to Uint64BE', () => {
+        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
+
+        const uint64 = id().toUint64BE()
+
+        expect(uint64).to.be.instanceof(platform.Uint64BE)
+        expect(uint64.toString()).to.equal('9151594822560186112')
       })
     })
 
@@ -188,6 +210,7 @@ describe('Platform', () => {
     describe('request', () => {
       let request
       let log
+      let getContainerInfo
 
       beforeEach(() => {
         nock.disableNetConnect()
@@ -195,7 +218,11 @@ describe('Platform', () => {
         log = {
           error: sinon.spy()
         }
+        getContainerInfo = {
+          sync: sinon.stub().returns({ containerId: 'abcd' })
+        }
         request = proxyquire('../src/platform/node/request', {
+          'container-info': getContainerInfo,
           '../../log': log
         })
       })
@@ -300,6 +327,24 @@ describe('Platform', () => {
           expect(err).to.be.instanceof(Error)
           expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
           done()
+        })
+      })
+
+      it('should inject the container ID', () => {
+        nock('http://test:123', {
+          reqheaders: {
+            'datadog-container-id': 'abcd'
+          }
+        })
+          .get('/')
+          .reply(200, 'OK')
+
+        return request({
+          hostname: 'test',
+          port: 123,
+          path: '/'
+        }, (err, res) => {
+          expect(res).to.equal('OK')
         })
       })
     })
@@ -410,7 +455,6 @@ describe('Platform', () => {
             host: 'localhost',
             tags: [
               'service:service',
-              'runtime-id:1234',
               'env:test'
             ]
           })
@@ -438,10 +482,8 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
           expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
 
-          if (semver.gte(process.version, '7.2.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
-            expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
-          }
+          expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
+          expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
 
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.max')
           expect(client.gauge).to.have.been.calledWith('event_loop.delay.min')
@@ -532,11 +574,9 @@ describe('Platform', () => {
 
           clock.tick(10000)
 
-          if (semver.gte(process.version, '6.1.0')) {
-            expect(client.gauge).to.have.been.calledWith('cpu.user')
-            expect(client.gauge).to.have.been.calledWith('cpu.system')
-            expect(client.gauge).to.have.been.calledWith('cpu.total')
-          }
+          expect(client.gauge).to.have.been.calledWith('cpu.user')
+          expect(client.gauge).to.have.been.calledWith('cpu.system')
+          expect(client.gauge).to.have.been.calledWith('cpu.total')
 
           expect(client.gauge).to.have.been.calledWith('mem.rss')
           expect(client.gauge).to.have.been.calledWith('mem.heap_total')
@@ -551,17 +591,13 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('heap.total_heap_size')
           expect(client.gauge).to.have.been.calledWith('heap.heap_size_limit')
 
-          if (semver.gte(process.version, '7.2.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
-            expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
-          }
+          expect(client.gauge).to.have.been.calledWith('heap.malloced_memory')
+          expect(client.gauge).to.have.been.calledWith('heap.peak_malloced_memory')
 
-          if (semver.gte(process.version, '6.0.0')) {
-            expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
-            expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
-            expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
-            expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
-          }
+          expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
+          expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
+          expect(client.gauge).to.have.been.calledWith('heap.available_size.by.space')
+          expect(client.gauge).to.have.been.calledWith('heap.physical_size.by.space')
 
           expect(client.flush).to.have.been.called
         })

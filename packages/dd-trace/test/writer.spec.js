@@ -36,7 +36,8 @@ describe('Writer', () => {
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {}
+        _tags: {},
+        _traceFlags: {}
       })
     }
 
@@ -118,7 +119,7 @@ describe('Writer', () => {
     })
 
     it('should not append if the span was dropped', () => {
-      span.context()._sampling.drop = true
+      span.context()._traceFlags.sampled = false
       writer.append(span)
 
       expect(writer._queue).to.be.empty
@@ -130,24 +131,16 @@ describe('Writer', () => {
       expect(prioritySampler.sample).to.have.been.calledWith(span.context())
     })
 
-    it('should remove spans from all scopes when the trace is finished', () => {
-      trace.started = [span, span]
-      trace.finished = [span, span]
-
-      writer.append(span)
-
-      expect(scope._wipe).to.have.been.calledTwice
-      expect(scope._wipe).to.have.been.calledWith(span)
-    })
-
-    it('should wait for more spans before removing for consumers', () => {
-      span.context()._tags['span.kind'] = 'consumer'
+    it('should erase the trace once finished', () => {
       trace.started = [span]
       trace.finished = [span]
 
       writer.append(span)
 
-      expect(scope._wipe).to.not.have.been.called
+      expect(trace).to.have.deep.property('started', [])
+      expect(trace).to.have.deep.property('finished', [])
+      expect(span.context()).to.have.deep.property('_tags', {})
+      expect(span.context()).to.have.deep.property('_metrics', {})
     })
   })
 

@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const Buffer = require('safe-buffer').Buffer
 const plugin = require('../src')
 
 wrapIt()
@@ -197,6 +196,14 @@ describe('Plugin', () => {
               server.destroy()
             })
           })
+
+          it('should not swallow missing callback errors', done => {
+            try {
+              server.insert(`test.${collection}`, [{ a: 1 }], {})
+            } catch (e) {
+              done()
+            }
+          })
         })
 
         describe('cursor', () => {
@@ -249,7 +256,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            server.insert(`test.${collection}`, [{ a: 1 }, { a: 2 }], {})
+            server.insert(`test.${collection}`, [{ a: 1 }, { a: 2 }], {}, () => {})
           })
 
           it('should sanitize the query as the resource', done => {

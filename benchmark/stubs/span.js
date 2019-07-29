@@ -1,11 +1,11 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const platform = require('../../packages/dd-trace/src/platform/node')
 const constants = require('../../packages/dd-trace/src/constants')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
-const id = new Uint64BE(0x12345678, 0x12345678)
+const id = platform.id('1234567812345678')
 
 const span = {
   tracer: () => ({
@@ -32,6 +32,7 @@ const span = {
       [SAMPLE_RATE_METRIC_KEY]: 1
     },
     _sampling: {},
+    _traceFlags: {},
     _name: 'operation'
   }),
   _startTime: 1500000000000.123456,

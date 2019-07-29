@@ -2,7 +2,7 @@
 
 const semver = require('semver')
 
-const SUPPORTED_VERSIONS = '>=4'
+const SUPPORTED_VERSIONS = '>=8'
 
 function validate () {
   if (!semver.satisfies(process.versions.node, SUPPORTED_VERSIONS)) {
