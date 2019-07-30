@@ -38,6 +38,7 @@ describe('Plugin', () => {
           bucket = cluster.openBucket('datadog-test', (err) => {
             done(err)
           })
+          cluster.enableCbas('couchbase://localhost')
         })
 
         afterEach(() => {
