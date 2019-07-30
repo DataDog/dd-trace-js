@@ -1,6 +1,6 @@
 'use strict'
 
-const tracer = require('../../../../../dd-trace-js')
+const tracer = require('../../../../..')
 tracer.init()
 
 const NodeEnvironment = require('jest-environment-node')
