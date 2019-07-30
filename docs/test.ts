@@ -105,6 +105,7 @@ tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('bluebird');
 tracer.use('bunyan');
+tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
