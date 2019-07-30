@@ -6,21 +6,13 @@ const RetryOperation = require('../operation')
 function waitForCouchbase () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('couchbase')
-    const ftsEndpoint = 'http://localhost:8094/api/index/test/query'
+    const cbasEndpoint = 'http://127.0.0.1:8095/query/service'
 
     operation.attempt(currentAttempt => {
       axios({
         method: 'POST',
-        url: ftsEndpoint,
-        data: {
-          'ctl': {
-            'timeout': 75000
-          },
-          'indexName': 'test',
-          'query': {
-            'query': 'eiffel'
-          }
-        },
+        url: cbasEndpoint,
+        data: { 'statement': 'SELECT * FROM datatest', 'timeout': '75000000us' },
         auth: {
           username: 'Administrator',
           password: 'password'

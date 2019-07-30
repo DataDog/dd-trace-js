@@ -68,7 +68,7 @@ describe('Plugin', () => {
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
 
-          const emitter = cluster.query(n1qlQuery, () => { })
+          const emitter = cluster.query(n1qlQuery)
 
           tracer.scope().activate(span, () => {
             emitter.on('rows', () => {
@@ -83,7 +83,7 @@ describe('Plugin', () => {
           bucket.disconnect()
           const span = tracer.startSpan('test')
 
-          bucket = cluster.openBucket('datadog-test', () => {})
+          bucket = cluster.openBucket('datadog-test')
 
           tracer.scope().activate(span, () => {
             bucket.on('connect', () => {
@@ -140,7 +140,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should handle cbas queries', done => {
+          it('should handle Analytics queries', done => {
             const query = 'SELECT * FROM datatest'
             const cbasQuery = CbasQuery.fromString(query)
 
@@ -207,6 +207,29 @@ describe('Plugin', () => {
               .catch(done)
 
             bucket.query(viewQuery, (err) => {
+              if (err) done(err)
+            })
+          })
+
+          it('should handle Search queries', done => {
+            const index = 'test'
+            const searchQuery = SearchQuery.new(index, SearchQuery.queryString('eiffel'))
+
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'couchbase.call')
+                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('resource', index)
+                expect(span).to.have.property('type', 'sql')
+                expect(span.meta).to.have.property('span.kind', 'client')
+                expect(span.meta).to.have.property('bucket', 'datadog-test')
+                expect(span.meta).to.have.property('query.type', 'search')
+              })
+              .then(done)
+              .catch(done)
+
+            bucket.query(searchQuery, (err) => {
               if (err) done(err)
             })
           })
