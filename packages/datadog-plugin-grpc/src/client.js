@@ -40,7 +40,7 @@ function wrapMethod (tracer, config, method, definition, grpc) {
     const metadata = args[1]
     const callback = args[length - 1]
     const scope = tracer.scope()
-    const span = startSpan(tracer, config, definition, filter)
+    const span = startSpan(tracer, config, definition)
 
     addMetadataTags(span, metadata, filter, 'request')
 
