@@ -6,15 +6,11 @@ const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
 function handleError (span, err) {
-  span.addTags({
-    'error.msg': err.message,
-    'error.stack': err.stack,
-    'error.type': err.name
-  })
+  span.setTag('error', err)
 }
 
 function createWrapHandler (grpc, tracer, config, handler) {
-  const configMetadata = getFilter(config, 'metadata')
+  const filter = getFilter(config, 'metadata')
 
   return function wrapHandler (func) {
     return function funcWithTrace (call, callback) {
@@ -37,7 +33,7 @@ function createWrapHandler (grpc, tracer, config, handler) {
       addMethodTags(span, handler, kinds[type])
 
       if (request && metadata) {
-        addMetadataTags(span, metadata, configMetadata, 'request')
+        addMetadataTags(span, metadata, filter, 'request')
       }
 
       scope.bind(call)
@@ -49,50 +45,12 @@ function createWrapHandler (grpc, tracer, config, handler) {
       })
 
       if (isStream) {
-        call.on('error', err => {
-          span.setTag('grpc.status.code', err.code)
-
-          handleError(span, err)
-
-          span.finish()
-        })
-
-        // Finish the span of the response only if it was successful.
-        // Otherwise it'll be finished in the `error` listener.
-        call.on('finish', () => {
-          span.setTag('grpc.status.code', call.status.code)
-
-          if (call.status.code === 0) {
-            span.finish()
-          }
-        })
-
-        // Call the original stream request, without modification.
-        return scope.bind(func, span).apply(this, arguments)
+        wrapStream(span, call)
+      } else {
+        arguments[1] = wrapCallback(span, callback, filter, grpc, childOf)
       }
 
-      // Call the unary request with a wrapped callback.
-      return scope.bind(func, span).call(this, call, function (err, value, trailer, flags) {
-        if (err) {
-          if (err.code) {
-            span.setTag('grpc.status.code', err.code)
-          }
-
-          handleError(span, err)
-        } else {
-          span.setTag('grpc.status.code', grpc.status.OK)
-        }
-
-        if (trailer && configMetadata) {
-          addMetadataTags(span, trailer, configMetadata, 'response')
-        }
-
-        span.finish()
-
-        if (callback) {
-          scope.bind(callback, childOf).apply(this, arguments)
-        }
-      })
+      return scope.bind(func, span).apply(this, arguments)
     }
   }
 }
@@ -105,6 +63,52 @@ function createWrapRegister (tracer, config, grpc) {
       arguments[1] = createWrapHandler(grpc, tracer, config, name)(handler)
 
       return register.apply(this, arguments)
+    }
+  }
+}
+
+function wrapStream (span, call) {
+  call.on('error', err => {
+    span.setTag('grpc.status.code', err.code)
+
+    handleError(span, err)
+
+    span.finish()
+  })
+
+  // Finish the span of the response only if it was successful.
+  // Otherwise it'll be finished in the `error` listener.
+  call.on('finish', () => {
+    span.setTag('grpc.status.code', call.status.code)
+
+    if (call.status.code === 0) {
+      span.finish()
+    }
+  })
+}
+
+function wrapCallback (span, callback, filter, grpc, childOf) {
+  const scope = span.tracer().scope()
+
+  return function (err, value, trailer, flags) {
+    if (err) {
+      if (err.code) {
+        span.setTag('grpc.status.code', err.code)
+      }
+
+      handleError(span, err)
+    } else {
+      span.setTag('grpc.status.code', grpc.status.OK)
+    }
+
+    if (trailer && filter) {
+      addMetadataTags(span, trailer, filter, 'response')
+    }
+
+    span.finish()
+
+    if (callback) {
+      scope.bind(callback, childOf).apply(this, arguments)
     }
   }
 }

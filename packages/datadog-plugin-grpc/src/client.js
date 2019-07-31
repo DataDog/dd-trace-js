@@ -17,10 +17,10 @@ function createWrapMakeClientConstructor (tracer, config, grpc) {
         .forEach(method => {
           const originalName = methods[method].originalName
 
-          proto[method] = wrapMethod(proto[method], methods[method], tracer, config, grpc)
+          proto[method] = wrapMethod(tracer, config, proto[method], methods[method], grpc)
 
           if (originalName) {
-            proto[originalName] = wrapMethod(proto[originalName], methods[originalName], tracer, config, grpc)
+            proto[originalName] = wrapMethod(tracer, config, proto[originalName], methods[originalName], grpc)
           }
         })
 
@@ -29,7 +29,7 @@ function createWrapMakeClientConstructor (tracer, config, grpc) {
   }
 }
 
-function wrapMethod (method, definition, tracer, config, grpc) {
+function wrapMethod (tracer, config, method, definition, grpc) {
   if (typeof method !== 'function' || !definition.path) return method
 
   const filter = getFilter(config, 'metadata')
