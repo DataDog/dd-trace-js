@@ -17,7 +17,8 @@ describe('Plugin', () => {
   function buildClient (service) {
     service = Object.assign({
       getBidi: () => {},
-      getStream: () => {},
+      getServerStream: () => {},
+      getClientStream: () => {},
       getUnary: () => {}
     }, service)
 
@@ -88,9 +89,9 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
         })
 
-        it('should handle `stream` calls', done => {
+        it('should handle `server_stream` calls', done => {
           const client = buildClient({
-            getStream: stream => {
+            getServerStream: stream => {
               stream.end()
             }
           })
@@ -100,12 +101,12 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getStream',
+                resource: '/test.TestService/getServerStream',
                 meta: {
-                  'grpc.method.name': 'getStream',
+                  'grpc.method.name': 'getServerStream',
                   'grpc.method.service': 'TestService',
                   'grpc.method.package': 'test',
-                  'grpc.method.path': '/test.TestService/getStream',
+                  'grpc.method.path': '/test.TestService/getServerStream',
                   'grpc.method.kind': kinds.server_stream,
                   'grpc.status.code': '0',
                   'span.kind': 'client',
@@ -116,9 +117,40 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          const call = client.getStream({ first: 'foobar' })
+          const call = client.getServerStream({ first: 'foobar' })
 
           call.on('data', () => {})
+        })
+
+        it('should handle `client_stream` calls', done => {
+          const client = buildClient({
+            getClientStream: (_, callback) => {
+              callback()
+            }
+          })
+
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.deep.include({
+                name: 'grpc.request',
+                service: 'test-grpc-client',
+                resource: '/test.TestService/getClientStream',
+                meta: {
+                  'grpc.method.name': 'getClientStream',
+                  'grpc.method.service': 'TestService',
+                  'grpc.method.package': 'test',
+                  'grpc.method.path': '/test.TestService/getClientStream',
+                  'grpc.method.kind': kinds.client_stream,
+                  'grpc.status.code': '0',
+                  'span.kind': 'client',
+                  'component': 'grpc'
+                }
+              })
+            })
+            .then(done)
+            .catch(done)
+
+          client.getClientStream(() => {})
         })
 
         it('should handle `bidi` calls', done => {
@@ -167,7 +199,7 @@ describe('Plugin', () => {
         it('should handle cancelled `stream` calls', done => {
           let call = null
           const client = buildClient({
-            getStream: () => call.cancel()
+            getServerStream: () => call.cancel()
           })
 
           agent
@@ -177,7 +209,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          call = client.getStream({ first: 'foobar' })
+          call = client.getServerStream({ first: 'foobar' })
           call.on('data', () => {})
         })
 
@@ -224,6 +256,35 @@ describe('Plugin', () => {
             .catch(done)
 
           client.getUnary({ first: 'foobar' }, () => {})
+        })
+
+        it('should handle a missing callback', done => {
+          const client = buildClient({
+            getUnary: (_, callback) => callback()
+          })
+
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.deep.include({
+                name: 'grpc.request',
+                service: 'test-grpc-client',
+                resource: '/test.TestService/getUnary',
+                meta: {
+                  'grpc.method.name': 'getUnary',
+                  'grpc.method.service': 'TestService',
+                  'grpc.method.package': 'test',
+                  'grpc.method.path': '/test.TestService/getUnary',
+                  'grpc.method.kind': kinds.unary,
+                  'grpc.status.code': '0',
+                  'span.kind': 'client',
+                  'component': 'grpc'
+                }
+              })
+            })
+            .then(done)
+            .catch(done)
+
+          client.getUnary({ first: 'foobar' })
         })
 
         it('should inject its parent span in the metadata', done => {

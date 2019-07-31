@@ -4,7 +4,8 @@ package test;
 
 service TestService {
   rpc getBidi (stream Request) returns (stream Empty) {}
-  rpc getStream (Request) returns (stream Empty) {}
+  rpc getServerStream (Request) returns (stream Empty) {}
+  rpc getClientStream (stream Request) returns (Empty) {}
   rpc getUnary (Request) returns (Empty) {}
 }
 
