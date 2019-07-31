@@ -323,6 +323,7 @@ interface Plugins {
   "fastify": plugins.fastify;
   "generic-pool": plugins.generic_pool;
   "graphql": plugins.graphql;
+  "grpc": plugins.grpc;
   "hapi": plugins.hapi;
   "http": plugins.http;
   "http2": plugins.http2;
@@ -511,6 +512,16 @@ declare namespace plugins {
     validateStatus?: (code: number) => boolean;
   }
 
+  /** @hidden */
+  interface Grpc extends Integration {
+    /**
+     * An array of metadata entries to record. Can also be a callback that returns
+     * the key/value pairs to record. For example, using
+     * `variables => variables` would record all variables.
+     */
+    metadata?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+  }
+
   /**
    * This plugin automatically instruments the
    * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
@@ -634,6 +645,22 @@ declare namespace plugins {
      * @default true
      */
     signature?: boolean;
+  }
+
+  /**
+   * This plugin automatically instruments the
+   * [grpc](https://github.com/grpc/grpc-node) module.
+   */
+  interface grpc extends Grpc {
+    /**
+     * Configuration for gRPC clients.
+     */
+    client?: Grpc,
+
+    /**
+     * Configuration for gRPC servers.
+     */
+    server?: Grpc
   }
 
   /**
