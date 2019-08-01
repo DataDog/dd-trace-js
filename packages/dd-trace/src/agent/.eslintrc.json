@@ -1,0 +1,11 @@
+{
+  "extends": [
+    "../../../.eslintrc.json"
+  ],
+  "globals": {
+    "crypto": true,
+    "fs": true,
+    "performance": true,
+    "WebAssembly": true
+  }
+}
