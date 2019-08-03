@@ -2,6 +2,7 @@
 
 const path = require('path')
 const fs = require('fs')
+const execSync = require('child_process').execSync
 const git = require('./helpers/git')
 const title = require('./helpers/title')
 const executeTest = require('../packages/dd-trace/test/plugins/harness')
@@ -16,28 +17,36 @@ if (!fs.existsSync(testConfigPath)) {
 }
 
 // Get the test configurations from the plugin's external test configuration file
-const externalTestConfigs = require(`../packages/datadog-plugin-${plugin}/test/external_tests.js`)
-const defaultConfig = externalTestConfigs.defaultConfig
-let testConfigs = externalTestConfigs.testConfigs
-if (Array.isArray(testConfigs)) {
-  if (testConfigs.length === 0) {
+const { testConfigs, defaultConfig } = require(`../packages/datadog-plugin-${plugin}/test/external_tests.js`)
+
+executeTestConfigs(testConfigs, defaultConfig)
+
+function executeTestConfigs (testConfigs, defaultConfig) {
+  if (!testConfigs) {
     testConfigs = [{}]
+  } else {
+    if (Array.isArray(testConfigs)) {
+      if (testConfigs.length === 0) {
+        testConfigs = [{}]
+      }
+    } else {
+      testConfigs = [testConfigs]
+    }
   }
-} else {
-  testConfigs = [testConfigs]
-}
 
-for (let i = 0; i < testConfigs.length; ++i) {
-  const testConfig = normalizeConfig(defaultConfig, testConfigs[i])
+  for (let i = 0; i < testConfigs.length; ++i) {
+    // Normalize the test config
+    const testConfig = normalizeConfig(testConfigs[i], defaultConfig)
 
-  // Print out the test config name
-  title(testConfig.name)
+    // Print out the test config name
+    title(testConfig.name)
 
-  // Get the integration
-  const executionPath = grabIntegration(testConfig)
+    // Get the integration
+    const executionPath = grabIntegration(testConfig)
 
-  // Execute tests through harness
-  executeTest(testConfig, executionPath)
+    // Execute tests through harness
+    executeTest(testConfig, executionPath)
+  }
 }
 
 function grabIntegration (testConfig) {
@@ -65,7 +74,7 @@ function grabIntegration (testConfig) {
   return testConfig.localCwd ? path.join(integrationPath, testConfig.localCwd) : integrationPath
 }
 
-function normalizeConfig (defaultConfig, testConfig) {
+function normalizeConfig (testConfig, defaultConfig) {
   const config = {
     integration: testConfig.integration || defaultConfig.integration,
     repo: testConfig.repo || defaultConfig.repo,
@@ -73,6 +82,10 @@ function normalizeConfig (defaultConfig, testConfig) {
     testType: testConfig.testType || defaultConfig.testType,
     localCwd: testConfig.localCwd || defaultConfig.localCwd,
     setup: testConfig.setup || defaultConfig.setup
+  }
+
+  if (config.setup === undefined) {
+    config.setup = (cwd) => execSync('npm install', { cwd })
   }
 
   config.name = testConfig.name || defaultConfig.name ||
