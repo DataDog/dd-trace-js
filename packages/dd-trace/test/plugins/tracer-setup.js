@@ -16,11 +16,13 @@ require('../../../dd-trace').init({ logInjection: true })
 // Helper to wrap child_process.spawn and spawnSync
 function wrapSpawn (childProcess, fnName) {
   const spawn = childProcess[fnName]
+  const basename = require('path').basename
 
   const wrapper = function (file, args, options) {
-    args.unshift('-r', __filename)
-    const res = spawn.call(this, file, args, options)
-    return res
+    if (basename(file) === 'node') {
+      args.unshift('-r', __filename)
+    }
+    return spawn.call(this, file, args, options)
   }
 
   Object.defineProperty(childProcess, fnName, {
