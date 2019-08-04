@@ -4,6 +4,7 @@ const executeJest = require('./jest')
 const executeGeneric = require('./generic')
 const executeNodeunit = require('./nodeunit')
 const executeTap = require('./tap')
+const executeTape = require('./tape')
 const executeCustom = require('./custom')
 
 function executeTest (testConfig, executionPath) {
@@ -11,15 +12,14 @@ function executeTest (testConfig, executionPath) {
 
   // Copy environment variables over
   if (testConfig.testEnv) {
-    const envCopy = {}
+    options.env = {}
     Object.keys(process.env).forEach(prop => {
-      envCopy[prop] = process.env[prop]
+      options.env[prop] = process.env[prop]
     })
 
     Object.keys(testConfig.testEnv).forEach(prop => {
-      envCopy[prop] = testConfig.testEnv[prop]
+      options.env[prop] = testConfig.testEnv[prop]
     })
-    options.env = envCopy
   }
 
   const testArgs = testConfig.testArgs || ''
@@ -38,6 +38,9 @@ function executeTest (testConfig, executionPath) {
       break
     case 'tap':
       executeTap(testArgs, options)
+      break
+    case 'tape':
+      executeTape(testArgs, options)
       break
     case 'custom':
       executeCustom(testConfig, options)

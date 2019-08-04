@@ -6,6 +6,7 @@ const execSync = require('child_process').execSync
 const git = require('./helpers/git')
 const title = require('./helpers/title')
 const executeTest = require('../packages/dd-trace/test/plugins/harness')
+const coalesce = require('koalas')
 
 // Get the plugin whose external tests we want to run
 const plugin = process.argv[2]
@@ -76,25 +77,26 @@ function grabIntegration (testConfig) {
 
 function normalizeConfig (testConfig, defaultConfig) {
   const config = {
-    integration: testConfig.integration || defaultConfig.integration,
-    repo: testConfig.repo || defaultConfig.repo,
-    branch: testConfig.branch || defaultConfig.branch,
-    testType: testConfig.testType || defaultConfig.testType,
-    localCwd: testConfig.localCwd || defaultConfig.localCwd,
-    setup: testConfig.setup || defaultConfig.setup
+    integration: coalesce(testConfig.integration, defaultConfig.integration),
+    repo: coalesce(testConfig.repo, defaultConfig.repo),
+    branch: coalesce(testConfig.branch, defaultConfig.branch),
+    testType: coalesce(testConfig.testType, defaultConfig.testType),
+    testEnv: coalesce(testConfig.testEnv, defaultConfig.testEnv),
+    localCwd: coalesce(testConfig.localCwd, defaultConfig.localCwd),
+    setup: coalesce(testConfig.setup, defaultConfig.setup)
   }
 
-  if (config.setup === undefined) {
+  if (!config.setup) {
     config.setup = (cwd) => execSync('npm install', { cwd })
   }
 
-  config.name = testConfig.name || defaultConfig.name ||
-    config.branch ? `${config.integration} (${config.branch})` : config.integration
+  config.name = coalesce(testConfig.name, defaultConfig.name,
+    config.branch ? `${config.integration} (${config.branch})` : config.integration)
 
   if (config.testType === 'custom') {
-    config.testFn = testConfig.testFn || defaultConfig.testFn
+    config.testFn = coalesce(testConfig.testFn, defaultConfig.testFn)
   } else {
-    config.testArgs = testConfig.testArgs || defaultConfig.testArgs || ''
+    config.testArgs = coalesce(testConfig.testArgs, defaultConfig.testArgs, '')
   }
 
   if (!config.integration) {
@@ -110,7 +112,7 @@ function normalizeConfig (testConfig, defaultConfig) {
   }
 
   if (config.testType === 'custom' && !config.testFn) {
-    throw new Error('All "custom" test configurations must have a "testFn" field')
+    throw new Error('All "custom" test configurations must have a "testFn" function')
   }
 
   return config
