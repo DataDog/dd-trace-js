@@ -6,10 +6,7 @@ const defaultConfig = {
   integration: 'amqp10',
   repo: 'https://github.com/noodlefrenzy/node-amqp10/',
   testType: 'mocha',
-  testArgs: '--recursive --check-leaks -R spec -t 5000 ./test/unit ./test/integration/qpid ./test/integration/servicebus',
-  setup: function (cwd) {
-    execSync('npm install', { cwd })
-  }
+  testArgs: '--recursive --check-leaks -R spec -t 5000 ./test/unit ./test/integration/qpid ./test/integration/servicebus'
 }
 
 const testConfigs = [

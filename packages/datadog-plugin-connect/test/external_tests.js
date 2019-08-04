@@ -1,15 +1,10 @@
 'use strict'
 
-const execSync = require('child_process').execSync
-
 const defaultConfig = {
   integration: 'connect',
   repo: 'https://github.com/senchalabs/connect/',
   testType: 'mocha',
-  testArgs: '--require test/support/env --reporter spec --check-leaks test/',
-  setup: function (cwd) {
-    execSync('npm install', { cwd })
-  }
+  testArgs: '--require test/support/env --reporter spec --check-leaks test/'
 }
 
 const testConfigs = [

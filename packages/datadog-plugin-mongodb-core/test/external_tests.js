@@ -10,9 +10,6 @@ const defaultConfig = {
     try {
       execSync(`npm run env -- mongodb-test-runner -t 60000 '${tracerSetupPath}' test/tests`, options)
     } catch (error) {} // eslint-disable-line no-empty
-  },
-  setup: function (cwd) {
-    return execSync('npm install', { cwd })
   }
 }
 

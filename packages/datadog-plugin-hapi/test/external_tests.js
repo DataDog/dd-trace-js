@@ -1,15 +1,10 @@
 'use strict'
 
-const execSync = require('child_process').execSync
-
 const defaultConfig = {
   integration: 'hapi',
   repo: 'https://github.com/hapijs/hapi',
   testType: 'lab',
-  testArgs: '-a @hapi/code -m 3000 test/',
-  setup: function (cwd) {
-    execSync('npm install', { cwd })
-  }
+  testArgs: '-a @hapi/code -m 3000 test/'
 }
 
 const testConfigs = [

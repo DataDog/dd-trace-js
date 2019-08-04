@@ -6,10 +6,7 @@ const defaultConfig = {
   integration: 'fastify',
   repo: 'https://github.com/fastify/fastify',
   testType: 'tap',
-  testArgs: '--no-esm -J test/*.test.js test/*/*.test.js',
-  setup: function (cwd) {
-    execSync('npm install', { cwd })
-  }
+  testArgs: '--no-esm -J test/*.test.js test/*/*.test.js'
 }
 
 const testConfigs = [

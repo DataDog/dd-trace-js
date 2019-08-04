@@ -1,8 +1,7 @@
 'use strict'
 
 const executeJest = require('./jest')
-const executeLab = require('./lab')
-const executeMocha = require('./mocha')
+const executeGeneric = require('./generic')
 const executeNodeunit = require('./nodeunit')
 const executeTap = require('./tap')
 const executeCustom = require('./custom')
@@ -31,10 +30,8 @@ function executeTest (testConfig, executionPath) {
       executeJest(testArgs, options)
       break
     case 'lab':
-      executeLab(testArgs, options)
-      break
     case 'mocha':
-      executeMocha(testArgs, options)
+      executeGeneric(testConfig.testType, testArgs, options)
       break
     case 'nodeunit':
       executeNodeunit(testArgs, options)
