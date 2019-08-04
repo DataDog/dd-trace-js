@@ -8,7 +8,7 @@ function executeGeneric (framework, args, options) {
 
   // Inject our tracer before we run the external tests
   try {
-    return execSync(`npm run env -- ${framework} '${tracerSetupPath}' ${args}`, options)
+    return execSync(`npm run env --silent -- ${framework} '${tracerSetupPath}' ${args}`, options)
   } catch (err) {} // eslint-disable-line no-empty
 }
 

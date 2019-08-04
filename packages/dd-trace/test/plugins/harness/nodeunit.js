@@ -8,7 +8,7 @@ function executeNodeunit (args, options) {
 
   // Inject our tracer before we run the external tests
   try {
-    return execSync(`node --inspect-brk -r "${tracerSetupPath}" ./node_modules/.bin/nodeunit ${args}`, options)
+    return execSync(`node -r "${tracerSetupPath}" nodeunit ${args}`, options)
   } catch (err) {} // eslint-disable-line no-empty
 }
 

@@ -10,7 +10,7 @@ const executeCustom = require('./custom')
 function executeTest (testConfig, executionPath) {
   const options = { cwd: executionPath, stdio: [0, 1, 2] }
 
-  // Copy environment variables over
+  // Merge process env vars with test config's env vars
   if (testConfig.testEnv) {
     options.env = {}
     Object.keys(process.env).forEach(prop => {

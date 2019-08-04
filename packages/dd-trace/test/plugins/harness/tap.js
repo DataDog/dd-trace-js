@@ -8,7 +8,7 @@ function executeTap (args, options) {
 
   // Inject our tracer before we run the external tests
   try {
-    return execSync(`npm run env -- tap --node-arg="--require" --node-arg="${tracerSetupPath}" ${args}`, options)
+    return execSync(`npm run env --silent -- tap --node-arg="--require" --node-arg="${tracerSetupPath}" ${args}`, options)
   } catch (err) {} // eslint-disable-line no-empty
 }
 
