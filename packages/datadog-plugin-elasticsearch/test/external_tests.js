@@ -1,7 +1,5 @@
 'use strict'
 
-const execSync = require('child_process').execSync
-
 const defaultConfig = {
   integration: '@elastic/elasticsearch',
   repo: 'https://github.com/elastic/elasticsearch-js',
@@ -10,6 +8,12 @@ const defaultConfig = {
 }
 
 const testConfigs = [
+  {
+    integration: 'elasticsearch',
+    repo: 'https://github.com/elastic/elasticsearch-js-legacy',
+    testType: 'mocha',
+    testArgs: 'test/unit/index.js'
+  },
   {
     branch: '5.x'
   },

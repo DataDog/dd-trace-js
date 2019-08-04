@@ -23,22 +23,24 @@ function executeTest (testConfig, executionPath) {
     options.env = envCopy
   }
 
+  const testArgs = testConfig.testArgs || ''
+
   // Run the test framework harness
   switch (testConfig.testType) {
     case 'jest':
-      executeJest(testConfig.testArgs, options)
+      executeJest(testArgs, options)
       break
     case 'lab':
-      executeLab(testConfig.testArgs, options)
+      executeLab(testArgs, options)
       break
     case 'mocha':
-      executeMocha(testConfig.testArgs, options)
+      executeMocha(testArgs, options)
       break
     case 'nodeunit':
-      executeNodeunit(testConfig.testArgs, options)
+      executeNodeunit(testArgs, options)
       break
     case 'tap':
-      executeTap(testConfig.testArgs, options)
+      executeTap(testArgs, options)
       break
     case 'custom':
       executeCustom(testConfig, options)
