@@ -26,7 +26,7 @@ const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 
 class DatadogTracer extends Tracer {
-  constructor (config) {
+  constructor(config) {
     super()
 
     log.use(config.logger)
@@ -42,7 +42,7 @@ class DatadogTracer extends Tracer {
 
     const exporters = []
 
-    if (config.useLogTraceExporter) {
+    if (config.experimental.useLogTraceExporter) {
       exporters.push(new LogExporter())
     } else {
       exporters.push(new AgentExporter(this._prioritySampler, config.url))
@@ -63,7 +63,7 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  _startSpan (name, fields) {
+  _startSpan(name, fields) {
     const references = getReferences(fields.references)
     const reference = getParent(references)
     const type = reference && reference.type()
@@ -94,7 +94,7 @@ class DatadogTracer extends Tracer {
     return span
   }
 
-  _inject (spanContext, format, carrier) {
+  _inject(spanContext, format, carrier) {
     try {
       this._prioritySampler.sample(spanContext)
       this._propagators[format].inject(spanContext, carrier)
@@ -105,7 +105,7 @@ class DatadogTracer extends Tracer {
     return this
   }
 
-  _extract (format, carrier) {
+  _extract(format, carrier) {
     try {
       return this._propagators[format].extract(carrier)
     } catch (e) {
@@ -115,7 +115,7 @@ class DatadogTracer extends Tracer {
   }
 }
 
-function getReferences (references) {
+function getReferences(references) {
   if (!references) return []
 
   return references.filter(ref => {
@@ -135,7 +135,7 @@ function getReferences (references) {
   })
 }
 
-function getParent (references) {
+function getParent(references) {
   let parent = null
 
   for (let i = 0; i < references.length; i++) {
@@ -155,7 +155,7 @@ function getParent (references) {
   return parent
 }
 
-function isSampled (sampler, parent, type) {
+function isSampled(sampler, parent, type) {
   if (type === REFERENCE_NOOP) return false
   if (parent && !parent._traceFlags.sampled) return false
   if (!parent && !sampler.isSampled()) return false
