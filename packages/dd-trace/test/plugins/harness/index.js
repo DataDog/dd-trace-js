@@ -2,6 +2,7 @@
 
 const executeJest = require('./jest')
 const executeGeneric = require('./generic')
+const executeNode = require('./node')
 const executeNodeunit = require('./nodeunit')
 const executeTap = require('./tap')
 const executeTape = require('./tape')
@@ -32,6 +33,10 @@ function executeTest (testConfig, executionPath) {
     case 'lab':
     case 'mocha':
       executeGeneric(testConfig.testType, testArgs, options)
+      break
+    case 'buster-test':
+    case 'promises-aplus-tests':
+      executeNode(testConfig.testType, testArgs, options)
       break
     case 'nodeunit':
       executeNodeunit(testArgs, options)

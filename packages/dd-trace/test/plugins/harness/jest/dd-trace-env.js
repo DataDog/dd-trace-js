@@ -1,6 +1,6 @@
 'use strict'
 
-const tracer = require('../../../../..')
+const tracer = require('../../../../../dd-trace')
 tracer.init()
 
 const NodeEnvironment = require('jest-environment-node')
@@ -29,11 +29,9 @@ constructor (config, context) {
     scriptObj[EVAL_RESULT_VARIABLE] = function (_module, exports, require, dirname, filename, global, jest) {
       const ret = orig.apply(this, arguments)
       const module_details = parse(filename)
-
       const moduleExports = _module.exports
       const moduleBaseDir = module_details.basedir
       const moduleName = path.join(module_details.name, module_details.path)
-
       const patchedExports = tracer._instrumenter.hookModule(moduleExports, moduleName, moduleBaseDir)
 
       Object.defineProperty(_module, 'exports', { value: patchedExports })
