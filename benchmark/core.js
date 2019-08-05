@@ -11,7 +11,8 @@ const Config = require('../packages/dd-trace/src/config')
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
-const Writer = proxyquire('../packages/dd-trace/src/writer', {
+const Writer = require('../packages/dd-trace/src/writer')
+const AgentExporter = proxyquire('../packages/dd-trace/src/agent/exporter', {
   './platform': { request: () => Promise.resolve() }
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
@@ -68,8 +69,9 @@ suite
     }
   })
   .add('Writer#append', {
-    onStart () {
-      writer = new Writer({ sample: () => {} }, {})
+    onStart() {
+      const sampler = { sample: () => { } }
+      writer = new Writer(sampler, [new AgentExporter(sampler, {})])
     },
     fn () {
       writer.append(spanStub)

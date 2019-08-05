@@ -1,18 +1,14 @@
 'use strict'
 
-const URL = require('url-parse')
-
 describe('Writer', () => {
   let Writer
   let writer
   let prioritySampler
   let trace
   let span
-  let platform
-  let response
+  let exporter
   let format
   let encode
-  let url
   let log
   let tracer
   let scope
@@ -41,30 +37,12 @@ describe('Writer', () => {
       })
     }
 
-    response = JSON.stringify({
-      rate_by_service: {
-        'service:hello,env:test': 1
-      }
-    })
-
-    platform = {
-      name: sinon.stub(),
-      version: sinon.stub(),
-      engine: sinon.stub(),
-      request: sinon.stub().yields(null, response),
-      msgpack: {
-        prefix: sinon.stub()
-      }
+    exporter = {
+      send: sinon.stub()
     }
 
     format = sinon.stub().withArgs(span).returns('formatted')
     encode = sinon.stub().withArgs(['formatted']).returns('encoded')
-
-    url = {
-      protocol: 'http:',
-      hostname: 'localhost',
-      port: 8126
-    }
 
     log = {
       error: sinon.spy()
@@ -76,13 +54,12 @@ describe('Writer', () => {
     }
 
     Writer = proxyquire('../src/writer', {
-      './platform': platform,
       './log': log,
       './format': format,
       './encode': encode,
       '../lib/version': 'tracerVersion'
     })
-    writer = new Writer(prioritySampler, url)
+    writer = new Writer(prioritySampler, [exporter])
   })
 
   describe('length', () => {
@@ -148,72 +125,15 @@ describe('Writer', () => {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(platform.request).to.not.have.been.called
+      expect(exporter.send).to.not.have.been.called
     })
 
     it('should empty the internal queue', () => {
       writer.append(span)
       writer.flush()
 
+      expect(exporter.send).to.have.been.called
       expect(writer.length).to.equal(0)
-    })
-
-    it('should flush its traces to the agent', () => {
-      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
-      platform.name.returns('lang')
-      platform.version.returns('version')
-      platform.engine.returns('interpreter')
-
-      writer.append(span)
-      writer.append(span)
-      writer.flush()
-
-      expect(platform.request).to.have.been.calledWithMatch({
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port,
-        path: '/v0.4/traces',
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/msgpack',
-          'Datadog-Meta-Lang': 'lang',
-          'Datadog-Meta-Lang-Version': 'version',
-          'Datadog-Meta-Lang-Interpreter': 'interpreter',
-          'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          'X-Datadog-Trace-Count': '2'
-        },
-        data: 'prefixed'
-      })
-    })
-
-    it('should log request errors', done => {
-      const error = new Error('boom')
-
-      platform.request.yields(error)
-
-      writer.append(span)
-      writer.flush()
-
-      setTimeout(() => {
-        expect(log.error).to.have.been.calledWith(error)
-        done()
-      })
-    })
-
-    context('with the url as a unix socket', () => {
-      beforeEach(() => {
-        url = new URL('unix:/path/to/somesocket.sock')
-        writer = new Writer(prioritySampler, url, 3)
-      })
-
-      it('should make a request to the socket', () => {
-        writer.append(span)
-        writer.flush()
-
-        expect(platform.request).to.have.been.calledWithMatch({
-          socketPath: url.pathname
-        })
-      })
     })
   })
 })

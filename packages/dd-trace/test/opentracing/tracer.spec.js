@@ -11,6 +11,8 @@ describe('Tracer', () => {
   let span
   let PrioritySampler
   let prioritySampler
+  let agentExporter
+  let AgentExporter
   let Writer
   let writer
   let Recorder
@@ -61,6 +63,8 @@ describe('Tracer', () => {
     TextMapPropagator = sinon.stub()
     HttpPropagator = sinon.stub()
     BinaryPropagator = sinon.stub()
+    agentExporter = {}
+    AgentExporter = sinon.stub().returns(agentExporter)
     propagator = {
       inject: sinon.stub(),
       extract: sinon.stub()
@@ -92,6 +96,7 @@ describe('Tracer', () => {
       '../writer': Writer,
       '../recorder': Recorder,
       '../sampler': Sampler,
+      '../agent/exporter': AgentExporter,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
@@ -104,7 +109,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(Writer).to.have.been.called
-    expect(Writer).to.have.been.calledWith(prioritySampler, config.url)
+    expect(Writer).to.have.been.calledWith(prioritySampler, [agentExporter])
     expect(Recorder).to.have.been.calledWith(writer, config.flushInterval)
     expect(recorder.init).to.have.been.called
   })

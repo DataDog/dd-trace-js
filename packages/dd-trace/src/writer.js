@@ -1,18 +1,16 @@
 'use strict'
 
-const platform = require('./platform')
 const log = require('./log')
 const format = require('./format')
 const encode = require('./encode')
-const tracerVersion = require('../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
 class Writer {
-  constructor (prioritySampler, url) {
+  constructor(prioritySampler, exporters) {
     this._queue = []
     this._prioritySampler = prioritySampler
-    this._url = url
+    this._exporters = exporters
     this._size = 0
   }
 
@@ -53,9 +51,9 @@ class Writer {
 
   flush () {
     if (this._queue.length > 0) {
-      const data = platform.msgpack.prefix(this._queue)
-
-      this._request(data, this._queue.length)
+      for (const exporter of this._exporters) {
+        exporter.send(this._queue)
+      }
 
       this._queue = []
       this._size = 0
