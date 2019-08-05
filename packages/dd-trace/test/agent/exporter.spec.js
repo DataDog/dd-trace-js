@@ -7,29 +7,12 @@ describe('AgentExporter', () => {
   let AgentExporter
   let exporter
   let prioritySampler
-  let trace
   let platform
   let response
   let url
   let log
-  let span
 
   beforeEach(() => {
-
-    trace = {
-      started: [],
-      finished: []
-    }
-
-    span = {
-      tracer: sinon.stub().returns(tracer),
-      context: sinon.stub().returns({
-        _trace: trace,
-        _sampling: {},
-        _tags: {},
-        _traceFlags: {}
-      })
-    }
 
     response = JSON.stringify({
       rate_by_service: {
