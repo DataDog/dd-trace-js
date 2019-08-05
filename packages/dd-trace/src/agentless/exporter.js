@@ -1,11 +1,9 @@
-"use strict";
+'use strict'
 
 const log = require('../log')
 
 class LogExporter {
-  constructor() { }
-
-  send(queue) {
+  send (queue) {
     log.JSON({ traces: queue })
   }
 }

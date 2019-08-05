@@ -3,7 +3,6 @@
 const URL = require('url-parse')
 
 describe('AgentExporter', () => {
-
   let AgentExporter
   let exporter
   let prioritySampler
@@ -13,7 +12,6 @@ describe('AgentExporter', () => {
   let log
 
   beforeEach(() => {
-
     response = JSON.stringify({
       rate_by_service: {
         'service:hello,env:test': 1
@@ -29,8 +27,6 @@ describe('AgentExporter', () => {
         prefix: sinon.stub()
       }
     }
-
-
     url = {
       protocol: 'http:',
       hostname: 'localhost',
@@ -53,8 +49,6 @@ describe('AgentExporter', () => {
     })
     exporter = new AgentExporter(prioritySampler, url)
   })
-
-
   describe('send', () => {
     it('should send traces to the agent', () => {
       platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
@@ -62,7 +56,7 @@ describe('AgentExporter', () => {
       platform.version.returns('version')
       platform.engine.returns('interpreter')
 
-      const queue = ['encoded', 'encoded'];
+      const queue = ['encoded', 'encoded']
       exporter.send(queue)
 
       expect(platform.request).to.have.been.calledWithMatch({
@@ -87,7 +81,7 @@ describe('AgentExporter', () => {
       const error = new Error('boom')
 
       platform.request.yields(error)
-      const queue = ['encoded'];
+      const queue = ['encoded']
       exporter.send(queue)
 
       setTimeout(() => {

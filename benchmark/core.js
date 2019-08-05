@@ -69,7 +69,7 @@ suite
     }
   })
   .add('Writer#append', {
-    onStart() {
+    onStart () {
       const sampler = { sample: () => { } }
       writer = new Writer(sampler, [new AgentExporter(sampler, {})])
     },
