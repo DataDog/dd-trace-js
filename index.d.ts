@@ -236,6 +236,7 @@ export declare interface TracerOptions {
    */
   experimental?: boolean | {
     b3?: boolean
+    useLogTraceExporter?: boolean
   };
 
   /**

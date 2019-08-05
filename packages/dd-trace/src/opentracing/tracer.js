@@ -9,6 +9,7 @@ const Writer = require('../writer')
 const Recorder = require('../recorder')
 const Sampler = require('../sampler')
 const AgentExporter = require('../agent/exporter')
+const LogExporter = require('../agentless/exporter')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
@@ -38,9 +39,15 @@ class DatadogTracer extends Tracer {
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
-    const exporters = [
-      new AgentExporter(this._prioritySampler, config.url)
-    ]
+
+    const exporters = []
+
+    if (config.useLogTraceExporter) {
+      exporters.push(new LogExporter())
+    } else {
+      exporters.push(new AgentExporter(this._prioritySampler, config.url))
+    }
+
     this._writer = new Writer(this._prioritySampler, exporters)
     this._recorder = new Recorder(this._writer, config.flushInterval)
     this._recorder.init()

@@ -52,7 +52,8 @@ class Config {
     }
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
     this.experimental = {
-      b3: !(!options.experimental || !options.experimental.b3)
+      b3: !(!options.experimental || !options.experimental.b3),
+      useLogTraceExporter: !(!options.experimental || !options.experimental.useLogTraceExporter)
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope
