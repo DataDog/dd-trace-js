@@ -79,7 +79,7 @@ describe('Tracer', () => {
       tags: {},
       debug: false,
       experimental: {
-        useLogTraceExporter: true
+        useLogTraceExporter: false
       }
     }
 
