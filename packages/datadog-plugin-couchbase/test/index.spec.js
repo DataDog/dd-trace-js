@@ -56,7 +56,7 @@ describe('Plugin', () => {
           const span = tracer.startSpan('test.query.cb')
 
           tracer.scope().activate(span, () => {
-            cluster.query(n1qlQuery, (err) => {
+            cluster.query(n1qlQuery, (err, rows) => {
               expect(tracer.scope().active()).to.equal(span)
               done(err)
             })
@@ -231,6 +231,29 @@ describe('Plugin', () => {
               .catch(done)
 
             bucket.query(searchQuery, (err) => {
+              if (err) done(err)
+            })
+          })
+
+          it('should handle Analytics queries', done => {
+            const query = 'SELECT * FROM datatest'
+            const cbasQuery = CbasQuery.fromString(query)
+
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'couchbase.call')
+                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('resource', query)
+                expect(span).to.have.property('type', 'sql')
+                expect(span.meta).to.have.property('span.kind', 'client')
+                expect(span.meta).to.have.property('bucket', 'datadog-test')
+                expect(span.meta).to.have.property('query.type', 'cbas')
+              })
+              .then(done)
+              .catch(done)
+
+            bucket.query(cbasQuery, (err) => {
               if (err) done(err)
             })
           })

@@ -32,31 +32,33 @@ function assertVersions () {
     .map(key => plugins[key])
     .reduce((prev, next) => prev.concat(next), [])
 
-  internals.forEach(assertInstrumentation)
+  internals.forEach((inst) => {
+    assertInstrumentation(inst, false)
+  })
 
   Object.keys(externals)
     .filter(name => ~names.indexOf(name))
     .forEach(name => {
-      [].concat(externals[name]).forEach(assertInstrumentation)
+      [].concat(externals[name]).forEach(inst => assertInstrumentation(inst, true))
     })
 }
 
-function assertInstrumentation (instrumentation) {
+function assertInstrumentation (instrumentation, external) {
   [].concat(instrumentation.versions).forEach(version => {
     if (version) {
-      assertModules(instrumentation.name, semver.coerce(version).version)
-      assertModules(instrumentation.name, version)
+      assertModules(instrumentation.name, semver.coerce(version).version, external)
+      assertModules(instrumentation.name, version, external)
     }
   })
 }
 
-function assertModules (name, version) {
+function assertModules (name, version, external) {
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
   assertFolder(name, version)
-  assertPackage(name, null, version)
-  assertPackage(name, version, version)
+  assertPackage(name, null, version, external)
+  assertPackage(name, version, version, external)
   assertIndex(name)
   assertIndex(name, version)
 }
@@ -75,8 +77,8 @@ function assertFolder (name, version) {
   }
 }
 
-function assertPackage (name, version, dependency) {
-  fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify({
+function assertPackage (name, version, dependency, external) {
+  const pkg = {
     name: [name, sha1(name).substr(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
     license: 'BSD-3-Clause',
@@ -84,7 +86,14 @@ function assertPackage (name, version, dependency) {
     optionalDependencies: {
       [name]: dependency
     }
-  }, null, 2) + '\n')
+  }
+
+  if (!external) {
+    pkg.workspaces = {
+      nohoist: ['**/**']
+    }
+  }
+  fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
 }
 
 function assertIndex (name, version) {
@@ -104,7 +113,9 @@ function assertWorkspace () {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    workspaces: Array.from(workspaces)
+    workspaces: {
+      packages: Array.from(workspaces)
+    }
   }, null, 2) + '\n')
 }
 

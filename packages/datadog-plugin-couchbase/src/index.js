@@ -202,26 +202,32 @@ module.exports = [
       this.wrap(Bucket.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
 
       this.wrap(Bucket.prototype, '_n1ql', createWrapN1qlQuery(tracer, config))
-      this.wrap(Bucket.prototype, '_view', createWrapViewQuery(tracer, config))
-      this.wrap(Bucket.prototype, '_fts', createWrapFtsQuery(tracer, config))
-      this.wrap(Bucket.prototype, '_cbas', createWrapCbasQuery(tracer, config))
-
       this.wrap(Bucket.prototype, '_n1qlReq', createWrapN1qlRequest(tracer))
+
+      this.wrap(Bucket.prototype, '_view', createWrapViewQuery(tracer, config))
       this.wrap(Bucket.prototype, '_viewReq', createWrapViewRequest(tracer, config))
+
+      this.wrap(Bucket.prototype, '_fts', createWrapFtsQuery(tracer, config))
       this.wrap(Bucket.prototype, '_ftsReq', createWrapFtsRequest(tracer, config))
-      this.wrap(Bucket.prototype, '_cbasReq', createWrapCbasRequest(tracer))
+
+      if (Bucket.prototype._cbas) {
+        this.wrap(Bucket.prototype, '_cbas', createWrapCbasQuery(tracer, config))
+        this.wrap(Bucket.prototype, '_cbasReq', createWrapCbasRequest(tracer))
+      }
     },
     unpatch (Bucket) {
       this.unwrap(Bucket.prototype, '_maybeInvoke')
 
       this.unwrap(Bucket.prototype, '_n1ql')
-      this.unwrap(Bucket.prototype, '_view')
-      this.unwrap(Bucket.prototype, '_fts')
-      this.unwrap(Bucket.prototype, '_cbas')
-
       this.unwrap(Bucket.prototype, '_n1qlReq')
+
+      this.unwrap(Bucket.prototype, '_view')
       this.unwrap(Bucket.prototype, '_viewReq')
+
+      this.unwrap(Bucket.prototype, '_fts')
       this.unwrap(Bucket.prototype, '_ftsReq')
+
+      this.unwrap(Bucket.prototype, '_cbas')
       this.unwrap(Bucket.prototype, '_cbasReq')
     }
   },
