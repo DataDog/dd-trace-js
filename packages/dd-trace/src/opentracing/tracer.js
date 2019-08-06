@@ -42,14 +42,17 @@ class DatadogTracer extends Tracer {
 
     const exporters = []
 
+    let flushInterval = config.flushInterval
     if (config.experimental.useLogTraceExporter) {
+      // when using the LogExporter, always flush the logs immediately
       exporters.push(new LogExporter())
+      flushInterval = 0
     } else {
       exporters.push(new AgentExporter(this._prioritySampler, config.url))
     }
 
     this._writer = new Writer(this._prioritySampler, exporters)
-    this._recorder = new Recorder(this._writer, config.flushInterval)
+    this._recorder = new Recorder(this._writer, flushInterval)
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
