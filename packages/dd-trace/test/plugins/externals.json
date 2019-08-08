@@ -1,4 +1,10 @@
 {
+  "express": [
+    {
+      "name": "loopback",
+      "versions": [">=2.13.0"]
+    }
+  ],
   "generic-pool": [
     {
       "name": "generic-pool",
