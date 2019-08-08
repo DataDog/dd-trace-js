@@ -76,10 +76,8 @@ function createWrapN1qlRequest (tracer) {
     return function n1qlRequestWithTrace (host, q, adhoc, emitter) {
       const span = tracer.scope().active()
 
-      span.addTags({
-        'cluster.host': host,
-        'bucket': this.name
-      })
+      addBucketTag(this, span)
+      span.setTag('cluster.host', host)
 
       return _n1qlReq.apply(this, arguments)
     }
@@ -111,9 +109,7 @@ function createWrapViewRequest (tracer) {
     return function viewRequestWithTrace () {
       const span = tracer.scope().active()
 
-      span.addTags({
-        'bucket': this.name
-      })
+      addBucketTag(this, span)
 
       return _viewReq.apply(this, arguments)
     }
@@ -143,9 +139,7 @@ function createWrapFtsRequest (tracer) {
     return function ftsRequestWithTrace () {
       const span = tracer.scope().active()
 
-      span.addTags({
-        'bucket': this.name
-      })
+      addBucketTag(this, span)
 
       return _ftsReq.apply(this, arguments)
     }
@@ -171,13 +165,11 @@ function createWrapCbasQuery (tracer, config) {
 
 function createWrapCbasRequest (tracer) {
   return function wrapCbasRequest (_cbasReq) {
-    return function cbasRequestWithTrace (host, q, emitter) {
+    return function cbasRequestWithTrace (host) {
       const span = tracer.scope().active()
 
-      span.addTags({
-        'cbas.host': host,
-        'bucket': this.name
-      })
+      addBucketTag(this, span)
+      span.setTag('cbas.host', host)
 
       return _cbasReq.apply(this, arguments)
     }
@@ -193,63 +185,113 @@ function createWrapOpenBucket (tracer) {
   }
 }
 
+function addBucketTag (bucket, span) {
+  span.setTag('bucket.name', bucket.name || bucket._name)
+}
+
+function wrapQueries (Class, tracer, config) {
+  this.wrap(Class.prototype, '_n1ql', createWrapN1qlQuery(tracer, config))
+  this.wrap(Class.prototype, '_fts', createWrapFtsQuery(tracer, config))
+
+  if (Class.prototype._view) {
+    this.wrap(Class.prototype, '_view', createWrapViewQuery(tracer, config))
+  }
+
+  if (Class.prototype._cbas) {
+    this.wrap(Class.prototype, '_cbas', createWrapCbasQuery(tracer, config))
+  }
+}
+
+function unwrapQueries (Class) {
+  this.unwrap(Class.prototype, '_n1ql')
+  this.unwrap(Class.prototype, '_fts')
+
+  if (Class.prototype._view) {
+    this.unwrap(Class.prototype, '_view')
+  }
+
+  if (Class.prototype._cbas) {
+    this.unwrap(Class.prototype, '_cbas')
+  }
+}
+
+function wrapRequests (Class, tracer) {
+  this.wrap(Class.prototype, '_n1qlReq', createWrapN1qlRequest(tracer))
+  this.wrap(Class.prototype, '_ftsReq', createWrapFtsRequest(tracer))
+
+  if (Class.prototype._viewReq) {
+    this.wrap(Class.prototype, '_viewReq', createWrapViewRequest(tracer))
+  }
+
+  if (Class.prototype._cbasReq) {
+    this.wrap(Class.prototype, '_cbasReq', createWrapCbasRequest(tracer))
+  }
+}
+
+function unwrapRequests (Class, tracer) {
+  this.unwrap(Class.prototype, '_n1qlReq')
+  this.unwrap(Class.prototype, '_ftsReq')
+
+  if (Class.prototype._viewReq) {
+    this.unwrap(Class.prototype, '_viewReq')
+  }
+
+  if (Class.prototype._cbasReq) {
+    this.unwrap(Class.prototype, '_cbasReq')
+  }
+}
+
 module.exports = [
   {
     name: 'couchbase',
     versions: ['>=2.4.2'],
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
-      this.wrap(Bucket.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
-
-      this.wrap(Bucket.prototype, '_n1ql', createWrapN1qlQuery(tracer, config))
-      this.wrap(Bucket.prototype, '_n1qlReq', createWrapN1qlRequest(tracer))
-
-      this.wrap(Bucket.prototype, '_view', createWrapViewQuery(tracer, config))
-      this.wrap(Bucket.prototype, '_viewReq', createWrapViewRequest(tracer, config))
-
-      this.wrap(Bucket.prototype, '_fts', createWrapFtsQuery(tracer, config))
-      this.wrap(Bucket.prototype, '_ftsReq', createWrapFtsRequest(tracer, config))
-
-      if (Bucket.prototype._cbas) {
-        this.wrap(Bucket.prototype, '_cbas', createWrapCbasQuery(tracer, config))
-        this.wrap(Bucket.prototype, '_cbasReq', createWrapCbasRequest(tracer))
-      }
+      this.wrap(Bucket.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer))
+      wrapQueries.call(this, Bucket, tracer, config)
+      wrapRequests.call(this, Bucket, tracer)
     },
     unpatch (Bucket) {
       this.unwrap(Bucket.prototype, '_maybeInvoke')
 
-      this.unwrap(Bucket.prototype, '_n1ql')
-      this.unwrap(Bucket.prototype, '_n1qlReq')
-
-      this.unwrap(Bucket.prototype, '_view')
-      this.unwrap(Bucket.prototype, '_viewReq')
-
-      this.unwrap(Bucket.prototype, '_fts')
-      this.unwrap(Bucket.prototype, '_ftsReq')
-
-      this.unwrap(Bucket.prototype, '_cbas')
-      this.unwrap(Bucket.prototype, '_cbasReq')
+      unwrapQueries.call(this, Bucket)
+      unwrapRequests.call(this, Bucket)
     }
   },
   {
     name: 'couchbase',
-    versions: ['>=2.4.2'],
+    versions: ['>2.5.1'],
     file: 'lib/cluster.js',
     patch (Cluster, tracer, config) {
-      this.wrap(Cluster.prototype, 'openBucket', createWrapOpenBucket(tracer, config))
-      this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
+      this.wrap(Cluster.prototype, 'openBucket', createWrapOpenBucket(tracer))
+      this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer))
 
-      this.wrap(Cluster.prototype, '_n1ql', createWrapN1qlQuery(tracer, config))
-      this.wrap(Cluster.prototype, '_fts', createWrapFtsQuery(tracer, config))
-      this.wrap(Cluster.prototype, '_cbas', createWrapCbasQuery(tracer, config))
+      wrapQueries.call(this, Cluster, tracer, config)
     },
     unpatch (Cluster) {
       this.unwrap(Cluster.prototype, 'openBucket')
       this.unwrap(Cluster.prototype, '_maybeInvoke')
 
-      this.unwrap(Cluster.prototype, '_n1ql')
-      this.unwrap(Cluster.prototype, '_fts')
-      this.unwrap(Cluster.prototype, '_cbas')
+      unwrapQueries.call(this, Cluster)
+    }
+  },
+  {
+    name: 'couchbase',
+    versions: ['2.4.2 - 2.5.1'],
+    file: 'lib/cluster.js',
+    patch (Cluster, tracer, config) {
+      this.wrap(Cluster.prototype, 'openBucket', createWrapOpenBucket(tracer, config))
+      this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
+
+      wrapQueries.call(this, Cluster, tracer, config)
+      this.wrap(Cluster.prototype, '_cbasReq', createWrapCbasRequest(tracer))
+    },
+    unpatch (Cluster) {
+      this.unwrap(Cluster.prototype, 'openBucket')
+      this.unwrap(Cluster.prototype, '_maybeInvoke')
+
+      unwrapQueries.call(this, Cluster)
+      this.unwrap(Cluster.prototype, '_cbasReq')
     }
   }
 ]
