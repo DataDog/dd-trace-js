@@ -260,7 +260,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['>2.5.1'],
+    versions: ['>=2.6.0'],
     file: 'lib/cluster.js',
     patch (Cluster, tracer, config) {
       this.wrap(Cluster.prototype, 'openBucket', createWrapOpenBucket(tracer))

@@ -36,8 +36,8 @@ describe('Plugin', () => {
         beforeEach(done => {
           cluster = new couchbase.Cluster('localhost:8091')
           cluster.authenticate('Administrator', 'password')
-          bucket = cluster.openBucket('datadog-test', (err) => done(err))
           cluster.enableCbas('localhost:8095')
+          bucket = cluster.openBucket('datadog-test', (err) => done(err))
         })
 
         afterEach(() => {
@@ -45,9 +45,10 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          // return agent.close()
+          expect(bucket.connected).to.equal(false)
+          return agent.close()
         })
-        /*
+
         it('should run the Query callback in the parent context', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
           const query = 'SELECT 1+1'
@@ -91,7 +92,7 @@ describe('Plugin', () => {
               done()
             })
           })
-        }) */
+        })
 
         describe('queries on cluster', () => {
           it('should handle N1QL queries', done => {
@@ -118,9 +119,10 @@ describe('Plugin', () => {
 
             if (semver.intersects(version, '2.4.2 - 2.5.0')) {
               // Due to bug JSCBC-491 in Couchbase, we have to reconnect to dispatch waiting queries
-              bucket = cluster.openBucket('datadog-test', (err) => {
+              const triggerBucket = cluster.openBucket('datadog-test', (err) => {
                 if (err) done(err)
               })
+              triggerBucket.on('connect', () => triggerBucket.disconnect())
             }
           })
 
@@ -148,9 +150,10 @@ describe('Plugin', () => {
 
             if (semver.intersects(version, '2.4.2 - 2.5.0')) {
               // Due to bug JSCBC-491 in Couchbase, we have to reconnect to dispatch waiting queries
-              bucket = cluster.openBucket('datadog-test', (err) => {
+              const triggerBucket = cluster.openBucket('datadog-test', (err) => {
                 if (err) done(err)
               })
+              triggerBucket.on('connect', () => triggerBucket.disconnect())
             }
           })
 
