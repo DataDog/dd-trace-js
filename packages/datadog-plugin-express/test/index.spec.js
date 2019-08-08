@@ -1,6 +1,5 @@
 'use strict'
 
-const path = require('path')
 const axios = require('axios')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -877,11 +876,7 @@ describe('Plugin', () => {
 
                   expect(spans[4]).to.have.property('name', 'express.middleware')
                   expect(spans[4]).to.have.property('service', 'test')
-                  expect(spans[4]).to.have.property('type', 'web')
                   expect(spans[4]).to.have.property('resource', 'handleDD')
-                  expect(spans[4].meta).to.have.property('span.kind', 'server')
-                  expect(spans[4].meta).to.have.property('http.method', 'GET')
-                  expect(spans[4].meta).to.have.property('http.status_code', '200')
                 })
                 .then(done)
                 .catch(done)
