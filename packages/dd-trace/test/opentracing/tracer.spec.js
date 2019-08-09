@@ -89,7 +89,7 @@ describe('Tracer', () => {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
-      '../writer': Writer,
+      '../agent/writer': Writer,
       '../recorder': Recorder,
       '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,

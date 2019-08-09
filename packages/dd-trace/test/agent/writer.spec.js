@@ -75,12 +75,12 @@ describe('Writer', () => {
       sample: sinon.stub()
     }
 
-    Writer = proxyquire('../src/writer', {
-      './platform': platform,
-      './log': log,
-      './format': format,
-      './encode': encode,
-      '../lib/version': 'tracerVersion'
+    Writer = proxyquire('../src/agent/writer', {
+      '../platform': platform,
+      '../log': log,
+      '../format': format,
+      '../encode': encode,
+      '../../lib/version': 'tracerVersion'
     })
     writer = new Writer(prioritySampler, url)
   })

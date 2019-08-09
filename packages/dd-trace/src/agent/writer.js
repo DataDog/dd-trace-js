@@ -1,10 +1,10 @@
 'use strict'
 
-const platform = require('./platform')
-const log = require('./log')
-const format = require('./format')
-const encode = require('./encode')
-const tracerVersion = require('../lib/version')
+const platform = require('../platform')
+const log = require('../log')
+const format = require('../format')
+const encode = require('../encode')
+const tracerVersion = require('../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
