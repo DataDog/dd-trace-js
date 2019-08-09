@@ -5,7 +5,8 @@ const Tracer = opentracing.Tracer
 const Reference = opentracing.Reference
 const Span = require('./span')
 const SpanContext = require('./span_context')
-const Writer = require('../agent/writer')
+const AgentWriter = require('../agent/writer')
+const LogWriter = require('../agentless/writer')
 const Recorder = require('../recorder')
 const Sampler = require('../sampler')
 const PrioritySampler = require('../priority_sampler')
@@ -37,8 +38,16 @@ class DatadogTracer extends Tracer {
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
-    this._writer = new Writer(this._prioritySampler, config.url)
-    this._recorder = new Recorder(this._writer, config.flushInterval)
+
+    let flushInterval = config.flushInterval
+    if (config.experimental.useLogWriter) {
+      this._writer = new LogWriter(this._prioritySampler, process.stdout)
+      flushInterval = 0
+    } else {
+      this._writer = new AgentWriter(this._prioritySampler, config.url)
+    }
+
+    this._recorder = new Recorder(this._writer, flushInterval)
     this._recorder.init()
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {

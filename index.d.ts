@@ -236,6 +236,11 @@ export declare interface TracerOptions {
    */
   experimental?: boolean | {
     b3?: boolean
+    /**
+     * Whether to write traces to log output, rather than send to an agent
+     * @default false
+     */
+    useLogWriter?: boolean
   };
 
   /**
