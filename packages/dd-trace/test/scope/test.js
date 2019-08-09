@@ -285,6 +285,21 @@ module.exports = factory => {
 
         emitter.emit('test')
       })
+
+      it('should remove once listeners', () => {
+        const spy = sinon.spy()
+
+        scope.bind(emitter)
+
+        scope.activate(span, () => {
+          emitter.once('test', spy)
+          emitter.removeListener('test', spy)
+        })
+
+        emitter.emit('test')
+
+        expect(spy).to.not.have.been.called
+      })
     })
 
     describe('with an unsupported target', () => {

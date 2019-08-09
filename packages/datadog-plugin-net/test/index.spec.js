@@ -216,5 +216,19 @@ describe('Plugin', () => {
         })
       })
     })
+
+    it('should run event listeners in the correct scope', done => {
+      const socket = new net.Socket()
+
+      tracer.scope().activate(parent, () => {
+        socket.once('close', () => {
+          expect(tracer.scope().active()).to.equal(parent)
+          done()
+        })
+      })
+
+      socket.connect({ port })
+      socket.destroy()
+    })
   })
 })
