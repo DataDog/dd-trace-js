@@ -55,15 +55,23 @@ function wrapRouterMethod (original) {
 function wrapLayerHandle (layer, handle) {
   handle._name = handle._name || layer.name
 
+  let wrapCallHandle
+
   if (handle.length === 4) {
-    return function (error, req, res, next) {
+    wrapCallHandle = function (error, req, res, next) {
       return callHandle(layer, handle, req, [error, req, res, wrapNext(layer, req, next)])
     }
   } else {
-    return function (req, res, next) {
+    wrapCallHandle = function (req, res, next) {
       return callHandle(layer, handle, req, [req, res, wrapNext(layer, req, next)])
     }
   }
+
+  // This is a workaround for the `loopback` library so that it can find the correct express layer
+  // that contains the real handle function
+  wrapCallHandle._datadog_orig = handle
+
+  return wrapCallHandle
 }
 
 function wrapStack (stack, offset, matchers) {
