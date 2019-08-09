@@ -8,7 +8,7 @@ const tracerVersion = require('../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
-class Writer {
+class AgentWriter {
   constructor (prioritySampler, url) {
     this._queue = []
     this._prioritySampler = prioritySampler
@@ -110,4 +110,4 @@ class Writer {
   }
 }
 
-module.exports = Writer
+module.exports = AgentWriter
