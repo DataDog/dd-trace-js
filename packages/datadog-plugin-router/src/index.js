@@ -68,7 +68,7 @@ function wrapLayerHandle (layer, handle) {
   }
 
   // This is a workaround for the `loopback` library so that it can find the correct express layer
-  //  that contains the real handle function
+  // that contains the real handle function
   wrapCallHandle._datadog_orig = handle
 
   return wrapCallHandle
