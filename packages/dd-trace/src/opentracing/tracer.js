@@ -40,7 +40,7 @@ class DatadogTracer extends Tracer {
     this._prioritySampler = new PrioritySampler(config.env)
 
     let flushInterval = config.flushInterval
-    if (config.experimental.useLogWriter) {
+    if (config.experimental !== undefined && config.experimental.useLogWriter) {
       this._writer = new LogWriter(this._prioritySampler, process.stdout)
       flushInterval = 0
     } else {

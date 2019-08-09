@@ -11,7 +11,8 @@ describe('Tracer', () => {
   let span
   let PrioritySampler
   let prioritySampler
-  let Writer
+  let AgentWriter
+  let LogWriter
   let writer
   let Recorder
   let recorder
@@ -42,7 +43,9 @@ describe('Tracer', () => {
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
     writer = {}
-    Writer = sinon.stub().returns(writer)
+    AgentWriter = sinon.stub().returns(writer)
+    LogWriter = sinon.stub().returns(writer)
+
 
     recorder = {
       init: sinon.spy(),
@@ -89,7 +92,8 @@ describe('Tracer', () => {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
-      '../agent/writer': Writer,
+      '../agent/writer': AgentWriter,
+      '../agentless/writer': LogWriter,
       '../recorder': Recorder,
       '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,
@@ -103,10 +107,20 @@ describe('Tracer', () => {
   it('should support recording', () => {
     tracer = new Tracer(config)
 
-    expect(Writer).to.have.been.called
-    expect(Writer).to.have.been.calledWith(prioritySampler, config.url)
+    expect(AgentWriter).to.have.been.called
+    expect(AgentWriter).to.have.been.calledWith(prioritySampler, config.url)
     expect(Recorder).to.have.been.calledWith(writer, config.flushInterval)
     expect(recorder.init).to.have.been.called
+  })
+
+  it('should support recording with LogWriter', () => {
+    config.experimental = {
+      useLogWriter: true
+    }
+    tracer = new Tracer(config)
+
+    expect(AgentWriter).not.to.have.been.called
+    expect(LogWriter).to.have.been.calledWith(prioritySampler, process.stdout)
   })
 
   it('should support sampling', () => {
