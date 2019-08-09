@@ -117,7 +117,7 @@ describe('Plugin', () => {
               if (err) done(err)
             })
 
-            if (semver.intersects(version, '2.4.2 - 2.5.0')) {
+            if (semver.intersects(version, '2.4.0 - 2.5.0')) {
               // Due to bug JSCBC-491 in Couchbase, we have to reconnect to dispatch waiting queries
               const triggerBucket = cluster.openBucket('datadog-test', (err) => {
                 if (err) done(err)
@@ -148,7 +148,7 @@ describe('Plugin', () => {
               if (err) done(err)
             })
 
-            if (semver.intersects(version, '2.4.2 - 2.5.0')) {
+            if (semver.intersects(version, '2.4.0 - 2.5.0')) {
               // Due to bug JSCBC-491 in Couchbase, we have to reconnect to dispatch waiting queries
               const triggerBucket = cluster.openBucket('datadog-test', (err) => {
                 if (err) done(err)
@@ -157,31 +157,34 @@ describe('Plugin', () => {
             }
           })
 
-          it('should handle Analytics queries', done => {
-            const query = 'SELECT * FROM datatest'
-            const cbasQuery = CbasQuery.fromString(query)
+          // Only couchbase v2.4.2 supports authentication with Analytics queries
+          if (semver.intersects(version, '>=2.4.2')) {
+            it('should handle Analytics queries', done => {
+              const query = 'SELECT * FROM datatest'
+              const cbasQuery = CbasQuery.fromString(query)
 
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.call')
-                expect(span).to.have.property('service', 'test-couchbase')
-                expect(span).to.have.property('resource', query)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('query.type', 'cbas')
+              agent
+                .use(traces => {
+                  const span = traces[0][0]
+                  expect(span).to.have.property('name', 'couchbase.call')
+                  expect(span).to.have.property('service', 'test-couchbase')
+                  expect(span).to.have.property('resource', query)
+                  expect(span).to.have.property('type', 'sql')
+                  expect(span.meta).to.have.property('span.kind', 'client')
+                  expect(span.meta).to.have.property('query.type', 'cbas')
 
-                if (semver.intersects(version, '>=2.6.0')) {
-                  expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                }
+                  if (semver.intersects(version, '>=2.6.0')) {
+                    expect(span.meta).to.have.property('bucket.name', 'datadog-test')
+                  }
+                })
+                .then(done)
+                .catch(done)
+
+              cluster.query(cbasQuery, (err) => {
+                if (err) done(err)
               })
-              .then(done)
-              .catch(done)
-
-            cluster.query(cbasQuery, (err) => {
-              if (err) done(err)
             })
-          })
+          }
         })
 
         describe('queries on buckets', () => {
