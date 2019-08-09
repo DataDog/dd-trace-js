@@ -1,3 +1,12 @@
 {
-  "debug.node.autoAttach": "on"
+  "debug.node.autoAttach": "on",
+  "javascript.format.insertSpaceAfterCommaDelimiter": false,
+  "javascript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+  "javascript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+  "javascript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,
+  "javascript.autoClosingTags": false,
+  "javascript.format.insertSpaceAfterSemicolonInForStatements": false,
+  "javascript.format.insertSpaceBeforeAndAfterBinaryOperators": false,
+  "typescript.format.enable": false,
+  "javascript.format.enable": false
 }

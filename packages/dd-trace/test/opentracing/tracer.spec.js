@@ -46,7 +46,6 @@ describe('Tracer', () => {
     AgentWriter = sinon.stub().returns(writer)
     LogWriter = sinon.stub().returns(writer)
 
-
     recorder = {
       init: sinon.spy(),
       record: sinon.spy()
