@@ -5,10 +5,10 @@ const Tracer = opentracing.Tracer
 const Reference = opentracing.Reference
 const Span = require('./span')
 const SpanContext = require('./span_context')
-const AgentWriter = require('../agent/writer')
-const LogWriter = require('../agentless/writer')
-const Recorder = require('../recorder')
-const Sampler = require('../sampler')
+const AgentExporter = require('../agent/exporter')
+const LogExporter = require('../agentless/exporter')
+const SpanProcessor = require('./span_processor')
+const Sampler = require('../agent/sampler')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
@@ -39,16 +39,13 @@ class DatadogTracer extends Tracer {
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
 
-    let flushInterval = config.flushInterval
     if (config.experimental !== undefined && config.experimental.useLogWriter) {
-      this._writer = new LogWriter(this._prioritySampler, process.stdout)
-      flushInterval = 0
+      this._exporter = new LogExporter(process.stdout)
     } else {
-      this._writer = new AgentWriter(this._prioritySampler, config.url)
+      this._exporter = new AgentExporter(config.url, config.flushInterval)
     }
 
-    this._recorder = new Recorder(this._writer, flushInterval)
-    this._recorder.init()
+    this._spanProcessor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
@@ -78,7 +75,7 @@ class DatadogTracer extends Tracer {
       tags.env = this._env
     }
 
-    const span = new Span(this, this._recorder, this._sampler, this._prioritySampler, {
+    const span = new Span(this, this._spanProcessor, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent,
       tags,

@@ -8,10 +8,9 @@ const tracerVersion = require('../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
-class AgentWriter {
-  constructor (prioritySampler, url) {
+class Writer {
+  constructor (url) {
     this._queue = []
-    this._prioritySampler = prioritySampler
     this._url = url
     this._size = 0
   }
@@ -24,31 +23,20 @@ class AgentWriter {
     const spanContext = span.context()
     const trace = spanContext._trace
 
-    if (trace.started.length === trace.finished.length) {
-      this._prioritySampler.sample(spanContext)
+    const formattedTrace = trace.finished.map(format)
 
-      const formattedTrace = trace.finished.map(format)
+    log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
 
-      this._erase(trace)
+    const buffer = encode(formattedTrace)
 
-      if (spanContext._traceFlags.sampled === false) {
-        log.debug(() => `Dropping trace due to user configured filtering: ${JSON.stringify(formattedTrace)}`)
-        return
-      }
+    log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
 
-      log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
-
-      const buffer = encode(formattedTrace)
-
-      log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
-
-      if (buffer.length + this._size > MAX_SIZE) {
-        this.flush()
-      }
-
-      this._size += buffer.length
-      this._queue.push(buffer)
+    if (buffer.length + this._size > MAX_SIZE) {
+      this.flush()
     }
+
+    this._size += buffer.length
+    this._queue.push(buffer)
   }
 
   flush () {
@@ -98,16 +86,6 @@ class AgentWriter {
       }
     })
   }
-
-  _erase (trace) {
-    trace.finished.forEach(span => {
-      span.context()._tags = {}
-      span.context()._metrics = {}
-    })
-
-    trace.started = []
-    trace.finished = []
-  }
 }
 
-module.exports = AgentWriter
+module.exports = Writer

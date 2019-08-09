@@ -1,6 +1,6 @@
 'use strict'
 
-const Sampler = require('./sampler')
+const Sampler = require('./agent/sampler')
 const ext = require('../../../ext')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
