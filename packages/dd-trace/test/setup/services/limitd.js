@@ -6,7 +6,7 @@ const LimitdClient = require('../../../../../versions/limitd-client').get()
 function waitForLimitd () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('limitd')
-    const limitd = new LimitdClient('limitd://127.0.0.1:9231')
+    const limitd = new LimitdClient('limitd://localhost:9231')
 
     setImmediate(() => {
       operation.attempt(currentAttempt => {
