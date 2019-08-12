@@ -18,7 +18,7 @@
 [2]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
 [3]: https://github.com/DataDog/dd-trace-js/blob/master/docs/API.md
 [4]: https://github.com/DataDog/dd-trace-js/blob/master/.circleci/config.yml
-[5]: https://github.com/DataDog/dd-trace-js/blob/master/src/plugins/index.js
+[5]: https://github.com/DataDog/dd-trace-js/blob/master/packages/dd-trace/src/plugins/index.js
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->
