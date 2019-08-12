@@ -68,7 +68,6 @@ function cleanup () {
     .map(name => path.join(cwd, `addons-${name}.tgz`))
     .forEach(file => {
       try {
-        console.log(file)
         fs.unlinkSync(file)
       } catch (e) {
         // Ignore as it's just to save space
