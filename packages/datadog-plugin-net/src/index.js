@@ -122,9 +122,13 @@ module.exports = {
   patch (net, tracer, config) {
     require('dns') // net will otherwise get an unpatched version for DNS lookups
 
+    tracer.scope().bind(net.Socket.prototype)
+
     this.wrap(net.Socket.prototype, 'connect', createWrapConnect(tracer, config))
   },
-  unpatch (net) {
+  unpatch (net, tracer) {
+    tracer.scope().unbind(net.Socket.prototype)
+
     this.unwrap(net.Socket.prototype, 'connect')
   }
 }

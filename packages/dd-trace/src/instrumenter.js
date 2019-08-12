@@ -206,7 +206,7 @@ class Instrumenter {
     if (instrumented) {
       instrumented.forEach(moduleExports => {
         try {
-          instrumentation.unpatch.call(this, moduleExports)
+          instrumentation.unpatch.call(this, moduleExports, this._tracer)
         } catch (e) {
           log.error(e)
         }

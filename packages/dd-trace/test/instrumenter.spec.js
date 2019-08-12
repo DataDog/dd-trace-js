@@ -270,7 +270,7 @@ describe('Instrumenter', () => {
 
         instrumenter.unpatch()
 
-        expect(integrations.express.unpatch).to.have.been.calledWith(express)
+        expect(integrations.express.unpatch).to.have.been.calledWith(express, tracer)
       })
 
       it('should remove the require hooks', () => {
