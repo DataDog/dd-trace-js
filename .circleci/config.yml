@@ -587,7 +587,7 @@ workflows:
       - node-http2
       - node-knex
       - node-koa
-      - node-limitd-client
+      # - node-limitd-client
       - node-memcached
       - node-mongodb-core
       - node-tedious
@@ -674,7 +674,7 @@ workflows:
       - node-http2
       - node-knex
       - node-koa
-      - node-limitd-client
+      # - node-limitd-client
       - node-memcached
       - node-mongodb-core
       - node-mysql
