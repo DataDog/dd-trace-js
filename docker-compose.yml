@@ -59,8 +59,6 @@ services:
   limitd:
     image: rochdev/limitd
     environment:
-      - PORT=9231
-      - DB=/var/limitd/database
       - BUCKET_1_NAME=user
       - BUCKET_1_SIZE=10
       - BUCKET_1_PER_SECOND=5
