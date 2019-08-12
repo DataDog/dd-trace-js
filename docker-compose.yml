@@ -56,3 +56,13 @@ services:
       - CASSANDRA_TOKEN=-9223372036854775808
     ports:
       - "127.0.0.1:9042:9042"
+  limitd:
+    image: rochdev/limitd
+    environment:
+      - PORT=9231
+      - DB=/var/limitd/database
+      - BUCKET_1_NAME=user
+      - BUCKET_1_SIZE=10
+      - BUCKET_1_PER_SECOND=5
+    ports:
+      - "127.0.0.1:9231:9231"
