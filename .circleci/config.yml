@@ -280,6 +280,19 @@ jobs:
         environment:
           - PLUGINS=koa
 
+  node-limitd-client:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=limitd
+          - PLUGINS=limitd-client
+      - image: rochdev/limitd
+        environment:
+          - BUCKET_1_NAME=user
+          - BUCKET_1_SIZE=10
+          - BUCKET_1_PER_SECOND=5
+
   node-memcached:
     <<: *node-plugin-base
     docker:
@@ -574,6 +587,7 @@ workflows:
       - node-http2
       - node-knex
       - node-koa
+      # - node-limitd-client
       - node-memcached
       - node-mongodb-core
       - node-tedious
@@ -660,6 +674,7 @@ workflows:
       - node-http2
       - node-knex
       - node-koa
+      # - node-limitd-client
       - node-memcached
       - node-mongodb-core
       - node-mysql
