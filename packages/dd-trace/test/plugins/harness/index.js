@@ -36,6 +36,7 @@ function executeTest (testConfig, executionPath) {
       break
     case 'buster-test':
     case 'promises-aplus-tests':
+    case 'jasmine-node':
       executeNode(testConfig.testType, testArgs, options)
       break
     case 'nodeunit':
