@@ -14,7 +14,7 @@ const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagat
 const Writer = proxyquire('../packages/dd-trace/src/agent/writer', {
   './platform': { request: () => Promise.resolve() }
 })
-const Sampler = require('../packages/dd-trace/src/agent/sampler')
+const Sampler = require('../packages/dd-trace/src/sampler')
 const format = require('../packages/dd-trace/src/format')
 const encode = require('../packages/dd-trace/src/encode')
 const config = new Config('benchmark', { service: 'benchmark' })
