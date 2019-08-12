@@ -198,10 +198,12 @@ function wrapRemoveListener (removeListener) {
 
 function wrapRemoveAllListeners (removeAllListeners) {
   return function removeAllListenersWithTrace (eventName) {
-    if (this._datadog_events && eventName) {
-      delete this._datadog_events[eventName]
-    } else {
-      delete this._datadog_events
+    if (this._datadog_events) {
+      if (eventName) {
+        delete this._datadog_events[eventName]
+      } else {
+        delete this._datadog_events
+      }
     }
 
     return removeAllListeners.call(this, eventName)
