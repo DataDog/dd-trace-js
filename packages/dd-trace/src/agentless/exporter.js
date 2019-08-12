@@ -6,8 +6,9 @@ const format = require('../format')
 const MAX_SIZE = 255 * 1024 // 255kb
 
 class LogExporter {
-  constructor (outputStream) {
+  constructor (outputStream, maxSize = MAX_SIZE) {
     this._outputStream = outputStream
+    this._maxSize = maxSize
   }
 
   export (span) {
@@ -21,11 +22,11 @@ class LogExporter {
 
     for (const span of trace.finished) {
       const spanStr = JSON.stringify(format(span))
-      if (spanStr.length > MAX_SIZE) {
-        log.debug(() => 'Span too large to send to logs, dropping')
+      if (spanStr.length > this._maxSize) {
+        log.debug('Span too large to send to logs, dropping')
         continue
       }
-      if (spanStr.length + size + 1 > MAX_SIZE) {
+      if (spanStr.length + size + 1 > this._maxSize) {
         this._printSpans(queue)
         queue = []
         size = 0
@@ -33,7 +34,9 @@ class LogExporter {
       size += spanStr.length + 1 // includes length of ',' character
       queue.push(spanStr)
     }
-    this._printSpans(queue)
+    if (queue.length > 0) {
+      this._printSpans(queue)
+    }
   }
 
   _printSpans (queue) {

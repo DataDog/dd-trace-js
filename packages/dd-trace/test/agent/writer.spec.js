@@ -5,7 +5,6 @@ const URL = require('url-parse')
 describe('Writer', () => {
   let Writer
   let writer
-  let prioritySampler
   let trace
   let span
   let platform

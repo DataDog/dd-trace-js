@@ -1,7 +1,7 @@
 'use strict'
 
 describe('Exporter', () => {
-  const url = "www.example.com"
+  const url = 'www.example.com'
   let Scheduler
   let scheduler
   let Exporter

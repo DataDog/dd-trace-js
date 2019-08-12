@@ -1,6 +1,5 @@
 
 describe('SpanProcessor', () => {
-
   let prioritySampler
   let spanProcessor
   let SpanProcessor
