@@ -1,4 +1,4 @@
-const log = require('../log')
+const log = require('./log')
 
 class SpanProcessor {
   constructor (exporter, prioritySampler) {

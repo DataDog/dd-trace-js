@@ -8,7 +8,7 @@ describe('Span', () => {
   let Span
   let span
   let tracer
-  let recorder
+  let processor
   let prioritySampler
   let sampler
   let platform
@@ -31,8 +31,8 @@ describe('Span', () => {
       rate: sinon.stub().returns(1)
     }
 
-    recorder = {
-      record: sinon.stub()
+    processor = {
+      process: sinon.stub()
     }
 
     prioritySampler = {
@@ -45,14 +45,14 @@ describe('Span', () => {
   })
 
   it('should have a default context', () => {
-    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
 
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._spanId).to.deep.equal('123')
   })
 
   it('should add itself to the context trace started spans', () => {
-    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
 
     expect(span.context()._trace.started).to.deep.equal([span])
   })
@@ -69,7 +69,7 @@ describe('Span', () => {
       }
     }
 
-    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
+    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation', parent })
 
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._parentId).to.deep.equal('456')
@@ -82,7 +82,7 @@ describe('Span', () => {
   })
 
   it('should keep track of its memory lifecycle', () => {
-    span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
 
     expect(platform.metrics().track).to.have.been.calledWith(span)
 
@@ -93,7 +93,7 @@ describe('Span', () => {
 
   describe('tracer', () => {
     it('should return its parent tracer', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
 
       expect(span.tracer()).to.equal(tracer)
     })
@@ -101,7 +101,7 @@ describe('Span', () => {
 
   describe('setOperationName', () => {
     it('should set the operation name', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'foo' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'foo' })
       span.setOperationName('bar')
 
       expect(span.context()._name).to.equal('bar')
@@ -120,7 +120,7 @@ describe('Span', () => {
         }
       }
 
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation', parent })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation', parent })
       span.setBaggageItem('foo', 'bar')
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
@@ -130,7 +130,7 @@ describe('Span', () => {
 
   describe('getBaggageItem', () => {
     it('should get a baggage item', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span._spanContext._baggageItems.foo = 'bar'
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
@@ -139,7 +139,7 @@ describe('Span', () => {
 
   describe('setTag', () => {
     it('should set a tag', () => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
       expect(span.context()._tags).to.have.property('foo', 'bar')
@@ -148,7 +148,7 @@ describe('Span', () => {
 
   describe('addTags', () => {
     beforeEach(() => {
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
     })
 
     it('should add tags as an object', () => {
@@ -185,31 +185,31 @@ describe('Span', () => {
 
   describe('finish', () => {
     it('should add itself to the context trace finished spans', () => {
-      recorder.record.returns(Promise.resolve())
+      processor.process.returns(Promise.resolve())
 
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span.finish()
 
       expect(span.context()._trace.finished).to.deep.equal([span])
     })
 
     it('should record the span', () => {
-      recorder.record.returns(Promise.resolve())
+      processor.process.returns(Promise.resolve())
 
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span.finish()
 
-      expect(recorder.record).to.have.been.calledWith(span)
+      expect(processor.process).to.have.been.calledWith(span)
     })
 
     it('should not record the span if already finished', () => {
-      recorder.record.returns(Promise.resolve())
+      processor.process.returns(Promise.resolve())
 
-      span = new Span(tracer, recorder, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span.finish()
       span.finish()
 
-      expect(recorder.record).to.have.been.calledOnce
+      expect(processor.process).to.have.been.calledOnce
     })
   })
 })

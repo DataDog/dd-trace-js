@@ -11,11 +11,11 @@ describe('Tracer', () => {
   let span
   let PrioritySampler
   let prioritySampler
-  let AgentWriter
-  let LogWriter
-  let writer
-  let Recorder
-  let recorder
+  let AgentExporter
+  let LogExporter
+  let SpanProcessor
+  let spanProcessor
+  let exporter
   let Sampler
   let sampler
   let spanContext
@@ -42,15 +42,16 @@ describe('Tracer', () => {
     }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
-    writer = {}
-    AgentWriter = sinon.stub().returns(writer)
-    LogWriter = sinon.stub().returns(writer)
-
-    recorder = {
-      init: sinon.spy(),
-      record: sinon.spy()
+    exporter = {
+      export: sinon.spy()
     }
-    Recorder = sinon.stub().returns(recorder)
+    AgentExporter = sinon.stub().returns(exporter)
+    LogExporter = sinon.stub().returns(exporter)
+
+    spanProcessor = {
+      process: sinon.spy()
+    }
+    SpanProcessor = sinon.stub().returns(spanProcessor)
 
     sampler = {
       isSampled: sinon.stub().returns(true)
@@ -91,9 +92,9 @@ describe('Tracer', () => {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
-      '../agent/writer': AgentWriter,
-      '../agentless/writer': LogWriter,
-      '../recorder': Recorder,
+      '../agent/exporter': AgentExporter,
+      '../agentless/exporter': LogExporter,
+      '../span_processor': SpanProcessor,
       '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
@@ -106,20 +107,21 @@ describe('Tracer', () => {
   it('should support recording', () => {
     tracer = new Tracer(config)
 
-    expect(AgentWriter).to.have.been.called
-    expect(AgentWriter).to.have.been.calledWith(prioritySampler, config.url)
-    expect(Recorder).to.have.been.calledWith(writer, config.flushInterval)
-    expect(recorder.init).to.have.been.called
+    expect(AgentExporter).to.have.been.called
+    expect(AgentExporter).to.have.been.calledWith(config.url, config.flushInterval)
+    expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 
-  it('should support recording with LogWriter', () => {
+  it('should support recording with LogExporter', () => {
     config.experimental = {
       useLogWriter: true
     }
     tracer = new Tracer(config)
 
-    expect(AgentWriter).not.to.have.been.called
-    expect(LogWriter).to.have.been.calledWith(prioritySampler, process.stdout)
+    expect(AgentExporter).not.to.have.been.called
+    expect(LogExporter).to.have.been.called
+    expect(LogExporter).to.have.been.calledWith(process.stdout)
+    expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 
   it('should support sampling', () => {
@@ -143,7 +145,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -170,7 +172,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -186,7 +188,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -199,7 +201,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -223,7 +225,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -239,7 +241,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -251,7 +253,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -265,7 +267,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -295,7 +297,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, recorder, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
         tags: {
           'env': 'test'
         }

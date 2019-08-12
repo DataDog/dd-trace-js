@@ -1,17 +1,25 @@
 'use strict'
 
 const Writer = require('./writer')
-const Recorder = require('./recorder')
+const Scheduler = require('./scheduler')
 
 class AgentExporter {
+
   constructor (url, interval) {
-    const writer = new Writer(url)
-    this._recorder = new Recorder(writer, interval)
-    this._recorder.init()
+    this._writer = new Writer(url)
+
+    if (interval > 0) {
+      this._scheduler = new Scheduler(() => this._writer.flush(), interval)
+    }
+    this._scheduler && this._scheduler.start()
   }
 
   export (span) {
-    this._recorder.record(span)
+    this._writer.append(span)
+
+    if (!this._scheduler) {
+      this._writer.flush()
+    }
   }
 }
 
