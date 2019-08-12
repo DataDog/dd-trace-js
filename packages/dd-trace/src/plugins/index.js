@@ -19,6 +19,7 @@ module.exports = {
   'ioredis': require('../../../../packages/datadog-plugin-ioredis/src'),
   'knex': require('../../../../packages/datadog-plugin-knex/src'),
   'koa': require('../../../../packages/datadog-plugin-koa/src'),
+  'limitd-client': require('../../../../packages/datadog-plugin-limitd-client/src'),
   'memcached': require('../../../../packages/datadog-plugin-memcached/src'),
   'mongodb-core': require('../../../../packages/datadog-plugin-mongodb-core/src'),
   'mysql': require('../../../../packages/datadog-plugin-mysql/src'),

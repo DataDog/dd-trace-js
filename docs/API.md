@@ -231,6 +231,7 @@ tracer.use('pg', {
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
+<h5 id="limitd-client"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
@@ -280,6 +281,7 @@ tracer.use('pg', {
 * [ioredis](./interfaces/plugins.ioredis.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
+* [limitd-client](./interfaces/plugins.limitd_client.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)
 * [mysql](./interfaces/plugins.mysql.html)

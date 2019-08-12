@@ -136,6 +136,7 @@ tracer.use('ioredis');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('limitd-client');
 tracer.use('memcached');
 tracer.use('mongodb-core');
 tracer.use('mysql');
