@@ -11,7 +11,7 @@ const Config = require('../packages/dd-trace/src/config')
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
-const Writer = proxyquire('../packages/dd-trace/src/agent/writer', {
+const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
   './platform': { request: () => Promise.resolve() }
 })
 const Sampler = require('../packages/dd-trace/src/sampler')

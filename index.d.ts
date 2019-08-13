@@ -240,7 +240,7 @@ export declare interface TracerOptions {
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
-    useLogWriter?: boolean
+    exporter?: typeof LOG_EXPORTER | typeof AGENT_EXPORTER
   };
 
   /**
@@ -520,19 +520,19 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
    */
-  interface amqp10 extends Integration {}
+  interface amqp10 extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [amqplib](https://github.com/squaremo/amqp.node) module.
    */
-  interface amqplib extends Integration {}
+  interface amqplib extends Integration { }
 
   /**
    * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
    * module to bind the promise callback the the caller context.
    */
-  interface bluebird extends Integration {}
+  interface bluebird extends Integration { }
 
   /**
    * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -540,49 +540,49 @@ declare namespace plugins {
    * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
    * on the tracer.
    */
-  interface bunyan extends Integration {}
+  interface bunyan extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
    */
-  interface cassandra_driver extends Integration {}
+  interface cassandra_driver extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [connect](https://github.com/senchalabs/connect) module.
    */
-  interface connect extends HttpServer {}
+  interface connect extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [dns](https://nodejs.org/api/dns.html) module.
    */
-  interface dns extends Integration {}
+  interface dns extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [elasticsearch](https://github.com/elastic/elasticsearch-js) module.
    */
-  interface elasticsearch extends Integration {}
+  interface elasticsearch extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [express](http://expressjs.com/) module.
    */
-  interface express extends HttpServer {}
+  interface express extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [fastify](https://www.fastify.io/) module.
    */
-  interface fastify extends HttpServer {}
+  interface fastify extends HttpServer { }
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
    * module to bind the callbacks the the caller context.
    */
-  interface generic_pool extends Integration {}
+  interface generic_pool extends Integration { }
 
   /**
    * This plugin automatically instruments the
@@ -645,7 +645,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [hapi](https://hapijs.com/) module.
    */
-  interface hapi extends HttpServer {}
+  interface hapi extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
@@ -705,61 +705,61 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [ioredis](https://github.com/luin/ioredis) module.
    */
-  interface ioredis extends Integration {}
+  interface ioredis extends Integration { }
 
   /**
    * This plugin patches the [knex](https://knexjs.org/)
    * module to bind the promise callback the the caller context.
    */
-  interface knex extends Integration {}
+  interface knex extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [koa](https://koajs.com/) module.
    */
-  interface koa extends HttpServer {}
+  interface koa extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [memcached](https://github.com/3rd-Eden/memcached) module.
    */
-  interface memcached extends Integration {}
+  interface memcached extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
-  interface mongodb_core extends Integration {}
+  interface mongodb_core extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [mysql](https://github.com/mysqljs/mysql) module.
    */
-  interface mysql extends Integration {}
+  interface mysql extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [mysql2](https://github.com/brianmario/mysql2) module.
    */
-  interface mysql2 extends Integration {}
+  interface mysql2 extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [net](https://nodejs.org/api/net.html) module.
    */
-  interface net extends Integration {}
+  interface net extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
-  interface paperplane extends HttpServer {}
+  interface paperplane extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [pg](https://node-postgres.com/) module.
    */
-  interface pg extends Integration {}
+  interface pg extends Integration { }
 
   /**
    * This plugin patches the [pino](http://getpino.io)
@@ -767,55 +767,55 @@ declare namespace plugins {
    * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
    * on the tracer.
    */
-  interface pino extends Integration {}
+  interface pino extends Integration { }
 
   /**
    * This plugin patches the [promise-js](https://github.com/kevincennis/promise)
    * module to bind the promise callback the the caller context.
    */
-  interface promise_js extends Integration {}
+  interface promise_js extends Integration { }
 
   /**
    * This plugin patches the [promise](https://github.com/then/promise)
    * module to bind the promise callback the the caller context.
    */
-  interface promise extends Integration {}
+  interface promise extends Integration { }
 
   /**
    * This plugin patches the [q](https://github.com/kriskowal/q)
    * module to bind the promise callback the the caller context.
    */
-  interface q extends Integration {}
+  interface q extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [redis](https://github.com/NodeRedis/node_redis) module.
    */
-  interface redis extends Integration {}
+  interface redis extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [restify](http://restify.com/) module.
    */
-  interface restify extends HttpServer {}
+  interface restify extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [router](https://github.com/pillarjs/router) module.
    */
-  interface router extends Integration {}
+  interface router extends Integration { }
 
-    /**
-   * This plugin automatically instruments the
-   * [tedious](https://github.com/tediousjs/tedious/) module.
-   */
-  interface tedious extends Integration {}
+  /**
+ * This plugin automatically instruments the
+ * [tedious](https://github.com/tediousjs/tedious/) module.
+ */
+  interface tedious extends Integration { }
 
   /**
    * This plugin patches the [when](https://github.com/cujojs/when)
    * module to bind the promise callback the the caller context.
    */
-  interface when extends Integration {}
+  interface when extends Integration { }
 
   /**
    * This plugin patches the [winston](https://github.com/winstonjs/winston)
@@ -823,7 +823,7 @@ declare namespace plugins {
    * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
    * on the tracer.
    */
-  interface winston extends Integration {}
+  interface winston extends Integration { }
 }
 
 /**
@@ -832,5 +832,8 @@ declare namespace plugins {
  * a no-op implementation.
  */
 export declare const tracer: Tracer;
+
+export declare const LOG_EXPORTER: 'log-exporter';
+export declare const AGENT_EXPORTER: 'agent-exporter';
 
 export default tracer;

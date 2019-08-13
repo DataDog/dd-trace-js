@@ -39,7 +39,7 @@ class DatadogTracer extends Tracer {
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
 
-    if (config.experimental !== undefined && config.experimental.useLogWriter) {
+    if (config.experimental !== undefined && config.experimental.exporter === constants.LOG_EXPORTER) {
       this._exporter = new LogExporter(process.stdout)
     } else {
       this._exporter = new AgentExporter(config.url, config.flushInterval)
