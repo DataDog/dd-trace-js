@@ -1,7 +1,6 @@
 'use strict'
 
 const log = require('../../log')
-const format = require('../../format')
 
 const MAX_SIZE = 255 * 1024 // 255kb
 
@@ -11,17 +10,14 @@ class LogExporter {
     this._maxSize = maxSize
   }
 
-  export (span) {
-    const spanContext = span.context()
-    const trace = spanContext._trace
-
-    log.debug(() => `Adding trace to queue: ${JSON.stringify(trace)}`)
+  export (spans) {
+    log.debug(() => `Adding trace to queue: ${JSON.stringify(spans)}`)
 
     let size = 0
     let queue = []
 
-    for (const span of trace.finished) {
-      const spanStr = JSON.stringify(format(span))
+    for (const span of spans) {
+      const spanStr = JSON.stringify(span)
       if (spanStr.length > this._maxSize) {
         log.debug('Span too large to send to logs, dropping')
         continue

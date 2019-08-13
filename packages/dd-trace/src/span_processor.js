@@ -1,4 +1,5 @@
 const log = require('./log')
+const format = require('./format')
 
 class SpanProcessor {
   constructor (exporter, prioritySampler) {
@@ -18,7 +19,9 @@ class SpanProcessor {
         this._erase(trace)
         return
       }
-      this._exporter.export(span)
+
+      const formattedSpans = trace.finished.map(format)
+      this._exporter.export(formattedSpans)
       this._erase(trace)
     }
   }

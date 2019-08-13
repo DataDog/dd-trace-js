@@ -2,7 +2,6 @@
 
 const platform = require('../../platform')
 const log = require('../../log')
-const format = require('../../format')
 const encode = require('../../encode')
 const tracerVersion = require('../../../lib/version')
 
@@ -19,15 +18,10 @@ class Writer {
     return this._queue.length
   }
 
-  append (span) {
-    const spanContext = span.context()
-    const trace = spanContext._trace
+  append (spans) {
+    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
-    const formattedTrace = trace.finished.map(format)
-
-    log.debug(() => `Encoding trace: ${JSON.stringify(formattedTrace)}`)
-
-    const buffer = encode(formattedTrace)
+    const buffer = encode(spans)
 
     log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
 

@@ -7,6 +7,7 @@ describe('SpanProcessor', () => {
   let trace
   let exporter
   let tracer
+  let format
 
   beforeEach(() => {
     tracer = {}
@@ -30,7 +31,11 @@ describe('SpanProcessor', () => {
     prioritySampler = {
       sample: sinon.stub()
     }
-    SpanProcessor = proxyquire('../src/span_processor', {})
+    format = sinon.stub().returns([span])
+
+    SpanProcessor = proxyquire('../src/span_processor', {
+      './format': format
+    })
     processor = new SpanProcessor(exporter, prioritySampler)
   })
 

@@ -1,4 +1,3 @@
 {
-  "debug.node.autoAttach": "on",
-  "javascript.format.enable": false
+  "debug.node.autoAttach": "on"
 }

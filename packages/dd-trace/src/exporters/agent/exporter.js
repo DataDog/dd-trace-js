@@ -13,8 +13,8 @@ class AgentExporter {
     this._scheduler && this._scheduler.start()
   }
 
-  export (span) {
-    this._writer.append(span)
+  export (spans) {
+    this._writer.append(spans)
 
     if (!this._scheduler) {
       this._writer.flush()

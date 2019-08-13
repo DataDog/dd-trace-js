@@ -81,8 +81,8 @@ describe('Writer', () => {
 
   describe('length', () => {
     it('should return the number of traces', () => {
-      writer.append(span)
-      writer.append(span)
+      writer.append([span])
+      writer.append([span])
 
       expect(writer.length).to.equal(2)
     })
@@ -90,15 +90,15 @@ describe('Writer', () => {
 
   describe('append', () => {
     it('should append a trace', () => {
-      writer.append(span)
+      writer.append([span])
 
       expect(writer._queue).to.deep.include('encoded')
     })
 
     it('should flush when full', () => {
-      writer.append(span)
+      writer.append([span])
       writer._size = 8 * 1024 * 1024
-      writer.append(span)
+      writer.append([span])
 
       expect(writer.length).to.equal(1)
       expect(writer._queue).to.deep.include('encoded')
@@ -113,7 +113,7 @@ describe('Writer', () => {
     })
 
     it('should empty the internal queue', () => {
-      writer.append(span)
+      writer.append([span])
       writer.flush()
 
       expect(writer.length).to.equal(0)
@@ -125,8 +125,8 @@ describe('Writer', () => {
       platform.version.returns('version')
       platform.engine.returns('interpreter')
 
-      writer.append(span)
-      writer.append(span)
+      writer.append([span])
+      writer.append([span])
       writer.flush()
 
       expect(platform.request).to.have.been.calledWithMatch({
@@ -152,7 +152,7 @@ describe('Writer', () => {
 
       platform.request.yields(error)
 
-      writer.append(span)
+      writer.append([span])
       writer.flush()
 
       setTimeout(() => {
@@ -168,7 +168,7 @@ describe('Writer', () => {
       })
 
       it('should make a request to the socket', () => {
-        writer.append(span)
+        writer.append([span])
         writer.flush()
 
         expect(platform.request).to.have.been.calledWithMatch({

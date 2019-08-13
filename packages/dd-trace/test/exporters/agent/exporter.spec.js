@@ -50,9 +50,9 @@ describe('Exporter', () => {
 
       it('should export a span', () => {
         writer.length = 0
-        exporter.export(span)
+        exporter.export([span])
 
-        expect(writer.append).to.have.been.calledWith(span)
+        expect(writer.append).to.have.been.calledWith([span])
       })
     })
   })
@@ -63,7 +63,7 @@ describe('Exporter', () => {
     })
 
     it('should flush right away when interval is set to 0', () => {
-      exporter.export(span)
+      exporter.export([span])
       expect(writer.flush).to.have.been.called
     })
   })
