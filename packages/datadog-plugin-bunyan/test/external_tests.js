@@ -7,11 +7,7 @@ const defaultConfig = {
   testArgs: '$(ls -1 test/*.test.js | grep -v dtrace | xargs)'
 }
 
-const testConfigs = [
-  {
-    branch: 'master'
-  }
-]
+const testConfigs = []
 
 module.exports = {
   defaultConfig,

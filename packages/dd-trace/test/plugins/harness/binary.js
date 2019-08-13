@@ -3,13 +3,14 @@
 const path = require('path')
 const execSync = require('../../../../../scripts/helpers/exec')
 
-function executeNodeunit (args, options) {
+function executeBinary (binary, args, options) {
   const tracerSetupPath = path.join(__dirname, '..', 'tracer-setup.js')
+  const npmRunEnv = 'npm run env --silent --'
 
   // Inject our tracer before we run the external tests
   try {
-    return execSync(`node -r "${tracerSetupPath}" nodeunit ${args}`, options)
+    return execSync(`${npmRunEnv} node -r '${tracerSetupPath}' ./node_modules/.bin/${binary} ${args}`, options)
   } catch (err) {} // eslint-disable-line no-empty
 }
 
-module.exports = executeNodeunit
+module.exports = executeBinary

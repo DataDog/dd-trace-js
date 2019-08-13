@@ -1,12 +1,12 @@
 'use strict'
 
 const executeJest = require('./jest')
-const executeGeneric = require('./generic')
-const executeNode = require('./node')
-const executeNodeunit = require('./nodeunit')
 const executeTap = require('./tap')
 const executeTape = require('./tape')
+const executeNode = require('./node')
 const executeCustom = require('./custom')
+const executeGeneric = require('./generic')
+const executeBinary = require('./binary')
 
 function executeTest (testConfig, executionPath) {
   const options = { cwd: executionPath, stdio: [0, 1, 2] }
@@ -30,26 +30,27 @@ function executeTest (testConfig, executionPath) {
     case 'jest':
       executeJest(testArgs, options)
       break
-    case 'lab':
-    case 'mocha':
-      executeGeneric(testConfig.testType, testArgs, options)
-      break
-    case 'buster-test':
-    case 'promises-aplus-tests':
-    case 'jasmine-node':
-      executeNode(testConfig.testType, testArgs, options)
-      break
-    case 'nodeunit':
-      executeNodeunit(testArgs, options)
-      break
     case 'tap':
       executeTap(testArgs, options)
       break
     case 'tape':
       executeTape(testArgs, options)
       break
+    case 'node':
+      executeNode(testArgs, options)
+      break
     case 'custom':
       executeCustom(testConfig, options)
+      break
+    case 'lab':
+    case 'mocha':
+      executeGeneric(testConfig.testType, testArgs, options)
+      break
+    case 'buster-test':
+    case 'jasmine-node':
+    case 'nodeunit':
+    case 'promises-aplus-tests':
+      executeBinary(testConfig.testType, testArgs, options)
       break
     default:
       throw new Error(`'${testConfig.testType}' is an unsupported test framework`)

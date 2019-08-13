@@ -1,16 +1,10 @@
 'use strict'
 
-const execSync = require('child_process').execSync
-
 const defaultConfig = {
   integration: 'mysql',
   repo: 'https://github.com/mysqljs/mysql',
-  testType: 'custom',
-  testFn: function (tracerSetupPath, options) {
-    try {
-      execSync(`npm run env --silent -- node -r '${tracerSetupPath}' test/run.js`, options)
-    } catch (error) {} // eslint-disable-line no-empty
-  },
+  testType: 'node',
+  testArgs: 'test/run.js',
   testEnv: {
     'MYSQL_DATABASE': 'db',
     'MYSQL_HOST': 'localhost',
