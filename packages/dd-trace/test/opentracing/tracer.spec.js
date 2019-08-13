@@ -14,7 +14,7 @@ describe('Tracer', () => {
   let AgentExporter
   let LogExporter
   let SpanProcessor
-  let spanProcessor
+  let processor
   let exporter
   let Sampler
   let sampler
@@ -48,10 +48,10 @@ describe('Tracer', () => {
     AgentExporter = sinon.stub().returns(exporter)
     LogExporter = sinon.stub().returns(exporter)
 
-    spanProcessor = {
+    processor = {
       process: sinon.spy()
     }
-    SpanProcessor = sinon.stub().returns(spanProcessor)
+    SpanProcessor = sinon.stub().returns(processor)
 
     sampler = {
       isSampled: sinon.stub().returns(true)
@@ -145,7 +145,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -172,7 +172,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -188,7 +188,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -201,7 +201,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -225,7 +225,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -241,7 +241,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -253,7 +253,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -267,7 +267,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -297,7 +297,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, spanProcessor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
         tags: {
           'env': 'test'
         }

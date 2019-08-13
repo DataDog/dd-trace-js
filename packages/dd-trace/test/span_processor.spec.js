@@ -1,7 +1,7 @@
 
 describe('SpanProcessor', () => {
   let prioritySampler
-  let spanProcessor
+  let processor
   let SpanProcessor
   let span
   let trace
@@ -31,11 +31,11 @@ describe('SpanProcessor', () => {
       sample: sinon.stub()
     }
     SpanProcessor = proxyquire('../src/span_processor', {})
-    spanProcessor = new SpanProcessor(exporter, prioritySampler)
+    processor = new SpanProcessor(exporter, prioritySampler)
   })
 
   it('should generate sampling priority', () => {
-    spanProcessor.process(span)
+    processor.process(span)
 
     expect(prioritySampler.sample).to.have.been.calledWith(span.context())
   })
@@ -44,7 +44,7 @@ describe('SpanProcessor', () => {
     trace.started = [span]
     trace.finished = [span]
 
-    spanProcessor.process(span)
+    processor.process(span)
 
     expect(trace).to.have.deep.property('started', [])
     expect(trace).to.have.deep.property('finished', [])
@@ -55,13 +55,13 @@ describe('SpanProcessor', () => {
   it('should skip traces with unfinished spans', () => {
     trace.started = [span]
     trace.finished = []
-    spanProcessor.process(span)
+    processor.process(span)
 
     expect(exporter.export).not.to.have.been.called
   })
   it('should not append if the span was dropped', () => {
     span.context()._traceFlags.sampled = false
-    spanProcessor.process(span)
+    processor.process(span)
 
     expect(exporter.export).not.to.have.been.called
   })

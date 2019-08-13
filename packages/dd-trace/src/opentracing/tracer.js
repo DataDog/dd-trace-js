@@ -45,7 +45,7 @@ class DatadogTracer extends Tracer {
       this._exporter = new AgentExporter(config.url, config.flushInterval)
     }
 
-    this._spanProcessor = new SpanProcessor(this._exporter, this._prioritySampler)
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
@@ -75,7 +75,7 @@ class DatadogTracer extends Tracer {
       tags.env = this._env
     }
 
-    const span = new Span(this, this._spanProcessor, this._sampler, this._prioritySampler, {
+    const span = new Span(this, this._processor, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent,
       tags,

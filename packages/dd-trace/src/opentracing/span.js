@@ -11,7 +11,7 @@ const constants = require('../constants')
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 class DatadogSpan extends Span {
-  constructor (tracer, spanProcessor, sampler, prioritySampler, fields) {
+  constructor (tracer, processor, sampler, prioritySampler, fields) {
     super()
 
     const startTime = fields.startTime || platform.now()
@@ -25,7 +25,7 @@ class DatadogSpan extends Span {
 
     this._parentTracer = tracer
     this._sampler = sampler
-    this._spanProcessor = spanProcessor
+    this._processor = processor
     this._prioritySampler = prioritySampler
     this._startTime = startTime
 
@@ -141,7 +141,7 @@ class DatadogSpan extends Span {
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
     this._handle.finish()
-    this._spanProcessor.process(this)
+    this._processor.process(this)
   }
 }
 
