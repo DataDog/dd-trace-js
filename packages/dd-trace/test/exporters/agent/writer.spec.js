@@ -69,12 +69,12 @@ describe('Writer', () => {
       error: sinon.spy()
     }
 
-    Writer = proxyquire('../src/agent/writer', {
-      '../platform': platform,
-      '../log': log,
-      '../format': format,
-      '../encode': encode,
-      '../../lib/version': 'tracerVersion'
+    Writer = proxyquire('../src/exporters/agent/writer', {
+      '../../platform': platform,
+      '../../log': log,
+      '../../format': format,
+      '../../encode': encode,
+      '../../../lib/version': 'tracerVersion'
     })
     writer = new Writer(url)
   })

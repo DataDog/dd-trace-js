@@ -40,8 +40,8 @@ describe('LogExporter', () => {
       write: sinon.stub()
     }
 
-    Exporter = proxyquire('../src/agentless/exporter', {
-      '../format': format
+    Exporter = proxyquire('../src/exporters/log/exporter', {
+      '../../format': format
     })
     exporter = new Exporter(outputStream)
   })

@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../platform')
+const platform = require('../../platform')
 
 class Scheduler {
   constructor (callback, interval) {

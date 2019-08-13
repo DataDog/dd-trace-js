@@ -1,7 +1,7 @@
 'use strict'
 
-const log = require('../log')
-const format = require('../format')
+const log = require('../../log')
+const format = require('../../format')
 
 const MAX_SIZE = 255 * 1024 // 255kb
 
