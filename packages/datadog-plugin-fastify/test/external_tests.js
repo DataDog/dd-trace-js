@@ -1,7 +1,5 @@
 'use strict'
 
-const execSync = require('child_process').execSync
-
 const defaultConfig = {
   integration: 'fastify',
   repo: 'https://github.com/fastify/fastify',
