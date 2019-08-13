@@ -17,7 +17,9 @@ describe('Scope', () => {
     sinon.spy(metrics, 'increment')
     sinon.spy(metrics, 'decrement')
 
-    scope = new Scope()
+    scope = new Scope({
+      experimental: {}
+    })
   })
 
   afterEach(() => {

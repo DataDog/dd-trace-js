@@ -55,7 +55,9 @@ class Config {
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
       exporter: (options.experimental && options.experimental.exporter === exporters.LOG)
-        ? exporters.LOG : exporters.AGENT
+        ? exporters.LOG
+        : exporters.AGENT,
+      thenables: !(!options.experimental || !options.experimental.thenables)
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope

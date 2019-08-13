@@ -17,7 +17,7 @@ class NoopTracer extends Tracer {
     }
 
     this._scopeManager = new ScopeManager()
-    this._scope = new Scope()
+    this._scope = new Scope(config)
     this._span = new Span(this)
   }
 

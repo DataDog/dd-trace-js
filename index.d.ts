@@ -241,6 +241,8 @@ export declare interface TracerOptions {
      * @default false
      */
     exporter?: 'log-exporter' | 'agent-exporter'
+
+    thenables?: boolean
   };
 
   /**
