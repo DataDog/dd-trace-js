@@ -240,7 +240,7 @@ export declare interface TracerOptions {
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
-    exporter?: typeof LOG_EXPORTER | typeof AGENT_EXPORTER
+    exporter?: 'log-exporter' | 'agent-exporter'
   };
 
   /**
@@ -806,9 +806,9 @@ declare namespace plugins {
   interface router extends Integration { }
 
   /**
- * This plugin automatically instruments the
- * [tedious](https://github.com/tediousjs/tedious/) module.
- */
+   * This plugin automatically instruments the
+   * [tedious](https://github.com/tediousjs/tedious/) module.
+   */
   interface tedious extends Integration { }
 
   /**
@@ -832,8 +832,5 @@ declare namespace plugins {
  * a no-op implementation.
  */
 export declare const tracer: Tracer;
-
-export declare const LOG_EXPORTER: 'log-exporter';
-export declare const AGENT_EXPORTER: 'agent-exporter';
 
 export default tracer;
