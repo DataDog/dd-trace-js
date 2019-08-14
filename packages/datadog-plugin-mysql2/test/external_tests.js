@@ -16,9 +16,6 @@ const defaultConfig = {
   }
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

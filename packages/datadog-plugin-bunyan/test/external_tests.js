@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: '$(ls -1 test/*.test.js | grep -v dtrace | xargs)'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

@@ -6,7 +6,7 @@ const defaultConfig = {
   integration: 'ioredis',
   repo: 'https://github.com/luin/ioredis',
   testType: 'mocha',
-  testArgs: '\"test/**/*.ts\"', // eslint-disable-line no-useless-escape
+  testArgs: '"test/**/*.ts"',
   setup: function (cwd) {
     execSync('npm install && npm run build', { cwd })
   },
@@ -17,9 +17,6 @@ const defaultConfig = {
   }
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

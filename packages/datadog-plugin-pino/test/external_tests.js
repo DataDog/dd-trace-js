@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: '--no-esm -j 4 --no-cov test/*test.js'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

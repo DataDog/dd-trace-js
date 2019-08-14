@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: 'test/*.test.js test/**/*.test.js --exit'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

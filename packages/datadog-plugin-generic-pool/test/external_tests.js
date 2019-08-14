@@ -8,9 +8,6 @@ const defaultConfig = {
   branch: 'v2.5'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

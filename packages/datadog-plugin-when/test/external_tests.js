@@ -7,12 +7,10 @@ const defaultConfig = {
 
 const testConfigs = [
   {
-    name: 'when -- master -- buster-test',
     testType: 'buster-test',
     testArgs: '-e node'
   },
   {
-    name: 'when -- master -- promises-aplus-tests',
     testType: 'promises-aplus-tests',
     testArgs: 'test/promises-aplus-adapter.js'
   }

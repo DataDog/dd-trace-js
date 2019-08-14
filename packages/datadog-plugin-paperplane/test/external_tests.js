@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: '--reporter dot test/'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

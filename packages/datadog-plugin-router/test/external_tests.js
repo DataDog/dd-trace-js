@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: '--reporter spec --exit --check-leaks test/'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

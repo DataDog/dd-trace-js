@@ -3,7 +3,6 @@
 const defaultConfig = {
   integration: 'q',
   repo: 'https://github.com/kriskowal/q'
-
 }
 
 const testConfigs = [

@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: "$(find test -name '*.test.js') --exit"
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

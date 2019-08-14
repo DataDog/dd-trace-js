@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: '--exit -t 15000 test/common/unit.js test/tedious'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }

@@ -90,8 +90,10 @@ function normalizeConfig (testConfig, defaultConfig) {
     config.setup = (cwd) => execSync('npm install', { cwd })
   }
 
-  config.name = coalesce(testConfig.name, defaultConfig.name,
-    config.branch ? `${config.integration} (${config.branch})` : config.integration)
+  config.name = coalesce(testConfig.name, defaultConfig.name)
+  if (!config.name) {
+    config.name = `${config.integration} (${config.branch || 'default branch'}) - ${config.testType}`
+  }
 
   if (config.testType === 'custom') {
     config.testFn = coalesce(testConfig.testFn, defaultConfig.testFn)

@@ -7,9 +7,6 @@ const defaultConfig = {
   testArgs: './test/*.js ./test/commands/*.js --timeout 8000'
 }
 
-const testConfigs = []
-
 module.exports = {
-  defaultConfig,
-  testConfigs
+  defaultConfig
 }
