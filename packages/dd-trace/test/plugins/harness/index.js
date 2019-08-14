@@ -1,6 +1,5 @@
 'use strict'
 
-const executeJest = require('./jest')
 const executeTap = require('./tap')
 const executeTape = require('./tape')
 const executeNode = require('./node')
@@ -27,9 +26,6 @@ function executeTest (testConfig, executionPath) {
 
   // Run the test framework harness
   switch (testConfig.testType) {
-    case 'jest':
-      executeJest(testArgs, options)
-      break
     case 'tap':
       executeTap(testArgs, options)
       break
