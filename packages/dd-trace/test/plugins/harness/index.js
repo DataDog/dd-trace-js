@@ -9,20 +9,12 @@ const executeBinary = require('./binary')
 
 function executeTest (testConfig, executionPath) {
   const options = { cwd: executionPath, stdio: [0, 1, 2] }
+  const testArgs = testConfig.testArgs || ''
 
   // Merge process env vars with test config's env vars
   if (testConfig.testEnv) {
-    options.env = {}
-    Object.keys(process.env).forEach(prop => {
-      options.env[prop] = process.env[prop]
-    })
-
-    Object.keys(testConfig.testEnv).forEach(prop => {
-      options.env[prop] = testConfig.testEnv[prop]
-    })
+    options.env = getEnvVars(testConfig)
   }
-
-  const testArgs = testConfig.testArgs || ''
 
   // Run the test framework harness
   switch (testConfig.testType) {
@@ -51,6 +43,19 @@ function executeTest (testConfig, executionPath) {
     default:
       throw new Error(`'${testConfig.testType}' is an unsupported test framework`)
   }
+}
+
+function getEnvVars (testConfig) {
+  const env = {}
+  Object.keys(process.env).forEach(prop => {
+    env[prop] = process.env[prop]
+  })
+
+  Object.keys(testConfig.testEnv).forEach(prop => {
+    env[prop] = testConfig.testEnv[prop]
+  })
+
+  return env
 }
 
 module.exports = executeTest
