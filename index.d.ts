@@ -1,7 +1,6 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
-import { exporters } from './ext/exporters'
 
 export { SpanOptions };
 
@@ -241,7 +240,7 @@ export declare interface TracerOptions {
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
-    exporter?: typeof exporters.LOG | typeof exporters.AGENT
+    exporter?: 'log-exporter' | 'agent-exporter'
   };
 
   /**
