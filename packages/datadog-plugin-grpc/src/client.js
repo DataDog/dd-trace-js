@@ -150,7 +150,9 @@ module.exports = [
   {
     name: 'grpc',
     versions: ['>=1.13'],
-    patch (grpc) {
+    patch (grpc, tracer, config) {
+      if (config.client === false) return
+
       grpc.Client._datadog = { grpc }
     },
     unpatch (grpc) {
@@ -162,6 +164,8 @@ module.exports = [
     versions: ['>=1.13'],
     file: 'src/client.js',
     patch (client, tracer, config) {
+      if (config.client === false) return
+
       const grpc = client.Client._datadog.grpc
 
       this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config, grpc))

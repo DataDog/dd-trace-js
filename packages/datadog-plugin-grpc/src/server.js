@@ -117,7 +117,9 @@ module.exports = [
   {
     name: 'grpc',
     versions: ['>=1.13'],
-    patch (grpc) {
+    patch (grpc, tracer, config) {
+      if (config.server === false) return
+
       grpc.Server._datadog = { grpc }
     },
     unpatch (grpc) {
@@ -129,6 +131,8 @@ module.exports = [
     versions: ['>=1.13'],
     file: 'src/server.js',
     patch (server, tracer, config) {
+      if (config.server === false) return
+
       const grpc = server.Server._datadog.grpc
 
       this.wrap(server.Server.prototype, 'register', createWrapRegister(tracer, config, grpc))

@@ -264,33 +264,6 @@ describe('Plugin', () => {
           client.getBidi(new Readable(), () => {})
         })
 
-        it('should handle a missing callback', done => {
-          const client = buildClient({
-            getUnary: (_, callback) => callback()
-          })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.deep.include({
-                name: 'grpc.request',
-                service: 'test',
-                resource: '/test.TestService/getUnary'
-              })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getUnary')
-              expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.package', 'test')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getUnary')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.unary)
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
-            })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' })
-        })
-
         it('should run the handler in the scope of the request', done => {
           const client = buildClient({
             getUnary: (_, callback) => {
