@@ -76,7 +76,8 @@ describe('Tracer', () => {
       sampleRate: 0.5,
       logger: 'logger',
       tags: {},
-      debug: false
+      debug: false,
+      experimental: {}
     }
 
     log = {

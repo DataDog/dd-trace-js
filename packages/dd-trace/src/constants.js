@@ -6,7 +6,5 @@ module.exports = {
   ANALYTICS_KEY: '_dd1.sr.eausr',
   ORIGIN_KEY: '_dd.origin',
   HOSTNAME_KEY: '_dd.hostname',
-  REFERENCE_NOOP: 'noop',
-  LOG_EXPORTER: 'log-exporter',
-  AGENT_EXPORTER: 'agent-exporter'
+  REFERENCE_NOOP: 'noop'
 }

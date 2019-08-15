@@ -16,6 +16,8 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const NoopSpan = require('../noop/span')
 const formats = require('../../../../ext/formats')
+const exporters = require('../../../../ext/exporters')
+
 const log = require('../log')
 const constants = require('../constants')
 const platform = require('../platform')
@@ -39,7 +41,7 @@ class DatadogTracer extends Tracer {
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
 
-    if (config.experimental !== undefined && config.experimental.exporter === constants.LOG_EXPORTER) {
+    if (config.experimental.exporter === exporters.LOG) {
       this._exporter = new LogExporter(process.stdout)
     } else {
       this._exporter = new AgentExporter(config.url, config.flushInterval)
