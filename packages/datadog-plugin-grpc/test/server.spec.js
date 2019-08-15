@@ -399,6 +399,27 @@ describe('Plugin', () => {
 
           client.getUnary({ first: 'foobar' }, () => {})
         })
+
+        it('should not alter the request metadata', done => {
+          const client = buildClient({
+            getUnary: (call, callback) => {
+              callback(null, {})
+
+              try {
+                expect(call.metadata.getMap()).to.have.property('foo', 'bar')
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }
+          })
+
+          const metadata = new grpc.Metadata()
+
+          metadata.set('foo', 'bar')
+
+          client.getUnary({ first: 'foobar' }, metadata, () => {})
+        })
       })
     })
   })

@@ -292,14 +292,25 @@ describe('Plugin', () => {
             getUnary: (call, callback) => {
               const metadata = call.metadata.getMap()
 
-              expect(metadata['x-datadog-trace-id']).to.be.a('string')
-              expect(metadata['x-datadog-parent-id']).to.be.a('string')
+              callback(null, {})
 
-              callback()
+              try {
+                expect(metadata).to.have.property('foo', 'bar')
+                expect(metadata['x-datadog-trace-id']).to.be.a('string')
+                expect(metadata['x-datadog-parent-id']).to.be.a('string')
+
+                done()
+              } catch (e) {
+                done(e)
+              }
             }
           })
 
-          client.getUnary({ first: 'foobar' }, done)
+          const metadata = new grpc.Metadata()
+
+          metadata.set('foo', 'bar')
+
+          client.getUnary({ first: 'foobar' }, metadata, () => {})
         })
 
         it('should propagate the parent scope to the callback', done => {
