@@ -13,7 +13,7 @@ describe('LogExporter', () => {
       write: sinon.stub()
     }
 
-    Exporter = proxyquire('../src/exporters/log/exporter', {})
+    Exporter = proxyquire('../src/exporters/log', {})
     exporter = new Exporter(outputStream)
   })
 

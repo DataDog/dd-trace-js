@@ -23,7 +23,7 @@ describe('Exporter', () => {
     Scheduler = sinon.stub().returns(scheduler)
     Writer = sinon.stub().returns(writer)
 
-    Exporter = proxyquire('../src/exporters/agent/exporter', {
+    Exporter = proxyquire('../src/exporters/agent', {
       './scheduler': Scheduler,
       './writer': Writer
     })
