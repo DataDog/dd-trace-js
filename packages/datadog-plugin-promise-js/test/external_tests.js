@@ -10,9 +10,10 @@ const testConfigs = [
     repo: 'https://github.com/kevincennis/promise',
     framework: 'promises-aplus-tests',
     args: 'test/adapter.js',
-    setup: function (cwd) {
-      execSync('npm install', { cwd })
+    setup: function (tracerSetupPath, options) {
+      execSync('npm install', options)
 
+      const cwd = options.cwd
       const distDir = path.join(cwd, 'dist')
       if (!fs.existsSync(distDir)) {
         fs.mkdirSync(distDir)

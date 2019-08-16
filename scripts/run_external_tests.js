@@ -35,11 +35,6 @@ function executeTestConfigs (testConfigs) {
     // Get the integration
     const executionPath = getIntegration(testConfig)
 
-    // Execute the setup function
-    if (testConfig.setup) {
-      testConfig.setup(executionPath)
-    }
-
     // Execute tests through harness
     executeTest(testConfig, executionPath)
   }
@@ -64,9 +59,9 @@ function cleanupConfig (testConfig) {
     testConfig.setup = (cwd) => execSync('npm install', { cwd })
   }
 
+  testConfig.branch = testConfig.branch || 'master'
   testConfig.name = testConfig.name || `${testConfig.integration} (${testConfig.branch}) - ${testConfig.framework}`
   testConfig.args = testConfig.args || ''
-  testConfig.branch = testConfig.branch || 'master'
 }
 
 function validateConfig (testConfig) {

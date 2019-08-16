@@ -1,10 +1,8 @@
 'use strict'
 
-const path = require('path')
 const execSync = require('../../../../../scripts/helpers/exec')
 
-function executeTap (args, options) {
-  const tracerSetupPath = path.join(__dirname, '..', 'tracer-setup.js')
+function executeTap (tracerSetupPath, args, options) {
   const npmRunEnv = 'npm run env --silent --'
 
   // Inject our tracer before we run the external tests

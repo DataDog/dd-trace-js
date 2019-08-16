@@ -19,7 +19,7 @@ function normalizeTestConfigs (testConfigs, defaults) {
     if (config.framework === 'custom') {
       config.execTests = coalesce(testConfig.execTests, defaults.execTests)
     } else {
-      config.args = coalesce(testConfig.args, defaults.args, '')
+      config.args = coalesce(testConfig.args, defaults.args)
     }
 
     configs.push(config)

@@ -8,8 +8,8 @@ const testConfigs = [
     repo: 'https://github.com/luin/ioredis',
     framework: 'mocha',
     args: '"test/**/*.ts"',
-    setup: function (cwd) {
-      execSync('npm install && npm run build', { cwd })
+    setup: function (tracerSetupPath, options) {
+      execSync('npm install && npm run build', options)
     },
     env: {
       'TS_NODE_TRANSPILE_ONLY': true,

@@ -10,9 +10,10 @@ const testConfigs = [
     repo: 'https://github.com/graphql/graphql-js',
     framework: 'mocha',
     args: '--full-trace **/__tests__/**/*-test.js',
-    setup: function (cwd) {
-      execSync('npm install', { cwd })
+    setup: function (tracerSetupPath, options) {
+      execSync('npm install', options)
 
+      const cwd = options.cwd
       const srcDir = path.join(cwd, 'src')
       const srcFiles = fs.readdirSync(srcDir)
 

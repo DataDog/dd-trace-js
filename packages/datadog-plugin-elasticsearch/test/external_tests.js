@@ -13,8 +13,9 @@ const testConfigs = [
   {
     integration: 'elasticsearch',
     repo: 'https://github.com/elastic/elasticsearch-js-legacy',
+    branch: '16.x',
     framework: 'mocha',
-    args: 'test/unit/index.js'
+    args: 'test/unit/index.js --exit'
   },
   {
     branch: '5.x'

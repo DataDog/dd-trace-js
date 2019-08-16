@@ -1,9 +1,6 @@
 'use strict'
 
-const path = require('path')
-
-function executeCustom (testConfig, options) {
-  const tracerSetupPath = path.join(__dirname, '..', 'tracer-setup.js')
+function executeCustom (tracerSetupPath, testConfig, options) {
   return testConfig.execTests(tracerSetupPath, options)
 }
 
