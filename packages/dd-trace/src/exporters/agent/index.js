@@ -1,24 +1,20 @@
 'use strict'
 
+const Writer = require('./writer')
 const Scheduler = require('./scheduler')
 
-// TODO: make calls to Writer#append asynchronous
-
-class Recorder {
-  constructor (writer, interval) {
-    this._writer = writer
+class AgentExporter {
+  constructor (url, interval) {
+    this._writer = new Writer(url)
 
     if (interval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), interval)
     }
-  }
-
-  init () {
     this._scheduler && this._scheduler.start()
   }
 
-  record (span) {
-    this._writer.append(span)
+  export (spans) {
+    this._writer.append(spans)
 
     if (!this._scheduler) {
       this._writer.flush()
@@ -26,4 +22,4 @@ class Recorder {
   }
 }
 
-module.exports = Recorder
+module.exports = AgentExporter

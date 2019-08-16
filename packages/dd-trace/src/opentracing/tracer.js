@@ -5,8 +5,9 @@ const Tracer = opentracing.Tracer
 const Reference = opentracing.Reference
 const Span = require('./span')
 const SpanContext = require('./span_context')
-const Writer = require('../writer')
-const Recorder = require('../recorder')
+const AgentExporter = require('../exporters/agent')
+const LogExporter = require('../exporters/log')
+const SpanProcessor = require('../span_processor')
 const Sampler = require('../sampler')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
@@ -15,6 +16,8 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const NoopSpan = require('../noop/span')
 const formats = require('../../../../ext/formats')
+const exporters = require('../../../../ext/exporters')
+
 const log = require('../log')
 const constants = require('../constants')
 const platform = require('../platform')
@@ -37,9 +40,14 @@ class DatadogTracer extends Tracer {
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
-    this._writer = new Writer(this._prioritySampler, config.url)
-    this._recorder = new Recorder(this._writer, config.flushInterval)
-    this._recorder.init()
+
+    if (config.experimental.exporter === exporters.LOG) {
+      this._exporter = new LogExporter(process.stdout)
+    } else {
+      this._exporter = new AgentExporter(config.url, config.flushInterval)
+    }
+
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
@@ -69,7 +77,7 @@ class DatadogTracer extends Tracer {
       tags.env = this._env
     }
 
-    const span = new Span(this, this._recorder, this._sampler, this._prioritySampler, {
+    const span = new Span(this, this._processor, this._sampler, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent,
       tags,

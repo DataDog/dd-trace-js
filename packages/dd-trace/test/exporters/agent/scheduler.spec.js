@@ -11,8 +11,8 @@ describe('Scheduler', () => {
   beforeEach(() => {
     platform = new EventEmitter()
 
-    Scheduler = proxyquire('../src/scheduler', {
-      './platform': platform
+    Scheduler = proxyquire('../../../src/exporters/agent/scheduler', {
+      '../../platform': platform
     })
 
     clock = sinon.useFakeTimers()

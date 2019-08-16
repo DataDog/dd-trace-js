@@ -236,6 +236,11 @@ export declare interface TracerOptions {
    */
   experimental?: boolean | {
     b3?: boolean
+    /**
+     * Whether to write traces to log output, rather than send to an agent
+     * @default false
+     */
+    exporter?: 'log-exporter' | 'agent-exporter'
   };
 
   /**
@@ -807,7 +812,7 @@ declare namespace plugins {
    */
   interface router extends Integration {}
 
-    /**
+  /**
    * This plugin automatically instruments the
    * [tedious](https://github.com/tediousjs/tedious/) module.
    */

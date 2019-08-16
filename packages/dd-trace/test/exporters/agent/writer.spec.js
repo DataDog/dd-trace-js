@@ -5,7 +5,6 @@ const URL = require('url-parse')
 describe('Writer', () => {
   let Writer
   let writer
-  let prioritySampler
   let trace
   let span
   let platform
@@ -70,25 +69,20 @@ describe('Writer', () => {
       error: sinon.spy()
     }
 
-    prioritySampler = {
-      update: sinon.stub(),
-      sample: sinon.stub()
-    }
-
-    Writer = proxyquire('../src/writer', {
-      './platform': platform,
-      './log': log,
-      './format': format,
-      './encode': encode,
-      '../lib/version': 'tracerVersion'
+    Writer = proxyquire('../src/exporters/agent/writer', {
+      '../../platform': platform,
+      '../../log': log,
+      '../../format': format,
+      '../../encode': encode,
+      '../../../lib/version': 'tracerVersion'
     })
-    writer = new Writer(prioritySampler, url)
+    writer = new Writer(url)
   })
 
   describe('length', () => {
     it('should return the number of traces', () => {
-      writer.append(span)
-      writer.append(span)
+      writer.append([span])
+      writer.append([span])
 
       expect(writer.length).to.equal(2)
     })
@@ -96,51 +90,18 @@ describe('Writer', () => {
 
   describe('append', () => {
     it('should append a trace', () => {
-      writer.append(span)
+      writer.append([span])
 
       expect(writer._queue).to.deep.include('encoded')
-    })
-
-    it('should skip traces with unfinished spans', () => {
-      trace.started = [span]
-      trace.finished = []
-      writer.append(span)
-
-      expect(writer._queue).to.be.empty
     })
 
     it('should flush when full', () => {
-      writer.append(span)
+      writer.append([span])
       writer._size = 8 * 1024 * 1024
-      writer.append(span)
+      writer.append([span])
 
       expect(writer.length).to.equal(1)
       expect(writer._queue).to.deep.include('encoded')
-    })
-
-    it('should not append if the span was dropped', () => {
-      span.context()._traceFlags.sampled = false
-      writer.append(span)
-
-      expect(writer._queue).to.be.empty
-    })
-
-    it('should generate sampling priority', () => {
-      writer.append(span)
-
-      expect(prioritySampler.sample).to.have.been.calledWith(span.context())
-    })
-
-    it('should erase the trace once finished', () => {
-      trace.started = [span]
-      trace.finished = [span]
-
-      writer.append(span)
-
-      expect(trace).to.have.deep.property('started', [])
-      expect(trace).to.have.deep.property('finished', [])
-      expect(span.context()).to.have.deep.property('_tags', {})
-      expect(span.context()).to.have.deep.property('_metrics', {})
     })
   })
 
@@ -152,7 +113,7 @@ describe('Writer', () => {
     })
 
     it('should empty the internal queue', () => {
-      writer.append(span)
+      writer.append([span])
       writer.flush()
 
       expect(writer.length).to.equal(0)
@@ -164,8 +125,8 @@ describe('Writer', () => {
       platform.version.returns('version')
       platform.engine.returns('interpreter')
 
-      writer.append(span)
-      writer.append(span)
+      writer.append([span])
+      writer.append([span])
       writer.flush()
 
       expect(platform.request).to.have.been.calledWithMatch({
@@ -191,7 +152,7 @@ describe('Writer', () => {
 
       platform.request.yields(error)
 
-      writer.append(span)
+      writer.append([span])
       writer.flush()
 
       setTimeout(() => {
@@ -203,11 +164,11 @@ describe('Writer', () => {
     context('with the url as a unix socket', () => {
       beforeEach(() => {
         url = new URL('unix:/path/to/somesocket.sock')
-        writer = new Writer(prioritySampler, url, 3)
+        writer = new Writer(url, 3)
       })
 
       it('should make a request to the socket', () => {
-        writer.append(span)
+        writer.append([span])
         writer.flush()
 
         expect(platform.request).to.have.been.calledWithMatch({

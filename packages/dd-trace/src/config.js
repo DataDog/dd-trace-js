@@ -4,6 +4,7 @@ const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
+const exporters = require('../../../ext/exporters')
 
 class Config {
   constructor (service, options) {
@@ -52,7 +53,9 @@ class Config {
     }
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
     this.experimental = {
-      b3: !(!options.experimental || !options.experimental.b3)
+      b3: !(!options.experimental || !options.experimental.b3),
+      exporter: (options.experimental && options.experimental.exporter === exporters.LOG)
+        ? exporters.LOG : exporters.AGENT
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope
