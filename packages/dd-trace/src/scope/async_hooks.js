@@ -24,6 +24,7 @@ class Scope extends Base {
     this._types = Object.create(null)
     this._weaks = new WeakMap()
     this._promises = [false]
+    this._stack = []
     this._depth = 0
     this._hook = asyncHooks.createHook({
       init: this._init.bind(this),
@@ -43,6 +44,7 @@ class Scope extends Base {
 
   _enter (span) {
     this._depth++
+    this._stack[this._depth] = this._current
     this._current = span
     this._promises[this._depth] = false
   }
@@ -50,6 +52,7 @@ class Scope extends Base {
   _exit (span) {
     this._thenables && this._await(span)
     this._current = span
+    this._stack[this._depth] = null
     this._depth--
   }
 
@@ -97,14 +100,11 @@ class Scope extends Base {
   }
 
   _before (asyncId) {
-    this._current = this._spans[asyncId]
-    this._promises[this._depth] = false
+    this._enter(this._spans[asyncId])
   }
 
   _after () {
-    this._await(null)
-    this._current = null
-    this._promises[this._depth] = false
+    this._exit(this._stack[this._depth])
   }
 
   _destroy (asyncId) {

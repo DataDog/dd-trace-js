@@ -189,66 +189,6 @@ module.exports = factory => {
       })
     })
 
-    describe('with a thenable', () => {
-      let thenable
-      let test
-
-      beforeEach(() => {
-        thenable = {
-          then: () => {}
-        }
-
-        test = async () => {
-          await thenable
-        }
-      })
-
-      it('should not alter the active span when using await', () => {
-        scope.bind(thenable)
-        scope.activate(span, () => test())
-
-        expect(scope.active()).to.be.null
-      })
-
-      it('should use the active span when using await', done => {
-        thenable.then = () => {
-          expect(scope.active()).to.equal(span)
-          done()
-        }
-
-        scope.bind(thenable)
-        scope.activate(span, () => test())
-      })
-
-      it('should use the active span when using await in a timer', done => {
-        thenable.then = () => {
-          expect(scope.active()).to.equal(span)
-          done()
-        }
-
-        test = async () => {
-          setTimeout(async () => {
-            await thenable
-          })
-        }
-
-        scope.bind(thenable)
-        scope.activate(span, () => test())
-      })
-
-      it('should use the active span when using await in nested scopes', done => {
-        thenable.then = () => {
-          expect(scope.active()).to.equal(span)
-          done()
-        }
-
-        scope.bind(thenable)
-        scope.activate({}, async () => {
-          scope.activate(span, () => test())
-        })
-      })
-    })
-
     describe('with an event emitter', () => {
       let emitter
 
