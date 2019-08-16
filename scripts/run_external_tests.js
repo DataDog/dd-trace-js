@@ -56,7 +56,7 @@ function getIntegration (testConfig) {
 
 function cleanupConfig (testConfig) {
   if (!testConfig.setup) {
-    testConfig.setup = (cwd) => execSync('npm install', { cwd })
+    testConfig.setup = (tracerSetupPath, options) => execSync('npm install', options)
   }
 
   testConfig.branch = testConfig.branch || 'master'
