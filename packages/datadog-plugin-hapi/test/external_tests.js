@@ -1,16 +1,18 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'hapi',
   repo: 'https://github.com/hapijs/hapi',
-  testType: 'lab',
-  testArgs: '-a @hapi/code -m 3000 test/'
+  framework: 'lab',
+  args: '-a @hapi/code -m 3000 test/'
 }
 
 const testConfigs = [
   {
     branch: 'v16-commercial',
-    testArgs: '-a code -m 3000 -l test/'
+    args: '-a code -m 3000 -l test/'
   },
   {
     branch: 'v17'
@@ -20,7 +22,4 @@ const testConfigs = [
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

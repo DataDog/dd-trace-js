@@ -1,12 +1,12 @@
 'use strict'
 
-const defaultConfig = {
-  integration: 'redis',
-  repo: 'https://github.com/NodeRedis/node_redis',
-  testType: 'mocha',
-  testArgs: './test/*.js ./test/commands/*.js --timeout 8000'
-}
+const testConfigs = [
+  {
+    integration: 'redis',
+    repo: 'https://github.com/NodeRedis/node_redis',
+    framework: 'mocha',
+    args: './test/*.js ./test/commands/*.js --timeout 8000'
+  }
+]
 
-module.exports = {
-  defaultConfig
-}
+module.exports = testConfigs

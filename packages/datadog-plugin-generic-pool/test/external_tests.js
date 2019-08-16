@@ -1,13 +1,13 @@
 'use strict'
 
-const defaultConfig = {
-  integration: 'generic-pool',
-  repo: 'https://github.com/coopernurse/node-pool',
-  testType: 'tap',
-  testArgs: 'test/*-test.js',
-  branch: 'v2.5'
-}
+const testConfigs = [
+  {
+    integration: 'generic-pool',
+    repo: 'https://github.com/coopernurse/node-pool',
+    framework: 'tap',
+    args: 'test/*-test.js',
+    branch: 'v2.5'
+  }
+]
 
-module.exports = {
-  defaultConfig
-}
+module.exports = testConfigs

@@ -1,22 +1,21 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'when',
   repo: 'https://github.com/cujojs/when'
 }
 
 const testConfigs = [
   {
-    testType: 'buster-test',
-    testArgs: '-e node'
+    framework: 'buster-test',
+    args: '-e node'
   },
   {
-    testType: 'promises-aplus-tests',
-    testArgs: 'test/promises-aplus-adapter.js'
+    framework: 'promises-aplus-tests',
+    args: 'test/promises-aplus-adapter.js'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

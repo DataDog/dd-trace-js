@@ -1,8 +1,9 @@
 'use strict'
 
 const execSync = require('child_process').execSync
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
 
-const defaultConfig = {
+const defaults = {
   integration: 'promise',
   repo: 'https://github.com/then/promise',
   setup: function (cwd) {
@@ -12,17 +13,14 @@ const defaultConfig = {
 
 const testConfigs = [
   {
-    testType: 'mocha',
-    testArgs: '--timeout 200 --slow 99999 "test/**/*"'
+    framework: 'mocha',
+    args: '--timeout 200 --slow 99999 "test/**/*"'
   },
   {
-    name: 'promise (default branch) - memory leak test',
-    testType: 'node',
-    testArgs: '--expose-gc test/memory-leak.js'
+    name: 'promise (master) - memory leak test',
+    framework: 'node',
+    args: '--expose-gc test/memory-leak.js'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

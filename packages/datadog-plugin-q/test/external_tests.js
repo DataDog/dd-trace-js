@@ -1,22 +1,21 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'q',
   repo: 'https://github.com/kriskowal/q'
 }
 
 const testConfigs = [
   {
-    testType: 'promises-aplus-tests',
-    testArgs: 'spec/aplus-adapter'
+    framework: 'promises-aplus-tests',
+    args: 'spec/aplus-adapter'
   },
   {
-    testType: 'jasmine-node',
-    testArgs: 'spec'
+    framework: 'jasmine-node',
+    args: 'spec'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

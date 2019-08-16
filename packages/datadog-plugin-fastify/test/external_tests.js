@@ -1,10 +1,12 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'fastify',
   repo: 'https://github.com/fastify/fastify',
-  testType: 'tap',
-  testArgs: '--no-esm -J test/*.test.js test/*/*.test.js'
+  framework: 'tap',
+  args: '--no-esm -J test/*.test.js test/*/*.test.js'
 }
 
 const testConfigs = [
@@ -12,11 +14,8 @@ const testConfigs = [
     branch: '1.x'
   },
   {
-    branch: undefined
+    branch: 'master'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

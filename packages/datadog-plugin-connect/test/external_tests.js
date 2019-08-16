@@ -1,10 +1,12 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'connect',
   repo: 'https://github.com/senchalabs/connect/',
-  testType: 'mocha',
-  testArgs: '--require test/support/env --reporter spec --check-leaks test/'
+  framework: 'mocha',
+  args: '--require test/support/env --reporter spec --check-leaks test/'
 }
 
 const testConfigs = [
@@ -12,11 +14,8 @@ const testConfigs = [
     branch: '2.30.2'
   },
   {
-    branch: undefined
+    branch: 'master'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

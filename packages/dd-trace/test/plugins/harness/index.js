@@ -9,39 +9,39 @@ const executeBinary = require('./binary')
 
 function executeTest (testConfig, executionPath) {
   const options = { cwd: executionPath, stdio: [0, 1, 2] }
-  const testArgs = testConfig.testArgs || ''
+  const args = testConfig.args || ''
 
   // Merge process env vars with test config's env vars
-  if (testConfig.testEnv) {
+  if (testConfig.env) {
     options.env = getEnvVars(testConfig)
   }
 
   // Run the test framework harness
-  switch (testConfig.testType) {
+  switch (testConfig.framework) {
     case 'tap':
-      executeTap(testArgs, options)
+      executeTap(args, options)
       break
     case 'tape':
-      executeTape(testArgs, options)
+      executeTape(args, options)
       break
     case 'node':
-      executeNode(testArgs, options)
+      executeNode(args, options)
       break
     case 'custom':
       executeCustom(testConfig, options)
       break
     case 'lab':
     case 'mocha':
-      executeGeneric(testConfig.testType, testArgs, options)
+      executeGeneric(testConfig.framework, args, options)
       break
     case 'buster-test':
     case 'jasmine-node':
     case 'nodeunit':
     case 'promises-aplus-tests':
-      executeBinary(testConfig.testType, testArgs, options)
+      executeBinary(testConfig.framework, args, options)
       break
     default:
-      throw new Error(`'${testConfig.testType}' is an unsupported test framework`)
+      throw new Error(`'${testConfig.framework}' is an unsupported test framework`)
   }
 }
 
@@ -51,8 +51,8 @@ function getEnvVars (testConfig) {
     env[prop] = process.env[prop]
   })
 
-  Object.keys(testConfig.testEnv).forEach(prop => {
-    env[prop] = testConfig.testEnv[prop]
+  Object.keys(testConfig.env).forEach(prop => {
+    env[prop] = testConfig.env[prop]
   })
 
   return env

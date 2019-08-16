@@ -1,22 +1,21 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'restify',
   repo: 'https://github.com/restify/node-restify/'
 }
 
 const testConfigs = [
   {
-    testType: 'mocha',
-    testArgs: '--exit --full-trace test/plugins/*.test.js'
+    framework: 'mocha',
+    args: '--exit --full-trace test/plugins/*.test.js'
   },
   {
-    testType: 'nodeunit',
-    testArgs: 'test/*.test.js'
+    framework: 'nodeunit',
+    args: 'test/*.test.js'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

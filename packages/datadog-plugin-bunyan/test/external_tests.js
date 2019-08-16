@@ -1,12 +1,12 @@
 'use strict'
 
-const defaultConfig = {
-  integration: 'bunyan',
-  repo: 'https://github.com/trentm/node-bunyan',
-  testType: 'nodeunit',
-  testArgs: '$(ls -1 test/*.test.js | grep -v dtrace | xargs)'
-}
+const testConfigs = [
+  {
+    integration: 'bunyan',
+    repo: 'https://github.com/trentm/node-bunyan',
+    framework: 'nodeunit',
+    args: '$(ls -1 test/*.test.js | grep -v dtrace | xargs)'
+  }
+]
 
-module.exports = {
-  defaultConfig
-}
+module.exports = testConfigs

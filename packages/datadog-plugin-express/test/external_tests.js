@@ -1,10 +1,12 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'express',
   repo: 'https://github.com/expressjs/express',
-  testType: 'mocha',
-  testArgs: '--require test/support/env --reporter spec --check-leaks test/ test/acceptance/'
+  framework: 'mocha',
+  args: '--require test/support/env --reporter spec --check-leaks test/ test/acceptance/'
 }
 
 const testConfigs = [
@@ -15,11 +17,8 @@ const testConfigs = [
     branch: '5.x'
   },
   {
-    branch: undefined
+    branch: 'master'
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)

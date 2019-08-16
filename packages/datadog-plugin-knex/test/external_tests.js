@@ -1,28 +1,27 @@
 'use strict'
 
-const defaultConfig = {
+const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+
+const defaults = {
   integration: 'knex',
   repo: 'https://github.com/tgriesser/knex'
 }
 
 const testConfigs = [
   {
-    testType: 'mocha',
-    testArgs: '--exit -t 10000 test/index.js',
-    testEnv: {
+    framework: 'mocha',
+    args: '--exit -t 10000 test/index.js',
+    env: {
       'DB': 'sqlite3'
     }
   },
   {
-    testType: 'tape',
-    testArgs: 'test/tape/index.js',
-    testEnv: {
+    framework: 'tape',
+    args: 'test/tape/index.js',
+    env: {
       'DB': 'sqlite3'
     }
   }
 ]
 
-module.exports = {
-  defaultConfig,
-  testConfigs
-}
+module.exports = normalizeTestConfigs(testConfigs, defaults)
