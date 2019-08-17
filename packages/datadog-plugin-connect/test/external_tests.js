@@ -1,6 +1,6 @@
 'use strict'
 
-const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+const normalizeTestConfigs = require('../../../scripts/helpers/normalize_test_configs')
 
 const defaults = {
   integration: 'connect',

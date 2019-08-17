@@ -6,9 +6,7 @@ function executeTap (tracerSetupPath, args, options) {
   const npmRunEnv = 'npm run env --silent --'
 
   // Inject our tracer before we run the external tests
-  try {
-    return execSync(`${npmRunEnv} tap --node-arg="--require" --node-arg="${tracerSetupPath}" ${args}`, options)
-  } catch (err) {} // eslint-disable-line no-empty
+  return execSync(`${npmRunEnv} tap --node-arg="--require" --node-arg="${tracerSetupPath}" ${args}`, options)
 }
 
 module.exports = executeTap

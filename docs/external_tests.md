@@ -1,14 +1,14 @@
-# Writing external tests configs
+# Writing external test configs
 
 We can leverage an integration's own tests to ensure compatibility between the integration and our tracer. We do this by cloning the source repo of the integration and then running its tests through a test harness that injects and executes the tracer before the tests are run.
 
-## Structure of the test config:
+## Structure of a test config
 
 External test configurations are stored in a module called `external-tests.js` located at `datadog-plugin-<plugin>/test/external-tests.js`. The module exports an array of test configurations that the harness can execute.
 
 A test config typically looks like the following:
 
-```javascript
+```
 {
   name: The name that describes this test config, defaults to '<integration> (<branch>) - <framework>',
   integration: The name of the integration, which should be the same as its npm package name,
@@ -18,7 +18,7 @@ A test config typically looks like the following:
     Any environment key-value pairs you want to pass along to the test runner
   },
   framework: The test runner used by the integration to run its tests,
-  args: If framework is not 'custom', any CLI arguments you want to pass to the test runner--which are typically the tests files to run,
+  args: If framework is not 'custom', any CLI arguments you want to pass to the test runner--which are typically the test files to run,
   execTests: function (tracerSetupPath, options) {
     If framework is custom, you must set define this function. This function will then be responsible for
     executing the test runner and injecting the tracer setup script located in 'tracerSetupPath'. The
@@ -27,11 +27,12 @@ A test config typically looks like the following:
   setup: function (tracerSetupPath, options) {
     A function that allows you to do any preliminary tasks before the test harness executes the test config,
     defaults to just running 'npm install'.
-  }
+  },
+  ignoreFailure: If enabled, script exits with exit code 0 regardless of the outcome of tests
 }
 ```
 
-## Supported test frameworks:
+## Supported test frameworks
 
 Currently, we support the following test frameworks:
 
@@ -69,10 +70,10 @@ If you take a look at `redis`'s [`package.json`][7], you can see that we just ha
 
 ### Multiple test configs:
 
-If you need multiple test configs, e.g. to test multiple branches or different test frameworks, you may want to use the `normalizeTestConfigs` helper funcion to simplify your test configs. We can define a set of defaults that will be applied to each test config, unless it's already defined in test config:
+If you need multiple test configs, e.g. to test multiple branches or different test frameworks, you may want to use the `normalizeTestConfigs` helper function. We can define a set of defaults that will be applied to each test config, unless it's already defined:
 
 ```javascript
-const normalizeTestConfigs = require('../../../scripts/helpers/normalizeTestConfigs')
+const normalizeTestConfigs = require('../../../scripts/helpers/normalize_test_configs')
 
 const defaults = {
   integration: 'express',
@@ -100,7 +101,7 @@ In this case, we want to test multiple branches but the way we test each branch 
 
 ### Using a setup function:
 
-In certain cases, the integration requires building it before you can run tests on it. To solve this problem, you can supply your own `setup` function that will be executed before the tests are run. You can also use this function to move files around if necessary.
+In certain cases, you will need to build the integration before you can run its tests. To solve this problem, you can supply your own `setup` function that will be executed before the tests are run. You can also use this function to move files around if necessary.
 
  ```javascript
 const testConfigs = [
@@ -114,9 +115,11 @@ const testConfigs = [
 ]
 ```
 
+The `setup` function also gives you access to `tracerSetupPath` which contains the path for the tracer setup script. If you find a test runner that does not let you inject the tracer setup script through the command line, you might be able to just copy the tracer setup script into that repo's test folder and have the test runner execute it when the runner tries to run the tests.
+
 ### Custom test frameworks:
 
-Rarely, projects use their own test runner. In these cases, you should investigate ways on running our tracer setup script before the tests run. For example, the custom test runner for `mongodb-core` requires us pass the tracer setup script as a test to the runner before any of the other tests:
+Rarely, projects use their own test runner. In these cases, you should investigate ways to run our tracer setup script before the tests are run. For example, the custom test runner for `mongodb-core` requires you to pass the tracer setup script as a test to the runner before any of the other tests:
 
 ```javascript
 const execSync = require('child_process').execSync

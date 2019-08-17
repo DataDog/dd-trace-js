@@ -10,7 +10,7 @@ const executeBinary = require('./binary')
 
 function executeTest (testConfig, executionPath) {
   const tracerSetupPath = path.join(__dirname, '..', 'tracer-setup.js')
-  const args = testConfig.args || ''
+
   const options = { cwd: executionPath, stdio: [0, 1, 2] }
 
   // Merge process env vars with test config's env vars
@@ -23,8 +23,28 @@ function executeTest (testConfig, executionPath) {
     testConfig.setup(tracerSetupPath, options)
   }
 
-  // Run the test framework harness
-  switch (testConfig.framework) {
+  let executedTests
+
+  try {
+    executedTests = executeTestHarness(tracerSetupPath, testConfig, options)
+  } catch (err) {
+    if (!testConfig.ignoreFailure) {
+      process.exit(err.status)
+    }
+
+    executedTests = true
+  }
+
+  if (!executedTests) {
+    throw new Error(`'${testConfig.framework}' is an unsupported test framework`)
+  }
+}
+
+function executeTestHarness (tracerSetupPath, testConfig, options) {
+  const framework = testConfig.framework
+  const args = testConfig.args || ''
+
+  switch (framework) {
     case 'tap':
       executeTap(tracerSetupPath, args, options)
       break
@@ -39,17 +59,19 @@ function executeTest (testConfig, executionPath) {
       break
     case 'lab':
     case 'mocha':
-      executeGeneric(testConfig.framework, tracerSetupPath, args, options)
+      executeGeneric(tracerSetupPath, framework, args, options)
       break
     case 'buster-test':
     case 'jasmine-node':
     case 'nodeunit':
     case 'promises-aplus-tests':
-      executeBinary(testConfig.framework, tracerSetupPath, args, options)
+      executeBinary(tracerSetupPath, framework, args, options)
       break
     default:
-      throw new Error(`'${testConfig.framework}' is an unsupported test framework`)
+      return false
   }
+
+  return true
 }
 
 function getEnvVars (testConfig) {

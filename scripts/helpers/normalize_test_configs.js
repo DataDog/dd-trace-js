@@ -13,7 +13,8 @@ function normalizeTestConfigs (testConfigs, defaults) {
       branch: coalesce(testConfig.branch, defaults.branch),
       framework: coalesce(testConfig.framework, defaults.framework),
       env: coalesce(testConfig.env, defaults.env),
-      setup: coalesce(testConfig.setup, defaults.setup)
+      setup: coalesce(testConfig.setup, defaults.setup),
+      ignoreFailure: coalesce(testConfig.ignoreFailure, defaults.ignoreFailure)
     }
 
     if (config.framework === 'custom') {

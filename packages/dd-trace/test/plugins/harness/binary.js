@@ -2,13 +2,11 @@
 
 const execSync = require('../../../../../scripts/helpers/exec')
 
-function executeBinary (binary, tracerSetupPath, args, options) {
+function executeBinary (tracerSetupPath, binary, args, options) {
   const npmRunEnv = 'npm run env --silent --'
 
   // Inject our tracer before we run the external tests
-  try {
-    return execSync(`${npmRunEnv} node -r '${tracerSetupPath}' ./node_modules/.bin/${binary} ${args}`, options)
-  } catch (err) {} // eslint-disable-line no-empty
+  return execSync(`${npmRunEnv} node -r '${tracerSetupPath}' ./node_modules/.bin/${binary} ${args}`, options)
 }
 
 module.exports = executeBinary
