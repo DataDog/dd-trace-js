@@ -27,9 +27,6 @@ describe('Plugin', () => {
           return agent.load(plugin, 'couchbase').then(() => {
             couchbase = require(`../../../versions/couchbase@${version}`).get()
             N1qlQuery = couchbase.N1qlQuery
-            ViewQuery = couchbase.ViewQuery
-            SearchQuery = couchbase.SearchQuery
-            CbasQuery = couchbase.CbasQuery
           })
         })
 
@@ -102,13 +99,12 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.call')
+                expect(span).to.have.property('name', 'couchbase.query')
                 expect(span).to.have.property('service', 'test-couchbase')
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('query.type', 'n1ql')
+                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
               })
               .then(done)
               .catch(done)
@@ -125,66 +121,6 @@ describe('Plugin', () => {
               triggerBucket.on('connect', () => triggerBucket.disconnect())
             }
           })
-
-          it('should handle Search queries', done => {
-            const index = 'test'
-            const searchQuery = SearchQuery.new(index, SearchQuery.queryString('eiffel'))
-
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.call')
-                expect(span).to.have.property('service', 'test-couchbase')
-                expect(span).to.have.property('resource', index)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('query.type', 'search')
-              })
-              .then(done)
-              .catch(done)
-
-            cluster.query(searchQuery, (err) => {
-              if (err) done(err)
-            })
-
-            if (semver.intersects(version, '2.4.0 - 2.5.0')) {
-              // Due to bug JSCBC-491 in Couchbase, we have to reconnect to dispatch waiting queries
-              const triggerBucket = cluster.openBucket('datadog-test', (err) => {
-                if (err) done(err)
-              })
-              triggerBucket.on('connect', () => triggerBucket.disconnect())
-            }
-          })
-
-          // Only couchbase v2.4.2 supports authentication with Analytics queries
-          if (semver.intersects(version, '>=2.4.2')) {
-            it('should handle Analytics queries', done => {
-              const query = 'SELECT * FROM datatest'
-              const cbasQuery = CbasQuery.fromString(query)
-
-              agent
-                .use(traces => {
-                  const span = traces[0][0]
-                  expect(span).to.have.property('name', 'couchbase.call')
-                  expect(span).to.have.property('service', 'test-couchbase')
-                  expect(span).to.have.property('resource', query)
-                  expect(span).to.have.property('type', 'sql')
-                  expect(span.meta).to.have.property('span.kind', 'client')
-                  expect(span.meta).to.have.property('query.type', 'cbas')
-
-                  if (semver.intersects(version, '>=2.6.0')) {
-                    expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                  }
-                })
-                .then(done)
-                .catch(done)
-
-              cluster.query(cbasQuery, (err) => {
-                if (err) done(err)
-              })
-            })
-          }
         })
 
         describe('queries on buckets', () => {
@@ -195,13 +131,12 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.call')
+                expect(span).to.have.property('name', 'couchbase.query')
                 expect(span).to.have.property('service', 'test-couchbase')
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('query.type', 'n1ql')
+                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
               })
               .then(done)
               .catch(done)
@@ -210,77 +145,6 @@ describe('Plugin', () => {
               if (err) done(err)
             })
           })
-
-          it('should handle View queries ', done => {
-            const viewQuery = ViewQuery.from('datadoc', 'by_name')
-
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.call')
-                expect(span).to.have.property('service', 'test-couchbase')
-                expect(span).to.have.property('resource', viewQuery.name)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('ddoc', viewQuery.ddoc)
-                expect(span.meta).to.have.property('query.type', 'view')
-              })
-              .then(done)
-              .catch(done)
-
-            bucket.query(viewQuery, (err) => {
-              if (err) done(err)
-            })
-          })
-
-          it('should handle Search queries', done => {
-            const index = 'test'
-            const searchQuery = SearchQuery.new(index, SearchQuery.queryString('eiffel'))
-
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.call')
-                expect(span).to.have.property('service', 'test-couchbase')
-                expect(span).to.have.property('resource', index)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                expect(span.meta).to.have.property('query.type', 'search')
-              })
-              .then(done)
-              .catch(done)
-
-            bucket.query(searchQuery, (err) => {
-              if (err) done(err)
-            })
-          })
-
-          if (semver.intersects(version, '>=2.6.0')) {
-            it('should handle Analytics queries', done => {
-              const query = 'SELECT * FROM datatest'
-              const cbasQuery = CbasQuery.fromString(query)
-
-              agent
-                .use(traces => {
-                  const span = traces[0][0]
-                  expect(span).to.have.property('name', 'couchbase.call')
-                  expect(span).to.have.property('service', 'test-couchbase')
-                  expect(span).to.have.property('resource', query)
-                  expect(span).to.have.property('type', 'sql')
-                  expect(span.meta).to.have.property('span.kind', 'client')
-                  expect(span.meta).to.have.property('bucket.name', 'datadog-test')
-                  expect(span.meta).to.have.property('query.type', 'cbas')
-                })
-                .then(done)
-                .catch(done)
-
-              bucket.query(cbasQuery, (err) => {
-                if (err) done(err)
-              })
-            })
-          }
         })
       })
     })

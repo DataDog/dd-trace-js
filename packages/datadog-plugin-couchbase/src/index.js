@@ -15,7 +15,6 @@ function startQuerySpan (tracer, config, queryType, query) {
       'component': 'couchbase',
       'service.name': config.service || `${tracer._service}-couchbase`,
       'resource.name': query,
-      'query.type': queryType,
       [Tags.SPAN_KIND]: Kinds.CLIENT
     }
   })
@@ -89,108 +88,6 @@ function createWrapN1qlRequest (tracer) {
   }
 }
 
-function createWrapViewQuery (tracer, config) {
-  return function wrapViewQuery (_view) {
-    return function viewQueryWithTrace () {
-      const viewName = arguments[2]
-      const callback = arguments[_view.length - 1]
-      const scope = tracer.scope()
-      const span = startQuerySpan(tracer, config, 'view', viewName)
-
-      if (callback) {
-        arguments[_view.length - 1] = tx.wrap(span, callback)
-      }
-
-      const req = scope.bind(_view, span).apply(this, arguments)
-
-      onRequestFinish(req, span)
-
-      return scope.bind(req)
-    }
-  }
-}
-
-function createWrapViewRequest (tracer) {
-  return function wrapViewRequest (_viewReq) {
-    return function viewRequestWithTrace () {
-      const span = tracer.scope().active()
-      const ddoc = arguments[1]
-
-      addBucketTag(span, this)
-      span.setTag('couchbase.view.ddoc', ddoc)
-
-      return _viewReq.apply(this, arguments)
-    }
-  }
-}
-
-function createWrapFtsQuery (tracer, config) {
-  return function wrapFtsQuery (_fts) {
-    return function ftsQueryWithTrace (query) {
-      const callback = arguments[_fts.length - 1]
-      const scope = tracer.scope()
-      const index = query.data.indexName
-      const span = startQuerySpan(tracer, config, 'search', index)
-
-      if (callback) {
-        arguments[_fts.length - 1] = tx.wrap(span, callback)
-      }
-
-      const req = scope.bind(_fts, span).apply(this, arguments)
-
-      onRequestFinish(req, span)
-
-      return scope.bind(req)
-    }
-  }
-}
-
-function createWrapFtsRequest (tracer) {
-  return function wrapFtsRequest (_ftsReq) {
-    return function ftsRequestWithTrace () {
-      const span = tracer.scope().active()
-
-      addBucketTag(span, this)
-
-      return _ftsReq.apply(this, arguments)
-    }
-  }
-}
-
-function createWrapCbasQuery (tracer, config) {
-  return function wrapCbasQuery (_cbas) {
-    return function cbasQueryWithTrace (query) {
-      const callback = arguments[_cbas.length - 1]
-      const scope = tracer.scope()
-      const cbasQuery = query.options.statement
-      const span = startQuerySpan(tracer, config, 'cbas', cbasQuery)
-
-      if (callback) {
-        arguments[_cbas.length] = tx.wrap(span, callback)
-      }
-
-      const req = scope.bind(_cbas, span).apply(this, arguments)
-
-      onRequestFinish(req, span)
-
-      return scope.bind(req)
-    }
-  }
-}
-
-function createWrapCbasRequest (tracer) {
-  return function wrapCbasRequest (_cbasReq) {
-    return function cbasRequestWithTrace (host) {
-      const span = tracer.scope().active()
-
-      addBucketTag(span, this)
-      addHostTag(span, host)
-
-      return _cbasReq.apply(this, arguments)
-    }
-  }
-}
-
 function createWrapOpenBucket (tracer) {
   return function wrapOpenBucket (openBucket) {
     return function openBucketWithTrace () {
@@ -204,7 +101,9 @@ function addBucketTag (span, bucket) {
   span.setTag('couchbase.bucket.name', bucket.name || bucket._name)
 }
 
-function addHostTag (host, span) {
+function addHostTag (span, host) {
+  if (!host) return
+
   const conn = host.split(':')
   span.setTag('out.host', conn[0])
   span.setTag('out.port', conn[1])
@@ -212,48 +111,18 @@ function addHostTag (host, span) {
 
 function wrapQueries (Class, tracer, config) {
   this.wrap(Class.prototype, '_n1ql', createWrapN1qlQuery(tracer, config))
-  this.wrap(Class.prototype, '_fts', createWrapFtsQuery(tracer, config))
-
-  if (Class.prototype._view) {
-    this.wrap(Class.prototype, '_view', createWrapViewQuery(tracer, config))
-  }
-
-  if (Class.prototype._cbas) {
-    this.wrap(Class.prototype, '_cbas', createWrapCbasQuery(tracer, config))
-  }
 }
 
 function unwrapQueries (Class) {
   this.unwrap(Class.prototype, '_n1ql')
-  this.unwrap(Class.prototype, '_fts')
-
-  if (Class.prototype._view) {
-    this.unwrap(Class.prototype, '_view')
-  }
-
-  if (Class.prototype._cbas) {
-    this.unwrap(Class.prototype, '_cbas')
-  }
 }
 
 function wrapRequests (Class, tracer) {
   this.wrap(Class.prototype, '_n1qlReq', createWrapN1qlRequest(tracer))
-  this.wrap(Class.prototype, '_ftsReq', createWrapFtsRequest(tracer))
-
-  if (Class.prototype._viewReq) {
-    this.wrap(Class.prototype, '_viewReq', createWrapViewRequest(tracer))
-  }
-
-  if (Class.prototype._cbasReq) {
-    this.wrap(Class.prototype, '_cbasReq', createWrapCbasRequest(tracer))
-  }
 }
 
 function unwrapRequests (Class, tracer) {
   this.unwrap(Class.prototype, '_n1qlReq')
-  this.unwrap(Class.prototype, '_ftsReq')
-  this.unwrap(Class.prototype, '_viewReq')
-  this.unwrap(Class.prototype, '_cbasReq')
 }
 
 module.exports = [
@@ -300,14 +169,12 @@ module.exports = [
       this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
 
       wrapQueries.call(this, Cluster, tracer, config)
-      this.wrap(Cluster.prototype, '_cbasReq', createWrapCbasRequest(tracer))
     },
     unpatch (Cluster) {
       this.unwrap(Cluster.prototype, 'openBucket')
       this.unwrap(Cluster.prototype, '_maybeInvoke')
 
       unwrapQueries.call(this, Cluster)
-      this.unwrap(Cluster.prototype, '_cbasReq')
     }
   }
 ]
