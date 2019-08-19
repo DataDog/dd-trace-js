@@ -1,28 +1,27 @@
 'use strict'
 
-const EventEmitter = require('events')
 const id = require('./id')
 const uuid = require('./uuid')
 const now = require('./now')
 const env = require('./env')
 const validate = require('./validate')
 const service = require('./service')
-const request = require('./request')
-const msgpack = require('./msgpack')
 const metrics = require('./metrics')
-const Uint64BE = require('./uint64be')
-const hostname = require('./hostname')
+const Uint64BE = require('../node/uint64be')
+const Bowser = require('bowser')
 const Instrumenter = require('./instrumenter')
-const Scope = require('../../scope/async_hooks')
-const Exporter = require('../../exporters/agent')
+const Scope = require('../../scope/base')
+const Exporter = require('../../exporters/log')
 
-const emitter = new EventEmitter()
+const process = Bowser.parse(window.navigator.userAgent)
 
 const platform = {
   _config: {},
-  name: () => 'nodejs',
-  version: () => process.version,
-  engine: () => process.jsEngine || 'v8',
+  // TODO: distinguish the language/browser
+  // TODO: normalize casing
+  name: () => process.browsername,
+  version: () => process.browser.version,
+  engine: () => process.engine.name,
   configure (config) {
     this._config = config
   },
@@ -39,18 +38,14 @@ const platform = {
   env,
   validate,
   service,
-  request,
-  msgpack,
   metrics,
-  Uint64BE,
-  hostname,
-  on: emitter.on.bind(emitter),
-  off: emitter.removeListener.bind(emitter),
+  Uint64BE, // TODO: remove dependency on Uint64BE
+  hostname: () => {}, // TODO: add hostname
+  on: () => {}, // TODO: add event listener
+  off: () => {}, // TODO: add event listener
   Instrumenter,
   Scope,
   Exporter
 }
-
-process.once('beforeExit', () => emitter.emit('exit'))
 
 module.exports = platform

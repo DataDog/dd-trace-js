@@ -1,7 +1,8 @@
 'use strict'
 
 describe('Exporter', () => {
-  const url = 'www.example.com'
+  let url
+  let interval
   let Scheduler
   let scheduler
   let Exporter
@@ -11,6 +12,8 @@ describe('Exporter', () => {
   let span
 
   beforeEach(() => {
+    url = 'www.example.com'
+    interval = 1000
     span = {}
     scheduler = {
       start: sinon.spy(),
@@ -31,12 +34,12 @@ describe('Exporter', () => {
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
-      exporter = new Exporter(url, 1000)
+      exporter = new Exporter({ url, interval })
     })
 
     it('should schedule flushing after the configured interval', () => {
       writer.length = 0
-      exporter = new Exporter(url, 1000)
+      exporter = new Exporter({ url, interval })
       Scheduler.firstCall.args[0]()
 
       expect(scheduler.start).to.have.been.called
@@ -59,7 +62,7 @@ describe('Exporter', () => {
 
   describe('when interval is set to 0', () => {
     beforeEach(() => {
-      exporter = new Exporter(writer, 0)
+      exporter = new Exporter({ url, interval: 0 })
     })
 
     it('should flush right away when interval is set to 0', () => {

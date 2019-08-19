@@ -4,7 +4,6 @@ const BaseTracer = require('opentracing').Tracer
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
 const log = require('./log')
 const analyticsSampler = require('./analytics_sampler')
@@ -15,7 +14,7 @@ class Tracer extends BaseTracer {
   constructor () {
     super()
     this._tracer = noop
-    this._instrumenter = new Instrumenter(this)
+    this._instrumenter = new platform.Instrumenter(this)
     this._deprecate = method => log.deprecate(`tracer.${method}`, [
       `tracer.${method}() is deprecated.`,
       'Please use tracer.startSpan() and tracer.scope() instead.',

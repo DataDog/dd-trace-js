@@ -86,14 +86,14 @@ describe('Tracer', () => {
     }
 
     platform = {
-      hostname: sinon.stub().returns('my_hostname')
+      hostname: sinon.stub().returns('my_hostname'),
+      Exporter: AgentExporter
     }
 
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
-      '../exporters/agent': AgentExporter,
       '../exporters/log': LogExporter,
       '../span_processor': SpanProcessor,
       '../sampler': Sampler,
@@ -109,7 +109,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(config.url, config.flushInterval)
+    expect(AgentExporter).to.have.been.calledWith(config)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 
@@ -121,7 +121,6 @@ describe('Tracer', () => {
 
     expect(AgentExporter).not.to.have.been.called
     expect(LogExporter).to.have.been.called
-    expect(LogExporter).to.have.been.calledWith(process.stdout)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 

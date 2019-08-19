@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+  <title>Datadog APM Example</title>
+
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+  <div class="center">
+    <img src="dd_icon_white.svg" alt="Datadog" width="200">
+    <p>Click the button to generate traces. Open the console to view traces.</p>
+    <button id="request" type="button">Send Request</button>
+  </div>
+
+  <script src="../../dist/datadog-tracer.js"></script>
+  <script>
+    const tracer = datadog.tracer
+
+    tracer.init()
+    tracer.use('xmlhttprequest', {
+      splitByDomain: true
+    })
+
+    document.getElementById('request').addEventListener('click', function () {
+      const req = new XMLHttpRequest()
+
+      req.open("GET", "index.html")
+      req.send()
+    })
+  </script>
+</body>
+</html>

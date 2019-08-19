@@ -54,18 +54,18 @@ describe('Instrumenter', () => {
     shimmer.massWrap = sinon.spy()
     shimmer.massUnwrap = sinon.spy()
 
-    Instrumenter = proxyquire('../src/instrumenter', {
+    Instrumenter = proxyquire('../src/platform/node/instrumenter', {
       'shimmer': shimmer,
-      './plugins': {
+      '../../plugins': {
         'http': integrations.http,
         'express-mock': integrations.express,
         'mysql-mock': integrations.mysql,
         'other': integrations.other
       },
-      '../../datadog-plugin-http/src': integrations.http,
-      '../../datadog-plugin-express-mock/src': integrations.express,
-      '../../datadog-plugin-mysql-mock/src': integrations.mysql,
-      '../../datadog-plugin-other/src': integrations.other
+      '../../../../datadog-plugin-http/src': integrations.http,
+      '../../../../datadog-plugin-express-mock/src': integrations.express,
+      '../../../../datadog-plugin-mysql-mock/src': integrations.mysql,
+      '../../../../datadog-plugin-other/src': integrations.other
     })
 
     instrumenter = new Instrumenter(tracer)

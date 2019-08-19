@@ -6,7 +6,9 @@ const parse = require('module-details-from-path')
 const path = require('path')
 const shimmer = require('shimmer')
 const uniq = require('lodash.uniq')
-const log = require('./log')
+const log = require('../../log')
+
+// TODO: refactor to share code between Node and the browser
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
@@ -29,7 +31,7 @@ class Instrumenter {
     config = config || {}
 
     try {
-      this._set(require(`../../datadog-plugin-${name}/src`), { name, config })
+      this._set(require(`../../../../datadog-plugin-${name}/src`), { name, config })
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }
@@ -41,7 +43,7 @@ class Instrumenter {
     config = config || {}
 
     if (config.plugins !== false) {
-      const plugins = require('./plugins')
+      const plugins = require('../../plugins')
 
       Object.keys(plugins)
         .forEach(name => {

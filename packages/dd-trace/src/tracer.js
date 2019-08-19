@@ -3,6 +3,7 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
+const platform = require('./platform')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -131,7 +132,7 @@ function getScope (config) {
   if (config.scope === NOOP) {
     Scope = require('./scope/base')
   } else {
-    Scope = require('./scope/async_hooks')
+    Scope = platform.Scope
   }
 
   return new Scope(config)

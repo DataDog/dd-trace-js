@@ -54,7 +54,8 @@ describe('TracerProxy', () => {
       load: sinon.spy(),
       metrics: sinon.stub().returns({
         start: sinon.spy()
-      })
+      }),
+      Instrumenter
     }
 
     analyticsSampler = {
@@ -64,7 +65,6 @@ describe('TracerProxy', () => {
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
-      './instrumenter': Instrumenter,
       './config': Config,
       './platform': platform,
       './analytics_sampler': analyticsSampler
