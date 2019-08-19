@@ -32,6 +32,8 @@ const testConfigs = require(testConfigsPath)
 executeTestConfigs(testConfigs)
 
 function executeTestConfigs (testConfigs) {
+  let exitCode = 0
+
   for (let i = 0; i < testConfigs.length; ++i) {
     const testConfig = testConfigs[i]
 
@@ -46,8 +48,10 @@ function executeTestConfigs (testConfigs) {
     const executionPath = getIntegration(testConfig)
 
     // Execute tests through harness
-    executeTest(testConfig, executionPath)
+    exitCode = executeTest(testConfig, executionPath) || exitCode
   }
+
+  process.exit(exitCode)
 }
 
 function getIntegration (testConfig) {

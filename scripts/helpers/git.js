@@ -13,7 +13,7 @@ function clone (repo, localDir, branch, options) {
     return execSync(`git -C '${localDir}' fetch --depth 1`, options)
   } else {
     const branchArgs = branch ? `-b ${branch}` : ''
-    return execSync(`git clone --depth 1 --single-branch ${repo} ${branchArgs} '${localDir}'`, options)
+    return execSync(`git clone --depth 1 --single-branch ${branchArgs} -- ${repo} '${localDir}'`, options)
   }
 }
 

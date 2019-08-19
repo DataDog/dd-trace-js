@@ -29,7 +29,7 @@ function executeTest (testConfig, executionPath) {
     executedTests = executeTestHarness(tracerSetupPath, testConfig, options)
   } catch (err) {
     if (!testConfig.ignoreFailure) {
-      process.exit(err.status)
+      return err.status
     }
 
     executedTests = true
@@ -38,6 +38,8 @@ function executeTest (testConfig, executionPath) {
   if (!executedTests) {
     throw new Error(`'${testConfig.framework}' is an unsupported test framework`)
   }
+
+  return 0
 }
 
 function executeTestHarness (tracerSetupPath, testConfig, options) {
