@@ -3,7 +3,7 @@
 // We may need to do some hack-y stuff to get *certain* test suites to work correctly
 
 // Propagate this injection script across child processes, if enabled
-if (process.env._DD_PATCH_SPAWN) {
+if (process.env.hasOwnProperty('_DD_PATCH_SPAWN')) {
   const childProcess = require('child_process')
 
   wrapSpawn(childProcess, 'spawn')

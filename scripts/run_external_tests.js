@@ -8,7 +8,12 @@ const title = require('./helpers/title')
 const executeTest = require('../packages/dd-trace/test/plugins/harness')
 
 // Get the plugin whose external tests we want to run
-const plugin = process.argv[2]
+let plugin
+if (process.argv[2]) {
+  plugin = process.argv[2]
+} else if (process.env.hasOwnProperty('PLUGINS')) {
+  plugin = process.env.PLUGINS.split('|')[0]
+}
 
 // Make sure it's a valid plugin
 const testConfigPath = path.join(__dirname, `../packages/datadog-plugin-${plugin}/test/external_tests.js`)
