@@ -27,7 +27,7 @@ services:
   redis:
     image: redis:4.0-alpine
     ports:
-      - "127.0.0.1:16379:6379"
+      - "127.0.0.1:6379:6379"
   mongo:
     image: circleci/mongo
     ports:
