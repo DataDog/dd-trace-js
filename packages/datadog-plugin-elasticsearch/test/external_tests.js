@@ -18,12 +18,6 @@ const testConfigs = [
     args: 'test/unit/index.js --exit'
   },
   {
-    branch: '5.x'
-  },
-  {
-    branch: '6.x'
-  },
-  {
     branch: '7.x'
   }
 ]

@@ -16,14 +16,19 @@ if (process.argv[2]) {
 }
 
 // Make sure it's a valid plugin
-const testConfigPath = path.join(__dirname, `../packages/datadog-plugin-${plugin}/test/external_tests.js`)
-if (!fs.existsSync(testConfigPath)) {
-  throw new Error(`'${plugin}' is not a valid plugin or it does not support external tests`)
+const pluginPath = path.join(__dirname, `../packages/datadog-plugin-${plugin}`)
+if (!fs.existsSync(pluginPath)) {
+  throw new Error(`'${plugin}' is not a valid plugin`)
 }
 
 // Get the test configurations from the plugin's external test configuration file
-const testConfigs = require(`../packages/datadog-plugin-${plugin}/test/external_tests.js`)
+const testConfigsPath = path.join(pluginPath, '/test/external_tests.js')
+if (!fs.existsSync(testConfigsPath)) {
+  execSync(`echo "'${plugin}' does not support external tests"`, { stdio: [0, 1, 2] })
+  process.exit(0)
+}
 
+const testConfigs = require(testConfigsPath)
 executeTestConfigs(testConfigs)
 
 function executeTestConfigs (testConfigs) {
