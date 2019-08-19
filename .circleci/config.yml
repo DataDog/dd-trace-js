@@ -50,9 +50,6 @@ node-bench-base: &node-bench-base
     - run:
         name: Benchmark
         command: yarn bench
-    - run:
-        name: External tests
-        command: yarn test:external
 
 node-plugin-base: &node-plugin-base
   docker:
@@ -83,7 +80,9 @@ node-plugin-base: &node-plugin-base
         command: yarn test:plugins
     - store_artifacts:
         path: ./coverage/lcov-report
-
+    - run:
+        name: External tests
+        command: yarn test:external
 jobs:
   # Linting
 
