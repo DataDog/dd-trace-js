@@ -5,10 +5,12 @@ const Tags = require('../../../ext/tags')
 const Kinds = require('../../../ext/kinds')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-const bucketOperations = ['get', 'getMulti', 'getAndTouch', 'getAndLock', 'getReplica', 'touch',
+const bucketOperations = [
+  'get', 'getMulti', 'getAndTouch', 'getAndLock', 'getReplica', 'touch',
   'unlock', 'remove', 'upsert', 'insert', 'replace', 'append', 'prepend', 'counter', 'mapGet',
   'mapRemove', 'mapSize', 'mapAdd', 'listGet', 'listAppend', 'listPrepend', 'listRemove', 'listSet',
-  'listSize', 'setAdd', 'setExists', 'setSize', 'setRemove', 'queuePush', 'queuePop', 'queueSize']
+  'listSize', 'setAdd', 'setExists', 'setSize', 'setRemove', 'queuePush', 'queuePop', 'queueSize'
+]
 
 function startQuerySpan (tracer, config, queryType, query) {
   const childOf = tracer.scope().active()
