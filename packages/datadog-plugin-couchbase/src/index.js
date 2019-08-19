@@ -30,22 +30,21 @@ function startQuerySpan (tracer, config, queryType, query) {
 }
 
 function onRequestFinish (emitter, span) {
+  let rowsListener // eslint-disable-line prefer-const
+
   const errorListener = (err) => {
     span.setTag(Tags.ERROR, err)
     span.finish()
-  }
-  const rowsListener = () => {
-    span.finish()
+    emitter.removeListener('rows', rowsListener)
   }
 
-  emitter.once('rows', () => {
-    rowsListener()
+  rowsListener = () => {
+    span.finish()
     emitter.removeListener('error', errorListener)
-  })
-  emitter.once('error', (err) => {
-    errorListener(err)
-    emitter.removeListener('rows', rowsListener)
-  })
+  }
+
+  emitter.once('rows', rowsListener)
+  emitter.once('error', errorListener)
 }
 
 function createWrapMaybeInvoke (tracer) {
@@ -66,7 +65,7 @@ function createWrapQuery (tracer) {
 
       if (params instanceof Function) {
         params = scope.bind(params)
-      } else {
+      } else if (callback) {
         callback = scope.bind(callback)
       }
 
@@ -145,6 +144,7 @@ function wrapCouchbase (Class, tracer, config) {
   if (Class.prototype.openBucket) {
     this.wrap(Class.prototype, 'openBucket', createWrapOpenBucket(tracer, config))
   }
+
   this.wrap(Class.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
   this.wrap(Class.prototype, 'query', createWrapQuery(tracer))
 }
@@ -191,14 +191,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['>=2.6.0'],
-    file: 'lib/cluster.js',
-    patch: wrapCouchbase,
-    unpatch: unwrapCouchbase
-  },
-  {
-    name: 'couchbase',
-    versions: ['2.4.0 - 2.5.1'],
+    versions: ['>=2.4.0'],
     file: 'lib/cluster.js',
     patch: wrapCouchbase,
     unpatch: unwrapCouchbase
