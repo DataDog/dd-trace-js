@@ -9,9 +9,6 @@ wrapIt()
 describe('Plugin', () => {
   let couchbase
   let N1qlQuery
-  let ViewQuery
-  let SearchQuery
-  let CbasQuery
   let cluster
   let bucket
   let tracer
@@ -34,6 +31,7 @@ describe('Plugin', () => {
           cluster = new couchbase.Cluster('localhost:8091')
           cluster.authenticate('Administrator', 'password')
           cluster.enableCbas('localhost:8095')
+          cluster.ebn
           bucket = cluster.openBucket('datadog-test', (err) => done(err))
         })
 
@@ -85,6 +83,18 @@ describe('Plugin', () => {
 
           tracer.scope().activate(span, () => {
             bucket.on('connect', () => {
+              expect(tracer.scope().active()).to.equal(span)
+              done()
+            })
+          })
+        })
+
+        it('should run any Bucket operations in the parent context', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+          const span = tracer.startSpan('test')
+
+          tracer.scope().activate(span, () => {
+            bucket.get('1', () => {
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
