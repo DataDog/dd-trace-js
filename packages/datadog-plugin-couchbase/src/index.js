@@ -7,7 +7,7 @@ const tx = require('../../dd-trace/src/plugins/util/tx.js')
 
 function startQuerySpan (tracer, config, queryType, query) {
   const childOf = tracer.scope().active()
-  const span = tracer.startSpan('couchbase.call', {
+  const span = tracer.startSpan('couchbase.query', {
     childOf,
     tags: {
       'db.type': 'couchbase',
@@ -81,8 +81,8 @@ function createWrapN1qlRequest (tracer) {
     return function n1qlRequestWithTrace (host) {
       const span = tracer.scope().active()
 
-      addBucketTag(this, span)
-      span.setTag('cluster.host', host)
+      addBucketTag(span, this)
+      addHostTag(span, host)
 
       return _n1qlReq.apply(this, arguments)
     }
@@ -116,8 +116,8 @@ function createWrapViewRequest (tracer) {
       const span = tracer.scope().active()
       const ddoc = arguments[1]
 
-      addBucketTag(this, span)
-      span.setTag('ddoc', ddoc)
+      addBucketTag(span, this)
+      span.setTag('couchbase.view.ddoc', ddoc)
 
       return _viewReq.apply(this, arguments)
     }
@@ -150,7 +150,7 @@ function createWrapFtsRequest (tracer) {
     return function ftsRequestWithTrace () {
       const span = tracer.scope().active()
 
-      addBucketTag(this, span)
+      addBucketTag(span, this)
 
       return _ftsReq.apply(this, arguments)
     }
@@ -183,8 +183,8 @@ function createWrapCbasRequest (tracer) {
     return function cbasRequestWithTrace (host) {
       const span = tracer.scope().active()
 
-      addBucketTag(this, span)
-      span.setTag('cbas.host', host)
+      addBucketTag(span, this)
+      addHostTag(span, host)
 
       return _cbasReq.apply(this, arguments)
     }
@@ -200,8 +200,14 @@ function createWrapOpenBucket (tracer) {
   }
 }
 
-function addBucketTag (bucket, span) {
-  span.setTag('bucket.name', bucket.name || bucket._name)
+function addBucketTag (span, bucket) {
+  span.setTag('couchbase.bucket.name', bucket.name || bucket._name)
+}
+
+function addHostTag (host, span) {
+  const conn = host.split(':')
+  span.setTag('out.host', conn[0])
+  span.setTag('out.port', conn[1])
 }
 
 function wrapQueries (Class, tracer, config) {
@@ -246,14 +252,8 @@ function wrapRequests (Class, tracer) {
 function unwrapRequests (Class, tracer) {
   this.unwrap(Class.prototype, '_n1qlReq')
   this.unwrap(Class.prototype, '_ftsReq')
-
-  if (Class.prototype._viewReq) {
-    this.unwrap(Class.prototype, '_viewReq')
-  }
-
-  if (Class.prototype._cbasReq) {
-    this.unwrap(Class.prototype, '_cbasReq')
-  }
+  this.unwrap(Class.prototype, '_viewReq')
+  this.unwrap(Class.prototype, '_cbasReq')
 }
 
 module.exports = [
@@ -263,6 +263,7 @@ module.exports = [
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       this.wrap(Bucket.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer))
+
       wrapQueries.call(this, Bucket, tracer, config)
       wrapRequests.call(this, Bucket, tracer)
     },
