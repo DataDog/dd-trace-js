@@ -30,7 +30,9 @@ function createWrapMakeClientConstructor (tracer, config, grpc) {
 }
 
 function wrapMethod (tracer, config, method, definition, grpc) {
-  if (typeof method !== 'function' || !definition.path) return method
+  if (typeof method !== 'function' || method._datadog_patched || !definition || !definition.path) {
+    return method
+  }
 
   const filter = getFilter(config, 'metadata')
 
@@ -69,6 +71,8 @@ function wrapMethod (tracer, config, method, definition, grpc) {
   }
 
   Object.assign(methodWithTrace, method)
+
+  methodWithTrace._datadog_patched = true
 
   return methodWithTrace
 }
