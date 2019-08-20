@@ -19,7 +19,7 @@ const platform = {
   _config: {},
   // TODO: distinguish the language/browser
   // TODO: normalize casing
-  name: () => process.browsername,
+  name: () => process.browser.name,
   version: () => process.browser.version,
   engine: () => process.engine.name,
   configure (config) {
