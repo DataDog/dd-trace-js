@@ -36,7 +36,7 @@ function createWrapSendCommand (tracer, config) {
 
 function startSpan (tracer, config, client, command, args) {
   const db = client.selected_db
-  const connectionOptions = client.connection_options || client.connection_option || {}
+  const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || {}
   const span = tx.instrument(tracer, config, db, command, args)
 
   tx.setHost(span, connectionOptions.host, connectionOptions.port)
