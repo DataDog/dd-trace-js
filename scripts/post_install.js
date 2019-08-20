@@ -20,7 +20,7 @@ const platforms = [
   'win32-ia32'
 ]
 
-if (process.env.DD_NATIVE_METRICS !== 'false') {
+if (process.env.DD_NATIVE_METRICS !== 'false' && __dirname.indexOf('/node_modules/') !== -1) {
   if (buildFromSource === 'true' || buildFromSource === 'dd-trace' || !platforms.includes(name)) {
     extract()
       .then(rebuild)
