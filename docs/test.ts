@@ -40,7 +40,8 @@ tracer.init({
   env: 'test',
   runtimeMetrics: true,
   experimental: {
-    b3: true
+    b3: true,
+    thenables: true
   },
   hostname: 'agent',
   logger: {

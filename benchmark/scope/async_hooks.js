@@ -37,7 +37,9 @@ const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
   '../platform': platform
 })
 
-const scope = new Scope()
+const scope = new Scope({
+  experimental: {}
+})
 
 let fn
 let promise

@@ -33,6 +33,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.nested.property('experimental.b3', false)
+    expect(config).to.have.nested.property('experimental.thenables', false)
   })
 
   it('should initialize from the default service', () => {
@@ -113,7 +114,8 @@ describe('Config', () => {
       plugins: false,
       scope: 'noop',
       experimental: {
-        b3: true
+        b3: true,
+        thenables: true
       }
     })
 
@@ -138,6 +140,7 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.thenables', true)
   })
 
   it('should initialize from the options with url taking precedence', () => {

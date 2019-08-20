@@ -134,7 +134,7 @@ function getScope (config) {
     Scope = require('./scope/async_hooks')
   }
 
-  return new Scope()
+  return new Scope(config)
 }
 
 module.exports = DatadogTracer
