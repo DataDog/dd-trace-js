@@ -4,7 +4,7 @@ const normalizeTestConfigs = require('../../../scripts/helpers/normalize_test_co
 
 const defaults = {
   integration: 'connect',
-  repo: 'https://github.com/senchalabs/connect/',
+  repo: 'https://github.com/senchalabs/connect',
   framework: 'mocha',
   args: '--require test/support/env --reporter spec --check-leaks test/'
 }

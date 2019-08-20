@@ -4,7 +4,7 @@ const normalizeTestConfigs = require('../../../scripts/helpers/normalize_test_co
 
 const defaults = {
   integration: 'restify',
-  repo: 'https://github.com/restify/node-restify/'
+  repo: 'https://github.com/restify/node-restify'
 }
 
 const testConfigs = [
