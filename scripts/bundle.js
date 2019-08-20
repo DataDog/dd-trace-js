@@ -33,7 +33,7 @@ function bundle (options) {
   return bundler
     .plugin(require('bundle-collapser/plugin'))
     .bundle()
-    .pipe(source('datadog-tracer.js'))
+    .pipe(source('dd-trace.js'))
     .pipe(buffer())
     .pipe(sourcemaps.init({ loadMaps: true }))
     .pipe(sourcemaps.write('.', { sourceRoot: '' }))

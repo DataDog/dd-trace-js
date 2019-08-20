@@ -14,4 +14,4 @@ function defineTask (entry, target) {
 
 defineTask('./browser', './dist')
 
-gulp.task('default', defaultTask)
+gulp.task('default', gulp.parallel(defaultTask))

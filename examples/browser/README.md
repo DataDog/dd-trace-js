@@ -9,5 +9,3 @@ npm install
 npm run bundle
 npm run browser
 ```
-
-**Note:** Bundling is currently supported only on Node 10.
