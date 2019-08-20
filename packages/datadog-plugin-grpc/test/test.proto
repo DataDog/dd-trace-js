@@ -3,7 +3,7 @@ syntax = "proto3";
 package test;
 
 service TestService {
-  rpc getBidi (stream Request) returns (stream Empty) {}
+  rpc get_Bidi (stream Request) returns (stream Empty) {} // test rename support
   rpc getServerStream (Request) returns (stream Empty) {}
   rpc getClientStream (stream Request) returns (Empty) {}
   rpc getUnary (Request) returns (Empty) {}

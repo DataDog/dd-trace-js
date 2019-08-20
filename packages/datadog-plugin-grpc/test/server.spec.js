@@ -122,11 +122,11 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test',
-                resource: '/test.TestService/getBidi'
+                resource: '/test.TestService/get_Bidi'
               })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getBidi')
+              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'get_Bidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
+              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/get_Bidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.bidi)
               expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')

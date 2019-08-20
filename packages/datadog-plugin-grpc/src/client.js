@@ -20,7 +20,7 @@ function createWrapMakeClientConstructor (tracer, config, grpc) {
           proto[method] = wrapMethod(tracer, config, proto[method], methods[method], grpc)
 
           if (originalName) {
-            proto[originalName] = wrapMethod(tracer, config, proto[originalName], methods[originalName], grpc)
+            proto[originalName] = wrapMethod(tracer, config, proto[originalName], methods[method], grpc)
           }
         })
 
