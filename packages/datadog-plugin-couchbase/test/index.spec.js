@@ -31,7 +31,6 @@ describe('Plugin', () => {
           cluster = new couchbase.Cluster('localhost:8091')
           cluster.authenticate('Administrator', 'password')
           cluster.enableCbas('localhost:8095')
-          cluster.ebn
           bucket = cluster.openBucket('datadog-test', (err) => done(err))
         })
 
@@ -40,7 +39,6 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          expect(bucket.connected).to.equal(false)
           return agent.close()
         })
 
