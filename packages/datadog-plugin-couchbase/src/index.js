@@ -1,6 +1,5 @@
 'use strict'
 
-const URL = require('url')
 const Tags = require('../../../ext/tags')
 const Kinds = require('../../../ext/kinds')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
