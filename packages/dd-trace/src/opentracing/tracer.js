@@ -42,11 +42,9 @@ class DatadogTracer extends Tracer {
     this._prioritySampler = new PrioritySampler(config.env)
 
     if (config.experimental.exporter === exporters.LOG) {
-      this._exporter = new LogExporter(config)
-    } else if (config.experimental.exporter === exporters.AGENT) {
-      this._exporter = new AgentExporter(config)
+      this._exporter = new LogExporter(process.stdout)
     } else {
-      this._exporter = new platform.Exporter(config)
+      this._exporter = new AgentExporter(config.url, config.flushInterval)
     }
 
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
