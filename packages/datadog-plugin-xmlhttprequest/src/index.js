@@ -16,6 +16,8 @@ function createWrapSend (tracer, config) {
     return function sendWithTrace (body) {
       const span = tracer.startSpan('http.request')
 
+      inject(this, tracer, span)
+
       this.addEventListener('error', e => span.setTag('error', e))
       this.addEventListener('loadend', () => {
         const method = this._datadog_method
@@ -46,6 +48,17 @@ function getServiceName (tracer, config, url) {
   }
 
   return tracer._service
+}
+
+function inject (xhr, tracer, span) {
+  const format = window.datadog.ext.formats.HTTP_HEADERS
+  const headers = {}
+
+  tracer.inject(span, format, headers)
+
+  for (const name in headers) {
+    xhr.setRequestHeader(name, headers[name])
+  }
 }
 
 module.exports = {
