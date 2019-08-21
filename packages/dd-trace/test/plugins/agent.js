@@ -41,7 +41,7 @@ module.exports = {
         config = [].concat(config)
 
         server.on('close', () => {
-          tracer._instrumenter.unpatch()
+          tracer._instrumenter.disable()
           tracer = null
         })
 

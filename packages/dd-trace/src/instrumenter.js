@@ -57,6 +57,8 @@ class Instrumenter {
     }
 
     this._plugins.clear()
+    this._enabled = false
+    this._loader.reload(this._plugins)
   }
 
   wrap (nodules, names, wrapper) {
@@ -100,7 +102,7 @@ class Instrumenter {
         instrumentations
           .forEach(instrumentation => {
             this._loader.getModules(instrumentation).forEach(nodule => {
-              this._patch(instrumentation, nodule, meta.config)
+              this.patch(instrumentation, nodule, meta.config)
             })
           })
       } catch (e) {
@@ -149,7 +151,6 @@ class Instrumenter {
   }
 
   _set (plugin, meta) {
-    this.unload(plugin)
     this._plugins.set(plugin, meta)
     this.load(plugin, meta)
   }
