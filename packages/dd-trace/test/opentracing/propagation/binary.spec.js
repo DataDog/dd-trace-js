@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../../../src/platform')
+const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('BinaryPropagator', () => {
@@ -16,8 +16,8 @@ describe('BinaryPropagator', () => {
     it('should not be supported', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('456', 10)
+        traceId: id('123', 10),
+        spanId: id('456', 10)
       })
 
       propagator.inject(spanContext, carrier)

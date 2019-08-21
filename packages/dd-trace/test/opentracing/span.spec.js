@@ -13,17 +13,19 @@ describe('Span', () => {
   let sampler
   let platform
   let handle
+  let id
 
   beforeEach(() => {
     handle = { finish: sinon.spy() }
     platform = {
-      id: sinon.stub(),
       metrics: sinon.stub().returns({
         track: sinon.stub().returns(handle)
       })
     }
-    platform.id.onFirstCall().returns('123')
-    platform.id.onSecondCall().returns('456')
+
+    id = sinon.stub()
+    id.onFirstCall().returns('123')
+    id.onSecondCall().returns('456')
 
     tracer = {}
 
@@ -40,7 +42,8 @@ describe('Span', () => {
     }
 
     Span = proxyquire('../src/opentracing/span', {
-      '../platform': platform
+      '../platform': platform,
+      '../id': id
     })
   })
 

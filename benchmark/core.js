@@ -18,6 +18,7 @@ const Sampler = require('../packages/dd-trace/src/sampler')
 const format = require('../packages/dd-trace/src/format')
 const encode = require('../packages/dd-trace/src/encode')
 const config = new Config('benchmark', { service: 'benchmark' })
+const id = require('../packages/dd-trace/src/id')
 
 const suite = benchmark('core')
 
@@ -45,8 +46,8 @@ suite
       propagator = new TextMapPropagator(config)
       carrier = {}
       spanContext = new DatadogSpanContext({
-        traceId: platform.id('1234567812345678'),
-        spanId: platform.id('1234567812345678'),
+        traceId: id('1234567812345678'),
+        spanId: id('1234567812345678'),
         baggageItems: { foo: 'bar' }
       })
     },
@@ -91,6 +92,11 @@ suite
   .add('encode', {
     fn () {
       encode(traceStub)
+    }
+  })
+  .add('id', {
+    fn () {
+      id()
     }
   })
 

@@ -7,6 +7,7 @@ const SpanContext = require('./span_context')
 const platform = require('../platform')
 const log = require('../log')
 const constants = require('../constants')
+const id = require('../id')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
@@ -58,14 +59,14 @@ class DatadogSpan extends Span {
     if (parent) {
       spanContext = new SpanContext({
         traceId: parent._traceId,
-        spanId: platform.id(),
+        spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
         baggageItems: parent._baggageItems,
         trace: parent._trace
       })
     } else {
-      const spanId = platform.id()
+      const spanId = id()
       spanContext = new SpanContext({
         traceId: spanId,
         spanId

@@ -5,6 +5,8 @@ const platform = require('../../packages/dd-trace/src/platform')
 const node = require('../../packages/dd-trace/src/platform/node')
 const benchmark = require('../benchmark')
 
+platform.use(node)
+
 const suite = benchmark('scope (async_hooks)')
 
 const spanStub = require('../stubs/span')
@@ -44,8 +46,6 @@ const scope = new Scope({
 let fn
 let promise
 let emitter
-
-platform.use(node)
 
 suite
   .add('Scope#activate', {

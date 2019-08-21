@@ -4,7 +4,7 @@ const Int64BE = require('int64-buffer').Int64BE
 const Uint64BE = require('int64-buffer').Uint64BE
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
-const platform = require('../src/platform')
+const id = require('../src/id')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -12,7 +12,7 @@ const ANALYTICS = tags.ANALYTICS
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
-const id = platform.id('0234567812345678')
+const spanId = id('0234567812345678')
 
 describe('format', () => {
   let format
@@ -23,9 +23,9 @@ describe('format', () => {
 
   beforeEach(() => {
     spanContext = {
-      _traceId: id,
-      _spanId: id,
-      _parentId: id,
+      _traceId: spanId,
+      _spanId: spanId,
+      _parentId: spanId,
       _tags: {},
       _metrics: {},
       _sampling: {},
