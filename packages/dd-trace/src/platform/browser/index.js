@@ -7,20 +7,16 @@ const validate = require('./validate')
 const service = require('./service')
 const metrics = require('./metrics')
 const plugins = require('../../plugins/browser')
-const Bowser = require('bowser')
 const Loader = require('./loader')
 const Scope = require('../../scope/base')
 const Exporter = require('../../exporters/log')
 
-const process = Bowser.parse(window.navigator.userAgent)
-
 const platform = {
   _config: {},
-  // TODO: distinguish the language/browser
-  // TODO: normalize casing
-  name: () => process.browser.name,
-  version: () => process.browser.version,
-  engine: () => process.engine.name,
+  // TODO: determine what should be the name/version/engine
+  name: () => {},
+  version: () => {},
+  engine: () => {},
   crypto,
   now,
   env,
