@@ -12,6 +12,10 @@ const msgpack = require('./msgpack')
 const metrics = require('./metrics')
 const Uint64BE = require('./uint64be')
 const hostname = require('./hostname')
+const plugins = require('../../plugins')
+const Loader = require('./loader')
+const Scope = require('../../scope/async_hooks')
+const Exporter = require('../../exporters/agent')
 
 const emitter = new EventEmitter()
 
@@ -41,9 +45,13 @@ const platform = {
   metrics,
   Uint64BE,
   hostname,
+  plugins,
   on: emitter.on.bind(emitter),
   once: emitter.once.bind(emitter),
-  off: emitter.removeListener.bind(emitter)
+  off: emitter.removeListener.bind(emitter),
+  Loader,
+  Scope,
+  Exporter
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))

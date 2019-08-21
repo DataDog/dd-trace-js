@@ -1,6 +1,11 @@
 'use strict'
 
 const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
 
-module.exports = data => msgpack.encode(data, { codec })
+let codec
+
+module.exports = data => {
+  codec = codec || msgpack.createCodec({ int64: true })
+
+  return msgpack.encode(data, { codec })
+}
