@@ -9,8 +9,9 @@ const service = require('./service')
 const request = require('./request')
 const msgpack = require('./msgpack')
 const metrics = require('./metrics')
+const plugins = require('../../plugins')
 const hostname = require('./hostname')
-const Instrumenter = require('./instrumenter')
+const Loader = require('./loader')
 const Scope = require('../../scope/async_hooks')
 const Exporter = require('../../exporters/agent')
 
@@ -29,10 +30,11 @@ const platform = {
   request,
   msgpack,
   metrics,
+  plugins,
   hostname,
   on: emitter.on.bind(emitter),
   off: emitter.removeListener.bind(emitter),
-  Instrumenter,
+  Loader,
   Scope,
   Exporter
 }

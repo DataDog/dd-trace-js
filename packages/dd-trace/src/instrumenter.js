@@ -1,21 +1,21 @@
 'use strict'
 
 const shimmer = require('shimmer')
-const log = require('../../log')
-
-// TODO: refactor to share code between Node and the browser
+const log = require('./log')
+const platform = require('./platform')
 
 shimmer({ logger: () => {} })
 
-const plugins = require('../../plugins/browser')
+const plugins = platform.plugins
 
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
+    this._loader = new platform.Loader(this)
     this._enabled = false
     this._names = new Set()
     this._plugins = new Map()
-    this._instrumented = new Set()
+    this._instrumented = new Map()
   }
 
   use (name, config) {
@@ -30,9 +30,13 @@ class Instrumenter {
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }
+
+    if (this._enabled) {
+      this._loader.reload(this._plugins)
+    }
   }
 
-  patch (config) {
+  enable (config) {
     config = config || {}
 
     if (config.plugins !== false) {
@@ -42,12 +46,15 @@ class Instrumenter {
           this._set(plugins[name], { name, config: {} })
         })
     }
+
+    this._enabled = true
+    this._loader.reload(this._plugins)
   }
 
-  unpatch () {
-    this._instrumented.forEach(instrumentation => {
-      this._unpatch(instrumentation)
-    })
+  disable () {
+    for (const instrumentation of this._instrumented.keys()) {
+      this.unpatch(instrumentation)
+    }
 
     this._plugins.clear()
   }
@@ -85,58 +92,66 @@ class Instrumenter {
     })
   }
 
-  enable () {
-    this._enabled = true
-  }
-
-  _set (plugin, meta) {
-    this._unload(plugin)
-    this._plugins.set(plugin, meta)
-    this._load(plugin, meta)
-  }
-
-  _unload (plugin) {
-    [].concat(plugin)
-      .forEach(instrumentation => {
-        this._unpatch(instrumentation)
-        this._instrumented.delete(instrumentation)
-      })
-
-    this._plugins.delete(plugin)
-  }
-
-  _patch (instrumentation, module, config) {
-    if (!this._instrumented.has(instrumentation)) {
-      this._instrumented.add(instrumentation)
-      return instrumentation.patch.call(this, module, this._tracer._tracer, config)
-    }
-  }
-
-  _unpatch (instrumentation) {
-    if (this._instrumented.has(instrumentation)) {
-      try {
-        instrumentation.unpatch.call(this, window[instrumentation.name], this._tracer)
-      } catch (e) {
-        log.error(e)
-      }
-    }
-  }
-
-  _load (plugin, meta) {
+  load (plugin, meta) {
     if (this._enabled) {
       const instrumentations = [].concat(plugin)
 
       try {
         instrumentations
           .forEach(instrumentation => {
-            this._patch(instrumentation, window[instrumentation.name], meta.config)
+            this._loader.getModules(instrumentation).forEach(nodule => {
+              this._patch(instrumentation, nodule, meta.config)
+            })
           })
       } catch (e) {
         log.error(e)
-        this._unload(plugin)
+        this.unload(plugin)
         log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
       }
     }
+  }
+
+  unload (plugin) {
+    [].concat(plugin)
+      .forEach(instrumentation => {
+        this.unpatch(instrumentation)
+        this._instrumented.delete(instrumentation)
+      })
+
+    this._plugins.delete(plugin)
+  }
+
+  patch (instrumentation, moduleExports, config) {
+    let instrumented = this._instrumented.get(instrumentation)
+
+    if (!instrumented) {
+      this._instrumented.set(instrumentation, instrumented = new Set())
+    }
+
+    if (!instrumented.has(moduleExports)) {
+      instrumented.add(moduleExports)
+      return instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config)
+    }
+  }
+
+  unpatch (instrumentation) {
+    const instrumented = this._instrumented.get(instrumentation)
+
+    if (instrumented) {
+      instrumented.forEach(moduleExports => {
+        try {
+          instrumentation.unpatch.call(this, moduleExports, this._tracer)
+        } catch (e) {
+          log.error(e)
+        }
+      })
+    }
+  }
+
+  _set (plugin, meta) {
+    this.unload(plugin)
+    this._plugins.set(plugin, meta)
+    this.load(plugin, meta)
   }
 }
 

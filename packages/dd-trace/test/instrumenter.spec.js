@@ -1,6 +1,6 @@
 'use strict'
 
-const proxyquire = require('proxyquire').noCallThru()
+const proxyquire = require('proxyquire')
 const path = require('path')
 
 describe('Instrumenter', () => {
@@ -54,18 +54,20 @@ describe('Instrumenter', () => {
     shimmer.massWrap = sinon.spy()
     shimmer.massUnwrap = sinon.spy()
 
-    Instrumenter = proxyquire('../src/platform/node/instrumenter', {
+    Instrumenter = proxyquire('../src/instrumenter', {
       'shimmer': shimmer,
-      '../../plugins': {
-        'http': integrations.http,
-        'express-mock': integrations.express,
-        'mysql-mock': integrations.mysql,
-        'other': integrations.other
+      './platform': {
+        plugins: {
+          'http': integrations.http,
+          'express-mock': integrations.express,
+          'mysql-mock': integrations.mysql,
+          'other': integrations.other
+        }
       },
-      '../../../../datadog-plugin-http/src': integrations.http,
-      '../../../../datadog-plugin-express-mock/src': integrations.express,
-      '../../../../datadog-plugin-mysql-mock/src': integrations.mysql,
-      '../../../../datadog-plugin-other/src': integrations.other
+      '../../datadog-plugin-http/src': integrations.http,
+      '../../datadog-plugin-express-mock/src': integrations.express,
+      '../../datadog-plugin-mysql-mock/src': integrations.mysql,
+      '../../datadog-plugin-other/src': integrations.other
     })
 
     instrumenter = new Instrumenter(tracer)
@@ -91,7 +93,7 @@ describe('Instrumenter', () => {
         const config = { foo: 'bar' }
 
         instrumenter.use('express-mock', config)
-        instrumenter.patch()
+        instrumenter.enable()
 
         const express = require('express-mock')
 
@@ -100,7 +102,7 @@ describe('Instrumenter', () => {
 
       it('should default to an empty plugin configuration', () => {
         instrumenter.use('express-mock')
-        instrumenter.patch()
+        instrumenter.enable()
 
         const express = require('express-mock')
 
@@ -110,7 +112,7 @@ describe('Instrumenter', () => {
       it('should reapply the require hook when called multiple times', () => {
         instrumenter.use('mysql-mock')
         instrumenter.use('express-mock')
-        instrumenter.patch()
+        instrumenter.enable()
 
         require('express-mock')
 
@@ -199,7 +201,7 @@ describe('Instrumenter', () => {
 
     describe('patch', () => {
       it('should patch modules from node_modules when they are loaded', () => {
-        instrumenter.patch()
+        instrumenter.enable()
 
         const express = require('express-mock')
 
@@ -208,7 +210,7 @@ describe('Instrumenter', () => {
 
       it('should only patch a module if its version is supported by the plugin ', () => {
         integrations.express.versions = ['^3.0.0']
-        instrumenter.patch()
+        instrumenter.enable()
 
         const express = require('express-mock')
 
@@ -216,7 +218,7 @@ describe('Instrumenter', () => {
       })
 
       it('should patch native modules when they are loaded', () => {
-        instrumenter.patch()
+        instrumenter.enable()
 
         const http = require('http')
 
@@ -228,7 +230,7 @@ describe('Instrumenter', () => {
         const Connection = require('mysql-mock/lib/connection')
         const Pool = require('mysql-mock/lib/pool')
 
-        instrumenter.patch()
+        instrumenter.enable()
 
         const mysql = require('mysql-mock')
 
@@ -244,7 +246,7 @@ describe('Instrumenter', () => {
 
         const Connection = require('mysql-mock/lib/connection')
 
-        instrumenter.patch()
+        instrumenter.enable()
 
         const mysql = require('mysql-mock')
 
@@ -254,7 +256,7 @@ describe('Instrumenter', () => {
       })
 
       it('should replace the module exports with the return value of the plugin', () => {
-        instrumenter.patch()
+        instrumenter.enable()
 
         const other = require('other')
 
@@ -264,18 +266,18 @@ describe('Instrumenter', () => {
 
     describe('unpatch', () => {
       it('should unpatch patched modules', () => {
-        instrumenter.patch()
+        instrumenter.enable()
 
         const express = require('express-mock')
 
-        instrumenter.unpatch()
+        instrumenter.disable()
 
         expect(integrations.express.unpatch).to.have.been.calledWith(express, tracer)
       })
 
       it('should remove the require hooks', () => {
-        instrumenter.patch()
-        instrumenter.unpatch()
+        instrumenter.enable()
+        instrumenter.disable()
 
         require('express-mock')
 
@@ -284,11 +286,11 @@ describe('Instrumenter', () => {
 
       it('should handle errors', () => {
         integrations.mysql[0].unpatch = sinon.stub().throws(new Error())
-        instrumenter.patch()
+        instrumenter.enable()
 
         require('mysql-mock')
 
-        expect(() => instrumenter.unpatch()).to.not.throw()
+        expect(() => instrumenter.disable()).to.not.throw()
         expect(integrations.mysql[1].unpatch).to.have.been.called
       })
     })
@@ -330,37 +332,17 @@ describe('Instrumenter', () => {
     describe('use', () => {
       it('should still allow adding plugins manually by name', () => {
         instrumenter.use('express-mock')
-        instrumenter.patch({ plugins: false })
+        instrumenter.enable({ plugins: false })
 
         const express = require('express-mock')
 
         expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
     })
-
-    describe('patch', () => {
-      it('should not patch any module', () => {
-        instrumenter.patch({ plugins: false })
-
-        const express = require('express-mock')
-
-        expect(integrations.express.patch).to.not.have.been.calledWithMatch(express, 'tracer', {})
-      })
-    })
   })
 
   describe('with the instrumenter disabled', () => {
     describe('use', () => {
-      it('should not patch modules when they are loaded when the tracer is disabled', () => {
-        instrumenter.patch()
-
-        require('express-mock')
-
-        expect(integrations.express.patch).to.not.have.been.called
-      })
-    })
-
-    describe('patch', () => {
       it('should not patch if the tracer is disabled', () => {
         instrumenter.use('express-mock')
 

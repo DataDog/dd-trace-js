@@ -6,8 +6,9 @@ const env = require('./env')
 const validate = require('./validate')
 const service = require('./service')
 const metrics = require('./metrics')
+const plugins = require('../../plugins/browser')
 const Bowser = require('bowser')
-const Instrumenter = require('./instrumenter')
+const Loader = require('./loader')
 const Scope = require('../../scope/base')
 const Exporter = require('../../exporters/log')
 
@@ -26,10 +27,11 @@ const platform = {
   validate,
   service,
   metrics,
+  plugins,
   hostname: () => {}, // TODO: add hostname
   on: () => {}, // TODO: add event listener
   off: () => {}, // TODO: add event listener
-  Instrumenter,
+  Loader,
   Scope,
   Exporter
 }
