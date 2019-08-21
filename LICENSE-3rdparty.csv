@@ -24,6 +24,7 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,babel-plugin-transform-object-assign,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,babel-preset-es2015,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
