@@ -1,6 +1,5 @@
 'use strict'
 
-// const platform = require('../../packages/dd-trace/src/platform/node')
 const constants = require('../../packages/dd-trace/src/constants')
 const id = require('../../packages/dd-trace/src/id')
 
