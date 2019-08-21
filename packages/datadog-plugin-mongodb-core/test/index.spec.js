@@ -8,17 +8,17 @@ wrapIt()
 describe('Plugin', () => {
   let mongo
   let server
-  let platform
+  let id
   let tracer
   let collection
 
   describe('mongodb-core', () => {
     withVersions(plugin, 'mongodb-core', version => {
       beforeEach(() => {
-        platform = require('../../dd-trace/src/platform')
+        id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
 
-        collection = platform.id().toString()
+        collection = id().toString()
       })
 
       afterEach(() => {

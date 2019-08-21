@@ -1,11 +1,12 @@
 'use strict'
 
-const platform = require('../../packages/dd-trace/src/platform/node')
+// const platform = require('../../packages/dd-trace/src/platform/node')
 const constants = require('../../packages/dd-trace/src/constants')
+const id = require('../../packages/dd-trace/src/id')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
-const id = platform.id('1234567812345678')
+const spanId = id('1234567812345678')
 
 const span = {
   tracer: () => ({
@@ -16,9 +17,9 @@ const span = {
   }),
   addTags: () => {},
   context: () => ({
-    _traceId: id,
-    _spanId: id,
-    _parentId: id,
+    _traceId: spanId,
+    _spanId: spanId,
+    _parentId: spanId,
     _trace: {
       started: [span, span],
       finished: [span, span]

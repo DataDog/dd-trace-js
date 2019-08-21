@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../../src/platform')
+const id = require('../../src/id')
 
 describe('SpanContext', () => {
   let SpanContext
@@ -86,8 +86,8 @@ describe('SpanContext', () => {
   describe('toTraceId()', () => {
     it('should return the trace ID as string', () => {
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('456', 10)
+        traceId: id('123', 10),
+        spanId: id('456', 10)
       })
 
       expect(spanContext.toTraceId()).to.equal('123')
@@ -97,8 +97,8 @@ describe('SpanContext', () => {
   describe('toSpanId()', () => {
     it('should return the span ID as string', () => {
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('456', 10)
+        traceId: id('123', 10),
+        spanId: id('456', 10)
       })
 
       expect(spanContext.toSpanId()).to.equal('456')

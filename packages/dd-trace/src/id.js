@@ -1,25 +1,29 @@
 'use strict'
 
-const Uint64BE = require('../node/uint64be') // TODO: remove dependency
-const crypto = window.crypto
+const Uint64BE = require('./uint64be') // TODO: remove dependency
+const platform = require('./platform')
 
 // Cryptographically secure local seeds to mitigate Math.random() seed reuse.
 const seed = new Uint32Array(2)
 
-crypto.getRandomValues(seed)
+platform.crypto.getRandomValues(seed)
 
 // Internal representation of a trace or span ID.
 class Identifier {
   constructor (value, radix) {
     this._buffer = typeof radix === 'number'
-      ? new Uint64BE(value, radix).toBuffer()
+      ? new Uint8Array(new Uint64BE(value, radix).toArrayBuffer())
       : createBuffer(value)
   }
 
   toString (radix) {
-    return typeof radix === 'number'
-      ? this.toUint64BE().toString()
-      : this._buffer.map(byte => byte.toString(16)).join('')
+    if (typeof radix === 'number') {
+      return this.toUint64BE().toString()
+    } else {
+      return Array.from(this._buffer)
+        .map(byte => byte.toString(16).padStart(2, '0'))
+        .join('')
+    }
   }
 
   toUint64BE () {
@@ -63,7 +67,7 @@ function randomUInt32 (seed) {
   return seed ^ Math.floor(Math.random() * (0xFFFFFFFF + 1))
 }
 
-// Write unsigned integer bytes to a buffer. Faster than Buffer.writeUInt32BE().
+// Write unsigned integer bytes to a buffer.
 function writeUInt32BE (buffer, value, offset) {
   buffer[3 + offset] = value & 255
   value = value >> 8
