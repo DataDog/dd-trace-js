@@ -31,7 +31,7 @@ class Loader {
 
   load (instrumentation, config) {
     this._getModules(instrumentation).forEach(nodule => {
-      this.patch(instrumentation, nodule, config)
+      this._instrumenter.patch(instrumentation, nodule, config)
     })
   }
 
