@@ -165,7 +165,7 @@ function addTagArray (meta, key, array, seen) {
   function replacer (key, value) {
     if (typeof value === 'object') {
       if (seen && ~seen.indexOf(value)) return '[Circular]'
-      if (!Array.isArray(value)) return getConstructor(value) || '[object Object]'
+      if (!Array.isArray(value)) return serialize(value) || '[object Object]'
 
       seen.push(value)
     }
@@ -173,11 +173,6 @@ function addTagArray (meta, key, array, seen) {
   }
   const formattedArray = JSON.stringify(array, replacer)
   addTag(meta, key, formattedArray, seen)
-}
-
-function getConstructor (obj) {
-  const desc = Object.getOwnPropertyDescriptor(obj, 'constructor')
-  return desc && typeof desc.value === 'function' && desc.value.name
 }
 
 function serialize (obj) {

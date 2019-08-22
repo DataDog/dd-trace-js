@@ -145,7 +145,7 @@ describe('format', () => {
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
-    it('should extract objects', () => {
+    it('should extract unempty objects', () => {
       spanContext._tags['root'] = {
         level1: {
           level2: {
@@ -162,7 +162,7 @@ describe('format', () => {
       expect(trace.meta['root.level1.level2.level3']).to.be.undefined
     })
 
-    it('should extract nested arrays', () => {
+    it('should support nested arrays', () => {
       spanContext._tags['root'] = {
         array: ['a', ['b', ['c']]]
       }
@@ -170,6 +170,18 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta['root.array']).to.equal('["a",["b",["c"]]]')
+    })
+
+    it('should support objects in arrays', () => {
+      class Foo {}
+
+      spanContext._tags['root'] = {
+        array: ['a', { 'bar': 'baz' }, new Foo()]
+      }
+
+      trace = format(span)
+
+      expect(trace.meta['root.array']).to.equal('["a","[object Object]","[object Object]"]')
     })
 
     it('should add runtime tags', () => {
@@ -281,14 +293,14 @@ describe('format', () => {
       obj.self = obj
 
       const tag = {
-        'biz': 'baz',
+        'baz': 'qux',
         obj
       }
 
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag.biz']).to.equal('baz')
+      expect(trace.meta['circularTag.baz']).to.equal('qux')
       expect(trace.meta['circularTag.obj.foo']).to.equal('bar')
       expect(trace.meta['circularTag.obj.self']).to.equal('[Circular]')
     })
@@ -296,26 +308,26 @@ describe('format', () => {
     it('should support circular references in an array', () => {
       const tag = { 'foo': 'bar' }
 
-      tag['biz'] = ['baz', tag]
+      tag['baz'] = ['qux', tag]
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
       expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.biz']).to.equal('["baz","[Circular]"]')
+      expect(trace.meta['circularTag.baz']).to.equal('["qux","[Circular]"]')
     })
 
     it('should support circular referenced arrays', () => {
       const tag = { 'foo': 'bar' }
 
-      const circularArr = ['qux', 'empty', 'quux']
-      tag['biz'] = ['baz', circularArr]
-      circularArr[1] = tag['biz']
+      const circularArr = ['', 'quux']
+      tag['baz'] = ['qux', circularArr]
+      circularArr[0] = tag['baz']
 
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
       expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.biz']).to.equal('["baz",["qux","[Circular]","quux"]]')
+      expect(trace.meta['circularTag.baz']).to.equal('["qux",["[Circular]","quux"]]')
     })
 
     it('should support circular references in a class', () => {
