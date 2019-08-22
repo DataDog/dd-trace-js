@@ -66,3 +66,4 @@ file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns
 dev,vinyl-buffer,MIT,Copyright 2014 Hugh Kennedy
 dev,vinyl-fs,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
 dev,vinyl-source-stream,MIT,Copyright 2014 Hugh Kennedy
+dev,zone.js,MIT,Copyright 2010-2019 Google LLC.
