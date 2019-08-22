@@ -165,7 +165,7 @@ function addTagArray (meta, key, array, seen) {
   function replacer (key, value) {
     if (typeof value === 'object') {
       if (seen && ~seen.indexOf(value)) return '[Circular]'
-      if (!Array.isArray(value)) return serialize(value) || '[object Object]'
+      if (!Array.isArray(value)) return '[object Object]'
 
       seen.push(value)
     }
