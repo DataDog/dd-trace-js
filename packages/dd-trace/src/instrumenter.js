@@ -101,9 +101,7 @@ class Instrumenter {
       try {
         instrumentations
           .forEach(instrumentation => {
-            this._loader.getModules(instrumentation).forEach(nodule => {
-              this.patch(instrumentation, nodule, meta.config)
-            })
+            this._loader.load(instrumentation, meta.config)
           })
       } catch (e) {
         log.error(e)

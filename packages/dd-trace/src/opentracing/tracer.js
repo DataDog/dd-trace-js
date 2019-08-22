@@ -89,6 +89,7 @@ class DatadogTracer extends Tracer {
 
     span.addTags(this._tags)
     span.addTags(fields.tags)
+    span.addTags(platform.tags())
 
     return span
   }

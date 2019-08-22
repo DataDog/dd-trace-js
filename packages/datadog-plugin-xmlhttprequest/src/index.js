@@ -19,13 +19,14 @@ function createWrapSend (tracer, config) {
       inject(this, tracer, span)
 
       this.addEventListener('error', e => span.setTag('error', e))
+      this.addEventListener('load', () => span.setTag('http.status', this.status))
       this.addEventListener('loadend', () => {
         const method = this._datadog_method
-        const url = this.responseURL || this._datadog_url
+        const url = this._datadog_url
 
         span.addTags({
           'span.kind': 'client',
-          'service.name': getServiceName(tracer, config, url),
+          'service.name': 'browser',
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
@@ -40,18 +41,8 @@ function createWrapSend (tracer, config) {
   }
 }
 
-function getServiceName (tracer, config, url) {
-  if (config.splitByDomain) {
-    return (new URL(url)).host
-  } else if (config.service) {
-    return config.service
-  }
-
-  return tracer._service
-}
-
 function inject (xhr, tracer, span) {
-  const format = window.datadog.ext.formats.HTTP_HEADERS
+  const format = window.ddtrace.ext.formats.HTTP_HEADERS
   const headers = {}
 
   tracer.inject(span, format, headers)

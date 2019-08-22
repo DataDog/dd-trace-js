@@ -42,6 +42,18 @@ class Scope extends Base {
     return this._current
   }
 
+  _activate (span, callback) {
+    const active = this._active()
+
+    this._enter(span)
+
+    try {
+      return callback()
+    } finally {
+      this._exit(active)
+    }
+  }
+
   _enter (span) {
     this._depth++
     this._stack[this._depth] = this._current

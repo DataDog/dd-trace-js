@@ -3,13 +3,14 @@
 const crypto = require('./crypto')
 const now = require('./now')
 const env = require('./env')
+const tags = require('./tags')
 const validate = require('./validate')
 const service = require('./service')
 const metrics = require('./metrics')
 const plugins = require('../../plugins/browser')
 const Loader = require('./loader')
-const Scope = require('../../scope/base')
-const Exporter = require('../../exporters/log')
+const Scope = require('../../scope/zone')
+const Exporter = require('../../exporters/browser')
 
 const platform = {
   _config: {},
@@ -20,6 +21,7 @@ const platform = {
   crypto,
   now,
   env,
+  tags,
   validate,
   service,
   metrics,

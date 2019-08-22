@@ -29,7 +29,13 @@ class Loader {
     hook(instrumentedModules, { internals: true }, this._hookModule.bind(this))
   }
 
-  getModules (instrumentation) {
+  load (instrumentation, config) {
+    this._getModules(instrumentation).forEach(nodule => {
+      this.patch(instrumentation, nodule, config)
+    })
+  }
+
+  _getModules (instrumentation) {
     const modules = []
     const ids = Object.keys(require.cache)
 

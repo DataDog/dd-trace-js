@@ -13,4 +13,4 @@ module.exports = tracer
 module.exports.default = module.exports
 module.exports.tracer = module.exports
 
-window.datadog = { tracer, ext }
+window.ddtrace = { tracer, ext }

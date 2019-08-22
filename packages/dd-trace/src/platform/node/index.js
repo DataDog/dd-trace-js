@@ -25,6 +25,7 @@ const platform = {
   crypto,
   now,
   env,
+  tags: () => ({}),
   validate,
   service,
   request,

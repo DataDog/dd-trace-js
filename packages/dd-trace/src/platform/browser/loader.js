@@ -12,8 +12,11 @@ class Loader {
     })
   }
 
-  getModules (instrumentation) {
-    return [window[instrumentation.name]]
+  load (instrumentation, config) {
+    const nodule = window[instrumentation.name]
+    const override = this._instrumenter.patch(instrumentation, nodule, config)
+
+    window[instrumentation.name] = override || nodule
   }
 }
 

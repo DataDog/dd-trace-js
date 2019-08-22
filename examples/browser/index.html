@@ -13,24 +13,31 @@
 <body>
   <div class="center">
     <img src="dd_icon_white.svg" alt="Datadog" width="200">
-    <p>Click the button to generate traces. Open the console to view traces.</p>
-    <button id="request" type="button">Send Request</button>
+    <p>Click a button to generate traces. Open the console to view traces.</p>
+
+    <div>
+      <button id="xhr" type="button">Send XHR Request</button>
+      <button id="fetch" type="button">Send Fetch Request</button>
+    </div>
   </div>
 
   <script src="../../dist/dd-trace.js"></script>
   <script>
-    const tracer = datadog.tracer
-
-    tracer.init()
-    tracer.use('xmlhttprequest', {
-      splitByDomain: true
+    ddtrace.tracer.init({
+      experimental: {
+        exporter: ddtrace.ext.exporters.LOG
+      }
     })
 
-    document.getElementById('request').addEventListener('click', function () {
+    document.getElementById('xhr').addEventListener('click', function () {
       const req = new XMLHttpRequest()
 
       req.open("GET", "index.html")
       req.send()
+    })
+
+    document.getElementById('fetch').addEventListener('click', function () {
+      window.fetch()
     })
   </script>
 </body>
