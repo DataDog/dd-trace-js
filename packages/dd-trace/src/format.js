@@ -49,6 +49,7 @@ function extractTags (trace, span) {
   const origin = span.context()._trace.origin
   const tags = span.context()._tags
   const hostname = span.context()._hostname
+  const seen = []
 
   Object.keys(tags).forEach(tag => {
     switch (tag) {
@@ -70,7 +71,7 @@ function extractTags (trace, span) {
       case 'error.stack':
         trace.error = 1
       default: // eslint-disable-line no-fallthrough
-        addTag(trace.meta, tag, tags[tag])
+        addTag(trace.meta, tag, tags[tag], seen)
     }
   })
 
@@ -123,9 +124,7 @@ function extractAnalytics (trace, span) {
   }
 }
 
-function addTag (meta, key, value, depth) {
-  depth = depth || 0
-
+function addTag (meta, key, value, seen) {
   switch (typeof value) {
     case 'string':
       meta[key] = value
@@ -135,15 +134,50 @@ function addTag (meta, key, value, depth) {
     case 'object':
       if (value === null) break
 
-      if (!Array.isArray(value) && depth < 2) {
-        Object.keys(value).forEach(prop => {
-          addTag(meta, `${key}.${prop}`, value[prop], depth + 1)
-        })
-        break
+      if (Array.isArray(value)) {
+        addTagArray(meta, key, value, seen)
+      } else {
+        addTagObject(meta, key, value, seen)
       }
+
+      break
     default: // eslint-disable-line no-fallthrough
       addTag(meta, key, serialize(value))
   }
+}
+
+function addTagObject (meta, key, value, seen) {
+  if (seen) {
+    if (~seen.indexOf(value)) {
+      meta[key] = '[Circular]'
+      return
+    }
+
+    seen.push(value)
+  }
+
+  Object.keys(value).forEach(prop => {
+    addTag(meta, `${key}.${prop}`, value[prop], seen)
+  })
+}
+
+function addTagArray (meta, key, array, seen) {
+  function replacer (key, value) {
+    if (typeof value === 'object') {
+      if (seen && ~seen.indexOf(value)) return '[Circular]'
+      if (!Array.isArray(value)) return getConstructor(value) || '[object Object]'
+
+      seen.push(value)
+    }
+    return value
+  }
+  const formattedArray = JSON.stringify(array, replacer)
+  addTag(meta, key, formattedArray, seen)
+}
+
+function getConstructor (obj) {
+  const desc = Object.getOwnPropertyDescriptor(obj, 'constructor')
+  return desc && typeof desc.value === 'function' && desc.value.name
 }
 
 function serialize (obj) {
