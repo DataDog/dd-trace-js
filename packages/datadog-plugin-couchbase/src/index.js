@@ -24,21 +24,13 @@ function startQuerySpan (tracer, config, query) {
 }
 
 function onRequestFinish (emitter, span) {
-  let rowsListener // eslint-disable-line prefer-const
-
-  const errorListener = (err) => {
+  emitter.once('rows', () => {
+    span.finish()
+  })
+  emitter.once('error', (err) => {
     span.setTag(Tags.ERROR, err)
     span.finish()
-    emitter.removeListener('rows', rowsListener)
-  }
-
-  rowsListener = () => {
-    span.finish()
-    emitter.removeListener('error', errorListener)
-  }
-
-  emitter.once('rows', rowsListener)
-  emitter.once('error', errorListener)
+  })
 }
 
 function createWrapMaybeInvoke (tracer) {
@@ -113,7 +105,7 @@ function unwrapCouchbase (Class) {
 module.exports = [
   {
     name: 'couchbase',
-    versions: ['2.4.0'],
+    versions: ['>=2.4.0'],
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       tracer.scope().bind(Bucket.prototype)
@@ -130,7 +122,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['2.4.0'],
+    versions: ['>=2.4.0'],
     file: 'lib/cluster.js',
     patch: wrapCouchbase,
     unpatch: unwrapCouchbase
