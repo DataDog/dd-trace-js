@@ -8,7 +8,7 @@ const testConfigs = [
     repo: 'https://github.com/luin/ioredis',
     framework: 'mocha',
     args: '"test/**/*.ts"',
-    setup: function (tracerSetupPath, options) {
+    setup (tracerSetupPath, options) {
       execSync('npm install && npm run build', options)
     },
     env: {

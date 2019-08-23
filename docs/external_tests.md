@@ -19,12 +19,12 @@ A test config typically looks like the following:
   },
   framework: The test runner used by the integration to run its tests,
   args: If framework is not 'custom', any CLI arguments you want to pass to the test runner--which are typically the test files to run,
-  execTests: function (tracerSetupPath, options) {
+  execTests (tracerSetupPath, options) {
     If framework is custom, you must set define this function. This function will then be responsible for
     executing the test runner and injecting the tracer setup script located in 'tracerSetupPath'. The
     'options' parameter contains the cwd and other info that you should pass to any execSyncs or execs.
   },
-  setup: function (tracerSetupPath, options) {
+  setup (tracerSetupPath, options) {
     A function that allows you to do any preliminary tasks before the test harness executes the test config,
     defaults to just running 'npm install'.
   },
@@ -108,7 +108,7 @@ const testConfigs = [
   {
     integration: 'promise',
     repo: 'https://github.com/then/promise',
-    setup: function (tracerSetupPath, options) {
+    setup (tracerSetupPath, options) {
       execSync('npm install && npm build', options)
     }
   }
@@ -129,7 +129,7 @@ const testConfigs = [
     integration: 'mongodb-core',
     repo: 'https://github.com/mongodb-js/mongodb-core',
     framework: 'custom',
-    execTests: function (tracerSetupPath, options) {
+    execTests (tracerSetupPath, options) {
       execSync(`npm run env -- mongodb-test-runner -t 60000 '${tracerSetupPath}' test/tests`, options)
     }
   }

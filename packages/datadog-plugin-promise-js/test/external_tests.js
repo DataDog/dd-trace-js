@@ -10,7 +10,7 @@ const testConfigs = [
     repo: 'https://github.com/kevincennis/promise',
     framework: 'promises-aplus-tests',
     args: 'test/adapter.js',
-    setup: function (tracerSetupPath, options) {
+    setup (tracerSetupPath, options) {
       execSync('npm install', options)
 
       const cwd = options.cwd

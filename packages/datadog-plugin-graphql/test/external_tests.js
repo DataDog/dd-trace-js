@@ -10,7 +10,7 @@ const testConfigs = [
     repo: 'https://github.com/graphql/graphql-js',
     framework: 'mocha',
     args: '--full-trace **/__tests__/**/*-test.js',
-    setup: function (tracerSetupPath, options) {
+    setup (tracerSetupPath, options) {
       execSync('npm install', options)
 
       const cwd = options.cwd

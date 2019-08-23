@@ -7,7 +7,7 @@ const testConfigs = [
     integration: 'pg',
     repo: 'https://github.com/brianc/node-postgres',
     framework: 'custom',
-    execTests: function (tracerSetupPath, options) {
+    execTests (tracerSetupPath, options) {
       const connectionString = 'pg://postgres:postgres@127.0.0.1:5432/postgres?application_name=test'
       const nodeCmd = `xargs -n 1 -I file node -r '${tracerSetupPath}' file ${connectionString}`
 

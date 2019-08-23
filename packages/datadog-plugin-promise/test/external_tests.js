@@ -6,8 +6,9 @@ const normalizeTestConfigs = require('../../../scripts/helpers/normalize_test_co
 const defaults = {
   integration: 'promise',
   repo: 'https://github.com/then/promise',
-  setup: function (tracerSetupPath, options) {
-    execSync('npm install && npm build', options)
+  setup (tracerSetupPath, options) {
+    execSync('npm install && node build', options)
+    execSync('ls -a', options)
   }
 }
 
