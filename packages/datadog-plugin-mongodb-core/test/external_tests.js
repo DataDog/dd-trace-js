@@ -8,7 +8,7 @@ const testConfigs = [
     repo: 'https://github.com/mongodb-js/mongodb-core',
     framework: 'custom',
     execTests (tracerSetupPath, options) {
-      execSync(`npm run env -- mongodb-test-runner -t 60000 '${tracerSetupPath}' test/tests`, options)
+      execSync(`npm run env -- mongodb-test-runner -s -t 60000 '${tracerSetupPath}' test/tests`, options)
     },
     env: {
       'MONGODB_VERSION': '4.0.x'
