@@ -4,7 +4,7 @@ const testConfigs = [
   {
     integration: 'bluebird',
     repo: 'https://github.com/petkaantonov/bluebird',
-    failable: true,
+    ignoreFailure: true,
     framework: 'node',
     args: '--expose-gc tools/test.js',
     env: {

@@ -8,7 +8,6 @@ const defaults = {
   repo: 'https://github.com/then/promise',
   setup (tracerSetupPath, options) {
     execSync('npm install && node build', options)
-    execSync('ls -a', options)
   }
 }
 
