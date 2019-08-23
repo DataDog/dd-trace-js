@@ -438,7 +438,7 @@ jobs:
         environment:
           - SERVICES=redis
           - PLUGINS=redis|ioredis
-          - DD_TE
+          - DD_TEARDOWN_CONTAINER=true
       - image: redis:4.0-alpine
 
   node-restify:
