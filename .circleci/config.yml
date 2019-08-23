@@ -58,6 +58,8 @@ node-plugin-base: &node-plugin-base
   resource_class: small
   steps:
     - checkout
+    - setup_remote_docker:
+        docker_layer_caching: true
     - run:
         name: Versions
         command: yarn versions
@@ -436,6 +438,7 @@ jobs:
         environment:
           - SERVICES=redis
           - PLUGINS=redis|ioredis
+          - DD_TE
       - image: redis:4.0-alpine
 
   node-restify:

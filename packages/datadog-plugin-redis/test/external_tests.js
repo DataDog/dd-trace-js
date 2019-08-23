@@ -9,6 +9,7 @@ const testConfigs = [
     framework: 'mocha',
     args: './test/*.js ./test/commands/*.js --exit --timeout 8000',
     setup (tracerSetupPath, options) {
+      execSync('docker ps', options)
       execSync('npm install', options)
     }
   }
