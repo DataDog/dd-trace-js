@@ -141,7 +141,7 @@ function addTag (meta, key, value, seen) {
       }
 
       break
-    default: // eslint-disable-line no-fallthrough
+    default:
       addTag(meta, key, serialize(value))
   }
 }
