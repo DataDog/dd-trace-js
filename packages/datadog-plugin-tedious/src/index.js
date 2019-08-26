@@ -84,6 +84,7 @@ function getQueryOrProcedure (request) {
   if (!request.parameters) return
 
   const statement = request.parametersByName.statement || request.parametersByName.stmt
+
   if (!statement) {
     return request.sqlTextOrProcedure
   }
