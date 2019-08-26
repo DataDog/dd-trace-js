@@ -21,8 +21,14 @@ function waitForMssql () {
         if (operation.retry(err)) return
         if (err) return reject(err)
 
-        connection.on('end', () => resolve())
-        connection.close()
+        // Create a stored procedure for tests
+        const storedProc = 'CREATE PROCEDURE dbo.ddTestProc @num INT AS SELECT @num + 1 GO;'
+        const request = new tedious.Request(storedProc, () => {
+          connection.close()
+          resolve()
+        })
+
+        connection.execSql(request)
       })
     })
   })

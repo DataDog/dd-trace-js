@@ -51,15 +51,9 @@ describe('Plugin', () => {
           config.userName = MSSQL_USERNAME
           config.password = MSSQL_PASSWORD
         }
-        connection = new tds.Connection(config)
-          .on('connect', (err) => {
-            const storedProc = 'CREATE PROCEDURE dbo.ddTestProc @num INT AS SELECT @num + 1 GO;'
-            const request = new tds.Request(storedProc, () => {
-              done(err)
-            })
 
-            connection.execSql(request)
-          })
+        connection = new tds.Connection(config)
+          .on('connect', done)
       })
 
       afterEach(() => {
