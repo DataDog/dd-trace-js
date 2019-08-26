@@ -52,7 +52,14 @@ describe('Plugin', () => {
           config.password = MSSQL_PASSWORD
         }
         connection = new tds.Connection(config)
-          .on('connect', done)
+          .on('connect', (err) => {
+            const storedProc = 'CREATE PROCEDURE dbo.ddTestProc @num INT AS SELECT @num + 1 GO;'
+            const request = new tds.Request(storedProc, () => {
+              done(err)
+            })
+
+            connection.execSql(request)
+          })
       })
 
       afterEach(() => {
@@ -236,15 +243,6 @@ describe('Plugin', () => {
 
       it('should handle stored procedure calls', done => {
         const procedure = 'dbo.ddTestProc'
-
-        beforeEach(done => {
-          const storedProc = `CREATE PROCEDURE ${procedure} @num INT AS SELECT @num + 1 GO;`
-          const request = new tds.Request(storedProc, () => {
-            done()
-          })
-
-          connection.execSql(request)
-        })
 
         agent
           .use(traces => {
