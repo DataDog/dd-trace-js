@@ -5,10 +5,12 @@ const MAX_SIZE = 64 * 1024 // 64kb
 // TODO: rename and refactor to support Node
 
 class BrowserExporter {
-  constructor () {
+  constructor ({ apiKey, appKey }) {
     this._queue = []
-    this._url = 'localhost'
-    this._size = 2
+    this._apiKey = apiKey
+    this._appKey = appKey
+    this._url = `https://dd.datad0g.com/trace/api/experimental/intake` // TODO: config
+    this._size = 13
 
     window.addEventListener('unload', () => this._flush())
   }
@@ -27,12 +29,13 @@ class BrowserExporter {
 
   _flush () {
     if (this._queue.length > 0) {
-      const data = `[${this._queue.join(',')}]`
+      const url = `${this._url}?api_key=${this._apiKey}&application_key=${this._appKey}`
+      const data = `{"traces":[${this._queue.join(',')}]}`
 
-      window.navigator.sendBeacon(this._url, data)
+      window.navigator.sendBeacon(url, data)
 
       this._queue = []
-      this._size = 2
+      this._size = 13
     }
   }
 }

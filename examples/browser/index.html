@@ -21,24 +21,47 @@
     </div>
   </div>
 
-  <script src="../../dist/dd-trace.js"></script>
+  <script src="dist/dd-trace.js"></script>
   <script>
+    load()
+
     ddtrace.tracer.init({
-      experimental: {
-        exporter: ddtrace.ext.exporters.LOG
-      }
+      env: 'browser-example'
     })
 
     document.getElementById('xhr').addEventListener('click', function () {
-      const req = new XMLHttpRequest()
-
-      req.open("GET", "index.html")
-      req.send()
+      get('index.html')
     })
 
     document.getElementById('fetch').addEventListener('click', function () {
       window.fetch()
     })
+
+    function load () {
+      const req = get('env', false)
+
+      if (req.status === 200) {
+        req.responseText.split('\n')
+          .filter(pair => !!pair)
+          .map(pair => pair.split('='))
+          .forEach(pair => {
+            window[pair[0]] = pair[1]
+          })
+      }
+
+      if (!window.DD_API_KEY || !window.DD_APP_KEY) {
+        console.log('Please create a .env file with DD_API_KEY and DD_APP_KEY set.')
+      }
+    }
+
+    function get (url, async) {
+      const req = new XMLHttpRequest()
+
+      req.open('GET', url, async)
+      req.send()
+
+      return req
+    }
   </script>
 </body>
 </html>
