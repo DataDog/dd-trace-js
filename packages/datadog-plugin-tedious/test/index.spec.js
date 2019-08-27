@@ -51,8 +51,9 @@ describe('Plugin', () => {
           config.userName = MSSQL_USERNAME
           config.password = MSSQL_PASSWORD
         }
+
         connection = new tds.Connection(config)
-          .on('connect', err => done(err))
+          .on('connect', done)
       })
 
       afterEach(() => {
@@ -114,6 +115,8 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
+            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            expect(traces[0][0].meta).to.have.property('out.port', '1433')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
           })
           .then(done)
@@ -181,22 +184,25 @@ describe('Plugin', () => {
         const request = new tds.Request(query, (err) => {
           if (err) done(err)
         })
+
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.prepare(request)
       })
 
       it('should handle execute requests', done => {
+        const query = 'SELECT 1 + @num AS solution'
+
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
-            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + @num AS solution')
+            expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0].meta).to.have.property('tds.proc.name', 'sp_execute')
           })
           .then(done)
           .catch(done)
 
-        const request = new tds.Request('SELECT 1 + @num AS solution', (err) => {
+        const request = new tds.Request(query, (err) => {
           if (err) done(err)
         }).on('prepared', () => {
           connection.execute(request, { num: 5 })
@@ -227,6 +233,26 @@ describe('Plugin', () => {
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.prepare(request)
+      })
+
+      it('should handle stored procedure calls', done => {
+        const procedure = 'dbo.ddTestProc'
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('name', 'tedious.request')
+            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('resource', procedure)
+          })
+          .then(done)
+          .catch(done)
+
+        const request = new tds.Request(procedure, (err) => {
+          if (err) done(err)
+        })
+
+        request.addParameter('num', tds.TYPES.Int, 1)
+        connection.callProcedure(request)
       })
 
       it('should handle errors', done => {
