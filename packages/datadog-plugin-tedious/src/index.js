@@ -39,13 +39,13 @@ function createWrapMakeRequest (tracer, config) {
       const connectionConfig = this.config
       const scope = tracer.scope()
       const childOf = scope.active()
-      const query = getQuery(request)
+      const queryOrProcedure = getQueryOrProcedure(request)
 
-      if (!query) {
+      if (!queryOrProcedure) {
         return makeRequest.apply(this, arguments)
       }
 
-      const span = tracer.startSpan(`tedious.request`, {
+      const span = tracer.startSpan('tedious.request', {
         childOf,
         tags: {
           [Tags.SPAN_KIND]: Kinds.CLIENT,
@@ -53,7 +53,7 @@ function createWrapMakeRequest (tracer, config) {
           'span.type': 'sql',
           'component': 'tedious',
           'service.name': config.service || `${tracer._service}-mssql`,
-          'resource.name': query
+          'resource.name': queryOrProcedure
         }
       })
 
@@ -80,15 +80,16 @@ function createWrapGetRowStream (tracer) {
   }
 }
 
-function getQuery (request) {
-  if (request.parameters) {
-    if (request.parameters.length === 0) {
-      return request.sqlTextOrProcedure
-    } else {
-      const statement = request.parametersByName.statement || request.parametersByName.stmt
-      return statement.value
-    }
+function getQueryOrProcedure (request) {
+  if (!request.parameters) return
+
+  const statement = request.parametersByName.statement || request.parametersByName.stmt
+
+  if (!statement) {
+    return request.sqlTextOrProcedure
   }
+
+  return statement.value
 }
 
 function addConnectionTags (span, connectionConfig) {
@@ -125,7 +126,7 @@ module.exports = [
       this.unwrap(tedious, 'Connection')
       this.unwrap(tedious.Connection.prototype, 'makeRequest')
 
-      if (tedious.BulkLoad && tedious.BulkLoad.prototype.getRowStream) {
+      if (tedious.BulkLoad) {
         this.unwrap(tedious.BulkLoad.prototype, 'getRowStream')
       }
     }
