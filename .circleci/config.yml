@@ -437,7 +437,7 @@ jobs:
           - SERVICES=redis
           - PLUGINS=redis|ioredis
       - image: redis:4.0-alpine
-        command: redis-server
+        command: redis-server --port 16379
 
   node-restify:
     <<: *node-plugin-base
