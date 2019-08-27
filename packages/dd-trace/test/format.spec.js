@@ -1,7 +1,5 @@
 'use strict'
 
-const Int64BE = require('int64-buffer').Int64BE
-const Uint64BE = require('int64-buffer').Uint64BE
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
@@ -55,18 +53,14 @@ describe('format', () => {
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
-      expect(trace.trace_id).to.be.instanceof(Uint64BE)
-      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString(10))
-      expect(trace.span_id).to.be.instanceof(Uint64BE)
-      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString(10))
-      expect(trace.parent_id.toString()).to.equal(span.context()._parentId.toString(10))
+      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
+      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
+      expect(trace.parent_id.toString()).to.equal(span.context()._parentId.toString())
       expect(trace.name).to.equal(span.context()._name)
       expect(trace.resource).to.equal(span.context()._name)
       expect(trace.error).to.equal(0)
-      expect(trace.start).to.be.instanceof(Int64BE)
-      expect(trace.start.toNumber()).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.be.instanceof(Int64BE)
-      expect(trace.duration.toNumber()).to.equal(span._duration * 1e6)
+      expect(trace.start).to.equal(span._startTime * 1e6)
+      expect(trace.duration).to.equal(span._duration * 1e6)
     })
 
     it('should extract Datadog specific tags', () => {
@@ -228,8 +222,8 @@ describe('format', () => {
       expect(trace.resource).to.equal('null')
       expect(trace.meta).to.not.have.property('foo.bar')
       expect(trace.meta).to.not.have.property('baz.qux')
-      expect(trace.start).to.be.instanceof(Int64BE)
-      expect(trace.duration).to.be.instanceof(Int64BE)
+      expect(trace.start).to.be.a('number')
+      expect(trace.duration).to.be.a('number')
     })
 
     it('should include the sampling priority', () => {

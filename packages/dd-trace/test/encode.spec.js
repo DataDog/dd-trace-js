@@ -2,7 +2,7 @@
 
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const Uint64BE = require('int64-buffer').Uint64BE
+const id = require('../src/id')
 
 describe('encode', () => {
   let encode
@@ -13,7 +13,11 @@ describe('encode', () => {
 
   it('should encode to msgpack', () => {
     const data = [{
-      id: new Uint64BE(0x12345678, 0x12345678),
+      trace_id: id(),
+      span_id: id(),
+      parent_id: id(),
+      start: 123,
+      duration: 456,
       name: 'test'
     }]
 
@@ -22,7 +26,11 @@ describe('encode', () => {
 
     expect(decoded).to.be.instanceof(Array)
     expect(decoded[0]).to.be.instanceof(Object)
-    expect(decoded[0].id.toString()).to.equal(data[0].id.toString())
+    expect(decoded[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
+    expect(decoded[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
+    expect(decoded[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
+    expect(decoded[0].start.toString()).to.equal(data[0].start.toString())
+    expect(decoded[0].duration.toString()).to.equal(data[0].duration.toString())
     expect(decoded[0].name).to.equal(data[0].name)
   })
 })

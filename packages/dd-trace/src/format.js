@@ -1,6 +1,5 @@
 'use strict'
 
-const Int64BE = require('int64-buffer').Int64BE
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
@@ -32,16 +31,16 @@ function formatSpan (span) {
   const spanContext = span.context()
 
   return {
-    trace_id: spanContext._traceId.toUint64BE(),
-    span_id: spanContext._spanId.toUint64BE(),
-    parent_id: spanContext._parentId ? spanContext._parentId.toUint64BE() : null,
+    trace_id: spanContext._traceId,
+    span_id: spanContext._spanId,
+    parent_id: spanContext._parentId,
     name: serialize(spanContext._name),
     resource: serialize(spanContext._name),
     error: 0,
     meta: {},
     metrics: {},
-    start: new Int64BE(Math.round(span._startTime * 1e6)),
-    duration: new Int64BE(Math.round(span._duration * 1e6))
+    start: Math.round(span._startTime * 1e6),
+    duration: Math.round(span._duration * 1e6)
   }
 }
 
