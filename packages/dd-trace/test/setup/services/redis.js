@@ -9,6 +9,7 @@ function waitForRedis () {
 
     operation.attempt(currentAttempt => {
       const client = redis.createClient({
+        port: 16379,
         retry_strategy: options => {
           if (operation.retry(options.error)) return
           reject(options.error)
