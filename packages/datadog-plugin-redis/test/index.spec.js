@@ -35,7 +35,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           redis = require(`../../../versions/redis@${version}`).get()
-          client = redis.createClient()
+          client = redis.createClient({ port: 16379 })
           pub = redis.createClient()
           sub = redis.createClient()
         })
@@ -53,7 +53,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
-              expect(traces[0][0].meta).to.have.property('out.port', '6379')
+              expect(traces[0][0].meta).to.have.property('out.port', '16379')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
             })
             .then(done)
