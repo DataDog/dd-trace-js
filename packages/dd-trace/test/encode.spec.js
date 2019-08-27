@@ -13,9 +13,9 @@ describe('encode', () => {
 
   it('should encode to msgpack', () => {
     const data = [{
-      trace_id: id(),
-      span_id: id(),
-      parent_id: id(),
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
       start: 123,
       duration: 456,
       name: 'test'
