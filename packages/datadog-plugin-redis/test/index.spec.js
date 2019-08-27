@@ -36,8 +36,8 @@ describe('Plugin', () => {
         beforeEach(() => {
           redis = require(`../../../versions/redis@${version}`).get()
           client = redis.createClient({ port: 16379 })
-          pub = redis.createClient()
-          sub = redis.createClient()
+          pub = redis.createClient({ port: 16379 })
+          sub = redis.createClient({ port: 16379 })
         })
 
         it('should do automatic instrumentation when using callbacks', done => {
