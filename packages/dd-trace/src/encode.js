@@ -12,7 +12,7 @@ module.exports = data => {
     return Object.assign({}, span, {
       trace_id: new Uint64BE(span.trace_id.toBuffer()),
       span_id: new Uint64BE(span.span_id.toBuffer()),
-      parent_id: span.parent_id ? new Uint64BE(span.parent_id.toBuffer()) : null,
+      parent_id: new Uint64BE(span.parent_id.toBuffer()),
       start: new Int64BE(span.start),
       duration: new Int64BE(span.duration)
     })

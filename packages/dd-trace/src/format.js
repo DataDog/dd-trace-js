@@ -3,6 +3,7 @@
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
+const id = require('./id')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -33,7 +34,7 @@ function formatSpan (span) {
   return {
     trace_id: spanContext._traceId,
     span_id: spanContext._spanId,
-    parent_id: spanContext._parentId,
+    parent_id: spanContext._parentId || id('0'),
     name: serialize(spanContext._name),
     resource: serialize(spanContext._name),
     error: 0,

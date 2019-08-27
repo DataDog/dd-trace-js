@@ -4,6 +4,8 @@ const platform = require('./platform')
 
 const UINT_MAX = 4294967296
 
+const zeroId = new Uint8Array(8)
+
 // Cryptographically secure local seeds to mitigate Math.random() seed reuse.
 const seed = new Uint32Array(2)
 
@@ -34,6 +36,7 @@ class Identifier {
 
 // Create a buffer, using an optional hexadecimal value if provided.
 function createBuffer (value) {
+  if (value === '0') return zeroId
   if (!value) return pseudoRandom()
 
   const size = Math.ceil(value.length / 2)

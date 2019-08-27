@@ -28,10 +28,9 @@ let propagator
 let carrier
 let writer
 let sampler
-let span
 
-const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
+const span = format(spanStub)
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -72,7 +71,6 @@ suite
   .add('Writer#append', {
     onStart () {
       writer = new Writer({ sample: () => {} }, {})
-      span = format(spanStub)
     },
     fn () {
       writer.append([span])
@@ -93,7 +91,7 @@ suite
   })
   .add('encode', {
     fn () {
-      encode(traceStub)
+      encode([span])
     }
   })
   .add('id', {
