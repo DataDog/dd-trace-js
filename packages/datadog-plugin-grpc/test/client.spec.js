@@ -326,6 +326,25 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should propagate the parent scope to event listeners', done => {
+          const span = {}
+          const client = buildClient({
+            getServerStream: stream => {
+              stream.write('test')
+              stream.end()
+            }
+          })
+
+          const call = client.getServerStream({ first: 'foobar' })
+
+          tracer.scope().activate(span, () => {
+            call.on('data', () => {
+              expect(tracer.scope().active()).to.equal(span)
+              done()
+            })
+          })
+        })
       })
 
       describe('with service configuration', () => {
