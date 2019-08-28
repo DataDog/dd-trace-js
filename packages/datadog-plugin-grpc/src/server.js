@@ -65,7 +65,7 @@ function createWrapRegister (tracer, config, grpc) {
 }
 
 function wrapStream (span, call) {
-  call.on('error', err => {
+  call.once('error', err => {
     span.addTags({
       [ERROR]: err,
       'grpc.status.code': err.code
@@ -76,7 +76,7 @@ function wrapStream (span, call) {
 
   // Finish the span of the response only if it was successful.
   // Otherwise it'll be finished in the `error` listener.
-  call.on('finish', () => {
+  call.once('finish', () => {
     span.setTag('grpc.status.code', call.status.code)
 
     if (call.status.code === 0) {
