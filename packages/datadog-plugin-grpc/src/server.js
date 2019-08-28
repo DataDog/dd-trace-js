@@ -65,24 +65,34 @@ function createWrapRegister (tracer, config, grpc) {
 }
 
 function wrapStream (span, call) {
-  call.once('error', err => {
-    span.addTags({
-      [ERROR]: err,
-      'grpc.status.code': err.code
-    })
+  const emit = call.emit
 
-    span.finish()
-  })
+  call.emit = function (eventName, ...args) {
+    switch (eventName) {
+      case 'error':
+        span.addTags({
+          [ERROR]: args[0],
+          'grpc.status.code': args[0].code
+        })
 
-  // Finish the span of the response only if it was successful.
-  // Otherwise it'll be finished in the `error` listener.
-  call.once('finish', () => {
-    span.setTag('grpc.status.code', call.status.code)
+        span.finish()
 
-    if (call.status.code === 0) {
-      span.finish()
+        break
+
+      // Finish the span of the response only if it was successful.
+      // Otherwise it'll be finished in the `error` listener.
+      case 'finish':
+        span.setTag('grpc.status.code', call.status.code)
+
+        if (call.status.code === 0) {
+          span.finish()
+        }
+
+        break
     }
-  })
+
+    return emit.apply(this, arguments)
+  }
 }
 
 function wrapCallback (span, callback, filter, grpc, childOf) {

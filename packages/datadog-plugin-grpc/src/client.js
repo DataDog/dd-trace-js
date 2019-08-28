@@ -59,14 +59,7 @@ function wrapMethod (tracer, config, method, definition, grpc) {
 
     const call = scope.bind(method, span).apply(this, args)
 
-    call.once('error', err => span.setTag(ERROR, err))
-    call.once('status', status => {
-      span.setTag('grpc.status.code', status.code)
-
-      addMetadataTags(span, status.metadata, filter, 'response')
-
-      span.finish()
-    })
+    wrapStream(span, call, filter)
 
     return scope.bind(call)
   }
@@ -88,6 +81,29 @@ function wrapCallback (span, callback) {
     if (callback) {
       return scope.bind(callback, parent).apply(this, arguments)
     }
+  }
+}
+
+function wrapStream (span, call, filter) {
+  const emit = call.emit
+
+  call.emit = function (eventName, ...args) {
+    switch (eventName) {
+      case 'error':
+        span.setTag(ERROR, args[0])
+
+        break
+      case 'status':
+        span.setTag('grpc.status.code', args[0].code)
+
+        addMetadataTags(span, args[0].metadata, filter, 'response')
+
+        span.finish()
+
+        break
+    }
+
+    return emit.apply(this, arguments)
   }
 }
 

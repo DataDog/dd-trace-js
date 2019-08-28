@@ -211,6 +211,7 @@ describe('Plugin', () => {
 
           call = client.getServerStream({ first: 'foobar' })
           call.on('data', () => {})
+          call.on('error', () => {})
         })
 
         it('should handle cancelled `bidi` calls', done => {
@@ -228,6 +229,7 @@ describe('Plugin', () => {
 
           call = client.getBidi(new Readable(), () => {})
           call.on('data', () => {})
+          call.on('error', () => {})
         })
 
         it('should handle errors', done => {
