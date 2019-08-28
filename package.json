@@ -9,7 +9,7 @@
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
     "bundle": "gulp",
-    "browser": "live-server examples/browser --mount=/dist:./dist --mount=/env:./.env",
+    "browser": "live-server examples/browser --port=3000 --mount=/dist:./dist --mount=/env:./.env",
     "install": "node scripts/post_install.js",
     "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",

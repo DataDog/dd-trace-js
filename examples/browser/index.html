@@ -13,7 +13,7 @@
 <body>
   <div class="center">
     <img src="dd_icon_white.svg" alt="Datadog" width="200">
-    <p>Click a button to generate traces. Open the console to view traces.</p>
+    <p>Click a button to generate traces.</p>
 
     <div>
       <button id="xhr" type="button">Send XHR Request</button>
@@ -34,7 +34,7 @@
     })
 
     document.getElementById('fetch').addEventListener('click', function () {
-      window.fetch()
+      window.fetch('index.html')
     })
 
     function load () {
