@@ -43,7 +43,7 @@ function createBuffer (value) {
   const buffer = new Uint8Array(size)
 
   for (let i = 0; i < size; i++) {
-    buffer[i] = parseInt(value.substr(i * 2, 2), 16)
+    buffer[i] = parseInt(value.substring(i * 2, i * 2 + 2), 16)
   }
 
   return buffer
