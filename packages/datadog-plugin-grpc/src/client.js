@@ -30,7 +30,7 @@ function createWrapMakeClientConstructor (tracer, config, grpc) {
 }
 
 function wrapMethod (tracer, config, method, definition, grpc) {
-  if (typeof method !== 'function' || method._datadog_patched || !definition || !definition.path) {
+  if (typeof method !== 'function' || method._datadog_patched || !definition) {
     return method
   }
 
