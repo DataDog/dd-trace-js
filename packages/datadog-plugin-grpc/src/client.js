@@ -14,13 +14,13 @@ function createWrapMakeClientConstructor (tracer, config, grpc) {
       const proto = ServiceClient.prototype
 
       Object.keys(methods)
-        .forEach(method => {
-          const originalName = methods[method].originalName
+        .forEach(name => {
+          const originalName = methods[name].originalName
 
-          proto[method] = wrapMethod(tracer, config, proto[method], methods[method], grpc)
+          proto[name] = wrapMethod(tracer, config, proto[name], methods[name], grpc)
 
           if (originalName) {
-            proto[originalName] = wrapMethod(tracer, config, proto[originalName], methods[method], grpc)
+            proto[originalName] = wrapMethod(tracer, config, proto[originalName], methods[name], grpc)
           }
         })
 
