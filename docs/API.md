@@ -219,6 +219,7 @@ tracer.use('pg', {
 <h5 id="graphql"></h5>
 <h5 id="graphql-tags"></h5>
 <h5 id="graphql-config"></h5>
+<h5 id="grpc"></h5>
 <h5 id="hapi"></h5>
 <h5 id="hapi-tags"></h5>
 <h5 id="hapi-config"></h5>
@@ -275,6 +276,7 @@ tracer.use('pg', {
 * [fastify](./interfaces/plugins.fastify.html)
 * [generic-pool](./interfaces/plugins.generic_pool.html)
 * [graphql](./interfaces/plugins.graphql.html)
+* [grpc](./interfaces/plugins.grpc.html)
 * [hapi](./interfaces/plugins.hapi.html)
 * [http](./interfaces/plugins.http.html)
 * [http2](./interfaces/plugins.http2.html)

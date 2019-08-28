@@ -205,3 +205,5 @@ module.exports = [
     }
   }
 ]
+
+module.exports = [] // temporarily disable HTTP2 server plugin

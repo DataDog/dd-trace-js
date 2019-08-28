@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package test;
+
+service TestService {
+  rpc get_Bidi (stream Request) returns (stream Empty) {} // test rename support
+  rpc getServerStream (Request) returns (stream Empty) {}
+  rpc getClientStream (stream Request) returns (Empty) {}
+  rpc getUnary (Request) returns (Empty) {}
+}
+
+message Request {
+  string first = 1;
+  int32 second = 2;
+}
+
+message Empty {
+}

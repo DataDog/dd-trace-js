@@ -21,6 +21,12 @@
       "versions": ["3.1.1"]
     }
   ],
+  "grpc": [
+    {
+      "name": "@grpc/proto-loader",
+      "versions": ["0.5.0"]
+    }
+  ],
   "knex": [
     {
       "name": "sqlite3",

@@ -13,6 +13,7 @@ module.exports = {
   'fastify': require('../../../../packages/datadog-plugin-fastify/src'),
   'generic-pool': require('../../../../packages/datadog-plugin-generic-pool/src'),
   'graphql': require('../../../../packages/datadog-plugin-graphql/src'),
+  'grpc': require('../../../../packages/datadog-plugin-grpc/src'),
   'hapi': require('../../../../packages/datadog-plugin-hapi/src'),
   'http': require('../../../../packages/datadog-plugin-http/src'),
   'http2': require('../../../../packages/datadog-plugin-http2/src'),
