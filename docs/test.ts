@@ -39,9 +39,9 @@ tracer.init({
   analytics: true,
   env: 'test',
   runtimeMetrics: true,
+  trackAsyncScope: false,
   experimental: {
-    b3: true,
-    thenables: true
+    b3: true
   },
   hostname: 'agent',
   logger: {

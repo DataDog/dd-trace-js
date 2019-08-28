@@ -18,7 +18,7 @@ class Scope extends Base {
 
     singleton = this
 
-    this._thenables = config.experimental.thenables
+    this._trackAsyncScope = config.trackAsyncScope
     this._current = null
     this._spans = Object.create(null)
     this._types = Object.create(null)
@@ -62,7 +62,7 @@ class Scope extends Base {
   }
 
   _exit (span) {
-    this._thenables && this._await(span)
+    this._trackAsyncScope && this._await(span)
     this._current = span
     this._stack[this._depth] = null
     this._depth--
@@ -106,7 +106,7 @@ class Scope extends Base {
     platform.metrics().increment('async.resources')
     platform.metrics().increment('async.resources.by.type', `resource_type:${type}`)
 
-    if (this._thenables && type === 'PROMISE') {
+    if (this._trackAsyncScope && type === 'PROMISE') {
       this._initPromise()
     }
   }

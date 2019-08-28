@@ -13,9 +13,7 @@ const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
 const asyncHooksScope = new AsyncHooksScope({
-  experimental: {
-    thenables: true
-  }
+  trackAsyncScope: true
 })
 
 chai.use(sinonChai)
