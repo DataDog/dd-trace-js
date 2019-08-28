@@ -1,13 +1,10 @@
 'use strict'
 
 const Tags = require('../../../ext/tags')
-const TEXT_MAP = require('../../../ext/formats').TEXT_MAP
+const { TEXT_MAP } = require('../../../ext/formats')
+const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
-
-function handleError (span, err) {
-  span.setTag('error', err)
-}
 
 function createWrapHandler (grpc, tracer, config, handler) {
   const filter = getFilter(config, 'metadata')
@@ -39,7 +36,7 @@ function createWrapHandler (grpc, tracer, config, handler) {
       scope.bind(call)
 
       // Finish the span if the call was cancelled.
-      call.on('cancelled', () => {
+      call.once('cancelled', () => {
         span.setTag('grpc.status.code', grpc.status.CANCELLED)
         span.finish()
       })
@@ -69,9 +66,10 @@ function createWrapRegister (tracer, config, grpc) {
 
 function wrapStream (span, call) {
   call.on('error', err => {
-    span.setTag('grpc.status.code', err.code)
-
-    handleError(span, err)
+    span.addTags({
+      [ERROR]: err,
+      'grpc.status.code': err.code
+    })
 
     span.finish()
   })
@@ -96,7 +94,7 @@ function wrapCallback (span, callback, filter, grpc, childOf) {
         span.setTag('grpc.status.code', err.code)
       }
 
-      handleError(span, err)
+      span.setTag(ERROR, err)
     } else {
       span.setTag('grpc.status.code', grpc.status.OK)
     }
@@ -108,7 +106,7 @@ function wrapCallback (span, callback, filter, grpc, childOf) {
     span.finish()
 
     if (callback) {
-      scope.bind(callback, childOf).apply(this, arguments)
+      return scope.bind(callback, childOf).apply(this, arguments)
     }
   }
 }

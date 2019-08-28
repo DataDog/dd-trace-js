@@ -1,7 +1,8 @@
 'use strict'
 
 const Tags = require('../../../ext/tags')
-const TEXT_MAP = require('../../../ext/formats').TEXT_MAP
+const { TEXT_MAP } = require('../../../ext/formats')
+const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
@@ -58,7 +59,7 @@ function wrapMethod (tracer, config, method, definition, grpc) {
 
     const call = scope.bind(method, span).apply(this, args)
 
-    call.once('error', err => span.setTag('error', err))
+    call.once('error', err => span.setTag(ERROR, err))
     call.once('status', status => {
       span.setTag('grpc.status.code', status.code)
 
@@ -82,7 +83,7 @@ function wrapCallback (span, callback) {
   const parent = scope.active()
 
   return function (err) {
-    err && span.setTag('error', err)
+    err && span.setTag(ERROR, err)
 
     if (callback) {
       return scope.bind(callback, parent).apply(this, arguments)
