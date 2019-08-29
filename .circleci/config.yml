@@ -216,7 +216,7 @@ jobs:
   node-couchbase:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:8.8
         environment:
           - SERVICES=couchbase
           - PLUGINS=couchbase
