@@ -181,7 +181,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.meta['root.array']).to.equal('["a","[object Object]","[object Object]"]')
+      expect(trace.meta['root.array']).to.equal('["a",[object Object],[object Object]]')
     })
 
     it('should add runtime tags', () => {
@@ -343,7 +343,7 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.baz']).to.equal('["qux","[Circular]"]')
+      expect(trace.meta['circularTag.baz']).to.equal('["qux",[Circular]]')
     })
 
     it('should support circular referenced arrays', () => {
@@ -353,7 +353,7 @@ describe('format', () => {
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag']).to.equal('["foo",["bar",["baz",["quuz","[Circular]"]]]]')
+      expect(trace.meta['circularTag']).to.equal('["foo",["bar",["baz",["quuz",[Circular]]]]]')
     })
 
     it('should support circular references in a class', () => {
@@ -428,7 +428,7 @@ describe('format', () => {
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag']).to.equal('["[object Object]",["[object Object]"]]')
+      expect(trace.meta['circularTag']).to.equal('[[object Object],[[object Object]]]')
     })
 
     it('should support doubly-linked arrays', () => {
@@ -443,8 +443,8 @@ describe('format', () => {
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag.selfArrA']).to.equal('["ghost_eater",["space_invader","[Circular]"]]')
-      expect(trace.meta['circularTag.selfArrB']).to.equal('["space_invader","[Circular]"]')
+      expect(trace.meta['circularTag.selfArrA']).to.equal('["ghost_eater",["space_invader",[Circular]]]')
+      expect(trace.meta['circularTag.selfArrB']).to.equal('["space_invader",["ghost_eater",[Circular]]]')
     })
 
     it('should include the analytics sample rate', () => {

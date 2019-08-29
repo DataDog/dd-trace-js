@@ -163,19 +163,9 @@ function addObjectTag (meta, key, value, seen) {
 }
 
 function addArrayTag (meta, key, array, seen) {
-  const formattedArray = JSON.stringify(array, (key, value) => {
-    if (typeof value === 'object') {
-      if (seen && ~seen.indexOf(value)) return '[Circular]'
-      if (!Array.isArray(value)) return '[object Object]'
-
-      seen.push(value)
-    }
-    return value
-  })
+  const formattedArray = formatArray(array, seen)
 
   addTag(meta, key, formattedArray, seen)
-
-  seen.pop()
 }
 
 function formatArray (value, seen) {
