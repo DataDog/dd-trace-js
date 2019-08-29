@@ -289,13 +289,9 @@ describe('format', () => {
 
     it('should support indirect circular references', () => {
       const obj = { 'foo': 'bar' }
+      const tag = { obj, 'baz': 'qux' }
 
-      obj.self = obj
-
-      const tag = {
-        'baz': 'qux',
-        obj
-      }
+      obj.self = tag
 
       spanContext._tags['circularTag'] = tag
       trace = format(span)
@@ -303,6 +299,40 @@ describe('format', () => {
       expect(trace.meta['circularTag.baz']).to.equal('qux')
       expect(trace.meta['circularTag.obj.foo']).to.equal('bar')
       expect(trace.meta['circularTag.obj.self']).to.equal('[Circular]')
+    })
+
+    it('should support deep circular references', () => {
+      const tag = {
+        A: {
+          B: {
+            C: {
+              D: {
+                E: {
+                  num: 6
+                },
+                num: 5
+              },
+              num: 4
+            },
+            num: 3
+          },
+          num: 2
+        },
+        num: 1
+      }
+
+      tag.A.B.C.D.E.self = tag.A.B
+
+      spanContext._tags['circularTag'] = tag
+      trace = format(span)
+
+      expect(trace.meta['circularTag.num']).to.equal('1')
+      expect(trace.meta['circularTag.A.num']).to.equal('2')
+      expect(trace.meta['circularTag.A.B.num']).to.equal('3')
+      expect(trace.meta['circularTag.A.B.C.num']).to.equal('4')
+      expect(trace.meta['circularTag.A.B.C.D.num']).to.equal('5')
+      expect(trace.meta['circularTag.A.B.C.D.E.num']).to.equal('6')
+      expect(trace.meta['circularTag.A.B.C.D.E.self']).to.equal('[Circular]')
     })
 
     it('should support circular references in an array', () => {
@@ -317,17 +347,13 @@ describe('format', () => {
     })
 
     it('should support circular referenced arrays', () => {
-      const tag = { 'foo': 'bar' }
+      const tag = ['foo', ['bar', ['baz']]]
 
-      const circularArr = ['', 'quux']
-      tag['baz'] = ['qux', circularArr]
-      circularArr[0] = tag['baz']
-
+      tag[1][1][1] = ['quuz', tag[1]]
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.baz']).to.equal('["qux",["[Circular]","quux"]]')
+      expect(trace.meta['circularTag']).to.equal('["foo",["bar",["baz",["quuz","[Circular]"]]]]')
     })
 
     it('should support circular references in a class', () => {
@@ -345,6 +371,80 @@ describe('format', () => {
 
       expect(trace.meta['circularTag.foo']).to.equal('bar')
       expect(trace.meta['circularTag.self']).to.equal('[Circular]')
+    })
+
+    it('should support re-used objects', () => {
+      const obj = { foo: 'bar' }
+      const tag = {
+        baz: obj,
+        qux: obj
+      }
+
+      spanContext._tags['circularTag'] = tag
+      trace = format(span)
+
+      expect(trace.meta['circularTag.baz.foo']).to.equal('bar')
+      expect(trace.meta['circularTag.qux.foo']).to.equal('bar')
+    })
+
+    it('should support doubly-linked objects', () => {
+      const tag = {
+        selfA: { ghost: 'eater' },
+        selfB: { space: 'invader' }
+      }
+
+      tag.selfA.self = tag.selfB
+      tag.selfB.self = tag.selfA
+
+      spanContext._tags['circularTag'] = tag
+      trace = format(span)
+
+      expect(trace.meta['circularTag.selfA.ghost']).to.equal('eater')
+      expect(trace.meta['circularTag.selfA.self.self']).to.equal('[Circular]')
+      expect(trace.meta['circularTag.selfA.self.space']).to.equal('invader')
+      expect(trace.meta['circularTag.selfB.self.ghost']).to.equal('eater')
+      expect(trace.meta['circularTag.selfB.self.self']).to.equal('[Circular]')
+      expect(trace.meta['circularTag.selfB.space']).to.equal('invader')
+    })
+
+    it('should support re-used arrays', () => {
+      const obj = ['bar']
+      const tag = {
+        baz: obj,
+        qux: obj
+      }
+
+      spanContext._tags['circularTag'] = tag
+      trace = format(span)
+
+      expect(trace.meta['circularTag.baz']).to.equal('["bar"]')
+      expect(trace.meta['circularTag.qux']).to.equal('["bar"]')
+    })
+
+    it('should support re-used arrays within arrays', () => {
+      const obj = {}
+      const tag = [obj, [obj]]
+
+      spanContext._tags['circularTag'] = tag
+      trace = format(span)
+
+      expect(trace.meta['circularTag']).to.equal('["[object Object]",["[object Object]"]]')
+    })
+
+    it('should support doubly-linked arrays', () => {
+      const tag = {
+        selfArrA: ['ghost_eater'],
+        selfArrB: ['space_invader']
+      }
+
+      tag.selfArrA[1] = tag.selfArrB
+      tag.selfArrB[1] = tag.selfArrA
+
+      spanContext._tags['circularTag'] = tag
+      trace = format(span)
+
+      expect(trace.meta['circularTag.selfArrA']).to.equal('["ghost_eater",["space_invader","[Circular]"]]')
+      expect(trace.meta['circularTag.selfArrB']).to.equal('["space_invader","[Circular]"]')
     })
 
     it('should include the analytics sample rate', () => {

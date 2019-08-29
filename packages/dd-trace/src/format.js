@@ -49,7 +49,6 @@ function extractTags (trace, span) {
   const origin = span.context()._trace.origin
   const tags = span.context()._tags
   const hostname = span.context()._hostname
-  const seen = []
 
   Object.keys(tags).forEach(tag => {
     switch (tag) {
@@ -71,7 +70,7 @@ function extractTags (trace, span) {
       case 'error.stack':
         trace.error = 1
       default: // eslint-disable-line no-fallthrough
-        addTag(trace.meta, tag, tags[tag], seen)
+        addTag(trace.meta, tag, tags[tag])
     }
   })
 
@@ -125,6 +124,8 @@ function extractAnalytics (trace, span) {
 }
 
 function addTag (meta, key, value, seen) {
+  seen = seen || []
+
   switch (typeof value) {
     case 'string':
       meta[key] = value
@@ -135,34 +136,34 @@ function addTag (meta, key, value, seen) {
       if (value === null) break
 
       if (Array.isArray(value)) {
-        addTagArray(meta, key, value, seen)
+        addArrayTag(meta, key, value, seen)
       } else {
-        addTagObject(meta, key, value, seen)
+        addObjectTag(meta, key, value, seen)
       }
 
       break
     default:
-      addTag(meta, key, serialize(value))
+      addTag(meta, key, serialize(value), seen)
   }
 }
 
-function addTagObject (meta, key, value, seen) {
-  if (seen) {
-    if (~seen.indexOf(value)) {
-      meta[key] = '[Circular]'
-      return
-    }
-
-    seen.push(value)
+function addObjectTag (meta, key, value, seen) {
+  if (~seen.indexOf(value)) {
+    meta[key] = '[Circular]'
+    return
   }
+
+  seen.push(value)
 
   Object.keys(value).forEach(prop => {
     addTag(meta, `${key}.${prop}`, value[prop], seen)
   })
+
+  seen.pop()
 }
 
-function addTagArray (meta, key, array, seen) {
-  function replacer (key, value) {
+function addArrayTag (meta, key, array, seen) {
+  const formattedArray = JSON.stringify(array, (key, value) => {
     if (typeof value === 'object') {
       if (seen && ~seen.indexOf(value)) return '[Circular]'
       if (!Array.isArray(value)) return '[object Object]'
@@ -170,9 +171,31 @@ function addTagArray (meta, key, array, seen) {
       seen.push(value)
     }
     return value
-  }
-  const formattedArray = JSON.stringify(array, replacer)
+  })
+
   addTag(meta, key, formattedArray, seen)
+
+  seen.pop()
+}
+
+function formatArray (value, seen) {
+  if (typeof value !== 'object') return `"${serialize(value)}"`
+  if (seen && ~seen.indexOf(value)) return '[Circular]'
+  if (!Array.isArray(value)) return '[object Object]'
+
+  seen.push(value)
+
+  const formattedValues = []
+
+  value.forEach(value => {
+    formattedValues.push(formatArray(value, seen))
+  })
+
+  seen.pop()
+
+  const formatted = formattedValues.join(',')
+
+  return `[${formatted}]`
 }
 
 function serialize (obj) {
