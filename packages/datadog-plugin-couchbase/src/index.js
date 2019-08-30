@@ -105,7 +105,7 @@ function unwrapCouchbase (Class) {
 module.exports = [
   {
     name: 'couchbase',
-    versions: ['>=2.4.0 <3'],
+    versions: ['2.4'],
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       tracer.scope().bind(Bucket.prototype)
@@ -122,7 +122,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['>=2.4.0 <3'],
+    versions: ['2.4'],
     file: 'lib/cluster.js',
     patch: wrapCouchbase,
     unpatch: unwrapCouchbase
