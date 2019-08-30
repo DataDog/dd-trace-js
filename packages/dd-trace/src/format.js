@@ -169,7 +169,7 @@ function addArrayTag (meta, key, array, seen) {
 }
 
 function formatArray (value, seen) {
-  if (typeof value !== 'object') return `"${serialize(value)}"`
+  if (typeof value !== 'object') return `${serialize(value)}`
   if (seen && ~seen.indexOf(value)) return '[Circular]'
   if (!Array.isArray(value)) return '[object Object]'
 
