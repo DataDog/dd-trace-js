@@ -124,8 +124,6 @@ function extractAnalytics (trace, span) {
 }
 
 function addTag (meta, key, value, seen) {
-  seen = seen || []
-
   switch (typeof value) {
     case 'string':
       meta[key] = value
@@ -135,19 +133,19 @@ function addTag (meta, key, value, seen) {
     case 'object':
       if (value === null) break
 
-      if (Array.isArray(value)) {
-        addArrayTag(meta, key, value, seen)
-      } else {
+      if (!Array.isArray(value)) {
         addObjectTag(meta, key, value, seen)
+        break
       }
 
-      break
-    default:
-      addTag(meta, key, serialize(value), seen)
+    default: // eslint-disable-line no-fallthrough
+      addTag(meta, key, serialize(value))
   }
 }
 
 function addObjectTag (meta, key, value, seen) {
+  seen = seen || []
+
   if (~seen.indexOf(value)) {
     meta[key] = '[Circular]'
     return
@@ -160,32 +158,6 @@ function addObjectTag (meta, key, value, seen) {
   })
 
   seen.pop()
-}
-
-function addArrayTag (meta, key, array, seen) {
-  const formattedArray = formatArray(array, seen)
-
-  addTag(meta, key, formattedArray, seen)
-}
-
-function formatArray (value, seen) {
-  if (typeof value !== 'object') return `${serialize(value)}`
-  if (seen && ~seen.indexOf(value)) return '[Circular]'
-  if (!Array.isArray(value)) return '[object Object]'
-
-  seen.push(value)
-
-  const formattedValues = []
-
-  value.forEach(value => {
-    formattedValues.push(formatArray(value, seen))
-  })
-
-  seen.pop()
-
-  const formatted = formattedValues.join(',')
-
-  return `[${formatted}]`
 }
 
 function serialize (obj) {

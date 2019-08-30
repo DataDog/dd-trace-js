@@ -157,7 +157,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.meta['root.level1.array']).to.equal('[hello]')
+      expect(trace.meta['root.level1.array']).to.equal('hello')
       expect(trace.meta['root.level1.level2']).to.be.undefined
       expect(trace.meta['root.level1.level2.level3']).to.be.undefined
     })
@@ -169,7 +169,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.meta['root.array']).to.equal('[a,[b,[c]]]')
+      expect(trace.meta['root.array']).to.equal('a,b,c')
     })
 
     it('should support objects in arrays', () => {
@@ -181,7 +181,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.meta['root.array']).to.equal('[a,[object Object],[object Object]]')
+      expect(trace.meta['root.array']).to.equal('a,[object Object],[object Object]')
     })
 
     it('should add runtime tags', () => {
@@ -335,27 +335,6 @@ describe('format', () => {
       expect(trace.meta['circularTag.A.B.C.D.E.self']).to.equal('[Circular]')
     })
 
-    it('should support circular references in an array', () => {
-      const tag = { 'foo': 'bar' }
-
-      tag['baz'] = ['qux', tag]
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.baz']).to.equal('[qux,[Circular]]')
-    })
-
-    it('should support circular referenced arrays', () => {
-      const tag = ['foo', ['bar', ['baz']]]
-
-      tag[1][1][1] = ['quuz', tag[1]]
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag']).to.equal('[foo,[bar,[baz,[quuz,[Circular]]]]]')
-    })
-
     it('should support circular references in a class', () => {
       class CircularTag {
         constructor () {
@@ -417,8 +396,8 @@ describe('format', () => {
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag.baz']).to.equal('[bar]')
-      expect(trace.meta['circularTag.qux']).to.equal('[bar]')
+      expect(trace.meta['circularTag.baz']).to.equal('bar')
+      expect(trace.meta['circularTag.qux']).to.equal('bar')
     })
 
     it('should support re-used arrays within arrays', () => {
@@ -428,23 +407,7 @@ describe('format', () => {
       spanContext._tags['circularTag'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag']).to.equal('[[object Object],[[object Object]]]')
-    })
-
-    it('should support doubly-linked arrays', () => {
-      const tag = {
-        selfArrA: ['ghost_eater'],
-        selfArrB: ['space_invader']
-      }
-
-      tag.selfArrA[1] = tag.selfArrB
-      tag.selfArrB[1] = tag.selfArrA
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.selfArrA']).to.equal('[ghost_eater,[space_invader,[Circular]]]')
-      expect(trace.meta['circularTag.selfArrB']).to.equal('[space_invader,[ghost_eater,[Circular]]]')
+      expect(trace.meta['circularTag']).to.equal('[object Object],[object Object]')
     })
 
     it('should include the analytics sample rate', () => {
