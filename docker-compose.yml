@@ -1,5 +1,10 @@
 version: '2'
 services:
+  couchbase:
+    image: rishabhdev/couchbase-server-sandbox:latest
+    ports:
+      - '127.0.0.1:8091-8095:8091-8095'
+      - '127.0.0.1:11210:11210'
   postgres:
     image: postgres:9.5-alpine
     ports:

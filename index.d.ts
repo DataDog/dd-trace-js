@@ -324,6 +324,7 @@ interface Plugins {
   "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
+  "couchbase": plugins.couchbase;
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
@@ -567,6 +568,12 @@ declare namespace plugins {
    * [connect](https://github.com/senchalabs/connect) module.
    */
   interface connect extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [couchbase](https://www.npmjs.com/package/couchbase) module.
+   */
+  interface couchbase extends Integration {}
 
   /**
    * This plugin automatically instruments the
