@@ -4,6 +4,7 @@ const normalizeTestConfigs = require('../../../scripts/helpers/normalize_test_co
 
 const defaults = {
   integration: 'hapi',
+  ignoreFailure: true,
   repo: 'https://github.com/hapijs/hapi',
   framework: 'lab',
   args: '-a @hapi/code -m 3000 test/'
