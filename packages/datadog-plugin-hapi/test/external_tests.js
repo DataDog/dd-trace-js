@@ -16,7 +16,7 @@ const testConfigs = [
     args: '-a code -m 3000 -l test/'
   },
   {
-    branch: 'v17'
+    branch: 'v17-commercial'
   },
   {
     branch: 'v18-commercial'
