@@ -123,9 +123,7 @@ function extractAnalytics (trace, span) {
   }
 }
 
-function addTag (meta, key, value, depth) {
-  depth = depth || 0
-
+function addTag (meta, key, value, seen) {
   switch (typeof value) {
     case 'string':
       meta[key] = value
@@ -135,15 +133,31 @@ function addTag (meta, key, value, depth) {
     case 'object':
       if (value === null) break
 
-      if (!Array.isArray(value) && depth < 2) {
-        Object.keys(value).forEach(prop => {
-          addTag(meta, `${key}.${prop}`, value[prop], depth + 1)
-        })
+      if (!Array.isArray(value)) {
+        addObjectTag(meta, key, value, seen)
         break
       }
+
     default: // eslint-disable-line no-fallthrough
       addTag(meta, key, serialize(value))
   }
+}
+
+function addObjectTag (meta, key, value, seen) {
+  seen = seen || []
+
+  if (~seen.indexOf(value)) {
+    meta[key] = '[Circular]'
+    return
+  }
+
+  seen.push(value)
+
+  Object.keys(value).forEach(prop => {
+    addTag(meta, `${key}.${prop}`, value[prop], seen)
+  })
+
+  seen.pop()
 }
 
 function serialize (obj) {
