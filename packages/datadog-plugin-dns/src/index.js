@@ -106,10 +106,11 @@ function startSpan (tracer, config, operation, tags) {
 
 function wrapArgs (span, args, callback) {
   const original = args[args.length - 1]
+  const fn = tx.wrap(span, original)
 
   args[args.length - 1] = function () {
     callback && callback.apply(null, arguments)
-    return tx.wrap(span, original).apply(this, arguments)
+    return fn.apply(this, arguments)
   }
 }
 
