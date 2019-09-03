@@ -8,6 +8,7 @@ wrapIt()
 
 describe('Plugin', () => {
   let dns
+  let tracer
 
   describe('dns', () => {
     afterEach(() => {
@@ -17,7 +18,8 @@ describe('Plugin', () => {
     beforeEach(() => {
       return agent.load(plugin, 'dns')
         .then(() => {
-          dns = require(`dns`)
+          dns = require('dns')
+          tracer = require('../../dd-trace')
         })
     })
 
@@ -118,6 +120,20 @@ describe('Plugin', () => {
         .catch(done)
 
       dns.reverse('127.0.0.1', err => err && done(err))
+    })
+
+    it('should preserve the parent scope in the callback', done => {
+      const span = {}
+
+      tracer.scope().activate(span, () => {
+        dns.lookup('localhost', 4, (err) => {
+          if (err) return done(err)
+
+          expect(tracer.scope().active()).to.equal(span)
+
+          done()
+        })
+      })
     })
 
     if (semver.gte(process.version, '8.3.0')) {
