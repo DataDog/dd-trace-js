@@ -117,6 +117,27 @@ describe('Plugin', () => {
           .catch(done)
       })
 
+      it('should run the request handler in the request scope with a payload', done => {
+        server.route({
+          method: 'POST',
+          path: '/user/{id}',
+          handler: (request, h) => {
+            try {
+              expect(tracer.scope().active()).to.not.be.null
+              done()
+            } catch (e) {
+              done(e)
+            }
+
+            return handler(request, h)
+          }
+        })
+
+        axios
+          .post(`http://localhost:${port}/user/123`, {})
+          .catch(done)
+      })
+
       it('should run pre-handlers in the request scope', done => {
         server.route({
           method: 'GET',
