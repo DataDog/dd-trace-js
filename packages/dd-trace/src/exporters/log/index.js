@@ -42,7 +42,7 @@ class LogExporter {
       }
     }
     logLine += ']}\n'
-    console.log(logLine) // eslint-disable-line no-console
+    process.stdout.write(logLine)
   }
 }
 
