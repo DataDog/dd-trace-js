@@ -240,7 +240,7 @@ export declare interface TracerOptions {
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
-    exporter?: 'log-exporter' | 'agent-exporter'
+    exporter?: 'log' | 'browser' | 'agent'
 
     thenables?: boolean
   };

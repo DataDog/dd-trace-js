@@ -26,7 +26,10 @@
     load()
 
     ddtrace.tracer.init({
-      env: 'browser-example'
+      env: 'browser-example',
+      experimental: {
+        exporter: ddtrace.ext.exporters.BROWSER
+      }
     })
 
     document.getElementById('xhr').addEventListener('click', function () {

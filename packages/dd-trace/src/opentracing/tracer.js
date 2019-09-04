@@ -6,6 +6,7 @@ const Reference = opentracing.Reference
 const Span = require('./span')
 const SpanContext = require('./span_context')
 const LogExporter = require('../exporters/log')
+const BrowserExporter = require('../exporters/browser')
 const AgentExporter = require('../exporters/agent')
 const SpanProcessor = require('../span_processor')
 const Sampler = require('../sampler')
@@ -40,15 +41,7 @@ class DatadogTracer extends Tracer {
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
-
-    if (config.experimental.exporter === exporters.LOG) {
-      this._exporter = new LogExporter(config)
-    } else if (config.experimental.exporter === exporters.AGENT) {
-      this._exporter = new AgentExporter(config)
-    } else {
-      this._exporter = new platform.Exporter(config)
-    }
-
+    this._exporter = getExporter(config)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
     this._propagators = {
@@ -153,6 +146,19 @@ function getParent (references) {
   }
 
   return parent
+}
+
+function getExporter (config) {
+  switch (config.experimental.exporter) {
+    case exporters.LOG:
+      return new LogExporter(config)
+    case exporters.BROWSER:
+      return new BrowserExporter(config)
+    case exporters.AGENT:
+      return new AgentExporter(config)
+    default:
+      return new platform.Exporter(config)
+  }
 }
 
 function isSampled (sampler, parent, type) {

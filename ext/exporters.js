@@ -1,5 +1,6 @@
 'use strict'
 module.exports = {
-  LOG: 'log-exporter',
-  AGENT: 'agent-exporter'
+  LOG: 'log',
+  BROWSER: 'browser',
+  AGENT: 'agent'
 }
