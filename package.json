@@ -73,7 +73,6 @@
     "zone.js": "^0.10.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.5.5",
     "axios": "^0.18.0",
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
