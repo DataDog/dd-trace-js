@@ -8,6 +8,8 @@
   "scripts": {
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
+    "bundle": "gulp",
+    "browser": "live-server examples/browser --port=3000 --mount=/dist:./dist --mount=/env:./.env",
     "install": "node scripts/post_install.js",
     "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",
@@ -43,6 +45,7 @@
   "engines": {
     "node": ">=8"
   },
+  "browserify-shim": {},
   "dependencies": {
     "@types/node": "^10.12.18",
     "bowser": "^2.5.3",
@@ -74,8 +77,14 @@
   },
   "devDependencies": {
     "axios": "^0.18.0",
+    "babel-plugin-transform-object-assign": "^6.22.0",
+    "babel-preset-es2015": "^6.24.1",
+    "babelify": "^10.0.0",
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
+    "browserify": "^16.5.0",
+    "browserify-shim": "^3.8.14",
+    "bundle-collapser": "^1.3.0",
     "chai": "^4.1.2",
     "codecov": "^3.5.0",
     "eslint": "^4.15.0",
@@ -88,6 +97,10 @@
     "express": "^4.16.2",
     "get-port": "^3.2.0",
     "graphql": "0.13.2",
+    "gulp": "^4.0.2",
+    "gulp-sourcemaps": "^2.6.5",
+    "gulp-util": "^3.0.8",
+    "live-server": "^1.2.1",
     "mocha": "^5.2.0",
     "nock": "^11.3.3",
     "node-abi": "^2.8.0",
@@ -97,6 +110,9 @@
     "retry": "^0.10.1",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0",
-    "tape": "^4.9.1"
+    "tape": "^4.9.1",
+    "vinyl-buffer": "^1.0.1",
+    "vinyl-fs": "^3.0.3",
+    "vinyl-source-stream": "^2.0.0"
   }
 }

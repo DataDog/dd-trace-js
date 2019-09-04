@@ -1,0 +1,43 @@
+body {
+  background: #632CA6;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  color: white;
+}
+
+button {
+  background-color: white;
+  border: none;
+  border-radius: 5px;
+  color: #632CA6;
+  padding: 12px 24px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  outline: none;
+  transition: all .2s ease-in-out;
+}
+
+button:hover {
+  background-color: #eeeeee;
+  transition: all .2s ease-in-out;
+}
+
+button:active {
+  background-color: #cccccc;
+  transition: all .2s ease-in-out;
+}
+
+button:hover {
+  cursor: pointer;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 100vh;
+}

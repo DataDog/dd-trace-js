@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+  <title>Datadog APM Example</title>
+
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+  <div class="center">
+    <img src="dd_icon_white.svg" alt="Datadog" width="200">
+    <p>Click a button to generate traces.</p>
+
+    <div>
+      <button id="xhr" type="button">Send XHR Request</button>
+      <button id="fetch" type="button">Send Fetch Request</button>
+    </div>
+  </div>
+
+  <script src="dist/dd-trace.js"></script>
+  <script>
+    load()
+
+    ddtrace.tracer.init({
+      env: 'browser-example',
+      experimental: {
+        exporter: ddtrace.ext.exporters.BROWSER
+      }
+    })
+
+    document.getElementById('xhr').addEventListener('click', function () {
+      get('index.html')
+    })
+
+    document.getElementById('fetch').addEventListener('click', function () {
+      window.fetch('index.html')
+    })
+
+    function load () {
+      const req = get('env', false)
+
+      if (req.status === 200) {
+        req.responseText.split('\n')
+          .filter(pair => !!pair)
+          .map(pair => pair.split('='))
+          .forEach(pair => {
+            window[pair[0]] = pair[1]
+          })
+      }
+
+      if (!window.DD_API_KEY || !window.DD_APP_KEY) {
+        console.log('Please create a .env file with DD_API_KEY and DD_APP_KEY set.')
+      }
+    }
+
+    function get (url, async) {
+      const req = new XMLHttpRequest()
+
+      req.open('GET', url, async)
+      req.send()
+
+      return req
+    }
+  </script>
+</body>
+</html>
