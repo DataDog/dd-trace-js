@@ -115,7 +115,7 @@ describe('Tracer', () => {
 
   it('should support recording with LogExporter', () => {
     config.experimental = {
-      exporter: 'log-exporter'
+      exporter: 'log'
     }
     tracer = new Tracer(config)
 
