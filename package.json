@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "browser": "browser.js",
@@ -110,7 +110,6 @@
     "nyc": "^14.1.1",
     "prebuildify": "^2.11.0",
     "proxyquire": "^1.8.0",
-    "require-dir": "^1.0.0",
     "retry": "^0.10.1",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0",

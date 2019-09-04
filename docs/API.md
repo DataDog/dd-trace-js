@@ -207,6 +207,7 @@ tracer.use('pg', {
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
 <h5 id="bunyan"></h5>
+<h5 id="couchbase"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
 <h5 id="elasticsearch-tags"></h5>
@@ -219,6 +220,7 @@ tracer.use('pg', {
 <h5 id="graphql"></h5>
 <h5 id="graphql-tags"></h5>
 <h5 id="graphql-config"></h5>
+<h5 id="grpc"></h5>
 <h5 id="hapi"></h5>
 <h5 id="hapi-tags"></h5>
 <h5 id="hapi-config"></h5>
@@ -266,6 +268,7 @@ tracer.use('pg', {
 * [amqp10](./interfaces/plugins.amqp10.html)
 * [amqplib](./interfaces/plugins.amqplib.html)
 * [bluebird](./interfaces/plugins.bluebird.html)
+* [couchbase](./interfaces/plugins.couchbase.html)
 * [bunyan](./interfaces/plugins.bunyan.html)
 * [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
 * [connect](./interfaces/plugins.connect.html)
@@ -275,6 +278,7 @@ tracer.use('pg', {
 * [fastify](./interfaces/plugins.fastify.html)
 * [generic-pool](./interfaces/plugins.generic_pool.html)
 * [graphql](./interfaces/plugins.graphql.html)
+* [grpc](./interfaces/plugins.grpc.html)
 * [hapi](./interfaces/plugins.hapi.html)
 * [http](./interfaces/plugins.http.html)
 * [http2](./interfaces/plugins.http2.html)

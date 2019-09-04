@@ -249,3 +249,5 @@ module.exports = [
     }
   }
 ]
+
+module.exports = [] // temporarily disable HTTP2 client plugin

@@ -7,7 +7,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 let tools
 
-function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAsArray) {
+function createWrapExecute (tracer, config, defaultFieldResolver) {
   return function wrapExecute (execute) {
     return function executeWithTrace () {
       const args = normalizeArgs(arguments)
@@ -22,11 +22,11 @@ function createWrapExecute (tracer, config, defaultFieldResolver, responsePathAs
         return execute.apply(this, arguments)
       }
 
-      args.fieldResolver = wrapResolve(fieldResolver, tracer, config, responsePathAsArray)
+      args.fieldResolver = wrapResolve(fieldResolver, tracer, config)
 
       if (schema) {
-        wrapFields(schema._queryType, tracer, config, responsePathAsArray)
-        wrapFields(schema._mutationType, tracer, config, responsePathAsArray)
+        wrapFields(schema._queryType, tracer, config)
+        wrapFields(schema._mutationType, tracer, config)
       }
 
       const span = startExecutionSpan(tracer, config, operation, args)
@@ -103,7 +103,7 @@ function createWrapValidate (tracer, config) {
   }
 }
 
-function wrapFields (type, tracer, config, responsePathAsArray) {
+function wrapFields (type, tracer, config) {
   if (!type || !type._fields || type._datadog_patched) {
     return
   }
@@ -114,7 +114,7 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
     const field = type._fields[key]
 
     if (typeof field.resolve === 'function') {
-      field.resolve = wrapResolve(field.resolve, tracer, config, responsePathAsArray)
+      field.resolve = wrapResolve(field.resolve, tracer, config)
     }
 
     let unwrappedType = field.type
@@ -123,15 +123,16 @@ function wrapFields (type, tracer, config, responsePathAsArray) {
       unwrappedType = unwrappedType.ofType
     }
 
-    wrapFields(unwrappedType, tracer, config, responsePathAsArray)
+    wrapFields(unwrappedType, tracer, config)
   })
 }
 
-function wrapResolve (resolve, tracer, config, responsePathAsArray) {
+function wrapResolve (resolve, tracer, config) {
   if (resolve._datadog_patched || typeof resolve !== 'function') return resolve
-  if (config.collapse) {
-    responsePathAsArray = withCollapse(responsePathAsArray)
-  }
+
+  const responsePathAsArray = config.collapse
+    ? withCollapse(pathToArray)
+    : pathToArray
 
   function resolveWithTrace (source, args, contextValue, info) {
     const path = responsePathAsArray(info.path)
@@ -430,6 +431,16 @@ function getSignature (document, operationName, operationType, calculate) {
   return [operationType, operationName].filter(val => val).join(' ')
 }
 
+function pathToArray (path) {
+  const flattened = []
+  let curr = path
+  while (curr) {
+    flattened.push(curr.key)
+    curr = curr.prev
+  }
+  return flattened.reverse()
+}
+
 module.exports = [
   {
     name: 'graphql',
@@ -439,8 +450,7 @@ module.exports = [
       this.wrap(execute, 'execute', createWrapExecute(
         tracer,
         validateConfig(config),
-        execute.defaultFieldResolver,
-        execute.responsePathAsArray
+        execute.defaultFieldResolver
       ))
     },
     unpatch (execute) {

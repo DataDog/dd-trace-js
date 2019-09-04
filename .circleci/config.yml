@@ -213,6 +213,15 @@ jobs:
         environment:
           - PLUGINS=connect
 
+  node-couchbase:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=couchbase
+          - PLUGINS=couchbase
+      - image: rishabhdev/couchbase-server-sandbox:latest
+
   node-dns:
     <<: *node-plugin-base
     docker:
@@ -259,6 +268,13 @@ jobs:
       - image: node:8
         environment:
           - PLUGINS=graphql
+
+  node-grpc:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=grpc
 
   node-hapi:
     <<: *node-plugin-base
@@ -622,12 +638,14 @@ workflows:
       - node-bunyan
       - node-cassandra
       - node-connect
+      - node-couchbase
       - node-dns
       - node-elasticsearch
       - node-express
       - node-fastify
       - node-generic-pool
       - node-graphql
+      - node-grpc
       - node-hapi
       - node-http
       - node-http2
@@ -728,12 +746,14 @@ workflows:
       - node-bunyan
       - node-cassandra
       - node-connect
+      - node-couchbase
       - node-dns
       - node-elasticsearch
       - node-express
       - node-fastify
       - node-generic-pool
       - node-graphql
+      - node-grpc
       - node-hapi
       - node-http
       - node-http2
