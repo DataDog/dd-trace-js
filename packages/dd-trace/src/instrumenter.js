@@ -95,19 +95,19 @@ class Instrumenter {
   }
 
   load (plugin, meta) {
-    if (this._enabled) {
-      const instrumentations = [].concat(plugin)
+    if (!this._enabled) return
 
-      try {
-        instrumentations
-          .forEach(instrumentation => {
-            this._loader.load(instrumentation, meta.config)
-          })
-      } catch (e) {
-        log.error(e)
-        this.unload(plugin)
-        log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
-      }
+    const instrumentations = [].concat(plugin)
+
+    try {
+      instrumentations
+        .forEach(instrumentation => {
+          this._loader.load(instrumentation, meta.config)
+        })
+    } catch (e) {
+      log.error(e)
+      this.unload(plugin)
+      log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
     }
   }
 
