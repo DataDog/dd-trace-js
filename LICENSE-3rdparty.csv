@@ -24,6 +24,7 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+require,zone.js,MIT,Copyright 2010-2019 Google LLC.
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
@@ -51,4 +52,3 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
 file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns
-dev,zone.js,MIT,Copyright 2010-2019 Google LLC.
