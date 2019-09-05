@@ -11,11 +11,6 @@ const suite = benchmark('platform (node)')
 const traceStub = require('../stubs/trace')
 
 suite
-  .add('id', {
-    fn () {
-      platform.id()
-    }
-  })
   .add('now', {
     fn () {
       platform.now()

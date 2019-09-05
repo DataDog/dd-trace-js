@@ -1,8 +1,7 @@
 'use strict'
 
 const EventEmitter = require('events')
-const id = require('./id')
-const uuid = require('./uuid')
+const crypto = require('./crypto')
 const now = require('./now')
 const env = require('./env')
 const validate = require('./validate')
@@ -10,8 +9,11 @@ const service = require('./service')
 const request = require('./request')
 const msgpack = require('./msgpack')
 const metrics = require('./metrics')
-const Uint64BE = require('./uint64be')
+const plugins = require('../../plugins')
 const hostname = require('./hostname')
+const Loader = require('./loader')
+const Scope = require('../../scope/async_hooks')
+const Exporter = require('../../exporters/agent')
 
 const emitter = new EventEmitter()
 
@@ -20,30 +22,22 @@ const platform = {
   name: () => 'nodejs',
   version: () => process.version,
   engine: () => process.jsEngine || 'v8',
-  configure (config) {
-    this._config = config
-  },
-  runtime () {
-    return {
-      id: () => {
-        return this._config._runtimeId || (this._config._runtimeId = this.uuid())
-      }
-    }
-  },
-  id,
-  uuid,
+  crypto,
   now,
   env,
+  tags: () => ({}),
   validate,
   service,
   request,
   msgpack,
   metrics,
-  Uint64BE,
+  plugins,
   hostname,
   on: emitter.on.bind(emitter),
-  once: emitter.once.bind(emitter),
-  off: emitter.removeListener.bind(emitter)
+  off: emitter.removeListener.bind(emitter),
+  Loader,
+  Scope,
+  Exporter
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))

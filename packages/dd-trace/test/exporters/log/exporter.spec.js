@@ -4,40 +4,40 @@ describe('LogExporter', () => {
   let Exporter
   let exporter
   let span
-  let outputStream
+  let log
 
   beforeEach(() => {
-    span = { formatted: true }
-
-    outputStream = {
-      write: sinon.stub()
-    }
+    span = { tag: 'test' }
 
     Exporter = proxyquire('../src/exporters/log', {})
-    exporter = new Exporter(outputStream)
+    exporter = new Exporter()
   })
 
   describe('export', () => {
-    it('should flush its traces to the output stream', () => {
+    it('should flsh its traces to the console', () => {
+      log = sinon.stub(process.stdout, 'write')
       exporter.export([span, span])
-      const result = '{"datadog_traces":[{"formatted":true},{"formatted":true}]}'
-      expect(outputStream.write).to.have.been.calledWithMatch(result)
+      log.restore()
+      const result = '{"datadog_traces":[{"tag":"test"},{"tag":"test"}]}'
+      expect(log).to.have.been.calledWithMatch(result)
     })
 
     it('should send spans over multiple log lines when they are too large for a single log line', () => {
-      const maxSize = 20
-      exporter = new Exporter(outputStream, maxSize)
+      span.tag = new Array(200000).fill('a').join('')
+      log = sinon.stub(process.stdout, 'write')
       exporter.export([span, span])
-      const result = '{"datadog_traces":[{"formatted":true}]}'
-      expect(outputStream.write).to.have.calledTwice
-      expect(outputStream.write).to.have.been.calledWithMatch(result)
+      log.restore()
+      const result = `{"datadog_traces":[{"tag":"${span.tag}"}]}`
+      expect(log).to.have.calledTwice
+      expect(log).to.have.been.calledWithMatch(result)
     })
 
     it('should drop spans if they are too large for a single log line', () => {
-      const maxSize = 5
-      exporter = new Exporter(outputStream, maxSize)
+      span.tag = new Array(300000).fill('a').join('')
+      log = sinon.stub(process.stdout, 'write')
       exporter.export([span, span])
-      expect(outputStream.write).not.to.have.been.called
+      log.restore()
+      expect(log).not.to.have.been.called
     })
   })
 })

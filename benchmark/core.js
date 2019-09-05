@@ -18,6 +18,7 @@ const Sampler = require('../packages/dd-trace/src/sampler')
 const format = require('../packages/dd-trace/src/format')
 const encode = require('../packages/dd-trace/src/encode')
 const config = new Config('benchmark', { service: 'benchmark' })
+const id = require('../packages/dd-trace/src/id')
 
 const suite = benchmark('core')
 
@@ -28,8 +29,8 @@ let carrier
 let writer
 let sampler
 
-const traceStub = require('./stubs/trace')
 const spanStub = require('./stubs/span')
+const span = format(spanStub)
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -45,8 +46,8 @@ suite
       propagator = new TextMapPropagator(config)
       carrier = {}
       spanContext = new DatadogSpanContext({
-        traceId: platform.id('1234567812345678'),
-        spanId: platform.id('1234567812345678'),
+        traceId: id('1234567812345678'),
+        spanId: id('1234567812345678'),
         baggageItems: { foo: 'bar' }
       })
     },
@@ -72,7 +73,7 @@ suite
       writer = new Writer({ sample: () => {} }, {})
     },
     fn () {
-      writer.append(spanStub)
+      writer.append([span])
     }
   })
   .add('Sampler#isSampled', {
@@ -90,7 +91,12 @@ suite
   })
   .add('encode', {
     fn () {
-      encode(traceStub)
+      encode([span])
+    }
+  })
+  .add('id', {
+    fn () {
+      id()
     }
   })
 

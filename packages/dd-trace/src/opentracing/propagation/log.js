@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../../platform')
+const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 
 class LogPropagator {
@@ -19,8 +19,8 @@ class LogPropagator {
     }
 
     const spanContext = new DatadogSpanContext({
-      traceId: platform.id(carrier.dd.trace_id, 10),
-      spanId: platform.id(carrier.dd.span_id, 10)
+      traceId: id(carrier.dd.trace_id, 10),
+      spanId: id(carrier.dd.span_id, 10)
     })
 
     return spanContext

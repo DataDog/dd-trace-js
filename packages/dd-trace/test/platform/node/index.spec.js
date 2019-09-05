@@ -56,71 +56,32 @@ describe('Platform', () => {
       })
     })
 
-    describe('id', () => {
-      let id
+    describe('crypto', () => {
+      let crypto
       let randomBytes
+      let buffer
 
       beforeEach(() => {
-        const seed = Buffer.alloc(4)
+        buffer = Buffer.alloc(4)
 
-        seed.writeUInt32BE(0xFF000000)
+        buffer.writeUInt32BE(0xabcd1234)
 
-        randomBytes = sinon.stub().returns(seed)
+        randomBytes = sinon.stub().returns(buffer)
 
-        sinon.stub(Math, 'random')
-
-        id = proxyquire('../src/platform/node/id', {
+        crypto = proxyquire('../src/platform/node/crypto', {
           'crypto': { randomBytes }
         })
       })
 
-      afterEach(() => {
-        Math.random.restore()
-      })
+      it('should fill the typed array with random values', () => {
+        const typedArray = new Uint8Array(4)
 
-      it('should return a random 63bit ID', () => {
-        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
+        crypto.getRandomValues(typedArray)
 
-        expect(id().toString()).to.equal('7f00ff00ff00ff00')
-      })
-
-      it('should be serializable to an integer', () => {
-        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
-
-        expect(id().toString(10)).to.equal('9151594822560186112')
-      })
-
-      it('should be serializable to JSON', () => {
-        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
-
-        const json = JSON.stringify(id())
-
-        expect(json).to.equal('"7f00ff00ff00ff00"')
-      })
-
-      it('should be exportable to Uint64BE', () => {
-        Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
-
-        const uint64 = id().toUint64BE()
-
-        expect(uint64).to.be.instanceof(platform.Uint64BE)
-        expect(uint64.toString()).to.equal('9151594822560186112')
-      })
-    })
-
-    describe('uuid', () => {
-      let uuid
-
-      beforeEach(() => {
-        uuid = require('../../../src/platform/node/uuid')
-      })
-
-      it('should return a random UUID', () => {
-        expect(uuid()).to.match(/^[a-f0-9]{32}$/)
-      })
-
-      it('should return part of a random UUID', () => {
-        expect(uuid(8)).to.match(/^[a-f0-9]{16}$/)
+        expect(typedArray[0]).to.equal(0xab)
+        expect(typedArray[1]).to.equal(0xcd)
+        expect(typedArray[2]).to.equal(0x12)
+        expect(typedArray[3]).to.equal(0x34)
       })
     })
 
@@ -382,22 +343,6 @@ describe('Platform', () => {
 
           expect(prefixed.length).to.equal(length + 1)
           expect(prefixed[0]).to.deep.equal(Buffer.from([0xdd, 0x00, 0x01, 0x00, 0x00]))
-        })
-      })
-    })
-
-    describe('runtime', () => {
-      beforeEach(() => {
-        platform = require('../../../src/platform/node')
-      })
-
-      describe('id', () => {
-        it('should return a UUID', () => {
-          expect(platform.runtime().id()).to.match(/^[a-f0-9]{32}$/)
-        })
-
-        it('should always return the same ID', () => {
-          expect(platform.runtime().id()).to.equal(platform.runtime().id())
         })
       })
     })

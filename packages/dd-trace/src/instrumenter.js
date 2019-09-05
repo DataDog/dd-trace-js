@@ -1,20 +1,17 @@
 'use strict'
 
-const semver = require('semver')
-const hook = require('require-in-the-middle')
-const parse = require('module-details-from-path')
-const path = require('path')
 const shimmer = require('shimmer')
-const uniq = require('lodash.uniq')
 const log = require('./log')
-
-const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
+const platform = require('./platform')
 
 shimmer({ logger: () => {} })
+
+const plugins = platform.plugins
 
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
+    this._loader = new platform.Loader(this)
     this._enabled = false
     this._names = new Set()
     this._plugins = new Map()
@@ -29,50 +26,39 @@ class Instrumenter {
     config = config || {}
 
     try {
-      this._set(require(`../../datadog-plugin-${name}/src`), { name, config })
+      this._set(plugins[name.toLowerCase()], { name, config })
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }
 
-    this.reload()
+    if (this._enabled) {
+      this._loader.reload(this._plugins)
+    }
   }
 
-  patch (config) {
+  enable (config) {
     config = config || {}
 
     if (config.plugins !== false) {
-      const plugins = require('./plugins')
-
       Object.keys(plugins)
+        .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          this._plugins.has(plugins[name]) || this._set(plugins[name], { name, config: {} })
+          this._set(plugins[name], { name, config: {} })
         })
     }
 
-    this.reload()
+    this._enabled = true
+    this._loader.reload(this._plugins)
   }
 
-  unpatch () {
-    this._instrumented.forEach((moduleExports, instrumentation) => {
-      this._unpatch(instrumentation)
-    })
+  disable () {
+    for (const instrumentation of this._instrumented.keys()) {
+      this.unpatch(instrumentation)
+    }
 
     this._plugins.clear()
-  }
-
-  reload () {
-    if (!this._enabled) return
-
-    const instrumentations = Array.from(this._plugins.keys())
-      .reduce((prev, current) => prev.concat(current), [])
-
-    const instrumentedModules = uniq(instrumentations
-      .map(instrumentation => instrumentation.name))
-
-    this._names = new Set(instrumentations
-      .map(instrumentation => filename(instrumentation)))
-
-    hook(instrumentedModules, { internals: true }, this.hookModule.bind(this))
+    this._enabled = false
+    this._loader.reload(this._plugins)
   }
 
   wrap (nodules, names, wrapper) {
@@ -108,86 +94,34 @@ class Instrumenter {
     })
   }
 
-  hookModule (moduleExports, moduleName, moduleBaseDir) {
-    moduleName = moduleName.replace(pathSepExpr, '/')
+  load (plugin, meta) {
+    if (!this._enabled) return
 
-    if (!this._names.has(moduleName)) {
-      return moduleExports
-    }
-
-    if (moduleBaseDir) {
-      moduleBaseDir = moduleBaseDir.replace(pathSepExpr, '/')
-    }
-
-    const moduleVersion = getVersion(moduleBaseDir)
-
-    Array.from(this._plugins.keys())
-      .filter(plugin => [].concat(plugin).some(instrumentation =>
-        filename(instrumentation) === moduleName && matchVersion(moduleVersion, instrumentation.versions)
-      ))
-      .forEach(plugin => this._validate(plugin, moduleName, moduleBaseDir, moduleVersion))
-
-    this._plugins
-      .forEach((meta, plugin) => {
-        try {
-          [].concat(plugin)
-            .filter(instrumentation => moduleName === filename(instrumentation))
-            .filter(instrumentation => matchVersion(moduleVersion, instrumentation.versions))
-            .forEach(instrumentation => {
-              const config = this._plugins.get(plugin).config
-
-              if (config.enabled !== false) {
-                moduleExports = this._patch(instrumentation, moduleExports, config) || moduleExports
-              }
-            })
-        } catch (e) {
-          log.error(e)
-          this._fail(plugin)
-          log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
-        }
-      })
-
-    return moduleExports
-  }
-
-  enable () {
-    this._enabled = true
-  }
-
-  _set (plugin, meta) {
-    this._plugins.set(plugin, meta)
-    this._load(plugin, meta)
-  }
-
-  _validate (plugin, moduleName, moduleBaseDir, moduleVersion) {
-    const meta = this._plugins.get(plugin)
     const instrumentations = [].concat(plugin)
 
-    for (let i = 0; i < instrumentations.length; i++) {
-      if (moduleName.indexOf(instrumentations[i].name) !== 0) continue
-      if (instrumentations[i].versions && !matchVersion(moduleVersion, instrumentations[i].versions)) continue
-      if (instrumentations[i].file && !exists(moduleBaseDir, instrumentations[i].file)) {
-        this._fail(plugin)
-        log.debug([
-          `Plugin "${meta.name}" requires "${instrumentations[i].file}" which was not found.`,
-          `The plugin was disabled.`
-        ].join(' '))
-        break
-      }
+    try {
+      instrumentations
+        .forEach(instrumentation => {
+          this._loader.load(instrumentation, meta.config)
+        })
+    } catch (e) {
+      log.error(e)
+      this.unload(plugin)
+      log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
     }
   }
 
-  _fail (plugin) {
+  unload (plugin) {
     [].concat(plugin)
       .forEach(instrumentation => {
-        this._unpatch(instrumentation)
+        this.unpatch(instrumentation)
         this._instrumented.delete(instrumentation)
       })
 
     this._plugins.delete(plugin)
   }
 
-  _patch (instrumentation, moduleExports, config) {
+  patch (instrumentation, moduleExports, config) {
     let instrumented = this._instrumented.get(instrumentation)
 
     if (!instrumented) {
@@ -200,7 +134,7 @@ class Instrumenter {
     }
   }
 
-  _unpatch (instrumentation) {
+  unpatch (instrumentation) {
     const instrumented = this._instrumented.get(instrumentation)
 
     if (instrumented) {
@@ -214,84 +148,9 @@ class Instrumenter {
     }
   }
 
-  _load (plugin, meta) {
-    if (this._enabled) {
-      const instrumentations = [].concat(plugin)
-
-      try {
-        instrumentations
-          .forEach(instrumentation => {
-            getModules(instrumentation).forEach(nodule => {
-              this._patch(instrumentation, nodule, meta.config)
-            })
-          })
-      } catch (e) {
-        log.error(e)
-        this._fail(plugin)
-        log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
-      }
-    }
-  }
-}
-
-function getModules (instrumentation) {
-  const modules = []
-  const ids = Object.keys(require.cache)
-
-  let pkg
-
-  for (let i = 0, l = ids.length; i < l; i++) {
-    const id = ids[i].replace(pathSepExpr, '/')
-
-    if (!id.includes(`/node_modules/${instrumentation.name}/`)) continue
-
-    if (instrumentation.file) {
-      if (!id.endsWith(`/node_modules/${filename(instrumentation)}`)) continue
-
-      const basedir = getBasedir(ids[i])
-
-      pkg = require(`${basedir}/package.json`)
-    } else {
-      const basedir = getBasedir(ids[i])
-
-      pkg = require(`${basedir}/package.json`)
-
-      if (!id.endsWith(`/node_modules/${instrumentation.name}/${pkg.main || 'index.js'}`)) continue
-    }
-
-    if (!matchVersion(pkg.version, instrumentation.versions)) continue
-
-    modules.push(require.cache[ids[i]].exports)
-  }
-
-  return modules
-}
-
-function getBasedir (id) {
-  return parse(id).basedir.replace(pathSepExpr, '/')
-}
-
-function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => semver.satisfies(version, range)))
-}
-
-function getVersion (moduleBaseDir) {
-  if (moduleBaseDir) {
-    const packageJSON = `${moduleBaseDir}/package.json`
-    return require(packageJSON).version
-  }
-}
-
-function filename (plugin) {
-  return [plugin.name, plugin.file].filter(val => val).join('/')
-}
-
-function exists (basedir, file) {
-  try {
-    require.resolve(`${basedir}/${file}`)
-    return true
-  } catch (e) {
-    return false
+  _set (plugin, meta) {
+    this._plugins.set(plugin, meta)
+    this.load(plugin, meta)
   }
 }
 

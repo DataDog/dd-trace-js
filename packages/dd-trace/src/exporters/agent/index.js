@@ -4,7 +4,7 @@ const Writer = require('./writer')
 const Scheduler = require('./scheduler')
 
 class AgentExporter {
-  constructor (url, interval) {
+  constructor ({ url, interval }) {
     this._writer = new Writer(url)
 
     if (interval > 0) {

@@ -1,5 +1,6 @@
 Component,Origin,License,Copyright
 require,@types/node,MIT,Copyright Authors
+require,bowser,MIT,Copyright 2015 Dustin Diaz
 require,container-info,MIT,Copyright 2018 Stephen Belanger
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
@@ -23,6 +24,7 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+require,zone.js,MIT,Copyright 2010-2019 Google LLC.
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson

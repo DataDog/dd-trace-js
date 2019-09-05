@@ -8,7 +8,15 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    return this._activate(span, callback)
+    try {
+      return this._activate(span, callback)
+    } catch (e) {
+      if (span && typeof span.setTag === 'function') {
+        span.setTag('error', e)
+      }
+
+      throw e
+    }
   }
 
   bind (target, span) {
@@ -30,30 +38,6 @@ class Scope {
   _active () {
     return null
   }
-
-  _activate (span, callback) {
-    const active = this._active()
-
-    this._enter(span)
-
-    try {
-      return callback()
-    } catch (e) {
-      if (span && typeof span.setTag === 'function') {
-        span.setTag('error', e)
-      }
-
-      throw e
-    } finally {
-      this._exit(active)
-    }
-  }
-
-  _enter () {}
-
-  _exit () {}
-
-  _wipe () {}
 
   _bindFn (fn, span) {
     if (typeof fn !== 'function') return fn

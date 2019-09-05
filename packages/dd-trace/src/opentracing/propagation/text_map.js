@@ -1,7 +1,7 @@
 'use strict'
 
 const pick = require('lodash.pick')
-const platform = require('../../platform')
+const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const NoopSpanContext = require('../../noop/span_context')
 const log = require('../../log')
@@ -131,13 +131,13 @@ class TextMapPropagator {
   _extractGenericContext (carrier, traceKey, spanKey, traceFlags, radix) {
     if (carrier[traceKey] && carrier[spanKey]) {
       return {
-        traceId: platform.id(carrier[traceKey], radix),
-        spanId: platform.id(carrier[spanKey], radix),
+        traceId: id(carrier[traceKey], radix),
+        spanId: id(carrier[spanKey], radix),
         traceFlags
       }
     } else if (typeof traceFlags.sampled === 'boolean') {
       return {
-        traceId: platform.id(),
+        traceId: id(),
         spanId: null,
         traceFlags
       }

@@ -1,11 +1,11 @@
 'use strict'
 
-const platform = require('../../packages/dd-trace/src/platform/node')
+const id = require('../../packages/dd-trace/src/id')
 
 const trace = [
   {
-    trace_id: platform.id('123456789abcdef0'),
-    span_id: platform.id('1234567812345678'),
+    trace_id: id('123456789abcdef0'),
+    span_id: id('1234567812345678'),
     parent_id: null,
     name: 'root',
     resource: '/',
@@ -18,9 +18,9 @@ const trace = [
     duration: 100000000
   },
   {
-    trace_id: platform.id('123456789abcdef0'),
-    span_id: platform.id('9abcdef09abcdef0'),
-    parent_id: platform.id('1234567812345678'),
+    trace_id: id('123456789abcdef0'),
+    span_id: id('9abcdef09abcdef0'),
+    parent_id: id('1234567812345678'),
     name: 'child',
     resource: '/',
     service: 'benchmark',

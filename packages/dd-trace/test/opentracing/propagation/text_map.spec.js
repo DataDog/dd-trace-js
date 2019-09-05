@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../../../src/platform')
+const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('TextMapPropagator', () => {
@@ -28,8 +28,8 @@ describe('TextMapPropagator', () => {
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10),
+        traceId: id('123', 10),
+        spanId: id('-456', 10),
         baggageItems
       })
 
@@ -43,8 +43,8 @@ describe('TextMapPropagator', () => {
     it('should handle non-string values', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10),
+        traceId: id('123', 10),
+        spanId: id('-456', 10),
         baggageItems: {
           number: 1.23,
           bool: true,
@@ -64,8 +64,8 @@ describe('TextMapPropagator', () => {
     it('should inject an existing sampling priority', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10),
+        traceId: id('123', 10),
+        spanId: id('-456', 10),
         sampling: {
           priority: 0
         },
@@ -80,8 +80,8 @@ describe('TextMapPropagator', () => {
     it('should inject the origin', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10),
+        traceId: id('123', 10),
+        spanId: id('-456', 10),
         trace: {
           origin: 'synthetics'
         }
@@ -95,8 +95,8 @@ describe('TextMapPropagator', () => {
     it('should inject client sampling', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10)
+        traceId: id('123', 10),
+        spanId: id('-456', 10)
       })
 
       propagator.inject(spanContext, carrier)
@@ -107,9 +107,9 @@ describe('TextMapPropagator', () => {
     it('should inject the trace B3 headers', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('0000000000000123'),
-        spanId: platform.id('0000000000000456'),
-        parentId: platform.id('0000000000000789'),
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456'),
+        parentId: id('0000000000000789'),
         traceFlags: {
           sampled: true,
           debug: true
@@ -130,8 +130,8 @@ describe('TextMapPropagator', () => {
     it('should skip injection of B3 headers without the feature flag', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('0000000000000123'),
-        spanId: platform.id('0000000000000456')
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456')
       })
 
       propagator.inject(spanContext, carrier)
@@ -146,8 +146,8 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10),
+        traceId: id('123', 10),
+        spanId: id('-456', 10),
         baggageItems
       }))
     })
@@ -165,8 +165,8 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10),
+        traceId: id('123', 10),
+        spanId: id('-456', 10),
         sampling: {
           priority: 0
         },
@@ -208,8 +208,8 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(new SpanContext({
-          traceId: platform.id('123', 16),
-          spanId: platform.id('456', 16),
+          traceId: id('123', 16),
+          spanId: id('456', 16),
           baggageItems,
           traceFlags: {
             sampled: true
@@ -284,8 +284,8 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(new SpanContext({
-          traceId: platform.id('123', 16),
-          spanId: platform.id('456', 16),
+          traceId: id('123', 16),
+          spanId: id('456', 16),
           baggageItems,
           traceFlags: {
             sampled: true
@@ -300,8 +300,8 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(new SpanContext({
-          traceId: platform.id('123', 16),
-          spanId: platform.id('456', 16),
+          traceId: id('123', 16),
+          spanId: id('456', 16),
           baggageItems,
           traceFlags: {
             sampled: true
@@ -316,8 +316,8 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(new SpanContext({
-          traceId: platform.id('123', 16),
-          spanId: platform.id('456', 16),
+          traceId: id('123', 16),
+          spanId: id('456', 16),
           baggageItems,
           traceFlags: {
             sampled: true

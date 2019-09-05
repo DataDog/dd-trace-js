@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../../../src/platform')
+const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
 describe('LogPropagator', () => {
@@ -23,8 +23,8 @@ describe('LogPropagator', () => {
     it('should inject the span context into the carrier', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10)
+        traceId: id('123', 10),
+        spanId: id('-456', 10)
       })
 
       propagator.inject(spanContext, carrier)
@@ -44,8 +44,8 @@ describe('LogPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: platform.id('123', 10),
-        spanId: platform.id('-456', 10)
+        traceId: id('123', 10),
+        spanId: id('-456', 10)
       }))
     })
 

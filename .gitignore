@@ -111,3 +111,4 @@ build
 prebuilds
 docs/test.js
 !packages/*/test/node_modules
+dist

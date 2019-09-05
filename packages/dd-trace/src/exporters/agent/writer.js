@@ -50,13 +50,14 @@ class Writer {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/msgpack',
-        'Datadog-Meta-Lang': platform.name(),
-        'Datadog-Meta-Lang-Version': platform.version(),
-        'Datadog-Meta-Lang-Interpreter': platform.engine(),
         'Datadog-Meta-Tracer-Version': tracerVersion,
         'X-Datadog-Trace-Count': String(count)
       }
     }
+
+    this._setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
+    this._setHeader(options.headers, 'Datadog-Meta-Lang-Version', platform.version())
+    this._setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', platform.engine())
 
     if (this._url.protocol === 'unix:') {
       options.socketPath = this._url.pathname
@@ -79,6 +80,12 @@ class Writer {
         log.error(err)
       }
     })
+  }
+
+  _setHeader (headers, key, value) {
+    if (value) {
+      headers[key] = value
+    }
   }
 }
 

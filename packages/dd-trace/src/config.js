@@ -4,7 +4,6 @@ const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
-const exporters = require('../../../ext/exporters')
 
 class Config {
   constructor (service, options) {
@@ -34,6 +33,8 @@ class Config {
     )
     const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
     const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
+    const apiKey = coalesce(options.apiKey, platform.env('DD_API_KEY'))
+    const appKey = coalesce(options.appKey, platform.env('DD_APP_KEY'))
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -54,13 +55,13 @@ class Config {
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
-      exporter: (options.experimental && options.experimental.exporter === exporters.LOG)
-        ? exporters.LOG
-        : exporters.AGENT,
+      exporter: options.experimental && options.experimental.exporter,
       thenables: !(!options.experimental || !options.experimental.thenables)
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope
+    this.apiKey = apiKey
+    this.appKey = appKey
   }
 }
 

@@ -2,7 +2,7 @@
 
 const Span = require('opentracing').Span
 const NoopSpanContext = require('../noop/span_context')
-const platform = require('../platform')
+const id = require('../id')
 
 class NoopSpan extends Span {
   constructor (tracer, parent) {
@@ -29,7 +29,7 @@ class NoopSpan extends Span {
   }
 
   _createContext (parent) {
-    const spanId = platform.id()
+    const spanId = id()
 
     if (parent) {
       return new NoopSpanContext({

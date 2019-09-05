@@ -64,10 +64,10 @@ describe('TracerProxy', () => {
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
-      './instrumenter': Instrumenter,
       './config': Config,
       './platform': platform,
-      './analytics_sampler': analyticsSampler
+      './analytics_sampler': analyticsSampler,
+      './instrumenter': Instrumenter
     })
 
     proxy = new Proxy()
@@ -116,13 +116,12 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(instrumenter.enable).to.have.been.called
-        expect(instrumenter.patch).to.have.been.called
       })
 
       it('should update the delegate before setting up instrumentation', () => {
         proxy.init()
 
-        expect(instrumenter.patch).to.have.been.calledAfter(DatadogTracer)
+        expect(instrumenter.enable).to.have.been.calledAfter(DatadogTracer)
       })
 
       it('should not capture metrics by default', () => {

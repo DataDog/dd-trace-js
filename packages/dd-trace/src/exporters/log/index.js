@@ -5,11 +5,6 @@ const log = require('../../log')
 const MAX_SIZE = 255 * 1024 // 255kb
 
 class LogExporter {
-  constructor (outputStream, maxSize = MAX_SIZE) {
-    this._outputStream = outputStream
-    this._maxSize = maxSize
-  }
-
   export (spans) {
     log.debug(() => `Adding trace to queue: ${JSON.stringify(spans)}`)
 
@@ -18,11 +13,11 @@ class LogExporter {
 
     for (const span of spans) {
       const spanStr = JSON.stringify(span)
-      if (spanStr.length > this._maxSize) {
+      if (spanStr.length > MAX_SIZE) {
         log.debug('Span too large to send to logs, dropping')
         continue
       }
-      if (spanStr.length + size + 1 > this._maxSize) {
+      if (spanStr.length + size + 1 > MAX_SIZE) {
         this._printSpans(queue)
         queue = []
         size = 0
@@ -47,7 +42,7 @@ class LogExporter {
       }
     }
     logLine += ']}\n'
-    this._outputStream.write(logLine)
+    process.stdout.write(logLine)
   }
 }
 

@@ -3,6 +3,7 @@
   "version": "0.15.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
+  "browser": "browser.js",
   "typings": "index.d.ts",
   "scripts": {
     "rebuild": "node-gyp rebuild",
@@ -44,6 +45,7 @@
   },
   "dependencies": {
     "@types/node": "^10.12.18",
+    "bowser": "^2.5.3",
     "container-info": "^1.0.1",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
@@ -67,7 +69,8 @@
     "semver": "^5.5.0",
     "shimmer": "^1.2.0",
     "tar": "^4.4.8",
-    "url-parse": "^1.4.3"
+    "url-parse": "^1.4.3",
+    "zone.js": "^0.10.2"
   },
   "devDependencies": {
     "axios": "^0.18.0",

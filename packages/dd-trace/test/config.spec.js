@@ -32,6 +32,8 @@ describe('Config', () => {
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
+    expect(config).to.have.property('apiKey', undefined)
+    expect(config).to.have.property('appKey', undefined)
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.thenables', false)
   })
@@ -53,6 +55,8 @@ describe('Config', () => {
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
+    platform.env.withArgs('DD_API_KEY').returns('123')
+    platform.env.withArgs('DD_APP_KEY').returns('456')
 
     const config = new Config()
 
@@ -67,6 +71,8 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.property('apiKey', '123')
+    expect(config).to.have.property('appKey', '456')
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
@@ -113,6 +119,8 @@ describe('Config', () => {
       reportHostname: true,
       plugins: false,
       scope: 'noop',
+      apiKey: '123',
+      appKey: '456',
       experimental: {
         b3: true,
         thenables: true
@@ -136,6 +144,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('scope', 'noop')
+    expect(config).to.have.property('apiKey', '123')
+    expect(config).to.have.property('appKey', '456')
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
     })
@@ -196,6 +206,8 @@ describe('Config', () => {
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
+    platform.env.withArgs('DD_API_KEY').returns('123')
+    platform.env.withArgs('DD_APP_KEY').returns('456')
 
     const config = new Config('test', {
       enabled: true,
@@ -210,7 +222,9 @@ describe('Config', () => {
       runtimeMetrics: false,
       reportHostname: false,
       service: 'test',
-      env: 'development'
+      env: 'development',
+      apiKey: '234',
+      appKey: '567'
     })
 
     expect(config).to.have.property('enabled', true)
@@ -224,6 +238,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
+    expect(config).to.have.property('apiKey', '234')
+    expect(config).to.have.property('appKey', '567')
   })
 
   it('should give priority to the options especially url', () => {
