@@ -31,7 +31,7 @@ class LogExporter {
   }
 
   _printSpans (queue) {
-    let logLine = '{"datadog_traces":['
+    let logLine = '{"traces":[['
     let firstTrace = true
     for (const spanStr of queue) {
       if (firstTrace) {
@@ -41,7 +41,7 @@ class LogExporter {
         logLine += ',' + spanStr
       }
     }
-    logLine += ']}\n'
+    logLine += ']]}\n'
     process.stdout.write(logLine)
   }
 }
