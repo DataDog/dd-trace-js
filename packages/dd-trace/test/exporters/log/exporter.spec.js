@@ -18,7 +18,7 @@ describe('LogExporter', () => {
       log = sinon.stub(process.stdout, 'write')
       exporter.export([span, span])
       log.restore()
-      const result = '{"datadog_traces":[{"tag":"test"},{"tag":"test"}]}'
+      const result = '{"traces":[[{"tag":"test"},{"tag":"test"}]]}'
       expect(log).to.have.been.calledWithMatch(result)
     })
 
@@ -27,7 +27,7 @@ describe('LogExporter', () => {
       log = sinon.stub(process.stdout, 'write')
       exporter.export([span, span])
       log.restore()
-      const result = `{"datadog_traces":[{"tag":"${span.tag}"}]}`
+      const result = `{"traces":[[{"tag":"${span.tag}"}]]}`
       expect(log).to.have.calledTwice
       expect(log).to.have.been.calledWithMatch(result)
     })
