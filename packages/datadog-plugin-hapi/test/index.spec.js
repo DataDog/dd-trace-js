@@ -14,12 +14,22 @@ describe('Plugin', () => {
   let server
   let port
   let handler
+  let reply
 
   describe('hapi', () => {
     withVersions(plugin, ['hapi', '@hapi/hapi'], (version, module) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
+        reply = (request, h) => {
+          if (h.continue) {
+            return typeof h.continue === 'function'
+              ? h.continue()
+              : h.continue
+          } else {
+            return h()
+          }
+        }
       })
 
       after(() => {
@@ -138,6 +148,64 @@ describe('Plugin', () => {
           .catch(done)
       })
 
+      it('should run extension methods in the request scope', done => {
+        server.route({
+          method: 'POST',
+          path: '/user/{id}',
+          config: {
+            handler
+          }
+        })
+
+        server.ext('onPostAuth', (request, h) => {
+          return tracer.scope().activate(null, reply(request, h))
+        })
+
+        server.ext('onPreHandler', (request, h) => {
+          expect(tracer.scope().active()).to.not.be.null
+          done()
+
+          return reply(request, h)
+        })
+
+        axios
+          .post(`http://localhost:${port}/user/123`, {})
+          .catch(done)
+      })
+
+      if (semver.intersects(version, '>=11')) {
+        it('should run extension events in the request scope', done => {
+          server.route({
+            method: 'POST',
+            path: '/user/{id}',
+            config: {
+              handler
+            }
+          })
+
+          server.ext({
+            type: 'onPostAuth',
+            method: (request, h) => {
+              return tracer.scope().activate(null, reply(request, h))
+            }
+          })
+
+          server.ext({
+            type: 'onPreHandler',
+            method: (request, h) => {
+              expect(tracer.scope().active()).to.not.be.null
+              done()
+
+              return reply(request, h)
+            }
+          })
+
+          axios
+            .post(`http://localhost:${port}/user/123`, {})
+            .catch(done)
+        })
+      }
+
       it('should run request extensions in the request scope', done => {
         server.route({
           method: 'GET',
@@ -149,12 +217,36 @@ describe('Plugin', () => {
           expect(tracer.scope().active()).to.not.be.null
           done()
 
-          if (typeof h === 'function') {
-            return h()
-          } else if (typeof h.continue === 'function') {
-            return h.continue()
-          } else {
-            return h.continue
+          return reply(request, h)
+        })
+
+        axios
+          .get(`http://localhost:${port}/user/123`)
+          .catch(done)
+      })
+
+      it('should run request log events in the request scope', done => {
+        const events = server.events || server
+
+        server.route({
+          method: 'GET',
+          path: '/user/{id}',
+          handler
+        })
+
+        server.ext('onRequest', (request, h) => {
+          request.log('test')
+
+          done()
+
+          return reply(request, h)
+        })
+
+        events.on('request', () => {
+          try {
+            expect(tracer.scope().active()).to.not.be.null
+          } catch (e) {
+            done(e)
           }
         })
 
@@ -203,12 +295,12 @@ describe('Plugin', () => {
       })
 
       it('should handle errors', done => {
+        const error = new Error()
+
         server.route({
           method: 'GET',
           path: '/user/{id}',
           handler: (request, h) => {
-            const error = new Error()
-
             if (typeof h === 'function') {
               h(error)
             } else {
@@ -220,6 +312,9 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('error', 1)
+            expect(traces[0][0].meta).to.have.property('error.type', error.name)
+            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
           })
           .then(done)
           .catch(done)
