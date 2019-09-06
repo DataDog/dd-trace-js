@@ -68,6 +68,11 @@ class Scope extends Base {
     this._depth--
   }
 
+  _exitNative () {
+    this._current = null
+    this._promises[0] = false
+  }
+
   _await (span) {
     if (!this._promises[this._depth]) return
 
@@ -112,6 +117,7 @@ class Scope extends Base {
   }
 
   _before (asyncId) {
+    this._depth === 0 && this._exitNative()
     this._enter(this._spans[asyncId])
   }
 
