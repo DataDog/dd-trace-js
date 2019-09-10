@@ -91,7 +91,7 @@ describe('Scope (async_hooks)', () => {
 
     beforeEach(() => {
       thenable = {
-        then: () => {}
+        then: onFulfill => onFulfill()
       }
 
       test = async () => {
@@ -153,6 +153,23 @@ describe('Scope (async_hooks)', () => {
       scope.bind(thenable)
       scope.activate({}, async () => {
         scope.activate(span, () => test())
+      })
+    })
+
+    it('should use the active span when using nested awaits', async () => {
+      return scope.activate(span, async () => {
+        await thenable
+
+        thenable.then = (onFulfill, onReject) => {
+          try {
+            expect()
+            onFulfill()
+          } catch (e) {
+            onReject(e)
+          }
+        }
+
+        await thenable
       })
     })
   })

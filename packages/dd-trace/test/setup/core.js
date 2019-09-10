@@ -4,7 +4,6 @@ const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
 const proxyquire = require('../proxyquire')
-const nock = require('nock')
 const semver = require('semver')
 const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
@@ -13,9 +12,7 @@ const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
 const asyncHooksScope = new AsyncHooksScope({
-  experimental: {
-    thenables: true
-  }
+  trackAsyncScope: true
 })
 
 chai.use(sinonChai)
@@ -23,7 +20,6 @@ chai.use(sinonChai)
 global.sinon = sinon
 global.expect = chai.expect
 global.proxyquire = proxyquire
-global.nock = nock
 global.wrapIt = wrapIt
 global.withVersions = withVersions
 

@@ -27,6 +27,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.property('trackAsyncScope', true)
     expect(config).to.have.deep.property('tags', {})
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
@@ -35,7 +36,6 @@ describe('Config', () => {
     expect(config).to.have.property('apiKey', undefined)
     expect(config).to.have.property('appKey', undefined)
     expect(config).to.have.nested.property('experimental.b3', false)
-    expect(config).to.have.nested.property('experimental.thenables', false)
   })
 
   it('should initialize from the default service', () => {
@@ -116,14 +116,14 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       runtimeMetrics: true,
+      trackAsyncScope: false,
       reportHostname: true,
       plugins: false,
       scope: 'noop',
       apiKey: '123',
       appKey: '456',
       experimental: {
-        b3: true,
-        thenables: true
+        b3: true
       }
     })
 
@@ -141,6 +141,7 @@ describe('Config', () => {
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('trackAsyncScope', false)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('scope', 'noop')
@@ -150,7 +151,6 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
-    expect(config).to.have.nested.property('experimental.thenables', true)
   })
 
   it('should initialize from the options with url taking precedence', () => {

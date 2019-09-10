@@ -231,6 +231,12 @@ export declare interface TracerOptions {
   runtimeMetrics?: boolean
 
   /**
+   * Whether to track the scope of async functions. This is needed for async/await to work with non-native promises (thenables). Only disable this if you are sure only native promises are used with async/await.
+   * @default true
+   */
+  trackAsyncScope?: boolean
+
+  /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */
@@ -241,8 +247,6 @@ export declare interface TracerOptions {
      * @default false
      */
     exporter?: 'log' | 'browser' | 'agent'
-
-    thenables?: boolean
   };
 
   /**
