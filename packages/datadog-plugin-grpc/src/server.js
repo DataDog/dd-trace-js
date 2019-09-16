@@ -6,11 +6,12 @@ const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
-function createWrapHandler (grpc, tracer, config, handler) {
+function createWrapHandler (server, tracer, config, handler) {
   const filter = getFilter(config, 'metadata')
 
   return function wrapHandler (func) {
     return function funcWithTrace (call, callback) {
+      const grpc = server.Server._datadog.grpc
       const metadata = call.metadata
       const request = call.request
       const type = this.type
@@ -52,12 +53,12 @@ function createWrapHandler (grpc, tracer, config, handler) {
   }
 }
 
-function createWrapRegister (tracer, config, grpc) {
+function createWrapRegister (tracer, config, server) {
   config = config.server || config
 
   return function wrapRegister (register) {
     return function registerWithTrace (name, handler, serialize, deserialize, type) {
-      arguments[1] = createWrapHandler(grpc, tracer, config, name)(handler)
+      arguments[1] = createWrapHandler(server, tracer, config, name)(handler)
 
       return register.apply(this, arguments)
     }
@@ -141,9 +142,7 @@ module.exports = [
     patch (server, tracer, config) {
       if (config.server === false) return
 
-      const grpc = server.Server._datadog.grpc
-
-      this.wrap(server.Server.prototype, 'register', createWrapRegister(tracer, config, grpc))
+      this.wrap(server.Server.prototype, 'register', createWrapRegister(tracer, config, server))
     },
     unpatch (server) {
       this.unwrap(server.Server.prototype, 'register')
