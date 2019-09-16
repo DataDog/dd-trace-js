@@ -44,7 +44,10 @@ describe('plugins/util/web', () => {
     end = sinon.stub()
     res = {
       end,
-      getHeader: sinon.stub()
+      getHeader: sinon.stub(),
+      getHeaders: sinon.stub().returns({}),
+      setHeader: sinon.spy(),
+      writeHead: () => {}
     }
     res.getHeader.withArgs('server').returns('test')
     config = { hooks: {} }
@@ -246,6 +249,79 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'http://localhost/user/123'
           })
         })
+      })
+
+      it('should handle CORS preflight', () => {
+        const headers = [
+          'x-datadog-parent-id',
+          'x-datadog-sampled',
+          'x-datadog-sampling-priority',
+          'x-datadog-trace-id'
+        ].join(',')
+
+        req.method = 'OPTIONS'
+        req.headers['origin'] = 'http://test.com'
+        req.headers['access-control-request-headers'] = headers
+
+        res.getHeaders.returns({
+          'access-control-allow-origin': 'http://test.com'
+        })
+
+        web.instrument(tracer, config, req, res, 'test.request')
+
+        res.writeHead()
+
+        expect(res.setHeader).to.have.been.calledWith('access-control-allow-headers', headers)
+      })
+
+      it('should handle CORS preflight with partial headers', () => {
+        const headers = [
+          'x-datadog-parent-id',
+          'x-datadog-trace-id'
+        ].join(',')
+
+        req.method = 'OPTIONS'
+        req.headers['origin'] = 'http://test.com'
+        req.headers['access-control-request-headers'] = headers
+
+        res.getHeaders.returns({
+          'access-control-allow-origin': 'http://test.com'
+        })
+
+        web.instrument(tracer, config, req, res, 'test.request')
+
+        res.writeHead()
+
+        expect(res.setHeader).to.have.been.calledWith('access-control-allow-headers', headers)
+      })
+
+      it('should handle CORS preflight when the origin does not match', () => {
+        const headers = ['x-datadog-trace-id']
+
+        req.method = 'OPTIONS'
+        req.headers['origin'] = 'http://test.com'
+        req.headers['access-control-request-headers'] = headers
+
+        web.instrument(tracer, config, req, res, 'test.request')
+
+        res.writeHead()
+
+        expect(res.setHeader).to.not.have.been.called
+      })
+
+      it('should handle CORS preflight when no header was requested', () => {
+        req.method = 'OPTIONS'
+        req.headers['origin'] = 'http://test.com'
+
+        res.getHeaders.returns({
+          'access-control-allow-origin': 'http://test.com'
+        })
+
+        web.instrument(tracer, config, req, res, 'test.request')
+
+        res.writeHead()
+
+        expect(res.setHeader).to.not.have.been.called
       })
     })
 

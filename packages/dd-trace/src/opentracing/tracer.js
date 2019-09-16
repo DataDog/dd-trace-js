@@ -44,6 +44,7 @@ class DatadogTracer extends Tracer {
     this._exporter = getExporter(config)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
+    this._peers = config.experimental.peers
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
