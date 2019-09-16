@@ -91,7 +91,7 @@ export declare interface Tracer extends opentracing.Tracer {
   wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
 }
 
-export declare interface TraceOptions {
+export declare interface TraceOptions extends Analyzable {
   /**
    * The resource you are tracing. The resource name must not be longer than
    * 5000 characters.
@@ -107,13 +107,7 @@ export declare interface TraceOptions {
   /**
    * The type of request.
    */
-  type?: string,
-
-  /**
-   * Set the sample rate for Trace Analytics. Setting to `true` or `false` will
-   * set the rate to `1` and `0` respectively.
-   */
-  analytics?: boolean | number
+  type?: string
 }
 
 /**
@@ -358,6 +352,15 @@ interface Plugins {
   "winston": plugins.winston;
 }
 
+/** @hidden */
+interface Analyzable {
+  /**
+   * Whether to enable App Analytics. Can also be set to a number instead to
+   * control the sample rate.
+   */
+  analytics?: boolean | number;
+}
+
 declare namespace plugins {
   /** @hidden */
   interface Integration {
@@ -370,43 +373,13 @@ declare namespace plugins {
      * @default true
      */
     enabled?: boolean;
-
-    /**
-     * Trace Analytics configuration.
-     * @default false
-     */
-    analytics?: boolean | {
-      /**
-       * Whether to enable Trace Analytics.
-       * @default false
-       */
-      enabled?: boolean;
-
-      /**
-       * Global sample rate.
-       * @default 1
-       */
-      sampleRate?: number;
-
-      /**
-       * Sample rate by operation name.
-       *
-       * For example:
-       *
-       * ```javascript
-       * sampleRates: {
-       *   'express.request': 0.1
-       * }
-       * ```
-       */
-      sampleRates?: {
-        [key: string]: number;
-      }
-    };
   }
 
   /** @hidden */
-  interface Http extends Integration {
+  interface Instrumentation extends Integration, Analyzable {}
+
+  /** @hidden */
+  interface Http extends Instrumentation {
     /**
      * List of URLs that should be instrumented.
      *
@@ -522,7 +495,7 @@ declare namespace plugins {
   }
 
   /** @hidden */
-  interface Grpc extends Integration {
+  interface Grpc extends Instrumentation {
     /**
      * An array of metadata entries to record. Can also be a callback that returns
      * the key/value pairs to record. For example, using
@@ -535,13 +508,13 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
    */
-  interface amqp10 extends Integration {}
+  interface amqp10 extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [amqplib](https://github.com/squaremo/amqp.node) module.
    */
-  interface amqplib extends Integration {}
+  interface amqplib extends Instrumentation {}
 
   /**
    * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
@@ -561,7 +534,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
    */
-  interface cassandra_driver extends Integration {}
+  interface cassandra_driver extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
@@ -573,19 +546,19 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [couchbase](https://www.npmjs.com/package/couchbase) module.
    */
-  interface couchbase extends Integration {}
+  interface couchbase extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [dns](https://nodejs.org/api/dns.html) module.
    */
-  interface dns extends Integration {}
+  interface dns extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [elasticsearch](https://github.com/elastic/elasticsearch-js) module.
    */
-  interface elasticsearch extends Integration {}
+  interface elasticsearch extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
@@ -629,7 +602,7 @@ declare namespace plugins {
    * }
    * ```
    */
-  interface graphql extends Integration {
+  interface graphql extends Instrumentation {
     /**
      * The maximum depth of fields/resolvers to instrument. Set to `0` to only
      * instrument the operation or to `-1` to instrument all fields/resolvers.
@@ -742,7 +715,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [ioredis](https://github.com/luin/ioredis) module.
    */
-  interface ioredis extends Integration {}
+  interface ioredis extends Instrumentation {}
 
   /**
    * This plugin patches the [knex](https://knexjs.org/)
@@ -766,31 +739,31 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [memcached](https://github.com/3rd-Eden/memcached) module.
    */
-  interface memcached extends Integration {}
+  interface memcached extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
-  interface mongodb_core extends Integration {}
+  interface mongodb_core extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [mysql](https://github.com/mysqljs/mysql) module.
    */
-  interface mysql extends Integration {}
+  interface mysql extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [mysql2](https://github.com/brianmario/mysql2) module.
    */
-  interface mysql2 extends Integration {}
+  interface mysql2 extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
    * [net](https://nodejs.org/api/net.html) module.
    */
-  interface net extends Integration {}
+  interface net extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
@@ -802,7 +775,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [pg](https://node-postgres.com/) module.
    */
-  interface pg extends Integration {}
+  interface pg extends Instrumentation {}
 
   /**
    * This plugin patches the [pino](http://getpino.io)
@@ -834,7 +807,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [redis](https://github.com/NodeRedis/node_redis) module.
    */
-  interface redis extends Integration {}
+  interface redis extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
@@ -852,7 +825,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [tedious](https://github.com/tediousjs/tedious/) module.
    */
-  interface tedious extends Integration {}
+  interface tedious extends Instrumentation {}
 
   /**
    * This plugin patches the [when](https://github.com/cujojs/when)

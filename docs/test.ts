@@ -168,8 +168,6 @@ tracer.use('express', false)
 tracer.use('express', { enabled: false })
 tracer.use('express', { service: 'name' });
 tracer.use('express', { analytics: true });
-tracer.use('express', { analytics: { enabled: true, sampleRate: 0.5 } });
-tracer.use('express', { analytics: { sampleRates: { 'express.request': 0.5 } } });
 
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
