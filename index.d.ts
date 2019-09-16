@@ -110,8 +110,9 @@ export declare interface TraceOptions {
   type?: string,
 
   /**
-   * Set the sample rate for Trace Analytics. Setting to `true` or `false` will
-   * set the rate to `1` and `0` respectively.
+   * Whether to enable App Analytics. Can also be set to a number instead to
+   * control the sample rate. Defaults to `false` in most cases, and to `true`
+   * for top-level spans when the feature is enabled at the tracer level.
    */
   analytics?: boolean | number
 }
@@ -376,37 +377,11 @@ declare namespace plugins {
     enabled?: boolean;
 
     /**
-     * Trace Analytics configuration.
-     * @default false
+     * Whether to enable App Analytics. Can also be set to a number instead to
+     * control the sample rate. Defaults to `false` in most cases, and to `true`
+     * for top-level spans when the feature is enabled at the tracer level.
      */
-    analytics?: boolean | {
-      /**
-       * Whether to enable Trace Analytics.
-       * @default false
-       */
-      enabled?: boolean;
-
-      /**
-       * Global sample rate.
-       * @default 1
-       */
-      sampleRate?: number;
-
-      /**
-       * Sample rate by operation name.
-       *
-       * For example:
-       *
-       * ```javascript
-       * sampleRates: {
-       *   'express.request': 0.1
-       * }
-       * ```
-       */
-      sampleRates?: {
-        [key: string]: number;
-      }
-    };
+    analytics?: boolean | number;
   }
 
   /** @hidden */
