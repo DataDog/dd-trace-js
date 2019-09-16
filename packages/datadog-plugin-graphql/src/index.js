@@ -291,11 +291,11 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   })
 
   if (fieldNode) {
-    if (document) {
+    if (document && fieldNode.loc) {
       span.setTag('graphql.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
     }
 
-    if (config.variables) {
+    if (config.variables && fieldNode.arguments) {
       const variables = config.variables(info.variableValues)
 
       fieldNode.arguments
