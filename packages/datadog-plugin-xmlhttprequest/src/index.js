@@ -4,7 +4,7 @@ function createWrapOpen (tracer) {
   return function wrapOpen (open) {
     return function openWithTrace (method, url) {
       this._datadog_method = method
-      this._datadog_url = url
+      this._datadog_url = new URL(url, window.location.origin)
 
       return open.apply(this, arguments)
     }
@@ -14,6 +14,8 @@ function createWrapOpen (tracer) {
 function createWrapSend (tracer, config) {
   return function wrapSend (send) {
     return function sendWithTrace (body) {
+      const method = this._datadog_method
+      const url = this._datadog_url.href
       const span = tracer.startSpan('http.request')
 
       inject(this, tracer, span)
@@ -21,9 +23,6 @@ function createWrapSend (tracer, config) {
       this.addEventListener('error', e => span.setTag('error', e))
       this.addEventListener('load', () => span.setTag('http.status', this.status))
       this.addEventListener('loadend', () => {
-        const method = this._datadog_method
-        const url = this._datadog_url
-
         span.addTags({
           'span.kind': 'client',
           'service.name': 'browser',
@@ -44,6 +43,10 @@ function createWrapSend (tracer, config) {
 function inject (xhr, tracer, span) {
   const format = window.ddtrace.ext.formats.HTTP_HEADERS
   const headers = {}
+  const origin = xhr._datadog_url.origin
+  const peers = tracer._peers
+
+  if (origin !== window.location.origin && peers.indexOf(origin) === -1) return
 
   tracer.inject(span, format, headers)
 
