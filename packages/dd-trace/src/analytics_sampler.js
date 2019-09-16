@@ -14,7 +14,9 @@ module.exports = {
   },
 
   sample (span, rate, inherit) {
-    if (rate !== undefined) {
+    if (typeof rate === 'object') {
+      this.sample(span, rate[span.context()._name], inherit)
+    } else if (rate !== undefined) {
       span.setTag(ANALYTICS, rate)
     } else if (inherit && enabled) {
       span.setTag(ANALYTICS, 1)
