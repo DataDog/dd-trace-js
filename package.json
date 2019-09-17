@@ -8,6 +8,7 @@
   "scripts": {
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
+    "bundle": "webpack --display-modules",
     "install": "node scripts/post_install.js",
     "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",
@@ -97,6 +98,8 @@
     "retry": "^0.10.1",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0",
-    "tape": "^4.9.1"
+    "tape": "^4.9.1",
+    "webpack": "^4.40.2",
+    "webpack-cli": "^3.3.9"
   }
 }
