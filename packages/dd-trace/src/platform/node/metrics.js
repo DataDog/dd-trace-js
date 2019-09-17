@@ -223,7 +223,7 @@ function captureNativeMetrics () {
     if (type === 'all') {
       histogram('gc.pause', stats.gc[type])
     } else {
-      histogram('gc.pause.by.type', stats.gc[type], { gc_type: type })
+      histogram('gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
     }
   })
 
@@ -252,12 +252,12 @@ function captureNativeMetrics () {
   }
 }
 
-function histogram (name, stats) {
-  client.gauge(`${name}.min`, stats.min)
-  client.gauge(`${name}.max`, stats.max)
-  client.increment(`${name}.sum`, stats.sum)
-  client.gauge(`${name}.avg`, stats.avg)
-  client.increment(`${name}.count`, stats.count)
-  client.gauge(`${name}.median`, stats.median)
-  client.gauge(`${name}.95percentile`, stats.p95)
+function histogram (name, stats, tags) {
+  client.gauge(`${name}.min`, stats.min, tags)
+  client.gauge(`${name}.max`, stats.max, tags)
+  client.increment(`${name}.sum`, stats.sum, tags)
+  client.gauge(`${name}.avg`, stats.avg, tags)
+  client.increment(`${name}.count`, stats.count, tags)
+  client.gauge(`${name}.median`, stats.median, tags)
+  client.gauge(`${name}.95percentile`, stats.p95, tags)
 }
