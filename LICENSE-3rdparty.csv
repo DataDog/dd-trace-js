@@ -51,4 +51,6 @@ dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
+dev,webpack,MIT,Copyright JS Foundation and other contributors
+dev,webpack-cli,MIT,Copyright JS Foundation and other contributors
 file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns
