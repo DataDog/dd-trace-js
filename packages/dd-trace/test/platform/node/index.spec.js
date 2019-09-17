@@ -409,6 +409,8 @@ describe('Platform', () => {
         it('should start collecting metrics every 10 seconds', () => {
           metrics.apply(platform).start()
 
+          global.gc()
+
           clock.tick(10000)
 
           expect(client.gauge).to.have.been.calledWith('cpu.user')
