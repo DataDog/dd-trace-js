@@ -11,7 +11,7 @@ const globs = [
 ].map(glob => `'${glob}'`).join(' ')
 
 const options = { stdio: [0, 1, 2] }
-const command = `yarn services && NO_DEPRECATION=* mocha --watch`
+const command = `yarn services && NO_DEPRECATION=* mocha --watch --expose-gc`
 
 if (fs.existsSync(path.join(base, `datadog-plugin-${target}`))) {
   execSync(`PLUGINS=${target} ${command} ${globs} 'packages/datadog-plugin-${target}/test/**/*.spec.js'`, options)
