@@ -247,6 +247,31 @@ describe('plugins/util/web', () => {
           })
         })
       })
+
+      it('should support HTTP2 compatibility API', () => {
+        req.stream = {}
+        req.method = 'GET'
+        req.headers = {
+          ':scheme': 'https',
+          ':authority': 'localhost',
+          ':method': 'GET',
+          ':path': '/user/123'
+        }
+        res.statusCode = '200'
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.include({
+            [SPAN_TYPE]: WEB,
+            [HTTP_URL]: 'https://localhost/user/123',
+            [HTTP_METHOD]: 'GET',
+            [SPAN_KIND]: SERVER
+          })
+        })
+      })
     })
 
     describe('on request end', () => {

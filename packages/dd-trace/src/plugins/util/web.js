@@ -129,7 +129,7 @@ const web = {
   patch (req) {
     if (req._datadog) return
 
-    if (req.stream) {
+    if (req.stream && req.stream._datadog) {
       req._datadog = req.stream._datadog
       return
     }
