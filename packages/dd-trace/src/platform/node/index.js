@@ -13,9 +13,13 @@ const plugins = require('../../plugins')
 const hostname = require('./hostname')
 const Loader = require('./loader')
 const Scope = require('../../scope/async_hooks')
-const Exporter = require('../../exporters/agent')
+const AgentExporter = require('../../exporters/agent')
+const LogExporter = require('../../exporters/log')
 
 const emitter = new EventEmitter()
+
+const inAWSLambda = env('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+const Exporter = inAWSLambda ? LogExporter : AgentExporter
 
 const platform = {
   _config: {},
