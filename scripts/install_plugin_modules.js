@@ -83,7 +83,7 @@ function assertPackage (name, version, dependency, external) {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    optionalDependencies: {
+    dependencies: {
       [name]: dependency
     }
   }
