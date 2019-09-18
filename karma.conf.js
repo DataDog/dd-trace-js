@@ -14,7 +14,7 @@ module.exports = function (config) {
     // list of files / patterns to load in the browser
     files: [
       'packages/dd-trace/test/setup/browser.js',
-      'packages/dd-trace/test/browser.spec.js'
+      'packages/dd-trace/test/browser.test.js'
     ],
 
     // list of files / patterns to exclude
@@ -24,7 +24,7 @@ module.exports = function (config) {
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
       'packages/dd-trace/test/setup/browser.js': ['webpack'],
-      'packages/dd-trace/test/browser.spec.js': ['webpack']
+      'packages/dd-trace/test/browser.test.js': ['webpack']
     },
 
     // test results reporter to use
