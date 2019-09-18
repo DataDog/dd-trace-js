@@ -1,5 +1,6 @@
 'use strict'
 
+const nock = require('nock')
 const semver = require('semver')
 
 wrapIt()
