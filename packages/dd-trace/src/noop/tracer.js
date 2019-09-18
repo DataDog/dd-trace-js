@@ -3,6 +3,7 @@
 const Tracer = require('opentracing').Tracer
 const Scope = require('../scope/base')
 const Span = require('./span')
+const platform = require('../platform')
 
 class NoopTracer extends Tracer {
   constructor (config) {
@@ -10,7 +11,7 @@ class NoopTracer extends Tracer {
 
     let ScopeManager
 
-    if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
+    if (platform.env('DD_CONTEXT_PROPAGATION') === 'false') {
       ScopeManager = require('../scope/noop/scope_manager')
     } else {
       ScopeManager = require('../scope/scope_manager')
