@@ -4,7 +4,6 @@ const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
-const exporters = require('../../../ext/exporters')
 
 class Config {
   constructor (service, options) {
@@ -37,12 +36,6 @@ class Config {
     const apiKey = coalesce(options.apiKey, platform.env('DD_API_KEY'))
     const appKey = coalesce(options.appKey, platform.env('DD_APP_KEY'))
 
-    const lambdaFunctionName = platform.env('AWS_LAMBDA_FUNCTION_NAME')
-    let lambdaExporter
-    if (lambdaFunctionName !== undefined) {
-      lambdaExporter = exporters.LOG
-    }
-
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
     this.logInjection = String(logInjection) === 'true'
@@ -53,7 +46,7 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
-    this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), lambdaFunctionName, service, 'node')
+    this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
     this.tags = Object.assign({}, options.tags)
     this.dogstatsd = {
@@ -63,7 +56,7 @@ class Config {
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
-      exporter: coalesce(options.experimental && options.experimental.exporter, lambdaExporter),
+      exporter: options.experimental && options.experimental.exporter,
       peers: (options.experimental && options.experimental.peers) || []
     }
     this.reportHostname = String(reportHostname) === 'true'
