@@ -13,13 +13,9 @@ const plugins = require('../../plugins')
 const hostname = require('./hostname')
 const Loader = require('./loader')
 const Scope = require('../../scope/async_hooks')
-const AgentExporter = require('../../exporters/agent')
-const LogExporter = require('../../exporters/log')
+const Exporter = require('./exporter')
 
 const emitter = new EventEmitter()
-
-const inAWSLambda = env('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-const Exporter = inAWSLambda ? LogExporter : AgentExporter
 
 const platform = {
   _config: {},
@@ -41,7 +37,7 @@ const platform = {
   off: emitter.removeListener.bind(emitter),
   Loader,
   Scope,
-  Exporter
+  Exporter: Exporter()
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))
