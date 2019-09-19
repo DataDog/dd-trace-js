@@ -29,6 +29,14 @@ describe('analyticsSampler', () => {
       expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0)
     })
 
+    it('should sample a span with the provided rate by span name', () => {
+      sampler.sample(span, {
+        'web.request': 0.5
+      })
+
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 0.5)
+    })
+
     it('should not set a rate by default', () => {
       sampler.sample(span, undefined)
 
@@ -38,6 +46,15 @@ describe('analyticsSampler', () => {
     it('should inherit from global setting when unset', () => {
       sampler.enable()
       sampler.sample(span, undefined, true)
+
+      expect(span.setTag).to.have.been.calledWith(ANALYTICS, 1)
+    })
+
+    it('should inherit from global setting when span name is not matched', () => {
+      sampler.enable()
+      sampler.sample(span, {
+        'other.request': 0.5
+      }, true)
 
       expect(span.setTag).to.have.been.calledWith(ANALYTICS, 1)
     })

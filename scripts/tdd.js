@@ -5,7 +5,7 @@ const fs = require('fs')
 const path = require('path')
 
 const options = { stdio: [0, 1, 2] }
-const command = 'yarn services && NO_DEPRECATION=* mocha --watch'
+const command = 'yarn services && NO_DEPRECATION=* mocha --watch --expose-gc'
 
 const base = path.join(__dirname, '..', 'packages')
 const globs = [

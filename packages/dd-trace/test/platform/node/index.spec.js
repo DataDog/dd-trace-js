@@ -419,6 +419,8 @@ describe('Platform', () => {
         it('should start collecting metrics every 10 seconds', () => {
           metrics.apply(platform).start()
 
+          global.gc()
+
           clock.tick(10000)
 
           expect(client.gauge).to.have.been.calledWith('cpu.user')
@@ -456,6 +458,19 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('gc.pause.median')
           expect(client.gauge).to.have.been.calledWith('gc.pause.95percentile')
           expect(client.increment).to.have.been.calledWith('gc.pause.count')
+
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.max')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.min')
+          expect(client.increment).to.have.been.calledWith('gc.pause.by.type.sum')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.avg')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.median')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.95percentile')
+          expect(client.increment).to.have.been.calledWith('gc.pause.by.type.count')
+          expect(client.increment).to.have.been.calledWith(
+            'gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
+              return val && /^gc_type:[a-z_]+$/.test(val[0])
+            })
+          )
 
           expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')

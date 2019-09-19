@@ -360,9 +360,10 @@ interface Plugins {
 interface Analyzable {
   /**
    * Whether to enable App Analytics. Can also be set to a number instead to
-   * control the sample rate.
+   * control the sample rate, or to an key-value pair with span names as keys
+   * and booleans or sample rates as values for more granular control.
    */
-  analytics?: boolean | number;
+  analytics?: boolean | number | { [key: string]: boolean | number };
 }
 
 declare namespace plugins {

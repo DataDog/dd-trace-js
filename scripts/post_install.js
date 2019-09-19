@@ -30,8 +30,6 @@ if (process.env.DD_NATIVE_METRICS !== 'false' && __dirname.indexOf('/node_module
       .catch(rebuild)
       .then(cleanup)
   }
-} else {
-  cleanup()
 }
 
 function rebuild () {

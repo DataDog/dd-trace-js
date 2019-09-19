@@ -8,6 +8,7 @@
   "scripts": {
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
+    "bundle": "webpack --display-modules",
     "install": "node scripts/post_install.js",
     "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",
@@ -16,9 +17,10 @@
     "lint": "eslint . && node scripts/check_licenses.js",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "tdd": "node scripts/tdd.js",
-    "test": "SERVICES=* yarn services && mocha --exit 'packages/dd-trace/test/setup/all.js' 'packages/*/test/**/*.spec.js'",
-    "test:core": "nyc --include \"packages/dd-trace/src/**/*.js\" -- mocha --exit --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
+    "test": "SERVICES=* yarn services && mocha --exit --expose-gc 'packages/dd-trace/test/setup/all.js' 'packages/*/test/**/*.spec.js'",
+    "test:core": "nyc --include \"packages/dd-trace/src/**/*.js\" -- mocha --exit --expose-gc --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
     "test:plugins": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
+    "test:browser": "karma start --single-run",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
     "codecov": "codecov"
@@ -88,6 +90,10 @@
     "express": "^4.16.2",
     "get-port": "^3.2.0",
     "graphql": "0.13.2",
+    "karma": "^4.3.0",
+    "karma-chrome-launcher": "^3.1.0",
+    "karma-mocha": "^1.3.0",
+    "karma-webpack": "^4.0.2",
     "mocha": "^5.2.0",
     "nock": "^11.3.3",
     "node-abi": "^2.8.0",
@@ -97,6 +103,8 @@
     "retry": "^0.10.1",
     "sinon": "^4.2.1",
     "sinon-chai": "^2.14.0",
-    "tape": "^4.9.1"
+    "tape": "^4.9.1",
+    "webpack": "^4.40.2",
+    "webpack-cli": "^3.3.9"
   }
 }
