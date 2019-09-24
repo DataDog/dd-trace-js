@@ -270,5 +270,15 @@ describe('Tracer', () => {
 
       fn(() => {})
     })
+
+    it('should handle rejected promises', done => {
+      const fn = tracer.wrap('name', {}, (cb) => cb())
+      const catchHandler = sinon.spy(({ message }) => expect(message).to.equal('boom'))
+
+      fn(() => Promise.reject(new Error('boom')))
+        .catch(catchHandler)
+        .then(() => expect(catchHandler).to.have.been.called)
+        .then(() => done())
+    })
   })
 })
