@@ -70,7 +70,7 @@ class DatadogTracer extends Tracer {
             return cb.apply(this, arguments)
           }
 
-          fn.apply(this, arguments)
+          return fn.apply(this, arguments)
         })
       } else {
         return tracer.trace(name, options, () => fn.apply(this, arguments))
