@@ -1,1 +1,1 @@
-module.exports = '0.15.2'
+module.exports = '0.15.3'
