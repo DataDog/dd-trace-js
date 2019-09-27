@@ -9,7 +9,7 @@ const command = 'yarn services && NO_DEPRECATION=* mocha --watch --expose-gc'
 
 const base = path.join(__dirname, '..', 'packages')
 const globs = [
-  'packages/dd-trace/test/setup/*.js'
+  'packages/dd-trace/test/setup/node.js'
 ].map(glob => `'${glob}'`).join(' ')
 
 const pluginName = /\/?datadog-plugin-([\w -]+)\/?/
