@@ -37,9 +37,6 @@ node-core-base: &node-core-base
         command: yarn test:core
     - store_artifacts:
         path: ./coverage/lcov-report
-    # - run:
-    #     name: Code coverage
-    #     command: yarn codecov
     - run:
         name: Benchmark
         command: yarn bench
@@ -73,12 +70,6 @@ node-plugin-base: &node-plugin-base
         command: yarn test:plugins
     - store_artifacts:
         path: ./coverage/lcov-report
-    # - run:
-    #     name: Code coverage
-    #     command: yarn codecov
-    - run:
-        name: Memory leak tests
-        command: yarn leak:plugins
 
 jobs:
   # Linting
