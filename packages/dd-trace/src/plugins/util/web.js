@@ -1,5 +1,6 @@
 'use strict'
 
+const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
@@ -129,7 +130,7 @@ const web = {
   patch (req) {
     if (req._datadog) return
 
-    if (req.stream) {
+    if (req.stream && req.stream._datadog) {
       req._datadog = req.stream._datadog
       return
     }
@@ -236,6 +237,8 @@ function wrapEnd (req) {
 
   if (end === req._datadog.end) return
 
+  res.writeHead = wrapWriteHead(req)
+
   let _end = req._datadog.end = res.end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
 
@@ -257,6 +260,55 @@ function wrapEnd (req) {
       _end = scope.bind(value, req._datadog.span)
     }
   })
+}
+
+function wrapWriteHead (req) {
+  const res = req._datadog.res
+  const writeHead = res.writeHead
+
+  return function (statusCode, statusMessage, headers) {
+    headers = typeof statusMessage === 'string' ? headers : statusMessage
+    headers = Object.assign(res.getHeaders(), headers)
+
+    if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
+      addAllowHeaders(req, headers)
+    }
+
+    return writeHead.apply(this, arguments)
+  }
+}
+
+function addAllowHeaders (req, headers) {
+  const res = req._datadog.res
+  const allowHeaders = splitHeader(headers['access-control-allow-headers'])
+  const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
+  const contextHeaders = [
+    'x-datadog-parent-id',
+    'x-datadog-sampled',
+    'x-datadog-sampling-priority',
+    'x-datadog-trace-id'
+  ]
+
+  for (const header of contextHeaders) {
+    if (~requestHeaders.indexOf(header)) {
+      allowHeaders.push(header)
+    }
+  }
+
+  if (allowHeaders.length > 0) {
+    res.setHeader('access-control-allow-headers', uniq(allowHeaders).join(','))
+  }
+}
+
+function isOriginAllowed (req, headers) {
+  const origin = req.headers['origin']
+  const allowOrigin = headers['access-control-allow-origin']
+
+  return origin && (allowOrigin === '*' || allowOrigin === origin)
+}
+
+function splitHeader (str) {
+  return typeof str === 'string' ? str.split(/\s*,\s*/) : []
 }
 
 function wrapEvents (req) {

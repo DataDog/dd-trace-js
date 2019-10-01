@@ -3,6 +3,9 @@
 const nock = require('nock')
 const semver = require('semver')
 
+const AgentExporter = require('../../../src/exporters/agent')
+const LogExporter = require('../../../src/exporters/log')
+
 wrapIt()
 
 describe('Platform', () => {
@@ -146,6 +149,7 @@ describe('Platform', () => {
 
       afterEach(() => {
         platform._service = current
+        delete process.env['AWS_LAMBDA_FUNCTION_NAME']
       })
 
       it('should load the service name from the user module', () => {
@@ -160,6 +164,12 @@ describe('Platform', () => {
         service.call(platform)
 
         expect(platform._service).to.be.undefined
+      })
+
+      it('should use the use the lambda function name as the service when in AWS Lambda', () => {
+        process.env['AWS_LAMBDA_FUNCTION_NAME'] = 'my-function-name'
+        const result = service()
+        expect(result).to.equal('my-function-name')
       })
 
       it('should work even in subfolders', () => {
@@ -409,6 +419,8 @@ describe('Platform', () => {
         it('should start collecting metrics every 10 seconds', () => {
           metrics.apply(platform).start()
 
+          global.gc()
+
           clock.tick(10000)
 
           expect(client.gauge).to.have.been.calledWith('cpu.user')
@@ -446,6 +458,19 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('gc.pause.median')
           expect(client.gauge).to.have.been.calledWith('gc.pause.95percentile')
           expect(client.increment).to.have.been.calledWith('gc.pause.count')
+
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.max')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.min')
+          expect(client.increment).to.have.been.calledWith('gc.pause.by.type.sum')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.avg')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.median')
+          expect(client.gauge).to.have.been.calledWith('gc.pause.by.type.95percentile')
+          expect(client.increment).to.have.been.calledWith('gc.pause.by.type.count')
+          expect(client.increment).to.have.been.calledWith(
+            'gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
+              return val && /^gc_type:[a-z_]+$/.test(val[0])
+            })
+          )
 
           expect(client.gauge).to.have.been.calledWith('heap.size.by.space')
           expect(client.gauge).to.have.been.calledWith('heap.used_size.by.space')
@@ -547,6 +572,30 @@ describe('Platform', () => {
 
           expect(client.flush).to.have.been.called
         })
+      })
+    })
+
+    describe('Exporter', () => {
+      it('should create an AgentExporter by default', () => {
+        const Exporter = proxyquire('../src/platform/node/exporter', {
+          './env': () => undefined
+        })
+        const config = {}
+        const exporter = Exporter(config)
+        expect(exporter).to.be.equal(AgentExporter)
+      })
+      it('should create an LogExporter when in lambda environment', () => {
+        const Exporter = proxyquire('../src/platform/node/exporter', {
+          './env': (key) => {
+            if (key === 'AWS_LAMBDA_FUNCTION_NAME') {
+              return 'my-func'
+            }
+            return undefined
+          }
+        })
+        const config = {}
+        const exporter = Exporter(config)
+        expect(exporter).to.be.equal(LogExporter)
       })
     })
   })

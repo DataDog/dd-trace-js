@@ -6,13 +6,14 @@ const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
-function createWrapMakeClientConstructor (tracer, config, grpc) {
+function createWrapMakeClientConstructor (tracer, config, client) {
   config = config.client || config
 
   return function wrapMakeClientConstructor (makeClientConstructor) {
     return function makeClientConstructorWithTrace (methods) {
       const ServiceClient = makeClientConstructor.apply(this, arguments)
       const proto = ServiceClient.prototype
+      const grpc = client.Client._datadog.grpc
 
       Object.keys(methods)
         .forEach(name => {
@@ -187,9 +188,7 @@ module.exports = [
     patch (client, tracer, config) {
       if (config.client === false) return
 
-      const grpc = client.Client._datadog.grpc
-
-      this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config, grpc))
+      this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config, client))
     },
     unpatch (client) {
       this.unwrap(client, 'makeClientConstructor')

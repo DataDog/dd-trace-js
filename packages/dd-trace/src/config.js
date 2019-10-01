@@ -56,10 +56,11 @@ class Config {
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
-      exporter: options.experimental && options.experimental.exporter
+      exporter: options.experimental && options.experimental.exporter,
+      peers: (options.experimental && options.experimental.peers) || []
     }
     this.reportHostname = String(reportHostname) === 'true'
-    this.scope = process.env.DD_CONTEXT_PROPAGATION === 'false' ? scopes.NOOP : scope
+    this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
     this.apiKey = apiKey
     this.appKey = appKey
   }

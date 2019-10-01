@@ -17,10 +17,12 @@ function createWrapFetch (tracer, config) {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': url
+        'http.url': url.href
       })
 
-      const promise = fetch.call(this, resource, inject(init, tracer, span))
+      init = inject(init, tracer, span, url.origin)
+
+      const promise = fetch.call(this, resource, init)
 
       promise.then(res => {
         span.setTag('http.status_code', res.status)
@@ -47,13 +49,18 @@ function getMethod (resource, init) {
 }
 
 function getUrl (resource) {
-  return typeof resource === 'object'
+  const url = typeof resource === 'object'
     ? resource.url
     : resource
+
+  return new URL(url, window.location.origin)
 }
 
-function inject (init, tracer, span) {
+function inject (init, tracer, span, origin) {
   const format = window.ddtrace.ext.formats.HTTP_HEADERS
+  const peers = tracer._peers
+
+  if (origin !== window.location.origin && peers.indexOf(origin) === -1) return
 
   init = init || {}
   init.headers = init.headers || {}
