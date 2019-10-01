@@ -34,20 +34,6 @@ node-core-base: &node-core-base
     - store_artifacts:
         path: ./coverage/lcov-report
 
-node-native-base: &node-native-base
-  resource_class: small
-  working_directory: ~/dd-trace-js
-  steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - &yarn-rebuild
-      run:
-        name: Compile native code
-        command: yarn rebuild
-
 node-bench-base: &node-bench-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -161,28 +147,6 @@ jobs:
           name: Memory leak tests
           command: yarn leak:core
 
-  # Native tests
-
-  node-native-8:
-    <<: *node-native-base
-    docker:
-      - image: node:8
-
-  node-native-10:
-    <<: *node-native-base
-    docker:
-      - image: node:10
-
-  node-native-12:
-    <<: *node-native-base
-    docker:
-      - image: node:12
-
-  node-native-latest:
-    <<: *node-native-base
-    docker:
-      - image: node
-
   # Windows tests
 
   node-core-windows:
@@ -195,17 +159,6 @@ jobs:
       - *yarn-install
       - *save-yarn-cache
       - *yarn-test-core
-
-  node-native-windows:
-    executor: win/vs2019
-    working_directory: ~/dd-trace-js
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-rebuild
 
   # Plugin tests
 
@@ -697,12 +650,7 @@ workflows:
       - node-core-10
       - node-core-12
       - node-core-latest
-      - node-native-8
-      - node-native-10
-      - node-native-12
-      - node-native-latest
       - node-core-windows
-      - node-native-windows
       - node-bench-latest
       - node-amqplib
       - node-amqp10
@@ -812,12 +760,7 @@ workflows:
       - node-core-10
       - node-core-12
       - node-core-latest
-      - node-native-8
-      - node-native-10
-      - node-native-12
-      - node-native-latest
       - node-core-windows
-      - node-native-windows
       - node-bench-latest
       - node-amqplib
       - node-amqp10
