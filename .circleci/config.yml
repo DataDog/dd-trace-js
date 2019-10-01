@@ -162,6 +162,7 @@ jobs:
       - *restore-yarn-cache
       - *yarn-install
       - *save-yarn-cache
+      - *yarn-rebuild
       - *yarn-test-core
 
   # Plugin tests
