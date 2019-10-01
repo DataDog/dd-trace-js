@@ -6,14 +6,25 @@ const plugin = require('../src')
 wrapIt()
 
 describe('Plugin', () => {
-  let mongo
   let server
   let platform
   let tracer
   let collection
 
   describe('mongodb-core', () => {
-    withVersions(plugin, 'mongodb-core', version => {
+    withVersions(plugin, ['mongodb', 'mongodb-core'], (version, moduleName) => {
+      const getServer = () => {
+        return moduleName === 'mongodb'
+          ? require(`../../../versions/${moduleName}@${version}`).get().CoreServer
+          : require(`../../../versions/${moduleName}@${version}`).get().Server
+      }
+
+      const next = (cursor, cb) => {
+        return cursor._next
+          ? cursor._next(cb)
+          : cursor.next(cb)
+      }
+
       beforeEach(() => {
         platform = require('../../dd-trace/src/platform')
         tracer = require('../../dd-trace')
@@ -35,9 +46,9 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          mongo = require(`../../../versions/mongodb-core@${version}`).get()
+          const Server = getServer()
 
-          server = new mongo.Server({
+          server = new Server({
             host: 'localhost',
             port: 27017,
             reconnect: false
@@ -227,7 +238,7 @@ describe('Plugin', () => {
               documents: [{ a: 1 }]
             }, {})
 
-            cursor.next()
+            next(cursor)
           })
 
           it('should have the correct index', done => {
@@ -239,14 +250,14 @@ describe('Plugin', () => {
                 query: {}
               }, { batchSize: 1 })
 
-              cursor.next()
+              next(cursor)
             })
 
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('mongodb.cursor.index', '0')
               })
-              .then(() => cursor.next())
+              .then(() => next(cursor))
               .catch(done)
 
             agent
@@ -280,7 +291,7 @@ describe('Plugin', () => {
               }
             })
 
-            cursor.next()
+            next(cursor)
           })
 
           it('should run the callback in the parent context', done => {
@@ -291,7 +302,7 @@ describe('Plugin', () => {
               query: { a: 1 }
             })
 
-            cursor.next(() => {
+            next(cursor, () => {
               expect(tracer.scope().active()).to.be.null
               done()
             })
@@ -314,7 +325,7 @@ describe('Plugin', () => {
               query: 'invalid'
             })
 
-            cursor.next(err => {
+            next(cursor, err => {
               error = err
             })
           })
@@ -331,9 +342,9 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          mongo = require(`../../../versions/mongodb-core@${version}`).get()
+          const Server = getServer()
 
-          server = new mongo.Server({
+          server = new Server({
             host: 'localhost',
             port: 27017,
             reconnect: false

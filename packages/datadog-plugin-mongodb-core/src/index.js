@@ -136,23 +136,40 @@ function isBSON (val) {
   return val && val._bsontype
 }
 
+function patch (core, tracer, config) {
+  this.wrap(core.Server.prototype, 'command', createWrapOperation(tracer, config))
+  this.wrap(core.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))
+  this.wrap(core.Server.prototype, 'update', createWrapOperation(tracer, config, 'update'))
+  this.wrap(core.Server.prototype, 'remove', createWrapOperation(tracer, config, 'remove'))
+
+  if (core.Cursor.prototype.next) {
+    this.wrap(core.Cursor.prototype, 'next', createWrapNext(tracer, config))
+  } else if (core.Cursor.prototype._next) {
+    this.wrap(core.Cursor.prototype, '_next', createWrapNext(tracer, config))
+  }
+}
+
+function unpatch (core) {
+  this.unwrap(core.Server.prototype, 'command')
+  this.unwrap(core.Server.prototype, 'insert')
+  this.unwrap(core.Server.prototype, 'update')
+  this.unwrap(core.Server.prototype, 'remove')
+  this.unwrap(core.Cursor.prototype, 'next')
+  this.unwrap(core.Cursor.prototype, '_next')
+}
+
 module.exports = [
+  {
+    name: 'mongodb',
+    versions: ['>=3.3'],
+    file: 'lib/core/index.js',
+    patch,
+    unpatch
+  },
   {
     name: 'mongodb-core',
     versions: ['>=2'],
-    patch (mongo, tracer, config) {
-      this.wrap(mongo.Server.prototype, 'command', createWrapOperation(tracer, config))
-      this.wrap(mongo.Server.prototype, 'insert', createWrapOperation(tracer, config, 'insert'))
-      this.wrap(mongo.Server.prototype, 'update', createWrapOperation(tracer, config, 'update'))
-      this.wrap(mongo.Server.prototype, 'remove', createWrapOperation(tracer, config, 'remove'))
-      this.wrap(mongo.Cursor.prototype, 'next', createWrapNext(tracer, config))
-    },
-    unpatch (mongo) {
-      this.unwrap(mongo.Server.prototype, 'command')
-      this.unwrap(mongo.Server.prototype, 'insert')
-      this.unwrap(mongo.Server.prototype, 'update')
-      this.unwrap(mongo.Server.prototype, 'remove')
-      this.unwrap(mongo.Cursor.prototype, 'next')
-    }
+    patch,
+    unpatch
   }
 ]
