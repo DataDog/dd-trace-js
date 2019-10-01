@@ -37,9 +37,16 @@ node-core-base: &node-core-base
         command: yarn test:core
     - store_artifacts:
         path: ./coverage/lcov-report
-    # - run:
-    #     name: Code coverage
-    #     command: yarn codecov
+
+node-bench-base: &node-bench-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
     - run:
         name: Benchmark
         command: yarn bench
@@ -73,12 +80,6 @@ node-plugin-base: &node-plugin-base
         command: yarn test:plugins
     - store_artifacts:
         path: ./coverage/lcov-report
-    # - run:
-    #     name: Code coverage
-    #     command: yarn codecov
-    - run:
-        name: Memory leak tests
-        command: yarn leak:plugins
 
 jobs:
   # Linting
@@ -101,6 +102,13 @@ jobs:
       - run:
           name: Lint
           command: yarn lint
+
+  # Benchmarks
+
+  node-bench-latest:
+    <<: *node-bench-base
+    docker:
+      - image: node
 
   # Core tests
 
@@ -648,6 +656,7 @@ workflows:
       - node-core-12
       - node-core-latest
       - node-core-windows
+      - node-bench-latest
       - node-amqplib
       - node-amqp10
       - node-bluebird
@@ -757,6 +766,7 @@ workflows:
       - node-core-12
       - node-core-latest
       - node-core-windows
+      - node-bench-latest
       - node-amqplib
       - node-amqp10
       - node-bluebird
