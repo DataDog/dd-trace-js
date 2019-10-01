@@ -27,6 +27,10 @@ node-core-base: &node-core-base
         paths:
           - ./node_modules
           - ./yarn.lock
+    - &yarn-rebuild
+      run:
+        name: Compile native code
+        command: yarn rebuild
     - &yarn-test-core
       run:
         name: Unit tests
