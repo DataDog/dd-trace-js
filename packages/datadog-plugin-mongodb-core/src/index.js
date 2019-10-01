@@ -76,7 +76,7 @@ function addHost (span, topology) {
 
 function wrapCallback (tracer, span, done, cursor) {
   return tracer.scope().bind((err, res) => {
-    if (err instanceof Error) {
+    if (err) {
       span.addTags({
         'error.type': err.name,
         'error.msg': err.message,
