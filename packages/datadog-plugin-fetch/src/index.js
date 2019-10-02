@@ -22,7 +22,7 @@ function createWrapFetch (tracer, config) {
 
       init = inject(init, tracer, span, url.origin)
 
-      const promise = fetch.call(this, resource, init)
+      const promise = tracer.scope().bind(fetch, span).call(this, resource, init)
 
       promise.then(res => {
         span.setTag('http.status_code', res.status)
