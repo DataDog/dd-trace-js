@@ -35,7 +35,7 @@ function createWrapSend (tracer, config) {
         span.finish()
       })
 
-      return send.apply(this, arguments)
+      return tracer.scope().bind(send, span).apply(this, arguments)
     }
   }
 }
