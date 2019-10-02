@@ -78,11 +78,11 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins
-    - store_artifacts:
-        path: ./coverage/lcov-report
     - run:
         name: External tests
         command: yarn test:external
+    - store_artifacts:
+        path: ./coverage/lcov-report
 jobs:
   # Linting
 
