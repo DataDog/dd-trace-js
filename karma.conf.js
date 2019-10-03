@@ -1,8 +1,10 @@
 // Karma configuration
 // Generated on Tue Sep 17 2019 19:39:09 GMT-0400 (EDT)
 
+const webpackConfig = require('./webpack.config')
+
 module.exports = function (config) {
-  config.set({
+  const opts = {
 
     // base path that will be used to resolve all patterns (eg. files, exclude)
     basePath: '',
@@ -13,6 +15,7 @@ module.exports = function (config) {
 
     // list of files / patterns to load in the browser
     files: [
+      'browser.js',
       'packages/dd-trace/test/setup/browser.js',
       'packages/dd-trace/test/browser.test.js'
     ],
@@ -23,6 +26,7 @@ module.exports = function (config) {
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
+      'browser.js': ['webpack'],
       'packages/dd-trace/test/setup/browser.js': ['webpack'],
       'packages/dd-trace/test/browser.test.js': ['webpack']
     },
@@ -57,9 +61,55 @@ module.exports = function (config) {
     // how many browser should be started simultaneous
     concurrency: Infinity,
 
-    webpack: {
-      mode: 'development',
-      node: false
+    webpack: webpackConfig.find(entry => entry.mode === 'development')
+  }
+
+  if (process.env.CI === 'true') {
+    // https://github.com/karma-runner/karma-browserstack-launcher
+    opts.browserStack = {
+      project: 'dd-trace-js'
     }
-  })
+
+    opts.customLaunchers = {
+      bs_edge: {
+        base: 'BrowserStack',
+        browser: 'Edge',
+        browser_version: '18.0',
+        os: 'Windows',
+        os_version: '10'
+      },
+
+      // bs_ie11: {
+      //   base: 'BrowserStack',
+      //   browser: 'IE',
+      //   browser_version: '11.0',
+      //   os: 'Windows',
+      //   os_version: '10'
+      // },
+
+      // bs_ie10: {
+      //   base: 'BrowserStack',
+      //   browser: 'IE',
+      //   browser_version: '10.0',
+      //   os: 'Windows',
+      //   os_version: '8'
+      // },
+
+      bs_safari: {
+        base: 'BrowserStack',
+        browser: 'Safari',
+        browser_version: '12.0',
+        os: 'OS X',
+        os_version: 'Mojave'
+      }
+    }
+
+    opts.reporters.push('BrowserStack')
+
+    for (const browser in opts.customLaunchers) {
+      opts.browsers.push(browser)
+    }
+  }
+
+  config.set(opts)
 }
