@@ -42,6 +42,7 @@ dev,get-port,MIT,Copyright Sindre Sorhus
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,karma,MIT,Copyright 2011-2019 Google, Inc.
 dev,karma-chrome-launcher,MIT,Copyright 2011-2013 Google, Inc.
+dev,karma-firefox-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-mocha,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-webpack,MIT,Copyright JS Foundation and other contributors
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
