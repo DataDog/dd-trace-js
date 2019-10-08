@@ -74,6 +74,30 @@ describe('log', () => {
       expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
     })
 
+    it('should convert empty values to errors', () => {
+      log.error()
+
+      expect(console.error).to.have.been.called
+      expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+      expect(console.error.firstCall.args[0]).to.have.property('message', 'undefined')
+    })
+
+    it('should convert invalid types to errors', () => {
+      log.error(123)
+
+      expect(console.error).to.have.been.called
+      expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+      expect(console.error.firstCall.args[0]).to.have.property('message', '123')
+    })
+
+    it('should reuse error messages for non-errors', () => {
+      log.error({ message: 'test' })
+
+      expect(console.error).to.have.been.called
+      expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+      expect(console.error.firstCall.args[0]).to.have.property('message', 'test')
+    })
+
     it('should convert messages from callbacks to errors', () => {
       log.error(() => 'error')
 

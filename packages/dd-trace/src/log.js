@@ -51,7 +51,17 @@ const log = {
         err = err()
       }
 
-      _logger.error(typeof err === 'string' ? new Error(err) : err)
+      if (typeof err !== 'object' || !err) {
+        err = String(err)
+      } else if (!err.stack) {
+        err = String(err.message || err)
+      }
+
+      if (typeof err === 'string') {
+        err = new Error(err)
+      }
+
+      _logger.error(err)
     }
 
     return this
