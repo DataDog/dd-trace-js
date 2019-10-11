@@ -17,7 +17,7 @@ class Loader {
   reload (plugins) {
     this._plugins = new Map()
     this._globalPlugins = new Map()
-    Array.from(plugins.entries).forEach(([instrumentation, plugin]) => {
+    plugins.forEach((instrumentation, plugin) => {
       if (instrumentation.global) {
         this._globalPlugins.set(instrumentation, plugin)
       } else {
