@@ -21,7 +21,7 @@ class Loader {
       if (instrumentation.global) {
         this._globalPlugins.set(instrumentation, plugin)
       } else {
-        this.plugins.set(instrumentation, plugin)
+        this._plugins.set(instrumentation, plugin)
       }
     })
 
