@@ -15,7 +15,15 @@ class Loader {
   }
 
   reload (plugins) {
-    this._plugins = plugins
+    this._plugins = new Map()
+    this._globalPlugins = new Map()
+    Array.from(plugins.entries).forEach(([instrumentation, plugin]) => {
+      if (instrumentation.global) {
+        this._globalPlugins.set(instrumentation, plugin)
+      } else {
+        this.plugins.set(instrumentation, plugin)
+      }
+    })
 
     const instrumentations = Array.from(this._plugins.keys())
       .reduce((prev, current) => prev.concat(current), [])
@@ -27,16 +35,27 @@ class Loader {
       .map(instrumentation => filename(instrumentation)))
 
     hook(instrumentedModules, { internals: true }, this._hookModule.bind(this))
+    this._globalPlugins.forEach((meta, plugin) => {
+      this._instrumenter.unload(plugin)
+      this._instrumenter.load(plugin, meta)
+    })
   }
 
   load (instrumentation, config) {
-    this._getModules(instrumentation).forEach(nodule => {
-      this._instrumenter.patch(instrumentation, nodule, config)
-    })
+    if (instrumentation.global) {
+      const nodule = global[instrumentation.name]
+      const override = this._instrumenter.patch(instrumentation, nodule, config)
+      global[instrumentation.name] = override || nodule
+    } else {
+      this._getModules(instrumentation).forEach(nodule => {
+        this._instrumenter.patch(instrumentation, nodule, config)
+      })
+    }
   }
 
   _getModules (instrumentation) {
     const modules = []
+
     const ids = Object.keys(require.cache)
 
     let pkg
