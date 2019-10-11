@@ -219,6 +219,12 @@ export declare interface TracerOptions {
   sampleRate?: number;
 
   /**
+   * Interval in milliseconds at which the tracer will submit traces to the agent.
+   * @default 2000
+   */
+  flushInterval?: number;
+
+  /**
    * Whether to enable runtime metrics.
    * @default false
    */
