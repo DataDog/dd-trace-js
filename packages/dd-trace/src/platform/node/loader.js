@@ -15,17 +15,10 @@ class Loader {
   }
 
   reload (plugins) {
-    this._plugins = new Map()
-    this._globalPlugins = new Map()
-    plugins.forEach((meta, plugin) => {
-      if (plugin.global) {
-        this._globalPlugins.set(plugin, meta)
-      } else {
-        this._plugins.set(plugin, meta)
-      }
-    })
+    this._plugins = plugins
 
     const instrumentations = Array.from(this._plugins.keys())
+      .filter(plugin => !plugin.global)
       .reduce((prev, current) => prev.concat(current), [])
 
     const instrumentedModules = uniq(instrumentations
@@ -35,9 +28,11 @@ class Loader {
       .map(instrumentation => filename(instrumentation)))
 
     hook(instrumentedModules, { internals: true }, this._hookModule.bind(this))
-    this._globalPlugins.forEach((meta, plugin) => {
-      this._instrumenter.unload(plugin)
-      this._instrumenter.load(plugin, meta)
+    this._plugins.forEach((meta, plugin) => {
+      if (plugin.global) {
+        this._instrumenter.unload(plugin)
+        this._instrumenter.load(plugin, meta)
+      }
     })
   }
 
