@@ -16,7 +16,7 @@ let tracer = null
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
-  load (plugin, pluginName, config) {
+  load (plugin, pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ type: 'application/msgpack' }))
@@ -46,6 +46,7 @@ module.exports = {
         })
 
         tracer.init({
+          ...tracerConfig,
           service: 'test',
           port,
           flushInterval: 0,

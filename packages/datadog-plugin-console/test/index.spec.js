@@ -6,57 +6,78 @@ const plugin = require('../src')
 wrapIt()
 
 describe('Plugin', () => {
-  let localConsole
   let tracer
   let span
+  let spy
 
-  function setup (version) {
+  async function setup (logInjection) {
+    tracer = require('../../dd-trace/')
+    await agent.load(plugin, 'console', {}, { logInjection })
     span = tracer.startSpan('test')
+    spy = sinon.spy(process.stdout, 'write')
+  }
 
-    localConsole = { ...console }
-    sinon.spy(localConsole, 'log')
+  function teardown () {
+    spy.restore()
+    return agent.close()
   }
 
   describe('console', () => {
-    beforeEach(() => {
-      tracer = require('../../dd-trace')
-      return agent.load(plugin, 'console')
-    })
-
-    afterEach(() => {
-      return agent.close()
-    })
-
-    withVersions(plugin, 'console', version => {
-      describe('without configuration', () => {
-        beforeEach(() => {
-          setup(version)
-        })
-
-        it('should not alter the default behavior', () => {
-          tracer.scope().activate(span, () => {
-            localConsole.log('message')
-            expect(localConsole.log.firstCall.args[0]).toEqual('message')
-          })
-        })
+    describe('without configuration', () => {
+      beforeEach(() => {
+        return setup(false)
+      })
+      afterEach(() => {
+        return teardown()
       })
 
-      describe('with configuration', () => {
-        beforeEach(() => {
-          tracer._tracer._logInjection = true
-          setup(version)
+      it('should not alter the default behavior', () => {
+        tracer.scope().activate(span, () => {
+          // eslint-disable-next-line no-console
+          console.log('message')
+          expect(process.stdout.write.firstCall.args[0]).to.equal('message\n')
         })
-        it('should add the trace identifiers to logger instances', () => {
-          tracer.scope().activate(span, () => {
-            localConsole.log('message')
+      })
+    })
 
-            expect(localConsole.log).to.have.been.called
+    describe('with configuration', () => {
+      beforeEach(() => {
+        return setup(true)
+      })
+      afterEach(() => {
+        return teardown()
+      })
+      it('should add the trace identifiers to logger instances', () => {
+        tracer.scope().activate(span, () => {
+          // eslint-disable-next-line no-console
+          console.log('message')
 
-            const record = localConsole.load.firstCall.args[0].toString()
-            const traceId = span.context().toTraceId()
-            const spanId = span.context().toSpanId()
-            expect(record).toEqual(`[trace_id:${traceId}, span_id:${spanId}] message`)
-          })
+          const record = process.stdout.write.firstCall.args[0]
+          const traceId = span.context().toTraceId()
+          const spanId = span.context().toSpanId()
+          expect(record).to.equal(`[dd.trace_id=${traceId} dd.span_id=${spanId}] message\n`)
+        })
+      })
+      it('should add the trace identifiers to multiargument logs', () => {
+        tracer.scope().activate(span, () => {
+          // eslint-disable-next-line no-console
+          console.log('message', JSON.stringify({ hello: 'world' }))
+
+          const record = process.stdout.write.firstCall.args[0]
+          const traceId = span.context().toTraceId()
+          const spanId = span.context().toSpanId()
+          expect(record).to.equal(`[dd.trace_id=${traceId} dd.span_id=${spanId}] message {"hello":"world"}\n`)
+        })
+      })
+      it('should add the trace identifiers to no argument logs', () => {
+        tracer.scope().activate(span, () => {
+          // eslint-disable-next-line no-console
+          console.log()
+
+          const record = process.stdout.write.firstCall.args[0]
+          const traceId = span.context().toTraceId()
+          const spanId = span.context().toSpanId()
+          expect(record).to.equal(`[dd.trace_id=${traceId} dd.span_id=${spanId}]\n`)
         })
       })
     })

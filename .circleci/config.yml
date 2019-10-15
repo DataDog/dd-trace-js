@@ -221,6 +221,13 @@ jobs:
         environment:
           - PLUGINS=connect
 
+  node-console:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=console
+
   node-couchbase:
     <<: *node-plugin-base
     docker:

@@ -6,11 +6,15 @@ function createWrapLog (tracer) {
   return function wrapEmit (emit) {
     return function emitWithTrace () {
       const data = tx.correlate(tracer, {})
-      const prefix = `[dd.trace_id=${data.trace_id} dd.span_id=${data.span_id}]`
+      let prefix = ''
+      if (data.dd !== undefined) {
+        prefix = `[dd.trace_id=${data.dd.trace_id} dd.span_id=${data.dd.span_id}]`
+      }
       if (arguments.length > 0) {
         arguments[0] = `${prefix} ${arguments[0]}`
       } else {
         arguments[0] = prefix
+        arguments.length = 1
       }
       return emit.apply(this, arguments)
     }
@@ -20,7 +24,7 @@ function createWrapLog (tracer) {
 module.exports = {
   name: 'console',
   global: true,
-  patch (cnsole, tracer, config) {
+  patch (cnsole, tracer, _) {
     if (!tracer._logInjection) return
     this.wrap(cnsole, 'log', createWrapLog(tracer))
     this.wrap(cnsole, 'error', createWrapLog(tracer))

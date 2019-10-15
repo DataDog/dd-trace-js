@@ -17,11 +17,11 @@ class Loader {
   reload (plugins) {
     this._plugins = new Map()
     this._globalPlugins = new Map()
-    plugins.forEach((instrumentation, plugin) => {
-      if (instrumentation.global) {
-        this._globalPlugins.set(instrumentation, plugin)
+    plugins.forEach((meta, plugin) => {
+      if (plugin.global) {
+        this._globalPlugins.set(plugin, meta)
       } else {
-        this._plugins.set(instrumentation, plugin)
+        this._plugins.set(plugin, meta)
       }
     })
 
