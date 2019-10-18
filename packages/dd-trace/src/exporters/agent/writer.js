@@ -76,7 +76,7 @@ class Writer {
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
       } catch (e) {
-        log.error(err)
+        log.error(e)
       }
     })
   }
