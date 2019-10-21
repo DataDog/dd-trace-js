@@ -486,7 +486,7 @@ jobs:
 
   prebuild-linux-x64:
     docker:
-      - image: node:10
+      - image: node:8
     working_directory: ~/dd-trace-js
     resource_class: small
     environment:
@@ -510,7 +510,7 @@ jobs:
 
   prebuild-linux-x32:
     docker:
-      - image: node:10
+      - image: node:8
     working_directory: ~/dd-trace-js
     resource_class: small
     environment:
@@ -611,13 +611,30 @@ jobs:
 
   alpine-prebuilt:
     docker:
-      - image: node:10-alpine
+      - image: node:alpine
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
       - run:
           name: Install job dependencies
           command: apk add git
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - restore_cache:
+          key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+      - run:
+          name: Unit tests
+          command: yarn test:core
+
+  slim-prebuilt:
+    docker:
+      - image: node:slim
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
       - checkout
       - *yarn-versions
       - *restore-yarn-cache
@@ -749,6 +766,9 @@ workflows:
                 - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - alpine
       - alpine-prebuilt:
+          requires:
+            - prebuild-linux-x64
+      - slim-prebuilt:
           requires:
             - prebuild-linux-x64
   nightly:
