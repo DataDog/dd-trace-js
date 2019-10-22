@@ -10,6 +10,7 @@ const _default = {
 let _logger
 let _enabled
 let _deprecate
+let _onlyErrors
 
 const log = {
   use (logger) {
@@ -20,8 +21,9 @@ const log = {
     return this
   },
 
-  toggle (enabled) {
+  toggle (enabled, onlyErrors) {
     _enabled = enabled
+    _onlyErrors = onlyErrors
 
     return this
   },
@@ -38,7 +40,7 @@ const log = {
   },
 
   debug (message) {
-    if (_enabled) {
+    if (_enabled && !_onlyErrors) {
       _logger.debug(message instanceof Function ? message() : message)
     }
 

@@ -36,6 +36,7 @@ describe('Config', () => {
     expect(config).to.have.property('apiKey', undefined)
     expect(config).to.have.property('appKey', undefined)
     expect(config).to.have.nested.property('experimental.b3', false)
+    expect(config).to.have.nested.property('experimental.onlyErrors', false)
   })
 
   it('should initialize from the default service', () => {
@@ -123,7 +124,8 @@ describe('Config', () => {
       apiKey: '123',
       appKey: '456',
       experimental: {
-        b3: true
+        b3: true,
+        onlyErrors: true
       }
     })
 
@@ -151,6 +153,7 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.onlyErrors', true)
   })
 
   it('should initialize from the options with url taking precedence', () => {

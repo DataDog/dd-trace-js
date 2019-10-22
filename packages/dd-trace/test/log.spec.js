@@ -126,6 +126,33 @@ describe('log', () => {
       expect(console.log).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
+
+    it('should enable only error logs when enabled with onlyErrors argument set to true', () => {
+      log.toggle(true, true)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.not.have.been.called
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should enable error and debug logs when enabled with onlyErrors argument set to false', () => {
+      log.toggle(true, false)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should enable error and debug logs when enabled without onlyErrors argument', () => {
+      log.toggle(true)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
   })
 
   describe('use', () => {

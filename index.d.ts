@@ -241,6 +241,11 @@ export declare interface TracerOptions {
      * @default false
      */
     exporter?: 'log' | 'browser' | 'agent'
+    /**
+     * Whether to log only errors and not also debug messages when debug logging enabled
+     * @default false
+     */
+    onlyErrors?: boolean    
   };
 
   /**
