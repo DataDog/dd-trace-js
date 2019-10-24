@@ -109,7 +109,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(config.url, config.flushInterval)
+    expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 

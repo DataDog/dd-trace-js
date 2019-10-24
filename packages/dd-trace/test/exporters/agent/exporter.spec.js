@@ -2,15 +2,18 @@
 
 describe('Exporter', () => {
   const url = 'www.example.com'
+  let flushInterval
   let Scheduler
   let scheduler
   let Exporter
   let exporter
   let Writer
   let writer
+  let prioritySampler
   let span
 
   beforeEach(() => {
+    flushInterval = 1000
     span = {}
     scheduler = {
       start: sinon.spy(),
@@ -20,6 +23,7 @@ describe('Exporter', () => {
       append: sinon.spy(),
       flush: sinon.spy()
     }
+    prioritySampler = {}
     Scheduler = sinon.stub().returns(scheduler)
     Writer = sinon.stub().returns(writer)
 
@@ -31,12 +35,12 @@ describe('Exporter', () => {
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
-      exporter = new Exporter(url, 1000)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
     it('should schedule flushing after the configured interval', () => {
       writer.length = 0
-      exporter = new Exporter(url, 1000)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
       Scheduler.firstCall.args[0]()
 
       expect(scheduler.start).to.have.been.called
