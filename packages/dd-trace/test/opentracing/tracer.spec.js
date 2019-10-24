@@ -109,7 +109,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(config)
+    expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 
@@ -120,7 +120,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     expect(AgentExporter).not.to.have.been.called
-    expect(LogExporter).to.have.been.called
+    expect(LogExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 
