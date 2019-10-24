@@ -30,7 +30,7 @@ function findPkg (cwd) {
 }
 
 function isDependency (filepath) {
-  const expr = new RegExp(`${path.sep}node_modules${path.sep}`)
+  const expr = new RegExp(`\\${path.sep}node_modules\\${path.sep}`)
   return expr.test(filepath)
 }
 
