@@ -21,11 +21,17 @@ function service () {
 function findPkg (cwd) {
   let up = readPkgUp.sync({ cwd })
 
-  while (up && /\/node_modules\//.test(up.path)) {
-    up = readPkgUp.sync({ cwd: path.resolve(path.dirname(up.path), '..') })
+  while (up && isDependency(up.path)) {
+    cwd = path.resolve(path.dirname(up.path), '..')
+    up = readPkgUp.sync({ cwd })
   }
 
   return up && up.pkg ? up.pkg : {}
+}
+
+function isDependency (filepath) {
+  const expr = new RegExp(`${path.sep}node_modules${path.sep}`)
+  return expr.test(filepath)
 }
 
 module.exports = service
