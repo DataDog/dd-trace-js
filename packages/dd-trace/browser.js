@@ -1,5 +1,7 @@
 'use strict'
 
+require('whatwg-fetch')
+
 const platform = require('./src/platform')
 const browser = require('./src/platform/browser')
 const ext = require('../../ext')

@@ -1,6 +1,5 @@
 'use strict'
 
-const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
@@ -13,8 +12,7 @@ class Config {
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
     const env = coalesce(options.env, platform.env('DD_ENV'))
-    const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), null)
-    const protocol = 'http'
+    const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), platform.env('DD_TRACE_URL'), null)
     const hostname = coalesce(
       options.hostname,
       platform.env('DD_AGENT_HOST'),
@@ -39,8 +37,9 @@ class Config {
     this.debug = String(debug) === 'true'
     this.logInjection = String(logInjection) === 'true'
     this.env = env
-    this.url = url ? new URL(url) : new URL(`${protocol}://${hostname || 'localhost'}:${port}`)
-    this.hostname = hostname || this.url.hostname
+    this.url = url
+    this.hostname = hostname || (url && url.hostname)
+    this.port = port || (url && url.port)
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger

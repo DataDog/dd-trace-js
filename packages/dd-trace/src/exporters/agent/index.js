@@ -1,11 +1,13 @@
 'use strict'
 
+const URL = require('url-parse')
 const Writer = require('./writer')
 const Scheduler = require('./scheduler')
 
 class AgentExporter {
-  constructor ({ url, flushInterval }) {
+  constructor ({ url, hostname, port, flushInterval }) {
     this._writer = new Writer(url)
+    this._url = new URL(url || `http://${hostname || 'localhost'}:${port}`)
 
     if (flushInterval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)

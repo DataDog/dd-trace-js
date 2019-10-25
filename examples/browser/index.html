@@ -26,7 +26,6 @@
     load()
 
     ddtrace.tracer.init({
-      env: 'browser-example',
       experimental: {
         exporter: ddtrace.ext.exporters.BROWSER
       }
@@ -52,8 +51,8 @@
           })
       }
 
-      if (!window.DD_API_KEY || !window.DD_APP_KEY) {
-        console.log('Please create a .env file with DD_API_KEY and DD_APP_KEY set.')
+      if (!window.DD_CLIENT_TOKEN) {
+        console.log('Please create a .env file with DD_CLIENT_TOKEN set to your client token.')
       }
     }
 

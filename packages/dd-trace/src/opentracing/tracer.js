@@ -35,13 +35,13 @@ class DatadogTracer extends Tracer {
     log.toggle(config.debug)
 
     this._service = config.service
-    this._url = config.url
+    this._exporter = getExporter(config)
+    this._url = this._exporter._url
     this._env = config.env
     this._tags = config.tags
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
-    this._exporter = getExporter(config)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
     this._peers = config.experimental.peers
