@@ -8,9 +8,10 @@ const tracerVersion = require('../../../lib/version')
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
 class Writer {
-  constructor (url) {
+  constructor (url, prioritySampler) {
     this._queue = []
     this._url = url
+    this._prioritySampler = prioritySampler
     this._size = 0
   }
 
@@ -77,7 +78,7 @@ class Writer {
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
       } catch (e) {
-        log.error(err)
+        log.error(e)
       }
     })
   }

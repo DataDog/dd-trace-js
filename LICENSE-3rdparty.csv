@@ -49,14 +49,13 @@ dev,get-port,MIT,Copyright Sindre Sorhus
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,karma,MIT,Copyright 2011-2019 Google, Inc.
 dev,karma-chrome-launcher,MIT,Copyright 2011-2013 Google, Inc.
+dev,karma-firefox-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-mocha,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-webpack,MIT,Copyright JS Foundation and other contributors
 dev,live-server,MIT,Copyright 2012 Tapio Vierros
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
-dev,node-abi,MIT,Copyright 2016 Lukas Geiger
 dev,nyc,ISC,Copyright 2015 Contributors
-dev,prebuildify,MIT,Copyright 2017 Mathias Buus
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors

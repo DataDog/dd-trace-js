@@ -12,6 +12,7 @@ describe('Writer', () => {
   let format
   let encode
   let url
+  let prioritySampler
   let log
   let tracer
   let scope
@@ -65,6 +66,10 @@ describe('Writer', () => {
       port: 8126
     }
 
+    prioritySampler = {
+      update: sinon.spy()
+    }
+
     log = {
       error: sinon.spy()
     }
@@ -76,7 +81,7 @@ describe('Writer', () => {
       '../../encode': encode,
       '../../../lib/version': 'tracerVersion'
     })
-    writer = new Writer(url)
+    writer = new Writer(url, prioritySampler)
   })
 
   describe('length', () => {
@@ -158,6 +163,15 @@ describe('Writer', () => {
       setTimeout(() => {
         expect(log.error).to.have.been.calledWith(error)
         done()
+      })
+    })
+
+    it('should update sampling rates', () => {
+      writer.append([span])
+      writer.flush()
+
+      expect(prioritySampler.update).to.have.been.calledWith({
+        'service:hello,env:test': 1
       })
     })
 

@@ -1,21 +1,61 @@
 'use strict'
 
-const prebuildify = require('prebuildify')
-const abi = require('node-abi')
 const path = require('path')
 const os = require('os')
 const tar = require('tar')
-const semver = require('semver')
 const fs = require('fs')
+const execSync = require('child_process').execSync
 
-const name = `${os.platform()}-${process.env.ARCH || os.arch()}`
-const targets = abi.allTargets
-  .filter(target => target.runtime === 'node')
-  .filter(target => semver.satisfies(target.target, '>=8.0.0'))
+const platform = os.platform()
+const arch = process.env.ARCH || os.arch()
+const name = `${platform}-${arch}`
 
-const cb = err => {
-  if (err) throw err
+// https://nodejs.org/en/download/releases/
+const targets = [
+  { version: '8.0.0', abi: '57' },
+  { version: '9.0.0', abi: '59' },
+  { version: '10.0.0', abi: '64' },
+  { version: '11.0.0', abi: '67' },
+  { version: '12.0.0', abi: '72' },
+  { version: '13.0.0', abi: '79' }
+]
 
+prebuildify()
+pack()
+
+function retry (cmd) {
+  try {
+    execSync(cmd, { stdio: [0, 1, 2] })
+  } catch (e) {
+    retry(cmd)
+  }
+}
+
+function prebuildify () {
+  const cache = path.join(os.tmpdir(), 'prebuilds')
+
+  mkdirSafe(cache)
+  mkdirSafe('prebuilds')
+  mkdirSafe(`prebuilds/${platform}-${arch}`)
+
+  targets.forEach(target => {
+    const cmd = [
+      'node-gyp rebuild',
+      `--target=${target.version}`,
+      `--target_arch=${arch}`,
+      `--devdir=${cache}`,
+      '--release',
+      '--build_v8_with_gn=false',
+      '--enable_lto=false'
+    ].join(' ')
+
+    retry(cmd)
+
+    fs.copyFileSync('build/Release/metrics.node', `prebuilds/${platform}-${arch}/node-${target.abi}.node`)
+  })
+}
+
+function pack () {
   fs.copyFileSync(
     path.join(__dirname, '..', 'packages', 'dd-trace', 'src', 'native', 'tdigest', 'NOTICES'),
     path.join(__dirname, '..', 'prebuilds', 'NOTICES')
@@ -32,10 +72,15 @@ const cb = err => {
     portable: true,
     file: `addons-${name}.tgz`,
     cwd: path.join(__dirname, '..')
-  }, ['prebuilds'])
+  }, [
+    `prebuilds/${platform}-${arch}`,
+    'prebuilds/NOTICES',
+    'prebuilds/LICENSE-2.0.txt'
+  ])
 }
 
-prebuildify({
-  targets,
-  strip: false
-}, cb)
+function mkdirSafe (filename) {
+  if (!fs.existsSync(filename)) {
+    fs.mkdirSync(filename)
+  }
+}

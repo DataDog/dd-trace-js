@@ -42,6 +42,7 @@ class DatadogTracer extends Tracer {
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
+    this._exporter = getExporter(config, this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler(config.sampleRate)
     this._peers = config.experimental.peers
@@ -149,16 +150,16 @@ function getParent (references) {
   return parent
 }
 
-function getExporter (config) {
+function getExporter (config, prioritySampler) {
   switch (config.experimental.exporter) {
     case exporters.LOG:
-      return new LogExporter(config)
+      return new LogExporter(config, prioritySampler)
     case exporters.BROWSER:
-      return new BrowserExporter(config)
+      return new BrowserExporter(config, prioritySampler)
     case exporters.AGENT:
-      return new AgentExporter(config)
+      return new AgentExporter(config, prioritySampler)
     default:
-      return new platform.Exporter(config)
+      return new platform.Exporter(config, prioritySampler)
   }
 }
 
