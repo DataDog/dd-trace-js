@@ -219,6 +219,12 @@ export declare interface TracerOptions {
   sampleRate?: number;
 
   /**
+   * Interval in milliseconds at which the tracer will submit traces to the agent.
+   * @default 2000
+   */
+  flushInterval?: number;
+
+  /**
    * Whether to enable runtime metrics.
    * @default false
    */
@@ -230,6 +236,7 @@ export declare interface TracerOptions {
    */
   experimental?: boolean | {
     b3?: boolean
+
     /**
      * Whether to write traces to log output, rather than send to an agent
      * @default false
@@ -266,6 +273,12 @@ export declare interface TracerOptions {
    * doing.
    */
   scope?: 'async_hooks' | 'noop'
+
+  /**
+   * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
+   * @default false
+   */
+  reportHostname?: boolean
 }
 
 /** @hidden */
