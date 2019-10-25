@@ -9,11 +9,12 @@ function createWrapFetch (tracer, config) {
     }
 
     fetch._datadog_wrapper = function (resource, init) {
+      const service = config.service || `${tracer._service}-http-client`
       const method = getMethod(resource, init)
       const url = getUrl(resource)
       const span = tracer.startSpan('http.request', {
         'span.kind': 'client',
-        'service.name': 'browser',
+        'service.name': service,
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,

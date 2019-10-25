@@ -35,6 +35,7 @@ describe('Config', () => {
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('apiKey', undefined)
     expect(config).to.have.property('appKey', undefined)
+    expect(config).to.have.property('clientToken', undefined)
     expect(config).to.have.nested.property('experimental.b3', false)
   })
 
@@ -57,6 +58,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_API_KEY').returns('123')
     platform.env.withArgs('DD_APP_KEY').returns('456')
+    platform.env.withArgs('DD_CLIENT_TOKEN').returns('789')
 
     const config = new Config()
 
@@ -73,6 +75,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('apiKey', '123')
     expect(config).to.have.property('appKey', '456')
+    expect(config).to.have.property('clientToken', '789')
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
@@ -122,6 +125,7 @@ describe('Config', () => {
       scope: 'noop',
       apiKey: '123',
       appKey: '456',
+      clientToken: '789',
       experimental: {
         b3: true
       }
@@ -147,6 +151,7 @@ describe('Config', () => {
     expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.property('apiKey', '123')
     expect(config).to.have.property('appKey', '456')
+    expect(config).to.have.property('clientToken', '789')
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
     })
@@ -224,7 +229,8 @@ describe('Config', () => {
       service: 'test',
       env: 'development',
       apiKey: '234',
-      appKey: '567'
+      appKey: '567',
+      clientToken: '789'
     })
 
     expect(config).to.have.property('enabled', true)
@@ -240,6 +246,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('apiKey', '234')
     expect(config).to.have.property('appKey', '567')
+    expect(config).to.have.property('clientToken', '789')
   })
 
   it('should give priority to the options especially url', () => {

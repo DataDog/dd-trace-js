@@ -14,6 +14,7 @@ function createWrapOpen (tracer) {
 function createWrapSend (tracer, config) {
   return function wrapSend (send) {
     return function sendWithTrace (body) {
+      const service = config.service || `${tracer._service}-http-client`
       const method = this._datadog_method
       const url = this._datadog_url.href
       const span = tracer.startSpan('http.request')
@@ -25,7 +26,7 @@ function createWrapSend (tracer, config) {
       this.addEventListener('loadend', () => {
         span.addTags({
           'span.kind': 'client',
-          'service.name': 'browser',
+          'service.name': service,
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
