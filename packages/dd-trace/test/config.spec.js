@@ -92,6 +92,7 @@ describe('Config', () => {
     const tags = {
       'foo': 'bar'
     }
+    const customLogLevels = ['error']
     const config = new Config('test', {
       enabled: false,
       debug: true,
@@ -114,7 +115,8 @@ describe('Config', () => {
       scope: 'noop',
       clientToken: '789',
       experimental: {
-        b3: true
+        b3: true,
+        ddTraceLogLevels: customLogLevels
       }
     })
 
@@ -140,6 +142,7 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.ddTraceLogLevels', customLogLevels)
   })
 
   it('should initialize from the options with url taking precedence', () => {

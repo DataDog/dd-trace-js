@@ -126,6 +126,48 @@ describe('log', () => {
       expect(console.log).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
+
+    it('should set custom log levels when enabled with customLogLevels argument set to an array of log levels', () => {
+      log.toggle(true, ['error', 'info'])
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.not.have.been.called
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should set custom log levels when enabled with customLogLevels arg as CSV string of log levels', () => {
+      log.toggle(true, 'error,info')
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.not.have.been.called
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should log a warning if enabled with an improperly formatted Array', () => {
+      log.toggle(true, [{ 'invalid_key': 'invalid_value' }])
+
+      expect(console.log).to.have.been.calledOnce
+    })
+
+    it('should enable error and debug logs when enabled with customLogLevels argument set to null', () => {
+      log.toggle(true, null)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should enable error and debug logs when enabled without customLogLevels argument', () => {
+      log.toggle(true)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
   })
 
   describe('use', () => {

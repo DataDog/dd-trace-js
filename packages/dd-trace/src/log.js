@@ -11,6 +11,38 @@ let _logger
 let _enabled
 let _deprecate
 
+/*
+default [error, debug]
+from: https://tools.ietf.org/html/rfc5424
+
+  0       Emergency: system is unusable
+  1       Alert: action must be taken immediately
+  2       Critical: critical conditions
+  3       Error: error conditions
+  4       Warning: warning conditions
+  5       Notice: normal but significant condition
+  6       Informational: informational messages
+  7       Debug: debug-level messages
+*/
+
+let _customLogLevels
+
+const _isLogLevelEnabled = (level) => { return !_customLogLevels || _customLogLevels.indexOf(level) >= 0 }
+
+const _setCustomLogLevels = (customLogLevels) => {
+  if (customLogLevels) {
+    try {
+      if (typeof customLogLevels === 'string') {
+        return customLogLevels.toLowerCase().split(',')
+      } else if (Array.isArray(customLogLevels)) {
+        return customLogLevels.map(level => level.toLowerCase())
+      }
+    } catch (e) {
+      console.warn('customlogLevels option malformed', customLogLevels, e) /* eslint-disable-line no-console */
+    }
+  }
+}
+
 const log = {
   use (logger) {
     if (logger && logger.debug instanceof Function && logger.error instanceof Function) {
@@ -20,8 +52,12 @@ const log = {
     return this
   },
 
-  toggle (enabled) {
+  toggle (enabled, customLogLevels) {
     _enabled = enabled
+
+    if (customLogLevels) {
+      _customLogLevels = _setCustomLogLevels(customLogLevels)
+    }
 
     return this
   },
@@ -38,7 +74,7 @@ const log = {
   },
 
   debug (message) {
-    if (_enabled) {
+    if (_enabled && _isLogLevelEnabled('debug')) {
       _logger.debug(message instanceof Function ? message() : message)
     }
 
@@ -46,7 +82,7 @@ const log = {
   },
 
   error (err) {
-    if (_enabled) {
+    if (_enabled && _isLogLevelEnabled('error')) {
       if (err instanceof Function) {
         err = err()
       }
