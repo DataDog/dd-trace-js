@@ -10,6 +10,7 @@ describe('log', () => {
   beforeEach(() => {
     sinon.stub(console, 'log')
     sinon.stub(console, 'error')
+    sinon.stub(console, 'warn')
 
     error = new Error()
 
@@ -26,6 +27,7 @@ describe('log', () => {
     log.reset()
     console.log.restore()
     console.error.restore()
+    console.warn.restore()
   })
 
   it('should support chaining', () => {
