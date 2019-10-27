@@ -148,7 +148,7 @@ describe('log', () => {
     it('should log a warning if enabled with an improperly formatted Array', () => {
       log.toggle(true, [{ 'invalid_key': 'invalid_value' }])
 
-      expect(console.log).to.have.been.calledOnce
+      expect(console.warn).to.have.been.calledOnce
     })
 
     it('should enable error and debug logs when enabled with customLogLevels argument set to null', () => {
