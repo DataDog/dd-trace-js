@@ -177,6 +177,12 @@ describe('Platform', () => {
 
         expect(name).to.equal('foo')
       })
+
+      it('should work even in dependencies', () => {
+        const name = require('./load/node_modules/dep')
+
+        expect(name).to.equal('foo')
+      })
     })
 
     describe('request', () => {

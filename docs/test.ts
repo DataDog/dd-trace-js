@@ -38,10 +38,13 @@ tracer.init({
   logInjection: true,
   analytics: true,
   env: 'test',
+  url: 'http://localhost',
   runtimeMetrics: true,
   trackAsyncScope: false,
   experimental: {
-    b3: true
+    b3: true,
+    exporter: 'log',
+    peers: ['foo']
   },
   hostname: 'agent',
   logger: {
@@ -53,11 +56,13 @@ tracer.init({
   dogstatsd: {
     port: 8888
   },
+  flushInterval: 1000,
   sampleRate: 0.1,
   service: 'test',
   tags: {
     foo: 'bar'
   },
+  reportHostname: true,
   scope: 'noop'
 });
 
