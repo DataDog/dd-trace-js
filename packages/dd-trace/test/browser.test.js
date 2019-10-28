@@ -4,7 +4,7 @@ describe('dd-trace', () => {
   let tracer
 
   beforeEach(() => {
-    tracer = require('../browser')
+    tracer = window.ddtrace.tracer
 
     sinon.stub(navigator, 'sendBeacon')
 
