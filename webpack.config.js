@@ -1,13 +1,18 @@
 'use strict'
 
-module.exports = (env) => ({
-  mode: 'production',
+const base = {
   devtool: 'source-map',
   entry: {
-    'dd-trace': './browser.js'
+    'ddtrace': './browser.js'
   },
-  output: {
-    filename: '[name].min.js'
+  module: {
+    noParse: [
+      /node_modules\/zone\.js/,
+      /node_modules\/bowser/
+    ],
+    rules: [{
+      loader: 'babel-loader'
+    }]
   },
   stats: {
     assetsSort: '!size',
@@ -15,4 +20,21 @@ module.exports = (env) => ({
     modulesSort: '!size'
   },
   node: false
-})
+}
+
+module.exports = [
+  {
+    ...base,
+    mode: 'production',
+    output: {
+      filename: '[name].min.js'
+    }
+  },
+  {
+    ...base,
+    mode: 'development',
+    output: {
+      filename: '[name].js'
+    }
+  }
+]

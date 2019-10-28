@@ -2,6 +2,7 @@ Component,Origin,License,Copyright
 require,@types/node,MIT,Copyright Authors
 require,bowser,MIT,Copyright 2015 Dustin Diaz
 require,container-info,MIT,Copyright 2018 Stephen Belanger
+require,core-js,MIT,Copyright 2014-2019 Denis Pushkarev
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
@@ -26,7 +27,9 @@ require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 require,zone.js,MIT,Copyright 2010-2019 Google LLC.
 dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
+dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
+dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
 dev,babel-plugin-transform-object-assign,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,babel-preset-es2015,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,babelify,MIT,Copyright 2015 Sebastian McKenzie
@@ -48,6 +51,7 @@ dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,karma,MIT,Copyright 2011-2019 Google, Inc.
+dev,karma-browserstack-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-chrome-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-firefox-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-mocha,MIT,Copyright 2011-2013 Google, Inc.

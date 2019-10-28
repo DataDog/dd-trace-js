@@ -3,7 +3,7 @@
 // TODO: Zone metrics
 
 const Base = require('./base')
-const Zone = require('zone.js/dist/zone-evergreen') && window.Zone
+const Zone = require('zone.js/dist/zone') && window.Zone
 
 let singleton = null
 

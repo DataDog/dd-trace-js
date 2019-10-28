@@ -4,6 +4,7 @@
 [![npm (tag)](https://img.shields.io/npm/v/dd-trace/dev.svg)](https://www.npmjs.com/package/dd-trace/v/dev)
 [![CircleCI](https://circleci.com/gh/DataDog/dd-trace-js.svg?style=shield)](https://circleci.com/gh/DataDog/dd-trace-js)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
+[![BrowserStack Status](https://automate.browserstack.com/badge.svg?badge_key=TU95QWlIQXhOcGw2YkdvVGpSYkNLK2QveGlwbmRYc3FSVFRtMUcza3hhQT0tLWErRVVDMFMvWnVIU3p5OE9ZSFJWeXc9PQ==--f63f623010664e0a1776325aefd8d119362f31d4)](https://automate.browserstack.com/public-build/TU95QWlIQXhOcGw2YkdvVGpSYkNLK2QveGlwbmRYc3FSVFRtMUcza3hhQT0tLWErRVVDMFMvWnVIU3p5OE9ZSFJWeXc9PQ==--f63f623010664e0a1776325aefd8d119362f31d4)
 
 **JavaScript APM Tracer**
 
