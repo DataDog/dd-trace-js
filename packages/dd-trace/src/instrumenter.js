@@ -43,7 +43,12 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          this._set(plugins[name], { name, config: {} })
+          if(!config.ddIntegrationsDisabled && config.ddIntegrationsDisabled.indexOf(name) === -1) {
+            this._set(plugins[name], { name, config: {} })
+          } else {
+            log.debug(`configuration disabled via env var named "${name}".``)
+          }
+          
         })
     }
 
