@@ -118,7 +118,7 @@ describe('Config', () => {
       logLevel: logLevel,
       experimental: {
         b3: true,
-        ddTraceLogLevels: customLogLevels
+        logLevel: customLogLevel
       }
     })
 
@@ -145,7 +145,7 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
-    expect(config).to.have.nested.property('experimental.ddTraceLogLevels', customLogLevels)
+    expect(config).to.have.nested.property('experimental.logLevel', customLogLevel)
   })
 
   it('should initialize from the options with url taking precedence', () => {

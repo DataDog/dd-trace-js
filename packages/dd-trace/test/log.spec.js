@@ -10,7 +10,6 @@ describe('log', () => {
   beforeEach(() => {
     sinon.stub(console, 'log')
     sinon.stub(console, 'error')
-    sinon.stub(console, 'warn')
 
     error = new Error()
 
@@ -27,7 +26,6 @@ describe('log', () => {
     log.reset()
     console.log.restore()
     console.error.restore()
-    console.warn.restore()
   })
 
   it('should support chaining', () => {
@@ -152,9 +150,9 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.not.have.been.called
+      expect(console.log).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
-    })
+    })      
 
     it('should log all log levels greater than or equal to minimum log level', () => {
       log.toggle(true, 'debug')
