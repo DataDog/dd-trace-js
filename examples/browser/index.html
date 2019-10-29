@@ -27,7 +27,6 @@
 
     ddtrace.tracer.init({
       experimental: {
-        exporter: ddtrace.ext.exporters.BROWSER,
         peers: ['http://localhost:8080']
       }
     })

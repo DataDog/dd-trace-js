@@ -5,9 +5,6 @@ const Tracer = opentracing.Tracer
 const Reference = opentracing.Reference
 const Span = require('./span')
 const SpanContext = require('./span_context')
-const LogExporter = require('../exporters/log')
-const BrowserExporter = require('../exporters/browser')
-const AgentExporter = require('../exporters/agent')
 const SpanProcessor = require('../span_processor')
 const Sampler = require('../sampler')
 const PrioritySampler = require('../priority_sampler')
@@ -17,7 +14,6 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const NoopSpan = require('../noop/span')
 const formats = require('../../../../ext/formats')
-const exporters = require('../../../../ext/exporters')
 
 const log = require('../log')
 const constants = require('../constants')
@@ -34,16 +30,17 @@ class DatadogTracer extends Tracer {
     log.use(config.logger)
     log.toggle(config.debug)
 
+    const Exporter = platform.exporter(config.experimental.exporter)
+
     this._service = config.service
-    this._exporter = getExporter(config)
-    this._url = this._exporter._url
     this._env = config.env
     this._tags = config.tags
     this._logInjection = config.logInjection
     this._analytics = config.analytics
     this._prioritySampler = new PrioritySampler(config.env)
-    this._exporter = getExporter(config, this._prioritySampler)
+    this._exporter = new Exporter(config, this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
+    this._url = this._exporter._url
     this._sampler = new Sampler(config.sampleRate)
     this._peers = config.experimental.peers
     this._propagators = {
@@ -148,19 +145,6 @@ function getParent (references) {
   }
 
   return parent
-}
-
-function getExporter (config, prioritySampler) {
-  switch (config.experimental.exporter) {
-    case exporters.LOG:
-      return new LogExporter(config, prioritySampler)
-    case exporters.BROWSER:
-      return new BrowserExporter(config, prioritySampler)
-    case exporters.AGENT:
-      return new AgentExporter(config, prioritySampler)
-    default:
-      return new platform.Exporter(config, prioritySampler)
-  }
 }
 
 function isSampled (sampler, parent, type) {
