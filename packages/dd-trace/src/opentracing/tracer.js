@@ -28,7 +28,7 @@ class DatadogTracer extends Tracer {
     super()
 
     log.use(config.logger)
-    log.toggle(config.debug, config.experimental.ddTraceLogLevels)
+    log.toggle(config.debug, config.experimental.logLevel)
 
     const Exporter = platform.exporter(config.experimental.exporter)
 

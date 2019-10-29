@@ -7,39 +7,20 @@ const _default = {
   error: err => console.error(err) /* eslint-disable-line no-console */
 }
 
+const _logLevels = ['trace', 'debug', 'info', 'warn', 'error']
+
 let _logger
 let _enabled
 let _deprecate
+let _logLevel
 
-/*
-default [error, debug]
-from: https://tools.ietf.org/html/rfc5424
+const _isLogLevelEnabled = (level) => {
+  return !_logLevel || _logLevels.indexOf(level) >= _logLevels.indexOf(_logLevel)
+}
 
-  0       Emergency: system is unusable
-  1       Alert: action must be taken immediately
-  2       Critical: critical conditions
-  3       Error: error conditions
-  4       Warning: warning conditions
-  5       Notice: normal but significant condition
-  6       Informational: informational messages
-  7       Debug: debug-level messages
-*/
-
-let _customLogLevels
-
-const _isLogLevelEnabled = (level) => { return !_customLogLevels || _customLogLevels.indexOf(level) >= 0 }
-
-const _setCustomLogLevels = (customLogLevels) => {
-  if (customLogLevels) {
-    try {
-      if (typeof customLogLevels === 'string') {
-        return customLogLevels.toLowerCase().split(',')
-      } else if (Array.isArray(customLogLevels)) {
-        return customLogLevels.map(level => level.toLowerCase())
-      }
-    } catch (e) {
-      console.warn('customlogLevels option malformed', customLogLevels, e) /* eslint-disable-line no-console */
-    }
+const _setLogLevel = (logLevel) => {
+  if (logLevel && typeof logLevel === 'string') {
+    return logLevel.toLowerCase().trim()
   }
 }
 
@@ -52,11 +33,11 @@ const log = {
     return this
   },
 
-  toggle (enabled, customLogLevels) {
+  toggle (enabled, customLogLevel) {
     _enabled = enabled
 
-    if (customLogLevels) {
-      _customLogLevels = _setCustomLogLevels(customLogLevels)
+    if (customLogLevel) {
+      _logLevel = _setLogLevel(customLogLevel)
     }
 
     return this
@@ -69,6 +50,7 @@ const log = {
       _logger.error(message)
       return this
     })
+    _logLevel = undefined
 
     return this
   },
