@@ -3,7 +3,7 @@
 const URL = require('url-parse')
 
 const MAX_SIZE = 64 * 1024 // 64kb
-const DELIMITER_SIZE = 2
+const DELIMITER = '\r\n'
 
 // TODO: rename and refactor to support Node
 // TODO: flush more often
@@ -23,7 +23,7 @@ class BrowserExporter {
   export (spans) {
     const env = this._env
     const json = JSON.stringify({ spans, env })
-    const size = json.length + (this._queue.length > 0 ? DELIMITER_SIZE : 0)
+    const size = json.length + (this._queue.length > 0 ? DELIMITER.length : 0)
 
     if (this._size + size > MAX_SIZE) {
       this._flush()
@@ -38,7 +38,7 @@ class BrowserExporter {
 
     const url = `${this._url.href}/v1/input/${this._clientToken}`
     const method = 'POST'
-    const body = this._queue.join('\r\n')
+    const body = this._queue.join(DELIMITER)
     const keepalive = true
     const mode = 'no-cors'
     const done = () => {}
@@ -46,7 +46,7 @@ class BrowserExporter {
     this._queue = []
     this._size = 0
 
-    fetch(url, { body, method, keepalive, mode })
+    window.fetch(url, { body, method, keepalive, mode })
       .then(done, done)
   }
 }

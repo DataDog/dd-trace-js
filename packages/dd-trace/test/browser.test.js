@@ -1,13 +1,20 @@
 'use strict'
 
+const createEvent = (name) => {
+  if (typeof(Event) === 'function') {
+    return new Event(name)
+  } else {
+    const event = document.createEvent('Event')
+    event.initEvent(name, true, true)
+    return event
+  }
+}
+
 describe('dd-trace', () => {
   let tracer
 
   beforeEach(() => {
     tracer = window.ddtrace.tracer
-
-    sinon.stub(navigator, 'sendBeacon')
-
     tracer.init({
       service: 'test',
       exporter: 'browser'
@@ -15,16 +22,18 @@ describe('dd-trace', () => {
   })
 
   afterEach(() => {
-    navigator.sendBeacon.restore()
+    window.fetch.restore && window.fetch.restore()
   })
 
   it('should record and send a trace to the agent', () => {
+    sinon.stub(window, 'fetch').returns(Promise.resolve())
+
     const span = tracer.startSpan('test.request')
 
     span.finish()
 
-    window.dispatchEvent(new window.Event('unload'))
+    window.dispatchEvent(createEvent('visibilitychange'))
 
-    expect(navigator.sendBeacon).to.have.been.called
+    expect(window.fetch).to.have.been.called
   })
 })

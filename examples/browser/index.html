@@ -27,16 +27,17 @@
 
     ddtrace.tracer.init({
       experimental: {
-        exporter: ddtrace.ext.exporters.BROWSER
+        exporter: ddtrace.ext.exporters.BROWSER,
+        peers: ['http://localhost:8080']
       }
     })
 
     document.getElementById('xhr').addEventListener('click', function () {
-      get('index.html')
+      get('http://localhost:8080/users')
     })
 
     document.getElementById('fetch').addEventListener('click', function () {
-      window.fetch('index.html')
+      window.fetch('http://localhost:8080/users')
     })
 
     function load () {

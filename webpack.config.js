@@ -3,7 +3,7 @@
 const base = {
   devtool: 'source-map',
   entry: {
-    'ddtrace': './browser.js'
+    'dd-trace': './browser.js'
   },
   module: {
     noParse: [

@@ -1,6 +1,7 @@
 'use strict'
 
-const { Reference, REFERENCE_CHILD_OF, REFERENCE_NOOP } = require('opentracing')
+const { Reference, REFERENCE_CHILD_OF } = require('opentracing')
+const { REFERENCE_NOOP } = require('../../dd-trace/src/constants')
 
 function createWrapOpen (tracer) {
   return function wrapOpen (open) {
