@@ -46,7 +46,6 @@
   "engines": {
     "node": ">=8"
   },
-  "browserify-shim": {},
   "dependencies": {
     "@types/node": "^10.12.18",
     "bowser": "^2.5.3",
