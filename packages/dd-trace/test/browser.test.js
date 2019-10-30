@@ -1,7 +1,7 @@
 'use strict'
 
 const createEvent = (name) => {
-  if (typeof(Event) === 'function') {
+  if (typeof Event === 'function') {
     return new Event(name)
   } else {
     const event = document.createEvent('Event')

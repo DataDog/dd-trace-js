@@ -25,6 +25,7 @@ require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
+require,whatwg-fetch,MIT,Copyright 2014-2016 GitHub Inc.
 require,zone.js,MIT,Copyright 2010-2019 Google LLC.
 dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
@@ -32,12 +33,8 @@ dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
 dev,babel-plugin-transform-object-assign,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,babel-preset-es2015,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
-dev,babelify,MIT,Copyright 2015 Sebastian McKenzie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
-dev,browserify,MIT,Copyright 2010 James Halliday
-dev,browserify-shim,MIT,Copyright 2012 Thorsten Lorenz
-dev,bundle-collapser,MIT,Copyright James Halliday
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,codecov,MIT,Copyright 2014 Gregg Caines
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
@@ -69,6 +66,3 @@ dev,tape,MIT,Copyright James Halliday
 dev,webpack,MIT,Copyright JS Foundation and other contributors
 dev,webpack-cli,MIT,Copyright JS Foundation and other contributors
 file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns
-dev,vinyl-buffer,MIT,Copyright 2014 Hugh Kennedy
-dev,vinyl-fs,MIT,Copyright 2013-2017 Blaine Bublitz Eric Schoffstall and other contributors
-dev,vinyl-source-stream,MIT,Copyright 2014 Hugh Kennedy
