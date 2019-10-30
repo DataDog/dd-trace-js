@@ -13,7 +13,7 @@ class BrowserExporter {
     this._queue = []
     this._clientToken = clientToken
     this._env = env
-    this._url = new URL(url || 'https://public-trace-http-intake.logs.datadoghq.com')
+    this._url = url || new URL('https://public-trace-http-intake.logs.datadoghq.com')
     this._size = 0
 
     window.addEventListener('beforeunload', () => this._flush())

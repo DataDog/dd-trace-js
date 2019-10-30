@@ -1,5 +1,6 @@
 'use strict'
 
+const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
@@ -37,9 +38,9 @@ class Config {
     this.debug = String(debug) === 'true'
     this.logInjection = String(logInjection) === 'true'
     this.env = env
-    this.url = url
-    this.hostname = hostname || (url && url.hostname)
-    this.port = port || (url && url.port)
+    this.url = url && new URL(url)
+    this.hostname = hostname || (this.url && this.url.hostname)
+    this.port = String(port || (this.url && this.url.port))
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger

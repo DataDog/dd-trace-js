@@ -6,7 +6,7 @@ const Scheduler = require('./scheduler')
 
 class AgentExporter {
   constructor ({ url, hostname, port, flushInterval }, prioritySampler) {
-    this._url = new URL(url || `http://${hostname || 'localhost'}:${port}`)
+    this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
     this._writer = new Writer(this._url, prioritySampler)
 
     if (flushInterval > 0) {
