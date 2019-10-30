@@ -11,6 +11,7 @@ const DELIMITER = '\r\n'
 class BrowserExporter {
   constructor ({ clientToken, url, env }) {
     this._queue = []
+    this._flushing = false
     this._clientToken = clientToken
     this._env = env
     this._url = url || new URL('https://public-trace-http-intake.logs.datadoghq.com')
@@ -26,6 +27,9 @@ class BrowserExporter {
     const size = json.length + (this._queue.length > 0 ? DELIMITER.length : 0)
 
     if (this._size + size > MAX_SIZE) {
+      if (this._flushing) return // drop trace to avoid multiple connections
+      if (size > MAX_SIZE) return // drop trace because too large
+
       this._flush()
     }
 
@@ -36,12 +40,16 @@ class BrowserExporter {
   _flush () {
     if (this._queue.length === 0) return
 
+    this._flushing = true
+
     const url = `${this._url.href}/v1/input/${this._clientToken}`
     const method = 'POST'
     const body = this._queue.join(DELIMITER)
     const keepalive = true
     const mode = 'no-cors'
-    const done = () => {}
+    const done = () => {
+      this._flushing = false
+    }
 
     this._queue = []
     this._size = 0
