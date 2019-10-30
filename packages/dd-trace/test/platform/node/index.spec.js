@@ -586,9 +586,8 @@ describe('Platform', () => {
         const Exporter = proxyquire('../src/platform/node/exporter', {
           './env': () => undefined
         })()
-        const config = {}
-        const exporter = Exporter(config)
-        expect(exporter).to.be.equal(AgentExporter)
+
+        expect(Exporter).to.be.equal(AgentExporter)
       })
 
       it('should create an LogExporter when in lambda environment', () => {
@@ -600,18 +599,16 @@ describe('Platform', () => {
             return undefined
           }
         })()
-        const config = {}
-        const exporter = Exporter(config)
-        expect(exporter).to.be.equal(LogExporter)
+
+        expect(Exporter).to.be.equal(LogExporter)
       })
 
       it('should allow configuring the exporter', () => {
         const Exporter = proxyquire('../src/platform/node/exporter', {
           './env': () => undefined
-        })({ exporter: 'log' })
-        const config = {}
-        const exporter = Exporter(config)
-        expect(exporter).to.be.equal(LogExporter)
+        })('log')
+
+        expect(Exporter).to.be.equal(LogExporter)
       })
     })
   })
