@@ -53,7 +53,6 @@ dev,karma-chrome-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-firefox-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-mocha,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-webpack,MIT,Copyright JS Foundation and other contributors
-dev,live-server,MIT,Copyright 2012 Tapio Vierros
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
