@@ -9,7 +9,9 @@ const zeroId = new Uint8Array(8)
 // Cryptographically secure local seeds to mitigate Math.random() seed reuse.
 const seed = new Uint32Array(2)
 
-platform.crypto.getRandomValues(seed)
+if (platform.crypto) {
+  platform.crypto.getRandomValues(seed)
+}
 
 // Internal representation of a trace or span ID.
 class Identifier {

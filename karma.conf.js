@@ -79,21 +79,21 @@ module.exports = function (config) {
         os_version: '10'
       },
 
-      // bs_ie11: {
-      //   base: 'BrowserStack',
-      //   browser: 'IE',
-      //   browser_version: '11.0',
-      //   os: 'Windows',
-      //   os_version: '10'
-      // },
+      bs_ie11: {
+        base: 'BrowserStack',
+        browser: 'IE',
+        browser_version: '11.0',
+        os: 'Windows',
+        os_version: '10'
+      },
 
-      // bs_ie10: {
-      //   base: 'BrowserStack',
-      //   browser: 'IE',
-      //   browser_version: '10.0',
-      //   os: 'Windows',
-      //   os_version: '8'
-      // },
+      bs_ie10: {
+        base: 'BrowserStack',
+        browser: 'IE',
+        browser_version: '10.0',
+        os: 'Windows',
+        os_version: '8'
+      },
 
       bs_safari: {
         base: 'BrowserStack',

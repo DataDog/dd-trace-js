@@ -1,3 +1,3 @@
 'use strict'
 
-module.exports = window.crypto
+module.exports = window.crypto || window.msCrypto

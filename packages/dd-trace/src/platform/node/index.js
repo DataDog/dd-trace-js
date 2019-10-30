@@ -13,7 +13,7 @@ const plugins = require('../../plugins')
 const hostname = require('./hostname')
 const Loader = require('./loader')
 const Scope = require('../../scope/async_hooks')
-const getExporterType = require('./exporter')
+const exporter = require('./exporter')
 
 const emitter = new EventEmitter()
 
@@ -37,7 +37,7 @@ const platform = {
   off: emitter.removeListener.bind(emitter),
   Loader,
   Scope,
-  Exporter: getExporterType()
+  exporter
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))

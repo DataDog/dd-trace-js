@@ -8,9 +8,9 @@ const validate = require('./validate')
 const service = require('./service')
 const metrics = require('./metrics')
 const plugins = require('../../plugins/browser')
+const exporter = require('./exporter')
 const Loader = require('./loader')
 const Scope = require('../../scope/zone')
-const Exporter = require('../../exporters/browser')
 
 const platform = {
   _config: {},
@@ -31,7 +31,7 @@ const platform = {
   off: () => {}, // TODO: add event listener
   Loader,
   Scope,
-  Exporter
+  exporter
 }
 
 module.exports = platform

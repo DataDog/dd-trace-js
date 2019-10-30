@@ -1,25 +1,35 @@
 'use strict'
 
+const URL = require('url-parse')
+
 const MAX_SIZE = 64 * 1024 // 64kb
+const DELIMITER = '\r\n'
 
 // TODO: rename and refactor to support Node
+// TODO: flush more often
 
 class BrowserExporter {
-  constructor ({ apiKey, appKey }) {
+  constructor ({ clientToken, url, env }) {
     this._queue = []
-    this._apiKey = apiKey
-    this._appKey = appKey
-    this._url = `https://dd.datad0g.com/trace/api/experimental/intake` // TODO: config
-    this._size = 13
+    this._flushing = false
+    this._clientToken = clientToken
+    this._env = env
+    this._url = url || new URL('https://public-trace-http-intake.logs.datadoghq.com')
+    this._size = 0
 
-    window.addEventListener('unload', () => this._flush())
+    window.addEventListener('beforeunload', () => this._flush())
+    window.addEventListener('visibilitychange', () => this._flush())
   }
 
   export (spans) {
-    const json = JSON.stringify(spans)
-    const size = json.length + Math.min(0, this._queue.length)
+    const env = this._env
+    const json = JSON.stringify({ spans, env })
+    const size = json.length + (this._queue.length > 0 ? DELIMITER.length : 0)
 
     if (this._size + size > MAX_SIZE) {
+      if (this._flushing) return // drop trace to avoid multiple connections
+      if (size > MAX_SIZE) return // drop trace because too large
+
       this._flush()
     }
 
@@ -28,15 +38,24 @@ class BrowserExporter {
   }
 
   _flush () {
-    if (this._queue.length > 0) {
-      const url = `${this._url}?api_key=${this._apiKey}&application_key=${this._appKey}`
-      const data = `{"traces":[${this._queue.join(',')}]}`
+    if (this._queue.length === 0) return
 
-      window.navigator.sendBeacon(url, data)
+    this._flushing = true
 
-      this._queue = []
-      this._size = 13
+    const url = `${this._url.href}/v1/input/${this._clientToken}`
+    const method = 'POST'
+    const body = this._queue.join(DELIMITER)
+    const keepalive = true
+    const mode = 'no-cors'
+    const done = () => {
+      this._flushing = false
     }
+
+    this._queue = []
+    this._size = 0
+
+    window.fetch(url, { body, method, keepalive, mode })
+      .then(done, done)
   }
 }
 

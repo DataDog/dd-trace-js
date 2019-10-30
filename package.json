@@ -73,6 +73,7 @@
     "shimmer": "^1.2.0",
     "tar": "^4.4.8",
     "url-parse": "^1.4.3",
+    "whatwg-fetch": "^3.0.0",
     "zone.js": "^0.10.2"
   },
   "devDependencies": {

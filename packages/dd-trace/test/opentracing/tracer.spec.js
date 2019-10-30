@@ -12,7 +12,6 @@ describe('Tracer', () => {
   let PrioritySampler
   let prioritySampler
   let AgentExporter
-  let LogExporter
   let SpanProcessor
   let processor
   let exporter
@@ -46,7 +45,6 @@ describe('Tracer', () => {
       export: sinon.spy()
     }
     AgentExporter = sinon.stub().returns(exporter)
-    LogExporter = sinon.stub().returns(exporter)
 
     processor = {
       process: sinon.spy()
@@ -87,14 +85,13 @@ describe('Tracer', () => {
 
     platform = {
       hostname: sinon.stub().returns('my_hostname'),
-      Exporter: AgentExporter
+      exporter: sinon.stub().returns(AgentExporter)
     }
 
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
-      '../exporters/log': LogExporter,
       '../span_processor': SpanProcessor,
       '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,
@@ -110,17 +107,6 @@ describe('Tracer', () => {
 
     expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
-  })
-
-  it('should support recording with LogExporter', () => {
-    config.experimental = {
-      exporter: 'log'
-    }
-    tracer = new Tracer(config)
-
-    expect(AgentExporter).not.to.have.been.called
-    expect(LogExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 

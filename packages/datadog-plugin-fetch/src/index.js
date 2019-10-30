@@ -1,5 +1,7 @@
 'use strict'
 
+const { Reference, REFERENCE_CHILD_OF } = require('opentracing')
+const { REFERENCE_NOOP } = require('../../dd-trace/src/constants')
 const tx = require('../../dd-trace/src/plugins/util/tx')
 
 function createWrapFetch (tracer, config) {
@@ -9,18 +11,29 @@ function createWrapFetch (tracer, config) {
     }
 
     fetch._datadog_wrapper = function (resource, init) {
+      const service = config.service || `${tracer._service}-http-client`
       const method = getMethod(resource, init)
       const url = getUrl(resource)
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const type = isFlush(tracer._url.href, url) ? REFERENCE_NOOP : REFERENCE_CHILD_OF
       const span = tracer.startSpan('http.request', {
-        'span.kind': 'client',
-        'service.name': 'browser',
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': url.href
+        references: [
+          new Reference(type, childOf)
+        ],
+        tags: {
+          'span.kind': 'client',
+          'service.name': service,
+          'resource.name': method,
+          'span.type': 'http',
+          'http.method': method,
+          'http.url': url.href
+        }
       })
 
-      init = inject(init, tracer, span, url.origin)
+      if (type === REFERENCE_CHILD_OF) {
+        init = inject(init, tracer, span, url.origin)
+      }
 
       const promise = tracer.scope().bind(fetch, span).call(this, resource, init)
 
@@ -78,6 +91,10 @@ function inject (init, tracer, span, origin) {
   }
 
   return init
+}
+
+function isFlush (href, url) {
+  return (new RegExp(`^${href}/v1/input/[a-z0-9]+$`, 'i')).test(url.href)
 }
 
 module.exports = {
