@@ -289,6 +289,11 @@ export declare interface TracerOptions {
    * @default false
    */
   reportHostname?: boolean
+
+  /**
+   * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
+   */
+  clientToken?: string
 }
 
 /** @hidden */
