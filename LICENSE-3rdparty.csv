@@ -31,7 +31,6 @@ dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contribu
 dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
-dev,babel-preset-es2015,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
