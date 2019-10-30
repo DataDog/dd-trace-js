@@ -7,32 +7,6 @@ const tx = require('../../dd-trace/src/plugins/util/tx')
 
 const procnameRegex = /^sp_[a-z]+$/
 
-function createWrapRequestClass (tracer) {
-  return function wrapRequestClass (Request) {
-    class RequestWithTrace extends Request {
-      constructor (sqlTextOrProcedure, callback) {
-        super(sqlTextOrProcedure, callback)
-        tracer.scope().bind(this)
-      }
-    }
-
-    return RequestWithTrace
-  }
-}
-
-function createWrapConnectionClass (tracer) {
-  return function wrapConnectionClass (Connection) {
-    class ConnectionWithTrace extends Connection {
-      constructor (config) {
-        super(config)
-        tracer.scope().bind(this)
-      }
-    }
-
-    return ConnectionWithTrace
-  }
-}
-
 function createWrapMakeRequest (tracer, config) {
   return function wrapMakeRequest (makeRequest) {
     return function makeRequestWithTrace (request) {
@@ -113,22 +87,24 @@ module.exports = [
     name: 'tedious',
     versions: [ '>=1.0.0' ],
     patch (tedious, tracer, config) {
-      this.wrap(tedious, 'Request', createWrapRequestClass(tracer))
-      this.wrap(tedious, 'Connection', createWrapConnectionClass(tracer))
       this.wrap(tedious.Connection.prototype, 'makeRequest', createWrapMakeRequest(tracer, config))
 
       if (tedious.BulkLoad && tedious.BulkLoad.prototype.getRowStream) {
         this.wrap(tedious.BulkLoad.prototype, 'getRowStream', createWrapGetRowStream(tracer))
       }
+
+      tracer.scope().bind(tedious.Request.prototype)
+      tracer.scope().bind(tedious.Connection.prototype)
     },
-    unpatch (tedious) {
-      this.unwrap(tedious, 'Request')
-      this.unwrap(tedious, 'Connection')
+    unpatch (tedious, tracer) {
       this.unwrap(tedious.Connection.prototype, 'makeRequest')
 
       if (tedious.BulkLoad) {
         this.unwrap(tedious.BulkLoad.prototype, 'getRowStream')
       }
+
+      tracer.scope().unbind(tedious.Request.prototype)
+      tracer.scope().unbind(tedious.Connection.prototype)
     }
   }
 ]
