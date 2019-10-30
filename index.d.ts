@@ -289,6 +289,12 @@ export declare interface TracerOptions {
    * @default false
    */
   reportHostname?: boolean
+
+  /**
+   * List of integrations to disable when the tracer is initialized e.g. express,hapi,http,dns
+   * @default []
+   */
+  ddIntegrationsDisabled?: string[]
 }
 
 /** @hidden */

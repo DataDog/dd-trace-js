@@ -98,7 +98,7 @@ describe('Instrumenter', () => {
         const express = require('express-mock')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', config)
-      })
+      })      
 
       it('should default to an empty plugin configuration', () => {
         instrumenter.use('express-mock')
@@ -196,7 +196,7 @@ describe('Instrumenter', () => {
         require('other')
 
         expect(integrations.other.patch).to.have.been.called
-      })
+      })     
     })
 
     describe('patch', () => {
@@ -352,4 +352,28 @@ describe('Instrumenter', () => {
       })
     })
   })
+  
+  describe('with plugins disabled via configuration option', () => {
+    describe('enable', () => {
+      it('should not patch plugins disabled from configuration option', () => {
+        const config_disable = { foo: 'bar', ddIntegrationsDisabled: ['express-mock'] }
+        instrumenter.enable(config_disable)
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.not.have.been.called
+      }) 
+
+      it('should patch plugins not disabled from configuration option', () => {
+        const config_empty = {}
+        const config_no_disable = { foo: 'bar', ddIntegrationsDisabled: [] }
+        instrumenter.enable(config_no_disable)
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', config_empty)
+      }) 
+    })
+  })
+
 })

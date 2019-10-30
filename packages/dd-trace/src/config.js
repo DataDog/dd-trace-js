@@ -63,7 +63,7 @@ class Config {
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
     this.apiKey = apiKey
     this.appKey = appKey
-    this.ddIntegrationsDisabled = coalesce(options.ddIntegrationsDisabled, platform.env('DD_INTEGRATIONS_DISABLED'), null)
+    this.ddIntegrationsDisabled = coalesce(options.ddIntegrationsDisabled, platform.env('DD_INTEGRATIONS_DISABLED'), [])
   }
 }
 
