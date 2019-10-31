@@ -52,7 +52,7 @@ describe('PrioritySampler', () => {
       './sampler': Sampler
     })
 
-    prioritySampler = new PrioritySampler('test', {})
+    prioritySampler = new PrioritySampler('test')
   })
 
   describe('validate', () => {
