@@ -156,7 +156,7 @@ describe('PrioritySampler', () => {
       expect(context._sampling).to.have.property('priority', AUTO_REJECT)
     })
 
-    it('should support a sample rate from a rule on service', () => {
+    it('should support a sample rate from a rule on service as string', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
@@ -170,7 +170,21 @@ describe('PrioritySampler', () => {
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
     })
 
-    it('should support a sample rate from a rule on name', () => {
+    it('should support a sample rate from a rule on service as string as regex', () => {
+      context._tags['service.name'] = 'test'
+
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 0, service: /fo/ },
+          { sampleRate: 1, service: /tes/ }
+        ]
+      })
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+    })
+
+    it('should support a sample rate from a rule on name as string', () => {
       context._name = 'foo'
       context._tags['service.name'] = 'test'
 
@@ -178,6 +192,21 @@ describe('PrioritySampler', () => {
         rules: [
           { sampleRate: 0, name: 'bar' },
           { sampleRate: 1, name: 'foo' }
+        ]
+      })
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+    })
+
+    it('should support a sample rate from a rule on name as regex', () => {
+      context._name = 'foo'
+      context._tags['service.name'] = 'test'
+
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 0, name: /ba/ },
+          { sampleRate: 1, name: /fo/ }
         ]
       })
       prioritySampler.sample(context)

@@ -133,7 +133,9 @@ class PrioritySampler {
     const name = context._name
     const service = context._tags['service.name']
 
+    if (rule.name instanceof RegExp && !rule.name.test(name)) return false
     if (rule.name && rule.name !== name) return false
+    if (rule.service instanceof RegExp && !rule.service.test(service)) return false
     if (rule.service && rule.service !== service) return false
 
     return true
