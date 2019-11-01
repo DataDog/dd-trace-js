@@ -7,7 +7,12 @@ const _default = {
   error: err => console.error(err) /* eslint-disable-line no-console */
 }
 
-const _logLevels = ['trace', 'debug', 'info', 'warn', 'error']
+const _logLevels = {
+  'debug': 0,
+  'error': 1
+}
+
+const _defaultLogLevel = 'debug'
 
 let _logger
 let _enabled
@@ -15,13 +20,15 @@ let _deprecate
 let _logLevel
 
 const _isLogLevelEnabled = (level) => {
-  return !_logLevel || _logLevels.indexOf(level) >= _logLevels.indexOf(_logLevel)
+  return !_logLevel || _logLevels[level] >= _logLevel
 }
 
 const _setLogLevel = (logLevel) => {
   if (logLevel && typeof logLevel === 'string') {
-    return logLevel.toLowerCase().trim()
+    return _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
   }
+
+  return _logLevels[_defaultLogLevel]
 }
 
 const log = {
@@ -33,12 +40,9 @@ const log = {
     return this
   },
 
-  toggle (enabled, customLogLevel) {
+  toggle (enabled, logLevel) {
     _enabled = enabled
-
-    if (customLogLevel) {
-      _logLevel = _setLogLevel(customLogLevel)
-    }
+    _logLevel = _setLogLevel(logLevel)
 
     return this
   },
@@ -50,7 +54,7 @@ const log = {
       _logger.error(message)
       return this
     })
-    _logLevel = undefined
+    _logLevel = _setLogLevel()
 
     return this
   },

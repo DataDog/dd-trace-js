@@ -61,7 +61,11 @@ class Config {
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
-    this.clientToken = clientToken
+    this.logLevel = coalesce(
+      options.logLevel,
+      platform.env('DD_TRACE_LOG_LEVEL'),
+      'debug'
+    )
   }
 }
 
