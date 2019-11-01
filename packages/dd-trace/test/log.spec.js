@@ -150,9 +150,9 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.log).to.not.have.been.called
       expect(console.error).to.have.been.calledWith(error)
-    })      
+    })
 
     it('should log all log levels greater than or equal to minimum log level', () => {
       log.toggle(true, 'debug')

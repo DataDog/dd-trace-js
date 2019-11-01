@@ -117,8 +117,7 @@ describe('Config', () => {
       clientToken: '789',
       logLevel: logLevel,
       experimental: {
-        b3: true,
-        logLevel: customLogLevel
+        b3: true
       }
     })
 
@@ -145,7 +144,6 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
-    expect(config).to.have.nested.property('experimental.logLevel', customLogLevel)
   })
 
   it('should initialize from the options with url taking precedence', () => {

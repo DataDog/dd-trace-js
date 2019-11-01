@@ -57,15 +57,11 @@ class Config {
       b3: !(!options.experimental || !options.experimental.b3),
       exporter: options.experimental && options.experimental.exporter,
       peers: (options.experimental && options.experimental.peers) || [],
-      sampler: (options.experimental && options.experimental.sampler) || {},
-      logLevel: coalesce(
-        (options.experimental ? options.experimental.logLevel : null),
-        platform.env('LOG_LEVEL'),
-        null
-      )
+      sampler: (options.experimental && options.experimental.sampler) || {}
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
+    this.clientToken = clientToken
     this.logLevel = coalesce(
       options.logLevel,
       platform.env('DD_TRACE_LOG_LEVEL'),
