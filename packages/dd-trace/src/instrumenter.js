@@ -28,7 +28,7 @@ class Instrumenter {
     try {
       this._set(plugins[name.toLowerCase()], { name, config })
     } catch (e) {
-      log.debug(`Could not find a plugin named "${name}" .`)
+      log.debug(`Could not find a plugin named "${name}".`)
     }
 
     if (this._enabled) {
@@ -43,12 +43,11 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          if(!config.ddIntegrationsDisabled || config.ddIntegrationsDisabled.indexOf(name) === -1) {
+          if (!config.integrationsDisabled || config.integrationsDisabled.indexOf(name) === -1) {
             this._set(plugins[name], { name, config: {} })
           } else {
             log.debug(`configuration disabled via env var named "${name}".`)
           }
-          
         })
     }
 

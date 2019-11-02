@@ -294,7 +294,7 @@ export declare interface TracerOptions {
    * List of integrations to disable when the tracer is initialized e.g. express,hapi,http,dns
    * @default []
    */
-  ddIntegrationsDisabled?: string[]
+  integrationsDisabled?: string[]
   
   /**
    * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
