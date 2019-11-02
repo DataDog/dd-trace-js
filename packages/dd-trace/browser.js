@@ -1,5 +1,6 @@
 'use strict'
 
+require('whatwg-fetch')
 require('core-js/stable')
 
 const platform = require('./src/platform')

@@ -295,6 +295,11 @@ export declare interface TracerOptions {
    * @default []
    */
   ddIntegrationsDisabled?: string[]
+  
+  /**
+   * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
+   */
+  clientToken?: string
 }
 
 /** @hidden */

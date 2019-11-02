@@ -13,8 +13,7 @@ class Config {
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
     const env = coalesce(options.env, platform.env('DD_ENV'))
-    const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), null)
-    const protocol = 'http'
+    const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), platform.env('DD_TRACE_URL'), null)
     const hostname = coalesce(
       options.hostname,
       platform.env('DD_AGENT_HOST'),
@@ -33,15 +32,15 @@ class Config {
     )
     const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
     const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
-    const apiKey = coalesce(options.apiKey, platform.env('DD_API_KEY'))
-    const appKey = coalesce(options.appKey, platform.env('DD_APP_KEY'))
+    const clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
     this.logInjection = String(logInjection) === 'true'
     this.env = env
-    this.url = url ? new URL(url) : new URL(`${protocol}://${hostname || 'localhost'}:${port}`)
-    this.hostname = hostname || this.url.hostname
+    this.url = url && new URL(url)
+    this.hostname = hostname || (this.url && this.url.hostname)
+    this.port = String(port || (this.url && this.url.port))
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger
@@ -61,9 +60,8 @@ class Config {
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
-    this.apiKey = apiKey
-    this.appKey = appKey
-    this.ddIntegrationsDisabled = coalesce(options.ddIntegrationsDisabled, platform.env('DD_INTEGRATIONS_DISABLED'), [])
+    this.ddIntegrationsDisabled = coalesce(options.ddIntegrationsDisabled, platform.env('DD_INTEGRATIONS_DISABLED'), []
+    this.clientToken = clientToken
   }
 }
 

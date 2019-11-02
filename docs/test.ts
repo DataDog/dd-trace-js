@@ -63,7 +63,8 @@ tracer.init({
     foo: 'bar'
   },
   reportHostname: true,
-  scope: 'noop'
+  scope: 'noop',
+  clientToken: 'pub123abc'
 });
 
 const httpOptions = {

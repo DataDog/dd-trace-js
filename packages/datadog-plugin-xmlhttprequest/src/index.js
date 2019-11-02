@@ -1,5 +1,8 @@
 'use strict'
 
+const { Reference, REFERENCE_CHILD_OF } = require('opentracing')
+const { REFERENCE_NOOP } = require('../../dd-trace/src/constants')
+
 function createWrapOpen (tracer) {
   return function wrapOpen (open) {
     return function openWithTrace (method, url) {
@@ -14,26 +17,33 @@ function createWrapOpen (tracer) {
 function createWrapSend (tracer, config) {
   return function wrapSend (send) {
     return function sendWithTrace (body) {
+      const service = config.service || `${tracer._service}-http-client`
       const method = this._datadog_method
       const url = this._datadog_url.href
-      const span = tracer.startSpan('http.request')
-
-      inject(this, tracer, span)
-
-      this.addEventListener('error', e => span.setTag('error', e))
-      this.addEventListener('load', () => span.setTag('http.status', this.status))
-      this.addEventListener('loadend', () => {
-        span.addTags({
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const type = isFlush(tracer._url.href, url) ? REFERENCE_NOOP : REFERENCE_CHILD_OF
+      const span = tracer.startSpan('http.request', {
+        references: [
+          new Reference(type, childOf)
+        ],
+        tags: {
           'span.kind': 'client',
-          'service.name': 'browser',
+          'service.name': service,
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
           'http.url': url
-        })
-
-        span.finish()
+        }
       })
+
+      if (type === REFERENCE_CHILD_OF) {
+        inject(this, tracer, span)
+      }
+
+      this.addEventListener('error', e => span.setTag('error', e))
+      this.addEventListener('load', () => span.setTag('http.status', this.status))
+      this.addEventListener('loadend', () => span.finish())
 
       return tracer.scope().bind(send, span).apply(this, arguments)
     }
@@ -53,6 +63,10 @@ function inject (xhr, tracer, span) {
   for (const name in headers) {
     xhr.setRequestHeader(name, headers[name])
   }
+}
+
+function isFlush (href, url) {
+  return (new RegExp(`^${href}/v1/input/[a-z0-9]+$`, 'i')).test(url.href)
 }
 
 module.exports = {
