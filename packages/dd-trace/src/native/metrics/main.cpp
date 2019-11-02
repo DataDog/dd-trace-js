@@ -3,6 +3,7 @@
 #include "EventLoop.hpp"
 #include "GarbageCollection.hpp"
 #include "Heap.hpp"
+#include "HistogramWrap.hpp"
 #include "Object.hpp"
 #include "Process.hpp"
 #include "SpanTracker.hpp"
@@ -68,11 +69,17 @@ namespace datadog {
   NAN_MODULE_INIT(init) {
     Object obj = Object(target);
 
+    HistogramWrap::init(target);
+
+    auto histogram = Nan::GetFunction(
+      Nan::New<v8::FunctionTemplate>(HistogramWrap::create)).ToLocalChecked();
+
     obj.set("start", start);
     obj.set("stop", stop);
     obj.set("stats", stats);
     obj.set("track", track);
     obj.set("finish", finish);
+    obj.set("histogram", histogram);
   }
 
   NODE_MODULE(metrics, init);

@@ -538,6 +538,65 @@ describe('Platform', () => {
         })
       })
 
+      describe('histogram', () => {
+        it('should compute an histogram', () => {
+          metrics = metrics.apply(platform)
+          metrics.start()
+
+          metrics.histogram('test', 1)
+          metrics.histogram('test', 2)
+          metrics.histogram('test', 3)
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test.min', 1)
+          expect(client.gauge).to.have.been.calledWith('test.max', 3)
+          expect(client.increment).to.have.been.calledWith('test.sum', 6)
+          expect(client.gauge).to.have.been.calledWith('test.avg', 2)
+          expect(client.gauge).to.have.been.calledWith('test.median', 2)
+          expect(client.increment).to.have.been.calledWith('test.count', 3)
+          expect(client.gauge).to.have.been.calledWith('test.95percentile', 1)
+        })
+
+        it('should compute an histogram with a tag', () => {
+          metrics = metrics.apply(platform)
+          metrics.start()
+
+          metrics.histogram('test', 1, 'foo:bar')
+          metrics.histogram('test', 2, 'foo:bar')
+          metrics.histogram('test', 3, 'foo:bar')
+          metrics.histogram('test', 4, 'foo:baz')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test.min', 1, ['foo:bar'])
+          expect(client.gauge).to.have.been.calledWith('test.max', 3, ['foo:bar'])
+          expect(client.increment).to.have.been.calledWith('test.sum', 6, ['foo:bar'])
+          expect(client.gauge).to.have.been.calledWith('test.avg', 2, ['foo:bar'])
+          expect(client.gauge).to.have.been.calledWith('test.median', 2, ['foo:bar'])
+          expect(client.increment).to.have.been.calledWith('test.count', 3, ['foo:bar'])
+          expect(client.gauge).to.have.been.calledWith('test.95percentile', 1, ['foo:bar'])
+        })
+
+        it('should reset the stats', () => {
+          metrics = metrics.apply(platform)
+          metrics.start()
+
+          metrics.histogram('test.reset', 1)
+
+          clock.tick(10000)
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test.reset.min', 0)
+          expect(client.gauge).to.have.been.calledWith('test.reset.max', 0)
+          expect(client.increment).to.have.been.calledWith('test.reset.sum', 0)
+          expect(client.gauge).to.have.been.calledWith('test.reset.avg', 0)
+          expect(client.gauge).to.have.been.calledWith('test.reset.median', 0)
+          expect(client.increment).to.have.been.calledWith('test.reset.count', 0)
+          expect(client.gauge).to.have.been.calledWith('test.reset.95percentile', 0)
+        })
+      })
+
       describe('without native metrics', () => {
         beforeEach(() => {
           metrics = proxyquire('../src/platform/node/metrics', {

@@ -17,6 +17,7 @@ let client
 let time
 let cpuUsage
 let counters
+let histograms
 
 reset()
 
@@ -53,6 +54,7 @@ module.exports = function () {
         interval = setInterval(() => {
           captureCommonMetrics()
           captureNativeMetrics()
+          captureHistograms()
           client.flush()
         }, INTERVAL)
       } else {
@@ -90,6 +92,18 @@ module.exports = function () {
       return { finish: () => {} }
     },
 
+    histogram (name, value, tag) {
+      if (!client || !nativeMetrics) return
+
+      histograms[name] = histograms[name] || new Map()
+
+      if (!histograms[name].has(tag)) {
+        histograms[name].set(tag, nativeMetrics.histogram())
+      }
+
+      histograms[name].get(tag).add(value)
+    },
+
     count (name, count, tag) {
       if (!client) return
       if (!counters[name]) {
@@ -119,6 +133,7 @@ function reset () {
   time = null
   cpuUsage = null
   counters = {}
+  histograms = {}
 }
 
 function captureCpuUsage () {
@@ -191,6 +206,24 @@ function captureCounters () {
     } else {
       client.gauge(name, counters[name])
     }
+  })
+}
+
+function captureHistograms () {
+  Object.keys(histograms).forEach(name => {
+    histograms[name].forEach((stats, tag) => {
+      histogram(name, {
+        min: stats.min(),
+        max: stats.max(),
+        sum: stats.sum(),
+        avg: stats.avg(),
+        median: stats.median(),
+        count: stats.count(),
+        p95: stats.percentile(0.95)
+      }, tag && [tag])
+
+      stats.reset()
+    })
   })
 }
 
