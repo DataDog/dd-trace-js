@@ -46,7 +46,7 @@ class Instrumenter {
           if (!config.integrationsDisabled || config.integrationsDisabled.indexOf(name) === -1) {
             this._set(plugins[name], { name, config: {} })
           } else {
-            log.debug(`configuration disabled via env var named "${name}".`)
+            log.debug(`configuration disabled via configuration option, named "${name}".`)
           }
         })
     }
