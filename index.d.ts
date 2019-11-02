@@ -291,7 +291,7 @@ export declare interface TracerOptions {
   reportHostname?: boolean
 
   /**
-   * List of integrations to disable when the tracer is initialized e.g. express,hapi,http,dns
+   * An array of integrations to automatically disable when the tracer is initialized e.g. [`express`,`hapi`,`dns`]
    * @default []
    */
   integrationsDisabled?: string[]
