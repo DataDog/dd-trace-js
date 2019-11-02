@@ -329,7 +329,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | experimental         | -                              | `{}`        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins              | -                              | `true`      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 | clientToken          | `DD_CLIENT_TOKEN`              | -           | Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`. |
-| integrationsDisabled | `DD_INTEGRATIONS_DISABLED`     | `[]`        | Set an array of integration names to automatically disable when the tracer is initializated, e.g. `['express','http','dns']`. |
+| integrationsDisabled | `DD_INTEGRATIONS_DISABLED`     | `[]`        | Set an array of integration names to disable upon tracer is initialization, e.g. `['express','http','dns']` or `'express,http,dns'` when set as env var. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 

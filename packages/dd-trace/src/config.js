@@ -60,7 +60,14 @@ class Config {
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
-    this.integrationsDisabled = coalesce(options.integrationsDisabled, platform.env('DD_INTEGRATIONS_DISABLED'), [])
+    this.integrationsDisabled = coalesce(
+      options.integrationsDisabled,
+      (typeof platform.env('DD_INTEGRATIONS_DISABLED') === 'string'
+        ? platform.env('DD_INTEGRATIONS_DISABLED').split(',')
+        : undefined
+      ),
+      []
+    )
     this.clientToken = clientToken
   }
 }
