@@ -21,7 +21,7 @@ let _deprecate
 let _logLevel
 
 const _isLogLevelEnabled = (level) => {
-  return !_logLevel || _logLevels[level] >= _logLevel
+  return _logLevels[level] >= _logLevel
 }
 
 const _checkLogLevel = (logLevel) => {
