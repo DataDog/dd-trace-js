@@ -486,7 +486,7 @@ jobs:
 
   prebuild-linux-x64:
     docker:
-      - image: node:8
+      - image: node:8.0.0
     working_directory: ~/dd-trace-js
     resource_class: small
     environment:
@@ -510,7 +510,7 @@ jobs:
 
   prebuild-linux-x32:
     docker:
-      - image: node:8
+      - image: node:8.0.0
     working_directory: ~/dd-trace-js
     resource_class: small
     environment:
