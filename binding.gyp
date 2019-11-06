@@ -2,6 +2,13 @@
   "targets": [{
     "target_name": "metrics",
     "sources": [
+      "packages/dd-trace/src/native/hdr_histogram/hdr_encoding.c",
+      "packages/dd-trace/src/native/hdr_histogram/hdr_histogram_log.c",
+      "packages/dd-trace/src/native/hdr_histogram/hdr_histogram.c",
+      "packages/dd-trace/src/native/hdr_histogram/hdr_interval_recorder.c",
+      "packages/dd-trace/src/native/hdr_histogram/hdr_thread.c",
+      "packages/dd-trace/src/native/hdr_histogram/hdr_time.c",
+      "packages/dd-trace/src/native/hdr_histogram/hdr_writer_reader_phaser.c",
       "packages/dd-trace/src/native/metrics/Collector.cpp",
       "packages/dd-trace/src/native/metrics/EventLoop.cpp",
       "packages/dd-trace/src/native/metrics/GarbageCollection.cpp",
@@ -19,8 +26,9 @@
     ],
     "xcode_settings": {
       "MACOSX_DEPLOYMENT_TARGET": "10.9",
+      "CMAKE_CXX_STANDARD": "11",
       "OTHER_CFLAGS": [
-        "-std=c++11",
+        # "-std=c++11",
         "-stdlib=libc++",
         "-Wall",
         "-Werror"
