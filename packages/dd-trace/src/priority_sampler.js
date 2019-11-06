@@ -41,7 +41,7 @@ class PrioritySampler {
     const rule = this._findRule(context)
 
     return rule
-      ? this._isSampledByRule(context, rule)
+      ? this._isSampledByRule(context, rule) && this._isSampledByRateLimit(context)
       : this._isSampledByAgent(context)
   }
 
@@ -102,7 +102,7 @@ class PrioritySampler {
   _isSampledByRule (context, rule) {
     context._metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
 
-    return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context)
+    return rule.sampler.isSampled(context)
   }
 
   _isSampledByRateLimit (context) {
