@@ -102,7 +102,7 @@ class PrioritySampler {
   _isSampledByRule (context, rule) {
     context._metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
 
-    return rule.sampler.isSampled(context) && this._isSampledByRateLimit()
+    return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context)
   }
 
   _isSampledByRateLimit (context) {

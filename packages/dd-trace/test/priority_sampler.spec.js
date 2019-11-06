@@ -268,6 +268,16 @@ describe('PrioritySampler', () => {
 
     it('should add metrics for rule sample rate', () => {
       prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0
+      })
+      prioritySampler.sample(span)
+
+      expect(context._metrics).to.have.property('_dd.rule_psr', 0)
+      expect(context._metrics).to.not.have.property('_dd.limit_psr')
+    })
+
+    it('should add metrics for rate limiter sample rate', () => {
+      prioritySampler = new PrioritySampler('test', {
         sampleRate: 0.5,
         rateLimit: 1
       })
@@ -275,13 +285,6 @@ describe('PrioritySampler', () => {
 
       expect(context._metrics).to.have.property('_dd.rule_psr', 0.5)
       expect(context._metrics).to.have.property('_dd.limit_psr', 1)
-
-      delete context._sampling.priority
-
-      prioritySampler.sample(context)
-
-      expect(context._metrics).to.have.property('_dd.rule_psr', 0.5)
-      expect(context._metrics).to.have.property('_dd.limit_psr', 0.5)
     })
   })
 
