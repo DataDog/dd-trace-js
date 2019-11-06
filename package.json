@@ -52,6 +52,7 @@
     "core-js": "^3.3.4",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",
+    "limiter": "^1.1.4",
     "lodash.kebabcase": "^4.1.1",
     "lodash.memoize": "^4.1.2",
     "lodash.pick": "^4.4.0",

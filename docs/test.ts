@@ -44,7 +44,15 @@ tracer.init({
   experimental: {
     b3: true,
     exporter: 'log',
-    peers: ['foo']
+    peers: ['foo'],
+    sampler: {
+      sampleRate: 1,
+      rateLimit: 1000,
+      rules: [
+        { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
+        { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+      ]
+    }
   },
   hostname: 'agent',
   logger: {
