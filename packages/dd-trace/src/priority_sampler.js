@@ -100,12 +100,17 @@ class PrioritySampler {
   }
 
   _isSampledByRule (context, rule) {
-    const sampled = this._limiter.isAllowed() && rule.sampler.isSampled(context)
-
-    context._metrics[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
     context._metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
 
-    return sampled
+    return rule.sampler.isSampled(context) && this._isSampledByRateLimit()
+  }
+
+  _isSampledByRateLimit (context) {
+    const allowed = this._limiter.isAllowed()
+
+    context._metrics[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+
+    return allowed
   }
 
   _isSampledByAgent (context) {
