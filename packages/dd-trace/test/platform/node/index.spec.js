@@ -590,17 +590,32 @@ describe('Platform', () => {
         expect(Exporter).to.be.equal(AgentExporter)
       })
 
-      it('should create an LogExporter when in lambda environment', () => {
+      it('should create an LogExporter when in Lambda environment with a beta', () => {
         const Exporter = proxyquire('../src/platform/node/exporter', {
           './env': (key) => {
             if (key === 'AWS_LAMBDA_FUNCTION_NAME') {
               return 'my-func'
             }
             return undefined
-          }
+          },
+          '../../../lib/version': '0.16.0-beta.1'
         })()
 
         expect(Exporter).to.be.equal(LogExporter)
+      })
+
+      it('should create an AgentExporter when in Lambda environment without a beta', () => {
+        const Exporter = proxyquire('../src/platform/node/exporter', {
+          './env': (key) => {
+            if (key === 'AWS_LAMBDA_FUNCTION_NAME') {
+              return 'my-func'
+            }
+            return undefined
+          },
+          '../../../lib/version': '0.16.0'
+        })()
+
+        expect(Exporter).to.be.equal(AgentExporter)
       })
 
       it('should allow configuring the exporter', () => {
