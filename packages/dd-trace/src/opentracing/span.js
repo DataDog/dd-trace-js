@@ -5,7 +5,6 @@ const Span = opentracing.Span
 const truncate = require('lodash.truncate')
 const SpanContext = require('./span_context')
 const platform = require('../platform')
-const log = require('../log')
 const constants = require('../constants')
 const id = require('../id')
 const tagger = require('../tagger')
