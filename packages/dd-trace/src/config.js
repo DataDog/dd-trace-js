@@ -38,6 +38,7 @@ class Config {
 
     tagger.add(tags, platform.env('DD_TAGS'))
     tagger.add(tags, platform.env('DD_TRACE_TAGS'))
+    tagger.add(tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
     tagger.add(tags, options.tags)
 
     this.enabled = String(enabled) === 'true'

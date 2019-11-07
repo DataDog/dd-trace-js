@@ -53,7 +53,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_CLIENT_TOKEN').returns('789')
-    platform.env.withArgs('DD_TRACE_TAGS').returns('foo:bar,baz:qux')
+    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
 
     const config = new Config()
 
@@ -183,7 +183,7 @@ describe('Config', () => {
   it('should give priority to the common agent environment variable', () => {
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('trace-agent')
     platform.env.withArgs('DD_AGENT_HOST').returns('agent')
-    platform.env.withArgs('DD_TRACE_TAGS').returns('foo:foo')
+    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:foo')
     platform.env.withArgs('DD_TAGS').returns('foo:bar,baz:qux')
 
     const config = new Config()
@@ -206,7 +206,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_API_KEY').returns('123')
     platform.env.withArgs('DD_APP_KEY').returns('456')
-    platform.env.withArgs('DD_TRACE_TAGS').returns('foo:bar,baz:qux')
+    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
 
     const config = new Config('test', {
       enabled: true,
