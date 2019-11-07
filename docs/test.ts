@@ -72,7 +72,8 @@ tracer.init({
   },
   reportHostname: true,
   scope: 'noop',
-  clientToken: 'pub123abc'
+  clientToken: 'pub123abc',
+  logLevel: 'debug'
 });
 
 const httpOptions = {

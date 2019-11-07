@@ -336,6 +336,12 @@ export declare interface TracerOptions {
    * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
    */
   clientToken?: string
+
+  /**
+   * A string representing the minimum tracer log level to use when debug logging is enabled
+   * @default 'debug'
+   */
+  logLevel?: 'error' | 'debug'
 }
 
 /** @hidden */

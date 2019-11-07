@@ -7,9 +7,30 @@ const _default = {
   error: err => console.error(err) /* eslint-disable-line no-console */
 }
 
+// based on: https://github.com/trentm/node-bunyan#levels
+const _logLevels = {
+  'debug': 20,
+  'error': 50
+}
+
+const _defaultLogLevel = 'debug'
+
 let _logger
 let _enabled
 let _deprecate
+let _logLevel
+
+const _isLogLevelEnabled = (level) => {
+  return _logLevels[level] >= _logLevel
+}
+
+const _checkLogLevel = (logLevel) => {
+  if (logLevel && typeof logLevel === 'string') {
+    return _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
+  }
+
+  return _logLevels[_defaultLogLevel]
+}
 
 const log = {
   use (logger) {
@@ -20,8 +41,9 @@ const log = {
     return this
   },
 
-  toggle (enabled) {
+  toggle (enabled, logLevel) {
     _enabled = enabled
+    _logLevel = _checkLogLevel(logLevel)
 
     return this
   },
@@ -33,12 +55,13 @@ const log = {
       _logger.error(message)
       return this
     })
+    _logLevel = _checkLogLevel()
 
     return this
   },
 
   debug (message) {
-    if (_enabled) {
+    if (_enabled && _isLogLevelEnabled('debug')) {
       _logger.debug(message instanceof Function ? message() : message)
     }
 
@@ -46,7 +69,7 @@ const log = {
   },
 
   error (err) {
-    if (_enabled) {
+    if (_enabled && _isLogLevelEnabled('error')) {
       if (err instanceof Function) {
         err = err()
       }
