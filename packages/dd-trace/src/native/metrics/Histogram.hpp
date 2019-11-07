@@ -21,6 +21,7 @@ namespace datadog {
     public:
       Histogram();
       ~Histogram();
+      Histogram(const Histogram&) = delete; // safety net for C-style pointer
 
       uint64_t min();
       uint64_t max();
@@ -37,6 +38,6 @@ namespace datadog {
       uint64_t sum_;
       uint64_t count_;
       std::shared_ptr<tdigest::TDigest> digest_;
-      std::shared_ptr<hdr_histogram> histogram_;
+      hdr_histogram* histogram_;
   };
 }

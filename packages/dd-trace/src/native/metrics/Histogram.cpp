@@ -2,13 +2,12 @@
 
 namespace datadog {
   Histogram::Histogram() {
-    auto h = histogram_.get();
-    hdr_init(1, 1e10, 3, &h);
+    hdr_init(1, 1e10, 3, &histogram_);
     reset();
   }
 
   Histogram::~Histogram() {
-    hdr_close(histogram_.get());
+    hdr_close(histogram_);
   }
 
   uint64_t Histogram::min() { return min_; }
@@ -27,7 +26,7 @@ namespace datadog {
     count_ = 0;
 
     digest_ = std::make_shared<tdigest::TDigest>(1000);
-    hdr_reset(histogram_.get());
+    hdr_reset(histogram_);
   }
 
   void Histogram::add(uint64_t value) {
@@ -42,6 +41,6 @@ namespace datadog {
     sum_ += value;
 
     digest_->add(static_cast<tdigest::Value>(value));
-    hdr_record_value(histogram_.get(), value);
+    hdr_record_value(histogram_, value);
   }
 }

@@ -57,7 +57,7 @@ namespace datadog {
     );
   }
 
-  void Object::set(std::string key, Histogram value) {
+  void Object::set(std::string key, Histogram &value) {
     Object obj;
 
     obj.set("min", value.min());
