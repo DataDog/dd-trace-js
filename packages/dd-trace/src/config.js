@@ -4,6 +4,7 @@ const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
+const tagger = require('./tagger')
 
 class Config {
   constructor (service, options) {
@@ -33,6 +34,11 @@ class Config {
     const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
     const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
     const clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
+    const tags = {}
+
+    tagger.add(tags, platform.env('DD_TAGS'))
+    tagger.add(tags, platform.env('DD_TRACE_TAGS'))
+    tagger.add(tags, options.tags)
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -47,7 +53,7 @@ class Config {
     this.plugins = !!plugins
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
-    this.tags = Object.assign({}, options.tags)
+    this.tags = tags
     this.dogstatsd = {
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }

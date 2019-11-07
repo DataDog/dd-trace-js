@@ -31,6 +31,15 @@ module.exports = function () {
         tags.push(`env:${this._config.env}`)
       }
 
+      Object.keys(this._config.tags)
+        .filter(key => typeof this._config.tags[key] === 'string')
+        .forEach(key => {
+          // https://docs.datadoghq.com/tagging/#defining-tags
+          const value = this._config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+
+          tags.push(`${key}:${value}`)
+        })
+
       options = options || {}
 
       try {

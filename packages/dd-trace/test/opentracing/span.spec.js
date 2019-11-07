@@ -14,6 +14,7 @@ describe('Span', () => {
   let platform
   let handle
   let id
+  let tagger
 
   beforeEach(() => {
     handle = { finish: sinon.spy() }
@@ -41,9 +42,14 @@ describe('Span', () => {
       sample: sinon.stub()
     }
 
+    tagger = {
+      add: sinon.spy()
+    }
+
     Span = proxyquire('../src/opentracing/span', {
       '../platform': platform,
-      '../id': id
+      '../id': id,
+      '../tagger': tagger
     })
   })
 
@@ -145,7 +151,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      expect(span.context()._tags).to.have.property('foo', 'bar')
+      expect(tagger.add).to.have.been.calledWith(span.context()._tags, { foo: 'bar' })
     })
   })
 
@@ -154,35 +160,12 @@ describe('Span', () => {
       span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
     })
 
-    it('should add tags as an object', () => {
-      span.addTags({ foo: 'bar' })
+    it('should add tags', () => {
+      const tags = { foo: 'bar' }
 
-      expect(span.context()._tags).to.have.property('foo', 'bar')
-    })
+      span.addTags(tags)
 
-    it('should add tags as a string', () => {
-      span.addTags('foo:bar,baz:qux:quxx,invalid')
-
-      expect(span.context()._tags).to.have.property('foo', 'bar')
-      expect(span.context()._tags).to.have.property('baz', 'qux:quxx')
-      expect(span.context()._tags).to.not.have.property('invalid')
-    })
-
-    it('should add tags as an array', () => {
-      span.addTags(['foo:bar', 'baz:qux'])
-
-      expect(span.context()._tags).to.have.property('foo', 'bar')
-      expect(span.context()._tags).to.have.property('baz', 'qux')
-    })
-
-    it('should store the original values', () => {
-      span.addTags({ foo: 123 })
-
-      expect(span.context()._tags).to.have.property('foo', 123)
-    })
-
-    it('should handle errors', () => {
-      expect(() => span.addTags()).not.to.throw()
+      expect(tagger.add).to.have.been.calledWith(span.context()._tags, tags)
     })
   })
 
