@@ -6,25 +6,32 @@ const semver = require('semver')
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
-title('Pulling latest changes from master')
-
-exec(`git checkout master`)
-exec(`git pull`)
-
 const pkg = require('../package.json')
 const increment = getIncrement()
 const version = semver.inc(pkg.version, increment)
+const branch = `v${semver.major(version)}.${semver.minor(version)}`
+const tag = `v${version}`
+const isNewBranch = semver.major(pkg.version) !== semver.major(version) ||
+  semver.minor(pkg.version) !== semver.minor(version)
 
 title(`Bumping version to v${version} in a new branch`)
 
 pkg.version = version
 
-exec(`git checkout -b v${version}`)
+if (isNewBranch) {
+  exec(`git checkout master`)
+  exec(`git pull`)
+  exec(`git checkout -b ${branch}`)
+} else {
+  exec(`git checkout ${branch}`)
+  exec('git pull')
+}
+
 write('package.json', JSON.stringify(pkg, null, 2) + '\n')
 write('packages/dd-trace/lib/version.js', `module.exports = '${version}'\n`)
 add('package.json')
 add('packages/dd-trace/lib/version.js')
-exec(`git commit -m "v${version}"`)
+exec(`git commit -m "${tag}"`)
 exec(`git push -u origin HEAD`)
 
 function getIncrement () {
