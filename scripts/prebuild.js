@@ -10,6 +10,8 @@ const platform = os.platform()
 const arch = process.env.ARCH || os.arch()
 const name = `${platform}-${arch}`
 
+const { NODE_ABI = '64,67,72,79' } = process.env
+
 // https://nodejs.org/en/download/releases/
 const targets = [
   { version: '8.0.0', abi: '57' },
@@ -18,18 +20,10 @@ const targets = [
   { version: '11.0.0', abi: '67' },
   { version: '12.0.0', abi: '72' },
   { version: '13.0.0', abi: '79' }
-]
+].filter(target => !NODE_ABI || NODE_ABI.split(',').some(abi => target.abi === abi))
 
 prebuildify()
 pack()
-
-function retry (cmd) {
-  try {
-    execSync(cmd, { stdio: [0, 1, 2] })
-  } catch (e) {
-    retry(cmd)
-  }
-}
 
 function prebuildify () {
   const cache = path.join(os.tmpdir(), 'prebuilds')
@@ -49,7 +43,7 @@ function prebuildify () {
       '--enable_lto=false'
     ].join(' ')
 
-    retry(cmd)
+    execSync(cmd, { stdio: [0, 1, 2] })
 
     fs.copyFileSync('build/Release/metrics.node', `prebuilds/${platform}-${arch}/node-${target.abi}.node`)
   })
