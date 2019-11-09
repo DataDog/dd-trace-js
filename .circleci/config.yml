@@ -516,6 +516,9 @@ jobs:
     environment:
       - ARCH=x32
     steps:
+      - run:
+          name: Install job dependencies
+          command: apt-get update && apt-get install -y g++-multilib
       - checkout
       - *yarn-versions
       - *restore-yarn-cache
