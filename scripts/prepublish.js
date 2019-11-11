@@ -105,12 +105,10 @@ function getWorkflow (id) {
 }
 
 function getPrebuildJobs (workflow) {
-  const filter = platforms.map(platform => `prebuild-${platform}`)
-
   return fetch(`workflow/${workflow.id}/jobs`)
     .then(response => {
       const jobs = response.data.items
-        .filter(item => ~filter.indexOf(item.name))
+        .filter(item => /^prebuild-.+$/.test(item.name))
 
       if (jobs.length < 8) {
         throw new Error(`Missing prebuild jobs in workflow ${workflow.id}.`)
@@ -128,12 +126,16 @@ function downloadPrebuilds (jobs) {
 }
 
 function getPrebuildArtifacts (job) {
-  // const filter = platforms.map(platform => `addons-${platform}.tgz`)
-
   return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`)
     .then(response => {
-      return response.data.items
-        .filter(artifact => /\/prebuilds\/$/.test(artifact.url))
+      const artifacts = response.data.items
+        .filter(artifact => /\/prebuilds\//.test(artifact.url))
+
+      if (artifacts.length === 0) {
+        throw new Error(`Missing artifacts in job ${job.job_number}.`)
+      }
+
+      return artifacts
     })
 }
 
@@ -146,7 +148,7 @@ function downloadArtifact (artifact) {
     .then(response => {
       const parts = artifact.url.split('/')
       const basename = path.join(os.tmpdir(), parts.slice(-3, -1).join(path.sep))
-      const filename = parts.slice(-1)
+      const filename = parts.slice(-1)[0]
 
       mkdirp.sync(basename)
 
@@ -164,13 +166,9 @@ function zipPrebuilds () {
       gzip: true,
       sync: true,
       portable: true,
-      file: `addons-${platform}.tgz`,
+      file: path.join(os.tmpdir(), `addons-${platform}.tgz`),
       cwd: os.tmpdir()
-    }, [
-      `prebuilds/${platform}`,
-      'prebuilds/NOTICES',
-      'prebuilds/LICENSE-2.0.txt'
-    ])
+    }, [`prebuilds/${platform}`])
   })
 }
 
