@@ -502,7 +502,7 @@ jobs:
           name: Compile prebuilt binaries
           command: yarn prebuild
       - store_artifacts:
-          path: ./addons-linux-x64.tgz
+          path: ./prebuilds
       - save_cache:
           key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
           paths:
@@ -526,7 +526,7 @@ jobs:
       - *save-yarn-cache
       - *yarn-prebuild
       - store_artifacts:
-          path: ./addons-linux-x32.tgz
+          path: ./prebuilds
 
   prebuild-linux-x64-legacy:
     <<: *prebuild-linux-x64
@@ -544,7 +544,7 @@ jobs:
       - ARCH=x32
       - NODE_ABI=57,59
 
-  prebuild-darwin-x64:
+  prebuild-darwin-x64: &prebuild-darwin
     macos:
       xcode: "10.2.0"
     working_directory: ~/dd-trace-js
@@ -559,26 +559,14 @@ jobs:
       - *save-yarn-cache
       - *yarn-prebuild
       - store_artifacts:
-          path: ./addons-darwin-x64.tgz
+          path: ./prebuilds
 
   prebuild-darwin-x32:
-    macos:
-      xcode: "10.2.0"
-    working_directory: ~/dd-trace-js
-    resource_class: medium
+    <<: *prebuild-darwin
     environment:
       - ARCH=x32
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-prebuild
-      - store_artifacts:
-          path: ./addons-darwin-x32.tgz
 
-  prebuild-win32-x64:
+  prebuild-win32-x64: &prebuild-win32
     executor: win/vs2019
     working_directory: ~/dd-trace-js
     environment:
@@ -591,22 +579,12 @@ jobs:
       - *save-yarn-cache
       - *yarn-prebuild
       - store_artifacts:
-          path: ./addons-win32-x64.tgz
+          path: ./prebuilds
 
   prebuild-win32-ia32:
-    executor: win/vs2019
-    working_directory: ~/dd-trace-js
+    <<: *prebuild-win32
     environment:
       - ARCH=ia32
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-prebuild
-      - store_artifacts:
-          path: ./addons-win32-ia32.tgz
 
   alpine:
     docker:
@@ -726,46 +704,22 @@ workflows:
       - node-router
       - node-when
       - node-winston
-      - prebuild-linux-x64
+      - prebuild-linux-x64 #:
+          # filters:
+          #   branches:
+          #     only:
+          #       - master
+          #       - /v\d+\.\d+/
+          #   tags:
+          #     only:
+          #       - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - prebuild-linux-x32
       - prebuild-linux-x64-legacy
       - prebuild-linux-x32-legacy
-      - prebuild-darwin-x64:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-darwin-x32:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-win32-x64:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-win32-ia32:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-darwin-x64
+      - prebuild-darwin-x32
+      - prebuild-win32-x64
+      - prebuild-win32-ia32
       - alpine
       - alpine-prebuilt:
           requires:

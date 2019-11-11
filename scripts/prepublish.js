@@ -6,6 +6,7 @@ const axios = require('axios')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const tar = require('tar')
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
@@ -54,6 +55,7 @@ getPipeline()
   .then(getWorkflow)
   .then(getPrebuildJobs)
   .then(downloadPrebuilds)
+  .then(zipPrebuilds)
   .then(copyPrebuilds)
   .then(bundle)
   .catch(e => {
@@ -109,7 +111,7 @@ function getPrebuildJobs (workflow) {
       const jobs = response.data.items
         .filter(item => ~filter.indexOf(item.name))
 
-      if (jobs.length < 6) {
+      if (jobs.length < 8) {
         throw new Error(`Missing prebuild jobs in workflow ${workflow.id}.`)
       }
 
@@ -125,12 +127,12 @@ function downloadPrebuilds (jobs) {
 }
 
 function getPrebuildArtifacts (job) {
-  const filter = platforms.map(platform => `addons-${platform}.tgz`)
+  // const filter = platforms.map(platform => `addons-${platform}.tgz`)
 
   return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`)
     .then(response => {
       return response.data.items
-        .filter(artifact => filter.some(file => artifact.url.endsWith(file)))
+        .filter(artifact => /\/prebuilds\/$/.test(artifact.url))
     })
 }
 
@@ -141,7 +143,9 @@ function downloadArtifacts (artifacts) {
 function downloadArtifact (artifact) {
   return fetch(artifact.url, { responseType: 'stream' })
     .then(response => {
-      const filename = /[^/]*$/.exec(artifact.url)[0]
+      const filename = artifact.url.split('/')
+        .slice(-3)
+        .join(path.sep)
 
       return new Promise((resolve, reject) => {
         response.data.pipe(fs.createWriteStream(path.join(os.tmpdir(), filename)))
@@ -149,6 +153,22 @@ function downloadArtifact (artifact) {
           .on('error', reject)
       })
     })
+}
+
+function zipPrebuilds () {
+  platforms.forEach(platform => {
+    tar.create({
+      gzip: true,
+      sync: true,
+      portable: true,
+      file: `addons-${platform}.tgz`,
+      cwd: os.tmpdir()
+    }, [
+      `prebuilds/${platform}`,
+      'prebuilds/NOTICES',
+      'prebuilds/LICENSE-2.0.txt'
+    ])
+  })
 }
 
 function copyPrebuilds () {
