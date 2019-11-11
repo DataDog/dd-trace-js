@@ -4,6 +4,7 @@
 
 const axios = require('axios')
 const fs = require('fs')
+const mkdirp = require('mkdirp')
 const os = require('os')
 const path = require('path')
 const tar = require('tar')
@@ -143,12 +144,14 @@ function downloadArtifacts (artifacts) {
 function downloadArtifact (artifact) {
   return fetch(artifact.url, { responseType: 'stream' })
     .then(response => {
-      const filename = artifact.url.split('/')
-        .slice(-3)
-        .join(path.sep)
+      const parts = artifact.url.split('/')
+      const basename = path.join(os.tmpdir(), parts.slice(-3, -1).join(path.sep))
+      const filename = parts.slice(-1)
+
+      mkdirp.sync(basename)
 
       return new Promise((resolve, reject) => {
-        response.data.pipe(fs.createWriteStream(path.join(os.tmpdir(), filename)))
+        response.data.pipe(fs.createWriteStream(path.join(basename, filename)))
           .on('finish', () => resolve())
           .on('error', reject)
       })

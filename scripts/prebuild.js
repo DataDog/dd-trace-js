@@ -26,8 +26,8 @@ prebuildify()
 function prebuildify () {
   const cache = path.join(os.tmpdir(), 'prebuilds')
 
-  mkdirp(cache)
-  mkdirp(`prebuilds/${platform}-${arch}`)
+  mkdirp.sync(cache)
+  mkdirp.sync(`prebuilds/${platform}-${arch}`)
 
   targets.forEach(target => {
     const cmd = [
