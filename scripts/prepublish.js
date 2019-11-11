@@ -4,8 +4,10 @@
 
 const axios = require('axios')
 const fs = require('fs')
+const mkdirp = require('mkdirp')
 const os = require('os')
 const path = require('path')
+const tar = require('tar')
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
@@ -54,6 +56,7 @@ getPipeline()
   .then(getWorkflow)
   .then(getPrebuildJobs)
   .then(downloadPrebuilds)
+  .then(zipPrebuilds)
   .then(copyPrebuilds)
   .then(bundle)
   .catch(e => {
@@ -102,14 +105,12 @@ function getWorkflow (id) {
 }
 
 function getPrebuildJobs (workflow) {
-  const filter = platforms.map(platform => `prebuild-${platform}`)
-
   return fetch(`workflow/${workflow.id}/jobs`)
     .then(response => {
       const jobs = response.data.items
-        .filter(item => ~filter.indexOf(item.name))
+        .filter(item => /^prebuild-.+$/.test(item.name))
 
-      if (jobs.length < 6) {
+      if (jobs.length < 8) {
         throw new Error(`Missing prebuild jobs in workflow ${workflow.id}.`)
       }
 
@@ -125,12 +126,16 @@ function downloadPrebuilds (jobs) {
 }
 
 function getPrebuildArtifacts (job) {
-  const filter = platforms.map(platform => `addons-${platform}.tgz`)
-
   return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`)
     .then(response => {
-      return response.data.items
-        .filter(artifact => filter.some(file => artifact.url.endsWith(file)))
+      const artifacts = response.data.items
+        .filter(artifact => /\/prebuilds\//.test(artifact.url))
+
+      if (artifacts.length === 0) {
+        throw new Error(`Missing artifacts in job ${job.job_number}.`)
+      }
+
+      return artifacts
     })
 }
 
@@ -141,14 +146,30 @@ function downloadArtifacts (artifacts) {
 function downloadArtifact (artifact) {
   return fetch(artifact.url, { responseType: 'stream' })
     .then(response => {
-      const filename = /[^/]*$/.exec(artifact.url)[0]
+      const parts = artifact.url.split('/')
+      const basename = path.join(os.tmpdir(), parts.slice(-3, -1).join(path.sep))
+      const filename = parts.slice(-1)[0]
+
+      mkdirp.sync(basename)
 
       return new Promise((resolve, reject) => {
-        response.data.pipe(fs.createWriteStream(path.join(os.tmpdir(), filename)))
+        response.data.pipe(fs.createWriteStream(path.join(basename, filename)))
           .on('finish', () => resolve())
           .on('error', reject)
       })
     })
+}
+
+function zipPrebuilds () {
+  platforms.forEach(platform => {
+    tar.create({
+      gzip: true,
+      sync: true,
+      portable: true,
+      file: path.join(os.tmpdir(), `addons-${platform}.tgz`),
+      cwd: os.tmpdir()
+    }, [`prebuilds/${platform}`])
+  })
 }
 
 function copyPrebuilds () {
