@@ -321,7 +321,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | dogstatsd.port | `DD_DOGSTATSD_PORT`            | `8125`      | The port of the Dogstatsd agent that metrics will be submitted to. |
 | env            | `DD_ENV`                       | -           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
 | logInjection   | `DD_LOGS_INJECTION`            | `false`     | Enable automatic injection of trace IDs in logs for supported logging libraries. |
-| tags           | -                              | `{}`        | Set global tags that should be applied to all spans. |
+| tags           | `DD_TAGS`                      | `{}`        | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
 | sampleRate     | -                              | `1`         | Percentage of spans to sample as a float between 0 and 1. |
 | flushInterval  | -                              | `2000`      | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | runtimeMetrics | `DD_RUNTIME_METRICS_ENABLED`   | `false`     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |

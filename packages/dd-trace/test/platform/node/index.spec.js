@@ -394,6 +394,11 @@ describe('Platform', () => {
             hostname: 'localhost',
             dogstatsd: {
               port: 8125
+            },
+            tags: {
+              str: 'bar',
+              obj: {},
+              invalid: 't{e*s#t5-:./'
             }
           },
           name: sinon.stub().returns('nodejs'),
@@ -417,7 +422,9 @@ describe('Platform', () => {
             host: 'localhost',
             tags: [
               'service:service',
-              'env:test'
+              'env:test',
+              'str:bar',
+              'invalid:t_e_s_t5-:./'
             ]
           })
         })
