@@ -30,12 +30,12 @@ function request (options, callback) {
     res.on('data', chunk => { data += chunk })
     res.on('end', () => {
       if (res.statusCode >= 200 && res.statusCode <= 299) {
-        callback(null, data)
+        callback(null, data, res.statusCode)
       } else {
-        const error = new Error(http.STATUS_CODES[res.statusCode])
+        const error = new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
         error.status = res.statusCode
 
-        callback(new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`))
+        callback(error, null, res.statusCode)
       }
     })
   })

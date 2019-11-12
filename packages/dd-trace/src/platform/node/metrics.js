@@ -4,6 +4,7 @@
 
 const v8 = require('v8')
 const path = require('path')
+const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('../../log')
 
@@ -155,6 +156,8 @@ function captureMemoryUsage () {
   client.gauge('runtime.node.mem.heap_total', stats.heapTotal)
   client.gauge('runtime.node.mem.heap_used', stats.heapUsed)
   client.gauge('runtime.node.mem.rss', stats.rss)
+  client.gauge('runtime.node.mem.total', os.totalmem())
+  client.gauge('runtime.node.mem.free', os.freemem())
 
   stats.external && client.gauge('runtime.node.mem.external', stats.external)
 }
