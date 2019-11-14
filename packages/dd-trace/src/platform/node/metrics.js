@@ -115,7 +115,7 @@ module.exports = function () {
       histograms[name].get(tag).record(value)
     },
 
-    count (name, count, tag, monotonic) {
+    count (name, count, tag, monotonic = false) {
       if (!client) return
       if (typeof tag === 'boolean') {
         monotonic = tag
@@ -135,12 +135,12 @@ module.exports = function () {
       }
     },
 
-    increment (name, tag, monotonic = false) {
+    increment (name, tag, monotonic) {
       this.count(name, 1, tag, monotonic)
     },
 
     decrement (name, tag) {
-      this.count(name, -1, tag, false)
+      this.count(name, -1, tag)
     }
   })
 }
