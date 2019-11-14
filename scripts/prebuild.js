@@ -9,7 +9,7 @@ const execSync = require('child_process').execSync
 const platform = os.platform()
 const arch = process.env.ARCH || os.arch()
 
-const { NODE_ABI = '64,67,72,79' } = process.env
+const { NODE_ABI } = process.env
 
 // https://nodejs.org/en/download/releases/
 const targets = [
