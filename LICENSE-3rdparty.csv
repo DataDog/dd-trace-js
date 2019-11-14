@@ -3,6 +3,7 @@ require,@types/node,MIT,Copyright Authors
 require,bowser,MIT,Copyright 2015 Dustin Diaz
 require,container-info,MIT,Copyright 2018 Stephen Belanger
 require,core-js,MIT,Copyright 2014-2019 Denis Pushkarev
+require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman

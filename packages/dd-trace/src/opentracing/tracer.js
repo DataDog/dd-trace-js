@@ -60,8 +60,13 @@ class DatadogTracer extends Tracer {
     const type = reference && reference.type()
     const parent = reference && reference.referencedContext()
 
+    platform.metrics().increment('datadog.tracer.node.traces', true)
+
     if (parent && parent._noop) return parent._noop
-    if (!isSampled(this._sampler, parent, type)) return new NoopSpan(this, parent)
+    if (!isSampled(this._sampler, parent, type)) {
+      platform.metrics().increment('datadog.tracer.node.traces.dropped', true)
+      return new NoopSpan(this, parent)
+    }
 
     const tags = {
       'service.name': this._service

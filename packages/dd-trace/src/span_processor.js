@@ -1,5 +1,6 @@
 const log = require('./log')
 const format = require('./format')
+const platform = require('./platform')
 
 class SpanProcessor {
   constructor (exporter, prioritySampler) {
@@ -15,6 +16,7 @@ class SpanProcessor {
       this._prioritySampler.sample(spanContext)
 
       if (spanContext._traceFlags.sampled === false) {
+        platform.metrics().increment('datadog.tracer.node.traces.dropped', true)
         log.debug(() => `Dropping trace due to user configured filtering: ${trace}`)
         this._erase(trace)
         return

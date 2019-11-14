@@ -19,6 +19,8 @@ const format = require('../packages/dd-trace/src/format')
 const encode = require('../packages/dd-trace/src/encode')
 const config = new Config('benchmark', { service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
+const Histogram = require('../packages/dd-trace/src/histogram')
+const histogram = new Histogram()
 
 const suite = benchmark('core')
 
@@ -97,6 +99,11 @@ suite
   .add('id', {
     fn () {
       id()
+    }
+  })
+  .add('Histogram', {
+    fn () {
+      histogram.record(Math.round(Math.random() * 3e12))
     }
   })
 

@@ -4,7 +4,6 @@ const platform = require('../../platform')
 const log = require('../../log')
 const encode = require('../../encode')
 const tracerVersion = require('../../../lib/version')
-const metrics = platform.metrics()
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
@@ -27,7 +26,7 @@ class Writer {
 
     log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
 
-    metrics.histogram('tracer.node.agent.trace_size', buffer.length)
+    platform.metrics().histogram('datadog.tracer.node.exporter.agent.trace_size', buffer.length)
 
     if (buffer.length + this._size > MAX_SIZE) {
       this.flush()
@@ -44,7 +43,7 @@ class Writer {
 
       this._request(data, this._queue.length)
 
-      metrics.histogram('tracer.node.agent.payload_size', size)
+      platform.metrics().histogram('datadog.tracer.node.exporter.agent.payload_size', size)
 
       this._queue = []
       this._size = 0
@@ -76,15 +75,15 @@ class Writer {
 
     log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-    metrics.increment('tracer.node.agent.requests')
+    platform.metrics().increment('datadog.tracer.node.exporter.agent.requests')
 
     platform.request(Object.assign({ data }, options), (err, res, status) => {
       if (status) {
-        metrics.increment('tracer.node.agent.responses')
-        metrics.increment('tracer.node.agent.responses', [`status:${status}`])
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.responses')
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.responses', [`status:${status}`])
       } else {
-        metrics.increment('tracer.node.agent.errors')
-        metrics.increment('tracer.node.agent.errors.by.code', err.code && [`code:${err.code}`])
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.errors')
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.errors.by.code', err.code && [`code:${err.code}`])
       }
 
       if (err) return log.error(err)

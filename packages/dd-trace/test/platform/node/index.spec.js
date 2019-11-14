@@ -378,6 +378,7 @@ describe('Platform', () => {
         client = {
           gauge: sinon.spy(),
           increment: sinon.spy(),
+          histogram: sinon.spy(),
           flush: sinon.spy()
         }
 

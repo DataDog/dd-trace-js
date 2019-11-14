@@ -7,6 +7,7 @@ const path = require('path')
 const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('../../log')
+const Histogram = require('../../histogram')
 
 const INTERVAL = 10 * 1000
 
@@ -17,7 +18,9 @@ let interval
 let client
 let time
 let cpuUsage
+let gauges
 let counters
+let histograms
 
 reset()
 
@@ -100,25 +103,44 @@ module.exports = function () {
       return { finish: () => {} }
     },
 
-    count (name, count, tag) {
+    histogram (name, value, tag) {
       if (!client) return
-      if (!counters[name]) {
-        counters[name] = tag ? Object.create(null) : 0
+
+      histograms[name] = histograms[name] || new Map()
+
+      if (!histograms[name].has(tag)) {
+        histograms[name].set(tag, new Histogram())
+      }
+
+      histograms[name].get(tag).record(value)
+    },
+
+    count (name, count, tag, monotonic) {
+      if (!client) return
+      if (typeof tag === 'boolean') {
+        monotonic = tag
+        tag = undefined
+      }
+
+      const map = monotonic ? counters : gauges
+
+      if (!map[name]) {
+        map[name] = tag ? Object.create(null) : 0
       }
 
       if (tag) {
-        counters[name][tag] = (counters[name][tag] || 0) + count
+        map[name][tag] = (map[name][tag] || 0) + count
       } else {
-        counters[name] = (counters[name] || 0) + count
+        map[name] = (map[name] || 0) + count
       }
     },
 
-    increment (name, tag) {
-      this.count(name, 1, tag)
+    increment (name, tag, monotonic = false) {
+      this.count(name, 1, tag, monotonic)
     },
 
     decrement (name, tag) {
-      this.count(name, -1, tag)
+      this.count(name, -1, tag, false)
     }
   })
 }
@@ -128,7 +150,9 @@ function reset () {
   client = null
   time = null
   cpuUsage = null
+  gauges = {}
   counters = {}
+  histograms = {}
 }
 
 function captureCpuUsage () {
@@ -194,15 +218,36 @@ function captureHeapSpace () {
   }
 }
 
+function captureGauges () {
+  Object.keys(gauges).forEach(name => {
+    if (typeof gauges[name] === 'object') {
+      Object.keys(gauges[name]).forEach(tag => {
+        client.gauge(name, gauges[name][tag], [tag])
+      })
+    } else {
+      client.gauge(name, gauges[name])
+    }
+  })
+}
+
 function captureCounters () {
   Object.keys(counters).forEach(name => {
     if (typeof counters[name] === 'object') {
       Object.keys(counters[name]).forEach(tag => {
-        client.gauge(name, counters[name][tag], [tag])
+        client.count(name, counters[name][tag], [tag])
       })
     } else {
-      client.gauge(name, counters[name])
+      client.count(name, counters[name])
     }
+  })
+}
+
+function captureHistograms () {
+  Object.keys(histograms).forEach(name => {
+    histograms[name].forEach((stats, tag) => {
+      histogram(name, stats, tag)
+      stats.reset()
+    })
   })
 }
 
@@ -210,7 +255,9 @@ function captureCommonMetrics () {
   captureMemoryUsage()
   captureProcess()
   captureHeapStats()
+  captureGauges()
   captureCounters()
+  captureHistograms()
 }
 
 function captureNativeMetrics () {
@@ -265,6 +312,8 @@ function captureNativeMetrics () {
 }
 
 function histogram (name, stats, tags) {
+  tags = [].concat(tags)
+
   client.gauge(`${name}.min`, stats.min, tags)
   client.gauge(`${name}.max`, stats.max, tags)
   client.increment(`${name}.sum`, stats.sum, tags)
