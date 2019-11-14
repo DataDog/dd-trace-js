@@ -80,10 +80,13 @@ class Writer {
     platform.request(Object.assign({ data }, options), (err, res, status) => {
       if (status) {
         platform.metrics().increment('datadog.tracer.node.exporter.agent.responses')
-        platform.metrics().increment('datadog.tracer.node.exporter.agent.responses', [`status:${status}`])
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.responses', `status:${status}`)
       } else {
         platform.metrics().increment('datadog.tracer.node.exporter.agent.errors')
-        platform.metrics().increment('datadog.tracer.node.exporter.agent.errors.by.code', err.code && [`code:${err.code}`])
+
+        if (err && err.code) {
+          platform.metrics().increment('datadog.tracer.node.exporter.agent.errors.by.code', `code:${err.code}`)
+        }
       }
 
       if (err) return log.error(err)
