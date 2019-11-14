@@ -33,8 +33,6 @@ add('package.json')
 add('packages/dd-trace/lib/version.js')
 exec(`git commit -m "${tag}"`)
 exec(`git push -u origin HEAD`)
-exec(`git tag ${tag}`)
-exec(`git push origin refs/tags/${tag}`)
 
 function getIncrement () {
   const increments = ['major', 'premajor', 'minor', 'preminor', 'patch', 'prepatch', 'prerelease']
