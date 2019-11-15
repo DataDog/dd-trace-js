@@ -506,8 +506,28 @@ describe('Platform', () => {
         })
       })
 
+      describe('histogram', () => {
+        it('should add a record to a histogram', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).histogram('test', 1)
+          metrics.apply(platform).histogram('test', 2)
+          metrics.apply(platform).histogram('test', 3)
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test.max', 3)
+          expect(client.gauge).to.have.been.calledWith('test.min', 1)
+          expect(client.increment).to.have.been.calledWith('test.sum', 6)
+          expect(client.increment).to.have.been.calledWith('test.total', 6)
+          expect(client.gauge).to.have.been.calledWith('test.avg', 2)
+          expect(client.gauge).to.have.been.calledWith('test.median', 2)
+          expect(client.gauge).to.have.been.calledWith('test.95percentile', 3)
+          expect(client.increment).to.have.been.calledWith('test.count', 3)
+        })
+      })
+
       describe('increment', () => {
-        it('should increment a counter', () => {
+        it('should increment a gauge', () => {
           metrics.apply(platform).start()
           metrics.apply(platform).increment('test')
 
@@ -516,7 +536,7 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('test', 1)
         })
 
-        it('should increment a counter with a tag', () => {
+        it('should increment a gauge with a tag', () => {
           metrics.apply(platform).start()
           metrics.apply(platform).increment('test', 'foo:bar')
 
@@ -524,10 +544,28 @@ describe('Platform', () => {
 
           expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
         })
+
+        it('should increment a monotonic counter', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).increment('test', true)
+
+          clock.tick(10000)
+
+          expect(client.increment).to.have.been.calledWith('test', 1)
+        })
+
+        it('should increment a monotonic counter with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).increment('test', 'foo:bar', true)
+
+          clock.tick(10000)
+
+          expect(client.increment).to.have.been.calledWith('test', 1, ['foo:bar'])
+        })
       })
 
       describe('decrement', () => {
-        it('should increment a counter', () => {
+        it('should increment a gauge', () => {
           metrics.apply(platform).start()
           metrics.apply(platform).decrement('test')
 
@@ -536,7 +574,7 @@ describe('Platform', () => {
           expect(client.gauge).to.have.been.calledWith('test', -1)
         })
 
-        it('should decrement a counter with a tag', () => {
+        it('should decrement a gauge with a tag', () => {
           metrics.apply(platform).start()
           metrics.apply(platform).decrement('test', 'foo:bar')
 

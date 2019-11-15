@@ -234,10 +234,10 @@ function captureCounters () {
   Object.keys(counters).forEach(name => {
     if (typeof counters[name] === 'object') {
       Object.keys(counters[name]).forEach(tag => {
-        client.count(name, counters[name][tag], [tag])
+        client.increment(name, counters[name][tag], [tag])
       })
     } else {
-      client.count(name, counters[name])
+      client.increment(name, counters[name])
     }
   })
 }
@@ -317,6 +317,7 @@ function histogram (name, stats, tags) {
   client.gauge(`${name}.min`, stats.min, tags)
   client.gauge(`${name}.max`, stats.max, tags)
   client.increment(`${name}.sum`, stats.sum, tags)
+  client.increment(`${name}.total`, stats.sum, tags)
   client.gauge(`${name}.avg`, stats.avg, tags)
   client.increment(`${name}.count`, stats.count, tags)
   client.gauge(`${name}.median`, stats.median, tags)
