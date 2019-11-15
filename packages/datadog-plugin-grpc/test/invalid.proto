@@ -15,10 +15,5 @@ message Request {
 }
 
 message Response {
-  // enum Test {
-  //   FOO = 0;
-  //   BAR = 1;
-  // }
-
-  // Test first = 1;
+  required string first = 1;
 }

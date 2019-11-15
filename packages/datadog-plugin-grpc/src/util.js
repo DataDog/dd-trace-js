@@ -25,6 +25,8 @@ module.exports = {
   },
 
   addMetadataTags (span, metadata, filter, type) {
+    if (!metadata) return
+
     const values = filter(metadata.getMap())
 
     for (const key in values) {
