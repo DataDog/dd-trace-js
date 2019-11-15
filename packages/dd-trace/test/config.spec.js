@@ -54,6 +54,8 @@ describe('Config', () => {
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_CLIENT_TOKEN').returns('789')
     platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
+    platform.env.withArgs('DD_SAMPLE_RATE').returns('0.5')
+    platform.env.withArgs('DD_RATE_LIMIT').returns('-1')
 
     const config = new Config()
 
@@ -68,6 +70,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('clientToken', '789')
     expect(config).to.have.deep.property('tags', { foo: 'bar', baz: 'qux' })
+    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
@@ -119,7 +122,11 @@ describe('Config', () => {
       clientToken: '789',
       logLevel: logLevel,
       experimental: {
-        b3: true
+        b3: true,
+        sampler: {
+          sampleRate: 1,
+          rateLimit: 1000
+        }
       }
     })
 
@@ -146,6 +153,7 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
   })
 
   it('should initialize from the options with url taking precedence', () => {

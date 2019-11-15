@@ -41,6 +41,13 @@ class Config {
     tagger.add(tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
     tagger.add(tags, options.tags)
 
+    const sampler = (options.experimental && options.experimental.sampler) || {}
+
+    Object.assign(sampler, {
+      sampleRate: coalesce(sampler.sampleRate, platform.env('DD_SAMPLE_RATE')),
+      rateLimit: coalesce(sampler.rateLimit, platform.env('DD_RATE_LIMIT'))
+    })
+
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
     this.logInjection = String(logInjection) === 'true'
@@ -64,7 +71,7 @@ class Config {
       b3: !(!options.experimental || !options.experimental.b3),
       exporter: options.experimental && options.experimental.exporter,
       peers: (options.experimental && options.experimental.peers) || [],
-      sampler: (options.experimental && options.experimental.sampler) || {}
+      sampler
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
