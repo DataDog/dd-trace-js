@@ -45,7 +45,7 @@ class Config {
 
     Object.assign(sampler, {
       sampleRate: coalesce(sampler.sampleRate, platform.env('DD_SAMPLE_RATE')),
-      rateLimit: coalesce(sampler.sampleRate, platform.env('DD_RATE_LIMIT'))
+      rateLimit: coalesce(sampler.rateLimit, platform.env('DD_RATE_LIMIT'))
     })
 
     this.enabled = String(enabled) === 'true'

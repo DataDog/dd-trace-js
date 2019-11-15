@@ -122,7 +122,11 @@ describe('Config', () => {
       clientToken: '789',
       logLevel: logLevel,
       experimental: {
-        b3: true
+        b3: true,
+        sampler: {
+          sampleRate: 1,
+          rateLimit: 1000
+        }
       }
     })
 
@@ -149,6 +153,7 @@ describe('Config', () => {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
   })
 
   it('should initialize from the options with url taking precedence', () => {
