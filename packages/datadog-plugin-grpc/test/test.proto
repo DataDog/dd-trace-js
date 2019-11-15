@@ -14,11 +14,4 @@ message Request {
   int32 second = 2;
 }
 
-message Response {
-  // enum Test {
-  //   FOO = 0;
-  //   BAR = 1;
-  // }
-
-  // Test first = 1;
-}
+message Response {}
