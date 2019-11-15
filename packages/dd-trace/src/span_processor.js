@@ -1,6 +1,5 @@
 const log = require('./log')
 const format = require('./format')
-const platform = require('./platform')
 
 class SpanProcessor {
   constructor (exporter, prioritySampler) {
