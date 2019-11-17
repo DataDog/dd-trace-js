@@ -126,6 +126,60 @@ describe('log', () => {
       expect(console.log).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
+
+    it('should set minimum log level when enabled with logLevel argument set to a valid string', () => {
+      log.toggle(true, 'error')
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.not.have.been.called
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should set default log level when enabled with logLevel argument set to an invalid string', () => {
+      log.toggle(true, 'not a real log level')
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should set min log level when enabled w/logLevel arg set to valid string w/wrong case or whitespace', () => {
+      log.toggle(true, ' ErRoR   ')
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.not.have.been.called
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should log all log levels greater than or equal to minimum log level', () => {
+      log.toggle(true, 'debug')
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should enable default log level when enabled with logLevel argument set to invalid input', () => {
+      log.toggle(true, ['trace', 'info', 'eror'])
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
+
+    it('should enable default log level when enabled without logLevel argument', () => {
+      log.toggle(true)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
+    })
   })
 
   describe('use', () => {
@@ -177,6 +231,18 @@ describe('log', () => {
 
       expect(console.log).to.not.have.been.called
       expect(console.error).to.not.have.been.called
+    })
+
+    it('should reset the minimum log level to defaults', () => {
+      log.use(logger)
+      log.toggle(true, 'error')
+      log.reset()
+      log.toggle(true)
+      log.debug('debug')
+      log.error(error)
+
+      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.error).to.have.been.calledWith(error)
     })
   })
 

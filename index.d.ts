@@ -144,6 +144,26 @@ export declare interface SpanContext extends opentracing.SpanContext {
 }
 
 /**
+ * Sampling rule to configure on the priority sampler.
+ */
+export declare interface SamplingRule {
+  /**
+   * Sampling rate for this rule.
+   */
+  sampleRate: Number
+
+  /**
+   * Service on which to apply this rule. The rule will apply to all services if not provided.
+   */
+  service?: string | RegExp
+
+  /**
+   * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
+   */
+  name?: string | RegExp
+}
+
+/**
  * List of options available to the tracer.
  */
 export declare interface TracerOptions {
@@ -254,6 +274,28 @@ export declare interface TracerOptions {
      * @default []
      */
     peers?: string[]
+
+    /**
+     * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
+     */
+    sampler?: {
+      /**
+       * Sample rate to apply globally when no other rule is matched. Omit to fallback on the dynamic rates returned by the agent instead.
+       */
+      sampleRate?: Number,
+
+      /**
+       * Global rate limit that is applied on the global sample rate and all rules.
+       * @default 100
+       */
+      rateLimit?: Number,
+
+      /**
+       * Sampling rules to apply to priority sampling.
+       * @default []
+       */
+      rules?: SamplingRule[]
+    }
   };
 
   /**
@@ -300,6 +342,12 @@ export declare interface TracerOptions {
    * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
    */
   clientToken?: string
+
+  /**
+   * A string representing the minimum tracer log level to use when debug logging is enabled
+   * @default 'debug'
+   */
+  logLevel?: 'error' | 'debug'
 }
 
 /** @hidden */

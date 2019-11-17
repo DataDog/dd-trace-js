@@ -394,6 +394,11 @@ describe('Platform', () => {
             hostname: 'localhost',
             dogstatsd: {
               port: 8125
+            },
+            tags: {
+              str: 'bar',
+              obj: {},
+              invalid: 't{e*s#t5-:./'
             }
           },
           name: sinon.stub().returns('nodejs'),
@@ -417,7 +422,9 @@ describe('Platform', () => {
             host: 'localhost',
             tags: [
               'service:service',
-              'env:test'
+              'env:test',
+              'str:bar',
+              'invalid:t_e_s_t5-:./'
             ]
           })
         })
@@ -590,17 +597,32 @@ describe('Platform', () => {
         expect(Exporter).to.be.equal(AgentExporter)
       })
 
-      it('should create an LogExporter when in lambda environment', () => {
+      it('should create an LogExporter when in Lambda environment with a beta', () => {
         const Exporter = proxyquire('../src/platform/node/exporter', {
           './env': (key) => {
             if (key === 'AWS_LAMBDA_FUNCTION_NAME') {
               return 'my-func'
             }
             return undefined
-          }
+          },
+          '../../../lib/version': '0.16.0-beta.1'
         })()
 
         expect(Exporter).to.be.equal(LogExporter)
+      })
+
+      it('should create an AgentExporter when in Lambda environment without a beta', () => {
+        const Exporter = proxyquire('../src/platform/node/exporter', {
+          './env': (key) => {
+            if (key === 'AWS_LAMBDA_FUNCTION_NAME') {
+              return 'my-func'
+            }
+            return undefined
+          },
+          '../../../lib/version': '0.16.0'
+        })()
+
+        expect(Exporter).to.be.equal(AgentExporter)
       })
 
       it('should allow configuring the exporter', () => {

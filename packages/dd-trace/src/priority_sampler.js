@@ -1,7 +1,14 @@
 'use strict'
 
+const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const ext = require('../../../ext')
+
+const {
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION
+} = require('./constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -21,17 +28,21 @@ const priorities = new Set([
 ])
 
 class PrioritySampler {
-  constructor (env) {
+  constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
+    this._rules = this._normalizeRules(rules, sampleRate)
+    this._limiter = new RateLimiter(rateLimit)
+
     this.update({})
   }
 
   isSampled (span) {
     const context = this._getContext(span)
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
-    const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
+    const rule = this._findRule(context)
 
-    return sampler.isSampled(span)
+    return rule
+      ? this._isSampledByRule(context, rule) && this._isSampledByRateLimit(context)
+      : this._isSampledByAgent(context)
   }
 
   sample (span) {
@@ -86,6 +97,53 @@ class PrioritySampler {
         return USER_REJECT
       }
     }
+  }
+
+  _isSampledByRule (context, rule) {
+    context._metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
+
+    return rule.sampler.isSampled(context)
+  }
+
+  _isSampledByRateLimit (context) {
+    const allowed = this._limiter.isAllowed()
+
+    context._metrics[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+
+    return allowed
+  }
+
+  _isSampledByAgent (context) {
+    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
+
+    context._metrics[SAMPLING_AGENT_DECISION] = sampler.rate()
+
+    return sampler.isSampled(context)
+  }
+
+  _normalizeRules (rules, sampleRate) {
+    return rules
+      .concat({ sampleRate })
+      .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))
+      .filter(rule => !isNaN(rule.sampleRate))
+      .map(rule => ({ ...rule, sampler: new Sampler(rule.sampleRate) }))
+  }
+
+  _findRule (context) {
+    return this._rules.find(rule => this._matchRule(context, rule))
+  }
+
+  _matchRule (context, rule) {
+    const name = context._name
+    const service = context._tags['service.name']
+
+    if (rule.name instanceof RegExp && !rule.name.test(name)) return false
+    if (rule.name && rule.name !== name) return false
+    if (rule.service instanceof RegExp && !rule.service.test(service)) return false
+    if (rule.service && rule.service !== service) return false
+
+    return true
   }
 }
 

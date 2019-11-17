@@ -5,9 +5,9 @@ const Span = opentracing.Span
 const truncate = require('lodash.truncate')
 const SpanContext = require('./span_context')
 const platform = require('../platform')
-const log = require('../log')
 const constants = require('../constants')
 const id = require('../id')
+const tagger = require('../tagger')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
@@ -99,36 +99,7 @@ class DatadogSpan extends Span {
   }
 
   _addTags (keyValuePairs) {
-    if (!keyValuePairs) return
-
-    if (typeof keyValuePairs === 'string') {
-      return this._addTags(
-        keyValuePairs
-          .split(',')
-          .filter(tag => tag.indexOf(':') !== -1)
-          .reduce((prev, next) => {
-            const tag = next.split(':')
-            const key = tag[0]
-            const value = tag.slice(1).join(':')
-
-            prev[key] = value
-
-            return prev
-          }, {})
-      )
-    }
-
-    if (Array.isArray(keyValuePairs)) {
-      return keyValuePairs.forEach(tags => this._addTags(tags))
-    }
-
-    try {
-      Object.keys(keyValuePairs).forEach(key => {
-        this._spanContext._tags[key] = keyValuePairs[key]
-      })
-    } catch (e) {
-      log.error(e)
-    }
+    tagger.add(this._spanContext._tags, keyValuePairs)
   }
 
   _finish (finishTime) {

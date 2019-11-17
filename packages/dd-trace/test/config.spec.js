@@ -32,6 +32,7 @@ describe('Config', () => {
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('clientToken', undefined)
     expect(config).to.have.deep.property('integrationsDisabled', [])
+    expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.nested.property('experimental.b3', false)
   })
 
@@ -53,6 +54,9 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_CLIENT_TOKEN').returns('789')
+    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
+    platform.env.withArgs('DD_SAMPLE_RATE').returns('0.5')
+    platform.env.withArgs('DD_RATE_LIMIT').returns('-1')
 
     const config = new Config()
 
@@ -66,6 +70,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('clientToken', '789')
+    expect(config).to.have.deep.property('tags', { foo: 'bar', baz: 'qux' })
+    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
@@ -94,6 +100,7 @@ describe('Config', () => {
       'foo': 'bar'
     }
     const mockDisabledIntegrations = ['express']
+    const logLevel = 'error'
     const config = new Config('test', {
       enabled: false,
       debug: true,
@@ -116,8 +123,13 @@ describe('Config', () => {
       scope: 'noop',
       clientToken: '789',
       integrationsDisabled: mockDisabledIntegrations,
+      logLevel: logLevel,
       experimental: {
-        b3: true
+        b3: true,
+        sampler: {
+          sampleRate: 1,
+          rateLimit: 1000
+        }
       }
     })
 
@@ -140,10 +152,12 @@ describe('Config', () => {
     expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.property('clientToken', '789')
     expect(config).to.have.property('integrationsDisabled', mockDisabledIntegrations)
+    expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -181,10 +195,13 @@ describe('Config', () => {
   it('should give priority to the common agent environment variable', () => {
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('trace-agent')
     platform.env.withArgs('DD_AGENT_HOST').returns('agent')
+    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:foo')
+    platform.env.withArgs('DD_TAGS').returns('foo:bar,baz:qux')
 
     const config = new Config()
 
     expect(config).to.have.property('hostname', 'agent')
+    expect(config).to.have.deep.property('tags', { foo: 'foo', baz: 'qux' })
   })
 
   it('should give priority to the options', () => {
@@ -201,6 +218,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_API_KEY').returns('123')
     platform.env.withArgs('DD_APP_KEY').returns('456')
+    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
 
     const config = new Config('test', {
       enabled: true,
@@ -216,7 +234,10 @@ describe('Config', () => {
       reportHostname: false,
       service: 'test',
       env: 'development',
-      clientToken: '789'
+      clientToken: '789',
+      tags: {
+        foo: 'foo'
+      }
     })
 
     expect(config).to.have.property('enabled', true)
@@ -231,6 +252,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientToken', '789')
+    expect(config).to.have.deep.property('tags', { foo: 'foo', baz: 'qux' })
   })
 
   it('should give priority to the options especially url', () => {

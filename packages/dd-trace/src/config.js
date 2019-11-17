@@ -4,6 +4,7 @@ const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
+const tagger = require('./tagger')
 
 class Config {
   constructor (service, options) {
@@ -33,6 +34,19 @@ class Config {
     const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
     const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
     const clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
+    const tags = {}
+
+    tagger.add(tags, platform.env('DD_TAGS'))
+    tagger.add(tags, platform.env('DD_TRACE_TAGS'))
+    tagger.add(tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
+    tagger.add(tags, options.tags)
+
+    const sampler = (options.experimental && options.experimental.sampler) || {}
+
+    Object.assign(sampler, {
+      sampleRate: coalesce(sampler.sampleRate, platform.env('DD_SAMPLE_RATE')),
+      rateLimit: coalesce(sampler.rateLimit, platform.env('DD_RATE_LIMIT'))
+    })
 
     this.enabled = String(enabled) === 'true'
     this.debug = String(debug) === 'true'
@@ -47,7 +61,7 @@ class Config {
     this.plugins = !!plugins
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
-    this.tags = Object.assign({}, options.tags)
+    this.tags = tags
     this.dogstatsd = {
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
@@ -56,7 +70,8 @@ class Config {
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
       exporter: options.experimental && options.experimental.exporter,
-      peers: (options.experimental && options.experimental.peers) || []
+      peers: (options.experimental && options.experimental.peers) || [],
+      sampler
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
@@ -69,6 +84,11 @@ class Config {
       []
     )
     this.clientToken = clientToken
+    this.logLevel = coalesce(
+      options.logLevel,
+      platform.env('DD_TRACE_LOG_LEVEL'),
+      'debug'
+    )
   }
 }
 
