@@ -16,6 +16,7 @@ class Instrumenter {
     this._names = new Set()
     this._plugins = new Map()
     this._instrumented = new Map()
+    this._disabledPlugins = new Set()
   }
 
   use (name, config) {
@@ -40,14 +41,15 @@ class Instrumenter {
     config = config || {}
 
     if (config.plugins !== false) {
+      // sets disabled plugins
+      if(typeof config.plugins === 'object') {
+        Object.keys(config.plugins).filter( isPluginEnabled => config.plugins[isPluginEnabled] === false)
+          .forEach( name => this._disabledPlugins.add(name))
+      }
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          if (!config.integrationsDisabled || config.integrationsDisabled.indexOf(name) === -1) {
-            this._set(plugins[name], { name, config: {} })
-          } else {
-            log.debug(`configuration disabled via configuration option, named "${name}".`)
-          }
+          this._set(plugins[name], { name, config: {} })
         })
     }
 
@@ -153,8 +155,12 @@ class Instrumenter {
   }
 
   _set (plugin, meta) {
-    this._plugins.set(plugin, meta)
-    this.load(plugin, meta)
+    if(this._disabledPlugins.has(meta.name)) {
+      log.debug(`configuration disabled via configuration option, named "${meta.name}".`)
+    } else {
+      this._plugins.set(plugin, meta)
+      this.load(plugin, meta)
+    }
   }
 }
 
