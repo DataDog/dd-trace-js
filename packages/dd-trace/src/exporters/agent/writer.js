@@ -26,6 +26,8 @@ class Writer {
 
     log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
 
+    platform.metrics().histogram('datadog.tracer.node.exporter.agent.trace_size', buffer.length)
+
     if (buffer.length + this._size > MAX_SIZE) {
       this.flush()
     }
@@ -37,8 +39,11 @@ class Writer {
   flush () {
     if (this._queue.length > 0) {
       const data = platform.msgpack.prefix(this._queue)
+      const size = data.reduce((prev, next) => prev + next.length, 0)
 
       this._request(data, this._queue.length)
+
+      platform.metrics().histogram('datadog.tracer.node.exporter.agent.payload_size', size)
 
       this._queue = []
       this._size = 0
@@ -70,7 +75,20 @@ class Writer {
 
     log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-    platform.request(Object.assign({ data }, options), (err, res) => {
+    platform.metrics().increment('datadog.tracer.node.exporter.agent.requests')
+
+    platform.request(Object.assign({ data }, options), (err, res, status) => {
+      if (status) {
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.responses')
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.responses.by.status', `status:${status}`)
+      } else {
+        platform.metrics().increment('datadog.tracer.node.exporter.agent.errors')
+
+        if (err && err.code) {
+          platform.metrics().increment('datadog.tracer.node.exporter.agent.errors.by.code', `code:${err.code}`)
+        }
+      }
+
       if (err) return log.error(err)
 
       log.debug(`Response from the agent: ${res}`)

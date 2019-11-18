@@ -53,7 +53,7 @@ describe('Writer', () => {
       engine: sinon.stub(),
       request: sinon.stub().yields(null, response),
       msgpack: {
-        prefix: sinon.stub()
+        prefix: sinon.stub().returns([])
       }
     }
 
@@ -125,7 +125,7 @@ describe('Writer', () => {
     })
 
     it('should flush its traces to the agent', () => {
-      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns('prefixed')
+      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns(['prefixed'])
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
@@ -148,7 +148,7 @@ describe('Writer', () => {
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
           'X-Datadog-Trace-Count': '2'
         },
-        data: 'prefixed'
+        data: ['prefixed']
       })
     })
 

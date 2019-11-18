@@ -16,6 +16,8 @@ module.exports = function () {
       }
     },
 
+    histogram () {},
+
     count () {},
 
     increment () {},

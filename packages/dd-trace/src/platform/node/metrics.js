@@ -4,8 +4,10 @@
 
 const v8 = require('v8')
 const path = require('path')
+const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('../../log')
+const Histogram = require('../../histogram')
 
 const INTERVAL = 10 * 1000
 
@@ -16,7 +18,9 @@ let interval
 let client
 let time
 let cpuUsage
+let gauges
 let counters
+let histograms
 
 reset()
 
@@ -99,21 +103,40 @@ module.exports = function () {
       return { finish: () => {} }
     },
 
-    count (name, count, tag) {
+    histogram (name, value, tag) {
       if (!client) return
-      if (!counters[name]) {
-        counters[name] = tag ? Object.create(null) : 0
+
+      histograms[name] = histograms[name] || new Map()
+
+      if (!histograms[name].has(tag)) {
+        histograms[name].set(tag, new Histogram())
+      }
+
+      histograms[name].get(tag).record(value)
+    },
+
+    count (name, count, tag, monotonic = false) {
+      if (!client) return
+      if (typeof tag === 'boolean') {
+        monotonic = tag
+        tag = undefined
+      }
+
+      const map = monotonic ? counters : gauges
+
+      if (!map[name]) {
+        map[name] = tag ? Object.create(null) : 0
       }
 
       if (tag) {
-        counters[name][tag] = (counters[name][tag] || 0) + count
+        map[name][tag] = (map[name][tag] || 0) + count
       } else {
-        counters[name] = (counters[name] || 0) + count
+        map[name] = (map[name] || 0) + count
       }
     },
 
-    increment (name, tag) {
-      this.count(name, 1, tag)
+    increment (name, tag, monotonic) {
+      this.count(name, 1, tag, monotonic)
     },
 
     decrement (name, tag) {
@@ -127,7 +150,9 @@ function reset () {
   client = null
   time = null
   cpuUsage = null
+  gauges = {}
   counters = {}
+  histograms = {}
 }
 
 function captureCpuUsage () {
@@ -144,36 +169,38 @@ function captureCpuUsage () {
   const systemPercent = 100 * elapsedUsage.system / 1000 / elapsedMs
   const totalPercent = userPercent + systemPercent
 
-  client.gauge('cpu.system', systemPercent.toFixed(2))
-  client.gauge('cpu.user', userPercent.toFixed(2))
-  client.gauge('cpu.total', totalPercent.toFixed(2))
+  client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
+  client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
+  client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 }
 
 function captureMemoryUsage () {
   const stats = process.memoryUsage()
 
-  client.gauge('mem.heap_total', stats.heapTotal)
-  client.gauge('mem.heap_used', stats.heapUsed)
-  client.gauge('mem.rss', stats.rss)
+  client.gauge('runtime.node.mem.heap_total', stats.heapTotal)
+  client.gauge('runtime.node.mem.heap_used', stats.heapUsed)
+  client.gauge('runtime.node.mem.rss', stats.rss)
+  client.gauge('runtime.node.mem.total', os.totalmem())
+  client.gauge('runtime.node.mem.free', os.freemem())
 
-  stats.external && client.gauge('mem.external', stats.external)
+  stats.external && client.gauge('runtime.node.mem.external', stats.external)
 }
 
 function captureProcess () {
-  client.gauge('process.uptime', Math.round(process.uptime()))
+  client.gauge('runtime.node.process.uptime', Math.round(process.uptime()))
 }
 
 function captureHeapStats () {
   const stats = v8.getHeapStatistics()
 
-  client.gauge('heap.total_heap_size', stats.total_heap_size)
-  client.gauge('heap.total_heap_size_executable', stats.total_heap_size_executable)
-  client.gauge('heap.total_physical_size', stats.total_physical_size)
-  client.gauge('heap.total_available_size', stats.total_available_size)
-  client.gauge('heap.heap_size_limit', stats.heap_size_limit)
+  client.gauge('runtime.node.heap.total_heap_size', stats.total_heap_size)
+  client.gauge('runtime.node.heap.total_heap_size_executable', stats.total_heap_size_executable)
+  client.gauge('runtime.node.heap.total_physical_size', stats.total_physical_size)
+  client.gauge('runtime.node.heap.total_available_size', stats.total_available_size)
+  client.gauge('runtime.node.heap.heap_size_limit', stats.heap_size_limit)
 
-  stats.malloced_memory && client.gauge('heap.malloced_memory', stats.malloced_memory)
-  stats.peak_malloced_memory && client.gauge('heap.peak_malloced_memory', stats.peak_malloced_memory)
+  stats.malloced_memory && client.gauge('runtime.node.heap.malloced_memory', stats.malloced_memory)
+  stats.peak_malloced_memory && client.gauge('runtime.node.heap.peak_malloced_memory', stats.peak_malloced_memory)
 }
 
 function captureHeapSpace () {
@@ -184,22 +211,43 @@ function captureHeapSpace () {
   for (let i = 0, l = stats.length; i < l; i++) {
     const tags = [`space:${stats[i].space_name}`]
 
-    client.gauge('heap.size.by.space', stats[i].space_size, tags)
-    client.gauge('heap.used_size.by.space', stats[i].space_used_size, tags)
-    client.gauge('heap.available_size.by.space', stats[i].space_available_size, tags)
-    client.gauge('heap.physical_size.by.space', stats[i].physical_space_size, tags)
+    client.gauge('runtime.node.heap.size.by.space', stats[i].space_size, tags)
+    client.gauge('runtime.node.heap.used_size.by.space', stats[i].space_used_size, tags)
+    client.gauge('runtime.node.heap.available_size.by.space', stats[i].space_available_size, tags)
+    client.gauge('runtime.node.heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
+}
+
+function captureGauges () {
+  Object.keys(gauges).forEach(name => {
+    if (typeof gauges[name] === 'object') {
+      Object.keys(gauges[name]).forEach(tag => {
+        client.gauge(name, gauges[name][tag], [tag])
+      })
+    } else {
+      client.gauge(name, gauges[name])
+    }
+  })
 }
 
 function captureCounters () {
   Object.keys(counters).forEach(name => {
     if (typeof counters[name] === 'object') {
       Object.keys(counters[name]).forEach(tag => {
-        client.gauge(name, counters[name][tag], [tag])
+        client.increment(name, counters[name][tag], [tag])
       })
     } else {
-      client.gauge(name, counters[name])
+      client.increment(name, counters[name])
     }
+  })
+}
+
+function captureHistograms () {
+  Object.keys(histograms).forEach(name => {
+    histograms[name].forEach((stats, tag) => {
+      histogram(name, stats, tag)
+      stats.reset()
+    })
   })
 }
 
@@ -207,7 +255,9 @@ function captureCommonMetrics () {
   captureMemoryUsage()
   captureProcess()
   captureHeapStats()
+  captureGauges()
   captureCounters()
+  captureHistograms()
 }
 
 function captureNativeMetrics () {
@@ -222,49 +272,52 @@ function captureNativeMetrics () {
   const systemPercent = 100 * stats.cpu.system / elapsedUs
   const totalPercent = userPercent + systemPercent
 
-  client.gauge('cpu.system', systemPercent.toFixed(2))
-  client.gauge('cpu.user', userPercent.toFixed(2))
-  client.gauge('cpu.total', totalPercent.toFixed(2))
+  client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
+  client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
+  client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 
-  histogram('event_loop.delay', stats.eventLoop)
+  histogram('runtime.node.event_loop.delay', stats.eventLoop)
 
   Object.keys(stats.gc).forEach(type => {
     if (type === 'all') {
-      histogram('gc.pause', stats.gc[type])
+      histogram('runtime.node.gc.pause', stats.gc[type])
     } else {
-      histogram('gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
+      histogram('runtime.node.gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
     }
   })
 
-  client.gauge('spans.finished', stats.spans.total.finished)
-  client.gauge('spans.unfinished', stats.spans.total.unfinished)
+  client.gauge('runtime.node.spans.finished', stats.spans.total.finished)
+  client.gauge('runtime.node.spans.unfinished', stats.spans.total.unfinished)
 
   for (let i = 0, l = spaces.length; i < l; i++) {
     const tags = [`heap_space:${spaces[i].space_name}`]
 
-    client.gauge('heap.size.by.space', spaces[i].space_size, tags)
-    client.gauge('heap.used_size.by.space', spaces[i].space_used_size, tags)
-    client.gauge('heap.available_size.by.space', spaces[i].space_available_size, tags)
-    client.gauge('heap.physical_size.by.space', spaces[i].physical_space_size, tags)
+    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tags)
+    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
+    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
+    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
   }
 
   if (stats.spans.operations) {
     const operations = stats.spans.operations
 
     Object.keys(operations.finished).forEach(name => {
-      client.gauge('spans.finished.by.name', operations.finished[name], [`span_name:${name}`])
+      client.gauge('runtime.node.spans.finished.by.name', operations.finished[name], [`span_name:${name}`])
     })
 
     Object.keys(operations.unfinished).forEach(name => {
-      client.gauge('spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
+      client.gauge('runtime.node.spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
     })
   }
 }
 
 function histogram (name, stats, tags) {
+  tags = [].concat(tags)
+
   client.gauge(`${name}.min`, stats.min, tags)
   client.gauge(`${name}.max`, stats.max, tags)
   client.increment(`${name}.sum`, stats.sum, tags)
+  client.increment(`${name}.total`, stats.sum, tags)
   client.gauge(`${name}.avg`, stats.avg, tags)
   client.increment(`${name}.count`, stats.count, tags)
   client.gauge(`${name}.median`, stats.median, tags)

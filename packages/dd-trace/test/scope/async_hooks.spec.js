@@ -36,16 +36,16 @@ describe('Scope (async_hooks)', () => {
     scope._init(0, 'TEST')
     scope._destroy(0)
 
-    expect(metrics.increment).to.have.been.calledWith('async.resources')
-    expect(metrics.decrement).to.have.been.calledWith('async.resources')
+    expect(metrics.increment).to.have.been.calledWith('runtime.node.async.resources')
+    expect(metrics.decrement).to.have.been.calledWith('runtime.node.async.resources')
   })
 
   it('should keep track of asynchronous resource count by type', () => {
     scope._init(0, 'TEST')
     scope._destroy(0)
 
-    expect(metrics.increment).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
-    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type', 'resource_type:TEST')
+    expect(metrics.increment).to.have.been.calledWith('runtime.node.async.resources.by.type', 'resource_type:TEST')
+    expect(metrics.decrement).to.have.been.calledWith('runtime.node.async.resources.by.type', 'resource_type:TEST')
   })
 
   it('should only track destroys once', () => {
@@ -54,8 +54,8 @@ describe('Scope (async_hooks)', () => {
     scope._destroy(0)
 
     expect(metrics.decrement).to.have.been.calledTwice
-    expect(metrics.decrement).to.have.been.calledWith('async.resources')
-    expect(metrics.decrement).to.have.been.calledWith('async.resources.by.type')
+    expect(metrics.decrement).to.have.been.calledWith('runtime.node.async.resources')
+    expect(metrics.decrement).to.have.been.calledWith('runtime.node.async.resources.by.type')
   })
 
   it('should not break propagation for nested resources', done => {
