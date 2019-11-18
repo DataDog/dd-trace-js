@@ -13,8 +13,9 @@ describe('Plugin', () => {
   let port
   let server
   let tracer
+  let loader
 
-  function buildClient (service) {
+  function buildClient (service, ClientService) {
     service = Object.assign({
       getBidi: () => {},
       getServerStream: () => {},
@@ -22,7 +23,8 @@ describe('Plugin', () => {
       getUnary: () => {}
     }, service)
 
-    const loader = require('../../../versions/@grpc/proto-loader').get()
+    loader = require('../../../versions/@grpc/proto-loader').get()
+
     const definition = loader.loadSync(`${__dirname}/test.proto`)
     const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
@@ -32,7 +34,9 @@ describe('Plugin', () => {
     server.addService(TestService.service, service)
     server.start()
 
-    return new TestService(`localhost:${port}`, grpc.credentials.createInsecure())
+    ClientService = ClientService || TestService
+
+    return new ClientService(`localhost:${port}`, grpc.credentials.createInsecure())
   }
 
   describe('grpc/client', () => {
@@ -249,6 +253,36 @@ describe('Plugin', () => {
                 'grpc.method.path': '/test.TestService/getUnary',
                 'grpc.method.kind': kinds.unary,
                 'grpc.status.code': '2',
+                'span.kind': 'client',
+                'component': 'grpc'
+              })
+              expect(traces[0][0].meta).to.have.property('error.stack')
+            })
+            .then(done)
+            .catch(done)
+
+          client.getUnary({ first: 'foobar' }, () => {})
+        })
+
+        it('should handle protocol errors', done => {
+          const definition = loader.loadSync(`${__dirname}/invalid.proto`)
+          const test = grpc.loadPackageDefinition(definition).test
+          const client = buildClient({
+            getUnary: (_, callback) => callback(null)
+          }, test.TestService)
+
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.include({
+                'error.msg': '13 INTERNAL: Failed to parse server response',
+                'error.type': 'Error',
+                'grpc.method.name': 'getUnary',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': kinds.unary,
+                'grpc.status.code': '13',
                 'span.kind': 'client',
                 'component': 'grpc'
               })

@@ -14,4 +14,6 @@ message Request {
   int32 second = 2;
 }
 
-message Response {}
+message Response {
+  required string first = 1;
+}
