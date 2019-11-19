@@ -51,6 +51,7 @@ module.exports = function () {
         nativeMetrics.start()
       } catch (e) {
         log.error('Unable to load native metrics module. Some metrics will not be available.')
+        nativeMetrics = null
       }
 
       client = new Client({
@@ -79,6 +80,8 @@ module.exports = function () {
         }, INTERVAL)
       }
 
+      metrics.boolean('datadog.tracer.node.metrics.native.enabled', !!nativeMetrics)
+
       interval.unref()
     },
 
@@ -103,6 +106,10 @@ module.exports = function () {
       return { finish: () => {} }
     },
 
+    boolean (name, value, tag) {
+      metrics.gauge(name, value ? 1 : 0, tag)
+    },
+
     histogram (name, value, tag) {
       if (!client) return
 
@@ -124,15 +131,18 @@ module.exports = function () {
 
       const map = monotonic ? counters : gauges
 
-      if (!map[name]) {
-        map[name] = tag ? Object.create(null) : 0
-      }
+      map[name] = map[name] || new Map()
 
-      if (tag) {
-        map[name][tag] = (map[name][tag] || 0) + count
-      } else {
-        map[name] = (map[name] || 0) + count
-      }
+      const value = map[name].get(tag) || 0
+
+      map[name].set(tag, value + count)
+    },
+
+    gauge (name, value, tag) {
+      if (!client) return
+
+      gauges[name] = gauges[name] || new Map()
+      gauges[name].set(tag, value)
     },
 
     increment (name, tag, monotonic) {
@@ -220,32 +230,26 @@ function captureHeapSpace () {
 
 function captureGauges () {
   Object.keys(gauges).forEach(name => {
-    if (typeof gauges[name] === 'object') {
-      Object.keys(gauges[name]).forEach(tag => {
-        client.gauge(name, gauges[name][tag], [tag])
-      })
-    } else {
-      client.gauge(name, gauges[name])
-    }
+    gauges[name].forEach((value, tag) => {
+      client.gauge(name, value, tag && [tag])
+    })
   })
 }
 
 function captureCounters () {
   Object.keys(counters).forEach(name => {
-    if (typeof counters[name] === 'object') {
-      Object.keys(counters[name]).forEach(tag => {
-        client.increment(name, counters[name][tag], [tag])
-      })
-    } else {
-      client.increment(name, counters[name])
-    }
+    counters[name].forEach((value, tag) => {
+      client.increment(name, value, tag && [tag])
+    })
   })
+
+  counters = {}
 }
 
 function captureHistograms () {
   Object.keys(histograms).forEach(name => {
     histograms[name].forEach((stats, tag) => {
-      histogram(name, stats, tag)
+      histogram(name, stats, tag && [tag])
       stats.reset()
     })
   })

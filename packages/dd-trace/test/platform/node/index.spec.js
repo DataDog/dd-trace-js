@@ -552,6 +552,12 @@ describe('Platform', () => {
           clock.tick(10000)
 
           expect(client.increment).to.have.been.calledWith('test', 1)
+
+          client.increment.resetHistory()
+
+          clock.tick(10000)
+
+          expect(client.increment).to.not.have.been.calledWith('test')
         })
 
         it('should increment a monotonic counter with a tag', () => {
@@ -561,6 +567,12 @@ describe('Platform', () => {
           clock.tick(10000)
 
           expect(client.increment).to.have.been.calledWith('test', 1, ['foo:bar'])
+
+          client.increment.resetHistory()
+
+          clock.tick(10000)
+
+          expect(client.increment).to.not.have.been.calledWith('test')
         })
       })
 
