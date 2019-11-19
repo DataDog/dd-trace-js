@@ -353,25 +353,39 @@ describe('Instrumenter', () => {
     })
   })
 
-  describe('with plugins disabled via configuration option', () => {
+  describe('with plugins disabled via plugin configuration option', () => {
     describe('enable', () => {
       it('should not patch plugins disabled from configuration option', () => {
-        const configDisabled = { foo: 'bar', integrationsDisabled: ['express-mock'] }
+        const configDisabled = { foo: 'bar', plugins: { 'express-mock': false, 'mysql-mock': false } }
         instrumenter.enable(configDisabled)
 
         require('express-mock')
+        require('mysql-mock')
 
         expect(integrations.express.patch).to.not.have.been.called
+        expect(integrations.mysql.patch).to.not.have.been.called
       })
 
       it('should patch plugins not disabled from configuration option', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', integrationsDisabled: [] }
+        const configNotDisabled = { foo: 'bar', plugins: {} }
         instrumenter.enable(configNotDisabled)
 
         const express = require('express-mock')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+      })
+
+      it('should not patch plugins with configuration option plugin set to true', () => {
+        const configDefault = {}
+        const configNotDisabled = { foo: 'bar', plugins: { 'express-mock': true, 'mysql-mock': false } }
+        instrumenter.enable(configNotDisabled)
+
+        const express = require('express-mock')
+        require('mysql-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(integrations.mysql.patch).to.not.have.been.called
       })
     })
   })

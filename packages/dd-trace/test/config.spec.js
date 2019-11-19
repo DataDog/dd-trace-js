@@ -31,7 +31,6 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('clientToken', undefined)
-    expect(config).to.have.deep.property('integrationsDisabled', [])
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.nested.property('experimental.b3', false)
   })
@@ -99,8 +98,8 @@ describe('Config', () => {
     const tags = {
       'foo': 'bar'
     }
-    const mockDisabledIntegrations = ['express']
     const logLevel = 'error'
+    const plugins = { 'express': false, 'dns': false }
     const config = new Config('test', {
       enabled: false,
       debug: true,
@@ -119,10 +118,9 @@ describe('Config', () => {
       runtimeMetrics: true,
       trackAsyncScope: false,
       reportHostname: true,
-      plugins: false,
+      plugins: plugins,
       scope: 'noop',
       clientToken: '789',
-      integrationsDisabled: mockDisabledIntegrations,
       logLevel: logLevel,
       experimental: {
         b3: true,
@@ -148,10 +146,9 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('trackAsyncScope', false)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.property('plugins', false)
+    expect(config).to.have.property('plugins', plugins)
     expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.property('clientToken', '789')
-    expect(config).to.have.property('integrationsDisabled', mockDisabledIntegrations)
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'

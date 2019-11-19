@@ -42,18 +42,17 @@ class Instrumenter {
 
     if (config.plugins !== false) {
       // sets disabled plugins
-      if(typeof config.plugins === 'object') {
-        Object.keys(config.plugins).filter( plugin => config.plugins[plugin] === false)
-          .forEach( (plugin) => {
+      if (typeof config.plugins === 'object') {
+        Object.keys(config.plugins).filter(plugin => config.plugins[plugin] === false)
+          .forEach((plugin) => {
             this._disabledPlugins.add(plugin)
 
-            //account for edge case where .use has been called for a plugin before .enable could disable it
+            // account for edge case where .use has been called for a plugin before .enable could disable it
             if (this._plugins.has(plugin)) {
               this._plugins.delete(plugin)
             }
           })
       }
-
 
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
@@ -164,7 +163,7 @@ class Instrumenter {
   }
 
   _set (plugin, meta) {
-    if(this._disabledPlugins.has(meta.name)) {
+    if (this._disabledPlugins.has(meta.name)) {
       log.debug(`configuration disabled via configuration option, named "${meta.name}".`)
     } else {
       this._plugins.set(plugin, meta)

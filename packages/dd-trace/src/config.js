@@ -18,10 +18,11 @@ class Config {
 
       if (!pluginsPlatform) return true
 
-      if (String(pluginsPlatform) === 'true' || String(pluginsPlatform) === 'false') return String(pluginsPlatform) === 'true'
+      if (String(pluginsPlatform) === 'true' ||
+        String(pluginsPlatform) === 'false') return String(pluginsPlatform) === 'true'
 
-      return pluginsPlatform.split(",").reduce( (accum, curr) => {
-        accum[curr] = false 
+      return pluginsPlatform.split(',').reduce((accum, curr) => {
+        accum[curr] = false
         return accum
       }, {})
     }
@@ -39,7 +40,6 @@ class Config {
     const port = coalesce(options.port, platform.env('DD_TRACE_AGENT_PORT'), 8126)
     const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
-    const plugins = coalesce(options.plugins, true)
     const dogstatsd = options.dogstatsd || {}
     const runtimeMetrics = coalesce(options.runtimeMetrics, platform.env('DD_RUNTIME_METRICS_ENABLED'), false)
     const analytics = coalesce(
