@@ -10,7 +10,7 @@ class Config {
   constructor (service, options) {
     options = options || {}
 
-    const pluginsPlatform = platform.env('DD_INTEGRATIONS_DISABLED')
+    const pluginsPlatform = platform.env('DD_TRACE_DISABLED_PLUGINS')
 
     const determinePluginSetting = (pluginsOption, pluginsPlatform) => {
       // plugin is set via options
