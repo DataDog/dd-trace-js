@@ -356,14 +356,14 @@ describe('Instrumenter', () => {
   describe('with plugins disabled via plugin configuration option', () => {
     describe('enable', () => {
       it('should not patch plugins disabled from configuration option', () => {
-        const configDisabled = { foo: 'bar', plugins: { 'express-mock': false, 'mysql-mock': false } }
+        const configDisabled = { foo: 'bar', plugins: { 'express-mock': false, 'http': false } }
         instrumenter.enable(configDisabled)
 
         require('express-mock')
-        require('mysql-mock')
+        require('http')
 
         expect(integrations.express.patch).to.not.have.been.called
-        expect(integrations.mysql.patch).to.not.have.been.called
+        expect(integrations.http.patch).to.not.have.been.called
       })
 
       it('should patch plugins not disabled from configuration option', () => {
@@ -376,16 +376,16 @@ describe('Instrumenter', () => {
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
       })
 
-      it('should not patch plugins with configuration option plugin set to true', () => {
+      it('should patch plugins with configuration option plugin set to true', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: { 'express-mock': true, 'mysql-mock': false } }
+        const configNotDisabled = { foo: 'bar', plugins: { 'express-mock': true, 'http': false } }
         instrumenter.enable(configNotDisabled)
 
         const express = require('express-mock')
-        require('mysql-mock')
+        require('http')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
-        expect(integrations.mysql.patch).to.not.have.been.called
+        expect(integrations.http.patch).to.not.have.been.called
       })
     })
   })
