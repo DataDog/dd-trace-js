@@ -96,7 +96,7 @@ class Writer {
         log.error(e)
 
         platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+        platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
     })
   }
