@@ -100,7 +100,7 @@ class Instrumenter {
     const instrumentations = [].concat(plugin)
     const enabled = meta.config.enabled !== false
 
-    platform.metrics().boolean(`datadog.tracer.node.plugin.${meta.name}.enabled`, enabled)
+    platform.metrics().boolean(`datadog.tracer.node.plugin.enabled`, enabled, `name:${meta.name}`)
 
     try {
       instrumentations
@@ -128,7 +128,7 @@ class Instrumenter {
     if (meta) {
       this._plugins.delete(plugin)
 
-      platform.metrics().boolean(`datadog.tracer.node.plugin.${meta.name}.enabled`, false)
+      platform.metrics().boolean(`datadog.tracer.node.plugin.enabled`, false, `name:${meta.name}`)
     }
   }
 
