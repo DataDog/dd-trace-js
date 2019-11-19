@@ -596,6 +596,46 @@ describe('Platform', () => {
         })
       })
 
+      describe('gauge', () => {
+        it('should set a gauge', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).gauge('test', 10)
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 10)
+        })
+
+        it('should set a gauge with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).gauge('test', 10, 'foo:bar')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 10, ['foo:bar'])
+        })
+      })
+
+      describe('boolean', () => {
+        it('should set a gauge', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).boolean('test', true)
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 1)
+        })
+
+        it('should set a gauge with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).boolean('test', true, 'foo:bar')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+        })
+      })
+
       describe('without native metrics', () => {
         beforeEach(() => {
           metrics = proxyquire('../src/platform/node/metrics', {
