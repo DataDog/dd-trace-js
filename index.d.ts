@@ -299,10 +299,11 @@ export declare interface TracerOptions {
   };
 
   /**
-   * Whether to load all built-in plugins.
+   * Whether to load all built-in plugins, or a map of integrations 
+   * to automatically disable when the tracer is initialized e.g. `{'express': false, 'dns': false}`
    * @default true
    */
-  plugins?: boolean;
+  plugins?: boolean | { [key: string]: boolean };
 
   /**
    * Custom logger to be used by the tracer (if debug = true),
@@ -331,12 +332,6 @@ export declare interface TracerOptions {
    * @default false
    */
   reportHostname?: boolean
-
-  /**
-   * An array of integrations to automatically disable when the tracer is initialized e.g. [`express`,`hapi`,`dns`]
-   * @default []
-   */
-  integrationsDisabled?: string[]
   
   /**
    * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.

@@ -10,6 +10,22 @@ class Config {
   constructor (service, options) {
     options = options || {}
 
+    const pluginsPlatform = platform.env('DD_INTEGRATIONS_DISABLED')
+
+    const determinePluginSetting = (pluginsOption, pluginsPlatform) => {
+      // plugin is set via options
+      if (pluginsOption !== undefined) return pluginsOption
+
+      if (!pluginsPlatform) return true
+
+      if (String(pluginsPlatform) === 'true' || String(pluginsPlatform) === 'false') return String(pluginsPlatform) === 'true'
+
+      return pluginsPlatform.split(",").reduce( (accum, curr) => {
+        accum[curr] = false 
+        return accum
+      }, {})
+    }
+
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
@@ -58,7 +74,7 @@ class Config {
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger
-    this.plugins = !!plugins
+    this.plugins = determinePluginSetting(options.plugins, pluginsPlatform)
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
     this.tags = tags
@@ -75,14 +91,6 @@ class Config {
     }
     this.reportHostname = String(reportHostname) === 'true'
     this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
-    this.integrationsDisabled = coalesce(
-      options.integrationsDisabled,
-      (typeof platform.env('DD_INTEGRATIONS_DISABLED') === 'string'
-        ? platform.env('DD_INTEGRATIONS_DISABLED').split(',')
-        : undefined
-      ),
-      []
-    )
     this.clientToken = clientToken
     this.logLevel = coalesce(
       options.logLevel,
