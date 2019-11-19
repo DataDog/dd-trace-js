@@ -44,8 +44,8 @@ class Config {
     const sampler = (options.experimental && options.experimental.sampler) || {}
 
     Object.assign(sampler, {
-      sampleRate: coalesce(sampler.sampleRate, platform.env('DD_SAMPLE_RATE')),
-      rateLimit: coalesce(sampler.rateLimit, platform.env('DD_RATE_LIMIT'))
+      sampleRate: coalesce(sampler.sampleRate, platform.env('DD_TRACE_SAMPLE_RATE')),
+      rateLimit: coalesce(sampler.rateLimit, platform.env('DD_TRACE_RATE_LIMIT'))
     })
 
     this.enabled = String(enabled) === 'true'
