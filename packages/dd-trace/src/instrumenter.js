@@ -71,6 +71,7 @@ class Instrumenter {
     }
 
     this._plugins.clear()
+    this._disabledPlugins.clear()
     this._enabled = false
     this._loader.reload(this._plugins)
   }
