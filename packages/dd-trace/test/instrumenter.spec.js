@@ -387,6 +387,20 @@ describe('Instrumenter', () => {
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
         expect(integrations.http.patch).to.not.have.been.called
       })
+
+      it('should clear any plugins called by .use that have been disabled', () => {
+        const configDefault = {}
+        const configNotDisabled = { foo: 'bar', plugins: { 'express-mock': true, 'http': false } }
+
+        instrumenter.use('http', configDefault)
+        instrumenter.enable(configNotDisabled)
+
+        const express = require('express-mock')
+        require('http')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(integrations.http.patch).to.not.have.been.called
+      })
     })
   })
 })

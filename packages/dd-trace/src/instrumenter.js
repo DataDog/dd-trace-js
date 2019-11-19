@@ -48,8 +48,8 @@ class Instrumenter {
             this._disabledPlugins.add(plugin)
 
             // account for edge case where .use has been called for a plugin before .enable could disable it
-            if (this._plugins.has(plugin)) {
-              this._plugins.delete(plugin)
+            if (this._plugins.has(plugins[plugin])) {
+              this._plugins.delete(plugins[plugin])
             }
           })
       }
