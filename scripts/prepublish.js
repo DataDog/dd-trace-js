@@ -49,6 +49,8 @@ const fetch = (url, options) => {
   console.log(`GET ${url}`)
 
   return client.get(url, options)
+    .catch(() => client.get(url, options))
+    .catch(() => client.get(url, options))
 }
 
 getPipeline()
@@ -105,7 +107,7 @@ function getWorkflow (id) {
 }
 
 function getPrebuildJobs (workflow) {
-  return fetch(`workflow/${workflow.id}/jobs`)
+  return fetch(`workflow/${workflow.id}/job`)
     .then(response => {
       const jobs = response.data.items
         .filter(item => /^prebuild-.+$/.test(item.name))
