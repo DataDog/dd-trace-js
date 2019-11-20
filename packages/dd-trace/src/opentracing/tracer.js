@@ -92,6 +92,7 @@ class DatadogTracer extends Tracer {
       this._propagators[format].inject(spanContext, carrier)
     } catch (e) {
       log.error(e)
+      platform.metrics().increment('datadog.tracer.node.inject.errors', true)
     }
 
     return this
@@ -102,6 +103,7 @@ class DatadogTracer extends Tracer {
       return this._propagators[format].extract(carrier)
     } catch (e) {
       log.error(e)
+      platform.metrics().increment('datadog.tracer.node.extract.errors', true)
       return null
     }
   }

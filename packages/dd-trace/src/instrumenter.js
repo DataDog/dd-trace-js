@@ -98,6 +98,9 @@ class Instrumenter {
     if (!this._enabled) return
 
     const instrumentations = [].concat(plugin)
+    const enabled = meta.config.enabled !== false
+
+    platform.metrics().boolean(`datadog.tracer.node.plugin.enabled.by.name`, enabled, `name:${meta.name}`)
 
     try {
       instrumentations
@@ -108,6 +111,8 @@ class Instrumenter {
       log.error(e)
       this.unload(plugin)
       log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
+
+      platform.metrics().increment(`datadog.tracer.node.plugin.errors`, true)
     }
   }
 
@@ -118,7 +123,13 @@ class Instrumenter {
         this._instrumented.delete(instrumentation)
       })
 
-    this._plugins.delete(plugin)
+    const meta = this._plugins.get(plugin)
+
+    if (meta) {
+      this._plugins.delete(plugin)
+
+      platform.metrics().boolean(`datadog.tracer.node.plugin.enabled.by.name`, false, `name:${meta.name}`)
+    }
   }
 
   patch (instrumentation, moduleExports, config) {

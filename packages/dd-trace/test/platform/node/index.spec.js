@@ -552,6 +552,12 @@ describe('Platform', () => {
           clock.tick(10000)
 
           expect(client.increment).to.have.been.calledWith('test', 1)
+
+          client.increment.resetHistory()
+
+          clock.tick(10000)
+
+          expect(client.increment).to.not.have.been.calledWith('test')
         })
 
         it('should increment a monotonic counter with a tag', () => {
@@ -561,6 +567,12 @@ describe('Platform', () => {
           clock.tick(10000)
 
           expect(client.increment).to.have.been.calledWith('test', 1, ['foo:bar'])
+
+          client.increment.resetHistory()
+
+          clock.tick(10000)
+
+          expect(client.increment).to.not.have.been.calledWith('test')
         })
       })
 
@@ -581,6 +593,46 @@ describe('Platform', () => {
           clock.tick(10000)
 
           expect(client.gauge).to.have.been.calledWith('test', -1, ['foo:bar'])
+        })
+      })
+
+      describe('gauge', () => {
+        it('should set a gauge', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).gauge('test', 10)
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 10)
+        })
+
+        it('should set a gauge with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).gauge('test', 10, 'foo:bar')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 10, ['foo:bar'])
+        })
+      })
+
+      describe('boolean', () => {
+        it('should set a gauge', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).boolean('test', true)
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 1)
+        })
+
+        it('should set a gauge with a tag', () => {
+          metrics.apply(platform).start()
+          metrics.apply(platform).boolean('test', true, 'foo:bar')
+
+          clock.tick(10000)
+
+          expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
         })
       })
 
