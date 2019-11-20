@@ -80,8 +80,6 @@ module.exports = function () {
         }, INTERVAL)
       }
 
-      metrics.boolean('datadog.tracer.node.metrics.native.enabled', !!nativeMetrics)
-
       interval.unref()
     },
 
