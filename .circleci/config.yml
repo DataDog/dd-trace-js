@@ -710,14 +710,78 @@ workflows:
       - node-router
       - node-when
       - node-winston
-      - prebuild-linux-x64
-      - prebuild-linux-x32
-      - prebuild-linux-x64-legacy
-      - prebuild-linux-x32-legacy
-      - prebuild-darwin-x64
-      - prebuild-darwin-x32
-      - prebuild-win32-x64
-      - prebuild-win32-ia32
+      - prebuild-linux-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-linux-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-linux-x64-legacy:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-linux-x32-legacy:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-darwin-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-darwin-x32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-win32-x64:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
+      - prebuild-win32-ia32:
+          filters:
+            branches:
+              only:
+                - master
+                - /v\d+\.\d+/
+            tags:
+              only:
+                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
       - alpine
       - alpine-prebuilt:
           requires:
