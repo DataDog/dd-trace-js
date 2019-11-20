@@ -54,8 +54,8 @@ describe('Config', () => {
     platform.env.withArgs('DD_ENV').returns('test')
     platform.env.withArgs('DD_CLIENT_TOKEN').returns('789')
     platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
-    platform.env.withArgs('DD_SAMPLE_RATE').returns('0.5')
-    platform.env.withArgs('DD_RATE_LIMIT').returns('-1')
+    platform.env.withArgs('DD_TRACE_SAMPLE_RATE').returns('0.5')
+    platform.env.withArgs('DD_TRACE_RATE_LIMIT').returns('-1')
 
     const config = new Config()
 
