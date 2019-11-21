@@ -83,7 +83,8 @@ function getPipeline () {
 function getWorkflowId (pipeline) {
   return fetch(`pipeline/${pipeline.id}`)
     .then(response => {
-      const workflow = response.data.workflows[0]
+      const workflows = response.data.workflows
+      const workflow = workflows[workflows.length - 1]
 
       if (!workflow) {
         throw new Error(`Unable to find CircleCI workflow for pipeline ${workflow.id}.`)
