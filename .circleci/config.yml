@@ -491,6 +491,7 @@ jobs:
     resource_class: small
     environment:
       - ARCH=x64
+      - NODE_VERSIONS=>=10
     steps:
       - checkout
       - *yarn-versions
@@ -515,6 +516,7 @@ jobs:
     resource_class: small
     environment:
       - ARCH=x32
+      - NODE_VERSIONS=>=10
     steps:
       - run:
           name: Install job dependencies
@@ -534,7 +536,7 @@ jobs:
       - image: rochdev/holy-node-box
     environment:
       - ARCH=x64
-      - NODE_ABI=57,59
+      - NODE_VERSIONS=<10
 
   prebuild-linux-x32-legacy:
     <<: *prebuild-linux-x32
@@ -542,7 +544,7 @@ jobs:
       - image: rochdev/holy-node-box
     environment:
       - ARCH=x32
-      - NODE_ABI=57,59
+      - NODE_VERSIONS=<10
 
   prebuild-darwin-x64: &prebuild-darwin
     macos:
@@ -551,6 +553,7 @@ jobs:
     resource_class: medium
     environment:
       - ARCH=x64
+      - NODE_VERSIONS=*
     steps:
       - checkout
       - *yarn-versions
@@ -565,12 +568,14 @@ jobs:
     <<: *prebuild-darwin
     environment:
       - ARCH=x32
+      - NODE_VERSIONS=*
 
   prebuild-win32-x64: &prebuild-win32
     executor: win/vs2019
     working_directory: ~/dd-trace-js
     environment:
       - ARCH=x64
+      - NODE_VERSIONS=*
     steps:
       - checkout
       - *yarn-versions
@@ -585,6 +590,7 @@ jobs:
     <<: *prebuild-win32
     environment:
       - ARCH=ia32
+      - NODE_VERSIONS=*
 
   alpine:
     docker:
