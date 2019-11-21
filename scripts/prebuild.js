@@ -5,11 +5,12 @@ const os = require('os')
 const fs = require('fs')
 const mkdirp = require('mkdirp')
 const execSync = require('child_process').execSync
+const semver = require('semver')
 
 const platform = os.platform()
 const arch = process.env.ARCH || os.arch()
 
-const { NODE_ABI } = process.env
+const { NODE_VERSIONS = '>=10' } = process.env
 
 // https://nodejs.org/en/download/releases/
 const targets = [
@@ -19,7 +20,7 @@ const targets = [
   { version: '11.0.0', abi: '67' },
   { version: '12.0.0', abi: '72' },
   { version: '13.0.0', abi: '79' }
-].filter(target => !NODE_ABI || NODE_ABI.split(',').some(abi => target.abi === abi))
+].filter(target => semver.satisfies(target.version, NODE_VERSIONS))
 
 prebuildify()
 
