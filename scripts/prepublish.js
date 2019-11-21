@@ -54,7 +54,6 @@ const fetch = (url, options) => {
 }
 
 getPipeline()
-  .then(getWorkflowId)
   .then(getWorkflow)
   .then(getPrebuildJobs)
   .then(downloadPrebuilds)
@@ -80,10 +79,10 @@ function getPipeline () {
     })
 }
 
-function getWorkflowId (pipeline) {
-  return fetch(`pipeline/${pipeline.id}`)
+function getWorkflow (pipeline) {
+  return fetch(`pipeline/${pipeline.id}/workflow`)
     .then(response => {
-      const workflows = response.data.workflows
+      const workflows = response.data.items
         .sort((a, b) => (a.stopped_at < b.stopped_at) ? 1 : -1)
       const running = workflows.find(workflow => !workflow.stopped_at)
 
@@ -96,15 +95,6 @@ function getWorkflowId (pipeline) {
       if (!workflow) {
         throw new Error(`Unable to find CircleCI workflow for pipeline ${pipeline.id}.`)
       }
-
-      return workflow.id
-    })
-}
-
-function getWorkflow (id) {
-  return fetch(`workflow/${id}`)
-    .then(response => {
-      const workflow = response.data
 
       if (workflow.status !== 'success') {
         throw new Error(`Aborting because CircleCI workflow ${workflow.id} did not succeed.`)
