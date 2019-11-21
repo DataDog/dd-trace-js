@@ -50,7 +50,7 @@ module.exports = function () {
         nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..', '..', '..'))
         nativeMetrics.start()
       } catch (e) {
-        log.error('Unable to load native metrics module. Some metrics will not be available.')
+        log.error(e)
         nativeMetrics = null
       }
 

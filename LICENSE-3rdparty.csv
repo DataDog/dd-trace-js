@@ -36,6 +36,7 @@ dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
+dev,checksum,MIT,Copyright Daniel D. Shaw
 dev,codecov,MIT,Copyright 2014 Gregg Caines
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh

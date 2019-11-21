@@ -58,9 +58,7 @@ node-plugin-base: &node-plugin-base
   resource_class: small
   steps:
     - checkout
-    - run:
-        name: Versions
-        command: yarn versions
+    - *yarn-versions
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
@@ -81,6 +79,89 @@ node-plugin-base: &node-plugin-base
     - store_artifacts:
         path: ./coverage/lcov-report
 
+prebuild-linux-base: &prebuild-linux-base
+  docker:
+    - image: node:10.0.0
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - &yarn-prebuild
+      run:
+        name: Compile prebuilt binaries
+        command: yarn prebuild
+    - &persist-prebuilds
+      persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - prebuilds
+
+prebuild-linux-ia32-base: &prebuild-linux-ia32-base
+  <<: *prebuild-linux-base
+  steps:
+    - run:
+        name: Install job dependencies
+        command: apt-get update && apt-get install -y g++-multilib
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - *yarn-prebuild
+    - *persist-prebuilds
+
+test-prebuild-linux-base: &test-prebuild-linux-base
+  docker:
+    - image: node
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - attach_workspace:
+        at: ~/dd-trace-js
+    # - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - *yarn-test-core
+
+prebuild-darwin-base: &prebuild-darwin-base
+  macos:
+    xcode: "10.2.0"
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - *yarn-prebuild
+    - *persist-prebuilds
+
+prebuild-win32-base: &prebuild-win32-base
+  executor: win/vs2019
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - *yarn-prebuild
+    - *persist-prebuilds
+
+prebuild-job: &prebuild-job
+  filters:
+    branches:
+      only:
+        - /^.+$/
+  #       - master
+  #       - /v\d+\.\d+/
+
 jobs:
   # Linting
 
@@ -91,9 +172,7 @@ jobs:
     resource_class: small
     steps:
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
+      - *yarn-versions
       - *restore-yarn-cache
       - run:
           name: Install dependencies
@@ -139,9 +218,7 @@ jobs:
     resource_class: small
     steps:
       - checkout
-      - run:
-          name: Versions
-          command: yarn versions
+      - *yarn-versions
       - *restore-yarn-cache
       - run:
           name: Install dependencies
@@ -484,117 +561,55 @@ jobs:
       - store_artifacts:
           path: ./docs/out
 
-  prebuild-linux-x64: &prebuild-linux-x64
-    docker:
-      - image: node:10.0.0
-    working_directory: ~/dd-trace-js
-    resource_class: small
+  # Prebuilds (linux x64)
+
+  linux-x64-12:
+    <<: *prebuild-linux-base
     environment:
       - ARCH=x64
-      - NODE_VERSIONS=>=10
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - &yarn-prebuild
-        run:
-          name: Compile prebuilt binaries
-          command: yarn prebuild
-      - store_artifacts:
-          path: ./prebuilds
-      - save_cache:
-          key: '{{ .Environment.CIRCLE_JOB }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}'
-          paths:
-            - ./prebuilds
+      - NODE_VERSIONS=12 - 13
 
-  prebuild-linux-x32: &prebuild-linux-x32
-    docker:
-      - image: node:10.0.0
-    working_directory: ~/dd-trace-js
-    resource_class: small
+  linux-x64-10:
+    <<: *prebuild-linux-base
     environment:
-      - ARCH=x32
-      - NODE_VERSIONS=>=10
-    steps:
-      - run:
-          name: Install job dependencies
-          command: apt-get update && apt-get install -y g++-multilib
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-prebuild
-      - store_artifacts:
-          path: ./prebuilds
+      - ARCH=x64
+      - NODE_VERSIONS=10 - 11
 
-  prebuild-linux-x64-legacy:
-    <<: *prebuild-linux-x64
+  linux-x64-8:
+    <<: *prebuild-linux-base
     docker:
       - image: rochdev/holy-node-box
     environment:
       - ARCH=x64
-      - NODE_VERSIONS=<10
+      - NODE_VERSIONS=8 - 9
 
-  prebuild-linux-x32-legacy:
-    <<: *prebuild-linux-x32
+  ## Tests
+
+  linux-x64-13-test:
+    <<: *test-prebuild-linux-base
     docker:
-      - image: rochdev/holy-node-box
-    environment:
-      - ARCH=x32
-      - NODE_VERSIONS=<10
+      - image: node:13
 
-  prebuild-darwin-x64: &prebuild-darwin
-    macos:
-      xcode: "10.2.0"
-    working_directory: ~/dd-trace-js
-    resource_class: medium
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=*
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-prebuild
-      - store_artifacts:
-          path: ./prebuilds
-
-  prebuild-darwin-x32:
-    <<: *prebuild-darwin
-    environment:
-      - ARCH=x32
-      - NODE_VERSIONS=*
-
-  prebuild-win32-x64: &prebuild-win32
-    executor: win/vs2019
-    working_directory: ~/dd-trace-js
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=*
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-prebuild
-      - store_artifacts:
-          path: ./prebuilds
-
-  prebuild-win32-ia32:
-    <<: *prebuild-win32
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=*
-
-  alpine:
+  linux-x64-12-test:
+    <<: *test-prebuild-linux-base
     docker:
-      - image: node:10-alpine
+      - image: node:12
+
+  linux-x64-10-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: node:10
+
+  linux-x64-8-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: node:8
+
+  # Prebuilds (alpine x64)
+
+  alpine-x64: &alpine-base
+    docker:
+      - image: node:alpine
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
@@ -609,42 +624,151 @@ jobs:
       - *yarn-rebuild
       - *yarn-test-core
 
-  alpine-prebuilt:
-    docker:
-      - image: node:alpine
-    working_directory: ~/dd-trace-js
-    resource_class: small
-    steps:
-      - run:
-          name: Install job dependencies
-          command: apk add git
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - restore_cache:
-          key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
-      - run:
-          name: Unit tests
-          command: yarn test:core
+  # Prebuilds (alpine ia32)
 
-  slim-prebuilt:
+  alpine-ia32:
+    <<: *alpine-base
     docker:
-      - image: node:slim
+      - image: i386/node:alpine
+
+  # Prebuilds (linux ia32)
+
+  linux-ia32-12:
+    <<: *prebuild-linux-ia32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=12 - 13
+
+  linux-ia32-10:
+    <<: *prebuild-linux-ia32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=10 - 11
+
+  linux-ia32-8:
+    <<: *prebuild-linux-ia32-base
+    docker:
+      - image: rochdev/holy-node-box
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=8 - 9
+
+  ## Tests
+
+  linux-ia32-13-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: i386/node:13-alpine
+
+  linux-ia32-12-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: i386/node:12-alpine
+
+  linux-ia32-10-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: i386/node:10-alpine
+
+  linux-ia32-8-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: i386/node:8
+
+  # Prebuilds (darwin x64)
+
+  mac-x64-12:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=12 - 13
+
+  mac-x64-10:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=10 - 11
+
+  mac-x64-8:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=8 - 9
+
+  # Prebuilds (darwin ia32)
+
+  mac-ia32-12:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=12 - 13
+
+  mac-ia32-10:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=10 - 11
+
+  mac-ia32-8:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=8 - 9
+
+  # Prebuilds (win32 x64)
+
+  win-x64-12:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=12 - 13
+
+  win-x64-10:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=10 - 11
+
+  win-x64-8:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=8 - 9
+
+  # Prebuilds (win32 ia32)
+
+  win-ia32-12:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=12 - 13
+
+  win-ia32-10:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=10 - 11
+
+  win-ia32-8:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=8 - 9
+
+  # Prebuild Artifacts
+
+  prebuilds:
+    docker:
+      - image: node
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - restore_cache:
-          key: prebuild-linux-x64-{{ .Environment.CIRCLE_WORKFLOW_ID }}
-      - run:
-          name: Unit tests
-          command: yarn test:core
+      - attach_workspace:
+          at: ~/dd-trace-js
+      - store_artifacts:
+          path: ./prebuilds
+
+  # Browser
 
   browser:
     docker:
@@ -710,85 +834,105 @@ workflows:
       - node-router
       - node-when
       - node-winston
-      - prebuild-linux-x64:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-linux-x32:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-linux-x64-legacy:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-linux-x32-legacy:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-darwin-x64:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-darwin-x32:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-win32-x64:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - prebuild-win32-ia32:
-          filters:
-            branches:
-              only:
-                - master
-                - /v\d+\.\d+/
-            tags:
-              only:
-                - /v\d+\.\d+\.\d+([-a-z]+\.\d+)?/
-      - alpine
-      - alpine-prebuilt:
+  prebuild:
+    jobs:
+      # Linux x64
+      - linux-x64-12:
+          <<: *prebuild-job
+      - linux-x64-10:
+          <<: *prebuild-job
+      - linux-x64-8:
+          <<: *prebuild-job
+      - linux-x64-13-test:
           requires:
-            - prebuild-linux-x64
-      - slim-prebuilt:
+            - linux-x64-12
+      - linux-x64-12-test:
           requires:
-            - prebuild-linux-x64
+            - linux-x64-12
+      - linux-x64-10-test:
+          requires:
+            - linux-x64-10
+      - linux-x64-8-test:
+          requires:
+            - linux-x64-8
+      # Linux ia32
+      - linux-ia32-12:
+          <<: *prebuild-job
+      - linux-ia32-10:
+          <<: *prebuild-job
+      - linux-ia32-8:
+          <<: *prebuild-job
+      - linux-ia32-13-test:
+          requires:
+            - linux-ia32-12
+      - linux-ia32-12-test:
+          requires:
+            - linux-ia32-12
+      - linux-ia32-10-test:
+          requires:
+            - linux-ia32-10
+      - linux-ia32-8-test:
+          requires:
+            - linux-ia32-8
+      # Alpine x64
+      - alpine-x64:
+          <<: *prebuild-job
+      # Alpine ia32
+      - alpine-ia32:
+          <<: *prebuild-job
+      # Darwin x64
+      - mac-x64-12:
+          <<: *prebuild-job
+      - mac-x64-10:
+          <<: *prebuild-job
+      - mac-x64-8:
+          <<: *prebuild-job
+      # Darwin ia32
+      - mac-ia32-12:
+          <<: *prebuild-job
+      - mac-ia32-10:
+          <<: *prebuild-job
+      - mac-ia32-8:
+          <<: *prebuild-job
+      # Windows x64
+      - win-x64-12:
+          <<: *prebuild-job
+      - win-x64-10:
+          <<: *prebuild-job
+      - win-x64-8:
+          <<: *prebuild-job
+      # Windows ia32
+      - win-ia32-12:
+          <<: *prebuild-job
+      - win-ia32-10:
+          <<: *prebuild-job
+      - win-ia32-8:
+          <<: *prebuild-job
+      # Artifacts
+      - prebuilds:
+          requires:
+            - linux-x64-13-test
+            - linux-x64-12-test
+            - linux-x64-10-test
+            - linux-x64-8-test
+            - linux-ia32-13-test
+            - linux-ia32-12-test
+            - linux-ia32-10-test
+            - linux-ia32-8-test
+            - alpine-x64
+            - alpine-ia32
+            - mac-x64-12
+            - mac-x64-10
+            - mac-x64-8
+            - mac-ia32-12
+            - mac-ia32-10
+            - mac-ia32-8
+            - win-x64-12
+            - win-x64-10
+            - win-x64-8
+            - win-ia32-12
+            - win-ia32-10
+            - win-ia32-8
   nightly:
     triggers:
       - schedule:
