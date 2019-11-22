@@ -76,7 +76,9 @@ function inject (init, tracer, span, origin) {
   const format = window.ddtrace.ext.formats.HTTP_HEADERS
   const peers = tracer._peers
 
-  if (origin !== window.location.origin && peers.indexOf(origin) === -1) return
+  if (origin !== window.location.origin && peers.indexOf(origin) === -1) {
+    return init
+  }
 
   init = init || {}
   init.headers = init.headers || {}
