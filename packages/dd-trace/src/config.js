@@ -10,23 +10,6 @@ class Config {
   constructor (service, options) {
     options = options || {}
 
-    const pluginsPlatform = platform.env('DD_TRACE_DISABLED_PLUGINS')
-
-    const determinePluginSetting = (pluginsOption, pluginsPlatform) => {
-      // plugin is set via options
-      if (pluginsOption !== undefined) return pluginsOption
-
-      if (!pluginsPlatform) return true
-
-      if (String(pluginsPlatform) === 'true' ||
-        String(pluginsPlatform) === 'false') return String(pluginsPlatform) === 'true'
-
-      return pluginsPlatform.split(',').reduce((accum, curr) => {
-        accum[curr] = false
-        return accum
-      }, {})
-    }
-
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
@@ -37,6 +20,7 @@ class Config {
       platform.env('DD_AGENT_HOST'),
       platform.env('DD_TRACE_AGENT_HOSTNAME')
     )
+    const pluginsPlatform = platform.env('DD_TRACE_DISABLED_PLUGINS')
     const port = coalesce(options.port, platform.env('DD_TRACE_AGENT_PORT'), 8126)
     const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
@@ -74,7 +58,7 @@ class Config {
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger
-    this.plugins = determinePluginSetting(options.plugins, pluginsPlatform)
+    this.plugins = coalesce(options.plugins, (pluginsPlatform && pluginsPlatform.spit(',')), true)
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
     this.tags = tags

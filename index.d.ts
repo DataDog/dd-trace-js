@@ -299,11 +299,11 @@ export declare interface TracerOptions {
   };
 
   /**
-   * Whether to load all built-in plugins, or a map of integrations 
-   * to automatically disable when the tracer is initialized e.g. `{'express': false, 'dns': false}`
+   * Whether to load all built-in plugins, or an Array of integrations 
+   * to automatically disable when the tracer is initialized e.g. `['express', 'dns']`
    * @default true
    */
-  plugins?: boolean | { [key: string]: boolean };
+  plugins?: boolean | string[];
 
   /**
    * Custom logger to be used by the tracer (if debug = true),

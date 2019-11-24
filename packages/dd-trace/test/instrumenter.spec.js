@@ -356,7 +356,7 @@ describe('Instrumenter', () => {
   describe('with plugins disabled via plugin configuration option', () => {
     describe('enable', () => {
       it('should not patch plugins disabled from configuration option', () => {
-        const configDisabled = { foo: 'bar', plugins: { 'express-mock': false, 'http': false } }
+        const configDisabled = { foo: 'bar', plugins: ['express-mock', 'http'] }
         instrumenter.enable(configDisabled)
 
         require('express-mock')
@@ -368,7 +368,7 @@ describe('Instrumenter', () => {
 
       it('should patch plugins not disabled from configuration option', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: {} }
+        const configNotDisabled = { foo: 'bar', plugins: [] }
         instrumenter.enable(configNotDisabled)
 
         const express = require('express-mock')
@@ -378,21 +378,22 @@ describe('Instrumenter', () => {
 
       it('should patch plugins with configuration option plugin set to true', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: { 'express-mock': true, 'http': false } }
+        const configNotDisabled = { foo: 'bar', plugins: true }
         instrumenter.enable(configNotDisabled)
 
         const express = require('express-mock')
-        require('http')
+        const http = require('http')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
-        expect(integrations.http.patch).to.not.have.been.called
+        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', configDefault)
       })
 
       it('should clear any plugins called by .use that have been disabled', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: { 'express-mock': true, 'http': false } }
+        const configNotDisabled = { foo: 'bar', plugins: ['http'] }
 
         instrumenter.use('http', configDefault)
+        instrumenter.use('express-mock', configDefault)
         instrumenter.enable(configNotDisabled)
 
         const express = require('express-mock')

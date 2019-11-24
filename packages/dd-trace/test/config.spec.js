@@ -99,7 +99,7 @@ describe('Config', () => {
       'foo': 'bar'
     }
     const logLevel = 'error'
-    const plugins = { 'express': false, 'dns': false }
+    const plugins = ['express', 'dns']
     const config = new Config('test', {
       enabled: false,
       debug: true,
