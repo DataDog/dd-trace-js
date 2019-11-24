@@ -53,7 +53,7 @@ class Instrumenter {
         })
       }
 
-      plugins.filter(name => !this._plugins.has(plugins[name]))
+      Object.keys(plugins).filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
           this._set(plugins[name], { name, config: {} })
         })
