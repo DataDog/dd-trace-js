@@ -3,6 +3,7 @@
 /* eslint-disable no-console */
 
 const axios = require('axios')
+const checksum = require('checksum')
 const fs = require('fs')
 const mkdirp = require('mkdirp')
 const os = require('os')
@@ -29,9 +30,9 @@ const branch = exec.pipe(`git symbolic-ref --short HEAD`)
 console.log(branch)
 
 const platforms = [
-  'darwin-x32',
+  'darwin-ia32',
   'darwin-x64',
-  'linux-x32',
+  'linux-ia32',
   'linux-x64',
   'win32-ia32',
   'win32-x64'
@@ -55,10 +56,13 @@ const fetch = (url, options) => {
 
 getPipeline()
   .then(getWorkflow)
-  .then(getPrebuildJobs)
-  .then(downloadPrebuilds)
+  .then(getPrebuildsJob)
+  .then(getPrebuildArtifacts)
+  .then(downloadArtifacts)
   .then(zipPrebuilds)
   .then(copyPrebuilds)
+  .then(extractPrebuilds)
+  .then(validatePrebuilds)
   .then(bundle)
   .catch(e => {
     process.exitCode = 1
@@ -104,25 +108,18 @@ function getWorkflow (pipeline) {
     })
 }
 
-function getPrebuildJobs (workflow) {
+function getPrebuildsJob (workflow) {
   return fetch(`workflow/${workflow.id}/job`)
     .then(response => {
-      const jobs = response.data.items
-        .filter(item => /^prebuild-.+$/.test(item.name))
+      const job = response.data.items
+        .find(item => item.name === 'prebuilds')
 
-      if (jobs.length < 8) {
+      if (!job) {
         throw new Error(`Missing prebuild jobs in workflow ${workflow.id}.`)
       }
 
-      return jobs
+      return job
     })
-}
-
-function downloadPrebuilds (jobs) {
-  return Promise.all(jobs.map(job => {
-    return getPrebuildArtifacts(job)
-      .then(downloadArtifacts)
-  }))
 }
 
 function getPrebuildArtifacts (job) {
@@ -140,13 +137,18 @@ function getPrebuildArtifacts (job) {
 }
 
 function downloadArtifacts (artifacts) {
-  return Promise.all(artifacts.map(downloadArtifact))
+  const files = artifacts.map(artifact => artifact.url)
+
+  return Promise.all([
+    Promise.all(files.map(downloadArtifact)),
+    Promise.all(files.map(file => downloadArtifact(`${file}.sha1`)))
+  ])
 }
 
-function downloadArtifact (artifact) {
-  return fetch(artifact.url, { responseType: 'stream' })
+function downloadArtifact (file) {
+  return fetch(file, { responseType: 'stream' })
     .then(response => {
-      const parts = artifact.url.split('/')
+      const parts = file.split('/')
       const basename = path.join(os.tmpdir(), parts.slice(-3, -1).join(path.sep))
       const filename = parts.slice(-1)[0]
 
@@ -166,6 +168,7 @@ function zipPrebuilds () {
       gzip: true,
       sync: true,
       portable: true,
+      strict: true,
       file: path.join(os.tmpdir(), `addons-${platform}.tgz`),
       cwd: os.tmpdir()
     }, [`prebuilds/${platform}`])
@@ -183,6 +186,31 @@ function copyPrebuilds () {
         path.join(basename, filename)
       )
     })
+}
+
+function extractPrebuilds () {
+  platforms.forEach(platform => {
+    tar.extract({
+      sync: true,
+      strict: true,
+      file: `addons-${platform}.tgz`
+    })
+  })
+}
+
+function validatePrebuilds () {
+  platforms.forEach(platform => {
+    fs.readdirSync(path.join('prebuilds', platform))
+      .filter(file => /^node-\d+\.node$/.test(file))
+      .forEach(file => {
+        const content = fs.readFileSync(path.join('prebuilds', platform, file))
+        const sum = fs.readFileSync(path.join('prebuilds', platform, `${file}.sha1`), 'ascii')
+
+        if (sum !== checksum(content)) {
+          throw new Error(`Invalid checksum for "prebuilds/${platform}/${file}".`)
+        }
+      })
+  })
 }
 
 function bundle () {
