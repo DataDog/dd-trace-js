@@ -158,9 +158,8 @@ prebuild-job: &prebuild-job
   filters:
     branches:
       only:
-        - /^.+$/
-  #       - master
-  #       - /v\d+\.\d+/
+        - master
+        - /v\d+\.\d+/
 
 jobs:
   # Linting
