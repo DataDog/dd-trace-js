@@ -6,6 +6,7 @@ const fs = require('fs')
 const mkdirp = require('mkdirp')
 const execSync = require('child_process').execSync
 const semver = require('semver')
+const checksum = require('checksum')
 
 const platform = os.platform()
 const arch = process.env.ARCH || os.arch()
@@ -31,6 +32,7 @@ function prebuildify () {
   mkdirp.sync(`prebuilds/${platform}-${arch}`)
 
   targets.forEach(target => {
+    const output = `prebuilds/${platform}-${arch}/node-${target.abi}.node`
     const cmd = [
       'node-gyp rebuild',
       `--target=${target.version}`,
@@ -43,6 +45,9 @@ function prebuildify () {
 
     execSync(cmd, { stdio: [0, 1, 2] })
 
-    fs.copyFileSync('build/Release/metrics.node', `prebuilds/${platform}-${arch}/node-${target.abi}.node`)
+    const sum = checksum(fs.readFileSync('build/Release/metrics.node'))
+
+    fs.writeFileSync(`${output}.sha1`, sum)
+    fs.copyFileSync('build/Release/metrics.node', output)
   })
 }
