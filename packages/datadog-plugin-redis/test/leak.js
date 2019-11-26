@@ -9,7 +9,7 @@ const redis = require('../../../versions/redis').get()
 const profile = require('../../dd-trace/test/profile')
 
 test('redis plugin should not leak', t => {
-  const client = redis.createClient()
+  const client = redis.createClient(16379)
 
   profile(t, operation).then(() => client.quit())
 

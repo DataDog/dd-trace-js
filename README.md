@@ -59,6 +59,16 @@ To run the unit tests continuously in watch mode while developing, use:
 $ yarn tdd
 ```
 
+#### External tests
+
+We can leverage an integration's own tests to ensure compatibility with it and our tracer.
+
+To run external tests for a specific plugin, use:
+
+```sh
+$ yarn test:external <plugin>
+```
+
 #### Memory Leaks
 
 To run the memory leak tests, use:
