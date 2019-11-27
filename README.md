@@ -1,10 +1,12 @@
-# dd-trace-js
+# ls-trace-js
 
-[![npm](https://img.shields.io/npm/v/dd-trace.svg?colorB=blue)](https://www.npmjs.com/package/dd-trace)
-[![npm (tag)](https://img.shields.io/npm/v/dd-trace/dev.svg)](https://www.npmjs.com/package/dd-trace/v/dev)
-[![CircleCI](https://circleci.com/gh/DataDog/dd-trace-js.svg?style=shield)](https://circleci.com/gh/DataDog/dd-trace-js)
-[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
+[![npm](https://img.shields.io/npm/v/ls-trace.svg?colorB=blue)](https://www.npmjs.com/package/ls-trace)
+[![npm (tag)](https://img.shields.io/npm/v/ls-trace/dev.svg)](https://www.npmjs.com/package/ls-trace/v/dev)
+[![CircleCI](https://circleci.com/gh/lightstep/ls-trace-js.svg?style=shield)](https://circleci.com/gh/lightstep/ls-trace-js)
+[![codecov](https://codecov.io/gh/lightstep/ls-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/lightstep/ls-trace-js)
 [![BrowserStack Status](https://automate.browserstack.com/badge.svg?badge_key=TU95QWlIQXhOcGw2YkdvVGpSYkNLK2QveGlwbmRYc3FSVFRtMUcza3hhQT0tLWErRVVDMFMvWnVIU3p5OE9ZSFJWeXc9PQ==--f63f623010664e0a1776325aefd8d119362f31d4)](https://automate.browserstack.com/public-build/TU95QWlIQXhOcGw2YkdvVGpSYkNLK2QveGlwbmRYc3FSVFRtMUcza3hhQT0tLWErRVVDMFMvWnVIU3p5OE9ZSFJWeXc9PQ==--f63f623010664e0a1776325aefd8d119362f31d4)
+
+Datadog has generously announced the [donation](https://www.datadoghq.com/blog/opentelemetry-instrumentation) of their tracer libraries to the [OpenTelemety](https://opentelemetry.io/), project. Auto-instrumentation is a core feature of these libraries, making it possible to create and collect telemetry data without needing to change your code. LightStep wants you to be able to use these libraries now! `ls-trace-js` is LightStep's fork of Datadog’s tracing client for Javascript. You can install and use it to take advantage of auto-instrumentation without waiting for OpenTelemetry. Each LightStep agent is [“pinned” to a Datadog release](#versioning) and is fully supported by LightStep’s Customer Success team.
 
 **JavaScript APM Tracer**
 
@@ -12,15 +14,13 @@ Datadog APM tracing client for JavaScript.
 
 ## Getting Started
 
-For a basic product overview, check out our [setup documentation](https://docs.datadoghq.com/tracing/languages/nodejs/).
+For a basic product overview, check out our [setup documentation](https://docs.lightstep.com/docs/nodejs-auto-instrumentation)
 
-For installation, configuration, and details about using the API, check out our [API documentation](https://datadog.github.io/dd-trace-js).
-
-For descriptions of terminology used in APM, take a look at the [official documentation](https://docs.datadoghq.com/tracing/visualization/).
+For descriptions of terminology used in APM, take a look at the [official documentation](https://docs.lightstep.com/docs/understand-distributed-tracing)
 
 ## Development
 
-Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
+Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/lightstep/ls-trace-js/blob/master/CONTRIBUTING.md).
 
 ### Requirements
 

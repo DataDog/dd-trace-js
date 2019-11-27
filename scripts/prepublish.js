@@ -65,7 +65,7 @@ getPipeline()
   })
 
 function getPipeline () {
-  return fetch(`project/github/DataDog/dd-trace-js/pipeline?branch=${branch}`)
+  return fetch(`project/github/lightstep/ls-trace-js/pipeline?branch=${branch}`)
     .then(response => {
       const pipeline = response.data.items
         .find(item => item.vcs.revision === revision)
@@ -126,7 +126,7 @@ function downloadPrebuilds (jobs) {
 }
 
 function getPrebuildArtifacts (job) {
-  return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`)
+  return fetch(`project/github/lightstep/ls-trace-js/${job.job_number}/artifacts`)
     .then(response => {
       const artifacts = response.data.items
         .filter(artifact => /\/prebuilds\//.test(artifact.url))
