@@ -75,8 +75,11 @@ function inject (xhr, tracer, span) {
   }
 }
 
+// TODO: support staging and other environments
 function isFlush (href, url) {
-  return (new RegExp(`^${href}/v1/input/[a-z0-9]+$`, 'i')).test(url.href)
+  return (new RegExp(`^${href}/v1/input/[a-z0-9]+$`, 'i')).test(url.href) ||
+  url.href.startsWith('https://rum-http-intake.logs.datadoghq.com') ||
+  url.href.startsWith('https://browser-http-intake.logs.datadoghq.com')
 }
 
 module.exports = {
