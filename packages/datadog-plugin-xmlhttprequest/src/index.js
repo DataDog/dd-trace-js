@@ -19,7 +19,7 @@ function createWrapSend (tracer, config) {
     return function sendWithTrace (body) {
       const service = config.service || `${tracer._service}-http-client`
       const method = this._datadog_method
-      const url = this._datadog_url.href
+      const url = this._datadog_url
       const scope = tracer.scope()
       const childOf = scope.active()
       const type = isFlush(tracer._url.href, url) ? REFERENCE_NOOP : REFERENCE_CHILD_OF
@@ -33,7 +33,7 @@ function createWrapSend (tracer, config) {
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
-          'http.url': url
+          'http.url': url.href
         }
       })
 
@@ -78,8 +78,8 @@ function inject (xhr, tracer, span) {
 // TODO: support staging and other environments
 function isFlush (href, url) {
   return (new RegExp(`^${href}/v1/input/[a-z0-9]+$`, 'i')).test(url.href) ||
-  url.href.startsWith('https://rum-http-intake.logs.datadoghq.com') ||
-  url.href.startsWith('https://browser-http-intake.logs.datadoghq.com')
+    url.href.startsWith('https://rum-http-intake.logs.datadoghq.com') ||
+    url.href.startsWith('https://browser-http-intake.logs.datadoghq.com')
 }
 
 module.exports = {
