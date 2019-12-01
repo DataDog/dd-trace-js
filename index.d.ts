@@ -299,11 +299,10 @@ export declare interface TracerOptions {
   };
 
   /**
-   * Whether to load all built-in plugins, or an Array of integrations 
-   * to automatically disable when the tracer is initialized e.g. `['express', 'dns']`
+   * Whether to load all built-in plugins.
    * @default true
    */
-  plugins?: boolean | string[];
+  plugins?: boolean;
 
   /**
    * Custom logger to be used by the tracer (if debug = true),
@@ -332,7 +331,7 @@ export declare interface TracerOptions {
    * @default false
    */
   reportHostname?: boolean
-  
+
   /**
    * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
    */
@@ -343,6 +342,11 @@ export declare interface TracerOptions {
    * @default 'debug'
    */
   logLevel?: 'error' | 'debug'
+
+  /**
+   * A comma seperated string of integrations to automatically disable when the tracer is initialized e.g. `'express,dns'`
+   */
+  disabledPlugins?: string
 }
 
 /** @hidden */

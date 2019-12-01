@@ -20,10 +20,10 @@ class Config {
       platform.env('DD_AGENT_HOST'),
       platform.env('DD_TRACE_AGENT_HOSTNAME')
     )
-    const pluginsPlatform = platform.env('DD_TRACE_DISABLED_PLUGINS')
     const port = coalesce(options.port, platform.env('DD_TRACE_AGENT_PORT'), 8126)
     const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
+    const plugins = coalesce(options.plugins, true)
     const dogstatsd = options.dogstatsd || {}
     const runtimeMetrics = coalesce(options.runtimeMetrics, platform.env('DD_RUNTIME_METRICS_ENABLED'), false)
     const analytics = coalesce(
@@ -58,7 +58,8 @@ class Config {
     this.flushInterval = flushInterval
     this.sampleRate = sampleRate
     this.logger = options.logger
-    this.plugins = coalesce(options.plugins, (pluginsPlatform && pluginsPlatform.spit(',')), true)
+    this.plugins = !!plugins
+    this.disabledPlugins = coalesce(options.disabledPlugins, platform.env('DD_TRACE_DISABLED_PLUGINS'), null)
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
     this.tags = tags

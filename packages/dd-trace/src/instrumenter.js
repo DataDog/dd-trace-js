@@ -42,8 +42,8 @@ class Instrumenter {
 
     if (config.plugins !== false) {
       // sets disabled plugins
-      if (Array.isArray(config.plugins)) {
-        config.plugins.forEach((plugin) => {
+      if (typeof config.disabledPlugins === 'string') {
+        config.disabledPlugins.split(',').map(plugin => plugin.trim()).forEach((plugin) => {
           this._disabledPlugins.add(plugin)
 
           // account for edge case where .use has been called for a plugin before .enable could disable it

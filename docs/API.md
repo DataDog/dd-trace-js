@@ -327,7 +327,8 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | runtimeMetrics | `DD_RUNTIME_METRICS_ENABLED`   | `false`     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | reportHostname | `DD_TRACE_REPORT_HOSTNAME`     | `false`     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
 | experimental   | -                              | `{}`        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
-| plugins        | `DD_TRACE_DISABLED_PLUGINS`    | `true`      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. Either a boolean or an Array of integration names to automatically disable when the tracer is initialized e.g. `['express', 'dns']`. When passed an en environment variable, the format is a comma seperated string of integration names to automaticaly disable, e.g. `'express,http,dns'`|
+| plugins        | -                              | `true`      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
+| disabledPlugins| `DD_TRACE_DISABLED_PLUGINS`    | -           | a comma seperated string of integration names to automatically disable when the tracer is initialized e.g. `'express,dns'`. |
 | clientToken    | `DD_CLIENT_TOKEN`              | -           | Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`. |
 | logLevel       | `DD_TRACE_LOG_LEVEL`           | `debug`     | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
 

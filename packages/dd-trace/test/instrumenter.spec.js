@@ -353,10 +353,10 @@ describe('Instrumenter', () => {
     })
   })
 
-  describe('with plugins disabled via plugin configuration option', () => {
+  describe('with plugins disabled via disabledPlugins configuration option', () => {
     describe('enable', () => {
       it('should not patch plugins disabled from configuration option', () => {
-        const configDisabled = { foo: 'bar', plugins: ['express-mock', 'http'] }
+        const configDisabled = { foo: 'bar', disabledPlugins: 'express-mock,http' }
         instrumenter.enable(configDisabled)
 
         require('express-mock')
@@ -368,7 +368,7 @@ describe('Instrumenter', () => {
 
       it('should patch plugins not disabled from configuration option', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: [] }
+        const configNotDisabled = { foo: 'bar', disabledPlugins: '' }
         instrumenter.enable(configNotDisabled)
 
         const express = require('express-mock')
@@ -390,7 +390,7 @@ describe('Instrumenter', () => {
 
       it('should clear any plugins called by .use that have been disabled', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: ['http'] }
+        const configNotDisabled = { foo: 'bar', disabledPlugins: 'http' }
 
         instrumenter.use('http', configDefault)
         instrumenter.use('express-mock', configDefault)
@@ -400,6 +400,29 @@ describe('Instrumenter', () => {
         require('http')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(integrations.http.patch).to.not.have.been.called
+      })
+
+      it('should patch plugins with configuration option disabledPlugin set to an invalid array value', () => {
+        const configDefault = {}
+        const configNotDisabled = { foo: 'bar', disabledPlugins: ['express', 'http'] }
+        instrumenter.enable(configNotDisabled)
+
+        const express = require('express-mock')
+        const http = require('http')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', configDefault)
+      })
+
+      it('should not patch plugins disabled from configuration option that has white space', () => {
+        const configDisabled = { foo: 'bar', disabledPlugins: ' express-mock  , http' }
+        instrumenter.enable(configDisabled)
+
+        require('express-mock')
+        require('http')
+
+        expect(integrations.express.patch).to.not.have.been.called
         expect(integrations.http.patch).to.not.have.been.called
       })
     })
