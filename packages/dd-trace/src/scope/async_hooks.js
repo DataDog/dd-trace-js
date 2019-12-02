@@ -82,7 +82,7 @@ class Scope extends Base {
   // https://github.com/nodejs/node/issues/22360
   async _awaitAsync (span) {
     await {
-      then (resolve) {
+      then: (resolve) => {
         this._current = span
         resolve()
       }
