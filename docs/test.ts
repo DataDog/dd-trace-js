@@ -91,6 +91,11 @@ const httpServerOptions = {
   }
 };
 
+const expressOptions = {
+  ...httpServerOptions,
+  disableMiddleware: false
+};
+
 const httpClientOptions = {
   ...httpOptions,
   splitByDomain: true,
@@ -127,7 +132,7 @@ tracer.use('connect', httpServerOptions);
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('express');
-tracer.use('express', httpServerOptions);
+tracer.use('express', expressOptions);
 tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
 tracer.use('generic-pool');

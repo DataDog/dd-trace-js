@@ -641,7 +641,14 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [express](http://expressjs.com/) module.
    */
-  interface express extends HttpServer {}
+  interface express extends HttpServer {
+    /**
+     * Whether to disable instrumention of express.middleware spans
+     *
+     * @default false
+     */
+    disableMiddleware?: boolean;
+  }
 
   /**
    * This plugin automatically instruments the
