@@ -79,9 +79,9 @@ function wrapLayerHandle (layer, handle, config) {
 function wrapStack (stack, offset, matchers, config) {
   [].concat(stack).slice(offset).forEach(layer => {
     if (layer.__handle) { // express-async-errors
-      layer.__handle = wrapLayerHandle(layer, layer.__handle)
+      layer.__handle = wrapLayerHandle(layer, layer.__handle, config)
     } else {
-      layer.handle = wrapLayerHandle(layer, layer.handle)
+      layer.handle = wrapLayerHandle(layer, layer.handle, config)
     }
 
     layer._datadog_matchers = matchers

@@ -376,7 +376,7 @@ describe('plugins/util/web', () => {
       })
 
       it('should finish middleware spans', () => {
-        web.wrapMiddleware(req, () => {}, 'middleware', () => {
+        web.wrapMiddleware(req, () => {}, {}, 'middleware', () => {
           const span = tracer.scope().active()
 
           sinon.spy(span, 'finish')
@@ -551,7 +551,7 @@ describe('plugins/util/web', () => {
         done()
       }
 
-      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
+      web.wrapMiddleware(req, fn, {}, 'middleware', () => fn(req, res))
     })
   })
 
@@ -576,7 +576,7 @@ describe('plugins/util/web', () => {
         done()
       }
 
-      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
+      web.wrapMiddleware(req, fn, {}, 'middleware', () => fn(req, res))
     })
 
     it('should add an error if provided', (done) => {
@@ -595,7 +595,7 @@ describe('plugins/util/web', () => {
         done()
       }
 
-      web.wrapMiddleware(req, fn, 'middleware', () => fn(req, res))
+      web.wrapMiddleware(req, fn, {}, 'middleware', () => fn(req, res))
     })
   })
 
@@ -615,7 +615,7 @@ describe('plugins/util/web', () => {
       web.instrument(tracer, config, req, res, 'test.request', () => {
         const span = tracer.scope().active()
 
-        web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
+        web.wrapMiddleware(req, () => {}, {}, 'express.middleware', () => {
           expect(web.root(req)).to.equal(span)
         })
       })
@@ -637,7 +637,7 @@ describe('plugins/util/web', () => {
       web.instrument(tracer, config, req, res, 'test.request', () => {
         const span = tracer.scope().active()
 
-        web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
+        web.wrapMiddleware(req, () => {}, {}, 'express.middleware', () => {
           expect(web.active(req)).to.not.be.null
           expect(web.active(req)).to.not.equal(span)
         })

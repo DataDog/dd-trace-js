@@ -89,7 +89,7 @@ const web = {
   wrapMiddleware (req, middleware, config, name, fn) {
     if (!this.active(req)) return fn()
 
-    if (this.config.disableMiddleware) return fn()
+    if (config && config.disableMiddleware) return fn()
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)

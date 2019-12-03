@@ -986,6 +986,165 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with configuration for disabled middleware', () => {
+        before(() => {
+          return agent.load(plugin, 'express', {
+            disabledMiddleware: true
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          express = require(`../../../versions/express@${version}`).get()
+        })
+
+        it('should be configured with the correct service name', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'custom')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should be configured with the correct status code validator', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(400).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 400
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should include specified headers in metadata', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0].meta).to.have.property('http.request.headers.user-agent', 'test')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  headers: { 'User-Agent': 'test' }
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should not activate a scope per middleware', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const app = express()
+
+          let span
+
+          app.use((req, res, next) => {
+            span = tracer.scope().active()
+
+            tracer.scope().activate(null, () => next())
+          })
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+
+            try {
+              expect(tracer.scope().active()).to.not.be.null.and.equal(span)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should not activate a span for every middleware on a route with disabledMiddleware ennabled ', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const app = express()
+
+          const span = {}
+
+          app.get(
+            '/user',
+            (req, res, next) => {
+              tracer.scope().activate(span, () => next())
+            },
+            (req, res, next) => {
+              res.status(200).send()
+
+              try {
+                expect(tracer.scope().active()).to.not.be.null.and.equal(span)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }
+          )
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+      })
     })
   })
 })
