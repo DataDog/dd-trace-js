@@ -76,7 +76,7 @@ function callLayerHandle (layer, handle, req, args) {
     web.enterRoute(req, route)
   }
 
-  return web.wrapMiddleware(req, handle, 'connect.middleware', () => {
+  return web.wrapMiddleware(req, handle, {}, 'connect.middleware', () => {
     return handle.apply(layer, args)
   })
 }

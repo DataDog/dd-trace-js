@@ -71,7 +71,7 @@ function createWrapRegister (tracer, config) {
 
 function wrapMiddleware (fn) {
   return function (ctx, next) {
-    return web.wrapMiddleware(ctx.req, fn, 'koa.middleware', () => {
+    return web.wrapMiddleware(ctx.req, fn, {}, 'koa.middleware', () => {
       try {
         const result = fn.apply(this, arguments)
 
