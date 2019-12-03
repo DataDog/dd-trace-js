@@ -63,5 +63,20 @@ describe('plugins/util/log', () => {
         expect(record).to.not.have.property('dd')
       })
     })
+
+    it('should preserve existing properties', () => {
+      const span = tracer.startSpan('test')
+
+      tracer.scope().activate(span, () => {
+        const record = Object.create({ parent: 'parent' })
+
+        record.own = 'own'
+
+        const carrier = log.correlate(tracer, record)
+
+        expect(carrier).to.have.property('own', 'own')
+        expect(carrier).to.have.property('parent', 'parent')
+      })
+    })
   })
 })

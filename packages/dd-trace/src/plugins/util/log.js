@@ -9,12 +9,18 @@ const log = {
 
     if (!span) return record
 
-    return Object.assign({}, record, {
+    const carrier = {
       dd: {
         trace_id: span.context().toTraceId(),
         span_id: span.context().toSpanId()
       }
-    })
+    }
+
+    for (const key in record) {
+      carrier[key] = record[key]
+    }
+
+    return carrier
   }
 }
 
