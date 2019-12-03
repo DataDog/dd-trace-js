@@ -762,10 +762,20 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
+      - checkout
       - attach_workspace:
           at: ~/dd-trace-js
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - run:
+          name: Create prebuilds archive
+          command: yarn prebuilds
       - store_artifacts:
-          path: ./prebuilds
+          path: ./prebuilds.tgz
+      - store_artifacts:
+          path: ./prebuilds.tgz.sha1
 
   # Browser
 

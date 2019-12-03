@@ -5,10 +5,8 @@
 const axios = require('axios')
 const checksum = require('checksum')
 const fs = require('fs')
-const mkdirp = require('mkdirp')
 const os = require('os')
 const path = require('path')
-const tar = require('tar')
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
@@ -28,15 +26,6 @@ console.log(revision)
 const branch = exec.pipe(`git symbolic-ref --short HEAD`)
 
 console.log(branch)
-
-const platforms = [
-  'darwin-ia32',
-  'darwin-x64',
-  'linux-ia32',
-  'linux-x64',
-  'win32-ia32',
-  'win32-x64'
-]
 
 const client = axios.create({
   baseURL: 'https://circleci.com/api/v2/',
@@ -59,9 +48,6 @@ getPipeline()
   .then(getPrebuildsJob)
   .then(getPrebuildArtifacts)
   .then(downloadArtifacts)
-  .then(zipPrebuilds)
-  .then(copyPrebuilds)
-  .then(extractPrebuilds)
   .then(validatePrebuilds)
   .then(bundle)
   .catch(e => {
@@ -126,7 +112,7 @@ function getPrebuildArtifacts (job) {
   return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`)
     .then(response => {
       const artifacts = response.data.items
-        .filter(artifact => /\/prebuilds\//.test(artifact.url))
+        .filter(artifact => /\/prebuilds\.tgz/.test(artifact.url))
 
       if (artifacts.length === 0) {
         throw new Error(`Missing artifacts in job ${job.job_number}.`)
@@ -139,20 +125,15 @@ function getPrebuildArtifacts (job) {
 function downloadArtifacts (artifacts) {
   const files = artifacts.map(artifact => artifact.url)
 
-  return Promise.all([
-    Promise.all(files.map(downloadArtifact)),
-    Promise.all(files.map(file => downloadArtifact(`${file}.sha1`)))
-  ])
+  return Promise.all(files.map(downloadArtifact))
 }
 
 function downloadArtifact (file) {
   return fetch(file, { responseType: 'stream' })
     .then(response => {
       const parts = file.split('/')
-      const basename = path.join(os.tmpdir(), parts.slice(-3, -1).join(path.sep))
+      const basename = os.tmpdir()
       const filename = parts.slice(-1)[0]
-
-      mkdirp.sync(basename)
 
       return new Promise((resolve, reject) => {
         response.data.pipe(fs.createWriteStream(path.join(basename, filename)))
@@ -162,55 +143,14 @@ function downloadArtifact (file) {
     })
 }
 
-function zipPrebuilds () {
-  platforms.forEach(platform => {
-    tar.create({
-      gzip: true,
-      sync: true,
-      portable: true,
-      strict: true,
-      file: path.join(os.tmpdir(), `addons-${platform}.tgz`),
-      cwd: os.tmpdir()
-    }, [`prebuilds/${platform}`])
-  })
-}
-
-function copyPrebuilds () {
-  const basename = path.normalize(path.join(__dirname, '..'))
-
-  platforms
-    .map(platform => `addons-${platform}.tgz`)
-    .forEach(filename => {
-      fs.copyFileSync(
-        path.join(os.tmpdir(), filename),
-        path.join(basename, filename)
-      )
-    })
-}
-
-function extractPrebuilds () {
-  platforms.forEach(platform => {
-    tar.extract({
-      sync: true,
-      strict: true,
-      file: `addons-${platform}.tgz`
-    })
-  })
-}
-
 function validatePrebuilds () {
-  platforms.forEach(platform => {
-    fs.readdirSync(path.join('prebuilds', platform))
-      .filter(file => /^node-\d+\.node$/.test(file))
-      .forEach(file => {
-        const content = fs.readFileSync(path.join('prebuilds', platform, file))
-        const sum = fs.readFileSync(path.join('prebuilds', platform, `${file}.sha1`), 'ascii')
+  const file = path.join(os.tmpdir(), 'prebuilds.tgz')
+  const content = fs.readFileSync(file)
+  const sum = fs.readFileSync(path.join(`${file}.sha1`), 'ascii')
 
-        if (sum !== checksum(content)) {
-          throw new Error(`Invalid checksum for "prebuilds/${platform}/${file}".`)
-        }
-      })
-  })
+  if (sum !== checksum(content)) {
+    throw new Error('Invalid checksum for "prebuilds.tgz".')
+  }
 }
 
 function bundle () {

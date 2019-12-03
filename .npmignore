@@ -9,12 +9,7 @@
 !LICENSE
 !LICENSE-3rdparty.csv
 !README.md
-!addons-darwin-ia32.tgz
-!addons-darwin-x64.tgz
-!addons-linux-ia32.tgz
-!addons-linux-x64.tgz
-!addons-win32-ia32.tgz
-!addons-win32-x64.tgz
+!prebuilds.tgz
 !binding.gyp
 !index.d.ts
 !index.js
