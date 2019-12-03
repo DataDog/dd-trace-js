@@ -31,9 +31,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
 
       const span = startExecutionSpan(tracer, config, operation, args)
 
-      Object.defineProperty(contextValue, '_datadog_graphql', {
-        value: { source, span, fields: {} }
-      })
+      contextValue._datadog_graphql = { source, span, fields: {} }
 
       return call(execute, span, this, [args], (err, res) => {
         finishResolvers(contextValue)
@@ -135,6 +133,8 @@ function wrapResolve (resolve, tracer, config) {
     : pathToArray
 
   function resolveWithTrace (source, args, contextValue, info) {
+    if (!contextValue._datadog_graphql) return resolve.apply(this, arguments)
+
     const path = responsePathAsArray(info.path)
     const depth = path.filter(item => typeof item === 'string').length
 
