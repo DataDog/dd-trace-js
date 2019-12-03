@@ -86,8 +86,10 @@ const web = {
   },
 
   // Start a new middleware span and activate a new scope with the span.
-  wrapMiddleware (req, middleware, name, fn) {
+  wrapMiddleware (req, middleware, config, name, fn) {
     if (!this.active(req)) return fn()
+
+    if (this.config.disableMiddleware) return fn()
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)
