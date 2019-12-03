@@ -1065,6 +1065,128 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should handle error status codes', done => {
+          const app = express()
+
+          app.use((req, res, next) => {
+            next()
+          })
+
+          app.get('/user', (req, res) => {
+            res.status(500).send()
+          })
+
+          getPort().then(port => {
+            agent.use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('error', 1)
+              expect(spans[0]).to.have.property('resource', 'GET /user')
+              expect(spans[0].meta).to.have.property('http.status_code', '500')
+
+              done()
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should only handle errors for configured status codes', done => {
+          const app = express()
+
+          app.use((req, res, next) => {
+            next()
+          })
+
+          app.get('/user', (req, res) => {
+            res.statusCode = 400
+            throw new Error('boom')
+          })
+
+          getPort().then(port => {
+            agent.use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('error', 0)
+              expect(spans[0]).to.have.property('resource', 'GET /user')
+              expect(spans[0].meta).to.have.property('http.status_code', '400')
+
+              done()
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 400
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle request errors', done => {
+          const app = express()
+          const error = new Error('boom')
+
+          app.use(() => { throw error })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('http.status_code', '500')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle middleware errors', done => {
+          const app = express()
+          const error = new Error('boom')
+
+          app.use((req, res) => { throw error })
+          app.use((error, req, res, next) => res.status(500).send())
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[3]).to.have.property('error', 1)
+                expect(spans[3].meta).to.have.property('error.type', error.name)
+                expect(spans[3].meta).to.have.property('error.msg', error.message)
+                expect(spans[3].meta).to.have.property('error.stack', error.stack)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
       })
     })
   })
