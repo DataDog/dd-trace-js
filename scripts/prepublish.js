@@ -49,6 +49,7 @@ getPipeline()
   .then(getPrebuildArtifacts)
   .then(downloadArtifacts)
   .then(validatePrebuilds)
+  .then(copyPrebuilds)
   .then(bundle)
   .catch(e => {
     process.exitCode = 1
@@ -151,6 +152,16 @@ function validatePrebuilds () {
   if (sum !== checksum(content)) {
     throw new Error('Invalid checksum for "prebuilds.tgz".')
   }
+}
+
+function copyPrebuilds () {
+  const basename = path.normalize(path.join(__dirname, '..'))
+  const filename = 'prebuilds.tgz'
+
+  fs.copyFileSync(
+    path.join(os.tmpdir(), filename),
+    path.join(basename, filename)
+  )
 }
 
 function bundle () {

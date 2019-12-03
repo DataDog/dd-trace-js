@@ -50,7 +50,7 @@ function extract () {
   console.log('Extracting prebuilt binaries.')
 
   const promise = tar.extract({
-    file: `addons-${name}.tgz`,
+    file: `prebuilds.tgz`,
     cwd: path.join(__dirname, '..')
   })
 
@@ -62,13 +62,9 @@ function extract () {
 }
 
 function cleanup () {
-  platforms
-    .map(name => path.join(cwd, `addons-${name}.tgz`))
-    .forEach(file => {
-      try {
-        fs.unlinkSync(file)
-      } catch (e) {
-        // Ignore as it's just to save space
-      }
-    })
+  try {
+    fs.unlinkSync(path.join(cwd, `prebuilds.tgz`))
+  } catch (e) {
+    // Ignore as it's just to save space
+  }
 }
