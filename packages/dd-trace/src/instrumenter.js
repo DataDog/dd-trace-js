@@ -39,6 +39,8 @@ class Instrumenter {
   enable (config) {
     config = config || {}
 
+    this._enabled = true
+
     if (config.plugins !== false) {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
@@ -47,7 +49,6 @@ class Instrumenter {
         })
     }
 
-    this._enabled = true
     this._loader.reload(this._plugins)
   }
 
