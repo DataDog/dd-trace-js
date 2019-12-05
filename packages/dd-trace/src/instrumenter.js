@@ -157,7 +157,7 @@ class Instrumenter {
 
   _set (plugin, meta) {
     if (this._disabledPlugins.has(meta.name)) {
-      log.debug(`configuration disabled via configuration option, named "${meta.name}".`)
+      log.debug(`Plugin "${meta.name}" was disabled via configuration option.`)
     } else {
       this._plugins.set(plugin, meta)
       this.load(plugin, meta)

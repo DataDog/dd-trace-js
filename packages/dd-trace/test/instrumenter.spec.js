@@ -62,8 +62,7 @@ describe('Instrumenter', () => {
           'express-mock': integrations.express,
           'mysql-mock': integrations.mysql,
           'other': integrations.other
-        },
-        env: sinon.stub()
+        }
       },
       '../../datadog-plugin-http/src': integrations.http,
       '../../datadog-plugin-express-mock/src': integrations.express,
@@ -354,58 +353,71 @@ describe('Instrumenter', () => {
     })
   })
 
-  describe('with plugins disabled via disabledPlugins configuration option', () => {
+  describe('with plugins disabled via DD_TRACE_DISABLED_PLUGINS environment variable', () => {
+    beforeEach(() => {
+      process.env.DD_TRACE_DISABLED_PLUGINS = 'http,mysql-mock'
+
+      Instrumenter = proxyquire('../src/instrumenter', {
+        'shimmer': shimmer,
+        './platform': {
+          plugins: {
+            'http': integrations.http,
+            'express-mock': integrations.express,
+            'mysql-mock': integrations.mysql,
+            'other': integrations.other
+          }
+        },
+        '../../datadog-plugin-http/src': integrations.http,
+        '../../datadog-plugin-express-mock/src': integrations.express,
+        '../../datadog-plugin-mysql-mock/src': integrations.mysql,
+        '../../datadog-plugin-other/src': integrations.other
+      })
+
+      instrumenter = new Instrumenter(tracer)
+    })
+
+    afterEach(() => {
+      process.env.DD_TRACE_DISABLED_PLUGINS = undefined
+    })
+
     describe('enable', () => {
-      it('should not patch plugins disabled from configuration option', () => {
-        instrumenter._disabledPlugins = new Set(['express-mock', 'http'])
-        const configDisabled = { foo: 'bar' }
-        instrumenter.enable(configDisabled)
+      it('should not patch plugins disabled from environnment variable configuration option', () => {
+        instrumenter.enable()
 
-        require('express-mock')
         require('http')
+        require('mysql-mock')
 
-        expect(integrations.express.patch).to.not.have.been.called
         expect(integrations.http.patch).to.not.have.been.called
+        expect(integrations.mysql[0].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.not.have.been.called
       })
 
-      it('should patch plugins not disabled from configuration option', () => {
-        instrumenter._disabledPlugins = new Set()
+      it('should patch plugins not disabled by environnment variable configuration option', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar' }
-        instrumenter.enable(configNotDisabled)
+        instrumenter.enable()
 
         const express = require('express-mock')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(process.env.DD_TRACE_DISABLED_PLUGINS.indexOf('express-mock')).to.equal(-1)
       })
 
-      it('should patch plugins with configuration option plugin set to true', () => {
-        instrumenter._disabledPlugins = new Set()
+      it('should not patch plugins called by .use that have been disabled by environment variable', () => {
         const configDefault = {}
-        const configNotDisabled = { foo: 'bar', plugins: true }
-        instrumenter.enable(configNotDisabled)
-
-        const express = require('express-mock')
-        const http = require('http')
-
-        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
-        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', configDefault)
-      })
-
-      it('should clear any plugins called by .use that have been disabled', () => {
-        instrumenter._disabledPlugins = new Set(['http'])
-        const configDefault = {}
-        const configNotDisabled = { foo: 'bar' }
 
         instrumenter.use('http', configDefault)
+        instrumenter.use('mysql-mock', configDefault)
         instrumenter.use('express-mock', configDefault)
-        instrumenter.enable(configNotDisabled)
+        instrumenter.enable()
 
         const express = require('express-mock')
         require('http')
+        require('mysql-mock')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
         expect(integrations.http.patch).to.not.have.been.called
+        expect(integrations.mysql[0].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.not.have.been.called
       })
     })
   })

@@ -328,7 +328,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | reportHostname | `DD_TRACE_REPORT_HOSTNAME`     | `false`     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
 | experimental   | -                              | `{}`        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins        | -                              | `true`      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
-| -              | `DD_TRACE_DISABLED_PLUGINS`    | -           | a comma seperated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
+| -              | `DD_TRACE_DISABLED_PLUGINS`    | -           | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
 | clientToken    | `DD_CLIENT_TOKEN`              | -           | Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`. |
 | logLevel       | `DD_TRACE_LOG_LEVEL`           | `debug`     | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
 
