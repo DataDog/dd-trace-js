@@ -39,8 +39,8 @@ function createWrapMessageReceived (tracer, config) {
 }
 
 function startSendSpan (tracer, config, link) {
-  const address = getHost(link)
-  const target = getAddress(link)
+  const address = getAddress(link)
+  const target = getShortName(link)
 
   const span = tracer.startSpan(`amqp.send`, {
     tags: {
@@ -61,7 +61,7 @@ function startSendSpan (tracer, config, link) {
 }
 
 function startReceiveSpan (tracer, config, link) {
-  const source = getAddress(link)
+  const source = getShortName(link)
   const span = tracer.startSpan(`amqp.receive`, {
     tags: {
       'resource.name': ['receive', source].filter(v => v).join(' '),
@@ -79,7 +79,7 @@ function startReceiveSpan (tracer, config, link) {
 }
 
 function addTags (tracer, config, span, link = {}) {
-  const address = getHost(link)
+  const address = getAddress(link)
 
   span.addTags({
     'service.name': config.service || `${tracer._service}-amqp`,
@@ -117,13 +117,13 @@ function wrapPromise (promise, span) {
   return promise
 }
 
-function getAddress (link) {
+function getShortName (link) {
   if (!link || !link.name) return null
 
   return link.name.split('_').slice(0, -1).join('_')
 }
 
-function getHost (link) {
+function getAddress (link) {
   if (!link || !link.session || !link.session.connection) return {}
 
   return link.session.connection.address || {}
