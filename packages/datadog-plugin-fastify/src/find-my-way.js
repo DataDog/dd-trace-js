@@ -7,12 +7,15 @@ function createWrapOn () {
     return function onWithTrace (method, path, opts) {
       const index = typeof opts === 'function' ? 2 : 3
       const handler = arguments[index]
-
-      arguments[index] = function (req) {
+      const wrapper = function (req) {
         web.patch(req)
         web.enterRoute(req, path)
 
         return handler.apply(this, arguments)
+      }
+
+      if (typeof handler === 'function') {
+        arguments[index] = wrapper
       }
 
       return on.apply(this, arguments)

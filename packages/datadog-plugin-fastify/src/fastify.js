@@ -6,6 +6,8 @@ function createWrapFastify (tracer, config) {
   config = web.normalizeConfig(config)
 
   return function wrapFastify (fastify) {
+    if (typeof fastify !== 'function') return fastify
+
     const fastifyWithTrace = function fastifyWithTrace () {
       return fastify._datadog_wrapper.apply(this, arguments)
     }
@@ -13,8 +15,10 @@ function createWrapFastify (tracer, config) {
     fastify._datadog_wrapper = function () {
       const app = fastify.apply(this, arguments)
 
-      app.addHook('onRequest', createOnRequest(tracer, config))
-      app.addHook('preHandler', preHandler)
+      if (app && typeof app.addHook === 'function') {
+        app.addHook('onRequest', createOnRequest(tracer, config))
+        app.addHook('preHandler', preHandler)
+      }
 
       return app
     }
@@ -25,6 +29,8 @@ function createWrapFastify (tracer, config) {
 
 function createOnRequest (tracer, config) {
   return function onRequest (request, reply, next) {
+    if (typeof next !== 'function') return
+
     const req = getReq(request)
     const res = getRes(reply)
     const name = 'fastify.request'
@@ -34,6 +40,9 @@ function createOnRequest (tracer, config) {
 }
 
 function preHandler (request, reply, next) {
+  if (typeof next !== 'function') return
+  if (!reply || typeof reply.send !== 'function') return next()
+
   reply.send = wrapSend(reply.send)
 
   next()
@@ -41,7 +50,7 @@ function preHandler (request, reply, next) {
 
 function wrapSend (send) {
   return function sendWithTrace (payload) {
-    const req = getReq(this.request)
+    const req = getReq(this && this.request)
 
     web.addError(req, payload)
 
@@ -54,11 +63,11 @@ function unwrapFastify (fastify) {
 }
 
 function getReq (request) {
-  return request.req || request
+  return request && (request.req || request)
 }
 
 function getRes (reply) {
-  return reply.res || reply
+  return reply && (reply.res || reply)
 }
 
 module.exports = [
