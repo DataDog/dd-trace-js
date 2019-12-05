@@ -20,6 +20,8 @@ const rrtypes = {
 function createWrapLookup (tracer, config) {
   return function wrapLookup (lookup) {
     return function lookupWithTrace (hostname, options, callback) {
+      if (!isArgsValid(arguments, 2)) return lookup.apply(this, arguments)
+
       const span = startSpan(tracer, config, 'dns.lookup', {
         'resource.name': hostname,
         'dns.hostname': hostname
@@ -37,6 +39,8 @@ function createWrapLookup (tracer, config) {
 function createWrapLookupService (tracer, config) {
   return function wrapLookupService (lookupService) {
     return function lookupServiceWithTrace (address, port, callback) {
+      if (!isArgsValid(arguments, 3)) return lookupService.apply(this, arguments)
+
       const span = startSpan(tracer, config, 'dns.lookup_service', {
         'resource.name': `${address}:${port}`,
         'dns.address': address,
@@ -53,6 +57,8 @@ function createWrapLookupService (tracer, config) {
 function createWrapResolve (tracer, config) {
   return function wrapResolve (resolve) {
     return function resolveWithTrace (hostname, rrtype, callback) {
+      if (!isArgsValid(arguments, 2)) return resolve.apply(this, arguments)
+
       if (typeof rrtype !== 'string') {
         rrtype = 'A'
       }
@@ -67,6 +73,8 @@ function createWrapResolve (tracer, config) {
 function createWrapResolver (tracer, config, rrtype) {
   return function wrapResolve (resolve) {
     return function resolveWithTrace (hostname, callback) {
+      if (!isArgsValid(arguments, 2)) return resolve.apply(this, arguments)
+
       const span = wrapResolver(tracer, config, rrtype, arguments)
 
       return tracer.scope().activate(span, () => resolve.apply(this, arguments))
@@ -77,6 +85,8 @@ function createWrapResolver (tracer, config, rrtype) {
 function createWrapReverse (tracer, config) {
   return function wrapReverse (reverse) {
     return function reverseWithTrace (ip, callback) {
+      if (!isArgsValid(arguments, 2)) return reverse.apply(this, arguments)
+
       const span = startSpan(tracer, config, 'dns.reverse', {
         'resource.name': ip,
         'dns.ip': ip
@@ -102,6 +112,13 @@ function startSpan (tracer, config, operation, tags) {
   analyticsSampler.sample(span, config.analytics)
 
   return span
+}
+
+function isArgsValid (args, minLength) {
+  if (args.length < minLength) return false
+  if (typeof args[args.length - 1] !== 'function') return false
+
+  return true
 }
 
 function wrapArgs (span, args, callback) {
