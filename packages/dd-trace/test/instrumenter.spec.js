@@ -76,6 +76,8 @@ describe('Instrumenter', () => {
   afterEach(() => {
     const basedir = path.resolve(path.join(__dirname, 'node_modules'))
 
+    instrumenter.disable()
+
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
       .forEach(name => {
@@ -199,7 +201,7 @@ describe('Instrumenter', () => {
       })
     })
 
-    describe('patch', () => {
+    describe('enable', () => {
       it('should patch modules from node_modules when they are loaded', () => {
         instrumenter.enable()
 
@@ -264,7 +266,7 @@ describe('Instrumenter', () => {
       })
     })
 
-    describe('unpatch', () => {
+    describe('disable', () => {
       it('should unpatch patched modules', () => {
         instrumenter.enable()
 
@@ -349,6 +351,17 @@ describe('Instrumenter', () => {
         require('express-mock')
 
         expect(integrations.express.patch).to.not.have.been.called
+      })
+    })
+
+    describe('enable', () => {
+      it('should attempt to patch already loaded modules', () => {
+        const express = require('express-mock')
+
+        instrumenter.enable()
+
+        expect(integrations.express.patch).to.have.been.called
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
     })
   })
