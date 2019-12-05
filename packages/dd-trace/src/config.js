@@ -59,7 +59,6 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
-    this.disabledPlugins = coalesce(options.disabledPlugins, platform.env('DD_TRACE_DISABLED_PLUGINS'), null)
     this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
     this.analytics = String(analytics) === 'true'
     this.tags = tags

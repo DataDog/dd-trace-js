@@ -8,6 +8,12 @@ shimmer({ logger: () => {} })
 
 const plugins = platform.plugins
 
+const disabldPlugins = platform.env('DD_TRACE_DISABLED_PLUGINS')
+
+const collectDisabledPlugins = () => {
+  return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
+}
+
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
@@ -16,7 +22,7 @@ class Instrumenter {
     this._names = new Set()
     this._plugins = new Map()
     this._instrumented = new Map()
-    this._disabledPlugins = new Set()
+    this._disabledPlugins = collectDisabledPlugins()
   }
 
   use (name, config) {
@@ -41,18 +47,6 @@ class Instrumenter {
     config = config || {}
 
     if (config.plugins !== false) {
-      // sets disabled plugins
-      if (typeof config.disabledPlugins === 'string') {
-        config.disabledPlugins.split(',').map(plugin => plugin.trim()).forEach((plugin) => {
-          this._disabledPlugins.add(plugin)
-
-          // account for edge case where .use has been called for a plugin before .enable could disable it
-          if (this._plugins.has(plugins[plugin])) {
-            this._plugins.delete(plugins[plugin])
-          }
-        })
-      }
-
       Object.keys(plugins).filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
           this._set(plugins[name], { name, config: {} })
@@ -69,7 +63,6 @@ class Instrumenter {
     }
 
     this._plugins.clear()
-    this._disabledPlugins.clear()
     this._enabled = false
     this._loader.reload(this._plugins)
   }

@@ -342,11 +342,6 @@ export declare interface TracerOptions {
    * @default 'debug'
    */
   logLevel?: 'error' | 'debug'
-
-  /**
-   * A comma seperated string of integrations to automatically disable when the tracer is initialized e.g. `'express,dns'`
-   */
-  disabledPlugins?: string
 }
 
 /** @hidden */

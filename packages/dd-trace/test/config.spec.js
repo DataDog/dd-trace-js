@@ -99,7 +99,6 @@ describe('Config', () => {
       'foo': 'bar'
     }
     const logLevel = 'error'
-    const disabledPlugins = 'express,dns'
     const config = new Config('test', {
       enabled: false,
       debug: true,
@@ -122,7 +121,6 @@ describe('Config', () => {
       scope: 'noop',
       clientToken: '789',
       logLevel: logLevel,
-      disabledPlugins: disabledPlugins,
       experimental: {
         b3: true,
         sampler: {
@@ -151,7 +149,6 @@ describe('Config', () => {
     expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.property('clientToken', '789')
     expect(config).to.have.property('logLevel', logLevel)
-    expect(config).to.have.property('disabledPlugins', disabledPlugins)
     expect(config).to.have.deep.property('tags', {
       'foo': 'bar'
     })

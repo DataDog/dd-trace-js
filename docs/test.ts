@@ -74,7 +74,6 @@ tracer.init({
   scope: 'noop',
   clientToken: 'pub123abc',
   logLevel: 'debug',
-  disabledPlugins: '',
 });
 
 const httpOptions = {
