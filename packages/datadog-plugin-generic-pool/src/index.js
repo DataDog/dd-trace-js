@@ -3,17 +3,25 @@
 function createWrapAcquire (tracer, config) {
   return function wrapAcquire (acquire) {
     return function acquireWithTrace (callback, priority) {
-      return acquire.call(this, tracer.scope().bind(callback), priority)
+      if (typeof callback === 'function') {
+        arguments[0] = tracer.scope().bind(callback)
+      }
+
+      return acquire.apply(this, arguments)
     }
   }
 }
 
 function createWrapPool (tracer, config, instrumenter) {
   return function wrapPool (Pool) {
+    if (typeof Pool !== 'function') return Pool
+
     return function PoolWithTrace (factory) {
       const pool = Pool.apply(this, arguments)
 
-      instrumenter.wrap(pool, 'acquire', createWrapAcquire(tracer, config))
+      if (pool && typeof pool.acquire === 'function') {
+        instrumenter.wrap(pool, 'acquire', createWrapAcquire(tracer, config))
+      }
 
       return pool
     }
