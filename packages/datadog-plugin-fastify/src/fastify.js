@@ -29,7 +29,7 @@ function createWrapFastify (tracer, config) {
 
 function createOnRequest (tracer, config) {
   return function onRequest (request, reply, next) {
-    if (typeof next !== 'function') return next()
+    if (typeof next !== 'function') return
 
     const req = getReq(request)
     const res = getRes(reply)
