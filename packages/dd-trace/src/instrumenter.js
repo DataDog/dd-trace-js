@@ -8,6 +8,12 @@ shimmer({ logger: () => {} })
 
 const plugins = platform.plugins
 
+const disabldPlugins = platform.env('DD_TRACE_DISABLED_PLUGINS')
+
+const collectDisabledPlugins = () => {
+  return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
+}
+
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
@@ -16,6 +22,7 @@ class Instrumenter {
     this._names = new Set()
     this._plugins = new Map()
     this._instrumented = new Map()
+    this._disabledPlugins = collectDisabledPlugins()
   }
 
   use (name, config) {
@@ -161,8 +168,12 @@ class Instrumenter {
   }
 
   _set (plugin, meta) {
-    this._plugins.set(plugin, meta)
-    this.load(plugin, meta)
+    if (this._disabledPlugins.has(meta.name)) {
+      log.debug(`Plugin "${meta.name}" was disabled via configuration option.`)
+    } else {
+      this._plugins.set(plugin, meta)
+      this.load(plugin, meta)
+    }
   }
 }
 
