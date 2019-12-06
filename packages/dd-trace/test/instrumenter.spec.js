@@ -377,7 +377,7 @@ describe('Instrumenter', () => {
     })
 
     afterEach(() => {
-      process.env.DD_TRACE_DISABLED_PLUGINS = undefined
+      delete process.env.DD_TRACE_DISABLED_PLUGINS
     })
 
     describe('enable', () => {
