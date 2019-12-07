@@ -987,10 +987,10 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with configuration for disabled middleware', () => {
+      describe('with configuration for middleware disabled', () => {
         before(() => {
           return agent.load(plugin, 'express', {
-            disabledMiddleware: true
+            middleware: false
           })
         })
 
@@ -1034,7 +1034,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should not activate a span for every middleware on a route with disabledMiddleware ennabled ', done => {
+        it('should not activate a span for every middleware on a route with middleware disabled ', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const app = express()

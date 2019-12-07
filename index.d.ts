@@ -509,6 +509,13 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
+
+    /**
+     * Whether to enable instrumention of <plugin>.middleware spans
+     *
+     * @default true
+     */
+    middleware?: boolean;
   }
 
   /** @hidden */
@@ -641,14 +648,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [express](http://expressjs.com/) module.
    */
-  interface express extends HttpServer {
-    /**
-     * Whether to disable instrumention of express.middleware spans
-     *
-     * @default false
-     */
-    disableMiddleware?: boolean;
-  }
+  interface express extends HttpServer {}
 
   /**
    * This plugin automatically instruments the

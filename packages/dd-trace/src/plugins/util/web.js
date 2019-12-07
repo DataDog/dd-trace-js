@@ -36,12 +36,14 @@ const web = {
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
+    const middleware = getMiddlewareSetting(config)
 
     return Object.assign({}, config, {
       headers,
       validateStatus,
       hooks,
-      filter
+      filter,
+      middleware
     })
   },
 
@@ -89,7 +91,7 @@ const web = {
   wrapMiddleware (req, middleware, config, name, fn) {
     if (!this.active(req)) return fn()
 
-    if (config && config.disableMiddleware === true) return fn()
+    if (config && config.middleware === false) return fn()
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)
@@ -425,6 +427,16 @@ function getHooks (config) {
   const request = (config.hooks && config.hooks.request) || noop
 
   return { request }
+}
+
+function getMiddlewareSetting (config) {
+  if (config && config.middleware === 'boolean') {
+    return config.middleware
+  } else if (config && config.hasOwnProperty('middleware')) {
+    log.error('Expectted `middleware` to be a boolean.')
+  }
+
+  return true
 }
 
 module.exports = web

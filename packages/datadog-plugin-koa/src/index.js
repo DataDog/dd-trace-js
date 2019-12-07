@@ -33,13 +33,15 @@ function createWrapCreateContext () {
   }
 }
 
-function createWrapUse () {
+function createWrapUse (tracer, config) {
+  config = web.normalizeConfig(config)
+
   return function wrapUse (use) {
     return function useWithTrace () {
       const result = use.apply(this, arguments)
       const fn = this.middleware.pop()
 
-      this.middleware.push(wrapMiddleware(fn))
+      this.middleware.push(wrapMiddleware(fn, config))
 
       return result
     }
@@ -60,7 +62,7 @@ function createWrapRegister (tracer, config) {
           web.exitRoute(ctx.req)
           web.enterRoute(ctx.req, route.path)
 
-          return wrapMiddleware(middleware).apply(this, arguments)
+          return wrapMiddleware(middleware, config).apply(this, arguments)
         }
       })
 
@@ -69,9 +71,9 @@ function createWrapRegister (tracer, config) {
   }
 }
 
-function wrapMiddleware (fn) {
+function wrapMiddleware (fn, config) {
   return function (ctx, next) {
-    return web.wrapMiddleware(ctx.req, fn, {}, 'koa.middleware', () => {
+    return web.wrapMiddleware(ctx.req, fn, config, 'koa.middleware', () => {
       try {
         const result = fn.apply(this, arguments)
 
