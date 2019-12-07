@@ -4,12 +4,16 @@ const web = require('../../dd-trace/src/plugins/util/web')
 
 function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
+    if (typeof connect !== 'function') return connect
+
     const connectWithTrace = function connectWithTrace () {
       return connect._datadog_wrapper.apply(this, arguments)
     }
 
     connect._datadog_wrapper = function () {
       const app = connect()
+
+      if (!app) return app
 
       app.use = createWrapUse()(app.use)
       app.handle = createWrapHandle(tracer, config)(app.handle)
@@ -23,13 +27,18 @@ function createWrapConnect (tracer, config) {
 
 function createWrapUse () {
   return function wrapUse (use) {
-    return function useWithTrace (route, fn) {
-      const length = this.stack.length
-      const result = use.apply(this, arguments)
-      const layer = this.stack[length]
+    if (typeof use !== 'function') return use
 
-      if (layer) {
-        this.stack[length].handle = wrapLayerHandle(layer)
+    return function useWithTrace (route, fn) {
+      const result = use.apply(this, arguments)
+
+      if (!this || !Array.isArray(this.stack)) return result
+
+      const index = this.stack.length - 1
+      const layer = this.stack[index]
+
+      if (layer && layer.handle) {
+        this.stack[index].handle = wrapLayerHandle(layer)
       }
 
       return result
@@ -41,6 +50,8 @@ function createWrapHandle (tracer, config) {
   config = web.normalizeConfig(config)
 
   return function wrapHandle (handle) {
+    if (typeof handle !== 'function') return handle
+
     return function handleWithTrace (req, res, out) {
       return web.instrument(tracer, config, req, res, 'connect.request', () => {
         return handle.apply(this, arguments)
@@ -82,7 +93,7 @@ function callLayerHandle (layer, handle, req, args) {
 }
 
 function wrapNext (layer, req, next) {
-  if (!next || !web.active(req)) return next
+  if (typeof next !== 'function' || !web.active(req)) return next
 
   return function nextWithTrace (error) {
     if (!error && layer.route !== '/') {

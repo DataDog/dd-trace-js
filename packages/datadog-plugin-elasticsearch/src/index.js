@@ -6,6 +6,8 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (params, options, cb) {
+      if (!params) return request.apply(this, arguments)
+
       const childOf = tracer.scope().active()
       const span = tracer.startSpan('elasticsearch.query', {
         childOf,
@@ -41,7 +43,11 @@ function createWrapRequest (tracer, config) {
         } else {
           const promise = request.apply(this, arguments)
 
-          promise.then(() => finish(span), e => finish(span, e))
+          if (promise && typeof promise.then === 'function') {
+            promise.then(() => finish(span), e => finish(span, e))
+          } else {
+            finish(span)
+          }
 
           return promise
         }
@@ -70,7 +76,7 @@ function finish (span, err) {
 }
 
 function quantizePath (path) {
-  return path.replace(/[0-9]+/g, '?')
+  return path && path.replace(/[0-9]+/g, '?')
 }
 
 module.exports = [

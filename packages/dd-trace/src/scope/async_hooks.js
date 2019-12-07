@@ -76,24 +76,25 @@ class Scope extends Base {
   _await (span) {
     if (!this._promises[this._depth]) return
 
+    this._enabled = false
     this._awaitAsync(span)
+    this._enabled = true
   }
 
   // https://github.com/nodejs/node/issues/22360
   async _awaitAsync (span) {
     await {
-      then: () => {
+      then: (resolve) => {
         this._current = span
+        resolve()
       }
     }
   }
 
   _initPromise () {
     if (!this._promises[this._depth]) {
-      this._enabled = false
       this._promises[this._depth] = true
       this._await(this._current)
-      this._enabled = true
     }
   }
 

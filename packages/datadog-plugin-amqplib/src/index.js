@@ -66,7 +66,7 @@ function isCamelCase (str) {
   return /([A-Z][a-z0-9]+)+/.test(str)
 }
 
-function getResourceName (method, fields) {
+function getResourceName (method, fields = {}) {
   return [
     method,
     fields.exchange,
@@ -103,7 +103,7 @@ function addTags (channel, tracer, config, span, method, fields) {
     'span.type': 'worker'
   })
 
-  if (channel.connection && channel.connection.stream) {
+  if (channel && channel.connection && channel.connection.stream) {
     span.addTags({
       'out.host': channel.connection.stream._host,
       'out.port': channel.connection.stream.remotePort

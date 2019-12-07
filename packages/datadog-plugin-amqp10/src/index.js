@@ -24,7 +24,7 @@ function createWrapSend (tracer, config) {
 function createWrapMessageReceived (tracer, config) {
   return function wrapMessageReceived (messageReceived) {
     return function messageReceivedWithTrace (transferFrame) {
-      if (transferFrame.aborted || transferFrame.more) {
+      if (!transferFrame || transferFrame.aborted || transferFrame.more) {
         return messageReceived.apply(this, arguments)
       }
 
@@ -39,12 +39,12 @@ function createWrapMessageReceived (tracer, config) {
 }
 
 function startSendSpan (tracer, config, link) {
-  const address = link.session.connection.address
-  const target = getAddress(link)
+  const address = getAddress(link)
+  const target = getShortName(link)
 
   const span = tracer.startSpan(`amqp.send`, {
     tags: {
-      'resource.name': `send ${target}`,
+      'resource.name': ['send', target].filter(v => v).join(' '),
       'span.kind': 'producer',
       'amqp.link.target.address': target,
       'amqp.link.role': 'sender',
@@ -61,10 +61,10 @@ function startSendSpan (tracer, config, link) {
 }
 
 function startReceiveSpan (tracer, config, link) {
-  const source = getAddress(link)
+  const source = getShortName(link)
   const span = tracer.startSpan(`amqp.receive`, {
     tags: {
-      'resource.name': `receive ${source}`,
+      'resource.name': ['receive', source].filter(v => v).join(' '),
       'span.kind': 'consumer',
       'amqp.link.source.address': source,
       'amqp.link.role': 'receiver'
@@ -78,8 +78,8 @@ function startReceiveSpan (tracer, config, link) {
   return span
 }
 
-function addTags (tracer, config, span, link) {
-  const address = link.session.connection.address
+function addTags (tracer, config, span, link = {}) {
+  const address = getAddress(link)
 
   span.addTags({
     'service.name': config.service || `${tracer._service}-amqp`,
@@ -87,12 +87,9 @@ function addTags (tracer, config, span, link) {
     'amqp.link.name': link.name,
     'amqp.link.handle': link.handle,
     'amqp.connection.host': address.host,
-    'amqp.connection.port': address.port
+    'amqp.connection.port': address.port,
+    'amqp.connection.user': address.user
   })
-
-  if (address.user) {
-    span.setTag('amqp.connection.user', address.user)
-  }
 
   return span
 }
@@ -120,8 +117,16 @@ function wrapPromise (promise, span) {
   return promise
 }
 
-function getAddress (link) {
+function getShortName (link) {
+  if (!link || !link.name) return null
+
   return link.name.split('_').slice(0, -1).join('_')
+}
+
+function getAddress (link) {
+  if (!link || !link.session || !link.session.connection) return {}
+
+  return link.session.connection.address || {}
 }
 
 module.exports = [

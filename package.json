@@ -8,6 +8,7 @@
   "scripts": {
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
+    "prebuilds": "node scripts/prebuilds.js",
     "bundle": "webpack --display-modules",
     "prepublishOnly": "node scripts/prepublish.js",
     "postpublish": "node scripts/postpublish.js",
@@ -99,6 +100,7 @@
     "eventemitter3": "^3.1.0",
     "express": "^4.16.2",
     "get-port": "^3.2.0",
+    "glob": "^7.1.6",
     "graphql": "0.13.2",
     "karma": "^4.3.0",
     "karma-browserstack-launcher": "^1.5.1",

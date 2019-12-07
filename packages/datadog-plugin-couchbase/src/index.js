@@ -36,6 +36,8 @@ function onRequestFinish (emitter, span) {
 function createWrapMaybeInvoke (tracer) {
   return function wrapMaybeInvoke (_maybeInvoke) {
     return function maybeInvokeWithTrace (fn, args) {
+      if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
+
       const scope = tracer.scope()
       const callbackIndex = args.length - 1
       const callback = args[callbackIndex]
@@ -44,7 +46,7 @@ function createWrapMaybeInvoke (tracer) {
         args[callbackIndex] = scope.bind(callback)
       }
 
-      return scope.bind(_maybeInvoke).call(this, fn, args)
+      return scope.bind(_maybeInvoke).apply(this, arguments)
     }
   }
 }
@@ -54,13 +56,13 @@ function createWrapQuery (tracer) {
     return function queryWithTrace (q, params, callback) {
       const scope = tracer.scope()
 
-      if (params instanceof Function) {
-        params = scope.bind(params)
-      } else if (callback) {
-        callback = scope.bind(callback)
+      callback = arguments[arguments.length - 1]
+
+      if (typeof callback === 'function') {
+        arguments[arguments.length - 1] = scope.bind(callback)
       }
 
-      return scope.bind(query.call(this, q, params, callback))
+      return scope.bind(query.apply(this, arguments))
     }
   }
 }
@@ -68,8 +70,10 @@ function createWrapQuery (tracer) {
 function createWrapN1qlReq (tracer, config) {
   return function wrapN1qlReq (_n1qlReq) {
     return function n1qlReqWithTrace (host, q, adhoc, emitter) {
+      if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
+
       const scope = tracer.scope()
-      const n1qlQuery = q.statement
+      const n1qlQuery = q && q.statement
       const span = startQuerySpan(tracer, config, n1qlQuery)
 
       addBucketTag(span, this)

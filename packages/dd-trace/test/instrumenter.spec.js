@@ -76,6 +76,8 @@ describe('Instrumenter', () => {
   afterEach(() => {
     const basedir = path.resolve(path.join(__dirname, 'node_modules'))
 
+    instrumenter.disable()
+
     Object.keys(require.cache)
       .filter(name => name.indexOf(basedir) !== -1)
       .forEach(name => {
@@ -199,7 +201,7 @@ describe('Instrumenter', () => {
       })
     })
 
-    describe('patch', () => {
+    describe('enable', () => {
       it('should patch modules from node_modules when they are loaded', () => {
         instrumenter.enable()
 
@@ -264,7 +266,7 @@ describe('Instrumenter', () => {
       })
     })
 
-    describe('unpatch', () => {
+    describe('disable', () => {
       it('should unpatch patched modules', () => {
         instrumenter.enable()
 
@@ -349,6 +351,86 @@ describe('Instrumenter', () => {
         require('express-mock')
 
         expect(integrations.express.patch).to.not.have.been.called
+      })
+    })
+
+    describe('enable', () => {
+      it('should attempt to patch already loaded modules', () => {
+        const express = require('express-mock')
+
+        instrumenter.enable()
+
+        expect(integrations.express.patch).to.have.been.called
+        expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
+      })
+    })
+  })
+
+  describe('with plugins disabled via DD_TRACE_DISABLED_PLUGINS environment variable', () => {
+    beforeEach(() => {
+      process.env.DD_TRACE_DISABLED_PLUGINS = 'http,mysql-mock'
+
+      Instrumenter = proxyquire('../src/instrumenter', {
+        'shimmer': shimmer,
+        './platform': {
+          plugins: {
+            'http': integrations.http,
+            'express-mock': integrations.express,
+            'mysql-mock': integrations.mysql,
+            'other': integrations.other
+          }
+        },
+        '../../datadog-plugin-http/src': integrations.http,
+        '../../datadog-plugin-express-mock/src': integrations.express,
+        '../../datadog-plugin-mysql-mock/src': integrations.mysql,
+        '../../datadog-plugin-other/src': integrations.other
+      })
+
+      instrumenter = new Instrumenter(tracer)
+    })
+
+    afterEach(() => {
+      delete process.env.DD_TRACE_DISABLED_PLUGINS
+    })
+
+    describe('enable', () => {
+      it('should not patch plugins disabled from environnment variable configuration option', () => {
+        instrumenter.enable()
+
+        require('http')
+        require('mysql-mock')
+
+        expect(integrations.http.patch).to.not.have.been.called
+        expect(integrations.mysql[0].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.not.have.been.called
+      })
+
+      it('should patch plugins not disabled by environnment variable configuration option', () => {
+        const configDefault = {}
+        instrumenter.enable()
+
+        const express = require('express-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(process.env.DD_TRACE_DISABLED_PLUGINS.indexOf('express-mock')).to.equal(-1)
+      })
+
+      it('should not patch plugins called by .use that have been disabled by environment variable', () => {
+        const configDefault = {}
+
+        instrumenter.use('http', configDefault)
+        instrumenter.use('mysql-mock', configDefault)
+        instrumenter.use('express-mock', configDefault)
+        instrumenter.enable()
+
+        const express = require('express-mock')
+        require('http')
+        require('mysql-mock')
+
+        expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', configDefault)
+        expect(integrations.http.patch).to.not.have.been.called
+        expect(integrations.mysql[0].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.not.have.been.called
       })
     })
   })
