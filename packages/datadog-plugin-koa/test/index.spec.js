@@ -497,130 +497,129 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => agent.load(plugin, 'koa', { middleware: false }))
-        after(() => agent.close())
-
-        it('should not do automatic instrumentation on 2.x middleware', done => {
-          const app = new Koa()
-
-          app.use(function handle (ctx) {
-            ctx.body = ''
-          })
-
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans[0]).to.have.property('name', 'koa.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-
-              expect(spans[1]).to.not.have.property('name', 'koa.middleware')
-              expect(spans[1]).to.not.have.property('service', 'test')
-              expect(spans[1]).to.not.have.property('resource', 'handle')
-            })
-            .then(done)
-            .catch(done)
-
-          appListener = app.listen(port, 'localhost', () => {
-            axios
-              .get(`http://localhost:${port}/user`)
-              .catch(done)
-          })
+        beforeEach(() => {
+          agent.reset()
+          agent.load(plugin, 'koa', { middleware: false })
         })
+        describe('middleware set to false', () => {
+          it('should not do automatic instrumentation on 2.x middleware', done => {
+            const app = new Koa()
 
-        it('should do automatic instrumentation on 1.x middleware', done => {
-          const app = new Koa()
-
-          app.use(function * handle (next) {
-            this.body = ''
-            yield next
-          })
-
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans[0]).to.have.property('name', 'koa.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-
-              expect(spans[1]).to.not.have.property('name', 'koa.middleware')
-              expect(spans[1]).to.not.have.property('service', 'test')
-              expect(spans[1]).to.not.have.property('resource', 'handle')
+            app.use(function handle (ctx) {
+              ctx.body = ''
             })
-            .then(done)
-            .catch(done)
 
-          appListener = app.listen(port, 'localhost', () => {
-            axios
-              .get(`http://localhost:${port}/user`)
-              .catch(done)
-          })
-        })
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
 
-        it('should run middleware in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+                expect(spans[0]).to.have.property('name', 'koa.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
 
-          const app = new Koa()
-
-          app.use((ctx, next) => {
-            ctx.body = ''
-
-            expect(tracer.scope().active()).to.not.be.null
-
-            return next()
-              .then(() => {
-                expect(tracer.scope().active()).to.not.be.null
-                done()
+                expect(spans).to.have.length(1)
               })
+              .then(done)
               .catch(done)
-          })
 
-          appListener = app.listen(port, 'localhost', () => {
-            axios
-              .get(`http://localhost:${port}/app/user/123`)
-              .catch(done)
-          })
-        })
-
-        it('should not activate a scope per middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
-          const app = new Koa()
-
-          let span
-
-          app.use((ctx, next) => {
-            span = tracer.scope().active()
-            return tracer.scope().activate(null, () => next())
-          })
-
-          app.use(ctx => {
-            ctx.body = ''
-
-            try {
-              expect(tracer.scope().active()).to.not.be.null.and.equal(span)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-
-          getPort().then(port => {
             appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/user`)
+              axios
+                .get(`http://localhost:${port}/user`)
                 .catch(done)
+            })
+          })
+
+          it('should do automatic instrumentation on 1.x middleware', done => {
+            const app = new Koa()
+
+            app.use(function * handle (next) {
+              this.body = ''
+              yield next
+            })
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('name', 'koa.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+
+                expect(spans).to.have.length(1)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+
+          it('should run middleware in the request scope', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+            const app = new Koa()
+
+            app.use((ctx, next) => {
+              ctx.body = ''
+
+              expect(tracer.scope().active()).to.not.be.null
+
+              return next()
+                .then(() => {
+                  expect(tracer.scope().active()).to.be.null
+                  done()
+                })
+                .catch(done)
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app/user/123`)
+                .catch(done)
+            })
+          })
+
+          it('should not activate a scope per middleware', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+            const app = new Koa()
+
+            let span
+
+            app.use((ctx, next) => {
+              span = tracer.scope().active()
+              return tracer.scope().activate(null, () => next())
+            })
+
+            app.use(ctx => {
+              ctx.body = ''
+
+              try {
+                expect(tracer.scope().active()).to.not.be.null.and.equal(span)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+
+            getPort().then(port => {
+              appListener = app.listen(port, 'localhost', () => {
+                axios.get(`http://localhost:${port}/user`)
+                  .catch(done)
+              })
             })
           })
         })
