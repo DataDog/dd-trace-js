@@ -9,6 +9,8 @@ function createWrapDispatch (tracer, config) {
     return function dispatchWithTrace (options) {
       const handler = dispatch.apply(this, arguments)
 
+      if (typeof handler !== 'function') return handler
+
       return function (req, res) {
         return web.instrument(tracer, config, req, res, 'hapi.request', () => {
           return handler.apply(this, arguments)
@@ -23,8 +25,15 @@ function createWrapServer (tracer) {
     return function serverWithTrace (options) {
       const app = server.apply(this, arguments)
 
-      app.ext = createWrapExt(tracer)(app.ext)
-      app.start = createWrapStart(tracer)(app.start)
+      if (!app) return app
+
+      if (typeof app.ext === 'function') {
+        app.ext = createWrapExt(tracer)(app.ext)
+      }
+
+      if (typeof app.start === 'function') {
+        app.start = createWrapStart(tracer)(app.start)
+      }
 
       return app
     }
@@ -34,7 +43,9 @@ function createWrapServer (tracer) {
 function createWrapStart () {
   return function wrapStart (start) {
     return function startWithTrace () {
-      this.ext('onPreResponse', onPreResponse)
+      if (this && typeof this.ext === 'function') {
+        this.ext('onPreResponse', onPreResponse)
+      }
 
       return start.apply(this, arguments)
     }
@@ -61,6 +72,8 @@ function wrapExtension (method) {
 
 function wrapEvents (events) {
   return [].concat(events).map(event => {
+    if (!event || !event.method) return event
+
     return Object.assign({}, event, {
       method: wrapExtension(event.method)
     })
@@ -68,18 +81,25 @@ function wrapEvents (events) {
 }
 
 function wrapHandler (handler) {
+  if (typeof handler !== 'function') return handler
+
   return function (request, h) {
-    if (!request.raw) return handler.apply(this, arguments)
+    if (!request || !request.raw) return handler.apply(this, arguments)
 
     return web.reactivate(request.raw.req, () => handler.apply(this, arguments))
   }
 }
 
 function onPreResponse (request, h) {
+  if (!request || !request.raw) return reply(request, h)
+
   const req = request.raw.req
 
   web.addError(req, request.response)
-  web.enterRoute(req, request.route.path)
+
+  if (request.route) {
+    web.enterRoute(req, request.route.path)
+  }
 
   return reply(request, h)
 }
@@ -89,7 +109,7 @@ function reply (request, h) {
     return typeof h.continue === 'function'
       ? h.continue()
       : h.continue
-  } else {
+  } else if (typeof h === 'function') {
     return h()
   }
 }
