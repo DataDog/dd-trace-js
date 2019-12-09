@@ -5,27 +5,31 @@ const log = require('../../dd-trace/src/log')
 
 module.exports = {
   addMethodTags (span, path, kind) {
+    if (typeof path !== 'string') return
+
+    span.addTags({
+      'grpc.method.path': path,
+      'grpc.method.kind': kind
+    })
+
     const methodParts = path.split('/')
+
+    if (methodParts.length < 2) return
+
     const serviceParts = methodParts[1].split('.')
     const name = methodParts[2]
     const service = serviceParts.pop()
     const pkg = serviceParts.join('.')
-    const tags = {
+
+    span.addTags({
       'grpc.method.name': name,
       'grpc.method.service': service,
-      'grpc.method.path': path,
-      'grpc.method.kind': kind
-    }
-
-    if (pkg) {
-      tags['grpc.method.package'] = pkg
-    }
-
-    span.addTags(tags)
+      'grpc.method.package': pkg
+    })
   },
 
   addMetadataTags (span, metadata, filter, type) {
-    if (!metadata) return
+    if (!metadata || typeof metadata.getMap !== 'function') return
 
     const values = filter(metadata.getMap())
 
