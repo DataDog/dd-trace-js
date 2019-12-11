@@ -7,7 +7,6 @@ class Scope {
 
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
-    if (typeof this._activate !== 'function') return callback()
 
     try {
       return this._activate(span, callback)
@@ -38,6 +37,10 @@ class Scope {
 
   _active () {
     return null
+  }
+
+  _activate (span, callback) {
+    return callback()
   }
 
   _bindFn (fn, span) {
