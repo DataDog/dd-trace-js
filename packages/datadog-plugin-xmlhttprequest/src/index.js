@@ -23,7 +23,7 @@ function createWrapSend (tracer, config) {
       const scope = tracer.scope()
       const childOf = scope.active()
       const type = isFlush(tracer._url.href, url) ? REFERENCE_NOOP : REFERENCE_CHILD_OF
-      const span = tracer.startSpan('http.request', {
+      const span = tracer.startSpan('browser.request', {
         references: [
           new Reference(type, childOf)
         ],
