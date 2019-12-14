@@ -7,8 +7,7 @@ const base = {
   },
   module: {
     noParse: [
-      /node_modules\/zone\.js/,
-      /node_modules\/bowser/
+      /node_modules\/zone\.js/
     ],
     rules: [{
       loader: 'babel-loader'
