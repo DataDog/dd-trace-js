@@ -44,7 +44,7 @@ tracer.init({
   experimental: {
     b3: true,
     exporter: 'log',
-    peers: ['foo'],
+    peers: ['foo', /bar/],
     sampler: {
       sampleRate: 1,
       rateLimit: 1000,

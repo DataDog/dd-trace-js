@@ -2,6 +2,7 @@
 
 const { Reference, REFERENCE_CHILD_OF } = require('opentracing')
 const { REFERENCE_NOOP } = require('../../dd-trace/src/constants')
+const tx = require('../../dd-trace/src/plugins/util/http')
 
 function createWrapOpen (tracer) {
   return function wrapOpen (open) {
@@ -66,7 +67,7 @@ function inject (xhr, tracer, span) {
   const origin = xhr._datadog_url.origin
   const peers = tracer._peers
 
-  if (origin !== window.location.origin && peers.indexOf(origin) === -1) return
+  if (origin !== window.location.origin && !tx.isPeer(origin, peers)) return
 
   tracer.inject(span, format, headers)
 

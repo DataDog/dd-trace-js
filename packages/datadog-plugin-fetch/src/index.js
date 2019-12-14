@@ -2,7 +2,7 @@
 
 const { Reference, REFERENCE_CHILD_OF } = require('opentracing')
 const { REFERENCE_NOOP } = require('../../dd-trace/src/constants')
-const tx = require('../../dd-trace/src/plugins/util/tx')
+const tx = require('../../dd-trace/src/plugins/util/http')
 
 function createWrapFetch (tracer, config) {
   return function wrapFetch (fetch) {
@@ -76,7 +76,7 @@ function inject (init, tracer, span, origin) {
   const format = window.ddtrace.ext.formats.HTTP_HEADERS
   const peers = tracer._peers
 
-  if (origin !== window.location.origin && peers.indexOf(origin) === -1) {
+  if (origin !== window.location.origin && !tx.isPeer(origin, peers)) {
     return init
   }
 
