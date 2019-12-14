@@ -38,8 +38,6 @@ const web = {
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
 
-    console.log('middleware normalized to, ', middleware)
-
     return Object.assign({}, config, {
       headers,
       validateStatus,

@@ -497,10 +497,9 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
-          agent.reset()
-          agent.load(plugin, 'koa', { middleware: false })
-        })
+        before(() => agent.load(plugin, 'koa', { middleware: false }))
+        after(() => agent.close())
+
         describe('middleware set to false', () => {
           it('should not do automatic instrumentation on 2.x middleware', done => {
             const app = new Koa()
@@ -534,7 +533,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should do automatic instrumentation on 1.x middleware', done => {
+          it('should not do automatic instrumentation on 1.x middleware', done => {
             const app = new Koa()
 
             app.use(function * handle (next) {
@@ -567,7 +566,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should run middleware in the request scope', done => {
+          it('should not run middleware in the request scope', done => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
             const app = new Koa()
@@ -575,7 +574,7 @@ describe('Plugin', () => {
             app.use((ctx, next) => {
               ctx.body = ''
 
-              expect(tracer.scope().active()).to.not.be.null
+              expect(tracer.scope().active()).to.be.null
 
               return next()
                 .then(() => {
@@ -608,7 +607,7 @@ describe('Plugin', () => {
               ctx.body = ''
 
               try {
-                expect(tracer.scope().active()).to.not.be.null.and.equal(span)
+                expect(tracer.scope().active()).to.be.null.and.not.equal(span)
                 done()
               } catch (e) {
                 done(e)
@@ -619,6 +618,201 @@ describe('Plugin', () => {
               appListener = app.listen(port, 'localhost', () => {
                 axios.get(`http://localhost:${port}/user`)
                   .catch(done)
+              })
+            })
+          })
+
+          withVersions(plugin, 'koa-router', routerVersion => {
+            let Router
+
+            beforeEach(() => {
+              Router = require(`../../../versions/koa-router@${routerVersion}`).get()
+            })
+
+            it('should do automatic instrumentation on routers', done => {
+              const app = new Koa()
+              const router = new Router()
+
+              router.get('user', '/user/:id', function handle (ctx, next) {
+                ctx.body = ''
+              })
+
+              app
+                .use(router.routes())
+                .use(router.allowedMethods())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans).to.have.length(1)
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', (e) => {
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(done)
+              })
+            })
+
+            it('should not lose the route if next() is called', done => {
+              const app = new Koa()
+              const router = new Router()
+
+              router.get('/user/:id', (ctx, next) => {
+                ctx.body = ''
+                return next()
+              })
+
+              app
+                .use(router.routes())
+                .use(router.allowedMethods())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', (e) => {
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(done)
+              })
+            })
+
+            it('should support nested routers', done => {
+              const app = new Koa()
+              const forums = new Router()
+              const posts = new Router()
+
+              posts.get('/:pid', (ctx, next) => {
+                ctx.body = ''
+              })
+
+              forums.use('/forums/:fid/posts', posts.routes(), posts.allowedMethods())
+
+              app.use(forums.routes())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/forums/123/posts/456`)
+                  .catch(done)
+              })
+            })
+
+            it('should only match the current HTTP method', done => {
+              const app = new Koa()
+              const forums = new Router()
+              const posts = new Router()
+
+              posts.get('/:pid', (ctx, next) => {
+                ctx.body = ''
+              })
+              posts.post('/:pid', (ctx, next) => {
+                ctx.body = ''
+              })
+
+              forums.use('/forums/:fid/posts', posts.routes(), posts.allowedMethods())
+
+              app.use(forums.routes())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/forums/123/posts/456`)
+                  .catch(done)
+              })
+            })
+
+            it('should support a router prefix', done => {
+              const app = new Koa()
+              const router = new Router({
+                prefix: '/user'
+              })
+
+              router.get('/:id', (ctx, next) => {
+                ctx.body = ''
+              })
+
+              app
+                .use(router.routes())
+                .use(router.allowedMethods())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(done)
+              })
+            })
+
+            it('should handle request errors', done => {
+              const error = new Error('boom')
+              const app = new Koa()
+              const router = new Router({
+                prefix: '/user'
+              })
+
+              router.get('/:id', (ctx, next) => {
+                throw error
+              })
+
+              app.silent = true
+              app
+                .use(router.routes())
+                .use(router.allowedMethods())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  expect(spans[0].error).to.equal(1)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(() => {})
               })
             })
           })

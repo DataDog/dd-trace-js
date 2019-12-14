@@ -488,14 +488,21 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
-          agent.reset()
+        before(() => {
           return agent.load(plugin, 'connect', {
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent'],
             middleware: false
           })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          connect = require(`../../../versions/connect@${version}`).get()
         })
 
         describe('with middleware disabled', () => {
@@ -592,7 +599,7 @@ describe('Plugin', () => {
                 .use(traces => {
                   const spans = sort(traces[0])
 
-                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('service', 'custom')
                   expect(spans[0]).to.have.property('type', 'web')
                   expect(spans[0]).to.have.property('resource', 'GET /user')
                   expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -623,14 +630,8 @@ describe('Plugin', () => {
                   const spans = sort(traces[0])
 
                   expect(spans).to.have.length(1)
-
                   expect(spans[0]).to.have.property('resource', 'GET /app/user')
                   expect(spans[0]).to.have.property('name', 'connect.request')
-                  expect(spans[1]).to.not.have.property('resource', 'named')
-                  expect(spans[1]).to.not.have.property('name', 'connect.middleware')
-                  expect(spans[1]).to.not.have.property('parent_id', spans[0].trace_id.toString())
-                  expect(spans[2]).to.not.have.property('resource', '<anonymous>')
-                  expect(spans[2]).to.not.have.property('name', 'connect.middleware')
                 })
                 .then(done)
                 .catch(done)
@@ -642,7 +643,7 @@ describe('Plugin', () => {
               })
             })
           })
-    
+
           it('should not activate a scope per middleware', done => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
@@ -657,11 +658,10 @@ describe('Plugin', () => {
             })
 
             app.use('/user', (req, res) => {
-              expect(tracer.scope().active()).to.not.be.null.and.equal(span)
               res.end()
 
               try {
-                expect(tracer.scope().active()).to.be.null
+                expect(tracer.scope().active()).to.be.null.and.not.equal(span)
                 done()
               } catch (e) {
                 done(e)
@@ -676,15 +676,11 @@ describe('Plugin', () => {
             })
           })
 
-          it('should handle middleware errors', done => {
+          it('should handle request errors', done => {
             const app = connect()
             const error = new Error('boom')
 
-            app.use((req, res) => { throw error })
-            app.use((error, req, res, next) => {
-              res.statusCode = 500
-              res.end()
-            })
+            app.use(() => { throw error })
 
             getPort().then(port => {
               agent
@@ -692,9 +688,7 @@ describe('Plugin', () => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property('error.type', error.name)
-                  expect(spans[0].meta).to.have.property('error.msg', error.message)
-                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                  expect(spans[0].meta).to.have.property('http.status_code', '500')
                 })
                 .then(done)
                 .catch(done)
