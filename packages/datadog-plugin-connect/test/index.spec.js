@@ -676,6 +676,39 @@ describe('Plugin', () => {
             })
           })
 
+          it('should handle middleware errors', done => {
+            const app = connect()
+            const error = new Error('boom')
+
+            app.use((req, res) => { throw error })
+            app.use((error, req, res, next) => {
+              res.statusCode = 500
+              res.end()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('error', 1)
+                  expect(spans[0].meta).to.have.property('error.type', error.name)
+                  expect(spans[0].meta).to.have.property('error.msg', error.message)
+                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = http.createServer(app).listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user`, {
+                    validateStatus: status => status === 500
+                  })
+                  .catch(done)
+              })
+            })
+          })
+
           it('should handle request errors', done => {
             const app = connect()
             const error = new Error('boom')

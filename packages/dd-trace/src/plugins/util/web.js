@@ -91,7 +91,7 @@ const web = {
   wrapMiddleware (req, middleware, config, name, fn) {
     if (!this.active(req)) return fn()
 
-    if (config && config.middleware === false) return fn()
+    if (config && config.middleware === false) return this.wrapMiddlewareErrors(fn, req)
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)
@@ -104,6 +104,24 @@ const web = {
     req._datadog.middleware.push(span)
 
     return tracer.scope().activate(span, fn)
+  },
+
+  // catch errors and apply to active span
+  wrapMiddlewareErrors (fn, req) {
+    try {
+      return fn()
+    } catch (e) {
+      const activeSpan = this.active(req)
+      if (activeSpan) {
+        activeSpan.addTags({
+          'error.type': e.name,
+          'error.msg': e.message,
+          'error.stack': e.stack
+        })
+      }
+
+      throw (e)
+    }
   },
 
   // Finish the active middleware span.
