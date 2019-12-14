@@ -1018,7 +1018,7 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send()
             try {
-              expect(tracer.scope().active()).to.be.null.and.not.equal(span)
+              expect(tracer.scope().active()).to.be.null.and.equal(span)
               done()
             } catch (e) {
               done(e)
