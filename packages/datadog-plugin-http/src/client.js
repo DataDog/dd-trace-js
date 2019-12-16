@@ -28,7 +28,15 @@ function patch (http, methodName, tracer, config) {
 
   function makeRequestTrace (request) {
     return function requestTrace () {
-      const args = normalizeArgs.apply(null, arguments)
+      let args
+
+      try {
+        args = normalizeArgs.apply(null, arguments)
+      } catch (e) {
+        log.error(e)
+        return request.apply(this, arguments)
+      }
+
       const uri = args.uri
       const options = args.options
 
