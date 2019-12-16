@@ -65,6 +65,10 @@ function createWrapCreateServer (tracer, config) {
 }
 
 function instrumentStream (tracer, config, stream, headers, name, callback) {
+  if (!stream) return callback()
+
+  headers = headers || {}
+
   web.patch(stream)
 
   const span = startStreamSpan(tracer, config, stream, headers, name)
@@ -140,6 +144,8 @@ function addRequestTags (stream, headers) {
 }
 
 function addRequestHeaders (stream, headers) {
+  if (!headers) return
+
   const span = stream._datadog.span
 
   stream._datadog.config.headers.forEach(key => {
@@ -164,10 +170,12 @@ function addResponseTags (stream) {
 }
 
 function addResponseHeaders (stream) {
+  if (!stream.sentHeaders) return
+
   const span = stream._datadog.span
 
   stream._datadog.config.headers.forEach(key => {
-    const resHeader = stream.sentHeaders[key]
+    const resHeader = stream.sentHeaders && stream.sentHeaders[key]
 
     if (resHeader) {
       span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
