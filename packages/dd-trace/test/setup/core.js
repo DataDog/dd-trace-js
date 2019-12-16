@@ -32,6 +32,7 @@ afterEach(() => {
 
 function wrapIt () {
   const it = global.it
+  const only = global.it.only
 
   global.it = function (title, fn) {
     if (!fn) return it.apply(this, arguments)
@@ -50,6 +51,26 @@ function wrapIt () {
       return it.call(this, title, fn)
     }
   }
+
+  global.it.only = function (title, fn) {
+    if (!fn) return only.apply(this, arguments)
+
+    const length = fn.length
+
+    fn = asyncHooksScope.bind(fn, null)
+
+    if (length > 0) {
+      return only.call(this, title, function (done) {
+        done = asyncHooksScope.bind(done, null)
+
+        return fn.call(this, done)
+      })
+    } else {
+      return only.call(this, title, fn)
+    }
+  }
+
+  global.it.skip = it.skip
 }
 
 function withVersions (plugin, modules, range, cb) {
