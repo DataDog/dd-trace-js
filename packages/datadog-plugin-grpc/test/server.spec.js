@@ -77,9 +77,9 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.package', 'test')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getUnary')
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.unary)
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('component', 'grpc')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
             .then(done)
             .catch(done)
@@ -103,8 +103,8 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getServerStream')
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.server_stream)
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
             .then(done)
             .catch(done)
@@ -128,8 +128,8 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/get_Bidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.bidi)
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
             .then(done)
             .catch(done)
@@ -145,7 +145,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '1')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
             .then(done)
             .catch(done)
@@ -161,7 +161,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '1')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
             .then(done)
             .catch(done)
@@ -177,7 +177,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '1')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
             .then(done)
             .catch(done)
@@ -230,7 +230,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('error.msg', 'foobar')
               expect(traces[0][0].meta['error.stack']).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
               expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '5')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
             })
             .then(done)
             .catch(done)
@@ -256,7 +256,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('error.msg', 'foobar')
               expect(traces[0][0].meta['error.stack']).to.equal(error.stack)
               expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '5')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
             })
             .then(done)
             .catch(done)
