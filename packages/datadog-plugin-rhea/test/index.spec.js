@@ -130,9 +130,19 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
-          it('should use the configuration', (done) => {
+          it('should use the configuration for the receiver', (done) => {
             agent.use(traces => {
               const span = traces[0][0]
+              expect(span).to.have.property('name', 'amqp.receive')
+              expect(span).to.have.property('service', 'a_test_service')
+            })
+              .then(done, done)
+            context.sender.send({ body: 'Hello World!' })
+          })
+          it('should use the configuration for the sender', (done) => {
+            agent.use(traces => {
+              const span = traces[0][0]
+              expect(span).to.have.property('name', 'amqp.send')
               expect(span).to.have.property('service', 'a_test_service')
             })
               .then(done, done)
