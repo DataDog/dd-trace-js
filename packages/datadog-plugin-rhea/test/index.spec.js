@@ -173,7 +173,7 @@ describe('Plugin', () => {
           }
         })
 
-        describe('defaults', () => {
+        describe('with defaults', () => {
           beforeEach(() => agent.load(plugin, 'rhea'))
 
           beforeEach(done => {
@@ -202,7 +202,7 @@ describe('Plugin', () => {
           })
 
           describe('client sent message', () => {
-            it('receiving', done => {
+            it('should be instrumented on receiving', done => {
               const p = expectReceiving(agent)
 
               server.on('message', msg => {
@@ -211,7 +211,7 @@ describe('Plugin', () => {
               clientContext.sender.send({ body: 'hello' })
             })
 
-            it('sending', done => {
+            it('should be instrumented on sending', done => {
               const p = expectSending(agent, null, 'amq.topic.2')
 
               server.on('message', msg => {
@@ -222,7 +222,7 @@ describe('Plugin', () => {
           })
 
           describe('server sent message', () => {
-            it('receiving', done => {
+            it('should be instrumented on receiving', done => {
               const p = expectReceiving(agent, null, 'amq.topic.2')
 
               client.on('message', msg => {
@@ -231,7 +231,7 @@ describe('Plugin', () => {
               serverContext.sender.send({ body: 'hello' })
             })
 
-            it('sending', done => {
+            it('should be instrumented on sending', done => {
               const p = expectSending(agent)
 
               client.on('message', msg => {
@@ -241,7 +241,7 @@ describe('Plugin', () => {
             })
 
             describe('exception in message handler', () => {
-              it('span should have error', (done) => {
+              it('should produce an error in span metadata', (done) => {
                 const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
                 const onTransfer = Session.prototype.on_transfer
                 const error = new Error('this is an error')
@@ -274,7 +274,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('pre-settled', () => {
+        describe('with pre-settled messages', () => {
           beforeEach(() => agent.load(plugin, 'rhea'))
 
           beforeEach(done => {
@@ -303,7 +303,7 @@ describe('Plugin', () => {
           })
 
           describe('client sent message', () => {
-            it('sending', done => {
+            it('should be instrumented on sending', done => {
               const p = expectSending(agent, 'accepted')
 
               server.on('message', msg => {
@@ -312,7 +312,7 @@ describe('Plugin', () => {
               clientContext.sender.send({ body: 'hello' })
             })
 
-            it('receiving', done => {
+            it('should be instrumented on receiving', done => {
               const p = expectReceiving(agent)
 
               server.on('message', msg => {
@@ -323,7 +323,7 @@ describe('Plugin', () => {
           })
 
           describe('server sent message', () => {
-            it('sending', done => {
+            it('should be instrumented on sending', done => {
               const p = expectSending(agent)
 
               client.on('message', msg => {
@@ -332,7 +332,7 @@ describe('Plugin', () => {
               serverContext.sender.send({ body: 'hello' })
             })
 
-            it('receiving', done => {
+            it('should be instrumented on receiving', done => {
               const p = expectReceiving(agent)
 
               client.on('message', msg => {
@@ -343,7 +343,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('manually settled', () => {
+        describe('with manually settled messages', () => {
           beforeEach(() => agent.load(plugin, 'rhea'))
 
           beforeEach(done => {
@@ -364,7 +364,7 @@ describe('Plugin', () => {
           })
 
           describe('server sent message', () => {
-            it('sending', done => {
+            it('should be instrumented on sending', done => {
               const p = expectSending(agent)
 
               client.on('message', msg => {
@@ -374,7 +374,7 @@ describe('Plugin', () => {
               serverContext.sender.send({ body: 'hello' })
             })
 
-            it('receiving accepting', done => {
+            it('should be instrumented on receiving and accepting', done => {
               const p = expectReceiving(agent)
 
               client.on('message', msg => {
@@ -386,7 +386,7 @@ describe('Plugin', () => {
               serverContext.sender.send({ body: 'hello' })
             })
 
-            it('receiving rejecting', done => {
+            it('should be instrumented on receiving and rejecting', done => {
               const p = expectReceiving(agent, 'rejected')
 
               client.on('message', msg => {
@@ -398,7 +398,7 @@ describe('Plugin', () => {
               serverContext.sender.send({ body: 'hello' })
             })
 
-            it('receiving releasing', done => {
+            it('should be instrumented on receiving and releasing', done => {
               const p = expectReceiving(agent, 'released')
 
               client.on('message', msg => {
@@ -410,7 +410,7 @@ describe('Plugin', () => {
               serverContext.sender.send({ body: 'hello' })
             })
 
-            it('receiving modified', done => {
+            it('should be instrumented on receiving and modifying', done => {
               const p = expectReceiving(agent, 'modified')
 
               client.on('message', msg => {
@@ -424,7 +424,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('disconnect', () => {
+        describe('on disconnect', () => {
           beforeEach(() => agent.load(plugin, 'rhea'))
 
           beforeEach(done => {
@@ -451,7 +451,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('sender span gets closed', (done) => {
+          it('sender span should get closed', (done) => {
             const err = new Error('fake protocol error')
             agent.use(traces => {
               const span = traces[0][0]
@@ -479,7 +479,7 @@ describe('Plugin', () => {
             clientContext.sender.send({ body: 'hello' })
           })
 
-          it('receiver span gets closed', (done) => {
+          it('receiver span should closed', (done) => {
             const err = new Error('fake protocol error')
             agent.use(traces => {
               const span = traces[0][0]
