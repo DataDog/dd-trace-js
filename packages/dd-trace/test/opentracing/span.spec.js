@@ -87,7 +87,7 @@ describe('Span', () => {
   })
 
   it('should set the sample rate metric from the sampler', () => {
-    expect(span.context()._metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
+    expect(span.context()._tags).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
   it('should keep track of its memory lifecycle', () => {

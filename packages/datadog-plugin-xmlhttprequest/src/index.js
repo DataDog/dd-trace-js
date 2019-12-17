@@ -38,7 +38,7 @@ function createWrapSend (tracer, config) {
       })
 
       // HACK: move to backend
-      span.context()._metrics._top_level = 1
+      span.setTag('_top_level', 1)
 
       if (type === REFERENCE_CHILD_OF) {
         inject(this, tracer, span)

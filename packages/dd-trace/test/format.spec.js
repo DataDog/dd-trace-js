@@ -119,16 +119,24 @@ describe('format', () => {
       expect(trace.meta['foo.bar']).to.equal('foobar')
     })
 
-    it('should extract metrics', () => {
-      spanContext._metrics = { metric: 50 }
+    it('should extract numeric tags as metrics', () => {
+      spanContext._tags = { metric: 50 }
 
       trace = format(span)
 
       expect(trace.metrics).to.have.property('metric', 50)
     })
 
-    it('should ignore metrics with invalid values', () => {
+    it('should ignore metrics with invalid type', () => {
       spanContext._metrics = { metric: 'test' }
+
+      trace = format(span)
+
+      expect(trace.metrics).to.not.have.property('metric')
+    })
+
+    it('should ignore metrics that are not a number', () => {
+      spanContext._metrics = { metric: NaN }
 
       trace = format(span)
 
@@ -317,17 +325,17 @@ describe('format', () => {
             C: {
               D: {
                 E: {
-                  num: 6
+                  num: '6'
                 },
-                num: 5
+                num: '5'
               },
-              num: 4
+              num: '4'
             },
-            num: 3
+            num: '3'
           },
-          num: 2
+          num: '2'
         },
-        num: 1
+        num: '1'
       }
 
       tag.A.B.C.D.E.self = tag.A.B

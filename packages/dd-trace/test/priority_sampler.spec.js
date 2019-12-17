@@ -22,7 +22,6 @@ describe('PrioritySampler', () => {
   beforeEach(() => {
     context = {
       _tags: {},
-      _metrics: {},
       _sampling: {}
     }
 
@@ -263,7 +262,7 @@ describe('PrioritySampler', () => {
     it('should add metrics for agent sample rate', () => {
       prioritySampler.sample(span)
 
-      expect(context._metrics).to.have.property('_dd.agent_psr', 1)
+      expect(context._tags).to.have.property('_dd.agent_psr', 1)
     })
 
     it('should add metrics for rule sample rate', () => {
@@ -272,8 +271,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(context._metrics).to.have.property('_dd.rule_psr', 0)
-      expect(context._metrics).to.not.have.property('_dd.limit_psr')
+      expect(context._tags).to.have.property('_dd.rule_psr', 0)
+      expect(context._tags).to.not.have.property('_dd.limit_psr')
     })
 
     it('should add metrics for rate limiter sample rate', () => {
@@ -283,8 +282,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(context._metrics).to.have.property('_dd.rule_psr', 0.5)
-      expect(context._metrics).to.have.property('_dd.limit_psr', 1)
+      expect(context._tags).to.have.property('_dd.rule_psr', 0.5)
+      expect(context._tags).to.have.property('_dd.limit_psr', 1)
     })
   })
 

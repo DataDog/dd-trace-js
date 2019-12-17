@@ -54,7 +54,6 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('started', [])
     expect(trace).to.have.deep.property('finished', [])
     expect(span.context()).to.have.deep.property('_tags', {})
-    expect(span.context()).to.have.deep.property('_metrics', {})
   })
 
   it('should skip traces with unfinished spans', () => {
