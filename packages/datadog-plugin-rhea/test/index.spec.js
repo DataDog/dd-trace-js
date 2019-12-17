@@ -50,10 +50,10 @@ describe('Plugin', () => {
               agent.use(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
-                  name: 'rhea.sender.send',
+                  name: 'amqp.send',
                   resource: 'amq.topic',
                   error: 0,
-                  service: 'test-amqp'
+                  service: 'test-amqp-producer'
                 })
                 expect(span.meta).to.include({
                   'span.kind': 'producer',
@@ -82,10 +82,10 @@ describe('Plugin', () => {
               agent.use(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
-                  name: 'rhea.receiver.onmessage',
+                  name: 'amqp.receive',
                   resource: 'amq.topic',
                   error: 0,
-                  service: 'test-amqp'
+                  service: 'test'
                 })
                 expect(span.meta).to.include({
                   'span.kind': 'consumer',
@@ -103,37 +103,6 @@ describe('Plugin', () => {
                 expect(span._spanContext._parentId).to.not.be.null
                 done()
               })
-              context.sender.send({ body: 'Hello World!' })
-            })
-          })
-
-          describe('exception in message handler', () => {
-            it('span should have error', (done) => {
-              const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
-              const on_transfer = Session.prototype.on_transfer // eslint-disable-line camelcase
-              Session.prototype.on_transfer = function on_transfer_wrapped () { // eslint-disable-line camelcase
-                try {
-                  return on_transfer.apply(this, arguments)
-                } catch (e) {
-                  // this is just to prevent mocha from crashing
-                }
-              }
-
-              container.on('message', () => {
-                throw new Error('this is an error')
-              })
-
-              agent.use(traces => {
-                const span = traces[0][0]
-                expect(span.error).to.equal(1)
-                expect(span.meta).to.include({
-                  'error.msg': 'this is an error',
-                  'error.type': 'Error'
-                })
-                expect(span.meta['error.stack'].startsWith('Error: this is an error\n    at')).to.be.true
-                Session.prototype.on_transfer = on_transfer // eslint-disable-line camelcase
-              }).then(done, done)
-
               context.sender.send({ body: 'Hello World!' })
             })
           })
@@ -260,6 +229,38 @@ describe('Plugin', () => {
               })
               serverContext.sender.send({ body: 'hello' })
             })
+
+            describe('exception in message handler', () => {
+              it('span should have error', (done) => {
+                const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
+                const onTransfer = Session.prototype.on_transfer
+                const error = new Error('this is an error')
+                Session.prototype.on_transfer = function onTransferWrapped () {
+                  try {
+                    return onTransfer.apply(this, arguments)
+                  } catch (e) {
+                    // this is just to prevent mocha from crashing
+                  }
+                }
+
+                client.on('message', () => {
+                  throw error
+                })
+
+                agent.use(traces => {
+                  const span = traces[0][0]
+                  expect(span.error).to.equal(1)
+                  expect(span.meta).to.include({
+                    'error.msg': 'this is an error',
+                    'error.type': 'Error',
+                    'error.stack': error.stack
+                  })
+                  Session.prototype.on_transfer = onTransfer
+                }).then(done, done)
+
+                serverContext.sender.send({ body: 'Hello World!' })
+              })
+            })
           })
         })
 
@@ -293,7 +294,7 @@ describe('Plugin', () => {
 
           describe('client sent message', () => {
             it('sending', done => {
-              const p = expectSending(agent, 'pre')
+              const p = expectSending(agent, 'accepted')
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -413,7 +414,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('disconnect receiver side', () => {
+        describe('disconnect', () => {
           beforeEach(() => agent.load(plugin, 'rhea'))
 
           beforeEach(done => {
@@ -442,14 +443,13 @@ describe('Plugin', () => {
 
           it('sender span gets closed', (done) => {
             const err = new Error('fake protocol error')
-            err.stack = 'a short, fake stack' // to not pollute test logs
             agent.use(traces => {
               const span = traces[0][0]
               expect(span).to.include({
-                name: 'rhea.sender.send',
+                name: 'amqp.send',
                 resource: 'amq.topic',
                 error: 1,
-                service: 'test-amqp'
+                service: 'test-amqp-producer'
               })
               expect(span.meta).to.include({
                 'span.kind': 'producer',
@@ -461,6 +461,7 @@ describe('Plugin', () => {
               })
             }).then(done, done)
             connection.output = function () {
+              this.on('disconnected', () => {}) // prevent logging the error
               this.saved_error = err
               this.dispatch('protocol_error', err)
               this.socket.end()
@@ -470,14 +471,13 @@ describe('Plugin', () => {
 
           it('receiver span gets closed', (done) => {
             const err = new Error('fake protocol error')
-            err.stack = 'a short, fake stack' // to not pollute test logs
             agent.use(traces => {
               const span = traces[0][0]
               expect(span).to.include({
-                name: 'rhea.receiver.onmessage',
+                name: 'amqp.receive',
                 resource: 'amq.topic',
                 error: 1,
-                service: 'test-amqp'
+                service: 'test'
               })
               expect(span.meta).to.include({
                 'span.kind': 'consumer',
@@ -489,6 +489,7 @@ describe('Plugin', () => {
               })
             }).then(done, done)
             client.on('message', msg => {
+              connection.on('disconnected', () => {}) // prevent logging the error
               connection.saved_error = err
               connection.dispatch('protocol_error', err)
               connection.socket.end()
@@ -507,10 +508,10 @@ function expectReceiving (agent, deliveryState, topic) {
   return agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
-      name: 'rhea.receiver.onmessage',
+      name: 'amqp.receive',
       resource: topic,
       error: 0,
-      service: 'test-amqp'
+      service: 'test'
     })
     expect(span.meta).to.include({
       'span.kind': 'consumer',
@@ -527,18 +528,16 @@ function expectSending (agent, deliveryState, topic) {
   return agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
-      name: 'rhea.sender.send',
+      name: 'amqp.send',
       resource: topic,
       error: 0,
-      service: 'test-amqp'
+      service: 'test-amqp-producer'
     })
     expect(span.meta).to.include({
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
-      'amqp.link.role': 'sender'
+      'amqp.link.role': 'sender',
+      'amqp.delivery.state': deliveryState
     })
-    if (deliveryState !== 'pre') {
-      expect(span.meta['amqp.delivery.state']).to.equal('accepted')
-    }
   })
 }

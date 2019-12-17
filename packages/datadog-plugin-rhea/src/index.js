@@ -1,25 +1,56 @@
+'use strict'
+
+let CircularBuffer
+let popIf
+
+function patchCircularBuffer (CircularBuffer) {
+  popIf = CircularBuffer.prototype.pop_if
+  CircularBuffer.prototype.pop_if = function (fn) {
+    const wrappedFn = entry => {
+      const shouldPop = fn(entry)
+      if (shouldPop && entry._dd) {
+        const state = entry.remote_state ? entry.remote_state.constructor.composite_type : 'accepted'
+        finish(entry, state)
+      }
+      return shouldPop
+    }
+    return popIf.call(this, wrappedFn)
+  }
+}
+
 function createWrapSend (tracer, config) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, tag, format) {
-      const name = this.options.target && this.options.target.address
+      const name = this.options && this.options.target && this.options.target.address
         ? this.options.target.address : 'amq.topic'
-      return tracer.trace('rhea.sender.send', { tags: {
-        'resource.name': name,
-        'service.name': config.service || `${tracer._service}-amqp`,
-        'span.kind': 'producer',
-        'amqp.link.target.address': name,
-        'amqp.link.role': 'sender',
-        'out.host': this.connection.options.host,
-        'out.port': this.connection.options.port
-      } }, (span, done) => {
-        msg.delivery_annotations = msg.delivery_annotations || {}
-        tracer.inject(span, 'text_map', msg.delivery_annotations)
-        const delivery = send.apply(this, arguments)
-        if (this.options.snd_settle_mode !== 1) {
-          delivery._dd = { done, span }
-        } else {
-          done()
+      let host
+      let port
+      if (this.connection && this.connection.options) {
+        if (this.connection.options.host !== undefined) { host = this.connection.options.host }
+        if (this.connection.options.port !== undefined) { port = this.connection.options.port }
+      }
+      if (!CircularBuffer && this.session && this.session.outgoing && this.session.outgoing.deliveries) {
+        CircularBuffer = this.session.outgoing.deliveries.constructor
+        patchCircularBuffer(CircularBuffer)
+      }
+      return tracer.trace('amqp.send', {
+        tags: {
+          'component': 'rhea',
+          'resource.name': name,
+          'service.name': config.service || `${tracer._service}-amqp-producer`,
+          'span.kind': 'producer',
+          'amqp.link.target.address': name,
+          'amqp.link.role': 'sender',
+          'out.host': host,
+          'out.port': port
         }
+      }, (span, done) => {
+        if (msg) {
+          msg.delivery_annotations = msg.delivery_annotations || {}
+          tracer.inject(span, 'text_map', msg.delivery_annotations)
+        }
+        const delivery = send.apply(this, arguments)
+        delivery._dd = { done, span }
         return delivery
       })
     }
@@ -27,41 +58,29 @@ function createWrapSend (tracer, config) {
 }
 
 function createWrapConnectionDispatch (tracer, config) {
-  return function wrapDispatch (dispatch) {
-    return function dispatchWithTrace (eventName, obj) {
-      if (eventName === 'disconnected') {
-        for (const key in this.local_channel_map) {
-          const session = this.local_channel_map[key]
-          const addTags = entry => {
-            if (entry && entry._dd) {
-              const { span, done } = entry._dd
-              const error = obj.error || this.saved_error
-              if (error) {
-                span.addTags({
-                  'error.type': error.name,
-                  'error.msg': error.message,
-                  'error.stack': error.stack
-                })
-              }
-              done()
-            }
-          }
-          session.incoming.deliveries.entries.forEach(addTags)
-          session.outgoing.deliveries.entries.forEach(addTags)
-        }
+  function addTags (entry, error) {
+    if (entry && entry._dd) {
+      const { span, done } = entry._dd
+      if (error) {
+        span.addTags({ error })
       }
-      return dispatch.apply(this, arguments)
+      done()
+      delete entry._dd
     }
   }
-}
-
-function createWrapSenderDispatch (tracer, config) {
   return function wrapDispatch (dispatch) {
     return function dispatchWithTrace (eventName, obj) {
-      if (eventName === 'settled') {
-        const state = obj.delivery.remote_state.constructor.composite_type
-        obj.delivery._dd.span.setTag('amqp.delivery.state', state)
-        obj.delivery._dd.done()
+      if (eventName === 'disconnected' && this.local_channel_map) {
+        const error = obj.error || this.saved_error
+        for (const key in this.local_channel_map) {
+          const session = this.local_channel_map[key]
+          if (session && session.incoming && session.incoming.deliveries && session.incoming.deliveries.entries) {
+            for (const entry of session.incoming.deliveries.entries) { addTags(entry, error) }
+          }
+          if (session && session.outgoing && session.outgoing.deliveries && session.outgoing.deliveries.entries) {
+            for (const entry of session.outgoing.deliveries.entries) { addTags(entry, error) }
+          }
+        }
       }
       return dispatch.apply(this, arguments)
     }
@@ -76,10 +95,11 @@ function createWrapReceiverDispatch (tracer, config) {
           ? msgObj.receiver.options.source.address : 'amq.topic'
 
         const childOf = tracer.extract('text_map', msgObj.message.delivery_annotations)
-        return tracer.trace('rhea.receiver.onmessage', {
+        return tracer.trace('amqp.receive', {
           tags: {
+            'component': 'rhea',
             'resource.name': name,
-            'service.name': config.service || `${tracer._service}-amqp`,
+            'service.name': config.service || tracer._service,
             'span.kind': 'consumer',
             'amqp.link.source.address': name,
             'amqp.link.role': 'receiver'
@@ -87,18 +107,16 @@ function createWrapReceiverDispatch (tracer, config) {
           childOf
         }, (span, done) => {
           msgObj.delivery._dd = { done, span }
-          wrapDeliveryMethod('accept', 'accepted', msgObj.delivery)
-          wrapDeliveryMethod('release', 'released', msgObj.delivery)
-          wrapDeliveryMethod('reject', 'rejected', msgObj.delivery)
-          wrapDeliveryMethod('modified', 'modified', msgObj.delivery)
-          if (!this.get_option('autoaccept', true)) {
-            return dispatch.apply(this, arguments)
-          } else {
+          wrapDeliveryUpdate(msgObj.delivery)
+          let dispatched
+          if (this.get_option('autoaccept', true)) {
             span.setTag('amqp.delivery.state', 'accepted')
-            const d = dispatch.apply(this, arguments)
+            dispatched = dispatch.apply(this, arguments)
             done()
-            return d
+          } else {
+            dispatched = dispatch.apply(this, arguments)
           }
+          return dispatched
         })
       }
 
@@ -107,12 +125,33 @@ function createWrapReceiverDispatch (tracer, config) {
   }
 }
 
-function wrapDeliveryMethod (name, stateName, delivery) {
-  const method = delivery[name]
-  delivery[name] = function (params) {
-    this._dd.span.setTag('amqp.delivery.state', stateName)
-    this._dd.done()
-    return method.apply(this, arguments)
+function getStateFromData (stateData) {
+  if (stateData && stateData.descriptor && stateData.descriptor.value) {
+    switch (stateData.descriptor.value) {
+      case 36: return 'accepted'
+      case 37: return 'rejected'
+      case 38: return 'released'
+      case 39: return 'modified'
+    }
+  }
+}
+
+function wrapDeliveryUpdate (delivery) {
+  const update = delivery.update
+  delivery.update = function wrappedUpdate (settled, stateData) {
+    if (!(this.link && this.link.get_option('autoaccept', true))) {
+      const stateName = getStateFromData(stateData)
+      finish(this, stateName)
+    }
+    return update.apply(this, arguments)
+  }
+}
+
+function finish (delivery, state) {
+  if (delivery._dd) {
+    delivery._dd.span.setTag('amqp.delivery.state', state || 'accepted')
+    delivery._dd.done()
+    delete delivery._dd
   }
 }
 
@@ -124,12 +163,10 @@ module.exports = [
     patch ({ Sender, Receiver }, tracer, config) {
       this.wrap(Sender.prototype, 'send', createWrapSend(tracer, config))
       this.wrap(Receiver.prototype, 'dispatch', createWrapReceiverDispatch(tracer, config))
-      this.wrap(Sender.prototype, 'dispatch', createWrapSenderDispatch(tracer, config))
     },
     unpatch ({ Sender, Receiver }, tracer) {
       this.unwrap(Sender.prototype, 'send')
       this.unwrap(Receiver.prototype, 'dispatch')
-      this.unwrap(Sender.prototype, 'dispatch')
     }
   },
   {
@@ -141,6 +178,8 @@ module.exports = [
     },
     unpatch (Connection, tracer) {
       this.unwrap(Connection.prototype, 'dispatch')
+      CircularBuffer.prototype.pop_if = popIf
+      CircularBuffer = undefined
     }
   }
 ]

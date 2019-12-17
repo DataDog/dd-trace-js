@@ -258,7 +258,7 @@ jobs:
       - image: node:8
         environment:
           - SERVICES=qpid
-          - PLUGINS=amqp10
+          - PLUGINS=amqp10,rhea
       - image: scholzj/qpid-cpp:1.38.0
         command: -p 5673
         environment:
@@ -518,19 +518,6 @@ jobs:
       - image: node:8
         environment:
           - PLUGINS=restify
-
-  node-rhea:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - SERVICES=qpid
-          - PLUGINS=rhea
-      - image: scholzj/qpid-cpp:1.38.0
-        command: -p 5673
-        environment:
-          - QPIDD_ADMIN_USERNAME=admin
-          - QPIDD_ADMIN_PASSWORD=admin
 
   node-router:
     <<: *node-plugin-base
@@ -853,7 +840,6 @@ workflows:
       - node-q
       - node-redis
       - node-restify
-      - node-rhea
       - node-router
       - node-when
       - node-winston
@@ -1004,7 +990,6 @@ workflows:
       - node-q
       - node-redis
       - node-restify
-      - node-rhea
       - node-router
       - node-tedious
       - node-when
