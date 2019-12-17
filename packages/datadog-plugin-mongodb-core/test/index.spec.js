@@ -228,7 +228,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('type', 'mongodb')
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', 'localhost')
-                expect(span.meta).to.have.property('out.port', '27017')
+                expect(span.metrics).to.have.property('out.port', 27017)
               })
               .then(done)
               .catch(done)
@@ -255,14 +255,14 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('mongodb.cursor.index', '0')
+                expect(traces[0][0].metrics).to.have.property('mongodb.cursor.index', 0)
               })
               .then(() => next(cursor))
               .catch(done)
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('mongodb.cursor.index', '1')
+                expect(traces[0][0].metrics).to.have.property('mongodb.cursor.index', 1)
               })
               .then(done)
               .catch(done)
