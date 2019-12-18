@@ -7,7 +7,6 @@ const inFlightDeliveries = new Set()
 function createWrapSend (tracer, config, instrumenter) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, tag, format) {
-      patchCircularBuffer(this, instrumenter)
       const name = getResourceNameFromSender(this)
       const { host, port } = getHostAndPort(this.connection)
       return tracer.trace('amqp.send', {
@@ -62,7 +61,6 @@ function createWrapConnectionDispatch (tracer, config) {
 function createWrapReceiverDispatch (tracer, config, instrumenter) {
   return function wrapDispatch (dispatch) {
     return function dispatchWithTrace (eventName, msgObj) {
-      patchCircularBuffer(this, instrumenter)
       if (eventName === 'message' && msgObj) {
         const name = getResourceNameFromMessage(msgObj)
         const childOf = getAnnotations(msgObj, tracer)
@@ -119,29 +117,43 @@ function wrapDeliveryUpdate (update) {
   }
 }
 
-function patchCircularBuffer (senderOrReceiver, instrumenter) {
-  const session = senderOrReceiver.session
-  if (!session) return
-  const deliveries = session.outgoing ? session.outgoing.deliveries
-    : (session.incoming ? session.incoming.deliveries : undefined)
-  if (deliveries && deliveries.constructor) {
-    const CircularBuffer = deliveries.constructor
-    if (CircularBuffer && !CircularBuffer.prototype.pop_if._datadog_patched) {
-      instrumenter.wrap(CircularBuffer.prototype, 'pop_if', createWrapCircularBufferPopIf())
-      const SenderOrReceiver = senderOrReceiver.constructor
-      if (SenderOrReceiver) {
-        SenderOrReceiver[circularBufferConstructor] = CircularBuffer
+function patchCircularBuffer (proto, instrumenter) {
+  Object.defineProperty(proto, 'session', {
+    configurable: true,
+    get () {},
+    set (session) {
+      Object.defineProperty(this, 'session', {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: session
+      })
+      if (session) {
+        let CircularBuffer
+        if (session.outgoing && session.outgoing.deliveries) {
+          CircularBuffer = session.outgoing.deliveries.constructor
+        }
+        if (!CircularBuffer && session.incoming && session.incoming.deliveries) {
+          CircularBuffer = session.incoming.deliveries.constructor
+        }
+
+        if (CircularBuffer && !CircularBuffer.prototype.pop_if._datadog_patched) {
+          instrumenter.wrap(CircularBuffer.prototype, 'pop_if', createWrapCircularBufferPopIf())
+          const SenderOrReceiver = proto.constructor
+          if (SenderOrReceiver) {
+            SenderOrReceiver[circularBufferConstructor] = CircularBuffer
+          }
+        }
       }
     }
-  }
+  })
 }
 
 function finishDeliverySpans (inOrOut, error) {
   if (inOrOut && inOrOut.deliveries && inOrOut.deliveries.entries) {
     for (const entry of inOrOut.deliveries.entries) {
       if (entry && entry[dd]) {
-        const { span, done } = entry[dd]
-        span.addTags({ error })
+        entry[dd].span.addTags({ error })
         finish(entry)
       }
     }
@@ -187,7 +199,7 @@ function finish (delivery, state) {
   }
 }
 
-function getResourceNameFromMessage(msgObj) {
+function getResourceNameFromMessage (msgObj) {
   let resourceName = 'amq.topic'
   let options = {}
   if (msgObj.receiver && msgObj.receiver.options) {
@@ -199,7 +211,7 @@ function getResourceNameFromMessage(msgObj) {
   return resourceName
 }
 
-function getResourceNameFromSender(sender) {
+function getResourceNameFromSender (sender) {
   let resourceName = 'amq.topic'
   if (sender.options && sender.options.target && sender.options.target.address) {
     resourceName = sender.options.target.address
@@ -207,7 +219,7 @@ function getResourceNameFromSender(sender) {
   return resourceName
 }
 
-function getAnnotations(msgObj, tracer) {
+function getAnnotations (msgObj, tracer) {
   if (msgObj.message) {
     return tracer.extract('text_map', msgObj.message.delivery_annotations)
   }
@@ -221,6 +233,8 @@ module.exports = [
     patch ({ Sender, Receiver }, tracer, config) {
       this.wrap(Sender.prototype, 'send', createWrapSend(tracer, config, this))
       this.wrap(Receiver.prototype, 'dispatch', createWrapReceiverDispatch(tracer, config, this))
+      patchCircularBuffer(Sender.prototype, this)
+      patchCircularBuffer(Receiver.prototype, this)
     },
     unpatch ({ Sender, Receiver }, tracer) {
       this.unwrap(Sender.prototype, 'send')
