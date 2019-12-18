@@ -304,7 +304,7 @@ describe('Plugin', () => {
 
           describe('client sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, 'accepted')
+              const p = expectSending(agent, false)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -513,7 +513,7 @@ describe('Plugin', () => {
 })
 
 function expectReceiving (agent, deliveryState, topic) {
-  deliveryState = deliveryState || 'accepted'
+  deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
   return agent.use(traces => {
     const span = traces[0][0]
@@ -523,17 +523,20 @@ function expectReceiving (agent, deliveryState, topic) {
       error: 0,
       service: 'test'
     })
-    expect(span.meta).to.include({
+    const expectedMeta = {
       'span.kind': 'consumer',
       'amqp.link.source.address': topic,
-      'amqp.link.role': 'receiver',
-      'amqp.delivery.state': deliveryState
-    })
+      'amqp.link.role': 'receiver'
+    }
+    if (deliveryState) {
+      expectedMeta['amqp.delivery.state'] = deliveryState
+    }
+    expect(span.meta).to.include(expectedMeta)
   })
 }
 
 function expectSending (agent, deliveryState, topic) {
-  deliveryState = deliveryState || 'accepted'
+  deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
   return agent.use(traces => {
     const span = traces[0][0]
@@ -543,11 +546,14 @@ function expectSending (agent, deliveryState, topic) {
       error: 0,
       service: 'test-amqp-producer'
     })
-    expect(span.meta).to.include({
+    const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
-      'amqp.link.role': 'sender',
-      'amqp.delivery.state': deliveryState
-    })
+      'amqp.link.role': 'sender'
+    }
+    if (deliveryState) {
+      expectedMeta['amqp.delivery.state'] = deliveryState
+    }
+    expect(span.meta).to.include(expectedMeta)
   })
 }
