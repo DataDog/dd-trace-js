@@ -54,12 +54,12 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
     return function dispatchWithTrace (eventName, msgObj) {
       patchCircularBuffer(this, instrumenter)
       if (eventName === 'message' && msgObj) {
-        const options = msgObj.receiver && msgObj.receiver.options ?
-          msgObj.receiver.options : {}
+        const options = msgObj.receiver && msgObj.receiver.options
+          ? msgObj.receiver.options : {}
         const name = options.source && options.source.address
           ? options.source.address : 'amq.topic'
-        const childOf = msgObj.message ?
-          tracer.extract('text_map', msgObj.message.delivery_annotations) : undefined
+        const childOf = msgObj.message
+          ? tracer.extract('text_map', msgObj.message.delivery_annotations) : undefined
         return tracer.trace('amqp.receive', {
           tags: {
             'component': 'rhea',
