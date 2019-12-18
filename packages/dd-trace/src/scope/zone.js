@@ -3,7 +3,7 @@
 // TODO: Zone metrics
 
 const Base = require('./base')
-const Zone = require('zone.js/dist/zone') && window.Zone
+const Zone = window.Zone
 
 let singleton = null
 
@@ -17,10 +17,14 @@ class Scope extends Base {
   }
 
   _active () {
+    if (!Zone) return null
+
     return Zone.current.get('_datadog_span')
   }
 
   _activate (span, callback) {
+    if (!Zone) return callback()
+
     const spec = {
       properties: {
         _datadog_span: span
