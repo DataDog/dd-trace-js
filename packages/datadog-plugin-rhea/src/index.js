@@ -53,10 +53,13 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
   return function wrapDispatch (dispatch) {
     return function dispatchWithTrace (eventName, msgObj) {
       patchCircularBuffer(this, instrumenter)
-      if (eventName === 'message') {
-        const name = msgObj.receiver.options.source && msgObj.receiver.options.source.address
-          ? msgObj.receiver.options.source.address : 'amq.topic'
-        const childOf = tracer.extract('text_map', msgObj.message.delivery_annotations)
+      if (eventName === 'message' && msgObj) {
+        const options = msgObj.receiver && msgObj.receiver.options ?
+          msgObj.receiver.options : {}
+        const name = options.source && options.source.address
+          ? options.source.address : 'amq.topic'
+        const childOf = msgObj.message ?
+          tracer.extract('text_map', msgObj.message.delivery_annotations) : undefined
         return tracer.trace('amqp.receive', {
           tags: {
             'component': 'rhea',
@@ -68,8 +71,10 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
           },
           childOf
         }, (span, done) => {
-          msgObj.delivery[dd] = { done, span }
-          msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery.update)
+          if (msgObj.delivery) {
+            msgObj.delivery[dd] = { done, span }
+            msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery.update)
+          }
           return dispatch.apply(this, arguments)
         })
       }
