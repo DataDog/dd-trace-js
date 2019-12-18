@@ -2,13 +2,13 @@
 
 const dd = Symbol('datadog')
 const circularBufferConstructor = Symbol('circularBufferConstructor')
+const inFlightDeliveries = new Set()
 
 function createWrapSend (tracer, config, instrumenter) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, tag, format) {
       patchCircularBuffer(this, instrumenter)
-      const name = this.options && this.options.target && this.options.target.address
-        ? this.options.target.address : 'amq.topic'
+      const name = getResourceNameFromSender(this)
       const { host, port } = getHostAndPort(this.connection)
       return tracer.trace('amqp.send', {
         tags: {
@@ -25,6 +25,7 @@ function createWrapSend (tracer, config, instrumenter) {
         addDeliveryAnnotations(msg, tracer, span)
         const delivery = send.apply(this, arguments)
         delivery[dd] = { done, span }
+        inFlightDeliveries.add(delivery)
         return delivery
       })
     }
@@ -34,14 +35,23 @@ function createWrapSend (tracer, config, instrumenter) {
 function createWrapConnectionDispatch (tracer, config) {
   return function wrapDispatch (dispatch) {
     return function dispatchWithTrace (eventName, obj) {
-      if (eventName === 'disconnected' && this.local_channel_map) {
+      if (eventName === 'disconnected') {
         const error = obj.error || this.saved_error
-        for (const key in this.local_channel_map) {
-          const session = this.local_channel_map[key]
-          if (session) {
-            finishDeliverySpans(session.incoming, error)
-            finishDeliverySpans(session.outgoing, error)
+        if (this.local_channel_map) {
+          for (const key in this.local_channel_map) {
+            const session = this.local_channel_map[key]
+            if (session) {
+              finishDeliverySpans(session.incoming, error)
+              finishDeliverySpans(session.outgoing, error)
+            }
           }
+        } else {
+          // this should only happen if for some reason local_channel_map is not available
+          inFlightDeliveries.forEach(delivery => {
+            const { span } = delivery[dd]
+            span.addTags({ error })
+            finish(delivery)
+          })
         }
       }
       return dispatch.apply(this, arguments)
@@ -54,12 +64,8 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
     return function dispatchWithTrace (eventName, msgObj) {
       patchCircularBuffer(this, instrumenter)
       if (eventName === 'message' && msgObj) {
-        const options = msgObj.receiver && msgObj.receiver.options
-          ? msgObj.receiver.options : {}
-        const name = options.source && options.source.address
-          ? options.source.address : 'amq.topic'
-        const childOf = msgObj.message
-          ? tracer.extract('text_map', msgObj.message.delivery_annotations) : undefined
+        const name = getResourceNameFromMessage(msgObj)
+        const childOf = getAnnotations(msgObj, tracer)
         return tracer.trace('amqp.receive', {
           tags: {
             'component': 'rhea',
@@ -74,6 +80,7 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
           if (msgObj.delivery) {
             msgObj.delivery[dd] = { done, span }
             msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery.update)
+            inFlightDeliveries.add(msgObj.delivery)
           }
           return dispatch.apply(this, arguments)
         })
@@ -91,7 +98,7 @@ function createWrapCircularBufferPopIf () {
         const shouldPop = fn(entry)
         if (shouldPop && entry[dd]) {
           const remoteState = entry.remote_state
-          const state = remoteState && remoteState.constructor && remoteState.constructor.composite_type
+          const state = remoteState && remoteState.constructor
             ? entry.remote_state.constructor.composite_type : undefined
           finish(entry, state)
         }
@@ -103,14 +110,13 @@ function createWrapCircularBufferPopIf () {
 }
 
 function wrapDeliveryUpdate (update) {
-  const wrappedUpdate = function wrappedUpdate (settled, stateData) {
-    const state = getStateFromData(stateData)
-    if (state) {
+  return function wrappedUpdate (settled, stateData) {
+    if (this[dd]) {
+      const state = getStateFromData(stateData)
       this[dd].span.setTag('amqp.delivery.state', state)
     }
     return update.apply(this, arguments)
   }
-  return wrappedUpdate
 }
 
 function patchCircularBuffer (senderOrReceiver, instrumenter) {
@@ -136,8 +142,7 @@ function finishDeliverySpans (inOrOut, error) {
       if (entry && entry[dd]) {
         const { span, done } = entry[dd]
         span.addTags({ error })
-        done()
-        delete entry[dd]
+        finish(entry)
       }
     }
   }
@@ -178,6 +183,33 @@ function finish (delivery, state) {
     }
     delivery[dd].done()
     delete delivery[dd]
+    inFlightDeliveries.delete(delivery)
+  }
+}
+
+function getResourceNameFromMessage(msgObj) {
+  let resourceName = 'amq.topic'
+  let options = {}
+  if (msgObj.receiver && msgObj.receiver.options) {
+    options = msgObj.receiver.options
+  }
+  if (options.source && options.source.address) {
+    resourceName = options.source.address
+  }
+  return resourceName
+}
+
+function getResourceNameFromSender(sender) {
+  let resourceName = 'amq.topic'
+  if (sender.options && sender.options.target && sender.options.target.address) {
+    resourceName = sender.options.target.address
+  }
+  return resourceName
+}
+
+function getAnnotations(msgObj, tracer) {
+  if (msgObj.message) {
+    return tracer.extract('text_map', msgObj.message.delivery_annotations)
   }
 }
 
