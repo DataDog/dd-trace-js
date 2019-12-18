@@ -273,7 +273,7 @@ export declare interface TracerOptions {
      * List of peer service URLs that will be called by this service. This is used to determine whether to send the distributed context from the browser.
      * @default []
      */
-    peers?: string[]
+    peers?: (string|RegExp)[]
 
     /**
      * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
