@@ -515,7 +515,7 @@ describe('Plugin', () => {
 function expectReceiving (agent, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
-  return agent.use(traces => {
+  return Promise.resolve().then(() => agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
       name: 'amqp.receive',
@@ -532,13 +532,13 @@ function expectReceiving (agent, deliveryState, topic) {
       expectedMeta['amqp.delivery.state'] = deliveryState
     }
     expect(span.meta).to.include(expectedMeta)
-  })
+  }))
 }
 
 function expectSending (agent, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
-  return agent.use(traces => {
+  return Promise.resolve().then(() => agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
       name: 'amqp.send',
@@ -555,5 +555,5 @@ function expectSending (agent, deliveryState, topic) {
       expectedMeta['amqp.delivery.state'] = deliveryState
     }
     expect(span.meta).to.include(expectedMeta)
-  })
+  }))
 }
