@@ -2,11 +2,15 @@
 
 const dd = Symbol('datadog')
 const circularBufferConstructor = Symbol('circularBufferConstructor')
-const inFlightDeliveries = new Set()
+const inFlightDeliveries = Symbol('inFlightDeliveries')
 
 function createWrapSend (tracer, config, instrumenter) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, tag, format) {
+      if (!this.connection || !this.connection || !this.connection.outgoing) {
+        // we can't handle disconnects or ending spans, so we can't safely instrument
+        return send.apply(this, arguments)
+      }
       const name = getResourceNameFromSender(this)
       const { host, port } = getHostAndPort(this.connection)
       return tracer.trace('amqp.send', {
@@ -24,7 +28,9 @@ function createWrapSend (tracer, config, instrumenter) {
         addDeliveryAnnotations(msg, tracer, span)
         const delivery = send.apply(this, arguments)
         delivery[dd] = { done, span }
-        inFlightDeliveries.add(delivery)
+        if (!this.connection.local_channel_map) {
+          handleLackOfLocalChannelMap(this.connection, delivery)
+        }
         return delivery
       })
     }
@@ -44,12 +50,11 @@ function createWrapConnectionDispatch (tracer, config) {
               finishDeliverySpans(session.outgoing, error)
             }
           }
-        } else {
-          // this should only happen if for some reason local_channel_map is not available
-          inFlightDeliveries.forEach(delivery => {
+        } else if (this[inFlightDeliveries]) {
+          this[inFlightDeliveries].forEach(delivery => {
             const { span } = delivery[dd]
             span.addTags({ error })
-            finish(delivery)
+            finish(delivery, null)
           })
         }
       }
@@ -61,6 +66,10 @@ function createWrapConnectionDispatch (tracer, config) {
 function createWrapReceiverDispatch (tracer, config, instrumenter) {
   return function wrapDispatch (dispatch) {
     return function dispatchWithTrace (eventName, msgObj) {
+      if (!this.connection || !this.session || !this.session.outgoing) {
+        // we can't handle disconnects or ending spans, so we can't safely instrument
+        return dispatch.apply(this, arguments)
+      }
       if (eventName === 'message' && msgObj) {
         const name = getResourceNameFromMessage(msgObj)
         const childOf = getAnnotations(msgObj, tracer)
@@ -78,7 +87,9 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
           if (msgObj.delivery) {
             msgObj.delivery[dd] = { done, span }
             msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery.update)
-            inFlightDeliveries.add(msgObj.delivery)
+            if (!this.connection.local_channel_map) {
+              handleLackOfLocalChannelMap(this.connection, msgObj.delivery)
+            }
           }
           return dispatch.apply(this, arguments)
         })
@@ -122,18 +133,13 @@ function patchCircularBuffer (proto, instrumenter) {
     configurable: true,
     get () {},
     set (outgoing) {
-      Object.defineProperty(this, 'outgoing', {
-        configurable: true,
-        writable: true,
-        enumerable: true,
-        value: outgoing
-      })
+      delete proto.outgoing // removes the setter on the prototype
+      this.outgoing = outgoing // assigns on the instance, like normal
       if (outgoing) {
         let CircularBuffer
         if (outgoing.deliveries) {
           CircularBuffer = outgoing.deliveries.constructor
         }
-
         if (CircularBuffer && !CircularBuffer.prototype.pop_if._datadog_patched) {
           instrumenter.wrap(CircularBuffer.prototype, 'pop_if', createWrapCircularBufferPopIf())
           const Session = proto.constructor
@@ -144,6 +150,16 @@ function patchCircularBuffer (proto, instrumenter) {
       }
     }
   })
+}
+
+function handleLackOfLocalChannelMap (connection, delivery) {
+  let deliveries = connection[inFlightDeliveries]
+  if (!deliveries) {
+    deliveries = new Set()
+    connection[inFlightDeliveries] = deliveries
+  }
+  deliveries.add(delivery)
+  delivery[dd].connection = connection
 }
 
 function finishDeliverySpans (inOrOut, error) {
@@ -191,8 +207,10 @@ function finish (delivery, state) {
       delivery[dd].span.setTag('amqp.delivery.state', state)
     }
     delivery[dd].done()
+    if (delivery[dd].connection && delivery[dd].connection[inFlightDeliveries]) {
+      delivery[dd].connection[inFlightDeliveries].delete(delivery)
+    }
     delete delivery[dd]
-    inFlightDeliveries.delete(delivery)
   }
 }
 
