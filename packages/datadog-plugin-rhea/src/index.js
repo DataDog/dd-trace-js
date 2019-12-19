@@ -7,7 +7,7 @@ const inFlightDeliveries = Symbol('inFlightDeliveries')
 function createWrapSend (tracer, config, instrumenter) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, tag, format) {
-      if (!this.connection || !this.connection || !this.connection.outgoing) {
+      if (!canTrace(this)) {
         // we can't handle disconnects or ending spans, so we can't safely instrument
         return send.apply(this, arguments)
       }
@@ -28,9 +28,7 @@ function createWrapSend (tracer, config, instrumenter) {
         addDeliveryAnnotations(msg, tracer, span)
         const delivery = send.apply(this, arguments)
         delivery[dd] = { done, span }
-        if (!this.connection.local_channel_map) {
-          handleLackOfLocalChannelMap(this.connection, delivery)
-        }
+        addToInFlightDeliveries(this.connection, delivery)
         return delivery
       })
     }
@@ -42,15 +40,7 @@ function createWrapConnectionDispatch (tracer, config) {
     return function dispatchWithTrace (eventName, obj) {
       if (eventName === 'disconnected') {
         const error = obj.error || this.saved_error
-        if (this.local_channel_map) {
-          for (const key in this.local_channel_map) {
-            const session = this.local_channel_map[key]
-            if (session) {
-              finishDeliverySpans(session.incoming, error)
-              finishDeliverySpans(session.outgoing, error)
-            }
-          }
-        } else if (this[inFlightDeliveries]) {
+        if (this[inFlightDeliveries]) {
           this[inFlightDeliveries].forEach(delivery => {
             const { span } = delivery[dd]
             span.addTags({ error })
@@ -66,7 +56,7 @@ function createWrapConnectionDispatch (tracer, config) {
 function createWrapReceiverDispatch (tracer, config, instrumenter) {
   return function wrapDispatch (dispatch) {
     return function dispatchWithTrace (eventName, msgObj) {
-      if (!this.connection || !this.session || !this.session.outgoing) {
+      if (!canTrace(this)) {
         // we can't handle disconnects or ending spans, so we can't safely instrument
         return dispatch.apply(this, arguments)
       }
@@ -87,9 +77,7 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
           if (msgObj.delivery) {
             msgObj.delivery[dd] = { done, span }
             msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery.update)
-            if (!this.connection.local_channel_map) {
-              handleLackOfLocalChannelMap(this.connection, msgObj.delivery)
-            }
+            addToInFlightDeliveries(this.connection, msgObj.delivery)
           }
           return dispatch.apply(this, arguments)
         })
@@ -152,7 +140,7 @@ function patchCircularBuffer (proto, instrumenter) {
   })
 }
 
-function handleLackOfLocalChannelMap (connection, delivery) {
+function addToInFlightDeliveries (connection, delivery) {
   let deliveries = connection[inFlightDeliveries]
   if (!deliveries) {
     deliveries = new Set()
@@ -160,17 +148,6 @@ function handleLackOfLocalChannelMap (connection, delivery) {
   }
   deliveries.add(delivery)
   delivery[dd].connection = connection
-}
-
-function finishDeliverySpans (inOrOut, error) {
-  if (inOrOut && inOrOut.deliveries && inOrOut.deliveries.entries) {
-    for (const entry of inOrOut.deliveries.entries) {
-      if (entry && entry[dd]) {
-        entry[dd].span.addTags({ error })
-        finish(entry)
-      }
-    }
-  }
 }
 
 function getHostAndPort (connection) {
@@ -238,6 +215,10 @@ function getAnnotations (msgObj, tracer) {
   if (msgObj.message) {
     return tracer.extract('text_map', msgObj.message.delivery_annotations)
   }
+}
+
+function canTrace (link) {
+  return link.connection && link.session && link.session.outgoing
 }
 
 module.exports = [
