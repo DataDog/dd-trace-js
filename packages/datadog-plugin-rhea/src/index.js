@@ -118,30 +118,27 @@ function wrapDeliveryUpdate (update) {
 }
 
 function patchCircularBuffer (proto, instrumenter) {
-  Object.defineProperty(proto, 'session', {
+  Object.defineProperty(proto, 'outgoing', {
     configurable: true,
     get () {},
-    set (session) {
-      Object.defineProperty(this, 'session', {
+    set (outgoing) {
+      Object.defineProperty(this, 'outgoing', {
         configurable: true,
         writable: true,
         enumerable: true,
-        value: session
+        value: outgoing
       })
-      if (session) {
+      if (outgoing) {
         let CircularBuffer
-        if (session.outgoing && session.outgoing.deliveries) {
-          CircularBuffer = session.outgoing.deliveries.constructor
-        }
-        if (!CircularBuffer && session.incoming && session.incoming.deliveries) {
-          CircularBuffer = session.incoming.deliveries.constructor
+        if (outgoing.deliveries) {
+          CircularBuffer = outgoing.deliveries.constructor
         }
 
         if (CircularBuffer && !CircularBuffer.prototype.pop_if._datadog_patched) {
           instrumenter.wrap(CircularBuffer.prototype, 'pop_if', createWrapCircularBufferPopIf())
-          const SenderOrReceiver = proto.constructor
-          if (SenderOrReceiver) {
-            SenderOrReceiver[circularBufferConstructor] = CircularBuffer
+          const Session = proto.constructor
+          if (Session) {
+            Session[circularBufferConstructor] = CircularBuffer
           }
         }
       }
@@ -233,18 +230,10 @@ module.exports = [
     patch ({ Sender, Receiver }, tracer, config) {
       this.wrap(Sender.prototype, 'send', createWrapSend(tracer, config, this))
       this.wrap(Receiver.prototype, 'dispatch', createWrapReceiverDispatch(tracer, config, this))
-      patchCircularBuffer(Sender.prototype, this)
-      patchCircularBuffer(Receiver.prototype, this)
     },
     unpatch ({ Sender, Receiver }, tracer) {
       this.unwrap(Sender.prototype, 'send')
       this.unwrap(Receiver.prototype, 'dispatch')
-      if (Sender[circularBufferConstructor]) {
-        this.unwrap(Sender[circularBufferConstructor].prototype, 'pop_if')
-      }
-      if (Receiver[circularBufferConstructor]) {
-        this.unwrap(Receiver[circularBufferConstructor].prototype, 'pop_if')
-      }
     }
   },
   {
@@ -256,6 +245,19 @@ module.exports = [
     },
     unpatch (Connection, tracer) {
       this.unwrap(Connection.prototype, 'dispatch')
+    }
+  },
+  {
+    name: 'rhea',
+    versions: ['>=1'],
+    file: 'lib/session.js',
+    patch (Session, tracer, config) {
+      patchCircularBuffer(Session.prototype, this)
+    },
+    unpatch (Session, tracer) {
+      if (Session[circularBufferConstructor]) {
+        this.unwrap(Session[circularBufferConstructor].prototype, 'pop_if')
+      }
     }
   }
 ]
