@@ -36,7 +36,10 @@ const span = {
     _name: 'operation'
   }),
   _startTime: 1500000000000.123456,
-  _duration: 100
+  _duration: 100,
+  _spanContext: {
+    _name: 'operation'
+  }
 }
 
 module.exports = span

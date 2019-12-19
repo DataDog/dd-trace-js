@@ -103,7 +103,7 @@ suite
   })
   .add('Histogram', {
     fn () {
-      histogram.record(Math.round(Math.random() * 3e12))
+      histogram.record(Math.round(Math.random() * 3.6e12))
     }
   })
 
