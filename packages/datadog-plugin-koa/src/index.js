@@ -25,9 +25,11 @@ function createWrapCreateContext () {
     return function createContextWithTrace (req, res) {
       const ctx = createContext.apply(this, arguments)
 
+      if (!ctx) return ctx
+
       web.patch(req)
       web.beforeEnd(req, () => {
-        ctx && web.enterRoute(req, ctx.routePath)
+        web.enterRoute(req, ctx.routePath)
       })
 
       return ctx
