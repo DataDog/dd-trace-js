@@ -32,24 +32,32 @@ afterEach(() => {
 
 function wrapIt () {
   const it = global.it
+  const only = global.it.only
 
-  global.it = function (title, fn) {
-    if (!fn) return it.apply(this, arguments)
+  function wrap (testFn) {
+    return function (title, fn) {
+      if (!fn) return testFn.apply(this, arguments)
 
-    const length = fn.length
+      const length = fn.length
 
-    fn = asyncHooksScope.bind(fn, null)
+      fn = asyncHooksScope.bind(fn, null)
 
-    if (length > 0) {
-      return it.call(this, title, function (done) {
-        done = asyncHooksScope.bind(done, null)
+      if (length > 0) {
+        return testFn.call(this, title, function (done) {
+          done = asyncHooksScope.bind(done, null)
 
-        return fn.call(this, done)
-      })
-    } else {
-      return it.call(this, title, fn)
+          return fn.call(this, done)
+        })
+      } else {
+        return testFn.call(this, title, fn)
+      }
     }
   }
+
+  global.it = wrap(it)
+  global.it.only = wrap(only)
+
+  global.it.skip = it.skip
 }
 
 function withVersions (plugin, modules, range, cb) {

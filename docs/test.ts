@@ -174,6 +174,7 @@ tracer.use('q');
 tracer.use('redis');
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
+tracer.use('rhea');
 tracer.use('router');
 tracer.use('tedious');
 tracer.use('when');

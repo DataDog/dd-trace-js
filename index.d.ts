@@ -422,6 +422,7 @@ interface Plugins {
   "q": plugins.q;
   "redis": plugins.redis;
   "restify": plugins.restify;
+  "rhea": plugins.rhea;
   "router": plugins.router;
   "tedious": plugins.tedious;
   "when": plugins.when;
@@ -891,6 +892,12 @@ declare namespace plugins {
    * [restify](http://restify.com/) module.
    */
   interface restify extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [rhea](https://github.com/amqp/rhea) module.
+   */
+  interface rhea extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
