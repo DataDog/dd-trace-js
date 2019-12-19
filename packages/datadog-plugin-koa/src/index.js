@@ -9,6 +9,8 @@ function createWrapCallback (tracer, config) {
     return function callbackWithTrace () {
       const handleRequest = callback.apply(this, arguments)
 
+      if (typeof handleRequest !== 'function') return handleRequest
+
       return function handleRequestWithTrace (req, res) {
         web.instrument(tracer, config, req, res, 'koa.request')
 
@@ -25,7 +27,7 @@ function createWrapCreateContext () {
 
       web.patch(req)
       web.beforeEnd(req, () => {
-        web.enterRoute(ctx.req, ctx.routePath)
+        ctx && web.enterRoute(req, ctx.routePath)
       })
 
       return ctx
@@ -37,6 +39,9 @@ function createWrapUse () {
   return function wrapUse (use) {
     return function useWithTrace () {
       const result = use.apply(this, arguments)
+
+      if (!Array.isArray(this.middleware)) return result
+
       const fn = this.middleware.pop()
 
       this.middleware.push(wrapMiddleware(fn))
@@ -51,11 +56,13 @@ function createWrapRegister (tracer, config) {
     return function registerWithTrace (path, methods, middleware, opts) {
       const route = register.apply(this, arguments)
 
-      if (Array.isArray(path)) return route
+      if (Array.isArray(path) || !route || !Array.isArray(route.stack)) return route
 
       route.stack = route.stack.map(middleware => {
+        if (typeof middleware !== 'function') return middleware
+
         return function (ctx, next) {
-          if (!web.active(ctx.req)) return middleware.apply(this, arguments)
+          if (!ctx || !web.active(ctx.req)) return middleware.apply(this, arguments)
 
           web.exitRoute(ctx.req)
           web.enterRoute(ctx.req, route.path)
@@ -70,7 +77,11 @@ function createWrapRegister (tracer, config) {
 }
 
 function wrapMiddleware (fn) {
+  if (typeof fn !== 'function') return fn
+
   return function (ctx, next) {
+    if (!ctx) return fn.apply(this, arguments)
+
     return web.wrapMiddleware(ctx.req, fn, 'koa.middleware', () => {
       try {
         const result = fn.apply(this, arguments)
