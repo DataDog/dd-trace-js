@@ -20,13 +20,6 @@ const AUTO_KEEP = ext.priority.AUTO_KEEP
 const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
-const priorities = new Set([
-  USER_REJECT,
-  AUTO_REJECT,
-  AUTO_KEEP,
-  USER_KEEP
-])
-
 class PrioritySampler {
   constructor (env, { sampleRate, rateLimit = -1, rules = [] } = {}) {
     this._env = env
@@ -76,7 +69,15 @@ class PrioritySampler {
   }
 
   validate (samplingPriority) {
-    return priorities.has(samplingPriority)
+    switch (samplingPriority) {
+      case USER_REJECT:
+      case USER_KEEP:
+      case AUTO_REJECT:
+      case AUTO_KEEP:
+        return true
+      default:
+        return false
+    }
   }
 
   _getContext (span) {

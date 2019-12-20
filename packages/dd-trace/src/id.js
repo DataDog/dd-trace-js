@@ -13,6 +13,9 @@ if (platform.crypto) {
   platform.crypto.getRandomValues(seed)
 }
 
+const map = Array.prototype.map
+const pad = byte => `${byte < 16 ? '0' : ''}${byte.toString(16)}`
+
 // Internal representation of a trace or span ID.
 class Identifier {
   constructor (value, radix) {
@@ -113,9 +116,7 @@ function toNumberString (buffer, radix) {
 
 // Convert a buffer to a hexadecimal string.
 function toHexString (buffer) {
-  return Array.from(buffer)
-    .map(byte => byte.toString(16).padStart(2, '0'))
-    .join('')
+  return map.call(buffer, pad).join('')
 }
 
 // Simple pseudo-random 64-bit ID generator.

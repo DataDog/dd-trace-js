@@ -26,7 +26,9 @@ describe('dd-trace', () => {
   })
 
   it('should record and send a trace to the agent', () => {
-    sinon.stub(window, 'fetch').returns(Promise.resolve())
+    sinon.stub(window, 'fetch').returns({
+      then: resolve => resolve()
+    })
 
     const span = tracer.startSpan('test.request')
 
