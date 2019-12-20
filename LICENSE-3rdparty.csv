@@ -6,7 +6,6 @@ require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
-require,lodash.memoize,MIT,Copyright JS Foundation and other contributors
 require,lodash.pick,MIT,Copyright JS Foundation and other contributors
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lodash.truncate,MIT,Copyright JS Foundation and other contributors
