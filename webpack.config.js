@@ -6,9 +6,6 @@ const base = {
     'dd-trace': './browser.js'
   },
   module: {
-    noParse: [
-      /node_modules\/zone\.js/
-    ],
     rules: [{
       loader: 'babel-loader'
     }]
