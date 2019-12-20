@@ -132,7 +132,9 @@ class PrioritySampler {
   }
 
   _findRule (context) {
-    return this._rules.find(rule => this._matchRule(context, rule))
+    for (let i = 0, l = this._rules.length; i < l; i++) {
+      if (this._matchRule(context, this._rules[i])) return this._rules[i]
+    }
   }
 
   _matchRule (context, rule) {

@@ -43,19 +43,27 @@ class BrowserExporter {
     this._flushing = true
 
     const url = `${this._url.href}/v1/input/${this._clientToken}`
-    const method = 'POST'
     const body = this._queue.join(DELIMITER)
-    const keepalive = true
-    const mode = 'no-cors'
-    const done = () => {
-      this._flushing = false
-    }
 
     this._queue = []
     this._size = 0
 
-    window.fetch(url, { body, method, keepalive, mode })
-      .then(done, done)
+    send(url, body, () => {
+      this._flushing = false
+    })
+  }
+}
+
+function send (url, body, callback) {
+  if (window.fetch) {
+    window.fetch(url, { body, method: 'POST', keepalive: true, mode: 'no-cors' })
+      .then(callback, callback)
+  } else {
+    const req = new XMLHttpRequest()
+
+    req.open('POST', url, true)
+    req.addEventListener('loadend', callback)
+    req.send(body)
   }
 }
 
