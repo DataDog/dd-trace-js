@@ -51,6 +51,7 @@
   "dependencies": {
     "@types/node": "^10.12.18",
     "container-info": "^1.0.1",
+    "core-js": "^3.6.0",
     "hdr-histogram-js": "^1.1.4",
     "int64-buffer": "^0.1.9",
     "koalas": "^1.0.2",

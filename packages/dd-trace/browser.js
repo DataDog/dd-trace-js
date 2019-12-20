@@ -1,6 +1,7 @@
 'use strict'
 
 require('whatwg-fetch') // TODO: remove depenency
+require('core-js/stable/object/assign') // TODO: remove depenency
 
 const platform = require('./src/platform')
 const browser = require('./src/platform/browser')
