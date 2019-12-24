@@ -44,7 +44,7 @@ tracer.init({
   experimental: {
     b3: true,
     exporter: 'log',
-    peers: ['foo'],
+    peers: ['foo', /bar/],
     sampler: {
       sampleRate: 1,
       rateLimit: 1000,
@@ -175,6 +175,7 @@ tracer.use('q');
 tracer.use('redis');
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
+tracer.use('rhea');
 tracer.use('router');
 tracer.use('tedious');
 tracer.use('when');

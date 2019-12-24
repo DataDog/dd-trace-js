@@ -116,7 +116,7 @@ function normalizeConfig (tracer, config) {
 }
 
 function addResponseTags (headers, span, config) {
-  const status = headers[HTTP2_HEADER_STATUS]
+  const status = headers && headers[HTTP2_HEADER_STATUS]
 
   span.setTag(HTTP_STATUS_CODE, status)
 
@@ -124,27 +124,27 @@ function addResponseTags (headers, span, config) {
     span.setTag('error', 1)
   }
 
-  config.headers.forEach(key => {
-    const value = headers[key]
-
-    if (value) {
-      span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
-    }
-  })
+  addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, config)
 }
 
 function addRequestTags (headers, span, config) {
-  config.headers.forEach(key => {
-    const value = headers[key]
-
-    if (value) {
-      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
-    }
-  })
+  addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, config)
 }
 
 function addErrorTags (span, error) {
   span.setTag('error', error)
+}
+
+function addHeaderTags (span, headers, prefix, config) {
+  if (!headers) return
+
+  config.headers.forEach(key => {
+    const value = headers[key]
+
+    if (value) {
+      span.setTag(`${prefix}.${key}`, value)
+    }
+  })
 }
 
 function getHeaders (config) {
@@ -156,6 +156,8 @@ function getHeaders (config) {
 }
 
 function startSpan (tracer, config, headers, sessionDetails) {
+  headers = headers || {}
+
   const scope = tracer.scope()
   const childOf = scope.active()
 
@@ -207,6 +209,8 @@ function createWrapEmit (tracer, config, span) {
 
 function createWrapRequest (tracer, config, sessionDetails) {
   return function wrapRequest (request) {
+    if (!sessionDetails) return request
+
     return function requestWithTrace (headers, options) {
       const scope = tracer.scope()
       const span = startSpan(tracer, config, headers, sessionDetails)

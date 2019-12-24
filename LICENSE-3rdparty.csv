@@ -2,7 +2,6 @@ Component,Origin,License,Copyright
 require,@types/node,MIT,Copyright Authors
 require,bowser,MIT,Copyright 2015 Dustin Diaz
 require,container-info,MIT,Copyright 2018 Stephen Belanger
-require,core-js,MIT,Copyright 2014-2019 Denis Pushkarev
 require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
@@ -28,7 +27,6 @@ require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 require,whatwg-fetch,MIT,Copyright 2014-2016 GitHub Inc.
-require,zone.js,MIT,Copyright 2010-2019 Google LLC.
 dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie

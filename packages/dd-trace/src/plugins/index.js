@@ -35,6 +35,7 @@ module.exports = {
   'q': require('../../../datadog-plugin-q/src'),
   'redis': require('../../../datadog-plugin-redis/src'),
   'restify': require('../../../datadog-plugin-restify/src'),
+  'rhea': require('../../../datadog-plugin-rhea/src'),
   'router': require('../../../datadog-plugin-router/src'),
   'tedious': require('../../../datadog-plugin-tedious/src'),
   'when': require('../../../datadog-plugin-when/src'),

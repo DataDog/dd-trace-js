@@ -39,6 +39,10 @@ class Scope {
     return null
   }
 
+  _activate (span, callback) {
+    return callback()
+  }
+
   _bindFn (fn, span) {
     if (typeof fn !== 'function') return fn
 

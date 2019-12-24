@@ -9,6 +9,8 @@ function createWrapCallback (tracer, config) {
     return function callbackWithTrace () {
       const handleRequest = callback.apply(this, arguments)
 
+      if (typeof handleRequest !== 'function') return handleRequest
+
       return function handleRequestWithTrace (req, res) {
         web.instrument(tracer, config, req, res, 'koa.request')
 
@@ -23,9 +25,11 @@ function createWrapCreateContext () {
     return function createContextWithTrace (req, res) {
       const ctx = createContext.apply(this, arguments)
 
+      if (!ctx) return ctx
+
       web.patch(req)
       web.beforeEnd(req, () => {
-        web.enterRoute(ctx.req, ctx.routePath)
+        web.enterRoute(req, ctx.routePath)
       })
 
       return ctx
@@ -39,6 +43,9 @@ function createWrapUse (tracer, config) {
   return function wrapUse (use) {
     return function useWithTrace () {
       const result = use.apply(this, arguments)
+
+      if (!Array.isArray(this.middleware)) return result
+
       const fn = this.middleware.pop()
 
       this.middleware.push(wrapMiddleware(fn, config))
@@ -53,11 +60,13 @@ function createWrapRegister (tracer, config) {
     return function registerWithTrace (path, methods, middleware, opts) {
       const route = register.apply(this, arguments)
 
-      if (Array.isArray(path)) return route
+      if (Array.isArray(path) || !route || !Array.isArray(route.stack)) return route
 
       route.stack = route.stack.map(middleware => {
+        if (typeof middleware !== 'function') return middleware
+
         return function (ctx, next) {
-          if (!web.active(ctx.req)) return middleware.apply(this, arguments)
+          if (!ctx || !web.active(ctx.req)) return middleware.apply(this, arguments)
 
           web.exitRoute(ctx.req)
           web.enterRoute(ctx.req, route.path)
@@ -72,7 +81,11 @@ function createWrapRegister (tracer, config) {
 }
 
 function wrapMiddleware (fn, config) {
+  if (typeof fn !== 'function') return fn
+
   return function (ctx, next) {
+    if (!ctx) return fn.apply(this, arguments)
+
     return web.wrapMiddleware(ctx.req, fn, config, 'koa.middleware', () => {
       try {
         const result = fn.apply(this, arguments)

@@ -5,7 +5,11 @@ function createWrapRequest (tracer) {
 
   return function wrapRequest (original) {
     return function requestWithTrace (request, callback) {
-      return original.call(this, request, scope.bind(callback))
+      const index = arguments.length - 1
+
+      arguments[index] = scope.bind(arguments[index])
+
+      return original.apply(this, arguments)
     }
   }
 }
