@@ -715,7 +715,7 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {
             res.statusCode = 400
-            throw new Error('boom')
+            res.status(400).send()
           })
 
           getPort().then(port => {
@@ -986,6 +986,40 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should only handle errors for configured status codes', done => {
+          const app = express()
+
+          app.use((req, res, next) => {
+            next()
+          })
+
+          app.get('/user', (req, res) => {
+            res.statusCode = 400
+            res.status(400).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0]).to.have.property('resource', 'GET /user')
+                expect(spans[0].meta).to.have.property('http.status_code', '400')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 400
+                })
+                .catch(done)
+            })
+          })
+        })
       })
 
       describe('with configuration for middleware disabled', () => {
@@ -1107,7 +1141,7 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {
             res.statusCode = 400
-            throw new Error('boom')
+            res.status(400).send()
           })
 
           getPort().then(port => {
@@ -1118,8 +1152,6 @@ describe('Plugin', () => {
                 expect(spans[0]).to.have.property('error', 0)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('http.status_code', '400')
-
-                done()
               })
               .then(done)
               .catch(done)
