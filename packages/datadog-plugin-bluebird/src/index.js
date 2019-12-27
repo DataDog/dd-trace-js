@@ -19,7 +19,7 @@ module.exports = [
     patch (Promise, tracer, config) {
       this.wrap(Promise.prototype, '_then', tx.createWrapThen(tracer, config))
       
-      if(Prommise.getNewLibraryCopy) {
+      if(Promise.getNewLibraryCopy) {
         this.wrap(Promise, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(tracer, config, this))  
       }
     },
