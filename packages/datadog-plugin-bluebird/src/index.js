@@ -15,21 +15,22 @@ function createGetNewLibraryCopyWrap (tracer, config, shim) {
 module.exports = [
   {
     name: 'bluebird',
+    versions: ['^2.11.0', '^3.4.1'],
+    patch (Promise, tracer, config) {
+      this.wrap(Promise, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(tracer, config, this))
+    },
+    unpatch (Promise) {
+      this.unwrap(Promise, 'getNewLibraryCopy')
+    }
+  },
+  {
+    name: 'bluebird',
     versions: ['>=2.0.2'], // 2.0.0 and 2.0.1 were removed from npm
     patch (Promise, tracer, config) {
       this.wrap(Promise.prototype, '_then', tx.createWrapThen(tracer, config))
-
-      // TODO: remove after adding versions requirments for ^2.11.0 and ^3.4.1
-      if (Promise.getNewLibraryCopy) {
-        this.wrap(Promise, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(tracer, config, this))
-      }
     },
     unpatch (Promise) {
       this.unwrap(Promise.prototype, '_then')
-
-      if (Promise.getNewLibraryCopy) {
-        this.unwrap(Promise, 'getNewLibraryCopy')
-      }
     }
   }
 ]
