@@ -28,7 +28,7 @@ const priorities = new Set([
 ])
 
 class PrioritySampler {
-  constructor (env, { sampleRate, rateLimit = -1, rules = [] } = {}) {
+  constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate)
     this._limiter = new RateLimiter(rateLimit)
