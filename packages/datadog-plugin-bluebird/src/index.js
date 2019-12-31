@@ -20,6 +20,12 @@ function addToLibraryCopies (originalLibPrototype, libraryCopy) {
 
   if (!libraryCopies) {
     libraryCopies = new Set()
+
+    Object.defineProperty(originalLibPrototype, DD_LIB_COPIES, {
+      enumerable: false,
+      writable: true
+    })
+
     originalLibPrototype[DD_LIB_COPIES] = libraryCopies
   }
 
