@@ -9,36 +9,35 @@ function createGetNewLibraryCopyWrap (tracer, config, originalLib, shim) {
     return function getNewLibraryCopyWithTrace () {
       const libraryCopy = getNewLibraryCopy.apply(this, arguments)
       shim.wrap(libraryCopy.prototype, '_then', tx.createWrapThen(tracer, config))
-      addToLibraryCopies(originalLib.prototype, libraryCopy)
+      addToLibraryCopies(originalLib, libraryCopy)
       return libraryCopy
     }
   }
 }
 
-function addToLibraryCopies (originalLibPrototype, libraryCopy) {
-  let libraryCopies = originalLibPrototype[DD_LIB_COPIES]
+function addToLibraryCopies (originalLib, libraryCopy) {
+  let libraryCopies = originalLib[DD_LIB_COPIES]
 
   if (!libraryCopies) {
     libraryCopies = new Set()
 
-    Object.defineProperty(originalLibPrototype, DD_LIB_COPIES, {
-      enumerable: false,
-      writable: true
+    Object.defineProperty(originalLib, DD_LIB_COPIES, {
+      writable: true,
+      configurable: true,
+      value: libraryCopies
     })
-
-    originalLibPrototype[DD_LIB_COPIES] = libraryCopies
   }
 
   libraryCopies.add(libraryCopy)
 }
 
-function unwrapLibraryCopies (originalLibPrototype, shim) {
-  const libraryCopies = originalLibPrototype[DD_LIB_COPIES]
+function unwrapLibraryCopies (originalLib, shim) {
+  const libraryCopies = originalLib[DD_LIB_COPIES]
 
   if (libraryCopies) {
     libraryCopies.forEach(libraryCopy => shim.unwrap(libraryCopy.prototype, '_then'))
     libraryCopies.clear()
-    delete originalLibPrototype[DD_LIB_COPIES]
+    delete originalLib[DD_LIB_COPIES]
   }
 }
 
@@ -51,7 +50,7 @@ module.exports = [
     },
     unpatch (Promise) {
       this.unwrap(Promise, 'getNewLibraryCopy')
-      unwrapLibraryCopies(Promise.prototype, this)
+      unwrapLibraryCopies(Promise, this)
     }
   },
   {
