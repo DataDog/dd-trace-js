@@ -15,7 +15,7 @@ assertPromise('bluebird', bluebird => {
   return bluebird.getNewLibraryCopy()
 })
 
-describe('Bluebird.getNewLibraryCopy', () => {
+describe('bluebird.getNewLibraryCopy', () => {
   let bluebird
   const agent = require('../../dd-trace/test/plugins/agent')
   const plugin = require('../src')
@@ -26,7 +26,7 @@ describe('Bluebird.getNewLibraryCopy', () => {
 
   wrapIt()
 
-  describe('patching and unpatching', () => {
+  describe('library copies to unpatch', () => {
     withVersions(plugin, 'bluebird', version => {
       beforeEach(() => {
         agent.load(plugin, 'bluebird')
@@ -41,28 +41,50 @@ describe('Bluebird.getNewLibraryCopy', () => {
           bluebird = require(`../../../versions/bluebird@${version}`).get()
         })
 
-        it('should add library copies as a hidden property on original promise', () => {
-          if (bluebird.getNewLibraryCopy) {
-            const bluebirdCopyOne = bluebird.getNewLibraryCopy()
-            const bluebirdCopyTwo = bluebird.getNewLibraryCopy()
+        describe('patching', () => {
+          it('should create a hidden property on original promise', () => {
+            if (bluebird.getNewLibraryCopy) {
+              bluebird.getNewLibraryCopy()
 
-            expect(bluebird['_datadog_library_copies']).to.exist
-            expect(bluebird['_datadog_library_copies']).to.contain(bluebirdCopyOne)
-            expect(bluebird['_datadog_library_copies']).to.contain(bluebirdCopyTwo)
-          }
+              expect(bluebird['_datadog_library_copies']).to.exist
+            }
+          })
+
+          it('should add library copies to hidden property on original promise', () => {
+            if (bluebird.getNewLibraryCopy) {
+              const bluebirdCopyOne = bluebird.getNewLibraryCopy()
+              const bluebirdCopyTwo = bluebird.getNewLibraryCopy()
+
+              expect(bluebird['_datadog_library_copies']).to.contain(bluebirdCopyOne)
+              expect(bluebird['_datadog_library_copies']).to.contain(bluebirdCopyTwo)
+            }
+          })
         })
 
-        it('should remove hidden property and unpatch copies', () => {
-          if (bluebird.getNewLibraryCopy) {
-            const bluebirdCopyOne = bluebird.getNewLibraryCopy()
-            const bluebirdCopyTwo = bluebird.getNewLibraryCopy()
+        describe('unpatching', () => {
+          it('should remove hidden property on original promise', () => {
+            if (bluebird.getNewLibraryCopy) {
+              bluebird.getNewLibraryCopy()
 
-            unpatch.call(mockIntegrations, bluebird)
+              expect(bluebird['_datadog_library_copies']).to.exist
 
-            expect(bluebird['_datadog_library_copies']).to.not.exist
-            expect(mockIntegrations.unwrap).to.have.been.calledWithMatch(bluebirdCopyOne.prototype, '_then')
-            expect(mockIntegrations.unwrap).to.have.been.calledWithMatch(bluebirdCopyTwo.prototype, '_then')
-          }
+              unpatch.call(mockIntegrations, bluebird)
+
+              expect(bluebird['_datadog_library_copies']).to.not.exist
+            }
+          })
+
+          it('should unwrap library copies', () => {
+            if (bluebird.getNewLibraryCopy) {
+              const bluebirdCopyOne = bluebird.getNewLibraryCopy()
+              const bluebirdCopyTwo = bluebird.getNewLibraryCopy()
+
+              unpatch.call(mockIntegrations, bluebird)
+
+              expect(mockIntegrations.unwrap).to.have.been.calledWithMatch(bluebirdCopyOne.prototype, '_then')
+              expect(mockIntegrations.unwrap).to.have.been.calledWithMatch(bluebirdCopyTwo.prototype, '_then')
+            }
+          })
         })
       })
     })
