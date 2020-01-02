@@ -41,26 +41,6 @@ describe('bluebird.getNewLibraryCopy', () => {
           bluebird = require(`../../../versions/bluebird@${version}`).get()
         })
 
-        describe('patching', () => {
-          it('should create a hidden property on original promise', () => {
-            if (bluebird.getNewLibraryCopy) {
-              bluebird.getNewLibraryCopy()
-
-              expect(bluebird['_datadog_library_copies']).to.exist
-            }
-          })
-
-          it('should add library copies to hidden property on original promise', () => {
-            if (bluebird.getNewLibraryCopy) {
-              const bluebirdCopyOne = bluebird.getNewLibraryCopy()
-              const bluebirdCopyTwo = bluebird.getNewLibraryCopy()
-
-              expect(bluebird['_datadog_library_copies']).to.contain(bluebirdCopyOne)
-              expect(bluebird['_datadog_library_copies']).to.contain(bluebirdCopyTwo)
-            }
-          })
-        })
-
         describe('unpatching', () => {
           it('should remove hidden property on original promise', () => {
             if (bluebird.getNewLibraryCopy) {
