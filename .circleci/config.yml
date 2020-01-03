@@ -339,6 +339,13 @@ jobs:
         environment:
           - PLUGINS=fastify
 
+  node-fs:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=fs
+
   node-generic-pool:
     <<: *node-plugin-base
     docker:
@@ -818,6 +825,7 @@ workflows:
       - node-elasticsearch
       - node-express
       - node-fastify
+      - node-fs
       - node-generic-pool
       - node-graphql
       - node-grpc
@@ -969,6 +977,7 @@ workflows:
       - node-elasticsearch
       - node-express
       - node-fastify
+      - node-fs
       - node-generic-pool
       - node-graphql
       - node-grpc
