@@ -6,6 +6,10 @@ const plugin = require('../src')
 const realFS = Object.assign({}, require('fs'))
 const os = require('os')
 const path = require('path')
+const semver = require('semver')
+
+const implicitFlag = semver.satisfies(process.versions.node, '>=11.1.0')
+const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 
 wrapIt()
 
@@ -34,21 +38,23 @@ describe('fs', () => {
       }
     })
 
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name: 'fs.open',
-        resource: __filename,
-        meta: {
-          'file.flag': 'r',
-          'file.path': __filename
-        }
-      })
+    if (implicitFlag) {
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name: 'fs.open',
+          resource: __filename,
+          meta: {
+            'file.flag': 'r',
+            'file.path': __filename
+          }
+        })
 
-      fs.open(__filename, (err, _fd) => {
-        fd = _fd
-        if (err) done(err)
+        fs.open(__filename, (err, _fd) => {
+          fd = _fd
+          if (err) done(err)
+        })
       })
-    })
+    }
 
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
@@ -76,18 +82,20 @@ describe('fs', () => {
       }
     })
 
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name: 'fs.opensync',
-        resource: __filename,
-        meta: {
-          'file.flag': 'r',
-          'file.path': __filename
-        }
-      })
+    if (implicitFlag) {
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name: 'fs.opensync',
+          resource: __filename,
+          meta: {
+            'file.flag': 'r',
+            'file.path': __filename
+          }
+        })
 
-      fd = fs.openSync(__filename)
-    })
+        fd = fs.openSync(__filename)
+      })
+    }
 
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
@@ -105,7 +113,7 @@ describe('fs', () => {
 
   describeBoth('close', (name, tested) => {
     it('should be instrumented', (done) => {
-      const fd = realFS.openSync(__filename)
+      const fd = realFS.openSync(__filename, 'r')
       expectOneSpan(agent, done, {
         name,
         resource: fd.toString(),
@@ -119,18 +127,20 @@ describe('fs', () => {
   })
 
   describeBoth('readFile', (name, tested) => {
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name,
-        resource: __filename,
-        meta: {
-          'file.flag': 'r',
-          'file.path': __filename
-        }
-      })
+    if (implicitFlag) {
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name,
+          resource: __filename,
+          meta: {
+            'file.flag': 'r',
+            'file.path': __filename
+          }
+        })
 
-      tested(fs, [__filename], done)
-    })
+        tested(fs, [__filename], done)
+      })
+    }
 
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
@@ -155,18 +165,20 @@ describe('fs', () => {
       realFS.unlinkSync(filename)
     })
 
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name,
-        resource: filename,
-        meta: {
-          'file.flag': 'w',
-          'file.path': filename
-        }
-      })
+    if (implicitFlag) {
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name,
+          resource: filename,
+          meta: {
+            'file.flag': 'w',
+            'file.path': filename
+          }
+        })
 
-      tested(fs, [filename, 'test'], done)
-    })
+        tested(fs, [filename, 'test'], done)
+      })
+    }
 
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
@@ -310,7 +322,7 @@ describe('fs', () => {
   describeBoth('read', (name, tested) => {
     let fd
     beforeEach(() => {
-      fd = realFS.openSync(__filename)
+      fd = realFS.openSync(__filename, 'r')
     })
     afterEach(() => {
       realFS.closeSync(fd)
@@ -350,28 +362,30 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('writev', (name, tested) => {
-    let fd
-    let filename
-    beforeEach(() => {
-      filename = path.join(tmpdir, 'writev')
-      fd = realFS.openSync(filename, 'w')
-    })
-    afterEach(() => {
-      realFS.closeSync(fd)
-      realFS.unlinkSync(filename)
-    })
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name,
-        resource: fd.toString(),
-        meta: {
-          'file.descriptor': fd.toString()
-        }
+  if (hasWritev) {
+    describeBoth('writev', (name, tested) => {
+      let fd
+      let filename
+      beforeEach(() => {
+        filename = path.join(tmpdir, 'writev')
+        fd = realFS.openSync(filename, 'w')
       })
-      tested(fs, [fd, [Buffer.from('hello')], 0], done)
+      afterEach(() => {
+        realFS.closeSync(fd)
+        realFS.unlinkSync(filename)
+      })
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name,
+          resource: fd.toString(),
+          meta: {
+            'file.descriptor': fd.toString()
+          }
+        })
+        tested(fs, [fd, [Buffer.from('hello')], 0], done)
+      })
     })
-  })
+  }
 
   describe('createReadStream', () => {
     it('should be instrumented', (done) => {
@@ -478,7 +492,7 @@ describe('fs', () => {
     let fd
     beforeEach(() => {
       mode = realFS.statSync(__filename).mode % 0o100000
-      fd = realFS.openSync(__filename)
+      fd = realFS.openSync(__filename, 'r')
     })
     afterEach(() => {
       realFS.closeSync(fd)
@@ -551,7 +565,7 @@ describe('fs', () => {
       const stats = realFS.statSync(__filename)
       uid = stats.uid
       gid = stats.gid
-      fd = realFS.openSync(__filename)
+      fd = realFS.openSync(__filename, 'r')
     })
     afterEach(() => {
       realFS.closeSync(fd)
