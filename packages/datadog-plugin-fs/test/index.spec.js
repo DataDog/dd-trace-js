@@ -10,6 +10,7 @@ const semver = require('semver')
 
 const implicitFlag = semver.satisfies(process.versions.node, '>=11.1.0')
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
+const hasOSymlink = realFS.constants.O_SYMLINK
 
 wrapIt()
 
@@ -468,24 +469,26 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('lchmod', (name, tested) => {
-    let mode
-    beforeEach(() => {
-      mode = realFS.statSync(__filename).mode % 0o100000
-    })
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name,
-        resource: __filename,
-        meta: {
-          'file.path': __filename,
-          'file.mode': '0o' + mode.toString(8)
-        }
+  if (hasOSymlink) {
+    describeBoth('lchmod', (name, tested) => {
+      let mode
+      beforeEach(() => {
+        mode = realFS.statSync(__filename).mode % 0o100000
       })
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name,
+          resource: __filename,
+          meta: {
+            'file.path': __filename,
+            'file.mode': '0o' + mode.toString(8)
+          }
+        })
 
-      tested(fs, [__filename, mode], done)
+        tested(fs, [__filename, mode], done)
+      })
     })
-  })
+  }
 
   describeBoth('fchmod', (name, tested) => {
     let mode
@@ -534,28 +537,30 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('lchown', (name, tested) => {
-    let uid
-    let gid
-    beforeEach(() => {
-      const stats = realFS.statSync(__filename)
-      uid = stats.uid
-      gid = stats.gid
-    })
-    it('should be instrumented', (done) => {
-      expectOneSpan(agent, done, {
-        name,
-        resource: __filename,
-        meta: {
-          'file.path': __filename,
-          'file.uid': uid.toString(),
-          'file.gid': gid.toString()
-        }
+  if (hasOSymlink) {
+    describeBoth('lchown', (name, tested) => {
+      let uid
+      let gid
+      beforeEach(() => {
+        const stats = realFS.statSync(__filename)
+        uid = stats.uid
+        gid = stats.gid
       })
+      it('should be instrumented', (done) => {
+        expectOneSpan(agent, done, {
+          name,
+          resource: __filename,
+          meta: {
+            'file.path': __filename,
+            'file.uid': uid.toString(),
+            'file.gid': gid.toString()
+          }
+        })
 
-      tested(fs, [__filename, uid, gid], done)
+        tested(fs, [__filename, uid, gid], done)
+      })
     })
-  })
+  }
 
   describeBoth('fchown', (name, tested) => {
     let uid
