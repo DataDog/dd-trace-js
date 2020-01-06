@@ -199,7 +199,7 @@ const tagMakers = {
   mkdtemp: createPathTags
 }
 
-function createWrap (tracer, config, name, tagMaker) {
+function createWrapCb (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(config, tracer)
   name = 'fs.' + name
   return function wrapFunction (fn) {
@@ -220,7 +220,7 @@ function createWrap (tracer, config, name, tagMaker) {
   }
 }
 
-function createWrapSync (tracer, config, name, tagMaker) {
+function createWrap (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(config, tracer)
   name = 'fs.' + name
   return function wrapSyncFunction (fn) {
@@ -277,15 +277,23 @@ module.exports = {
       if (tagMakerName in tagMakers) {
         const tagMaker = tagMakers[tagMakerName]
         if (name.endsWith('Sync')) {
-          this.wrap(fs, name, createWrapSync(tracer, config, name.toLowerCase(), tagMaker))
-        } else {
           this.wrap(fs, name, createWrap(tracer, config, name.toLowerCase(), tagMaker))
+        } else {
+          this.wrap(fs, name, createWrapCb(tracer, config, name.toLowerCase(), tagMaker))
+        }
+      }
+    }
+    if (fs.promises) {
+      for (const name in fs.promises) {
+        if (name in tagMakers) {
+          const tagMaker = tagMakers[name]
+          this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
         }
       }
     }
     this.wrap(fs, 'createReadStream', createWrapCreateReadStream(config, tracer))
     this.wrap(fs, 'createWriteStream', createWrapCreateWriteStream(config, tracer))
-    this.wrap(fs, 'existsSync', createWrapSync(tracer, config, 'existssync', createPathTags))
+    this.wrap(fs, 'existsSync', createWrap(tracer, config, 'existssync', createPathTags))
     this.wrap(fs, 'exists', createWrapExists(config, tracer))
   },
   unpatch (fs) {
@@ -295,6 +303,13 @@ module.exports = {
         this.unwrap(fs, name)
       }
     }
+    if (fs.promises) {
+      for (const name in fs.promises) {
+        if (name in tagMakers) {
+          this.unwrap(fs.promises, name)
+        }
+      }
+    }
     this.unwrap(fs, 'createReadStream')
     this.unwrap(fs, 'createWriteStream')
     this.unwrap(fs, 'existsSync')
@@ -302,7 +317,6 @@ module.exports = {
   }
 }
 
-// TODO fs.promise
 /** TODO fs functions:
 
 opendir

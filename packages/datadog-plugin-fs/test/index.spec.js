@@ -74,6 +74,50 @@ describe('fs', () => {
     })
   })
 
+  if (realFS.promises) {
+    describe('promises.open', () => {
+      let fd
+      afterEach(() => {
+        if (typeof fd === 'number') {
+          realFS.closeSync(fd)
+          fd = undefined
+        }
+      })
+
+      if (implicitFlag) {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.promises.open',
+            resource: __filename,
+            meta: {
+              'file.flag': 'r',
+              'file.path': __filename
+            }
+          })
+
+          fs.promises.open(__filename).then(_fd => {
+            fd = _fd
+          }, done)
+        })
+      }
+
+      it('should be instrumented with flags', (done) => {
+        expectOneSpan(agent, done, {
+          name: 'fs.promises.open',
+          resource: __filename,
+          meta: {
+            'file.flag': 'r+',
+            'file.path': __filename
+          }
+        })
+
+        fs.promises.open(__filename, 'r+').then(_fd => {
+          fd = _fd
+        }, done)
+      })
+    })
+  }
+
   describe('openSync', () => {
     let fd
     afterEach(() => {
@@ -112,7 +156,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('close', (name, tested) => {
+  describeThreeWays('close', (name, tested) => {
     it('should be instrumented', (done) => {
       const fd = realFS.openSync(__filename, 'r')
       expectOneSpan(agent, done, {
@@ -127,7 +171,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('readFile', (name, tested) => {
+  describeThreeWays('readFile', (name, tested) => {
     if (implicitFlag) {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
@@ -157,7 +201,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('writeFile', (name, tested) => {
+  describeThreeWays('writeFile', (name, tested) => {
     let filename
     beforeEach(() => {
       filename = path.join(tmpdir, 'writeFile')
@@ -195,7 +239,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('appendFile', (name, tested) => {
+  describeThreeWays('appendFile', (name, tested) => {
     let filename
     beforeEach(() => {
       filename = path.join(tmpdir, 'appendFile')
@@ -231,7 +275,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('access', (name, tested) => {
+  describeThreeWays('access', (name, tested) => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -245,7 +289,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('copyFile', (name, tested) => {
+  describeThreeWays('copyFile', (name, tested) => {
     const dest = `${__filename}copy`
     afterEach(() => {
       realFS.unlinkSync(dest)
@@ -264,7 +308,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('stat', (name, tested) => {
+  describeThreeWays('stat', (name, tested) => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -278,7 +322,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('lstat', (name, tested) => {
+  describeThreeWays('lstat', (name, tested) => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -292,7 +336,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('fstat', (name, tested) => {
+  describeThreeWays('fstat', (name, tested) => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -306,7 +350,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('readdir', (name, tested) => {
+  describeThreeWays('readdir', (name, tested) => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -320,7 +364,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('read', (name, tested) => {
+  describeThreeWays('read', (name, tested) => {
     let fd
     beforeEach(() => {
       fd = realFS.openSync(__filename, 'r')
@@ -340,7 +384,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('write', (name, tested) => {
+  describeThreeWays('write', (name, tested) => {
     let fd
     let filename
     beforeEach(() => {
@@ -364,7 +408,7 @@ describe('fs', () => {
   })
 
   if (hasWritev) {
-    describeBoth('writev', (name, tested) => {
+    describeThreeWays('writev', (name, tested) => {
       let fd
       let filename
       beforeEach(() => {
@@ -450,7 +494,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('chmod', (name, tested) => {
+  describeThreeWays('chmod', (name, tested) => {
     let mode
     beforeEach(() => {
       mode = realFS.statSync(__filename).mode % 0o100000
@@ -470,7 +514,7 @@ describe('fs', () => {
   })
 
   if (hasOSymlink) {
-    describeBoth('lchmod', (name, tested) => {
+    describeThreeWays('lchmod', (name, tested) => {
       let mode
       beforeEach(() => {
         mode = realFS.statSync(__filename).mode % 0o100000
@@ -490,7 +534,7 @@ describe('fs', () => {
     })
   }
 
-  describeBoth('fchmod', (name, tested) => {
+  describeThreeWays('fchmod', (name, tested) => {
     let mode
     let fd
     beforeEach(() => {
@@ -514,7 +558,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('chown', (name, tested) => {
+  describeThreeWays('chown', (name, tested) => {
     let uid
     let gid
     beforeEach(() => {
@@ -538,7 +582,7 @@ describe('fs', () => {
   })
 
   if (hasOSymlink) {
-    describeBoth('lchown', (name, tested) => {
+    describeThreeWays('lchown', (name, tested) => {
       let uid
       let gid
       beforeEach(() => {
@@ -562,7 +606,7 @@ describe('fs', () => {
     })
   }
 
-  describeBoth('fchown', (name, tested) => {
+  describeThreeWays('fchown', (name, tested) => {
     let uid
     let gid
     let fd
@@ -590,7 +634,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('realpath', (name, tested) => {
+  describeThreeWays('realpath', (name, tested) => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -603,7 +647,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('readlink', (name, tested) => {
+  describeThreeWays('readlink', (name, tested) => {
     let link
     beforeEach(() => {
       link = path.join(tmpdir, 'link')
@@ -624,7 +668,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('unlink', (name, tested) => {
+  describeThreeWays('unlink', (name, tested) => {
     let link
     beforeEach(() => {
       link = path.join(tmpdir, 'link')
@@ -642,7 +686,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('symlink', (name, tested) => {
+  describeThreeWays('symlink', (name, tested) => {
     let link
     beforeEach(() => {
       link = path.join(tmpdir, 'link')
@@ -663,7 +707,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('link', (name, tested) => {
+  describeThreeWays('link', (name, tested) => {
     let link
     beforeEach(() => {
       link = path.join(tmpdir, 'link')
@@ -684,7 +728,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('rmdir', (name, tested) => {
+  describeThreeWays('rmdir', (name, tested) => {
     let dir
     beforeEach(() => {
       dir = path.join(tmpdir, 'dir')
@@ -702,7 +746,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('rename', (name, tested) => {
+  describeThreeWays('rename', (name, tested) => {
     let src
     let dest
     beforeEach(() => {
@@ -726,7 +770,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('fsync', (name, tested) => {
+  describeThreeWays('fsync', (name, tested) => {
     let fd
     let tmpfile
     beforeEach(() => {
@@ -749,7 +793,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('fdatasync', (name, tested) => {
+  describeThreeWays('fdatasync', (name, tested) => {
     let fd
     let tmpfile
     beforeEach(() => {
@@ -772,7 +816,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('mkdir', (name, tested) => {
+  describeThreeWays('mkdir', (name, tested) => {
     let dir
     beforeEach(() => {
       dir = path.join(tmpdir, 'mkdir')
@@ -792,7 +836,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('truncate', (name, tested) => {
+  describeThreeWays('truncate', (name, tested) => {
     let filename
     beforeEach(() => {
       filename = path.join(tmpdir, 'truncate')
@@ -813,7 +857,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('ftruncate', (name, tested) => {
+  describeThreeWays('ftruncate', (name, tested) => {
     let filename
     let fd
     beforeEach(() => {
@@ -837,7 +881,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('utimes', (name, tested) => {
+  describeThreeWays('utimes', (name, tested) => {
     let filename
     beforeEach(() => {
       filename = path.join(tmpdir, 'truncate')
@@ -859,7 +903,7 @@ describe('fs', () => {
     })
   })
 
-  describeBoth('futimes', (name, tested) => {
+  describeThreeWays('futimes', (name, tested) => {
     let filename
     let fd
     beforeEach(() => {
@@ -953,13 +997,21 @@ describe('fs', () => {
   })
 })
 
-function describeBoth (name, fn) {
+function describeThreeWays (name, fn) {
   describe(name, () => {
     fn('fs.' + name.toLowerCase(), (fs, args, done) => {
       args.push((err) => err && done(err))
       return fs[name].apply(fs, args)
     })
   })
+
+  if (realFS.promises && name in realFS.promises) {
+    describe('promises.' + name, () => {
+      fn('fs.promises.' + name.toLowerCase(), (fs, args, done) => {
+        fs.promises[name].apply(fs.promises, args).catch(done)
+      })
+    })
+  }
 
   const nameSync = name + 'Sync'
   describe(nameSync, () => {
