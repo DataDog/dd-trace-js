@@ -123,6 +123,7 @@ describe('Config', () => {
       logLevel: logLevel,
       experimental: {
         b3: true,
+        runtimeId: true,
         sampler: {
           sampleRate: 1,
           rateLimit: 1000
@@ -149,10 +150,12 @@ describe('Config', () => {
     expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.property('clientToken', '789')
     expect(config).to.have.property('logLevel', logLevel)
-    expect(config).to.have.deep.property('tags', {
-      'foo': 'bar'
-    })
+    expect(config).to.have.property('tags')
+    expect(config.tags).to.have.property('foo', 'bar')
+    expect(config.tags).to.have.property('runtime-id')
+    expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{32}$/)
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
   })
 

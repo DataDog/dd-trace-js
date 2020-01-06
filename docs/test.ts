@@ -43,6 +43,7 @@ tracer.init({
   trackAsyncScope: false,
   experimental: {
     b3: true,
+    runtimeId: true,
     exporter: 'log',
     peers: ['foo', /bar/],
     sampler: {

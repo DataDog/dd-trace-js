@@ -264,6 +264,12 @@ export declare interface TracerOptions {
     b3?: boolean
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to spans and metrics.
+     * @default false
+     */
+    runtimeId?: boolean
+
+    /**
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
