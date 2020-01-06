@@ -100,7 +100,7 @@ class PrioritySampler {
   }
 
   _isSampledByRule (context, rule) {
-    context._metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._tags[SAMPLING_RULE_DECISION] = rule.sampleRate
 
     return rule.sampler.isSampled(context)
   }
@@ -108,7 +108,7 @@ class PrioritySampler {
   _isSampledByRateLimit (context) {
     const allowed = this._limiter.isAllowed()
 
-    context._metrics[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+    context._tags[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
 
     return allowed
   }
@@ -117,7 +117,7 @@ class PrioritySampler {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._metrics[SAMPLING_AGENT_DECISION] = sampler.rate()
+    context._tags[SAMPLING_AGENT_DECISION] = sampler.rate()
 
     return sampler.isSampled(context)
   }

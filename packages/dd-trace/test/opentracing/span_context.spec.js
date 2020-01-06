@@ -40,7 +40,6 @@ describe('SpanContext', () => {
       _name: 'test',
       _isFinished: true,
       _tags: {},
-      _metrics: {},
       _sampling: { priority: 2 },
       _baggageItems: { foo: 'bar' },
       _traceFlags: {
@@ -68,7 +67,6 @@ describe('SpanContext', () => {
       _name: undefined,
       _isFinished: false,
       _tags: {},
-      _metrics: {},
       _sampling: {},
       _baggageItems: {},
       _traceFlags: {

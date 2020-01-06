@@ -14,7 +14,6 @@ class DatadogSpanContext extends SpanContext {
     this._name = props.name
     this._isFinished = props.isFinished || false
     this._tags = props.tags || {}
-    this._metrics = props.metrics || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
     this._traceFlags = props.traceFlags || {}
