@@ -101,6 +101,38 @@ module.exports = (name, factory, versionFilter) => {
                   })
               })
             })
+
+            it('should unpatch then() callback when unpatching instrumentation', () => {
+              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
+              tracer._instrumenter.disable()
+
+              const span = {}
+              const differentContextSpan = {}
+
+              let promise = new Promise((resolve, reject) => {
+                setImmediate(() => {
+                  tracer.scope().activate(differentContextSpan, () => {
+                    resolve()
+                  })
+                })
+              })
+
+              return tracer.scope().activate(span, () => {
+                for (let i = 0; i < promise.then.length; i++) {
+                  const args = new Array(i + 1)
+
+                  args[i] = () => {
+                    expect(tracer.scope().active()).to.equal(differentContextSpan)
+                    expect(span).to.not.equal(differentContextSpan)
+                  }
+
+                  promise = promise.then.apply(promise, args)
+                }
+
+                return promise
+              })
+            })
           })
         }
       })
