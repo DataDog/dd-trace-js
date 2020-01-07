@@ -5,6 +5,9 @@ const platform = require('./platform')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
+const id = require('./id')
+
+const runtimeId = `${id().toString()}${id().toString()}`
 
 class Config {
   constructor (service, options) {
@@ -69,6 +72,7 @@ class Config {
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
+      runtimeId: !(!options.experimental || !options.experimental.runtimeId),
       exporter: options.experimental && options.experimental.exporter,
       peers: (options.experimental && options.experimental.peers) || [],
       sampler
@@ -81,6 +85,12 @@ class Config {
       platform.env('DD_TRACE_LOG_LEVEL'),
       'debug'
     )
+
+    if (this.experimental.runtimeId) {
+      tagger.add(tags, {
+        'runtime-id': runtimeId
+      })
+    }
   }
 }
 
