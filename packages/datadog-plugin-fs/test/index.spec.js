@@ -364,6 +364,23 @@ describe('fs', () => {
     })
   })
 
+  describeThreeWays('opendir', (name, tested) => {
+    it('should be instrumented', (done) => {
+      expectOneSpan(agent, done, {
+        name,
+        resource: __dirname,
+        meta: {
+          'file.path': __dirname
+        }
+      })
+
+      tested(fs, [__dirname], (err, dir) => {
+        if (err) done(err)
+        else dir.close(done)
+      })
+    })
+  })
+
   describeThreeWays('read', (name, tested) => {
     let fd
     beforeEach(() => {
@@ -995,6 +1012,134 @@ describe('fs', () => {
       fs.existsSync(__filename)
     })
   })
+
+  if (realFS.Dir) {
+    describe('Dir', () => {
+      let dirname
+      let dir
+      beforeEach(async () => {
+        dirname = path.join(tmpdir, 'dir')
+        fs.mkdirSync(dirname)
+        fs.writeFileSync(path.join(dirname, '1'), '1')
+        fs.writeFileSync(path.join(dirname, '2'), '2')
+        fs.writeFileSync(path.join(dirname, '3'), '3')
+        dir = await fs.promises.opendir(dirname)
+      })
+      afterEach(async () => {
+        try {
+          await dir.close()
+        } catch (e) {
+          if (e.code !== 'ERR_DIR_CLOSED') {
+            throw e
+          }
+        }
+        fs.unlinkSync(path.join(dirname, '1'))
+        fs.unlinkSync(path.join(dirname, '2'))
+        fs.unlinkSync(path.join(dirname, '3'))
+        fs.rmdirSync(dirname)
+      })
+
+      describe('close', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.close',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          dir.close().catch(done)
+        })
+
+        it('should be instrumented with callback', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.close',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          dir.close(err => err && done(err))
+        })
+
+        it('Sync should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.closesync',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          dir.closeSync()
+        })
+      })
+
+      describe('read', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.read',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          dir.read().catch(done)
+        })
+
+        it('should be instrumented with callback', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.read',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          dir.read(err => err && done(err))
+        })
+
+        it('Sync should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.readsync',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          dir.readSync()
+        })
+      })
+
+      describe('Symbol.asyncIterator', (done) => {
+        it('should be instrumented for reads', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.read',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          ;(async () => {
+            // eslint-disable-next-line no-unused-vars
+            for await (const dirent of dir) { /* noop */ }
+          })().catch(done)
+        })
+
+        it('should be instrumented for close', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.dir.close',
+            resource: dirname,
+            meta: {
+              'file.path': dirname
+            }
+          })
+          ;(async () => {
+            // eslint-disable-next-line no-unused-vars
+            for await (const dirent of dir) { /* noop */ }
+          })().catch(done)
+        })
+      })
+    })
+  }
 
   if (realFS.promises) {
     describe('FileHandle', () => {

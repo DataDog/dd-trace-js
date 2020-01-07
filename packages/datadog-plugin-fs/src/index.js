@@ -48,6 +48,118 @@ function createWrapExists (config, tracer) {
   }
 }
 
+function createWrapDirRead (config, tracer, sync) {
+  const name = sync ? 'fs.dir.readsync' : 'fs.dir.read'
+  return function wrapDirRead (read) {
+    return function wrappedDirRead (cb) {
+      const tags = makeFSTags(this.path, null, null, config, tracer)
+      return tracer.trace(name, { tags }, (span, done) => {
+        if (cb) {
+          return read.call(this, (err, dirent) => {
+            done(err)
+            cb(err, dirent)
+          })
+        } else {
+          const p = read.call(this)
+          if (p && typeof p.then === 'function') {
+            return p.then(r => {
+              done()
+              return r
+            }, e => {
+              done(e)
+              throw e
+            })
+          } else {
+            done()
+            return p
+          }
+        }
+      })
+    }
+  }
+}
+
+function createWrapDirClose (config, tracer, sync) {
+  const name = sync ? 'fs.dir.closesync' : 'fs.dir.close'
+  return function wrapDirClose (close) {
+    return function wrappedDirClose (cb) {
+      const tags = makeFSTags(this.path, null, null, config, tracer)
+      return tracer.trace(name, { tags }, (span, done) => {
+        if (cb) {
+          return close.call(this, (err, dirent) => {
+            done(err)
+            cb(err, dirent)
+          })
+        } else {
+          const p = close.call(this)
+          if (p && typeof p.then === 'function') {
+            return p.then(r => {
+              done()
+              return r
+            }, e => {
+              done(e)
+              throw e
+            })
+          } else {
+            done()
+            return p
+          }
+        }
+      })
+    }
+  }
+}
+
+let kDirReadPromisified
+let kDirClosePromisified
+
+function createWrapDirAsyncIterator (config, tracer, instrumenter) {
+  return function wrapDirAsyncIterator (asyncIterator) {
+    return function wrappedDirAsyncIterator () {
+      if (!kDirReadPromisified) {
+        const keys = Reflect.ownKeys(this)
+        for (const key of keys) {
+          if (kDirReadPromisified && kDirClosePromisified) break
+          if (typeof key !== 'symbol') continue
+          if (!kDirReadPromisified && getSymbolName(key).includes('kDirReadPromisified')) {
+            kDirReadPromisified = key
+          }
+          if (!kDirClosePromisified && getSymbolName(key).includes('kDirClosePromisified')) {
+            kDirClosePromisified = key
+          }
+        }
+      }
+      instrumenter.wrap(this, kDirReadPromisified, createWrapKDirRead(config, tracer))
+      instrumenter.wrap(this, kDirClosePromisified, createWrapKDirClose(config, tracer, instrumenter))
+      return asyncIterator.call(this)
+    }
+  }
+}
+
+function createWrapKDirRead (config, tracer) {
+  return createWrapDirRead(config, tracer)
+}
+
+function createWrapKDirClose (config, tracer, instrumenter) {
+  return function wrapKDirClose (kDirClose) {
+    return function wrappedKDirClose () {
+      const tags = makeFSTags(this.path, null, null, config, tracer)
+      return tracer.trace('fs.dir.close', { tags }, (span) => {
+        const p = kDirClose.call(this)
+        return p.then(r => {
+          instrumenter.unwrap(this, kDirReadPromisified)
+          instrumenter.unwrap(this, kDirClosePromisified)
+          return r
+        }, e => {
+          instrumenter.unwrap(this, kDirReadPromisified)
+          instrumenter.unwrap(this, kDirClosePromisified)
+          throw e
+        })
+      })
+    }
+  }
+}
+
 function createOpenTags (config, tracer) {
   return function openTags (path, flag, mode) {
     if (!flag || typeof flag === 'function') {
@@ -170,6 +282,10 @@ function createFchownTags (config, tracer) {
   }
 }
 
+function getSymbolName (sym) {
+  return sym.description || sym.toString()
+}
+
 const tagMakers = {
   open: createOpenTags,
   close: createCloseTags,
@@ -182,6 +298,7 @@ const tagMakers = {
   lstat: createPathTags,
   fstat: createFDTags,
   readdir: createPathTags,
+  opendir: createPathTags,
   read: createFDTags,
   write: createFDTags,
   writev: createFDTags,
@@ -282,7 +399,7 @@ function wrapCallback (cb, done) {
   }
 }
 
-async function getFileHandlePrototype(fs) {
+async function getFileHandlePrototype (fs) {
   const fh = await fs.promises.open(__filename, 'r')
   await fh.close()
   return Object.getPrototypeOf(fh)
@@ -315,15 +432,21 @@ module.exports = {
             continue
           }
           let tagMaker
-          if ('f'+name in tagMakers) {
-            tagMaker = tagMakers['f'+ name]
+          if ('f' + name in tagMakers) {
+            tagMaker = tagMakers['f' + name]
           } else {
             tagMaker = createFDTags
           }
           this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name.toLowerCase(), tagMaker))
-
         }
-      }).catch(e => console.error(e))
+      })
+    }
+    if (fs.Dir) {
+      this.wrap(fs.Dir.prototype, 'close', createWrapDirClose(config, tracer))
+      this.wrap(fs.Dir.prototype, 'closeSync', createWrapDirClose(config, tracer, true))
+      this.wrap(fs.Dir.prototype, 'read', createWrapDirRead(config, tracer))
+      this.wrap(fs.Dir.prototype, 'readSync', createWrapDirRead(config, tracer, true))
+      this.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
     }
     this.wrap(fs, 'createReadStream', createWrapCreateReadStream(config, tracer))
     this.wrap(fs, 'createWriteStream', createWrapCreateWriteStream(config, tracer))
@@ -352,6 +475,13 @@ module.exports = {
         }
       })
     }
+    if (fs.Dir) {
+      this.unwrap(fs.Dir.prototype, 'close')
+      this.unwrap(fs.Dir.prototype, 'closeSync')
+      this.unwrap(fs.Dir.prototype, 'read')
+      this.unwrap(fs.Dir.prototype, 'readSync')
+      this.unwrap(fs.Dir.prototype, Symbol.asyncIterator)
+    }
     this.unwrap(fs, 'createReadStream')
     this.unwrap(fs, 'createWriteStream')
     this.unwrap(fs, 'existsSync')
@@ -361,8 +491,6 @@ module.exports = {
 
 /** TODO fs functions:
 
-opendir
-opendirSync
 unwatchFile
 watch
 watchFile
