@@ -1,8 +1,9 @@
 'use strict'
 
-module.exports = (name, factory, versionFilter) => {
+module.exports = (name, factory, versionRange) => {
   const agent = require('./agent')
   const plugin = require(`../../../datadog-plugin-${name}/src`)
+  const semver = require('semver')
 
   wrapIt()
 
@@ -12,7 +13,7 @@ module.exports = (name, factory, versionFilter) => {
 
     describe(name, () => {
       withVersions(plugin, name, version => {
-        if (!versionFilter || versionFilter(version)) {
+        if (!versionRange || semver.intersects(version, versionRange)) {
           beforeEach(() => {
             tracer = require('../..')
           })
@@ -104,10 +105,6 @@ module.exports = (name, factory, versionFilter) => {
 
             it('should unpatch then() callback when unpatching instrumentation', () => {
               if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
-              // some non native promise library versions willl defer to native promises, skip for now
-              // https://github.com/kevincennis/promise/blob/b58ef67dd4023139d0aad98ccd0cb60d8a4f9eec/src/promise.js#L7
-              if (Promise === global.Promise) return
 
               tracer._instrumenter.disable()
 

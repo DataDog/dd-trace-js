@@ -5,7 +5,7 @@ const tx = require('../../dd-trace/src/plugins/util/promise')
 module.exports = [
   {
     name: 'promise-js',
-    versions: ['>=0.0.3'],
+    versions: ['0.0.3 - 0.0.6'],
     patch (Promise, tracer, config) {
       this.wrap(Promise.prototype, 'then', tx.createWrapThen(tracer, config))
     },
