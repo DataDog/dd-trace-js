@@ -995,6 +995,225 @@ describe('fs', () => {
       fs.existsSync(__filename)
     })
   })
+
+  if (realFS.promises) {
+    describe('FileHandle', () => {
+      let filehandle
+      let filename
+      beforeEach(async () => {
+        filename = path.join(os.tmpdir(), 'filehandle')
+        await fs.promises.writeFile(filename, 'some data')
+        filehandle = await fs.promises.open(filename, 'w+')
+      })
+      afterEach(async () => {
+        try {
+          await filehandle.close()
+        } catch (e) {
+          // we expect an EBADF from the `close` test
+          if (e.code !== 'EBADF') {
+            throw e
+          }
+        }
+        await fs.promises.unlink(filename)
+      })
+
+      describe('appendFile', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.appendfile',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.appendFile('some more data').catch(done)
+        })
+      })
+
+      describe('writeFile', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.writefile',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.writeFile('some more data').catch(done)
+        })
+      })
+
+      describe('readFile', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.readfile',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.readFile().catch(done)
+        })
+      })
+
+      describe('write', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.write',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.write('some more data').catch(done)
+        })
+      })
+
+      describe('writev', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.writev',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.writev([Buffer.from('some more data')]).catch(done)
+        })
+      })
+
+      describe('read', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.read',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.read(Buffer.alloc(5), 0, 5, 0).catch(done)
+        })
+      })
+
+      describe('chmod', () => {
+        let mode
+        beforeEach(() => {
+          mode = realFS.statSync(__filename).mode % 0o100000
+        })
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.chmod',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString(),
+              'file.mode': '0o' + mode.toString(8)
+            }
+          })
+          filehandle.chmod(mode).catch(done)
+        })
+      })
+
+      describe('chown', () => {
+        let uid
+        let gid
+        beforeEach(() => {
+          const stats = realFS.statSync(filename)
+          uid = stats.uid
+          gid = stats.gid
+        })
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.chown',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString(),
+              'file.uid': uid.toString(),
+              'file.gid': gid.toString()
+            }
+          })
+          filehandle.chown(uid, gid).catch(done)
+        })
+      })
+
+      describe('stat', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.stat',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.stat().catch(done)
+        })
+      })
+
+      describe('sync', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.sync',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.sync().catch(done)
+        })
+      })
+
+      describe('datasync', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.datasync',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.datasync().catch(done)
+        })
+      })
+
+      describe('truncate', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.truncate',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.truncate(5).catch(done)
+        })
+      })
+
+      describe('utimes', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.utimes',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.utimes(Date.now(), Date.now()).catch(done)
+        })
+      })
+
+      describe('close', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.filehandle.close',
+            resource: filehandle.fd.toString(),
+            meta: {
+              'file.descriptor': filehandle.fd.toString()
+            }
+          })
+          filehandle.close().catch(done)
+        })
+      })
+    })
+  }
 })
 
 function describeThreeWays (name, fn) {

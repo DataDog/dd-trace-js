@@ -110,6 +110,9 @@ function createChmodTags (config, tracer) {
 
 function createFchmodTags (config, tracer) {
   return function fchmodTags (fd, mode) {
+    if (typeof this === 'object' && this !== null && this.fd) {
+      fd = this.fd
+    }
     if (typeof fd !== 'number' || typeof mode !== 'number') {
       return
     }
@@ -130,6 +133,9 @@ function createPathTags (config, tracer) {
 
 function createFDTags (config, tracer) {
   return function fdTags (fd) {
+    if (typeof this === 'object' && this !== null && this.fd) {
+      fd = this.fd
+    }
     if (typeof fd !== 'number') {
       return
     }
@@ -151,6 +157,9 @@ function createChownTags (config, tracer) {
 
 function createFchownTags (config, tracer) {
   return function fchownTags (fd, uid, gid) {
+    if (typeof this === 'object' && this !== null && this.fd) {
+      fd = this.fd
+    }
     if (typeof fd !== 'number' || typeof uid !== 'number' || typeof gid !== 'number') {
       return
     }
@@ -225,7 +234,11 @@ function createWrap (tracer, config, name, tagMaker) {
   name = 'fs.' + name
   return function wrapSyncFunction (fn) {
     return function wrappedSyncFunction () {
-      const tags = makeTags.apply(this, arguments)
+      const tagArgs = Array.from(arguments)
+      if (name.indexOf('filehandle') > -1) {
+        tagArgs.unshift(null)
+      }
+      const tags = makeTags.apply(this, tagArgs)
       if (!tags) {
         return fn.apply(this, arguments)
       }
@@ -269,6 +282,12 @@ function wrapCallback (cb, done) {
   }
 }
 
+async function getFileHandlePrototype(fs) {
+  const fh = await fs.promises.open(__filename, 'r')
+  await fh.close()
+  return Object.getPrototypeOf(fh)
+}
+
 module.exports = {
   name: 'fs',
   patch (fs, tracer, config) {
@@ -290,6 +309,21 @@ module.exports = {
           this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
         }
       }
+      getFileHandlePrototype(fs).then(fileHandlePrototype => {
+        for (const name of Reflect.ownKeys(fileHandlePrototype)) {
+          if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+            continue
+          }
+          let tagMaker
+          if ('f'+name in tagMakers) {
+            tagMaker = tagMakers['f'+ name]
+          } else {
+            tagMaker = createFDTags
+          }
+          this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name.toLowerCase(), tagMaker))
+
+        }
+      }).catch(e => console.error(e))
     }
     this.wrap(fs, 'createReadStream', createWrapCreateReadStream(config, tracer))
     this.wrap(fs, 'createWriteStream', createWrapCreateWriteStream(config, tracer))
@@ -309,6 +343,14 @@ module.exports = {
           this.unwrap(fs.promises, name)
         }
       }
+      getFileHandlePrototype(fs).then(fileHandlePrototype => {
+        for (const name of Reflect.ownKeys(fileHandlePrototype)) {
+          if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+            continue
+          }
+          this.unwrap(fileHandlePrototype, name)
+        }
+      })
     }
     this.unwrap(fs, 'createReadStream')
     this.unwrap(fs, 'createWriteStream')
