@@ -105,6 +105,10 @@ module.exports = (name, factory, versionFilter) => {
             it('should unpatch then() callback when unpatching instrumentation', () => {
               if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
 
+              // some non native promise library versions willl defer to native promises, skip for now
+              // https://github.com/kevincennis/promise/blob/b58ef67dd4023139d0aad98ccd0cb60d8a4f9eec/src/promise.js#L7
+              if (Promise === global.Promise) return
+
               tracer._instrumenter.disable()
 
               const span = {}
