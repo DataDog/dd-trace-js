@@ -2,7 +2,6 @@
 
 const opentracing = require('opentracing')
 const Span = opentracing.Span
-const truncate = require('lodash.truncate')
 const SpanContext = require('./span_context')
 const platform = require('../platform')
 const constants = require('../constants')
@@ -41,13 +40,16 @@ class DatadogSpan extends Span {
 
   toString () {
     const spanContext = this.context()
+    const resource = spanContext._tags['resource.name'].length > 100
+      ? `${spanContext._tags['resource.name'].substring(0, 97)}...`
+      : spanContext._tags['resource.name']
     const json = JSON.stringify({
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
       service: spanContext._tags['service.name'],
       name: spanContext._name,
-      resource: truncate(spanContext._tags['resource.name'], { length: 100 })
+      resource
     })
 
     return `Span${json}`
