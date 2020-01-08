@@ -1119,8 +1119,8 @@ describe('fs', () => {
             }
           })
           ;(async () => {
-            // eslint-disable-next-line no-unused-vars
-            for await (const dirent of dir) { /* noop */ }
+            const iterator = dir[Symbol.asyncIterator]()
+            while (!(await iterator.next()).done) { /* noop */ }
           })().catch(done)
         })
 
@@ -1133,8 +1133,8 @@ describe('fs', () => {
             }
           })
           ;(async () => {
-            // eslint-disable-next-line no-unused-vars
-            for await (const dirent of dir) { /* noop */ }
+            const iterator = dir[Symbol.asyncIterator]()
+            while (!(await iterator.next()).done) { /* noop */ }
           })().catch(done)
         })
       })
@@ -1214,18 +1214,20 @@ describe('fs', () => {
         })
       })
 
-      describe('writev', () => {
-        it('should be instrumented', (done) => {
-          expectOneSpan(agent, done, {
-            name: 'fs.filehandle.writev',
-            resource: filehandle.fd.toString(),
-            meta: {
-              'file.descriptor': filehandle.fd.toString()
-            }
+      if (hasWritev) {
+        describe('writev', () => {
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              name: 'fs.filehandle.writev',
+              resource: filehandle.fd.toString(),
+              meta: {
+                'file.descriptor': filehandle.fd.toString()
+              }
+            })
+            filehandle.writev([Buffer.from('some more data')]).catch(done)
           })
-          filehandle.writev([Buffer.from('some more data')]).catch(done)
         })
-      })
+      }
 
       describe('read', () => {
         it('should be instrumented', (done) => {
@@ -1362,12 +1364,14 @@ describe('fs', () => {
 })
 
 function describeThreeWays (name, fn) {
-  describe(name, () => {
-    fn('fs.' + name.toLowerCase(), (fs, args, done) => {
-      args.push((err) => err && done(err))
-      return fs[name].apply(fs, args)
+  if (name in realFS) {
+    describe(name, () => {
+      fn('fs.' + name.toLowerCase(), (fs, args, done) => {
+        args.push((err) => err && done(err))
+        return fs[name].apply(fs, args)
+      })
     })
-  })
+  }
 
   if (realFS.promises && name in realFS.promises) {
     describe('promises.' + name, () => {
@@ -1378,11 +1382,14 @@ function describeThreeWays (name, fn) {
   }
 
   const nameSync = name + 'Sync'
-  describe(nameSync, () => {
-    fn('fs.' + nameSync.toLowerCase(), (fs, args) => {
-      return fs[nameSync].apply(fs, args)
+
+  if (nameSync in realFS) {
+    describe(nameSync, () => {
+      fn('fs.' + nameSync.toLowerCase(), (fs, args) => {
+        return fs[nameSync].apply(fs, args)
+      })
     })
-  })
+  }
 }
 
 function mkExpected (props) {

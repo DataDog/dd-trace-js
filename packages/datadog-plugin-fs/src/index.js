@@ -409,6 +409,7 @@ module.exports = {
   name: 'fs',
   patch (fs, tracer, config) {
     for (const name in fs) {
+      if (!fs[name]) continue
       const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
       if (tagMakerName in tagMakers) {
         const tagMaker = tagMakers[tagMakerName]
@@ -455,6 +456,7 @@ module.exports = {
   },
   unpatch (fs) {
     for (const name in fs) {
+      if (!fs[name]) continue
       const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
       if (tagMakerName in tagMakers) {
         this.unwrap(fs, name)
