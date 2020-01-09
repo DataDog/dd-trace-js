@@ -1,7 +1,6 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
-import { TransportRequestParams } from "@elastic/elasticsearch/lib/Transport"
 
 export { SpanOptions };
 
@@ -358,6 +357,20 @@ interface EventEmitter {
   off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
+}
+
+/** @hidden */
+declare type anyObject = {
+  [key: string]: any;
+};
+
+/** @hidden */
+interface TransportRequestParams {
+  method: string;
+  path: string;
+  body?: anyObject;
+  bulkBody?: anyObject;
+  querystring?: anyObject;
 }
 
 /**
