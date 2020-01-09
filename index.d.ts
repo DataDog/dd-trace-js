@@ -1,6 +1,7 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
+import { TransportRequestParams } from "@elastic/elasticsearch/lib/Transport"
 
 export { SpanOptions };
 
@@ -650,7 +651,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the query span finishes.
        */
-      query?: (span?: opentracing.Span, params?: any) => any;
+      query?: (span?: opentracing.Span, params?: TransportRequestParams) => any;
     };
   }
 

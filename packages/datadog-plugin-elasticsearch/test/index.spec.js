@@ -217,7 +217,9 @@ describe('Plugin', () => {
         before(() => {
           return agent.load(plugin, 'elasticsearch', {
             service: 'test',
-            hooks: { query: span => { span.setTag('elasticsearch.params', 'foo') } }
+            hooks: { query: (span, params) => {
+              span.setTags({ 'elasticsearch.params': 'foo', 'elasticsearch.size': params.size })
+            } }
           })
         })
 
@@ -248,6 +250,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('elasticsearch.params', 'foo')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.size', 100)
             })
             .then(done)
             .catch(done)

@@ -45,9 +45,9 @@ function createWrapRequest (tracer, config) {
           const promise = request.apply(this, arguments)
 
           if (promise && typeof promise.then === 'function') {
-            promise.then(() => finish(span, null, params, config), e => finish(span, e, params, config))
+            promise.then(() => finish(span, params, config), e => finish(span, params, config, e))
           } else {
-            finish(span, null, params, config)
+            finish(span, params, config)
           }
 
           return promise
@@ -59,12 +59,12 @@ function createWrapRequest (tracer, config) {
 
 function wrapCallback (tracer, span, params, config, done) {
   return function (err) {
-    finish(span, err, params, config)
+    finish(span, params, config, err)
     done.apply(null, arguments)
   }
 }
 
-function finish (span, err, params, config) {
+function finish (span, params, config, err) {
   if (err) {
     span.addTags({
       'error.type': err.name,
