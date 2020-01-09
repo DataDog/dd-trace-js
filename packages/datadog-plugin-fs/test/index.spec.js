@@ -522,7 +522,7 @@ describe('fs', () => {
         resource: __filename,
         meta: {
           'file.path': __filename,
-          'file.mode': '0o' + mode.toString(8)
+          'file.mode': mode.toString(8)
         }
       })
 
@@ -542,7 +542,7 @@ describe('fs', () => {
           resource: __filename,
           meta: {
             'file.path': __filename,
-            'file.mode': '0o' + mode.toString(8)
+            'file.mode': mode.toString(8)
           }
         })
 
@@ -567,7 +567,7 @@ describe('fs', () => {
         resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString(),
-          'file.mode': '0o' + mode.toString(8)
+          'file.mode': mode.toString(8)
         }
       })
 
@@ -1145,19 +1145,16 @@ describe('fs', () => {
     describe('FileHandle', () => {
       let filehandle
       let filename
+      let isClosed
       beforeEach(async () => {
+        isClosed = false
         filename = path.join(os.tmpdir(), 'filehandle')
-        await fs.promises.writeFile(filename, 'some data')
+        fs.writeFileSync(filename, 'some data')
         filehandle = await fs.promises.open(filename, 'w+')
       })
       afterEach(async () => {
-        try {
+        if (!isClosed) {
           await filehandle.close()
-        } catch (e) {
-          // we expect an EBADF from the `close` test
-          if (e.code !== 'EBADF') {
-            throw e
-          }
         }
         await fs.promises.unlink(filename)
       })
@@ -1253,7 +1250,7 @@ describe('fs', () => {
             resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString(),
-              'file.mode': '0o' + mode.toString(8)
+              'file.mode': mode.toString(8)
             }
           })
           filehandle.chmod(mode).catch(done)
@@ -1356,6 +1353,7 @@ describe('fs', () => {
               'file.descriptor': filehandle.fd.toString()
             }
           })
+          isClosed = true
           filehandle.close().catch(done)
         })
       })

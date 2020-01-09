@@ -1,9 +1,52 @@
 'use strict'
 
+const tx = require('../../dd-trace/src/plugins/util/tx.js')
+
+let kDirReadPromisified
+let kDirClosePromisified
+
+const tagMakers = {
+  open: createOpenTags,
+  close: createCloseTags,
+  readFile: createReadFileTags,
+  writeFile: createWriteFileTags,
+  appendFile: createAppendFileTags,
+  access: createPathTags,
+  copyFile: createCopyFileTags,
+  stat: createPathTags,
+  lstat: createPathTags,
+  fstat: createFDTags,
+  readdir: createPathTags,
+  opendir: createPathTags,
+  read: createFDTags,
+  write: createFDTags,
+  writev: createFDTags,
+  chmod: createChmodTags,
+  lchmod: createChmodTags,
+  fchmod: createFchmodTags,
+  chown: createChownTags,
+  lchown: createChownTags,
+  fchown: createFchownTags,
+  realpath: createPathTags,
+  readlink: createPathTags,
+  unlink: createPathTags,
+  symlink: createCopyFileTags,
+  link: createCopyFileTags,
+  rmdir: createPathTags,
+  rename: createCopyFileTags,
+  fsync: createFDTags,
+  fdatasync: createFDTags,
+  mkdir: createPathTags,
+  truncate: createPathTags,
+  ftruncate: createFDTags,
+  utimes: createPathTags,
+  futimes: createFDTags,
+  mkdtemp: createPathTags
+}
+
 function createWrapCreateReadStream (config, tracer) {
   return function wrapCreateReadStream (createReadStream) {
     return function wrappedCreateReadStream (path, options) {
-      path = options && 'fd' in options ? options.fd : path
       const tags = makeFSTags(path, options, 'r', config, tracer)
       return tracer.trace('fs.readstream', { tags }, (span, done) => {
         const stream = createReadStream.apply(this, arguments)
@@ -18,7 +61,6 @@ function createWrapCreateReadStream (config, tracer) {
 function createWrapCreateWriteStream (config, tracer) {
   return function wrapCreateWriteStream (createWriteStream) {
     return function wrappedCreateWriteStream (path, options) {
-      path = options && 'fd' in options ? options.fd : path
       const tags = makeFSTags(path, options, 'w', config, tracer)
       return tracer.trace('fs.writestream', { tags }, (span, done) => {
         const stream = createWriteStream.apply(this, arguments)
@@ -33,12 +75,12 @@ function createWrapCreateWriteStream (config, tracer) {
 function createWrapExists (config, tracer) {
   return function wrapExists (exists) {
     return function wrappedExists (path, cb) {
-      if (typeof path === 'number' || typeof cb !== 'function') {
+      if (typeof cb !== 'function') {
         return exists.apply(this, arguments)
       }
       const tags = makeFSTags(path, null, null, config, tracer)
       return tracer.trace('fs.exists', { tags }, (span, done) => {
-        arguments[arguments.length - 1] = function (result) {
+        arguments[1] = function (result) {
           done()
           cb.apply(this, arguments)
         }
@@ -51,67 +93,24 @@ function createWrapExists (config, tracer) {
 function createWrapDirRead (config, tracer, sync) {
   const name = sync ? 'fs.dir.readsync' : 'fs.dir.read'
   return function wrapDirRead (read) {
-    return function wrappedDirRead (cb) {
+    function options () {
       const tags = makeFSTags(this.path, null, null, config, tracer)
-      return tracer.trace(name, { tags }, (span, done) => {
-        if (cb) {
-          return read.call(this, (err, dirent) => {
-            done(err)
-            cb(err, dirent)
-          })
-        } else {
-          const p = read.call(this)
-          if (p && typeof p.then === 'function') {
-            return p.then(r => {
-              done()
-              return r
-            }, e => {
-              done(e)
-              throw e
-            })
-          } else {
-            done()
-            return p
-          }
-        }
-      })
+      return { tags }
     }
+    return tracer.wrap(name, options, read)
   }
 }
 
 function createWrapDirClose (config, tracer, sync) {
   const name = sync ? 'fs.dir.closesync' : 'fs.dir.close'
   return function wrapDirClose (close) {
-    return function wrappedDirClose (cb) {
+    function options () {
       const tags = makeFSTags(this.path, null, null, config, tracer)
-      return tracer.trace(name, { tags }, (span, done) => {
-        if (cb) {
-          return close.call(this, (err, dirent) => {
-            done(err)
-            cb(err, dirent)
-          })
-        } else {
-          const p = close.call(this)
-          if (p && typeof p.then === 'function') {
-            return p.then(r => {
-              done()
-              return r
-            }, e => {
-              done(e)
-              throw e
-            })
-          } else {
-            done()
-            return p
-          }
-        }
-      })
+      return { tags }
     }
+    return tracer.wrap(name, options, close)
   }
 }
-
-let kDirReadPromisified
-let kDirClosePromisified
 
 function createWrapDirAsyncIterator (config, tracer, instrumenter) {
   return function wrapDirAsyncIterator (asyncIterator) {
@@ -129,15 +128,11 @@ function createWrapDirAsyncIterator (config, tracer, instrumenter) {
           }
         }
       }
-      instrumenter.wrap(this, kDirReadPromisified, createWrapKDirRead(config, tracer))
+      instrumenter.wrap(this, kDirReadPromisified, createWrapDirRead(config, tracer))
       instrumenter.wrap(this, kDirClosePromisified, createWrapKDirClose(config, tracer, instrumenter))
       return asyncIterator.call(this)
     }
   }
-}
-
-function createWrapKDirRead (config, tracer) {
-  return createWrapDirRead(config, tracer)
 }
 
 function createWrapKDirClose (config, tracer, instrumenter) {
@@ -146,15 +141,12 @@ function createWrapKDirClose (config, tracer, instrumenter) {
       const tags = makeFSTags(this.path, null, null, config, tracer)
       return tracer.trace('fs.dir.close', { tags }, (span) => {
         const p = kDirClose.call(this)
-        return p.then(r => {
+        const unwrapBoth = () => {
           instrumenter.unwrap(this, kDirReadPromisified)
           instrumenter.unwrap(this, kDirClosePromisified)
-          return r
-        }, e => {
-          instrumenter.unwrap(this, kDirReadPromisified)
-          instrumenter.unwrap(this, kDirClosePromisified)
-          throw e
-        })
+        }
+        p.then(unwrapBoth, unwrapBoth)
+        return p
       })
     }
   }
@@ -201,11 +193,7 @@ function createCopyFileTags (config, tracer) {
     if (!src || !dest) {
       return
     }
-    const tags = makeFSTags(src, null, null, config, tracer)
-    delete tags['file.path']
-    tags['file.src'] = src.toString('utf8')
-    tags['file.dest'] = dest.toString('utf8')
-    return tags
+    return makeFSTags({ src, dest }, null, null, config, tracer)
   }
 }
 
@@ -215,7 +203,7 @@ function createChmodTags (config, tracer) {
       return
     }
     const tags = makeFSTags(path, null, null, config, tracer)
-    tags['file.mode'] = '0o' + mode.toString(8)
+    tags['file.mode'] = mode.toString(8)
     return tags
   }
 }
@@ -223,13 +211,14 @@ function createChmodTags (config, tracer) {
 function createFchmodTags (config, tracer) {
   return function fchmodTags (fd, mode) {
     if (typeof this === 'object' && this !== null && this.fd) {
+      mode = fd
       fd = this.fd
     }
     if (typeof fd !== 'number' || typeof mode !== 'number') {
       return
     }
     const tags = makeFSTags(fd, null, null, config, tracer)
-    tags['file.mode'] = '0o' + mode.toString(8)
+    tags['file.mode'] = mode.toString(8)
     return tags
   }
 }
@@ -270,6 +259,8 @@ function createChownTags (config, tracer) {
 function createFchownTags (config, tracer) {
   return function fchownTags (fd, uid, gid) {
     if (typeof this === 'object' && this !== null && this.fd) {
+      gid = uid
+      uid = fd
       fd = this.fd
     }
     if (typeof fd !== 'number' || typeof uid !== 'number' || typeof gid !== 'number') {
@@ -286,63 +277,17 @@ function getSymbolName (sym) {
   return sym.description || sym.toString()
 }
 
-const tagMakers = {
-  open: createOpenTags,
-  close: createCloseTags,
-  readFile: createReadFileTags,
-  writeFile: createWriteFileTags,
-  appendFile: createAppendFileTags,
-  access: createPathTags,
-  copyFile: createCopyFileTags,
-  stat: createPathTags,
-  lstat: createPathTags,
-  fstat: createFDTags,
-  readdir: createPathTags,
-  opendir: createPathTags,
-  read: createFDTags,
-  write: createFDTags,
-  writev: createFDTags,
-  chmod: createChmodTags,
-  lchmod: createChmodTags,
-  fchmod: createFchmodTags,
-  chown: createChownTags,
-  lchown: createChownTags,
-  fchown: createFchownTags,
-  realpath: createPathTags,
-  readlink: createPathTags,
-  unlink: createPathTags,
-  symlink: createCopyFileTags,
-  link: createCopyFileTags,
-  rmdir: createPathTags,
-  rename: createCopyFileTags,
-  fsync: createFDTags,
-  fdatasync: createFDTags,
-  mkdir: createPathTags,
-  truncate: createPathTags,
-  ftruncate: createFDTags,
-  utimes: createPathTags,
-  futimes: createFDTags,
-  mkdtemp: createPathTags
-}
-
 function createWrapCb (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(config, tracer)
   name = 'fs.' + name
   return function wrapFunction (fn) {
-    return function wrappedFunction () {
-      const cb = arguments[arguments.length - 1]
-      if (typeof cb !== 'function') {
-        return fn.apply(this, arguments)
+    return tracer.wrap(name, function () {
+      if (typeof arguments[arguments.length - 1] !== 'function') {
+        return
       }
       const tags = makeTags.apply(this, arguments)
-      if (!tags) {
-        return fn.apply(this, arguments)
-      }
-      return tracer.trace(name, { tags }, (span, done) => {
-        arguments[arguments.length - 1] = wrapCallback(cb, done)
-        return fn.apply(this, arguments)
-      })
-    }
+      return tags ? { tags } : null
+    }, fn)
   }
 }
 
@@ -350,23 +295,15 @@ function createWrap (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(config, tracer)
   name = 'fs.' + name
   return function wrapSyncFunction (fn) {
-    return function wrappedSyncFunction () {
-      const tagArgs = Array.from(arguments)
-      if (name.indexOf('filehandle') > -1) {
-        tagArgs.unshift(null)
-      }
-      const tags = makeTags.apply(this, tagArgs)
-      if (!tags) {
-        return fn.apply(this, arguments)
-      }
-      return tracer.trace(name, { tags }, (span) => {
-        return fn.apply(this, arguments)
-      })
-    }
+    return tracer.wrap(name, function () {
+      const tags = makeTags.apply(this, arguments)
+      return tags ? { tags } : null 
+    }, fn)
   }
 }
 
 function makeFSTags (path, options, defaultFlag, config, tracer) {
+  path = options && 'fd' in options ? options.fd : path
   if (
     typeof path !== 'number' &&
     typeof path !== 'string' &&
@@ -376,7 +313,6 @@ function makeFSTags (path, options, defaultFlag, config, tracer) {
   }
   const tags = {
     'component': 'fs',
-    'resource.name': path.toString(typeof path === 'number' ? 10 : 'utf8'),
     'service.name': config.service || `${tracer._service}-fs`
   }
   if (defaultFlag) {
@@ -384,11 +320,33 @@ function makeFSTags (path, options, defaultFlag, config, tracer) {
       ? options.flag
       : (options && options.flags ? options.flags : defaultFlag)
   }
-  if (typeof path === 'number' && Number.isInteger(path)) {
-    tags['file.descriptor'] = path
-  } else {
-    tags['file.path'] = path.toString('utf8')
+
+  switch(typeof path) {
+    case 'object': {
+      const src = 'src' in path ? path.src : null
+      const dest = 'dest' in path ? path.dest : null
+      if (src || dest) {
+        tags['file.src'] = src.toString('utf8')
+        tags['file.dest'] = dest.toString('utf8')
+        tags['resource.name'] = (src || dest).toString('utf8')
+      } else {
+        tags['file.path'] = path.toString('utf8')
+        tags['resource.name'] = path.toString('utf8')
+      }
+      break
+    }
+    case 'string': {
+      tags['file.path'] = path
+      tags['resource.name'] = path
+      break
+    }
+    case 'number': {
+      tags['file.descriptor'] = path
+      tags['resource.name'] = path.toString()
+      break
+    }
   }
+
   return tags
 }
 
@@ -399,10 +357,12 @@ function wrapCallback (cb, done) {
   }
 }
 
-async function getFileHandlePrototype (fs) {
-  const fh = await fs.promises.open(__filename, 'r')
-  await fh.close()
-  return Object.getPrototypeOf(fh)
+function getFileHandlePrototype (fs) {
+  return fs.promises.open(__filename, 'r')
+    .then(fh => {
+      fh.close()
+      return Object.getPrototypeOf(fh)
+    })
 }
 
 module.exports = {
@@ -421,15 +381,9 @@ module.exports = {
       }
     }
     if (fs.promises) {
-      for (const name in fs.promises) {
-        if (name in tagMakers) {
-          const tagMaker = tagMakers[name]
-          this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
-        }
-      }
       getFileHandlePrototype(fs).then(fileHandlePrototype => {
         for (const name of Reflect.ownKeys(fileHandlePrototype)) {
-          if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+          if (name === 'close' && name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
             continue
           }
           let tagMaker
@@ -441,6 +395,12 @@ module.exports = {
           this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name.toLowerCase(), tagMaker))
         }
       })
+      for (const name in fs.promises) {
+        if (name in tagMakers) {
+          const tagMaker = tagMakers[name]
+          this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
+        }
+      }
     }
     if (fs.Dir) {
       this.wrap(fs.Dir.prototype, 'close', createWrapDirClose(config, tracer))
@@ -463,11 +423,6 @@ module.exports = {
       }
     }
     if (fs.promises) {
-      for (const name in fs.promises) {
-        if (name in tagMakers) {
-          this.unwrap(fs.promises, name)
-        }
-      }
       getFileHandlePrototype(fs).then(fileHandlePrototype => {
         for (const name of Reflect.ownKeys(fileHandlePrototype)) {
           if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
@@ -476,6 +431,11 @@ module.exports = {
           this.unwrap(fileHandlePrototype, name)
         }
       })
+      for (const name in fs.promises) {
+        if (name in tagMakers) {
+          this.unwrap(fs.promises, name)
+        }
+      }
     }
     if (fs.Dir) {
       this.unwrap(fs.Dir.prototype, 'close')
