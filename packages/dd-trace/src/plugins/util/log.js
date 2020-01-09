@@ -20,6 +20,12 @@ const log = {
       carrier[key] = record[key]
     }
 
+    const symbols = Object.getOwnPropertySymbols(record)
+
+    for (const symbol in symbols) { 
+      carrier[symbols[symbol]] = record[symbols[symbol]]
+    }    
+
     return carrier
   }
 }
