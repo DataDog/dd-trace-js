@@ -1,7 +1,5 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/tx.js')
-
 let kDirReadPromisified
 let kDirClosePromisified
 
@@ -297,7 +295,7 @@ function createWrap (tracer, config, name, tagMaker) {
   return function wrapSyncFunction (fn) {
     return tracer.wrap(name, function () {
       const tags = makeTags.apply(this, arguments)
-      return tags ? { tags } : null 
+      return tags ? { tags } : null
     }, fn)
   }
 }
@@ -321,7 +319,7 @@ function makeFSTags (path, options, defaultFlag, config, tracer) {
       : (options && options.flags ? options.flags : defaultFlag)
   }
 
-  switch(typeof path) {
+  switch (typeof path) {
     case 'object': {
       const src = 'src' in path ? path.src : null
       const dest = 'dest' in path ? path.dest : null
@@ -350,13 +348,6 @@ function makeFSTags (path, options, defaultFlag, config, tracer) {
   return tags
 }
 
-function wrapCallback (cb, done) {
-  return function wrappedCallback (err, result) {
-    done(err)
-    return cb.apply(null, arguments)
-  }
-}
-
 function getFileHandlePrototype (fs) {
   return fs.promises.open(__filename, 'r')
     .then(fh => {
@@ -365,49 +356,102 @@ function getFileHandlePrototype (fs) {
     })
 }
 
+function patchClassicFunctions (fs, tracer, config) {
+  for (const name in fs) {
+    if (!fs[name]) continue
+    const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
+    if (tagMakerName in tagMakers) {
+      const tagMaker = tagMakers[tagMakerName]
+      if (name.endsWith('Sync')) {
+        this.wrap(fs, name, createWrap(tracer, config, name.toLowerCase(), tagMaker))
+      } else {
+        this.wrap(fs, name, createWrapCb(tracer, config, name.toLowerCase(), tagMaker))
+      }
+    }
+  }
+}
+
+function patchFileHandle (fs, tracer, config) {
+  getFileHandlePrototype(fs).then(fileHandlePrototype => {
+    for (const name of Reflect.ownKeys(fileHandlePrototype)) {
+      if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+        continue
+      }
+      let tagMaker
+      if ('f' + name in tagMakers) {
+        tagMaker = tagMakers['f' + name]
+      } else {
+        tagMaker = createFDTags
+      }
+      this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name.toLowerCase(), tagMaker))
+    }
+  })
+}
+
+function patchPromiseFunctions (fs, tracer, config) {
+  for (const name in fs.promises) {
+    if (name in tagMakers) {
+      const tagMaker = tagMakers[name]
+      this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
+    }
+  }
+}
+
+function patchDirFunctions (fs, tracer, config) {
+  this.wrap(fs.Dir.prototype, 'close', createWrapDirClose(config, tracer))
+  this.wrap(fs.Dir.prototype, 'closeSync', createWrapDirClose(config, tracer, true))
+  this.wrap(fs.Dir.prototype, 'read', createWrapDirRead(config, tracer))
+  this.wrap(fs.Dir.prototype, 'readSync', createWrapDirRead(config, tracer, true))
+  this.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
+}
+
+function unpatchClassicFunctions (fs) {
+  for (const name in fs) {
+    if (!fs[name]) continue
+    const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
+    if (tagMakerName in tagMakers) {
+      this.unwrap(fs, name)
+    }
+  }
+}
+
+function unpatchFileHandle (fs) {
+  getFileHandlePrototype(fs).then(fileHandlePrototype => {
+    for (const name of Reflect.ownKeys(fileHandlePrototype)) {
+      if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+        continue
+      }
+      this.unwrap(fileHandlePrototype, name)
+    }
+  })
+}
+
+function unpatchPromiseFunctions (fs) {
+  for (const name in fs.promises) {
+    if (name in tagMakers) {
+      this.unwrap(fs.promises, name)
+    }
+  }
+}
+
+function unpatchDirFunctions (fs) {
+  this.unwrap(fs.Dir.prototype, 'close')
+  this.unwrap(fs.Dir.prototype, 'closeSync')
+  this.unwrap(fs.Dir.prototype, 'read')
+  this.unwrap(fs.Dir.prototype, 'readSync')
+  this.unwrap(fs.Dir.prototype, Symbol.asyncIterator)
+}
+
 module.exports = {
   name: 'fs',
   patch (fs, tracer, config) {
-    for (const name in fs) {
-      if (!fs[name]) continue
-      const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
-      if (tagMakerName in tagMakers) {
-        const tagMaker = tagMakers[tagMakerName]
-        if (name.endsWith('Sync')) {
-          this.wrap(fs, name, createWrap(tracer, config, name.toLowerCase(), tagMaker))
-        } else {
-          this.wrap(fs, name, createWrapCb(tracer, config, name.toLowerCase(), tagMaker))
-        }
-      }
-    }
+    patchClassicFunctions.call(this, fs, tracer, config)
     if (fs.promises) {
-      getFileHandlePrototype(fs).then(fileHandlePrototype => {
-        for (const name of Reflect.ownKeys(fileHandlePrototype)) {
-          if (name === 'close' && name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
-            continue
-          }
-          let tagMaker
-          if ('f' + name in tagMakers) {
-            tagMaker = tagMakers['f' + name]
-          } else {
-            tagMaker = createFDTags
-          }
-          this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name.toLowerCase(), tagMaker))
-        }
-      })
-      for (const name in fs.promises) {
-        if (name in tagMakers) {
-          const tagMaker = tagMakers[name]
-          this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
-        }
-      }
+      patchFileHandle.call(this, fs, tracer, config)
+      patchPromiseFunctions.call(this, fs, tracer, config)
     }
     if (fs.Dir) {
-      this.wrap(fs.Dir.prototype, 'close', createWrapDirClose(config, tracer))
-      this.wrap(fs.Dir.prototype, 'closeSync', createWrapDirClose(config, tracer, true))
-      this.wrap(fs.Dir.prototype, 'read', createWrapDirRead(config, tracer))
-      this.wrap(fs.Dir.prototype, 'readSync', createWrapDirRead(config, tracer, true))
-      this.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
+      patchDirFunctions.call(this, fs, tracer, config)
     }
     this.wrap(fs, 'createReadStream', createWrapCreateReadStream(config, tracer))
     this.wrap(fs, 'createWriteStream', createWrapCreateWriteStream(config, tracer))
@@ -415,34 +459,13 @@ module.exports = {
     this.wrap(fs, 'exists', createWrapExists(config, tracer))
   },
   unpatch (fs) {
-    for (const name in fs) {
-      if (!fs[name]) continue
-      const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
-      if (tagMakerName in tagMakers) {
-        this.unwrap(fs, name)
-      }
-    }
+    unpatchClassicFunctions.call(this, fs)
     if (fs.promises) {
-      getFileHandlePrototype(fs).then(fileHandlePrototype => {
-        for (const name of Reflect.ownKeys(fileHandlePrototype)) {
-          if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
-            continue
-          }
-          this.unwrap(fileHandlePrototype, name)
-        }
-      })
-      for (const name in fs.promises) {
-        if (name in tagMakers) {
-          this.unwrap(fs.promises, name)
-        }
-      }
+      unpatchFileHandle.call(this, fs)
+      unpatchPromiseFunctions.call(this, fs)
     }
     if (fs.Dir) {
-      this.unwrap(fs.Dir.prototype, 'close')
-      this.unwrap(fs.Dir.prototype, 'closeSync')
-      this.unwrap(fs.Dir.prototype, 'read')
-      this.unwrap(fs.Dir.prototype, 'readSync')
-      this.unwrap(fs.Dir.prototype, Symbol.asyncIterator)
+      unpatchDirFunctions.call(this, fs)
     }
     this.unwrap(fs, 'createReadStream')
     this.unwrap(fs, 'createWriteStream')
