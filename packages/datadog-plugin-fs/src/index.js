@@ -45,7 +45,7 @@ const tagMakers = {
 function createWrapCreateReadStream (config, tracer) {
   return function wrapCreateReadStream (createReadStream) {
     return function wrappedCreateReadStream (path, options) {
-      const tags = makeFSTags(path, options, 'r', config, tracer)
+      const tags = makeFSFlagTags(path, options, 'r', config, tracer)
       return tracer.trace('fs.readstream', { tags }, (span, done) => {
         const stream = createReadStream.apply(this, arguments)
         stream.once('end', done)
@@ -59,7 +59,7 @@ function createWrapCreateReadStream (config, tracer) {
 function createWrapCreateWriteStream (config, tracer) {
   return function wrapCreateWriteStream (createWriteStream) {
     return function wrappedCreateWriteStream (path, options) {
-      const tags = makeFSTags(path, options, 'w', config, tracer)
+      const tags = makeFSFlagTags(path, options, 'w', config, tracer)
       return tracer.trace('fs.writestream', { tags }, (span, done) => {
         const stream = createWriteStream.apply(this, arguments)
         stream.once('finish', done)
@@ -76,7 +76,7 @@ function createWrapExists (config, tracer) {
       if (typeof cb !== 'function') {
         return exists.apply(this, arguments)
       }
-      const tags = makeFSTags(path, null, null, config, tracer)
+      const tags = makeFSTags(path, null, config, tracer)
       return tracer.trace('fs.exists', { tags }, (span, done) => {
         arguments[1] = function (result) {
           done()
@@ -92,7 +92,7 @@ function createWrapDirRead (config, tracer, sync) {
   const name = sync ? 'fs.dir.readsync' : 'fs.dir.read'
   return function wrapDirRead (read) {
     function options () {
-      const tags = makeFSTags(this.path, null, null, config, tracer)
+      const tags = makeFSTags(this.path, null, config, tracer)
       return { tags }
     }
     return tracer.wrap(name, options, read)
@@ -103,7 +103,7 @@ function createWrapDirClose (config, tracer, sync) {
   const name = sync ? 'fs.dir.closesync' : 'fs.dir.close'
   return function wrapDirClose (close) {
     function options () {
-      const tags = makeFSTags(this.path, null, null, config, tracer)
+      const tags = makeFSTags(this.path, null, config, tracer)
       return { tags }
     }
     return tracer.wrap(name, options, close)
@@ -136,7 +136,7 @@ function createWrapDirAsyncIterator (config, tracer, instrumenter) {
 function createWrapKDirClose (config, tracer, instrumenter) {
   return function wrapKDirClose (kDirClose) {
     return function wrappedKDirClose () {
-      const tags = makeFSTags(this.path, null, null, config, tracer)
+      const tags = makeFSTags(this.path, null, config, tracer)
       return tracer.trace('fs.dir.close', { tags }, (span) => {
         const p = kDirClose.call(this)
         const unwrapBoth = () => {
@@ -155,7 +155,7 @@ function createOpenTags (config, tracer) {
     if (!flag || typeof flag === 'function') {
       flag = null
     }
-    return makeFSTags(path, { flag }, 'r', config, tracer)
+    return makeFSFlagTags(path, { flag }, 'r', config, tracer)
   }
 }
 
@@ -164,25 +164,25 @@ function createCloseTags (config, tracer) {
     if (typeof fd !== 'number' || !Number.isInteger(fd)) {
       return
     }
-    return makeFSTags(fd, null, null, config, tracer)
+    return makeFSTags(fd, null, config, tracer)
   }
 }
 
 function createReadFileTags (config, tracer) {
   return function readFileTags (path, options) {
-    return makeFSTags(path, options, 'r', config, tracer)
+    return makeFSFlagTags(path, options, 'r', config, tracer)
   }
 }
 
 function createWriteFileTags (config, tracer) {
   return function writeFileTags (path, data, options) {
-    return makeFSTags(path, options, 'w', config, tracer)
+    return makeFSFlagTags(path, options, 'w', config, tracer)
   }
 }
 
 function createAppendFileTags (config, tracer) {
   return function appendFileTags (path, data, options) {
-    return makeFSTags(path, options, 'a', config, tracer)
+    return makeFSFlagTags(path, options, 'a', config, tracer)
   }
 }
 
@@ -191,7 +191,7 @@ function createCopyFileTags (config, tracer) {
     if (!src || !dest) {
       return
     }
-    return makeFSTags({ src, dest }, null, null, config, tracer)
+    return makeFSTags({ src, dest }, null, config, tracer)
   }
 }
 
@@ -200,7 +200,7 @@ function createChmodTags (config, tracer) {
     if (typeof path === 'number' || typeof mode !== 'number') {
       return
     }
-    const tags = makeFSTags(path, null, null, config, tracer)
+    const tags = makeFSTags(path, null, config, tracer)
     tags['file.mode'] = mode.toString(8)
     return tags
   }
@@ -215,7 +215,7 @@ function createFchmodTags (config, tracer) {
     if (typeof fd !== 'number' || typeof mode !== 'number') {
       return
     }
-    const tags = makeFSTags(fd, null, null, config, tracer)
+    const tags = makeFSTags(fd, null, config, tracer)
     tags['file.mode'] = mode.toString(8)
     return tags
   }
@@ -226,7 +226,7 @@ function createPathTags (config, tracer) {
     if (typeof path === 'number') {
       return
     }
-    return makeFSTags(path, null, null, config, tracer)
+    return makeFSTags(path, null, config, tracer)
   }
 }
 
@@ -238,7 +238,7 @@ function createFDTags (config, tracer) {
     if (typeof fd !== 'number') {
       return
     }
-    return makeFSTags(fd, null, null, config, tracer)
+    return makeFSTags(fd, null, config, tracer)
   }
 }
 
@@ -247,7 +247,7 @@ function createChownTags (config, tracer) {
     if (typeof path === 'number' || typeof uid !== 'number' || typeof gid !== 'number') {
       return
     }
-    const tags = makeFSTags(path, null, null, config, tracer)
+    const tags = makeFSTags(path, null, config, tracer)
     tags['file.uid'] = uid.toString()
     tags['file.gid'] = gid.toString()
     return tags
@@ -264,7 +264,7 @@ function createFchownTags (config, tracer) {
     if (typeof fd !== 'number' || typeof uid !== 'number' || typeof gid !== 'number') {
       return
     }
-    const tags = makeFSTags(fd, null, null, config, tracer)
+    const tags = makeFSTags(fd, null, config, tracer)
     tags['file.uid'] = uid.toString()
     tags['file.gid'] = gid.toString()
     return tags
@@ -279,7 +279,7 @@ function createWrapCb (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(config, tracer)
   name = 'fs.' + name
   return function wrapFunction (fn) {
-    return tracer.wrap(name, function () {
+    return tracer.wrap(name.toLowerCase(), function () {
       if (typeof arguments[arguments.length - 1] !== 'function') {
         return
       }
@@ -293,34 +293,40 @@ function createWrap (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(config, tracer)
   name = 'fs.' + name
   return function wrapSyncFunction (fn) {
-    return tracer.wrap(name, function () {
+    return tracer.wrap(name.toLowerCase(), function () {
       const tags = makeTags.apply(this, arguments)
       return tags ? { tags } : null
     }, fn)
   }
 }
 
-function makeFSTags (path, options, defaultFlag, config, tracer) {
-  path = options && 'fd' in options ? options.fd : path
-  if (
-    typeof path !== 'number' &&
-    typeof path !== 'string' &&
-    (typeof path !== 'object' || path === null)
-  ) {
-    return
+function makeFSFlagTags (path, options, defaultFlag, config, tracer) {
+  const tags = makeFSTags(path, options, config, tracer)
+
+  if (tags) {
+    let flag = defaultFlag
+    if (typeof options === 'object' && options !== null) {
+      if (options.flag) {
+        flag = options.flag
+      } else if (options.flags) {
+        flag = options.flags
+      }
+    }
+    tags['file.flag'] = flag
+    return tags
   }
+}
+
+function makeFSTags (path, options, config, tracer) {
+  path = options && 'fd' in options ? options.fd : path
   const tags = {
     'component': 'fs',
     'service.name': config.service || `${tracer._service}-fs`
   }
-  if (defaultFlag) {
-    tags['file.flag'] = options && options.flag
-      ? options.flag
-      : (options && options.flags ? options.flags : defaultFlag)
-  }
 
   switch (typeof path) {
     case 'object': {
+      if (path === null) return
       const src = 'src' in path ? path.src : null
       const dest = 'dest' in path ? path.dest : null
       if (src || dest) {
@@ -343,6 +349,8 @@ function makeFSTags (path, options, defaultFlag, config, tracer) {
       tags['resource.name'] = path.toString()
       break
     }
+    default:
+      return
   }
 
   return tags
@@ -363,9 +371,9 @@ function patchClassicFunctions (fs, tracer, config) {
     if (tagMakerName in tagMakers) {
       const tagMaker = tagMakers[tagMakerName]
       if (name.endsWith('Sync')) {
-        this.wrap(fs, name, createWrap(tracer, config, name.toLowerCase(), tagMaker))
+        this.wrap(fs, name, createWrap(tracer, config, name, tagMaker))
       } else {
-        this.wrap(fs, name, createWrapCb(tracer, config, name.toLowerCase(), tagMaker))
+        this.wrap(fs, name, createWrapCb(tracer, config, name, tagMaker))
       }
     }
   }
@@ -378,12 +386,13 @@ function patchFileHandle (fs, tracer, config) {
         continue
       }
       let tagMaker
-      if ('f' + name in tagMakers) {
-        tagMaker = tagMakers['f' + name]
+      const fName = 'f' + name
+      if (fName in tagMakers) {
+        tagMaker = tagMakers[fName]
       } else {
         tagMaker = createFDTags
       }
-      this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name.toLowerCase(), tagMaker))
+      this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name, tagMaker))
     }
   })
 }
@@ -393,6 +402,7 @@ function patchPromiseFunctions (fs, tracer, config) {
     if (name in tagMakers) {
       const tagMaker = tagMakers[name]
       this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name.toLowerCase(), tagMaker))
+      this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name, tagMaker))
     }
   }
 }
