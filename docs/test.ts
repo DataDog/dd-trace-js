@@ -119,9 +119,8 @@ const graphqlOptions = {
 
 const elasticsearchOptions = {
   service: 'test',
-  includeBody: false,
   hooks: {
-    query: (span) => {},
+    query: (span, params) => {},
   },
 };
 

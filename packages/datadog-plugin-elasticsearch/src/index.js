@@ -24,7 +24,7 @@ function createWrapRequest (tracer, config) {
         }
       })
 
-      if (params.body && config.includeBody !== false) {
+      if (params.body) {
         span.setTag('elasticsearch.body', JSON.stringify(params.body))
       }
 
@@ -37,17 +37,17 @@ function createWrapRequest (tracer, config) {
       return tracer.scope().activate(span, () => {
         if (typeof cb === 'function') {
           if (request.length === 2) {
-            return request.call(this, params, wrapCallback(tracer, span, config, cb))
+            return request.call(this, params, wrapCallback(tracer, span, params, config, cb))
           } else {
-            return request.call(this, params, options, wrapCallback(tracer, span, config, cb))
+            return request.call(this, params, options, wrapCallback(tracer, span, params, config, cb))
           }
         } else {
           const promise = request.apply(this, arguments)
 
           if (promise && typeof promise.then === 'function') {
-            promise.then(() => finish(span, null, config), e => finish(span, e, config))
+            promise.then(() => finish(span, null, params, config), e => finish(span, e, params, config))
           } else {
-            finish(span, null, config)
+            finish(span, null, params, config)
           }
 
           return promise
@@ -57,14 +57,14 @@ function createWrapRequest (tracer, config) {
   }
 }
 
-function wrapCallback (tracer, span, config, done) {
+function wrapCallback (tracer, span, params, config, done) {
   return function (err) {
-    finish(span, err, config)
+    finish(span, err, params, config)
     done.apply(null, arguments)
   }
 }
 
-function finish (span, err, config) {
+function finish (span, err, params, config) {
   if (err) {
     span.addTags({
       'error.type': err.name,
@@ -73,7 +73,7 @@ function finish (span, err, config) {
     })
   }
 
-  config.hooks.query(span)
+  config.hooks.query(span, params)
 
   span.finish()
 }

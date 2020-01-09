@@ -644,20 +644,13 @@ declare namespace plugins {
    */
   interface elasticsearch extends Instrumentation {
     /**
-     * Include the elasticsearch body in the trace.
-     *
-     * @default true
-     */
-    includeBody?: boolean;
-
-    /**
      * Hooks to run before spans are finished.
      */
     hooks?: {
       /**
        * Hook to execute just before the query span finishes.
        */
-      query?: (span?: opentracing.Span) => any;
+      query?: (span?: opentracing.Span, params?: any) => any;
     };
   }
 
