@@ -31,23 +31,17 @@ function wrapExecute (tracer, config, execute) {
       tags: {
         [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
         'service.name': config.service || `${tracer._service}-mysql`,
+        'resource.name': sql,
         'span.type': 'sql',
         'db.type': 'mysql',
         'db.user': connectionConfig.user,
+        'db.name': connectionConfig.database,
         'out.host': connectionConfig.host,
         'out.port': connectionConfig.port
       }
     })
 
-    if (connectionConfig.database) {
-      span.setTag('db.name', connectionConfig.database)
-    }
-
     analyticsSampler.sample(span, config.analytics)
-
-    const result = scope.bind(execute, span).apply(this, arguments)
-
-    span.setTag('resource.name', sql)
 
     if (typeof this.onResult === 'function') {
       this.onResult = wrapCallback(tracer, span, childOf, this.onResult)
@@ -59,7 +53,7 @@ function wrapExecute (tracer, config, execute) {
 
     this.execute = execute
 
-    return result
+    return scope.bind(execute, span).apply(this, arguments)
   }
 }
 
