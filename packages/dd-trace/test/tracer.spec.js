@@ -280,5 +280,40 @@ describe('Tracer', () => {
         .then(() => expect(catchHandler).to.have.been.called)
         .then(() => done())
     })
+
+    it('should accept an options object', () => {
+      const options = { tags: { sometag: 'somevalue' } }
+
+      const fn = tracer.wrap('name', options, function () {})
+
+      sinon.spy(tracer, 'trace')
+
+      fn('hello', 'goodbye')
+
+      expect(tracer.trace).to.have.been.calledWith('name', {
+        tags: { sometag: 'somevalue' }
+      })
+    })
+
+    it('should accept an options function', () => {
+      const it = {}
+
+      function options (foo, bar) {
+        expect(this).to.equal(it)
+        expect(foo).to.equal('hello')
+        expect(bar).to.equal('goodbye')
+        return { tags: { sometag: 'somevalue' } }
+      }
+
+      const fn = tracer.wrap('name', options, function () {})
+
+      sinon.spy(tracer, 'trace')
+
+      fn.call(it, 'hello', 'goodbye')
+
+      expect(tracer.trace).to.have.been.calledWith('name', {
+        tags: { sometag: 'somevalue' }
+      })
+    })
   })
 })

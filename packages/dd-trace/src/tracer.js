@@ -70,24 +70,19 @@ class DatadogTracer extends Tracer {
       }
       const lastArgId = arguments.length - 1
       const cb = arguments[lastArgId]
-      return tracer.trace(name, options, (span, done) => {
-        if (typeof cb === 'function') {
+
+      if (typeof cb === 'function') {
+        return tracer.trace(name, options, (span, done) => {
           arguments[lastArgId] = function (err) {
             done(err)
             return cb.apply(this, arguments)
           }
+
           return fn.apply(this, arguments)
-        } else {
-          const p = fn.apply(this, arguments)
-          if (typeof p === 'object' && p !== null && typeof p.then === 'function') {
-            p.then(() => done(), done)
-            return p
-          } else {
-            done()
-            return p
-          }
-        }
-      })
+        })
+      } else {
+        return tracer.trace(name, options, () => fn.apply(this, arguments))
+      }
     }
   }
 
