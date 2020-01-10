@@ -188,19 +188,16 @@ function createAppendFileTags (config, tracer) {
 
 function createCopyFileTags (config, tracer) {
   return function copyFileTags (src, dest, flag) {
-    if (!src || !dest) {
-      return
-    }
+    src = src || 'undefined'
+    dest = dest || 'undefined'
+
     return makeFSTags({ src, dest }, null, config, tracer)
   }
 }
 
 function createChmodTags (config, tracer) {
-  return function chmodTags (path, mode) {
-    if (typeof path === 'number' || typeof mode !== 'number') {
-      return
-    }
-    const tags = makeFSTags(path, null, config, tracer)
+  return function chmodTags (fd, mode) {
+    const tags = makeFSTags(fd, null, config, tracer)
     tags['file.mode'] = mode.toString(8)
     return tags
   }
@@ -212,20 +209,17 @@ function createFchmodTags (config, tracer) {
       mode = fd
       fd = this.fd
     }
-    if (typeof fd !== 'number' || typeof mode !== 'number') {
-      return
-    }
+
     const tags = makeFSTags(fd, null, config, tracer)
-    tags['file.mode'] = mode.toString(8)
+    if (mode) {
+      tags['file.mode'] = mode.toString(8)
+    }
     return tags
   }
 }
 
 function createPathTags (config, tracer) {
   return function pathTags (path) {
-    if (typeof path === 'number') {
-      return
-    }
     return makeFSTags(path, null, config, tracer)
   }
 }
@@ -235,21 +229,19 @@ function createFDTags (config, tracer) {
     if (typeof this === 'object' && this !== null && this.fd) {
       fd = this.fd
     }
-    if (typeof fd !== 'number') {
-      return
-    }
     return makeFSTags(fd, null, config, tracer)
   }
 }
 
 function createChownTags (config, tracer) {
-  return function chownTags (path, uid, gid) {
-    if (typeof path === 'number' || typeof uid !== 'number' || typeof gid !== 'number') {
-      return
+  return function chownTags (fd, uid, gid) {
+    const tags = makeFSTags(fd, null, config, tracer)
+    if (uid) {
+      tags['file.uid'] = uid.toString()
     }
-    const tags = makeFSTags(path, null, config, tracer)
-    tags['file.uid'] = uid.toString()
-    tags['file.gid'] = gid.toString()
+    if (gid) {
+      tags['file.gid'] = gid.toString()
+    }
     return tags
   }
 }
@@ -261,12 +253,13 @@ function createFchownTags (config, tracer) {
       uid = fd
       fd = this.fd
     }
-    if (typeof fd !== 'number' || typeof uid !== 'number' || typeof gid !== 'number') {
-      return
-    }
     const tags = makeFSTags(fd, null, config, tracer)
-    tags['file.uid'] = uid.toString()
-    tags['file.gid'] = gid.toString()
+    if (uid) {
+      tags['file.uid'] = uid.toString()
+    }
+    if (gid) {
+      tags['file.gid'] = gid.toString()
+    }
     return tags
   }
 }
@@ -350,7 +343,12 @@ function makeFSTags (path, options, config, tracer) {
       break
     }
     default:
-      return
+      if (path && typeof path.toString === 'function') {
+        const pathStr = path.toString()
+        tags['resource.name'] = pathStr
+      } else {
+        tags['resource.name'] = 'undefined'
+      }
   }
 
   return tags
