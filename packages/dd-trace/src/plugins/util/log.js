@@ -22,9 +22,7 @@ const log = {
 
     if (!record) return carrier
 
-    const symbols = Object.getOwnPropertySymbols(record)
-
-    for (const symbol of symbols) {
+    for (const symbol of Object.getOwnPropertySymbols(record)) {
       carrier[symbol] = record[symbol]
     }
 
