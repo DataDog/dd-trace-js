@@ -96,6 +96,6 @@ describe('plugins/util/log', () => {
         expect(carrier).to.have.property('parent', 'parent')
         expect(carrier).to.have.property(splatSymbol, splat)
       })
-    })    
+    })
   })
 })

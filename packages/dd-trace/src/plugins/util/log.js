@@ -26,7 +26,7 @@ const log = {
 
     for (const symbol of symbols) {
       carrier[symbol] = record[symbol]
-    }    
+    }
 
     return carrier
   }
