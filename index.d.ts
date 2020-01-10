@@ -359,6 +359,20 @@ interface EventEmitter {
   removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
 }
 
+/** @hidden */
+declare type anyObject = {
+  [key: string]: any;
+};
+
+/** @hidden */
+interface TransportRequestParams {
+  method: string;
+  path: string;
+  body?: anyObject;
+  bulkBody?: anyObject;
+  querystring?: anyObject;
+}
+
 /**
  * The Datadog Scope Manager. This is used for context propagation.
  */
@@ -642,7 +656,17 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [elasticsearch](https://github.com/elastic/elasticsearch-js) module.
    */
-  interface elasticsearch extends Instrumentation {}
+  interface elasticsearch extends Instrumentation {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the query span finishes.
+       */
+      query?: (span?: opentracing.Span, params?: TransportRequestParams) => any;
+    };
+  }
 
   /**
    * This plugin automatically instruments the
