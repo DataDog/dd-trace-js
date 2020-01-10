@@ -13,32 +13,83 @@ module.exports = (name, factory, versionRange) => {
 
     describe(name, () => {
       withVersions(plugin, name, version => {
-        if (!versionRange || semver.intersects(version, versionRange)) {
+        if (versionRange && !semver.intersects(version, versionRange)) return
+
+        beforeEach(() => {
+          tracer = require('../..')
+        })
+
+        beforeEach(() => {
+          const moduleExports = require(`../../../../versions/${name}@${version}`).get()
+
+          Promise = factory ? factory(moduleExports) : moduleExports
+        })
+
+        describe('without configuration', () => {
           beforeEach(() => {
-            tracer = require('../..')
+            return agent.load(plugin, name)
           })
 
           afterEach(() => {
             return agent.close()
           })
 
-          describe('without configuration', () => {
-            beforeEach(() => {
-              return agent.load(plugin, name)
+          it('should run the then() callbacks in the context where then() was called', () => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
+            const span = {}
+
+            let promise = new Promise((resolve, reject) => {
+              setImmediate(() => {
+                tracer.scope().activate({}, () => {
+                  resolve()
+                })
+              })
             })
 
-            beforeEach(() => {
-              const moduleExports = require(`../../../../versions/${name}@${version}`).get()
+            return tracer.scope().activate(span, () => {
+              for (let i = 0; i < promise.then.length; i++) {
+                const args = new Array(i + 1)
 
-              Promise = factory ? factory(moduleExports) : moduleExports
+                args[i] = () => {
+                  expect(tracer.scope().active()).to.equal(span)
+                }
+
+                promise = promise.then.apply(promise, args)
+              }
+
+              return promise
+            })
+          })
+
+          it('should run the catch() callback in the context where catch() was called', () => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
+            const span = {}
+            const promise = new Promise((resolve, reject) => {
+              setImmediate(() => {
+                tracer.scope().activate({}, () => {
+                  reject(new Error())
+                })
+              })
             })
 
-            it('should run the then() callbacks in the context where then() was called', () => {
-              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+            return tracer.scope().activate(span, () => {
+              return promise
+                .catch(err => {
+                  throw err
+                })
+                .catch(() => {
+                  expect(tracer.scope().active()).to.equal(span)
+                })
+            })
+          })
 
-              const span = {}
+          it('should allow to run without a scope if not available when calling then()', () => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
 
-              let promise = new Promise((resolve, reject) => {
+            tracer.scope().activate(null, () => {
+              const promise = new Promise((resolve, reject) => {
                 setImmediate(() => {
                   tracer.scope().activate({}, () => {
                     resolve()
@@ -46,25 +97,23 @@ module.exports = (name, factory, versionRange) => {
                 })
               })
 
-              return tracer.scope().activate(span, () => {
-                for (let i = 0; i < promise.then.length; i++) {
-                  const args = new Array(i + 1)
-
-                  args[i] = () => {
-                    expect(tracer.scope().active()).to.equal(span)
-                  }
-
-                  promise = promise.then.apply(promise, args)
-                }
-
-                return promise
-              })
+              return promise
+                .then(() => {
+                  expect(tracer.scope().active()).to.be.null
+                })
             })
+          })
+        })
 
-            it('should run the catch() callback in the context where catch() was called', () => {
-              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+        describe('unpatching', () => {
+          afterEach(() => {
+            return agent.close()
+          })
 
-              const span = {}
+          it('should behave the same before and after unpatching', async () => {
+            const span = {}
+
+            const testPatching = async function (Promise, tracer) {
               const promise = new Promise((resolve, reject) => {
                 setImmediate(() => {
                   tracer.scope().activate({}, () => {
@@ -73,69 +122,29 @@ module.exports = (name, factory, versionRange) => {
                 })
               })
 
-              return tracer.scope().activate(span, () => {
+              await tracer.scope().activate(span, () => {
                 return promise
                   .catch(err => {
                     throw err
                   })
                   .catch(() => {
-                    expect(tracer.scope().active()).to.equal(span)
+                    return tracer.scope().active() !== span
                   })
               })
-            })
+            }
 
-            it('should allow to run without a scope if not available when calling then()', () => {
-              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+            await agent.load()
 
-              tracer.scope().activate(null, () => {
-                const promise = new Promise((resolve, reject) => {
-                  setImmediate(() => {
-                    tracer.scope().activate({}, () => {
-                      resolve()
-                    })
-                  })
-                })
+            const beforePatching = await testPatching(Promise, tracer)
 
-                return promise
-                  .then(() => {
-                    expect(tracer.scope().active()).to.be.null
-                  })
-              })
-            })
+            tracer.use(name)
+            tracer._instrumenter.disable()
 
-            it('should unpatch then() callback when unpatching instrumentation', () => {
-              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+            const afterUnpatching = await testPatching(Promise, tracer)
 
-              tracer._instrumenter.disable()
-
-              const span = {}
-              const differentContextSpan = {}
-
-              let promise = new Promise((resolve, reject) => {
-                setImmediate(() => {
-                  tracer.scope().activate(differentContextSpan, () => {
-                    resolve()
-                  })
-                })
-              })
-
-              return tracer.scope().activate(span, () => {
-                for (let i = 0; i < promise.then.length; i++) {
-                  const args = new Array(i + 1)
-
-                  args[i] = () => {
-                    expect(tracer.scope().active()).to.equal(differentContextSpan)
-                    expect(span).to.not.equal(differentContextSpan)
-                  }
-
-                  promise = promise.then.apply(promise, args)
-                }
-
-                return promise
-              })
-            })
+            expect(beforePatching).to.equal(afterUnpatching)
           })
-        }
+        })
       })
     })
   })
