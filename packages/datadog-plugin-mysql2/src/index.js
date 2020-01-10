@@ -57,18 +57,11 @@ function wrapExecute (tracer, config, execute) {
 }
 
 function wrapCallback (tracer, span, parent, done) {
-  return tracer.scope().bind((err, res) => {
-    if (err) {
-      span.addTags({
-        'error.type': err.name,
-        'error.msg': err.message,
-        'error.stack': err.stack
-      })
-    }
-
+  return tracer.scope().bind((error, res) => {
+    span.addTags({ error })
     span.finish()
 
-    done(err, res)
+    done(error, res)
   }, parent)
 }
 
