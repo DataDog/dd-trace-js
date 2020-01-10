@@ -46,9 +46,8 @@ function wrapExecute (tracer, config, execute) {
     if (typeof this.onResult === 'function') {
       this.onResult = wrapCallback(tracer, span, childOf, this.onResult)
     } else {
-      this.on('end', () => {
-        span.finish()
-      })
+      this.on('error', error => span.addTags({ error }))
+      this.on('end', () => span.finish())
     }
 
     this.execute = execute
