@@ -25,7 +25,7 @@ const log = {
     const symbols = Object.getOwnPropertySymbols(record)
 
     for (const symbol of symbols) {
-      carrier[symbols[symbol]] = record[symbols[symbol]]
+      carrier[symbol] = record[symbol]
     }    
 
     return carrier
