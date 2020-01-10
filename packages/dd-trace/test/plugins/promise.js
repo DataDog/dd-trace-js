@@ -19,15 +19,15 @@ module.exports = (name, factory, versionRange) => {
           tracer = require('../..')
         })
 
-        beforeEach(() => {
-          const moduleExports = require(`../../../../versions/${name}@${version}`).get()
-
-          Promise = factory ? factory(moduleExports) : moduleExports
-        })
-
         describe('without configuration', () => {
           beforeEach(() => {
             return agent.load(plugin, name)
+          })
+
+          beforeEach(() => {
+            const moduleExports = require(`../../../../versions/${name}@${version}`).get()
+
+            Promise = factory ? factory(moduleExports) : moduleExports
           })
 
           afterEach(() => {
@@ -106,6 +106,12 @@ module.exports = (name, factory, versionRange) => {
         })
 
         describe('unpatching', () => {
+          beforeEach(() => {
+            const moduleExports = require(`../../../../versions/${name}@${version}`).get()
+
+            Promise = factory ? factory(moduleExports) : moduleExports
+          })
+
           afterEach(() => {
             return agent.close()
           })
