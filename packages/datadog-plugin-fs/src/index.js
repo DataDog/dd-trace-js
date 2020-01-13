@@ -338,7 +338,7 @@ function makeFSTags (path, options, config, tracer) {
       break
     }
     case 'number': {
-      tags['file.descriptor'] = path
+      tags['file.descriptor'] = path.toString()
       tags['resource.name'] = path.toString()
       break
     }
