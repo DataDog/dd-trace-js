@@ -254,10 +254,10 @@ function createFchownTags (config, tracer) {
       fd = this.fd
     }
     const tags = makeFSTags(fd, null, config, tracer)
-    if (uid) {
+    if (typeof uid === 'number') {
       tags['file.uid'] = uid.toString()
     }
-    if (gid) {
+    if (typeof gid === 'number') {
       tags['file.gid'] = gid.toString()
     }
     return tags
