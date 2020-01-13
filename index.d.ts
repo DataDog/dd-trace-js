@@ -89,7 +89,7 @@ export declare interface Tracer extends opentracing.Tracer {
    */
   wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
   wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => any, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 }
 
 export declare interface TraceOptions extends Analyzable {

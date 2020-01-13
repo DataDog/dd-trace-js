@@ -64,9 +64,6 @@ class DatadogTracer extends Tracer {
     return function () {
       if (typeof options === 'function') {
         options = options.apply(this, arguments)
-        if (!options) {
-          return fn.apply(this, arguments)
-        }
       }
       const lastArgId = arguments.length - 1
       const cb = arguments[lastArgId]

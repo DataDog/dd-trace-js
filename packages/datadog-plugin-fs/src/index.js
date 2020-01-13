@@ -188,9 +188,6 @@ function createAppendFileTags (config, tracer) {
 
 function createCopyFileTags (config, tracer) {
   return function copyFileTags (src, dest, flag) {
-    src = src || 'undefined'
-    dest = dest || 'undefined'
-
     return makeFSTags({ src, dest }, null, config, tracer)
   }
 }
@@ -346,8 +343,6 @@ function makeFSTags (path, options, config, tracer) {
       if (path && typeof path.toString === 'function') {
         const pathStr = path.toString()
         tags['resource.name'] = pathStr
-      } else {
-        tags['resource.name'] = 'undefined'
       }
   }
 
