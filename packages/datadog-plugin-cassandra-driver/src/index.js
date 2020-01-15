@@ -26,6 +26,16 @@ function createWrapInnerExecute (tracer, config) {
     }
   }
 }
+function createWrapExecute (tracer, config) {
+  return function wrapExecute (_execute) {
+    return function _executeWithTrace (query, params, execOptions, callback) {
+      const span = start(tracer, config, this, query)
+      const promise = tracer.scope().bind(_execute, span).apply(this, arguments)
+
+      return tx.wrap(span, promise)
+    }
+  }
+}
 
 function createWrapExecutionStart (tracer, config) {
   return function wrapExecutionStart (start) {
@@ -41,6 +51,18 @@ function createWrapExecutionStart (tracer, config) {
         addHost(span, execution._connection)
         return getHostCallback.apply(this, arguments)
       })
+    }
+  }
+}
+
+function createWrapSendOnConnection (tracer, config) {
+  return function wrapSendOnConnection (_sendOnConnection) {
+    return function _sendOnConnectionWithTrace () {
+      const span = tracer.scope().active()
+
+      addHost(span, this._connection)
+
+      return _sendOnConnection.apply(this, arguments)
     }
   }
 }
@@ -174,19 +196,48 @@ module.exports = [
     name: 'cassandra-driver',
     versions: ['>=3.0.0'],
     patch (cassandra, tracer, config) {
-      this.wrap(cassandra.Client.prototype, '_innerExecute', createWrapInnerExecute(tracer, config))
       this.wrap(cassandra.Client.prototype, 'batch', createWrapBatch(tracer, config))
       this.wrap(cassandra.Client.prototype, 'stream', createWrapStream(tracer, config))
     },
     unpatch (cassandra) {
-      this.unwrap(cassandra.Client.prototype, '_innerExecute')
       this.unwrap(cassandra.Client.prototype, 'batch')
       this.unwrap(cassandra.Client.prototype, 'stream')
     }
   },
   {
     name: 'cassandra-driver',
-    versions: ['>=3.3.0'],
+    versions: ['>=4.4'],
+    patch (cassandra, tracer, config) {
+      this.wrap(cassandra.Client.prototype, '_execute', createWrapExecute(tracer, config))
+    },
+    unpatch (cassandra) {
+      this.unwrap(cassandra.Client.prototype, '_execute')
+    }
+  },
+  {
+    name: 'cassandra-driver',
+    versions: ['3 - 4.3'],
+    patch (cassandra, tracer, config) {
+      this.wrap(cassandra.Client.prototype, '_innerExecute', createWrapInnerExecute(tracer, config))
+    },
+    unpatch (cassandra) {
+      this.unwrap(cassandra.Client.prototype, '_innerExecute')
+    }
+  },
+  {
+    name: 'cassandra-driver',
+    versions: ['>=3.3'],
+    file: 'lib/request-execution.js',
+    patch (RequestExecution, tracer, config) {
+      this.wrap(RequestExecution.prototype, '_sendOnConnection', createWrapSendOnConnection(tracer, config))
+    },
+    unpatch (RequestExecution) {
+      this.unwrap(RequestExecution.prototype, '_sendOnConnection')
+    }
+  },
+  {
+    name: 'cassandra-driver',
+    versions: ['3.3 - 4.3'],
     file: 'lib/request-execution.js',
     patch (RequestExecution, tracer, config) {
       this.wrap(RequestExecution.prototype, 'start', createWrapExecutionStart(tracer, config))
