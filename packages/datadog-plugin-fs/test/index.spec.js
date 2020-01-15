@@ -20,8 +20,10 @@ wrapIt()
 describe('fs', () => {
   let fs
   let tmpdir
+  let tracer
   afterEach(() => agent.close())
   beforeEach(() => agent.load(plugin, 'fs').then(() => {
+    tracer = require('../../dd-trace')
     fs = require('fs')
   }))
   before(() => {
@@ -1710,49 +1712,60 @@ describe('fs', () => {
       })
     })
   }
-})
 
-function describeThreeWays (name, fn) {
-  if (name in realFS) {
-    describe(name, () => {
-      fn('fs.' + name.toLowerCase(), (fs, args, done, withError) => {
-        args.push((err) => {
-          if (err) {
+  function describeThreeWays (name, fn) {
+    if (name in realFS) {
+      describe(name, () => {
+        fn('fs.' + name.toLowerCase(), (fs, args, done, withError) => {
+          const span = {}
+          return tracer.scope().activate(span, () => {
+            args.push((err) => {
+              expect(tracer.scope().active()).to.equal(span)
+              if (err) {
+                if (withError) withError(err)
+                else done(err)
+              }
+            })
+            return fs[name].apply(fs, args)
+          })
+        })
+      })
+    }
+
+    if (realFS.promises && name in realFS.promises) {
+      describe('promises.' + name, () => {
+        fn('fs.promises.' + name.toLowerCase(), (fs, args, done, withError) => {
+          const span = {}
+          return tracer.scope().activate(span, () => {
+            return fs.promises[name].apply(fs.promises, args)
+              .then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+              .catch((err) => {
+                if (withError) withError(err)
+                else done(err)
+              })
+          })
+        })
+      })
+    }
+
+    const nameSync = name + 'Sync'
+
+    if (nameSync in realFS) {
+      describe(nameSync, () => {
+        fn('fs.' + nameSync.toLowerCase(), (fs, args, _, withError) => {
+          try {
+            return fs[nameSync].apply(fs, args)
+          } catch (err) {
             if (withError) withError(err)
-            else done(err)
+            else throw err
           }
         })
-        return fs[name].apply(fs, args)
       })
-    })
+    }
   }
-
-  if (realFS.promises && name in realFS.promises) {
-    describe('promises.' + name, () => {
-      fn('fs.promises.' + name.toLowerCase(), (fs, args, done, withError) => {
-        fs.promises[name].apply(fs.promises, args).catch((err) => {
-          if (withError) withError(err)
-          else done(err)
-        })
-      })
-    })
-  }
-
-  const nameSync = name + 'Sync'
-
-  if (nameSync in realFS) {
-    describe(nameSync, () => {
-      fn('fs.' + nameSync.toLowerCase(), (fs, args, _, withError) => {
-        try {
-          return fs[nameSync].apply(fs, args)
-        } catch (err) {
-          if (withError) withError(err)
-          else throw err
-        }
-      })
-    })
-  }
-}
+})
 
 function mkExpected (props) {
   const meta = Object.assign({ component: 'fs' }, props.meta)
