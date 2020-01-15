@@ -889,7 +889,7 @@ describe('fs', () => {
       tested(fs, [__filename, link], done)
     })
 
-    it.skip('should handle errors', () =>
+    it('should handle errors', () =>
       testHandleErrors(fs, name, tested, [__filename, '/baddir/badfilename'], agent))
   })
 
@@ -916,7 +916,7 @@ describe('fs', () => {
       tested(fs, [__filename, link], done)
     })
 
-    it.skip('should handle errors', () =>
+    it('should handle errors', () =>
       testHandleErrors(fs, name, tested, ['/badfilename', link], agent))
   })
 
@@ -973,7 +973,7 @@ describe('fs', () => {
       tested(fs, [src, dest], done)
     })
 
-    it.skip('should handle errors', () =>
+    it('should handle errors', () =>
       testHandleErrors(fs, name, tested, ['/badfilename', dest], agent))
   })
 
@@ -1131,7 +1131,7 @@ describe('fs', () => {
       tested(fs, [filename, Date.now(), Date.now()], done)
     })
 
-    it.skip('should handle errors', () =>
+    it('should handle errors', () =>
       testHandleErrors(fs, name, tested, ['/badfilename', Date.now(), Date.now()], agent))
   })
 
