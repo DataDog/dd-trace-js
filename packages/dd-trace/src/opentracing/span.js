@@ -38,9 +38,10 @@ class DatadogSpan extends Span {
 
   toString () {
     const spanContext = this.context()
-    const resource = spanContext._tags['resource.name'].length > 100
-      ? `${spanContext._tags['resource.name'].substring(0, 97)}...`
-      : spanContext._tags['resource.name']
+    const resourceName = spanContext._tags['resource.name']
+    const resource = resourceName.length > 100
+      ? `${resourceName.substring(0, 97)}...`
+      : resourceName
     const json = JSON.stringify({
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
