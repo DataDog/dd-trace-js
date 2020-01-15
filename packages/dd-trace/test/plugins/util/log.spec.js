@@ -78,5 +78,24 @@ describe('plugins/util/log', () => {
         expect(carrier).to.have.property('parent', 'parent')
       })
     })
+
+    it('should preserve existing Symbol properties', () => {
+      const span = tracer.startSpan('test')
+
+      tracer.scope().activate(span, () => {
+        const record = Object.create({ parent: 'parent' })
+        const splat = 'splat'
+        const splatSymbol = Symbol.for(splat)
+
+        record.own = 'own'
+        record[splatSymbol] = splat
+
+        const carrier = log.correlate(tracer, record)
+
+        expect(carrier).to.have.property('own', 'own')
+        expect(carrier).to.have.property('parent', 'parent')
+        expect(carrier).to.have.property(splatSymbol, splat)
+      })
+    })
   })
 })
