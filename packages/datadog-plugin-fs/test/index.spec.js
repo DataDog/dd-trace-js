@@ -7,6 +7,7 @@ const realFS = Object.assign({}, require('fs'))
 const os = require('os')
 const path = require('path')
 const semver = require('semver')
+const rimraf = require('rimraf')
 
 const implicitFlag = semver.satisfies(process.versions.node, '>=11.1.0')
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
@@ -14,7 +15,7 @@ const hasOSymlink = realFS.constants.O_SYMLINK
 
 wrapIt()
 
-// TODO error cases
+// TODO remove skips
 
 describe('fs', () => {
   let fs
@@ -26,8 +27,8 @@ describe('fs', () => {
   before(() => {
     tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
   })
-  after(() => {
-    realFS.rmdirSync(tmpdir)
+  after((done) => {
+    rimraf(tmpdir, realFS, done)
   })
 
   describe('open', () => {
@@ -70,6 +71,24 @@ describe('fs', () => {
       fs.open(__filename, 'r+', (err, _fd) => {
         fd = _fd
         if (err) done(err)
+      })
+    })
+
+    it('should handle errors', (done) => {
+      const filename = path.join(__filename, Math.random().toString())
+      fs.open(filename, 'r', (err) => {
+        expectOneSpan(agent, done, {
+          name: 'fs.open',
+          resource: filename,
+          error: 1,
+          meta: {
+            'file.flag': 'r',
+            'file.path': filename,
+            'error.msg': err.message,
+            'error.type': err.name,
+            'error.stack': err.stack
+          }
+        })
       })
     })
   })
@@ -115,6 +134,24 @@ describe('fs', () => {
           fd = _fd
         }, done)
       })
+
+      it('should handle errors', (done) => {
+        const filename = path.join(__filename, Math.random().toString())
+        fs.promises.open(filename, 'r').catch((err) => {
+          expectOneSpan(agent, done, {
+            name: 'fs.promises.open',
+            resource: filename,
+            error: 1,
+            meta: {
+              'file.flag': 'r',
+              'file.path': filename,
+              'error.msg': err.message,
+              'error.type': err.name,
+              'error.stack': err.stack
+            }
+          })
+        })
+      })
     })
   }
 
@@ -154,6 +191,26 @@ describe('fs', () => {
 
       fd = fs.openSync(__filename, 'r+')
     })
+
+    it('should handle errors', (done) => {
+      const filename = path.join(__filename, Math.random().toString())
+      try {
+        fs.openSync(filename, 'r')
+      } catch (err) {
+        expectOneSpan(agent, done, {
+          name: 'fs.opensync',
+          resource: filename,
+          error: 1,
+          meta: {
+            'file.flag': 'r',
+            'file.path': filename,
+            'error.msg': err.message,
+            'error.type': err.name,
+            'error.stack': err.stack
+          }
+        })
+      }
+    })
   })
 
   describeThreeWays('close', (name, tested) => {
@@ -169,6 +226,9 @@ describe('fs', () => {
 
       tested(fs, [fd], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309], agent))
   })
 
   describeThreeWays('readFile', (name, tested) => {
@@ -199,6 +259,9 @@ describe('fs', () => {
 
       tested(fs, [__filename, { flag: 'r+' }], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', { flag: 'r' }], agent))
   })
 
   describeThreeWays('writeFile', (name, tested) => {
@@ -207,7 +270,9 @@ describe('fs', () => {
       filename = path.join(tmpdir, 'writeFile')
     })
     afterEach(() => {
-      realFS.unlinkSync(filename)
+      try {
+        realFS.unlinkSync(filename)
+      } catch (e) { /* */ }
     })
 
     if (implicitFlag) {
@@ -237,6 +302,9 @@ describe('fs', () => {
 
       tested(fs, [filename, 'test', { flag: 'w+' }], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [filename, 'test', { flag: 'r' }], agent))
   })
 
   describeThreeWays('appendFile', (name, tested) => {
@@ -245,7 +313,9 @@ describe('fs', () => {
       filename = path.join(tmpdir, 'appendFile')
     })
     afterEach(() => {
-      realFS.unlinkSync(filename)
+      try {
+        realFS.unlinkSync(filename)
+      } catch (e) { /* */ }
     })
 
     it('should be instrumented', (done) => {
@@ -273,6 +343,9 @@ describe('fs', () => {
 
       tested(fs, [filename, 'test', { flag: 'a+' }], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [filename, 'test', { flag: 'r' }], agent))
   })
 
   describeThreeWays('access', (name, tested) => {
@@ -287,13 +360,19 @@ describe('fs', () => {
 
       tested(fs, [__filename], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('copyFile', (name, tested) => {
     const dest = `${__filename}copy`
     afterEach(() => {
-      realFS.unlinkSync(dest)
+      try {
+        realFS.unlinkSync(dest)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -306,6 +385,9 @@ describe('fs', () => {
 
       tested(fs, [__filename, dest], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [__filename, __filename, fs.constants.COPYFILE_EXCL], agent))
   })
 
   describeThreeWays('stat', (name, tested) => {
@@ -320,6 +402,9 @@ describe('fs', () => {
 
       tested(fs, [__filename], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('lstat', (name, tested) => {
@@ -334,6 +419,9 @@ describe('fs', () => {
 
       tested(fs, [__filename], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('fstat', (name, tested) => {
@@ -348,6 +436,9 @@ describe('fs', () => {
 
       tested(fs, [1], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309], agent))
   })
 
   describeThreeWays('readdir', (name, tested) => {
@@ -362,6 +453,9 @@ describe('fs', () => {
 
       tested(fs, [__dirname], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/baddirname'], agent))
   })
 
   describeThreeWays('opendir', (name, tested) => {
@@ -379,6 +473,9 @@ describe('fs', () => {
         else dir.close(done)
       })
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/baddirname'], agent))
   })
 
   describeThreeWays('read', (name, tested) => {
@@ -389,6 +486,7 @@ describe('fs', () => {
     afterEach(() => {
       realFS.closeSync(fd)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -399,6 +497,9 @@ describe('fs', () => {
       })
       tested(fs, [fd, Buffer.alloc(5), 0, 5, 0], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
   })
 
   describeThreeWays('write', (name, tested) => {
@@ -412,6 +513,7 @@ describe('fs', () => {
       realFS.closeSync(fd)
       realFS.unlinkSync(filename)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -422,6 +524,9 @@ describe('fs', () => {
       })
       tested(fs, [fd, Buffer.from('hello'), 0, 5, 0], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
   })
 
   if (hasWritev) {
@@ -436,6 +541,7 @@ describe('fs', () => {
         realFS.closeSync(fd)
         realFS.unlinkSync(filename)
       })
+
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
@@ -446,6 +552,9 @@ describe('fs', () => {
         })
         tested(fs, [fd, [Buffer.from('hello')], 0], done)
       })
+
+      it('should handle errors', () =>
+        testHandleErrors(fs, name, tested, [8675309, [Buffer.alloc(5)], 0], agent))
     })
   }
 
@@ -472,6 +581,12 @@ describe('fs', () => {
         }
       })
       fs.createReadStream(__filename, { flags: 'r+' }).on('error', done).resume()
+    })
+
+    it('should handle errors', () => {
+      testHandleErrors(fs, 'fs.readstream', (fs, args, _, cb) => {
+        fs.createReadStream(...args).on('error', cb).emit('error', new Error('bad'))
+      }, [__filename], agent)
     })
   })
 
@@ -509,6 +624,12 @@ describe('fs', () => {
 
       fs.createWriteStream(filename, { flags: 'w+' }).on('error', done).end()
     })
+
+    it('should handle errors', () => {
+      testHandleErrors(fs, 'fs.writestream', (fs, args, _, cb) => {
+        fs.createWriteStream(...args).on('error', cb).emit('error', new Error('bad'))
+      }, [filename], agent)
+    })
   })
 
   describeThreeWays('chmod', (name, tested) => {
@@ -516,6 +637,7 @@ describe('fs', () => {
     beforeEach(() => {
       mode = realFS.statSync(__filename).mode % 0o100000
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -528,6 +650,9 @@ describe('fs', () => {
 
       tested(fs, [__filename, mode], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', mode], agent))
   })
 
   if (hasOSymlink) {
@@ -536,6 +661,7 @@ describe('fs', () => {
       beforeEach(() => {
         mode = realFS.statSync(__filename).mode % 0o100000
       })
+
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
@@ -548,6 +674,9 @@ describe('fs', () => {
 
         tested(fs, [__filename, mode], done)
       })
+
+      it('should handle errors', () =>
+        testHandleErrors(fs, name, tested, ['/badfilename', mode], agent))
     })
   }
 
@@ -561,6 +690,7 @@ describe('fs', () => {
     afterEach(() => {
       realFS.closeSync(fd)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -573,6 +703,9 @@ describe('fs', () => {
 
       tested(fs, [fd, mode], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309, mode], agent))
   })
 
   describeThreeWays('chown', (name, tested) => {
@@ -583,6 +716,7 @@ describe('fs', () => {
       uid = stats.uid
       gid = stats.gid
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -596,6 +730,9 @@ describe('fs', () => {
 
       tested(fs, [__filename, uid, gid], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', uid, gid], agent))
   })
 
   if (hasOSymlink) {
@@ -607,6 +744,7 @@ describe('fs', () => {
         uid = stats.uid
         gid = stats.gid
       })
+
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
@@ -620,6 +758,9 @@ describe('fs', () => {
 
         tested(fs, [__filename, uid, gid], done)
       })
+
+      it('should handle errors', () =>
+        testHandleErrors(fs, name, tested, ['/badfilename', uid, gid], agent))
     })
   }
 
@@ -636,6 +777,7 @@ describe('fs', () => {
     afterEach(() => {
       realFS.closeSync(fd)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -649,6 +791,9 @@ describe('fs', () => {
 
       tested(fs, [fd, uid, gid], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309, uid, gid], agent))
   })
 
   describeThreeWays('realpath', (name, tested) => {
@@ -662,6 +807,9 @@ describe('fs', () => {
       })
       tested(fs, [__filename], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('readlink', (name, tested) => {
@@ -673,6 +821,7 @@ describe('fs', () => {
     afterEach(() => {
       realFS.unlinkSync(link)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -683,6 +832,9 @@ describe('fs', () => {
       })
       tested(fs, [link], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('unlink', (name, tested) => {
@@ -691,6 +843,12 @@ describe('fs', () => {
       link = path.join(tmpdir, 'link')
       realFS.symlinkSync(__filename, link)
     })
+    afterEach(() => {
+      try {
+        realFS.unlinkSync(link)
+      } catch (e) { /* */ }
+    })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -701,6 +859,9 @@ describe('fs', () => {
       })
       tested(fs, [link], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('symlink', (name, tested) => {
@@ -709,8 +870,11 @@ describe('fs', () => {
       link = path.join(tmpdir, 'link')
     })
     afterEach(() => {
-      realFS.unlinkSync(link)
+      try {
+        realFS.unlinkSync(link)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -722,6 +886,9 @@ describe('fs', () => {
       })
       tested(fs, [__filename, link], done)
     })
+
+    it.skip('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [__filename, '/baddir/badfilename'], agent))
   })
 
   describeThreeWays('link', (name, tested) => {
@@ -730,8 +897,11 @@ describe('fs', () => {
       link = path.join(tmpdir, 'link')
     })
     afterEach(() => {
-      realFS.unlinkSync(link)
+      try {
+        realFS.unlinkSync(link)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -743,6 +913,9 @@ describe('fs', () => {
       })
       tested(fs, [__filename, link], done)
     })
+
+    it.skip('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', link], agent))
   })
 
   describeThreeWays('rmdir', (name, tested) => {
@@ -751,6 +924,12 @@ describe('fs', () => {
       dir = path.join(tmpdir, 'dir')
       realFS.mkdirSync(dir)
     })
+    afterEach(() => {
+      try {
+        realFS.rmdirSync(dir)
+      } catch (e) { /* */ }
+    })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -761,6 +940,9 @@ describe('fs', () => {
       })
       tested(fs, [dir], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename'], agent))
   })
 
   describeThreeWays('rename', (name, tested) => {
@@ -772,8 +954,11 @@ describe('fs', () => {
       realFS.writeFileSync(src, '')
     })
     afterEach(() => {
-      realFS.unlinkSync(dest)
+      try {
+        realFS.unlinkSync(dest)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -785,6 +970,9 @@ describe('fs', () => {
       })
       tested(fs, [src, dest], done)
     })
+
+    it.skip('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', dest], agent))
   })
 
   describeThreeWays('fsync', (name, tested) => {
@@ -798,6 +986,7 @@ describe('fs', () => {
       realFS.closeSync(fd)
       realFS.unlinkSync(tmpfile)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -808,6 +997,9 @@ describe('fs', () => {
       })
       tested(fs, [fd], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309], agent))
   })
 
   describeThreeWays('fdatasync', (name, tested) => {
@@ -821,6 +1013,7 @@ describe('fs', () => {
       realFS.closeSync(fd)
       realFS.unlinkSync(tmpfile)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -831,6 +1024,9 @@ describe('fs', () => {
       })
       tested(fs, [fd], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309], agent))
   })
 
   describeThreeWays('mkdir', (name, tested) => {
@@ -839,8 +1035,11 @@ describe('fs', () => {
       dir = path.join(tmpdir, 'mkdir')
     })
     afterEach(() => {
-      realFS.rmdirSync(dir)
+      try {
+        realFS.rmdirSync(dir)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -851,6 +1050,9 @@ describe('fs', () => {
       })
       tested(fs, [dir], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/baddir/baddir'], agent))
   })
 
   describeThreeWays('truncate', (name, tested) => {
@@ -862,6 +1064,7 @@ describe('fs', () => {
     afterEach(() => {
       realFS.unlinkSync(filename)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -872,6 +1075,9 @@ describe('fs', () => {
       })
       tested(fs, [filename, 5], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', 5], agent))
   })
 
   describeThreeWays('ftruncate', (name, tested) => {
@@ -886,6 +1092,7 @@ describe('fs', () => {
       realFS.closeSync(fd)
       realFS.unlinkSync(filename)
     })
+
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
@@ -896,6 +1103,9 @@ describe('fs', () => {
       })
       tested(fs, [fd, 5], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309, 5], agent))
   })
 
   describeThreeWays('utimes', (name, tested) => {
@@ -918,6 +1128,9 @@ describe('fs', () => {
       })
       tested(fs, [filename, Date.now(), Date.now()], done)
     })
+
+    it.skip('should handle errors', () =>
+      testHandleErrors(fs, name, tested, ['/badfilename', Date.now(), Date.now()], agent))
   })
 
   describeThreeWays('futimes', (name, tested) => {
@@ -943,13 +1156,19 @@ describe('fs', () => {
       })
       tested(fs, [fd, Date.now(), Date.now()], done)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, name, tested, [8675309, Date.now(), Date.now()], agent))
   })
 
   describe('mkdtemp', () => {
     let tmpdir
     afterEach(() => {
-      realFS.rmdirSync(tmpdir)
+      try {
+        realFS.rmdirSync(tmpdir)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
       expectOneSpan(agent, done, {
@@ -967,13 +1186,21 @@ describe('fs', () => {
         tmpdir = result
       })
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, 'fs.mkdtemp', (fs, args, _, cb) => {
+        fs.mkdtemp(...args, cb)
+      }, ['/baddir/baddir'], agent))
   })
 
   describe('mkdtempSync', () => {
     let tmpdir
     afterEach(() => {
-      realFS.rmdirSync(tmpdir)
+      try {
+        realFS.rmdirSync(tmpdir)
+      } catch (e) { /* */ }
     })
+
     it('should be instrumented', (done) => {
       const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
       expectOneSpan(agent, done, {
@@ -985,6 +1212,15 @@ describe('fs', () => {
       })
       tmpdir = fs.mkdtempSync(inputDir)
     })
+
+    it('should handle errors', () =>
+      testHandleErrors(fs, 'fs.mkdtempsync', (fs, args, _, cb) => {
+        try {
+          fs.mkdtempSync(...args)
+        } catch (e) {
+          cb(e)
+        }
+      }, ['/baddir/baddir'], agent))
   })
 
   describe('exists', () => {
@@ -1051,6 +1287,16 @@ describe('fs', () => {
           dir.close().catch(done)
         })
 
+        it('should handle errors', () =>
+          testHandleErrors(fs, 'fs.dir.close', (_1, _2, _3, cb) => {
+            dir.closeSync()
+            try {
+              dir.close()
+            } catch (e) {
+              cb(e)
+            }
+          }, [], agent))
+
         it('should be instrumented with callback', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.close',
@@ -1062,6 +1308,16 @@ describe('fs', () => {
           dir.close(err => err && done(err))
         })
 
+        it('should handle errors with callback', () =>
+          testHandleErrors(fs, 'fs.dir.close', (_1, _2, _3, cb) => {
+            dir.closeSync()
+            try {
+              dir.close(cb)
+            } catch (e) {
+              cb(e)
+            }
+          }, [], agent))
+
         it('Sync should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.closesync',
@@ -1072,6 +1328,16 @@ describe('fs', () => {
           })
           dir.closeSync()
         })
+
+        it('Sync should handle errors', () =>
+          testHandleErrors(fs, 'fs.dir.closesync', (_1, _2, _3, cb) => {
+            dir.closeSync()
+            try {
+              dir.closeSync()
+            } catch (e) {
+              cb(e)
+            }
+          }, [], agent))
       })
 
       describe('read', () => {
@@ -1086,6 +1352,16 @@ describe('fs', () => {
           dir.read().catch(done)
         })
 
+        it('should handle errors', () =>
+          testHandleErrors(fs, 'fs.dir.read', (_1, _2, _3, cb) => {
+            dir.closeSync()
+            try {
+              dir.read()
+            } catch (e) {
+              cb(e)
+            }
+          }, [], agent))
+
         it('should be instrumented with callback', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.read',
@@ -1097,6 +1373,16 @@ describe('fs', () => {
           dir.read(err => err && done(err))
         })
 
+        it('should handle errors with callback', () =>
+          testHandleErrors(fs, 'fs.dir.read', (_1, _2, _3, cb) => {
+            dir.closeSync()
+            try {
+              dir.read(cb)
+            } catch (e) {
+              cb(e)
+            }
+          }, [], agent))
+
         it('Sync should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.readsync',
@@ -1107,9 +1393,19 @@ describe('fs', () => {
           })
           dir.readSync()
         })
+
+        it('Sync should handle errors', () =>
+          testHandleErrors(fs, 'fs.dir.readsync', (_1, _2, _3, cb) => {
+            dir.closeSync()
+            try {
+              dir.readSync()
+            } catch (e) {
+              cb(e)
+            }
+          }, [], agent))
       })
 
-      describe('Symbol.asyncIterator', (done) => {
+      describe('Symbol.asyncIterator', () => {
         it('should be instrumented for reads', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.read',
@@ -1145,17 +1441,15 @@ describe('fs', () => {
     describe('FileHandle', () => {
       let filehandle
       let filename
-      let isClosed
       beforeEach(async () => {
-        isClosed = false
         filename = path.join(os.tmpdir(), 'filehandle')
         fs.writeFileSync(filename, 'some data')
         filehandle = await fs.promises.open(filename, 'w+')
       })
       afterEach(async () => {
-        if (!isClosed) {
+        try {
           await filehandle.close()
-        }
+        } catch (e) { /* */ }
         await fs.promises.unlink(filename)
       })
 
@@ -1170,6 +1464,10 @@ describe('fs', () => {
           })
           filehandle.appendFile('some more data').catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'appendFile', ['some more data'], filehandle, agent))
       })
 
       describe('writeFile', () => {
@@ -1183,6 +1481,10 @@ describe('fs', () => {
           })
           filehandle.writeFile('some more data').catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'writeFile', ['some more data'], filehandle, agent))
       })
 
       describe('readFile', () => {
@@ -1196,6 +1498,10 @@ describe('fs', () => {
           })
           filehandle.readFile().catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'readFile', [], filehandle, agent))
       })
 
       describe('write', () => {
@@ -1209,6 +1515,10 @@ describe('fs', () => {
           })
           filehandle.write('some more data').catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'write', ['some more data'], filehandle, agent))
       })
 
       if (hasWritev) {
@@ -1223,6 +1533,10 @@ describe('fs', () => {
             })
             filehandle.writev([Buffer.from('some more data')]).catch(done)
           })
+
+          // https://github.com/nodejs/node/issues/31361
+          it.skip('should handle errors', () =>
+            testFileHandleErrors(fs, 'writev', [[Buffer.from('some more data')]], filehandle, agent))
         })
       }
 
@@ -1237,6 +1551,10 @@ describe('fs', () => {
           })
           filehandle.read(Buffer.alloc(5), 0, 5, 0).catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'read', [Buffer.alloc(5), 0, 5, 0], filehandle, agent))
       })
 
       describe('chmod', () => {
@@ -1244,6 +1562,7 @@ describe('fs', () => {
         beforeEach(() => {
           mode = realFS.statSync(__filename).mode % 0o100000
         })
+
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.chmod',
@@ -1255,6 +1574,10 @@ describe('fs', () => {
           })
           filehandle.chmod(mode).catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'chmod', [mode], filehandle, agent))
       })
 
       describe('chown', () => {
@@ -1265,6 +1588,7 @@ describe('fs', () => {
           uid = stats.uid
           gid = stats.gid
         })
+
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.chown',
@@ -1277,6 +1601,10 @@ describe('fs', () => {
           })
           filehandle.chown(uid, gid).catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'chown', [uid, gid], filehandle, agent))
       })
 
       describe('stat', () => {
@@ -1290,6 +1618,10 @@ describe('fs', () => {
           })
           filehandle.stat().catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testHandleErrors(fs, 'stat', [], filehandle, agent))
       })
 
       describe('sync', () => {
@@ -1303,6 +1635,10 @@ describe('fs', () => {
           })
           filehandle.sync().catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testHandleErrors(fs, 'sync', [], filehandle, agent))
       })
 
       describe('datasync', () => {
@@ -1316,6 +1652,10 @@ describe('fs', () => {
           })
           filehandle.datasync().catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testHandleErrors(fs, 'datasync', [], filehandle, agent))
       })
 
       describe('truncate', () => {
@@ -1329,6 +1669,10 @@ describe('fs', () => {
           })
           filehandle.truncate(5).catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testHandleErrors(fs, 'truncate', [5], filehandle, agent))
       })
 
       describe('utimes', () => {
@@ -1342,6 +1686,10 @@ describe('fs', () => {
           })
           filehandle.utimes(Date.now(), Date.now()).catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testHandleErrors(fs, 'utimes', [Date.now(), Date.now()], filehandle, agent))
       })
 
       describe('close', () => {
@@ -1353,9 +1701,12 @@ describe('fs', () => {
               'file.descriptor': filehandle.fd.toString()
             }
           })
-          isClosed = true
           filehandle.close().catch(done)
         })
+
+        // https://github.com/nodejs/node/issues/31361
+        it.skip('should handle errors', () =>
+          testFileHandleErrors(fs, 'close', [], filehandle, agent))
       })
     })
   }
@@ -1364,8 +1715,13 @@ describe('fs', () => {
 function describeThreeWays (name, fn) {
   if (name in realFS) {
     describe(name, () => {
-      fn('fs.' + name.toLowerCase(), (fs, args, done) => {
-        args.push((err) => err && done(err))
+      fn('fs.' + name.toLowerCase(), (fs, args, done, withError) => {
+        args.push((err) => {
+          if (err) {
+            if (withError) withError(err)
+            else done(err)
+          }
+        })
         return fs[name].apply(fs, args)
       })
     })
@@ -1373,8 +1729,11 @@ function describeThreeWays (name, fn) {
 
   if (realFS.promises && name in realFS.promises) {
     describe('promises.' + name, () => {
-      fn('fs.promises.' + name.toLowerCase(), (fs, args, done) => {
-        fs.promises[name].apply(fs.promises, args).catch(done)
+      fn('fs.promises.' + name.toLowerCase(), (fs, args, done, withError) => {
+        fs.promises[name].apply(fs.promises, args).catch((err) => {
+          if (withError) withError(err)
+          else done(err)
+        })
       })
     })
   }
@@ -1383,8 +1742,13 @@ function describeThreeWays (name, fn) {
 
   if (nameSync in realFS) {
     describe(nameSync, () => {
-      fn('fs.' + nameSync.toLowerCase(), (fs, args) => {
-        return fs[nameSync].apply(fs, args)
+      fn('fs.' + nameSync.toLowerCase(), (fs, args, _, withError) => {
+        try {
+          return fs[nameSync].apply(fs, args)
+        } catch (err) {
+          if (withError) withError(err)
+          else throw err
+        }
       })
     })
   }
@@ -1417,5 +1781,40 @@ function forOneSpan (agent, fn, done) {
 }
 
 function expectOneSpan (agent, done, expected) {
-  forOneSpan(agent, span => expect(span).to.deep.include(mkExpected(expected)), done)
+  forOneSpan(agent, span => {
+    expected = mkExpected(expected)
+    const meta = expected.meta
+    delete expected.meta
+    expect(span.meta).to.include(meta)
+    expect(span).to.include(expected)
+  }, done)
+}
+
+function testHandleErrors (fs, name, tested, args, agent) {
+  return new Promise((resolve, reject) => {
+    function done (err) {
+      if (err) reject(err)
+      else resolve()
+    }
+    tested(fs, args, null, err => {
+      expectOneSpan(agent, done, {
+        name,
+        error: 1,
+        meta: {
+          'error.type': err.name,
+          'error.msg': err.message,
+          'error.stack': err.stack
+        }
+      })
+    })
+  })
+}
+
+function testFileHandleErrors (fs, method, args, filehandle, agent) {
+  const name = 'fs.filehandle.' + method.toLowerCase()
+  return testHandleErrors(fs, name, (fs, args, _, cb) => {
+    filehandle.close()
+      .then(() => filehandle[method](...args))
+      .catch(cb)
+  }, args, agent)
 }
