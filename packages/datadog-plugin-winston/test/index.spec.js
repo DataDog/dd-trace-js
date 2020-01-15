@@ -188,36 +188,6 @@ describe('Plugin', () => {
               }
             })
           })
-
-          it('should ensure symbol meta properties are persisted', () => {
-            const base = 'test'
-            const extra = 'message'
-            const interpolatedLog = base + ` ${extra}`
-            const splatFormmatedLog = base + ' %s'
-
-            const meta = {
-              dd: {
-                trace_id: span.context().toTraceId(),
-                span_id: span.context().toSpanId()
-              }
-            }
-
-            tracer.scope().activate(span, () => {
-              const exampleLogMeta = {}
-              exampleLogMeta[Symbol.for('arbitrary_meta')] = 'arbitrary_value'
-
-              winston.info(splatFormmatedLog, extra, exampleLogMeta)
-
-              if (semver.intersects(version, '>=3')) {
-                meta['message'] = interpolatedLog
-                meta[Symbol.for('arbitrary_meta')] = exampleLogMeta[Symbol.for('arbitrary_meta')]
-
-                expect(transport.log).to.have.been.calledWithMatch(meta)
-              } else {
-                expect(transport.log).to.have.been.calledWithMatch('info', interpolatedLog, meta)
-              }
-            })
-          })
         })
       })
     })
