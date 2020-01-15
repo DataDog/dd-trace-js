@@ -57,7 +57,8 @@ class Loader {
 
         pkg = require(`${basedir}/package.json`)
 
-        if (!id.endsWith(`/node_modules/${instrumentation.name}/${pkg.main || 'index.js'}`)) continue
+        const mainFile = path.posix.normalize(pkg.main || 'index.js')
+        if (!id.endsWith(`/node_modules/${instrumentation.name}/${mainFile}`)) continue
       }
 
       if (!matchVersion(pkg.version, instrumentation.versions)) continue

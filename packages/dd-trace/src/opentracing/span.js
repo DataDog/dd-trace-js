@@ -17,10 +17,9 @@ class DatadogSpan extends Span {
     const startTime = fields.startTime || platform.now()
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = Object.assign({}, fields.tags)
-    const metrics = {
+    const tags = Object.assign({
       [SAMPLE_RATE_METRIC_KEY]: sampler.rate()
-    }
+    }, fields.tags)
     const hostname = fields.hostname
 
     this._parentTracer = tracer
@@ -32,7 +31,6 @@ class DatadogSpan extends Span {
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
-    this._spanContext._metrics = metrics
     this._spanContext._hostname = hostname
 
     this._handle = platform.metrics().track(this)

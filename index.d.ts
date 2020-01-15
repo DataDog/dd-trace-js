@@ -264,6 +264,12 @@ export declare interface TracerOptions {
     b3?: boolean
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to spans and metrics.
+     * @default false
+     */
+    runtimeId?: boolean
+
+    /**
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
@@ -351,6 +357,20 @@ interface EventEmitter {
   off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
+}
+
+/** @hidden */
+declare type anyObject = {
+  [key: string]: any;
+};
+
+/** @hidden */
+interface TransportRequestParams {
+  method: string;
+  path: string;
+  body?: anyObject;
+  bulkBody?: anyObject;
+  querystring?: anyObject;
 }
 
 /**
@@ -636,7 +656,17 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [elasticsearch](https://github.com/elastic/elasticsearch-js) module.
    */
-  interface elasticsearch extends Instrumentation {}
+  interface elasticsearch extends Instrumentation {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the query span finishes.
+       */
+      query?: (span?: opentracing.Span, params?: TransportRequestParams) => any;
+    };
+  }
 
   /**
    * This plugin automatically instruments the

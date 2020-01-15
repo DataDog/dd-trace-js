@@ -3,115 +3,66 @@
 const Tags = require('opentracing').Tags
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapQuery (tracer, config) {
-  return function wrapQuery (query) {
-    return function queryWithTrace (sql, values, cb) {
-      const command = query.apply(this, arguments)
+function createWrapAddCommand (tracer, config) {
+  return function wrapAddCommand (addCommand) {
+    return function addCommandWithTrace (cmd) {
+      const name = cmd && cmd.constructor && cmd.constructor.name
+      const isCommand = typeof cmd.execute === 'function'
+      const isSupported = name === 'Execute' || name === 'Query'
 
-      return wrapCommand(tracer, config, command, command.sql)
+      if (isCommand && isSupported) {
+        cmd.execute = wrapExecute(tracer, config, cmd.execute)
+      }
+
+      return addCommand.apply(this, arguments)
     }
   }
 }
 
-function createWrapExecute (tracer, config) {
-  return function wrapExecute (execute) {
-    return function executeWithTrace (sql, values, cb) {
-      const command = execute.apply(this, arguments)
-
-      return wrapCommand(tracer, config, command, command.sql)
-    }
-  }
-}
-
-function createWrapPrepare (tracer, config) {
-  return function wrapPrepare (prepare) {
-    return function prepareWithTrace (options, cb) {
-      return prepare.call(this, options, function (err, statement) {
-        if (err) return cb.apply(this, arguments)
-
-        const execute = statement.execute
-
-        statement.execute = function executeWithTrace (packet, connection) {
-          const command = execute.apply(this, arguments)
-
-          return wrapCommand(tracer, config, command, command.statement.query)
-        }
-
-        return cb.call(this, err, statement)
-      })
-    }
-  }
-}
-
-function wrapCommand (tracer, config, command, sql) {
-  const execute = command.execute
+function wrapExecute (tracer, config, execute) {
   const scope = tracer.scope()
   const childOf = scope.active()
 
-  command.execute = function executeWithTrace (packet, connection) {
+  return function executeWithTrace (packet, connection) {
+    const connectionConfig = (connection && connection.config) || {}
+    const sql = this.statement ? this.statement.query : this.sql
     const span = tracer.startSpan('mysql.query', {
       childOf,
       tags: {
         [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
         'service.name': config.service || `${tracer._service}-mysql`,
+        'resource.name': sql,
         'span.type': 'sql',
         'db.type': 'mysql',
-        'db.user': connection.config.user,
-        'out.host': connection.config.host,
-        'out.port': connection.config.port
+        'db.user': connectionConfig.user,
+        'db.name': connectionConfig.database,
+        'out.host': connectionConfig.host,
+        'out.port': connectionConfig.port
       }
     })
 
-    if (connection.config.database) {
-      span.setTag('db.name', connection.config.database)
-    }
-
     analyticsSampler.sample(span, config.analytics)
 
-    const result = scope.bind(execute, span).apply(this, arguments)
-
-    span.setTag('resource.name', sql)
-
-    if (this.onResult) {
+    if (typeof this.onResult === 'function') {
       this.onResult = wrapCallback(tracer, span, childOf, this.onResult)
     } else {
-      this.on('end', () => {
-        span.finish()
-      })
+      this.on('error', error => span.addTags({ error }))
+      this.on('end', () => span.finish())
     }
 
-    return result
-  }
+    this.execute = execute
 
-  return command
+    return scope.bind(execute, span).apply(this, arguments)
+  }
 }
 
 function wrapCallback (tracer, span, parent, done) {
-  return tracer.scope().bind((err, res) => {
-    if (err) {
-      span.addTags({
-        'error.type': err.name,
-        'error.msg': err.message,
-        'error.stack': err.stack
-      })
-    }
-
+  return tracer.scope().bind((error, res) => {
+    span.addTags({ error })
     span.finish()
 
-    done(err, res)
+    done(error, res)
   }, parent)
-}
-
-function patchConnection (Connection, tracer, config) {
-  this.wrap(Connection.prototype, 'query', createWrapQuery(tracer, config))
-  this.wrap(Connection.prototype, 'execute', createWrapExecute(tracer, config))
-  this.wrap(Connection.prototype, 'prepare', createWrapPrepare(tracer, config))
-}
-
-function unpatchConnection (Connection) {
-  this.unwrap(Connection.prototype, 'query')
-  this.unwrap(Connection.prototype, 'execute')
-  this.unwrap(Connection.prototype, 'prepare')
 }
 
 module.exports = [
@@ -119,8 +70,12 @@ module.exports = [
     name: 'mysql2',
     file: 'lib/connection.js',
     versions: ['>=1'],
-    patch: patchConnection,
-    unpatch: unpatchConnection
+    patch (Connection, tracer, config) {
+      this.wrap(Connection.prototype, 'addCommand', createWrapAddCommand(tracer, config))
+    },
+    unpatch (Connection) {
+      this.unwrap(Connection.prototype, 'addCommand')
+    }
   },
   {
     name: 'mysql2',

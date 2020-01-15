@@ -81,10 +81,13 @@ describe('Plugin', () => {
                   'grpc.method.package': 'test',
                   'grpc.method.path': '/test.TestService/getUnary',
                   'grpc.method.kind': kinds.unary,
-                  'grpc.status.code': '0',
                   'span.kind': 'client',
                   'component': 'grpc'
                 }
+              })
+
+              expect(traces[0][0].metrics).to.include({
+                'grpc.status.code': 0
               })
             })
             .then(done)
@@ -112,10 +115,13 @@ describe('Plugin', () => {
                   'grpc.method.package': 'test',
                   'grpc.method.path': '/test.TestService/getServerStream',
                   'grpc.method.kind': kinds.server_stream,
-                  'grpc.status.code': '0',
                   'span.kind': 'client',
                   'component': 'grpc'
                 }
+              })
+
+              expect(traces[0][0].metrics).to.include({
+                'grpc.status.code': 0
               })
             })
             .then(done)
@@ -145,10 +151,13 @@ describe('Plugin', () => {
                   'grpc.method.package': 'test',
                   'grpc.method.path': '/test.TestService/getClientStream',
                   'grpc.method.kind': kinds.client_stream,
-                  'grpc.status.code': '0',
                   'span.kind': 'client',
                   'component': 'grpc'
                 }
+              })
+
+              expect(traces[0][0].metrics).to.include({
+                'grpc.status.code': 0
               })
             })
             .then(done)
@@ -173,8 +182,8 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/get_Bidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.bidi)
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '0')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
             .then(done)
             .catch(done)
@@ -192,7 +201,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '1')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
             .then(done)
             .catch(done)
@@ -208,7 +217,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '1')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
             .then(done)
             .catch(done)
@@ -226,7 +235,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.status.code', '1')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
             .then(done)
             .catch(done)
@@ -252,11 +261,11 @@ describe('Plugin', () => {
                 'grpc.method.package': 'test',
                 'grpc.method.path': '/test.TestService/getUnary',
                 'grpc.method.kind': kinds.unary,
-                'grpc.status.code': '2',
                 'span.kind': 'client',
                 'component': 'grpc'
               })
               expect(traces[0][0].meta).to.have.property('error.stack')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
             })
             .then(done)
             .catch(done)
@@ -282,11 +291,11 @@ describe('Plugin', () => {
                 'grpc.method.package': 'test',
                 'grpc.method.path': '/test.TestService/getUnary',
                 'grpc.method.kind': kinds.unary,
-                'grpc.status.code': '13',
                 'span.kind': 'client',
                 'component': 'grpc'
               })
               expect(traces[0][0].meta).to.have.property('error.stack')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 13)
             })
             .then(done)
             .catch(done)
@@ -311,10 +320,13 @@ describe('Plugin', () => {
                   'grpc.method.package': 'test',
                   'grpc.method.path': '/test.TestService/getUnary',
                   'grpc.method.kind': kinds.unary,
-                  'grpc.status.code': '0',
                   'span.kind': 'client',
                   'component': 'grpc'
                 }
+              })
+
+              expect(traces[0][0].metrics).to.deep.include({
+                'grpc.status.code': 0
               })
             })
             .then(done)
@@ -546,8 +558,11 @@ describe('Plugin', () => {
                 'grpc.method.path': '/test.TestService/getUnary',
                 'grpc.method.kind': 'unary',
                 'grpc.response.metadata.foo': 'bar',
-                'grpc.status.code': '0',
                 'span.kind': 'client'
+              })
+
+              expect(traces[0][0].metrics).to.deep.include({
+                'grpc.status.code': 0
               })
             })
             .then(done)
