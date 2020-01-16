@@ -322,28 +322,19 @@ function makeFSTags (path, options, config, tracer) {
       if (src || dest) {
         tags['file.src'] = src.toString('utf8')
         tags['file.dest'] = dest.toString('utf8')
-        tags['resource.name'] = (src || dest).toString('utf8')
       } else {
         tags['file.path'] = path.toString('utf8')
-        tags['resource.name'] = path.toString('utf8')
       }
       break
     }
     case 'string': {
       tags['file.path'] = path
-      tags['resource.name'] = path
       break
     }
     case 'number': {
       tags['file.descriptor'] = path.toString()
-      tags['resource.name'] = path.toString()
       break
     }
-    default:
-      if (path && typeof path.toString === 'function') {
-        const pathStr = path.toString()
-        tags['resource.name'] = pathStr
-      }
   }
 
   return tags

@@ -46,7 +46,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name: 'fs.open',
-          resource: __filename,
           meta: {
             'file.flag': 'r',
             'file.path': __filename
@@ -63,7 +62,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.open',
-        resource: __filename,
         meta: {
           'file.flag': 'r+',
           'file.path': __filename
@@ -81,7 +79,6 @@ describe('fs', () => {
       fs.open(filename, 'r', (err) => {
         expectOneSpan(agent, done, {
           name: 'fs.open',
-          resource: filename,
           error: 1,
           meta: {
             'file.flag': 'r',
@@ -109,7 +106,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.promises.open',
-            resource: __filename,
             meta: {
               'file.flag': 'r',
               'file.path': __filename
@@ -125,7 +121,6 @@ describe('fs', () => {
       it('should be instrumented with flags', (done) => {
         expectOneSpan(agent, done, {
           name: 'fs.promises.open',
-          resource: __filename,
           meta: {
             'file.flag': 'r+',
             'file.path': __filename
@@ -142,7 +137,6 @@ describe('fs', () => {
         fs.promises.open(filename, 'r').catch((err) => {
           expectOneSpan(agent, done, {
             name: 'fs.promises.open',
-            resource: filename,
             error: 1,
             meta: {
               'file.flag': 'r',
@@ -170,7 +164,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name: 'fs.opensync',
-          resource: __filename,
           meta: {
             'file.flag': 'r',
             'file.path': __filename
@@ -184,7 +177,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.opensync',
-        resource: __filename,
         meta: {
           'file.flag': 'r+',
           'file.path': __filename
@@ -201,7 +193,6 @@ describe('fs', () => {
       } catch (err) {
         expectOneSpan(agent, done, {
           name: 'fs.opensync',
-          resource: filename,
           error: 1,
           meta: {
             'file.flag': 'r',
@@ -220,7 +211,6 @@ describe('fs', () => {
       const fd = realFS.openSync(__filename, 'r')
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -238,7 +228,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
-          resource: __filename,
           meta: {
             'file.flag': 'r',
             'file.path': __filename
@@ -252,7 +241,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.flag': 'r+',
           'file.path': __filename
@@ -281,7 +269,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
-          resource: filename,
           meta: {
             'file.flag': 'w',
             'file.path': filename
@@ -295,7 +282,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: filename,
         meta: {
           'file.flag': 'w+',
           'file.path': filename
@@ -323,7 +309,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: filename,
         meta: {
           'file.flag': 'a',
           'file.path': filename
@@ -336,7 +321,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: filename,
         meta: {
           'file.flag': 'a+',
           'file.path': filename
@@ -354,7 +338,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.path': __filename
         }
@@ -378,7 +361,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.src': __filename,
           'file.dest': dest
@@ -396,7 +378,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.path': __filename
         }
@@ -413,7 +394,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.path': __filename
         }
@@ -430,7 +410,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: '1',
         meta: {
           'file.descriptor': '1'
         }
@@ -447,7 +426,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __dirname,
         meta: {
           'file.path': __dirname
         }
@@ -464,7 +442,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __dirname,
         meta: {
           'file.path': __dirname
         }
@@ -492,7 +469,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -519,7 +495,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -547,7 +522,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
-          resource: fd.toString(),
           meta: {
             'file.descriptor': fd.toString()
           }
@@ -564,7 +538,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.readstream',
-        resource: __filename,
         meta: {
           'file.path': __filename,
           'file.flag': 'r'
@@ -576,7 +549,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.readstream',
-        resource: __filename,
         meta: {
           'file.path': __filename,
           'file.flag': 'r+'
@@ -604,7 +576,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.writestream',
-        resource: filename,
         meta: {
           'file.path': filename,
           'file.flag': 'w'
@@ -617,7 +588,6 @@ describe('fs', () => {
     it('should be instrumented with flags', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.writestream',
-        resource: filename,
         meta: {
           'file.path': filename,
           'file.flag': 'w+'
@@ -643,7 +613,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.path': __filename,
           'file.mode': mode.toString(8)
@@ -667,7 +636,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
-          resource: __filename,
           meta: {
             'file.path': __filename,
             'file.mode': mode.toString(8)
@@ -696,7 +664,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString(),
           'file.mode': mode.toString(8)
@@ -722,7 +689,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.path': __filename,
           'file.uid': uid.toString(),
@@ -750,7 +716,6 @@ describe('fs', () => {
       it('should be instrumented', (done) => {
         expectOneSpan(agent, done, {
           name,
-          resource: __filename,
           meta: {
             'file.path': __filename,
             'file.uid': uid.toString(),
@@ -783,7 +748,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString(),
           'file.uid': uid.toString(),
@@ -802,7 +766,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.path': __filename
         }
@@ -827,7 +790,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: link,
         meta: {
           'file.path': link
         }
@@ -854,7 +816,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: link,
         meta: {
           'file.path': link
         }
@@ -880,7 +841,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.src': __filename,
           'file.dest': link
@@ -907,7 +867,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: __filename,
         meta: {
           'file.src': __filename,
           'file.dest': link
@@ -935,7 +894,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: dir,
         meta: {
           'file.path': dir
         }
@@ -964,7 +922,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: src,
         meta: {
           'file.src': src,
           'file.dest': dest
@@ -992,7 +949,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -1019,7 +975,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -1045,7 +1000,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: dir,
         meta: {
           'file.path': dir
         }
@@ -1070,7 +1024,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: filename,
         meta: {
           'file.path': filename
         }
@@ -1098,7 +1051,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -1123,7 +1075,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: filename,
         meta: {
           'file.path': filename
         }
@@ -1151,7 +1102,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name,
-        resource: fd.toString(),
         meta: {
           'file.descriptor': fd.toString()
         }
@@ -1175,7 +1125,6 @@ describe('fs', () => {
       const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
       expectOneSpan(agent, done, {
         name: 'fs.mkdtemp',
-        resource: inputDir,
         meta: {
           'file.path': inputDir
         }
@@ -1207,7 +1156,6 @@ describe('fs', () => {
       const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
       expectOneSpan(agent, done, {
         name: 'fs.mkdtempsync',
-        resource: inputDir,
         meta: {
           'file.path': inputDir
         }
@@ -1229,7 +1177,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.exists',
-        resource: __filename,
         meta: {
           'file.path': __filename
         }
@@ -1242,7 +1189,6 @@ describe('fs', () => {
     it('should be instrumented', (done) => {
       expectOneSpan(agent, done, {
         name: 'fs.existssync',
-        resource: __filename,
         meta: {
           'file.path': __filename
         }
@@ -1281,7 +1227,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.close',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1302,7 +1247,6 @@ describe('fs', () => {
         it('should be instrumented with callback', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.close',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1323,7 +1267,6 @@ describe('fs', () => {
         it('Sync should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.closesync',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1346,7 +1289,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.read',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1367,7 +1309,6 @@ describe('fs', () => {
         it('should be instrumented with callback', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.read',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1388,7 +1329,6 @@ describe('fs', () => {
         it('Sync should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.readsync',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1411,7 +1351,6 @@ describe('fs', () => {
         it('should be instrumented for reads', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.read',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1425,7 +1364,6 @@ describe('fs', () => {
         it('should be instrumented for close', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.dir.close',
-            resource: dirname,
             meta: {
               'file.path': dirname
             }
@@ -1459,7 +1397,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.appendfile',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1476,7 +1413,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.writefile',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1493,7 +1429,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.readfile',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1510,7 +1445,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.write',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1528,7 +1462,6 @@ describe('fs', () => {
           it('should be instrumented', (done) => {
             expectOneSpan(agent, done, {
               name: 'fs.filehandle.writev',
-              resource: filehandle.fd.toString(),
               meta: {
                 'file.descriptor': filehandle.fd.toString()
               }
@@ -1546,7 +1479,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.read',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1568,7 +1500,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.chmod',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString(),
               'file.mode': mode.toString(8)
@@ -1594,7 +1525,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.chown',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString(),
               'file.uid': uid.toString(),
@@ -1613,7 +1543,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.stat',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1630,7 +1559,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.sync',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1647,7 +1575,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.datasync',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1664,7 +1591,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.truncate',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1681,7 +1607,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.utimes',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1698,7 +1623,6 @@ describe('fs', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             name: 'fs.filehandle.close',
-            resource: filehandle.fd.toString(),
             meta: {
               'file.descriptor': filehandle.fd.toString()
             }
@@ -1770,6 +1694,11 @@ describe('fs', () => {
 function mkExpected (props) {
   const meta = Object.assign({ component: 'fs' }, props.meta)
   const expected = Object.assign({ error: 0, service: 'test-fs' }, props)
+  if (!expected.resource && expected.name) {
+    // For `fs` operations, we're not setting a resource name, so it defaults to
+    // just the span name.
+    expected.resource = expected.name
+  }
   expected.meta = meta
   return expected
 }
