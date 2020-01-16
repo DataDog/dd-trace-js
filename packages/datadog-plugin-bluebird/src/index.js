@@ -9,6 +9,7 @@ function createGetNewLibraryCopyWrap (tracer, config, originalLib, shim) {
     return function getNewLibraryCopyWithTrace () {
       const libraryCopy = getNewLibraryCopy.apply(this, arguments)
       shim.wrap(libraryCopy.prototype, '_then', tx.createWrapThen(tracer, config))
+      shim.wrap(libraryCopy, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(tracer, config, originalLib, shim))
       addToLibraryCopies(originalLib, libraryCopy)
       return libraryCopy
     }
@@ -27,7 +28,6 @@ function addToLibraryCopies (originalLib, libraryCopy) {
       value: libraryCopies
     })
   }
-
   libraryCopies.add(libraryCopy)
 }
 
@@ -35,7 +35,10 @@ function unwrapLibraryCopies (originalLib, shim) {
   const libraryCopies = originalLib[DD_LIB_COPIES]
 
   if (libraryCopies) {
-    libraryCopies.forEach(libraryCopy => shim.unwrap(libraryCopy.prototype, '_then'))
+    libraryCopies.forEach(libraryCopy => {
+      shim.unwrap(libraryCopy.prototype, '_then')
+      shim.unwrap(libraryCopy, 'getNewLibraryCopy')
+    })
     libraryCopies.clear()
     delete originalLib[DD_LIB_COPIES]
   }
