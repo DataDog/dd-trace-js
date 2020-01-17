@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const plugin = require('../src')
 
 const realFS = Object.assign({}, require('fs'))
@@ -1702,34 +1703,9 @@ function mkExpected (props) {
   return expected
 }
 
-function forOneSpan (agent, fn, done) {
-  agent.use(traces => {
-    const spans = traces[0]
-    let err
-    let success
-    spans.forEach(span => {
-      try {
-        fn(span)
-        success = true
-      } catch (e) {
-        debugger; // eslint-disable-line
-        err = e
-      }
-    })
-    if (!success) {
-      throw err
-    }
-  }).then(done, done)
-}
-
 function expectOneSpan (agent, done, expected) {
-  forOneSpan(agent, span => {
-    expected = mkExpected(expected)
-    const meta = expected.meta
-    delete expected.meta
-    expect(span.meta).to.include(meta)
-    expect(span).to.include(expected)
-  }, done)
+  expected = mkExpected(expected)
+  expectSomeSpan(agent, expected).then(done, done)
 }
 
 function testHandleErrors (fs, name, tested, args, agent) {
