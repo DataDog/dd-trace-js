@@ -320,10 +320,10 @@ function makeFSTags (resourceName, path, options, config, tracer) {
       const src = 'src' in path ? path.src : null
       const dest = 'dest' in path ? path.dest : null
       if (src || dest) {
-        tags['file.src'] = src.toString('utf8')
-        tags['file.dest'] = dest.toString('utf8')
+        tags['file.src'] = src
+        tags['file.dest'] = dest
       } else {
-        tags['file.path'] = path.toString('utf8')
+        tags['file.path'] = path
       }
       break
     }
