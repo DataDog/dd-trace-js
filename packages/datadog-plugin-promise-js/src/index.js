@@ -7,10 +7,14 @@ module.exports = [
     name: 'promise-js',
     versions: ['>=0.0.3'],
     patch (Promise, tracer, config) {
-      this.wrap(Promise.prototype, 'then', tx.createWrapThen(tracer, config))
+      if (Promise !== global.Promise) {
+        this.wrap(Promise.prototype, 'then', tx.createWrapThen(tracer, config))
+      }
     },
     unpatch (Promise) {
-      this.unwrap(Promise.prototype, 'then')
+      if (Promise !== global.Promise) {
+        this.unwrap(Promise.prototype, 'then')
+      }
     }
   }
 ]
