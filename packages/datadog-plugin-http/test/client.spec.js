@@ -143,6 +143,31 @@ describe('Plugin', () => {
           })
         })
 
+        it('should support configuration as an WHATWG URL object', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            const url = new URL(`${protocol}:localhost:${port}/user`)
+
+            appListener = server(app, port, () => {
+              const req = http.request(url)
+
+              req.end()
+            })
+          })
+        })        
+
         it('should remove the query string from the URL', done => {
           const app = express()
 

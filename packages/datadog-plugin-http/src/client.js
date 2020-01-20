@@ -158,7 +158,17 @@ function patch (http, methodName, tracer, config) {
   }
 
   function normalizeArgs (inputURL, inputOptions, callback) {
-    let options = typeof inputURL === 'string' ? url.parse(inputURL) : Object.assign({}, inputURL)
+    let options
+
+    if (typeof inputURL === 'string') {
+      options = url.parse(inputURL)
+    } else {
+      options = {}
+      for (const key in inputURL) {
+        options[key] = inputURL[key]
+      }
+    }
+
     options.headers = options.headers || {}
     if (typeof inputOptions === 'function') {
       callback = inputOptions
