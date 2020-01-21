@@ -158,6 +158,18 @@ function patch (http, methodName, tracer, config) {
   }
 
   function normalizeArgs (inputURL, inputOptions, callback) {
+    let options = normalizeURL(inputURL)
+
+    if (typeof inputOptions === 'function') {
+      callback = inputOptions
+    } else if (typeof inputOptions === 'object') {
+      options = Object.assign(options, inputOptions)
+    }
+    const uri = extractUrl(options)
+    return { uri, options, callback }
+  }
+
+  function normalizeURL (inputURL) {
     let options
 
     if (typeof inputURL === 'string') {
@@ -170,13 +182,7 @@ function patch (http, methodName, tracer, config) {
     }
 
     options.headers = options.headers || {}
-    if (typeof inputOptions === 'function') {
-      callback = inputOptions
-    } else if (typeof inputOptions === 'object') {
-      options = Object.assign(options, inputOptions)
-    }
-    const uri = extractUrl(options)
-    return { uri, options, callback }
+    return options
   }
 }
 

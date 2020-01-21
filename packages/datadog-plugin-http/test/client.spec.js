@@ -234,7 +234,7 @@ describe('Plugin', () => {
               req.end()
             })
 
-            agent.use(traces => {
+            await agent.use(traces => {
               expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
             })
           })
