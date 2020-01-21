@@ -86,10 +86,13 @@ export declare interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
+   *
+   * If the `requiresParent` argument is true, the wrapped function will not be
+   * traced unless there is an already active span to be its parent.
    */
-  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T, requiresParent?: boolean): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T, requiresParent?: boolean): T;
 }
 
 export declare interface TraceOptions extends Analyzable {

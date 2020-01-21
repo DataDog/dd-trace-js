@@ -45,6 +45,9 @@ const tagMakers = {
 function createWrapCreateReadStream (config, tracer) {
   return function wrapCreateReadStream (createReadStream) {
     return function wrappedCreateReadStream (path, options) {
+      if (!hasParent(tracer)) {
+        return createReadStream.apply(this, arguments)
+      }
       const tags = makeFSFlagTags('ReadStream', path, options, 'r', config, tracer)
       return tracer.trace('fs.operation', { tags }, (span, done) => {
         const stream = createReadStream.apply(this, arguments)
@@ -59,6 +62,9 @@ function createWrapCreateReadStream (config, tracer) {
 function createWrapCreateWriteStream (config, tracer) {
   return function wrapCreateWriteStream (createWriteStream) {
     return function wrappedCreateWriteStream (path, options) {
+      if (!hasParent(tracer)) {
+        return createWriteStream.apply(this, arguments)
+      }
       const tags = makeFSFlagTags('WriteStream', path, options, 'w', config, tracer)
       return tracer.trace('fs.operation', { tags }, (span, done) => {
         const stream = createWriteStream.apply(this, arguments)
@@ -73,7 +79,7 @@ function createWrapCreateWriteStream (config, tracer) {
 function createWrapExists (config, tracer) {
   return function wrapExists (exists) {
     return function wrappedExists (path, cb) {
-      if (typeof cb !== 'function') {
+      if (typeof cb !== 'function' || !hasParent(tracer)) {
         return exists.apply(this, arguments)
       }
       const tags = makeFSTags('exists', path, null, config, tracer)
@@ -95,7 +101,7 @@ function createWrapDirRead (config, tracer, sync) {
       const tags = makeFSTags(name, this.path, null, config, tracer)
       return { tags }
     }
-    return tracer.wrap('fs.operation', options, read)
+    return tracer.wrap('fs.operation', options, read, true)
   }
 }
 
@@ -106,7 +112,7 @@ function createWrapDirClose (config, tracer, sync) {
       const tags = makeFSTags(name, this.path, null, config, tracer)
       return { tags }
     }
-    return tracer.wrap('fs.operation', options, close)
+    return tracer.wrap('fs.operation', options, close, true)
   }
 }
 
@@ -136,6 +142,9 @@ function createWrapDirAsyncIterator (config, tracer, instrumenter) {
 function createWrapKDirClose (config, tracer, instrumenter) {
   return function wrapKDirClose (kDirClose) {
     return function wrappedKDirClose () {
+      if (!hasParent(tracer)) {
+        return kDirClose.call(this)
+      }
       const tags = makeFSTags('dir.close', this.path, null, config, tracer)
       return tracer.trace('fs.operation', { tags }, (span) => {
         const p = kDirClose.call(this)
@@ -265,6 +274,10 @@ function getSymbolName (sym) {
   return sym.description || sym.toString()
 }
 
+function hasParent (tracer) {
+  return !!tracer.scope().active()
+}
+
 function createWrapCb (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(name, config, tracer)
   name = 'fs.' + name
@@ -275,7 +288,7 @@ function createWrapCb (tracer, config, name, tagMaker) {
       }
       const tags = makeTags.apply(this, arguments)
       return tags ? { tags } : null
-    }, fn)
+    }, fn, true)
   }
 }
 
@@ -285,7 +298,7 @@ function createWrap (tracer, config, name, tagMaker) {
     return tracer.wrap('fs.operation', function () {
       const tags = makeTags.apply(this, arguments)
       return tags ? { tags } : null
-    }, fn)
+    }, fn, true)
   }
 }
 

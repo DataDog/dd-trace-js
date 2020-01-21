@@ -315,5 +315,77 @@ describe('Tracer', () => {
         tags: { sometag: 'somevalue' }
       })
     })
+
+    context('when there is no parent span', () => {
+      it('should not trace if `requireParent: true`', () => {
+        const fn = tracer.wrap('name', {}, () => {}, true)
+
+        sinon.spy(tracer, 'trace')
+
+        fn()
+
+        expect(tracer.trace).to.have.not.been.called
+      })
+
+      it('should trace if `requireParent: false`', () => {
+        const fn = tracer.wrap('name', {}, () => {}, false)
+
+        sinon.spy(tracer, 'trace')
+
+        fn()
+
+        expect(tracer.trace).to.have.been.called
+      })
+
+      it('should trace if `requireParent: undefined`', () => {
+        const fn = tracer.wrap('name', {}, () => {})
+
+        sinon.spy(tracer, 'trace')
+
+        fn()
+
+        expect(tracer.trace).to.have.been.called
+      })
+    })
+
+    context('when there is a parent span', () => {
+      it('should trace if `requireParent: true`', () => {
+        tracer.scope().activate(tracer.startSpan('parent'), () => {
+          const fn = tracer.wrap('name', {}, () => {}, true)
+
+          sinon.spy(tracer, 'trace')
+
+          fn()
+
+          expect(tracer.trace).to.have.been.called
+        })
+      })
+
+      it('should trace if `requireParent: false`', () => {
+        tracer.scope().activate(tracer.startSpan('parent'), () => {
+          tracer.startSpan('parent')
+          const fn = tracer.wrap('name', {}, () => {}, false)
+
+          sinon.spy(tracer, 'trace')
+
+          fn()
+
+          expect(tracer.trace).to.have.been.called
+        })
+      })
+
+      it('should trace if `requireParent: undefined`', () => {
+        tracer.scope().activate(tracer.startSpan('parent'), () => {
+          tracer.startSpan('parent')
+          const fn = tracer.wrap('name', {}, () => {})
+
+          sinon.spy(tracer, 'trace')
+
+          fn()
+
+          expect(tracer.trace).to.have.been.called
+        })
+      })
+    })
   })
 })

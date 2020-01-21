@@ -35,6 +35,30 @@ describe('Plugin', () => {
       rimraf(tmpdir, realFS, done)
     })
 
+    // For almost every test, we're not testing the case where there's no
+    // parent, so we'll wrap `it` so that it always adds a parent scope.
+    const realIt = global.it
+    function wrappedIt (testFn, name, fn) {
+      function inner (done) {
+        const parentSpan = tracer.startSpan('parent')
+        try {
+          tracer.scope().activate(parentSpan, () => fn(done))
+          parentSpan.finish()
+        } catch (e) {
+          parentSpan.finish()
+          throw e
+        }
+      }
+      if (fn.length) {
+        testFn(name, inner)
+      } else {
+        testFn(name, () => inner())
+      }
+    }
+    const it = (name, fn) => wrappedIt(realIt, name, fn)
+    it.skip = (name, fn) => wrappedIt(realIt.skip, name, fn)
+    it.only = (name, fn) => wrappedIt(realIt.only, name, fn)
+
     describe('open', () => {
       let fd
       afterEach(() => {
@@ -89,6 +113,22 @@ describe('Plugin', () => {
               'error.type': err.name,
               'error.stack': err.stack
             }
+          })
+        })
+      })
+
+      describe('when there is no parent span', () => {
+        // using the real `it` here because we don't want to use the wrapper
+        realIt('should not be instrumented', (done) => {
+          agent.use(() => {
+            expect.fail('should not have been any traces')
+          }).catch(done)
+
+          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+
+          fs.open(__filename, 'r+', (err, _fd) => {
+            fd = _fd
+            if (err) done(err)
           })
         })
       })
