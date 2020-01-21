@@ -222,28 +222,20 @@ describe('Plugin', () => {
             })
           })
 
-          it('should support configuration as an WHATWG URL object', done => {
+          it('should support configuration as an WHATWG URL object', async () => {
             const app = express()
+            const port = await getPort()
+            const url = new URL(`${protocol}:localhost:${port}/user`)
 
-            app.get('/user', (req, res) => {
-              res.status(200).send()
+            app.get('/user', (req, res) => res.status(200).send())
+
+            appListener = server(app, port, () => {
+              const req = http.request(url)
+              req.end()
             })
 
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
-                })
-                .then(done)
-                .catch(done)
-
-              const url = new URL(`${protocol}:localhost:${port}/user`)
-
-              appListener = server(app, port, () => {
-                const req = http.request(url)
-
-                req.end()
-              })
+            agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
             })
           })
         }
