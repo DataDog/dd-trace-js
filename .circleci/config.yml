@@ -367,6 +367,15 @@ jobs:
         environment:
           - PLUGINS=generic-pool
 
+  node-google-pubsub:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=gpubsub
+          - PLUGINS=gcloud-pubsub
+      - image: kinok/google-pubsub-emulator
+
   node-graphql:
     <<: *node-plugin-base
     docker:
@@ -843,6 +852,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-generic-pool
+      - node-gcloud-pubsub
       - node-graphql
       - node-grpc
       - node-hapi
@@ -997,6 +1007,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-generic-pool
+      - node-gcloud-pubsub
       - node-graphql
       - node-grpc
       - node-hapi

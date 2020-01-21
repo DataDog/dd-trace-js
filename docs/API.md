@@ -216,6 +216,7 @@ tracer.use('pg', {
 <h5 id="express-tags"></h5>
 <h5 id="express-config"></h5>
 <h5 id="generic-pool"></h5>
+<h5 id="gcloud-pubsub"></h5>
 <h5 id="fastify"></h5>
 <h5 id="fs"></h5>
 <h5 id="graphql"></h5>
@@ -279,6 +280,7 @@ tracer.use('pg', {
 * [fastify](./interfaces/plugins.fastify.html)
 * [fs](./interfaces/plugins.fs.html)
 * [generic-pool](./interfaces/plugins.generic_pool.html)
+* [gcloud-pubsub](./interfaces/plugins.gcloud_pubsub.html)
 * [graphql](./interfaces/plugins.graphql.html)
 * [grpc](./interfaces/plugins.grpc.html)
 * [hapi](./interfaces/plugins.hapi.html)
