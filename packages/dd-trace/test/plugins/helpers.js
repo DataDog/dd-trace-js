@@ -2,11 +2,14 @@
 
 const { AssertionError } = require('assert')
 
-function expectSomeSpan (agent, expected) {
+function expectSomeSpan (agent, expected, logSpans = false) {
   return agent.use(traces => {
     const scoredErrors = []
     for (const trace of traces) {
       for (const span of trace) {
+        if (logSpans) {
+          console.log(span) // eslint-disable-line
+        }
         try {
           deepInclude(expected, span)
           return
@@ -64,8 +67,19 @@ function isObject (obj) {
   return obj && typeof obj === 'object'
 }
 
+function withDefaults (defaults, obj) {
+  const newObj = Object.assign({}, defaults, obj)
+  for (const propName in defaults) {
+    if (isObject(defaults[propName]) && isObject(obj[propName])) {
+      newObj[propName] = withDefaults(defaults[propName], obj[propName])
+    }
+  }
+  return newObj
+}
+
 module.exports = {
   compare,
   deepInclude,
-  expectSomeSpan
+  expectSomeSpan,
+  withDefaults
 }
