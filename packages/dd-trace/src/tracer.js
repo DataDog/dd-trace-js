@@ -66,9 +66,8 @@ class DatadogTracer extends Tracer {
     const tracer = this
 
     return function () {
-      let theseOptions = options
       if (typeof options === 'function' && typeof fn === 'function') {
-        theseOptions = options.apply(this, arguments)
+        options = options.apply(this, arguments)
       }
 
       if (options.orphanable === false && !tracer.scope().active()) {
@@ -80,7 +79,7 @@ class DatadogTracer extends Tracer {
 
       if (typeof cb === 'function') {
         const scopeBoundCb = tracer.scope().bind(cb)
-        return tracer.trace(name, theseOptions, (span, done) => {
+        return tracer.trace(name, options, (span, done) => {
           arguments[lastArgId] = function (err) {
             done(err)
             return scopeBoundCb.apply(this, arguments)
@@ -89,7 +88,7 @@ class DatadogTracer extends Tracer {
           return fn.apply(this, arguments)
         })
       } else {
-        return tracer.trace(name, theseOptions, () => fn.apply(this, arguments))
+        return tracer.trace(name, options, () => fn.apply(this, arguments))
       }
     }
   }

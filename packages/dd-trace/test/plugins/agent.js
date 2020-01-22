@@ -53,6 +53,7 @@ module.exports = {
         })
 
         for (let i = 0, l = pluginName.length; i < l; i++) {
+          debugger // eslint-disable-line
           tracer.use(pluginName[i], config[i])
         }
       })

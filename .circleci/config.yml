@@ -372,8 +372,8 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=gpubsub
-          - PLUGINS=gcloud-pubsub
+          - SERVICES=google-cloud-pubsub
+          - PLUGINS=google-cloud-pubsub
       - image: kinok/google-pubsub-emulator
 
   node-graphql:

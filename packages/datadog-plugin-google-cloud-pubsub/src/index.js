@@ -8,15 +8,16 @@ function createWrapRequest (tracer, config) {
         topic = cfg.reqOpts[cfg.method === 'createTopic' ? 'name' : 'topic']
       }
       const tags = {
-        component: 'google-cloud-pubsub',
-        'resource.name': topic || 'default',
+        component: '@google-cloud/pubsub',
+        'resource.name': `${cfg.method || 'request'}:${topic}`,
         'service.name': config.service || `${tracer._service}-pubsub`,
         'pubsub.method': cfg.method,
-        'pubsub.projectid': this.projectId,
-        'pubsub.topic': topic
+        'pubsub.project_id': this.projectId,
+        'pubsub.topic': topic,
+        'span.kind': 'producer'
       }
       cb = tracer.scope().bind(cb)
-      return tracer.trace('gpubsub.request', { tags }, (span, done) => {
+      return tracer.trace('pubsub.request', { tags }, (span, done) => {
         if (cfg.reqOpts && cfg.method === 'publish') {
           for (const msg of cfg.reqOpts.messages) {
             if (!msg.attributes) {
@@ -26,7 +27,7 @@ function createWrapRequest (tracer, config) {
           }
         }
 
-        arguments[arguments.length - 1] = function (err) {
+        arguments[1] = function (err) {
           done(err)
           return cb.apply(this, arguments)
         }
@@ -46,14 +47,15 @@ function createWrapSubsciptionEmit (tracer, config) {
 
       const topic = this.metadata ? this.metadata.topic : 'default'
       const tags = {
-        component: 'google-cloud-pubsub',
-        'resource.name': topic,
+        component: '@google-cloud/pubsub',
+        'resource.name': `receive:${topic}`,
         'service.name': config.service || `${tracer._service}-pubsub`,
-        'pubsub.projectid': this.pubsub.projectId,
-        'pubsub.topic': topic
+        'pubsub.project_id': this.pubsub.projectId,
+        'pubsub.topic': topic,
+        'span.kind': 'consumer'
       }
       const childOf = tracer.extract('text_map', message.attributes)
-      return tracer.trace('gpubsub.onmessage', { tags, childOf }, (span) => {
+      return tracer.trace('pubsub.receive', { tags, childOf }, (span) => {
         return emit.apply(this, arguments)
       })
     }
@@ -63,7 +65,7 @@ function createWrapSubsciptionEmit (tracer, config) {
 module.exports = [
   {
     name: '@google-cloud/pubsub',
-    versions: ['>=1.2'],
+    versions: ['>=1.1'],
     patch ({ PubSub, Subscription }, tracer, config) {
       this.wrap(PubSub.prototype, 'request', createWrapRequest(tracer, config))
       this.wrap(Subscription.prototype, 'emit', createWrapSubsciptionEmit(tracer, config))

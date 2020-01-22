@@ -6,7 +6,7 @@ const { PubSub } = require('../../../../../versions/@google-cloud/pubsub').get()
 
 function waitForGpubsub () {
   return new Promise((resolve, reject) => {
-    const operation = new RetryOperation('gpubsub')
+    const operation = new RetryOperation('googgle-cloud-pubsub')
     operation.attempt(currentAttempt => {
       const ps = new PubSub({ projectId: 'setupProjectId' })
 
