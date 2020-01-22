@@ -77,6 +77,14 @@ describe('Plugin', () => {
             }
             return expectedSpanPromise
           })
+
+          it('should propagate context', () => {
+            const firstSpan = tracer.scope().active()
+            return pubsub.createTopic(topicName)
+              .then(() => {
+                expect(tracer.scope().active()).to.equal(firstSpan)
+              })
+          })
         })
 
         describe('publish', () => {
@@ -117,6 +125,17 @@ describe('Plugin', () => {
             }
             publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
+          })
+
+          it('should propagate context', () => {
+            const firstSpan = tracer.scope().active()
+            return pubsub.createTopic(topicName)
+              .then(([topic]) =>
+                publish(topic, { data: Buffer.from('hello') })
+              )
+              .then(() => {
+                expect(tracer.scope().active()).to.equal(firstSpan)
+              })
           })
         })
 
