@@ -14,7 +14,6 @@ wrapIt()
 
 describe('Plugin', () => {
   let tracer
-  let gpubsub
 
   describe('google-cloud-pubsub', function () {
     this.timeout(5000) // The roundtrip to the pubsub emulator takes time
@@ -39,8 +38,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           tracer = require('../../dd-trace')
           agent.load(plugin, 'google-cloud-pubsub')
-          gpubsub = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
-          const { PubSub } = gpubsub
+          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
           resource = `projects/${project}/topics/${topicName}`
@@ -194,8 +192,7 @@ describe('Plugin', () => {
           agent.load(plugin, 'google-cloud-pubsub', {
             service: 'a_test_service'
           })
-          gpubsub = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
-          const { PubSub } = gpubsub
+          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
           resource = `projects/${project}/topics/${topicName}`
