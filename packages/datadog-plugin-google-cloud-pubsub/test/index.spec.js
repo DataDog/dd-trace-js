@@ -4,7 +4,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const plugin = require('../src')
 const id = require('../../dd-trace/src/id')
-const { all } = Promise
 
 const BASE_PROJECT_ID = `test-project-${id()}-`
 let projectCounter = 0
@@ -58,18 +57,67 @@ describe('Plugin', () => {
             await pubsub.createTopic(topicName)
             return expectedSpanPromise
           })
+
+          it('should be instrumented w/ error', async () => {
+            const error = new Error('bad')
+            const expectedSpanPromise = expectSpanWithDefaults({
+              error: 1,
+              meta: {
+                'pubsub.method': 'createTopic',
+                'error.msg': error.message,
+                'error.type': error.name,
+                'error.stack': error.stack
+              }
+            })
+            pubsub.getClient_ = function () {
+              throw error
+            }
+            try {
+              await pubsub.createTopic(topicName)
+            } catch (e) {
+              // this is just to prevent mocha from crashing
+            }
+            return expectedSpanPromise
+          })
         })
 
         describe('publish', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               meta: {
-                'pubsub.method': 'createTopic',
+                'pubsub.method': 'publish',
                 'span.kind': 'producer'
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
             await publish(topic, { data: Buffer.from('hello') })
+            return expectedSpanPromise
+          })
+
+          it('should be instrumented w/ error', async () => {
+            const error = new Error('bad')
+            const expectedSpanPromise = expectSpanWithDefaults({
+              error: 1,
+              meta: {
+                'pubsub.method': 'publish',
+                'error.msg': error.message,
+                'error.type': error.name,
+                'error.stack': error.stack
+              }
+            })
+            const [topic] = await pubsub.createTopic(topicName)
+            pubsub.getClient_ = function () {
+              throw error
+            }
+            const request = topic.request
+            topic.request = function () {
+              try {
+                request.apply(this, arguments)
+              } catch (e) {
+                // this is just to prevent mocha from crashing
+              }
+            }
+            publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
         })
@@ -107,6 +155,34 @@ describe('Plugin', () => {
             })
             await publish(topic, { data: Buffer.from('hello') })
             await rxPromise
+            return expectedSpanPromise
+          })
+
+          it('should be instrumented w/ error', async () => {
+            const error = new Error('bad')
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: 'pubsub.receive',
+              error: 1,
+              meta: {
+                'error.msg': error.message,
+                'error.type': error.name,
+                'error.stack': error.stack
+              }
+            })
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            const emit = sub.emit
+            sub.emit = function emitWrapped () {
+              try {
+                return emit.apply(this, arguments)
+              } catch (e) {
+                // this is just to prevent mocha from crashing
+              }
+            }
+            sub.on('message', () => {
+              throw error
+            })
+            await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
         })
