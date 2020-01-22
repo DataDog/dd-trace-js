@@ -125,6 +125,7 @@ function addTag (meta, metrics, key, value, seen) {
       // Special case for Node.js Buffer and URL
       if (isNodeBuffer(value) || isUrl(value)) {
         metrics[key] = value.toString()
+        break
       }
 
       if (!Array.isArray(value)) {

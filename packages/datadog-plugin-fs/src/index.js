@@ -42,6 +42,8 @@ const tagMakers = {
   mkdtemp: createPathTags
 }
 
+const requiresParent = true
+
 function createWrapCreateReadStream (config, tracer) {
   return function wrapCreateReadStream (createReadStream) {
     return function wrappedCreateReadStream (path, options) {
@@ -99,7 +101,7 @@ function createWrapDirRead (config, tracer, sync) {
   return function wrapDirRead (read) {
     function options () {
       const tags = makeFSTags(name, this.path, null, config, tracer)
-      return { tags }
+      return { tags, requiresParent }
     }
     return tracer.wrap('fs.operation', options, read, true)
   }
@@ -110,7 +112,7 @@ function createWrapDirClose (config, tracer, sync) {
   return function wrapDirClose (close) {
     function options () {
       const tags = makeFSTags(name, this.path, null, config, tracer)
-      return { tags }
+      return { tags, requiresParent }
     }
     return tracer.wrap('fs.operation', options, close, true)
   }
@@ -287,7 +289,7 @@ function createWrapCb (tracer, config, name, tagMaker) {
         return
       }
       const tags = makeTags.apply(this, arguments)
-      return tags ? { tags } : null
+      return tags ? { tags, requiresParent } : { requiresParent }
     }, fn, true)
   }
 }
@@ -297,7 +299,7 @@ function createWrap (tracer, config, name, tagMaker) {
   return function wrapSyncFunction (fn) {
     return tracer.wrap('fs.operation', function () {
       const tags = makeTags.apply(this, arguments)
-      return tags ? { tags } : null
+      return tags ? { tags, requiresParent } : { requiresParent }
     }, fn, true)
   }
 }

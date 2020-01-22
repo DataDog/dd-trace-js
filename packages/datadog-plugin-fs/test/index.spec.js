@@ -14,8 +14,6 @@ const implicitFlag = semver.satisfies(process.versions.node, '>=11.1.0')
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
-wrapIt()
-
 // TODO remove skips
 
 describe('Plugin', () => {
@@ -35,107 +33,34 @@ describe('Plugin', () => {
       rimraf(tmpdir, realFS, done)
     })
 
-    // For almost every test, we're not testing the case where there's no
-    // parent, so we'll wrap `it` so that it always adds a parent scope.
-    const realIt = global.it
-    function wrappedIt (testFn, name, fn) {
-      function inner (done) {
-        const parentSpan = tracer.startSpan('parent')
-        try {
-          tracer.scope().activate(parentSpan, () => fn(done))
-          parentSpan.finish()
-        } catch (e) {
-          parentSpan.finish()
-          throw e
-        }
-      }
-      if (fn.length) {
-        testFn(name, inner)
-      } else {
-        testFn(name, () => inner())
-      }
-    }
-    const it = (name, fn) => wrappedIt(realIt, name, fn)
-    it.skip = (name, fn) => wrappedIt(realIt.skip, name, fn)
-    it.only = (name, fn) => wrappedIt(realIt.only, name, fn)
-
-    describe('open', () => {
-      let fd
-      afterEach(() => {
-        if (typeof fd === 'number') {
-          realFS.closeSync(fd)
-          fd = undefined
-        }
-      })
-
-      if (implicitFlag) {
-        it('should be instrumented', (done) => {
-          expectOneSpan(agent, done, {
-            resource: 'open',
-            meta: {
-              'file.flag': 'r',
-              'file.path': __filename
-            }
-          })
-
-          fs.open(__filename, (err, _fd) => {
-            fd = _fd
-            if (err) done(err)
-          })
-        })
-      }
-
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'open',
-          meta: {
-            'file.flag': 'r+',
-            'file.path': __filename
-          }
-        })
-
-        fs.open(__filename, 'r+', (err, _fd) => {
-          fd = _fd
-          if (err) done(err)
-        })
-      })
-
-      it('should handle errors', (done) => {
-        const filename = path.join(__filename, Math.random().toString())
-        fs.open(filename, 'r', (err) => {
-          expectOneSpan(agent, done, {
-            resource: 'open',
-            error: 1,
-            meta: {
-              'file.flag': 'r',
-              'file.path': filename,
-              'error.msg': err.message,
-              'error.type': err.name,
-              'error.stack': err.stack
-            }
-          })
-        })
-      })
-
-      describe('when there is no parent span', () => {
-        // using the real `it` here because we don't want to use the wrapper
-        realIt('should not be instrumented', (done) => {
+    describe('without parent span', () => {
+      describe('open', () => {
+        it('should not be instrumented', (done) => {
           agent.use(() => {
             expect.fail('should not have been any traces')
           }).catch(done)
 
           setTimeout(done, 1500) // allow enough time to ensure no traces happened
 
-          fs.open(__filename, 'r+', (err, _fd) => {
-            fd = _fd
-            if (err) done(err)
+          fs.open(__filename, 'r+', (err, fd) => {
+            if (err) {
+              done(err)
+            } else {
+              realFS.closeSync(fd)
+            }
           })
         })
       })
     })
 
-    if (realFS.promises) {
-      describe('promises.open', () => {
+    describe('with parent span', () => {
+      beforeEach((done) => {
+        const parentSpan = tracer.startSpan('parent')
+        parentSpan.finish()
+        tracer.scope().activate(parentSpan, done)
+      })
+
+      describe('open', () => {
         let fd
         afterEach(() => {
           if (typeof fd === 'number') {
@@ -147,38 +72,40 @@ describe('Plugin', () => {
         if (implicitFlag) {
           it('should be instrumented', (done) => {
             expectOneSpan(agent, done, {
-              resource: 'promises.open',
+              resource: 'open',
               meta: {
                 'file.flag': 'r',
                 'file.path': __filename
               }
             })
 
-            fs.promises.open(__filename).then(_fd => {
+            fs.open(__filename, (err, _fd) => {
               fd = _fd
-            }, done)
+              if (err) done(err)
+            })
           })
         }
 
         it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
-            resource: 'promises.open',
+            resource: 'open',
             meta: {
               'file.flag': 'r+',
               'file.path': __filename
             }
           })
 
-          fs.promises.open(__filename, 'r+').then(_fd => {
+          fs.open(__filename, 'r+', (err, _fd) => {
             fd = _fd
-          }, done)
+            if (err) done(err)
+          })
         })
 
         it('should handle errors', (done) => {
           const filename = path.join(__filename, Math.random().toString())
-          fs.promises.open(filename, 'r').catch((err) => {
+          fs.open(filename, 'r', (err) => {
             expectOneSpan(agent, done, {
-              resource: 'promises.open',
+              resource: 'open',
               error: 1,
               meta: {
                 'file.flag': 'r',
@@ -191,369 +118,400 @@ describe('Plugin', () => {
           })
         })
       })
-    }
 
-    describe('openSync', () => {
-      let fd
-      afterEach(() => {
-        if (typeof fd === 'number') {
-          realFS.closeSync(fd)
-          fd = undefined
+      if (realFS.promises) {
+        describe('promises.open', () => {
+          let fd
+          afterEach(() => {
+            if (typeof fd === 'number') {
+              realFS.closeSync(fd)
+              fd = undefined
+            }
+          })
+
+          if (implicitFlag) {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'promises.open',
+                meta: {
+                  'file.flag': 'r',
+                  'file.path': __filename
+                }
+              })
+
+              fs.promises.open(__filename).then(_fd => {
+                fd = _fd
+              }, done)
+            })
+          }
+
+          it('should be instrumented with flags', (done) => {
+            expectOneSpan(agent, done, {
+              resource: 'promises.open',
+              meta: {
+                'file.flag': 'r+',
+                'file.path': __filename
+              }
+            })
+
+            fs.promises.open(__filename, 'r+').then(_fd => {
+              fd = _fd
+            }, done)
+          })
+
+          it('should handle errors', (done) => {
+            const filename = path.join(__filename, Math.random().toString())
+            fs.promises.open(filename, 'r').catch((err) => {
+              expectOneSpan(agent, done, {
+                resource: 'promises.open',
+                error: 1,
+                meta: {
+                  'file.flag': 'r',
+                  'file.path': filename,
+                  'error.msg': err.message,
+                  'error.type': err.name,
+                  'error.stack': err.stack
+                }
+              })
+            })
+          })
+        })
+      }
+
+      describe('openSync', () => {
+        let fd
+        afterEach(() => {
+          if (typeof fd === 'number') {
+            realFS.closeSync(fd)
+            fd = undefined
+          }
+        })
+
+        if (implicitFlag) {
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              resource: 'openSync',
+              meta: {
+                'file.flag': 'r',
+                'file.path': __filename
+              }
+            })
+
+            fd = fs.openSync(__filename)
+          })
         }
-      })
 
-      if (implicitFlag) {
-        it('should be instrumented', (done) => {
+        it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
             resource: 'openSync',
             meta: {
-              'file.flag': 'r',
+              'file.flag': 'r+',
               'file.path': __filename
             }
           })
 
-          fd = fs.openSync(__filename)
+          fd = fs.openSync(__filename, 'r+')
         })
-      }
 
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'openSync',
-          meta: {
-            'file.flag': 'r+',
-            'file.path': __filename
+        it('should handle errors', (done) => {
+          const filename = path.join(__filename, Math.random().toString())
+          try {
+            fs.openSync(filename, 'r')
+          } catch (err) {
+            expectOneSpan(agent, done, {
+              resource: 'openSync',
+              error: 1,
+              meta: {
+                'file.flag': 'r',
+                'file.path': filename,
+                'error.msg': err.message,
+                'error.type': err.name,
+                'error.stack': err.stack
+              }
+            })
           }
         })
-
-        fd = fs.openSync(__filename, 'r+')
       })
 
-      it('should handle errors', (done) => {
-        const filename = path.join(__filename, Math.random().toString())
-        try {
-          fs.openSync(filename, 'r')
-        } catch (err) {
-          expectOneSpan(agent, done, {
-            resource: 'openSync',
-            error: 1,
-            meta: {
-              'file.flag': 'r',
-              'file.path': filename,
-              'error.msg': err.message,
-              'error.type': err.name,
-              'error.stack': err.stack
-            }
-          })
-        }
-      })
-    })
-
-    describeThreeWays('close', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        const fd = realFS.openSync(__filename, 'r')
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-
-        tested(fs, [fd], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309], agent))
-    })
-
-    describeThreeWays('readFile', (resource, tested) => {
-      if (implicitFlag) {
+      describeThreeWays('close', (resource, tested) => {
         it('should be instrumented', (done) => {
+          const fd = realFS.openSync(__filename, 'r')
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.flag': 'r',
+              'file.descriptor': fd.toString()
+            }
+          })
+
+          tested(fs, [fd], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309], agent))
+      })
+
+      describeThreeWays('readFile', (resource, tested) => {
+        if (implicitFlag) {
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              resource,
+              meta: {
+                'file.flag': 'r',
+                'file.path': __filename
+              }
+            })
+
+            tested(fs, [__filename], done)
+          })
+        }
+
+        it('should be instrumented with flags', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.flag': 'r+',
               'file.path': __filename
             }
           })
 
-          tested(fs, [__filename], done)
-        })
-      }
-
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.flag': 'r+',
-            'file.path': __filename
-          }
+          tested(fs, [__filename, { flag: 'r+' }], done)
         })
 
-        tested(fs, [__filename, { flag: 'r+' }], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename', { flag: 'r' }], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', { flag: 'r' }], agent))
-    })
+      describeThreeWays('writeFile', (resource, tested) => {
+        let filename
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'writeFile')
+        })
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(filename)
+          } catch (e) { /* */ }
+        })
 
-    describeThreeWays('writeFile', (resource, tested) => {
-      let filename
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'writeFile')
-      })
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(filename)
-        } catch (e) { /* */ }
+        if (implicitFlag) {
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              resource,
+              meta: {
+                'file.flag': 'w',
+                'file.path': filename
+              }
+            })
+
+            tested(fs, [filename, 'test'], done)
+          })
+        }
+
+        it('should be instrumented with flags', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.flag': 'w+',
+              'file.path': filename
+            }
+          })
+
+          tested(fs, [filename, 'test', { flag: 'w+' }], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [filename, 'test', { flag: 'r' }], agent))
       })
 
-      if (implicitFlag) {
+      describeThreeWays('appendFile', (resource, tested) => {
+        let filename
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'appendFile')
+        })
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(filename)
+          } catch (e) { /* */ }
+        })
+
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.flag': 'w',
+              'file.flag': 'a',
               'file.path': filename
             }
           })
 
           tested(fs, [filename, 'test'], done)
         })
-      }
 
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.flag': 'w+',
-            'file.path': filename
-          }
+        it('should be instrumented with flags', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.flag': 'a+',
+              'file.path': filename
+            }
+          })
+
+          tested(fs, [filename, 'test', { flag: 'a+' }], done)
         })
 
-        tested(fs, [filename, 'test', { flag: 'w+' }], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [filename, 'test', { flag: 'r' }], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [filename, 'test', { flag: 'r' }], agent))
-    })
+      describeThreeWays('access', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': __filename
+            }
+          })
 
-    describeThreeWays('appendFile', (resource, tested) => {
-      let filename
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'appendFile')
-      })
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(filename)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.flag': 'a',
-            'file.path': filename
-          }
+          tested(fs, [__filename], done)
         })
 
-        tested(fs, [filename, 'test'], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
       })
 
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.flag': 'a+',
-            'file.path': filename
-          }
+      describeThreeWays('copyFile', (resource, tested) => {
+        const dest = `${__filename}copy`
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(dest)
+          } catch (e) { /* */ }
         })
 
-        tested(fs, [filename, 'test', { flag: 'a+' }], done)
-      })
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.src': __filename,
+              'file.dest': dest
+            }
+          })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [filename, 'test', { flag: 'r' }], agent))
-    })
-
-    describeThreeWays('access', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __filename
-          }
+          tested(fs, [__filename, dest], done)
         })
 
-        tested(fs, [__filename], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [__filename, __filename, fs.constants.COPYFILE_EXCL], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
+      describeThreeWays('stat', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': __filename
+            }
+          })
 
-    describeThreeWays('copyFile', (resource, tested) => {
-      const dest = `${__filename}copy`
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(dest)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.src': __filename,
-            'file.dest': dest
-          }
+          tested(fs, [__filename], done)
         })
 
-        tested(fs, [__filename, dest], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [__filename, __filename, fs.constants.COPYFILE_EXCL], agent))
-    })
+      describeThreeWays('lstat', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': __filename
+            }
+          })
 
-    describeThreeWays('stat', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __filename
-          }
+          tested(fs, [__filename], done)
         })
 
-        tested(fs, [__filename], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
+      describeThreeWays('fstat', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': '1'
+            }
+          })
 
-    describeThreeWays('lstat', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __filename
-          }
+          tested(fs, [1], done)
         })
 
-        tested(fs, [__filename], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
+      describeThreeWays('readdir', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': __dirname
+            }
+          })
 
-    describeThreeWays('fstat', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': '1'
-          }
+          tested(fs, [__dirname], done)
         })
 
-        tested(fs, [1], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/baddirname'], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309], agent))
-    })
+      describeThreeWays('opendir', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': __dirname
+            }
+          })
 
-    describeThreeWays('readdir', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __dirname
-          }
+          tested(fs, [__dirname], (err, dir) => {
+            if (err) done(err)
+            else dir.close(done)
+          })
         })
 
-        tested(fs, [__dirname], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/baddirname'], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/baddirname'], agent))
-    })
-
-    describeThreeWays('opendir', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __dirname
-          }
+      describeThreeWays('read', (resource, tested) => {
+        let fd
+        beforeEach(() => {
+          fd = realFS.openSync(__filename, 'r')
+        })
+        afterEach(() => {
+          realFS.closeSync(fd)
         })
 
-        tested(fs, [__dirname], (err, dir) => {
-          if (err) done(err)
-          else dir.close(done)
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString()
+            }
+          })
+          tested(fs, [fd, Buffer.alloc(5), 0, 5, 0], done)
         })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/baddirname'], agent))
-    })
-
-    describeThreeWays('read', (resource, tested) => {
-      let fd
-      beforeEach(() => {
-        fd = realFS.openSync(__filename, 'r')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-        tested(fs, [fd, Buffer.alloc(5), 0, 5, 0], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
-    })
-
-    describeThreeWays('write', (resource, tested) => {
-      let fd
-      let filename
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'write')
-        fd = realFS.openSync(filename, 'w')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-        realFS.unlinkSync(filename)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-        tested(fs, [fd, Buffer.from('hello'), 0, 5, 0], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
-    })
-
-    if (hasWritev) {
-      describeThreeWays('writev', (resource, tested) => {
+      describeThreeWays('write', (resource, tested) => {
         let fd
         let filename
         beforeEach(() => {
-          filename = path.join(tmpdir, 'writev')
+          filename = path.join(tmpdir, 'write')
           fd = realFS.openSync(filename, 'w')
         })
         afterEach(() => {
@@ -568,108 +526,112 @@ describe('Plugin', () => {
               'file.descriptor': fd.toString()
             }
           })
-          tested(fs, [fd, [Buffer.from('hello')], 0], done)
+          tested(fs, [fd, Buffer.from('hello'), 0, 5, 0], done)
         })
 
         it('should handle errors', () =>
-          testHandleErrors(fs, resource, tested, [8675309, [Buffer.alloc(5)], 0], agent))
+          testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
       })
-    }
 
-    describe('createReadStream', () => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'ReadStream',
-          meta: {
-            'file.path': __filename,
-            'file.flag': 'r'
-          }
+      if (hasWritev) {
+        describeThreeWays('writev', (resource, tested) => {
+          let fd
+          let filename
+          beforeEach(() => {
+            filename = path.join(tmpdir, 'writev')
+            fd = realFS.openSync(filename, 'w')
+          })
+          afterEach(() => {
+            realFS.closeSync(fd)
+            realFS.unlinkSync(filename)
+          })
+
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              resource,
+              meta: {
+                'file.descriptor': fd.toString()
+              }
+            })
+            tested(fs, [fd, [Buffer.from('hello')], 0], done)
+          })
+
+          it('should handle errors', () =>
+            testHandleErrors(fs, resource, tested, [8675309, [Buffer.alloc(5)], 0], agent))
         })
-        fs.createReadStream(__filename).on('error', done).resume()
-      })
+      }
 
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'ReadStream',
-          meta: {
-            'file.path': __filename,
-            'file.flag': 'r+'
-          }
-        })
-        fs.createReadStream(__filename, { flags: 'r+' }).on('error', done).resume()
-      })
-
-      it('should handle errors', () => {
-        testHandleErrors(fs, 'ReadStream', (fs, args, _, cb) => {
-          fs.createReadStream(...args).on('error', cb).emit('error', new Error('bad'))
-        }, [__filename], agent)
-      })
-    })
-
-    describe('createWriteStream', () => {
-      let filename
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'createWriteStream')
-      })
-      afterEach(() => {
-        realFS.unlinkSync(filename)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'WriteStream',
-          meta: {
-            'file.path': filename,
-            'file.flag': 'w'
-          }
+      describe('createReadStream', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'ReadStream',
+            meta: {
+              'file.path': __filename,
+              'file.flag': 'r'
+            }
+          })
+          fs.createReadStream(__filename).on('error', done).resume()
         })
 
-        fs.createWriteStream(filename).on('error', done).end()
-      })
-
-      it('should be instrumented with flags', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'WriteStream',
-          meta: {
-            'file.path': filename,
-            'file.flag': 'w+'
-          }
+        it('should be instrumented with flags', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'ReadStream',
+            meta: {
+              'file.path': __filename,
+              'file.flag': 'r+'
+            }
+          })
+          fs.createReadStream(__filename, { flags: 'r+' }).on('error', done).resume()
         })
 
-        fs.createWriteStream(filename, { flags: 'w+' }).on('error', done).end()
+        it('should handle errors', () => {
+          testHandleErrors(fs, 'ReadStream', (fs, args, _, cb) => {
+            fs.createReadStream(...args).on('error', cb).emit('error', new Error('bad'))
+          }, [__filename], agent)
+        })
       })
 
-      it('should handle errors', () => {
-        testHandleErrors(fs, 'WriteStream', (fs, args, _, cb) => {
-          fs.createWriteStream(...args).on('error', cb).emit('error', new Error('bad'))
-        }, [filename], agent)
-      })
-    })
-
-    describeThreeWays('chmod', (resource, tested) => {
-      let mode
-      beforeEach(() => {
-        mode = realFS.statSync(__filename).mode % 0o100000
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __filename,
-            'file.mode': mode.toString(8)
-          }
+      describe('createWriteStream', () => {
+        let filename
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'createWriteStream')
+        })
+        afterEach(() => {
+          realFS.unlinkSync(filename)
         })
 
-        tested(fs, [__filename, mode], done)
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'WriteStream',
+            meta: {
+              'file.path': filename,
+              'file.flag': 'w'
+            }
+          })
+
+          fs.createWriteStream(filename).on('error', done).end()
+        })
+
+        it('should be instrumented with flags', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'WriteStream',
+            meta: {
+              'file.path': filename,
+              'file.flag': 'w+'
+            }
+          })
+
+          fs.createWriteStream(filename, { flags: 'w+' }).on('error', done).end()
+        })
+
+        it('should handle errors', () => {
+          testHandleErrors(fs, 'WriteStream', (fs, args, _, cb) => {
+            fs.createWriteStream(...args).on('error', cb).emit('error', new Error('bad'))
+          }, [filename], agent)
+        })
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', mode], agent))
-    })
-
-    if (hasOSymlink) {
-      describeThreeWays('lchmod', (resource, tested) => {
+      describeThreeWays('chmod', (resource, tested) => {
         let mode
         beforeEach(() => {
           mode = realFS.statSync(__filename).mode % 0o100000
@@ -690,63 +652,59 @@ describe('Plugin', () => {
         it('should handle errors', () =>
           testHandleErrors(fs, resource, tested, ['/badfilename', mode], agent))
       })
-    }
 
-    describeThreeWays('fchmod', (resource, tested) => {
-      let mode
-      let fd
-      beforeEach(() => {
-        mode = realFS.statSync(__filename).mode % 0o100000
-        fd = realFS.openSync(__filename, 'r')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-      })
+      if (hasOSymlink) {
+        describeThreeWays('lchmod', (resource, tested) => {
+          let mode
+          beforeEach(() => {
+            mode = realFS.statSync(__filename).mode % 0o100000
+          })
 
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource: resource,
-          meta: {
-            'file.descriptor': fd.toString(),
-            'file.mode': mode.toString(8)
-          }
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              resource,
+              meta: {
+                'file.path': __filename,
+                'file.mode': mode.toString(8)
+              }
+            })
+
+            tested(fs, [__filename, mode], done)
+          })
+
+          it('should handle errors', () =>
+            testHandleErrors(fs, resource, tested, ['/badfilename', mode], agent))
+        })
+      }
+
+      describeThreeWays('fchmod', (resource, tested) => {
+        let mode
+        let fd
+        beforeEach(() => {
+          mode = realFS.statSync(__filename).mode % 0o100000
+          fd = realFS.openSync(__filename, 'r')
+        })
+        afterEach(() => {
+          realFS.closeSync(fd)
         })
 
-        tested(fs, [fd, mode], done)
-      })
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: resource,
+            meta: {
+              'file.descriptor': fd.toString(),
+              'file.mode': mode.toString(8)
+            }
+          })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309, mode], agent))
-    })
-
-    describeThreeWays('chown', (resource, tested) => {
-      let uid
-      let gid
-      beforeEach(() => {
-        const stats = realFS.statSync(__filename)
-        uid = stats.uid
-        gid = stats.gid
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __filename,
-            'file.uid': uid.toString(),
-            'file.gid': gid.toString()
-          }
+          tested(fs, [fd, mode], done)
         })
 
-        tested(fs, [__filename, uid, gid], done)
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309, mode], agent))
       })
 
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', uid, gid], agent))
-    })
-
-    if (hasOSymlink) {
-      describeThreeWays('lchown', (resource, tested) => {
+      describeThreeWays('chown', (resource, tested) => {
         let uid
         let gid
         beforeEach(() => {
@@ -771,966 +729,994 @@ describe('Plugin', () => {
         it('should handle errors', () =>
           testHandleErrors(fs, resource, tested, ['/badfilename', uid, gid], agent))
       })
-    }
 
-    describeThreeWays('fchown', (resource, tested) => {
-      let uid
-      let gid
-      let fd
-      beforeEach(() => {
-        const stats = realFS.statSync(__filename)
-        uid = stats.uid
-        gid = stats.gid
-        fd = realFS.openSync(__filename, 'r')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString(),
-            'file.uid': uid.toString(),
-            'file.gid': gid.toString()
-          }
-        })
-
-        tested(fs, [fd, uid, gid], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309, uid, gid], agent))
-    })
-
-    describeThreeWays('realpath', (resource, tested) => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': __filename
-          }
-        })
-        tested(fs, [__filename], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
-
-    describeThreeWays('readlink', (resource, tested) => {
-      let link
-      beforeEach(() => {
-        link = path.join(tmpdir, 'link')
-        realFS.symlinkSync(__filename, link)
-      })
-      afterEach(() => {
-        realFS.unlinkSync(link)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': link
-          }
-        })
-        tested(fs, [link], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
-
-    describeThreeWays('unlink', (resource, tested) => {
-      let link
-      beforeEach(() => {
-        link = path.join(tmpdir, 'link')
-        realFS.symlinkSync(__filename, link)
-      })
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(link)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': link
-          }
-        })
-        tested(fs, [link], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
-
-    describeThreeWays('symlink', (resource, tested) => {
-      let link
-      beforeEach(() => {
-        link = path.join(tmpdir, 'link')
-      })
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(link)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.src': __filename,
-            'file.dest': link
-          }
-        })
-        tested(fs, [__filename, link], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [__filename, '/baddir/badfilename'], agent))
-    })
-
-    describeThreeWays('link', (resource, tested) => {
-      let link
-      beforeEach(() => {
-        link = path.join(tmpdir, 'link')
-      })
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(link)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.src': __filename,
-            'file.dest': link
-          }
-        })
-        tested(fs, [__filename, link], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', link], agent))
-    })
-
-    describeThreeWays('rmdir', (resource, tested) => {
-      let dir
-      beforeEach(() => {
-        dir = path.join(tmpdir, 'dir')
-        realFS.mkdirSync(dir)
-      })
-      afterEach(() => {
-        try {
-          realFS.rmdirSync(dir)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': dir
-          }
-        })
-        tested(fs, [dir], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
-    })
-
-    describeThreeWays('rename', (resource, tested) => {
-      let src
-      let dest
-      beforeEach(() => {
-        src = path.join(tmpdir, 'src')
-        dest = path.join(tmpdir, 'dest')
-        realFS.writeFileSync(src, '')
-      })
-      afterEach(() => {
-        try {
-          realFS.unlinkSync(dest)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.src': src,
-            'file.dest': dest
-          }
-        })
-        tested(fs, [src, dest], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', dest], agent))
-    })
-
-    describeThreeWays('fsync', (resource, tested) => {
-      let fd
-      let tmpfile
-      beforeEach(() => {
-        tmpfile = path.join(tmpdir, 'fsync')
-        fd = realFS.openSync(tmpfile, 'w')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-        realFS.unlinkSync(tmpfile)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-        tested(fs, [fd], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309], agent))
-    })
-
-    describeThreeWays('fdatasync', (resource, tested) => {
-      let fd
-      let tmpfile
-      beforeEach(() => {
-        tmpfile = path.join(tmpdir, 'fdatasync')
-        fd = realFS.openSync(tmpfile, 'w')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-        realFS.unlinkSync(tmpfile)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-        tested(fs, [fd], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309], agent))
-    })
-
-    describeThreeWays('mkdir', (resource, tested) => {
-      let dir
-      beforeEach(() => {
-        dir = path.join(tmpdir, 'mkdir')
-      })
-      afterEach(() => {
-        try {
-          realFS.rmdirSync(dir)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': dir
-          }
-        })
-        tested(fs, [dir], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/baddir/baddir'], agent))
-    })
-
-    describeThreeWays('truncate', (resource, tested) => {
-      let filename
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'truncate')
-        realFS.writeFileSync(filename, Buffer.alloc(10))
-      })
-      afterEach(() => {
-        realFS.unlinkSync(filename)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': filename
-          }
-        })
-        tested(fs, [filename, 5], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', 5], agent))
-    })
-
-    describeThreeWays('ftruncate', (resource, tested) => {
-      let filename
-      let fd
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'truncate')
-        realFS.writeFileSync(filename, Buffer.alloc(10))
-        fd = realFS.openSync(filename, 'w+')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-        realFS.unlinkSync(filename)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-        tested(fs, [fd, 5], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309, 5], agent))
-    })
-
-    describeThreeWays('utimes', (resource, tested) => {
-      let filename
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'truncate')
-        realFS.writeFileSync(filename, '')
-      })
-      afterEach(() => {
-        realFS.unlinkSync(filename)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.path': filename
-          }
-        })
-        tested(fs, [filename, Date.now(), Date.now()], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, ['/badfilename', Date.now(), Date.now()], agent))
-    })
-
-    describeThreeWays('futimes', (resource, tested) => {
-      let filename
-      let fd
-      beforeEach(() => {
-        filename = path.join(tmpdir, 'truncate')
-        realFS.writeFileSync(filename, '')
-        fd = realFS.openSync(filename, 'w')
-      })
-      afterEach(() => {
-        realFS.closeSync(fd)
-        realFS.unlinkSync(filename)
-      })
-
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource,
-          meta: {
-            'file.descriptor': fd.toString()
-          }
-        })
-        tested(fs, [fd, Date.now(), Date.now()], done)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, resource, tested, [8675309, Date.now(), Date.now()], agent))
-    })
-
-    describe('mkdtemp', () => {
-      let tmpdir
-      afterEach(() => {
-        try {
-          realFS.rmdirSync(tmpdir)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
-        expectOneSpan(agent, done, {
-          resource: 'mkdtemp',
-          meta: {
-            'file.path': inputDir
-          }
-        })
-        fs.mkdtemp(inputDir, (err, result) => {
-          if (err) {
-            done(err)
-            return
-          }
-          tmpdir = result
-        })
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, 'mkdtemp', (fs, args, _, cb) => {
-          fs.mkdtemp(...args, cb)
-        }, ['/baddir/baddir'], agent))
-    })
-
-    describe('mkdtempSync', () => {
-      let tmpdir
-      afterEach(() => {
-        try {
-          realFS.rmdirSync(tmpdir)
-        } catch (e) { /* */ }
-      })
-
-      it('should be instrumented', (done) => {
-        const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
-        expectOneSpan(agent, done, {
-          resource: 'mkdtempSync',
-          meta: {
-            'file.path': inputDir
-          }
-        })
-        tmpdir = fs.mkdtempSync(inputDir)
-      })
-
-      it('should handle errors', () =>
-        testHandleErrors(fs, 'mkdtempSync', (fs, args, _, cb) => {
-          try {
-            fs.mkdtempSync(...args)
-          } catch (e) {
-            cb(e)
-          }
-        }, ['/baddir/baddir'], agent))
-    })
-
-    describe('exists', () => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'exists',
-          meta: {
-            'file.path': __filename
-          }
-        })
-        fs.exists(__filename, () => {}) // eslint-disable-line node/no-deprecated-api
-      })
-    })
-
-    describe('existsSync', () => {
-      it('should be instrumented', (done) => {
-        expectOneSpan(agent, done, {
-          resource: 'existsSync',
-          meta: {
-            'file.path': __filename
-          }
-        })
-        fs.existsSync(__filename)
-      })
-    })
-
-    if (realFS.Dir) {
-      describe('Dir', () => {
-        let dirname
-        let dir
-        beforeEach(async () => {
-          dirname = path.join(tmpdir, 'dir')
-          fs.mkdirSync(dirname)
-          fs.writeFileSync(path.join(dirname, '1'), '1')
-          fs.writeFileSync(path.join(dirname, '2'), '2')
-          fs.writeFileSync(path.join(dirname, '3'), '3')
-          dir = await fs.promises.opendir(dirname)
-        })
-        afterEach(async () => {
-          try {
-            await dir.close()
-          } catch (e) {
-            if (e.code !== 'ERR_DIR_CLOSED') {
-              throw e
-            }
-          }
-          fs.unlinkSync(path.join(dirname, '1'))
-          fs.unlinkSync(path.join(dirname, '2'))
-          fs.unlinkSync(path.join(dirname, '3'))
-          fs.rmdirSync(dirname)
-        })
-
-        describe('close', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.close',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            dir.close().catch(done)
-          })
-
-          it('should handle errors', () =>
-            testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
-              dir.closeSync()
-              try {
-                dir.close()
-              } catch (e) {
-                cb(e)
-              }
-            }, [], agent))
-
-          it('should be instrumented with callback', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.close',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            dir.close(err => err && done(err))
-          })
-
-          it('should handle errors with callback', () =>
-            testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
-              dir.closeSync()
-              try {
-                dir.close(cb)
-              } catch (e) {
-                cb(e)
-              }
-            }, [], agent))
-
-          it('Sync should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.closeSync',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            dir.closeSync()
-          })
-
-          it('Sync should handle errors', () =>
-            testHandleErrors(fs, 'dir.closeSync', (_1, _2, _3, cb) => {
-              dir.closeSync()
-              try {
-                dir.closeSync()
-              } catch (e) {
-                cb(e)
-              }
-            }, [], agent))
-        })
-
-        describe('read', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.read',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            dir.read().catch(done)
-          })
-
-          it('should handle errors', () =>
-            testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
-              dir.closeSync()
-              try {
-                dir.read()
-              } catch (e) {
-                cb(e)
-              }
-            }, [], agent))
-
-          it('should be instrumented with callback', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.read',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            dir.read(err => err && done(err))
-          })
-
-          it('should handle errors with callback', () =>
-            testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
-              dir.closeSync()
-              try {
-                dir.read(cb)
-              } catch (e) {
-                cb(e)
-              }
-            }, [], agent))
-
-          it('Sync should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.readSync',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            dir.readSync()
-          })
-
-          it('Sync should handle errors', () =>
-            testHandleErrors(fs, 'dir.readSync', (_1, _2, _3, cb) => {
-              dir.closeSync()
-              try {
-                dir.readSync()
-              } catch (e) {
-                cb(e)
-              }
-            }, [], agent))
-        })
-
-        describe('Symbol.asyncIterator', () => {
-          it('should be instrumented for reads', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.read',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            ;(async () => {
-              const iterator = dir[Symbol.asyncIterator]()
-              while (!(await iterator.next()).done) { /* noop */ }
-            })().catch(done)
-          })
-
-          it('should be instrumented for close', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'dir.close',
-              meta: {
-                'file.path': dirname
-              }
-            })
-            ;(async () => {
-              const iterator = dir[Symbol.asyncIterator]()
-              while (!(await iterator.next()).done) { /* noop */ }
-            })().catch(done)
-          })
-        })
-      })
-    }
-
-    if (realFS.promises) {
-      describe('FileHandle', () => {
-        let filehandle
-        let filename
-        beforeEach(async () => {
-          filename = path.join(os.tmpdir(), 'filehandle')
-          fs.writeFileSync(filename, 'some data')
-          filehandle = await fs.promises.open(filename, 'w+')
-        })
-        afterEach(async () => {
-          try {
-            await filehandle.close()
-          } catch (e) { /* */ }
-          await fs.promises.unlink(filename)
-        })
-
-        describe('appendFile', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.appendFile',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.appendFile('some more data').catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'appendFile', ['some more data'], filehandle, agent))
-        })
-
-        describe('writeFile', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.writeFile',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.writeFile('some more data').catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'writeFile', ['some more data'], filehandle, agent))
-        })
-
-        describe('readFile', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.readFile',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.readFile().catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'readFile', [], filehandle, agent))
-        })
-
-        describe('write', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.write',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.write('some more data').catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'write', ['some more data'], filehandle, agent))
-        })
-
-        if (hasWritev) {
-          describe('writev', () => {
-            it('should be instrumented', (done) => {
-              expectOneSpan(agent, done, {
-                resource: 'filehandle.writev',
-                meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
-              })
-              filehandle.writev([Buffer.from('some more data')]).catch(done)
-            })
-
-            // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testFileHandleErrors(fs, 'writev', [[Buffer.from('some more data')]], filehandle, agent))
-          })
-        }
-
-        describe('read', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.read',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.read(Buffer.alloc(5), 0, 5, 0).catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'read', [Buffer.alloc(5), 0, 5, 0], filehandle, agent))
-        })
-
-        describe('chmod', () => {
-          let mode
-          beforeEach(() => {
-            mode = realFS.statSync(__filename).mode % 0o100000
-          })
-
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.chmod',
-              meta: {
-                'file.descriptor': filehandle.fd.toString(),
-                'file.mode': mode.toString(8)
-              }
-            })
-            filehandle.chmod(mode).catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'chmod', [mode], filehandle, agent))
-        })
-
-        describe('chown', () => {
+      if (hasOSymlink) {
+        describeThreeWays('lchown', (resource, tested) => {
           let uid
           let gid
           beforeEach(() => {
-            const stats = realFS.statSync(filename)
+            const stats = realFS.statSync(__filename)
             uid = stats.uid
             gid = stats.gid
           })
 
           it('should be instrumented', (done) => {
             expectOneSpan(agent, done, {
-              resource: 'filehandle.chown',
+              resource,
               meta: {
-                'file.descriptor': filehandle.fd.toString(),
+                'file.path': __filename,
                 'file.uid': uid.toString(),
                 'file.gid': gid.toString()
               }
             })
-            filehandle.chown(uid, gid).catch(done)
+
+            tested(fs, [__filename, uid, gid], done)
           })
 
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'chown', [uid, gid], filehandle, agent))
-        })
-
-        describe('stat', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.stat',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.stat().catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testHandleErrors(fs, 'stat', [], filehandle, agent))
-        })
-
-        describe('sync', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.sync',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.sync().catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testHandleErrors(fs, 'sync', [], filehandle, agent))
-        })
-
-        describe('datasync', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.datasync',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.datasync().catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testHandleErrors(fs, 'datasync', [], filehandle, agent))
-        })
-
-        describe('truncate', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.truncate',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.truncate(5).catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testHandleErrors(fs, 'truncate', [5], filehandle, agent))
-        })
-
-        describe('utimes', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.utimes',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.utimes(Date.now(), Date.now()).catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testHandleErrors(fs, 'utimes', [Date.now(), Date.now()], filehandle, agent))
-        })
-
-        describe('close', () => {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'filehandle.close',
-              meta: {
-                'file.descriptor': filehandle.fd.toString()
-              }
-            })
-            filehandle.close().catch(done)
-          })
-
-          // https://github.com/nodejs/node/issues/31361
-          it.skip('should handle errors', () =>
-            testFileHandleErrors(fs, 'close', [], filehandle, agent))
-        })
-      })
-    }
-
-    function describeThreeWays (name, fn) {
-      if (name in realFS) {
-        describe(name, () => {
-          fn(name, (fs, args, done, withError) => {
-            const span = {}
-            return tracer.scope().activate(span, () => {
-              args.push((err) => {
-                expect(tracer.scope().active()).to.equal(span)
-                if (err) {
-                  if (withError) withError(err)
-                  else done(err)
-                }
-              })
-              return fs[name].apply(fs, args)
-            })
-          })
+          it('should handle errors', () =>
+            testHandleErrors(fs, resource, tested, ['/badfilename', uid, gid], agent))
         })
       }
 
-      if (realFS.promises && name in realFS.promises) {
-        describe('promises.' + name, () => {
-          fn('promises.' + name, (fs, args, done, withError) => {
-            const span = {}
-            return tracer.scope().activate(span, () => {
-              return fs.promises[name].apply(fs.promises, args)
-                .then(() => {
-                  expect(tracer.scope().active()).to.equal(span)
-                })
-                .catch((err) => {
-                  if (withError) withError(err)
-                  else done(err)
-                })
-            })
-          })
+      describeThreeWays('fchown', (resource, tested) => {
+        let uid
+        let gid
+        let fd
+        beforeEach(() => {
+          const stats = realFS.statSync(__filename)
+          uid = stats.uid
+          gid = stats.gid
+          fd = realFS.openSync(__filename, 'r')
         })
-      }
+        afterEach(() => {
+          realFS.closeSync(fd)
+        })
 
-      const nameSync = name + 'Sync'
-
-      if (nameSync in realFS) {
-        describe(nameSync, () => {
-          fn(nameSync, (fs, args, _, withError) => {
-            try {
-              return fs[nameSync].apply(fs, args)
-            } catch (err) {
-              if (withError) withError(err)
-              else throw err
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString(),
+              'file.uid': uid.toString(),
+              'file.gid': gid.toString()
             }
           })
+
+          tested(fs, [fd, uid, gid], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309, uid, gid], agent))
+      })
+
+      describeThreeWays('realpath', (resource, tested) => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': __filename
+            }
+          })
+          tested(fs, [__filename], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
+      })
+
+      describeThreeWays('readlink', (resource, tested) => {
+        let link
+        beforeEach(() => {
+          link = path.join(tmpdir, 'link')
+          realFS.symlinkSync(__filename, link)
+        })
+        afterEach(() => {
+          realFS.unlinkSync(link)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': link
+            }
+          })
+          tested(fs, [link], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
+      })
+
+      describeThreeWays('unlink', (resource, tested) => {
+        let link
+        beforeEach(() => {
+          link = path.join(tmpdir, 'link')
+          realFS.symlinkSync(__filename, link)
+        })
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(link)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': link
+            }
+          })
+          tested(fs, [link], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
+      })
+
+      describeThreeWays('symlink', (resource, tested) => {
+        let link
+        beforeEach(() => {
+          link = path.join(tmpdir, 'link')
+        })
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(link)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.src': __filename,
+              'file.dest': link
+            }
+          })
+          tested(fs, [__filename, link], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [__filename, '/baddir/badfilename'], agent))
+      })
+
+      describeThreeWays('link', (resource, tested) => {
+        let link
+        beforeEach(() => {
+          link = path.join(tmpdir, 'link')
+        })
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(link)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.src': __filename,
+              'file.dest': link
+            }
+          })
+          tested(fs, [__filename, link], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename', link], agent))
+      })
+
+      describeThreeWays('rmdir', (resource, tested) => {
+        let dir
+        beforeEach(() => {
+          dir = path.join(tmpdir, 'dir')
+          realFS.mkdirSync(dir)
+        })
+        afterEach(() => {
+          try {
+            realFS.rmdirSync(dir)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': dir
+            }
+          })
+          tested(fs, [dir], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename'], agent))
+      })
+
+      describeThreeWays('rename', (resource, tested) => {
+        let src
+        let dest
+        beforeEach(() => {
+          src = path.join(tmpdir, 'src')
+          dest = path.join(tmpdir, 'dest')
+          realFS.writeFileSync(src, '')
+        })
+        afterEach(() => {
+          try {
+            realFS.unlinkSync(dest)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.src': src,
+              'file.dest': dest
+            }
+          })
+          tested(fs, [src, dest], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename', dest], agent))
+      })
+
+      describeThreeWays('fsync', (resource, tested) => {
+        let fd
+        let tmpfile
+        beforeEach(() => {
+          tmpfile = path.join(tmpdir, 'fsync')
+          fd = realFS.openSync(tmpfile, 'w')
+        })
+        afterEach(() => {
+          realFS.closeSync(fd)
+          realFS.unlinkSync(tmpfile)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString()
+            }
+          })
+          tested(fs, [fd], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309], agent))
+      })
+
+      describeThreeWays('fdatasync', (resource, tested) => {
+        let fd
+        let tmpfile
+        beforeEach(() => {
+          tmpfile = path.join(tmpdir, 'fdatasync')
+          fd = realFS.openSync(tmpfile, 'w')
+        })
+        afterEach(() => {
+          realFS.closeSync(fd)
+          realFS.unlinkSync(tmpfile)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString()
+            }
+          })
+          tested(fs, [fd], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309], agent))
+      })
+
+      describeThreeWays('mkdir', (resource, tested) => {
+        let dir
+        beforeEach(() => {
+          dir = path.join(tmpdir, 'mkdir')
+        })
+        afterEach(() => {
+          try {
+            realFS.rmdirSync(dir)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': dir
+            }
+          })
+          tested(fs, [dir], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/baddir/baddir'], agent))
+      })
+
+      describeThreeWays('truncate', (resource, tested) => {
+        let filename
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'truncate')
+          realFS.writeFileSync(filename, Buffer.alloc(10))
+        })
+        afterEach(() => {
+          realFS.unlinkSync(filename)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': filename
+            }
+          })
+          tested(fs, [filename, 5], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename', 5], agent))
+      })
+
+      describeThreeWays('ftruncate', (resource, tested) => {
+        let filename
+        let fd
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'truncate')
+          realFS.writeFileSync(filename, Buffer.alloc(10))
+          fd = realFS.openSync(filename, 'w+')
+        })
+        afterEach(() => {
+          realFS.closeSync(fd)
+          realFS.unlinkSync(filename)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString()
+            }
+          })
+          tested(fs, [fd, 5], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309, 5], agent))
+      })
+
+      describeThreeWays('utimes', (resource, tested) => {
+        let filename
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'truncate')
+          realFS.writeFileSync(filename, '')
+        })
+        afterEach(() => {
+          realFS.unlinkSync(filename)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.path': filename
+            }
+          })
+          tested(fs, [filename, Date.now(), Date.now()], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, ['/badfilename', Date.now(), Date.now()], agent))
+      })
+
+      describeThreeWays('futimes', (resource, tested) => {
+        let filename
+        let fd
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'truncate')
+          realFS.writeFileSync(filename, '')
+          fd = realFS.openSync(filename, 'w')
+        })
+        afterEach(() => {
+          realFS.closeSync(fd)
+          realFS.unlinkSync(filename)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString()
+            }
+          })
+          tested(fs, [fd, Date.now(), Date.now()], done)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309, Date.now(), Date.now()], agent))
+      })
+
+      describe('mkdtemp', () => {
+        let tmpdir
+        afterEach(() => {
+          try {
+            realFS.rmdirSync(tmpdir)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
+          expectOneSpan(agent, done, {
+            resource: 'mkdtemp',
+            meta: {
+              'file.path': inputDir
+            }
+          })
+          fs.mkdtemp(inputDir, (err, result) => {
+            if (err) {
+              done(err)
+              return
+            }
+            tmpdir = result
+          })
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, 'mkdtemp', (fs, args, _, cb) => {
+            fs.mkdtemp(...args, cb)
+          }, ['/baddir/baddir'], agent))
+      })
+
+      describe('mkdtempSync', () => {
+        let tmpdir
+        afterEach(() => {
+          try {
+            realFS.rmdirSync(tmpdir)
+          } catch (e) { /* */ }
+        })
+
+        it('should be instrumented', (done) => {
+          const inputDir = path.join(os.tmpdir(), 'mkdtemp-')
+          expectOneSpan(agent, done, {
+            resource: 'mkdtempSync',
+            meta: {
+              'file.path': inputDir
+            }
+          })
+          tmpdir = fs.mkdtempSync(inputDir)
+        })
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, 'mkdtempSync', (fs, args, _, cb) => {
+            try {
+              fs.mkdtempSync(...args)
+            } catch (e) {
+              cb(e)
+            }
+          }, ['/baddir/baddir'], agent))
+      })
+
+      describe('exists', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'exists',
+            meta: {
+              'file.path': __filename
+            }
+          })
+          fs.exists(__filename, () => {}) // eslint-disable-line node/no-deprecated-api
+        })
+      })
+
+      describe('existsSync', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'existsSync',
+            meta: {
+              'file.path': __filename
+            }
+          })
+          fs.existsSync(__filename)
+        })
+      })
+
+      if (realFS.Dir) {
+        describe('Dir', () => {
+          let dirname
+          let dir
+          beforeEach(async () => {
+            dirname = path.join(tmpdir, 'dir')
+            fs.mkdirSync(dirname)
+            fs.writeFileSync(path.join(dirname, '1'), '1')
+            fs.writeFileSync(path.join(dirname, '2'), '2')
+            fs.writeFileSync(path.join(dirname, '3'), '3')
+            dir = await fs.promises.opendir(dirname)
+          })
+          afterEach(async () => {
+            try {
+              await dir.close()
+            } catch (e) {
+              if (e.code !== 'ERR_DIR_CLOSED') {
+                throw e
+              }
+            }
+            fs.unlinkSync(path.join(dirname, '1'))
+            fs.unlinkSync(path.join(dirname, '2'))
+            fs.unlinkSync(path.join(dirname, '3'))
+            fs.rmdirSync(dirname)
+          })
+
+          describe('close', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.close',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              dir.close().catch(done)
+            })
+
+            it('should handle errors', () =>
+              testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
+                dir.closeSync()
+                try {
+                  dir.close()
+                } catch (e) {
+                  cb(e)
+                }
+              }, [], agent))
+
+            it('should be instrumented with callback', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.close',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              dir.close(err => err && done(err))
+            })
+
+            it('should handle errors with callback', () =>
+              testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
+                dir.closeSync()
+                try {
+                  dir.close(cb)
+                } catch (e) {
+                  cb(e)
+                }
+              }, [], agent))
+
+            it('Sync should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.closeSync',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              dir.closeSync()
+            })
+
+            it('Sync should handle errors', () =>
+              testHandleErrors(fs, 'dir.closeSync', (_1, _2, _3, cb) => {
+                dir.closeSync()
+                try {
+                  dir.closeSync()
+                } catch (e) {
+                  cb(e)
+                }
+              }, [], agent))
+          })
+
+          describe('read', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.read',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              dir.read().catch(done)
+            })
+
+            it('should handle errors', () =>
+              testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
+                dir.closeSync()
+                try {
+                  dir.read()
+                } catch (e) {
+                  cb(e)
+                }
+              }, [], agent))
+
+            it('should be instrumented with callback', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.read',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              dir.read(err => err && done(err))
+            })
+
+            it('should handle errors with callback', () =>
+              testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
+                dir.closeSync()
+                try {
+                  dir.read(cb)
+                } catch (e) {
+                  cb(e)
+                }
+              }, [], agent))
+
+            it('Sync should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.readSync',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              dir.readSync()
+            })
+
+            it('Sync should handle errors', () =>
+              testHandleErrors(fs, 'dir.readSync', (_1, _2, _3, cb) => {
+                dir.closeSync()
+                try {
+                  dir.readSync()
+                } catch (e) {
+                  cb(e)
+                }
+              }, [], agent))
+          })
+
+          describe('Symbol.asyncIterator', () => {
+            it('should be instrumented for reads', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.read',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              ;(async () => {
+                const iterator = dir[Symbol.asyncIterator]()
+                while (!(await iterator.next()).done) { /* noop */ }
+              })().catch(done)
+            })
+
+            it('should be instrumented for close', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'dir.close',
+                meta: {
+                  'file.path': dirname
+                }
+              })
+              ;(async () => {
+                const iterator = dir[Symbol.asyncIterator]()
+                while (!(await iterator.next()).done) { /* noop */ }
+              })().catch(done)
+            })
+          })
         })
       }
-    }
+
+      if (realFS.promises) {
+        describe('FileHandle', () => {
+          let filehandle
+          let filename
+          beforeEach(async () => {
+            filename = path.join(os.tmpdir(), 'filehandle')
+            fs.writeFileSync(filename, 'some data')
+            filehandle = await fs.promises.open(filename, 'w+')
+          })
+          afterEach(async () => {
+            try {
+              await filehandle.close()
+            } catch (e) { /* */ }
+            await fs.promises.unlink(filename)
+          })
+
+          describe('appendFile', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.appendFile',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.appendFile('some more data').catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'appendFile', ['some more data'], filehandle, agent))
+          })
+
+          describe('writeFile', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.writeFile',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.writeFile('some more data').catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'writeFile', ['some more data'], filehandle, agent))
+          })
+
+          describe('readFile', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.readFile',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.readFile().catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'readFile', [], filehandle, agent))
+          })
+
+          describe('write', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.write',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.write('some more data').catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'write', ['some more data'], filehandle, agent))
+          })
+
+          if (hasWritev) {
+            describe('writev', () => {
+              it('should be instrumented', (done) => {
+                expectOneSpan(agent, done, {
+                  resource: 'filehandle.writev',
+                  meta: {
+                    'file.descriptor': filehandle.fd.toString()
+                  }
+                })
+                filehandle.writev([Buffer.from('some more data')]).catch(done)
+              })
+
+              // https://github.com/nodejs/node/issues/31361
+              it.skip('should handle errors', () =>
+                testFileHandleErrors(fs, 'writev', [[Buffer.from('some more data')]], filehandle, agent))
+            })
+          }
+
+          describe('read', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.read',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.read(Buffer.alloc(5), 0, 5, 0).catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'read', [Buffer.alloc(5), 0, 5, 0], filehandle, agent))
+          })
+
+          describe('chmod', () => {
+            let mode
+            beforeEach(() => {
+              mode = realFS.statSync(__filename).mode % 0o100000
+            })
+
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.chmod',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString(),
+                  'file.mode': mode.toString(8)
+                }
+              })
+              filehandle.chmod(mode).catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'chmod', [mode], filehandle, agent))
+          })
+
+          describe('chown', () => {
+            let uid
+            let gid
+            beforeEach(() => {
+              const stats = realFS.statSync(filename)
+              uid = stats.uid
+              gid = stats.gid
+            })
+
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.chown',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString(),
+                  'file.uid': uid.toString(),
+                  'file.gid': gid.toString()
+                }
+              })
+              filehandle.chown(uid, gid).catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'chown', [uid, gid], filehandle, agent))
+          })
+
+          describe('stat', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.stat',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.stat().catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testHandleErrors(fs, 'stat', [], filehandle, agent))
+          })
+
+          describe('sync', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.sync',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.sync().catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testHandleErrors(fs, 'sync', [], filehandle, agent))
+          })
+
+          describe('datasync', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.datasync',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.datasync().catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testHandleErrors(fs, 'datasync', [], filehandle, agent))
+          })
+
+          describe('truncate', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.truncate',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.truncate(5).catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testHandleErrors(fs, 'truncate', [5], filehandle, agent))
+          })
+
+          describe('utimes', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.utimes',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.utimes(Date.now(), Date.now()).catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testHandleErrors(fs, 'utimes', [Date.now(), Date.now()], filehandle, agent))
+          })
+
+          describe('close', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.close',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
+              })
+              filehandle.close().catch(done)
+            })
+
+            // https://github.com/nodejs/node/issues/31361
+            it.skip('should handle errors', () =>
+              testFileHandleErrors(fs, 'close', [], filehandle, agent))
+          })
+        })
+      }
+
+      function describeThreeWays (name, fn) {
+        if (name in realFS) {
+          describe(name, () => {
+            fn(name, (fs, args, done, withError) => {
+              const span = {}
+              return tracer.scope().activate(span, () => {
+                args.push((err) => {
+                  expect(tracer.scope().active()).to.equal(span)
+                  if (err) {
+                    if (withError) withError(err)
+                    else done(err)
+                  }
+                })
+                return fs[name].apply(fs, args)
+              })
+            })
+          })
+        }
+
+        if (realFS.promises && name in realFS.promises) {
+          describe('promises.' + name, () => {
+            fn('promises.' + name, (fs, args, done, withError) => {
+              const span = {}
+              return tracer.scope().activate(span, () => {
+                return fs.promises[name].apply(fs.promises, args)
+                  .then(() => {
+                    expect(tracer.scope().active()).to.equal(span)
+                  })
+                  .catch((err) => {
+                    if (withError) withError(err)
+                    else done(err)
+                  })
+              })
+            })
+          })
+        }
+
+        const nameSync = name + 'Sync'
+
+        if (nameSync in realFS) {
+          describe(nameSync, () => {
+            fn(nameSync, (fs, args, _, withError) => {
+              try {
+                return fs[nameSync].apply(fs, args)
+              } catch (err) {
+                if (withError) withError(err)
+                else throw err
+              }
+            })
+          })
+        }
+      }
+    })
   })
 })
 
@@ -1771,7 +1757,7 @@ function testHandleErrors (fs, name, tested, args, agent) {
 }
 
 function testFileHandleErrors (fs, method, args, filehandle, agent) {
-  const name = 'fs.filehandle.' + method
+  const name = 'filehandle.' + method
   return testHandleErrors(fs, name, (fs, args, _, cb) => {
     filehandle.close()
       .then(() => filehandle[method](...args))

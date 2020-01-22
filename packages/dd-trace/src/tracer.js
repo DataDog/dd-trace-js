@@ -58,16 +58,18 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  wrap (name, options, fn, requiresParent = false) {
+  wrap (name, options, fn) {
     const tracer = this
 
     return function () {
-      if (requiresParent && !tracer.scope().active()) {
-        return fn.apply(this, arguments)
-      }
       if (typeof options === 'function' && typeof fn === 'function') {
         options = options.apply(this, arguments)
       }
+
+      if (options.requiresParent && !tracer.scope().active()) {
+        return fn.apply(this, arguments)
+      }
+
       const lastArgId = arguments.length - 1
       const cb = arguments[lastArgId]
 
