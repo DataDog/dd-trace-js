@@ -231,7 +231,7 @@ describe('Plugin', () => {
       })
 
       function expectSpanWithDefaults (expected) {
-        const prefixedResource = `${expected.meta['pubsub.method'] || 'receive'}:${resource}`
+        const prefixedResource = [expected.meta['pubsub.method'], resource].filter(x => x).join(' ')
         expected = withDefaults({
           name: 'pubsub.request',
           resource: prefixedResource,

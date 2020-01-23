@@ -2,14 +2,14 @@
 
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
-    return function wrappedRequest (cfg = { reqOpts: {} }, cb) {
+    return function requestWithTrace (cfg = { reqOpts: {} }, cb) {
       let topic
       if (cfg.reqOpts) {
         topic = cfg.reqOpts[cfg.method === 'createTopic' ? 'name' : 'topic']
       }
       const tags = {
         component: '@google-cloud/pubsub',
-        'resource.name': `${cfg.method || 'request'}:${topic}`,
+        'resource.name': [cfg.method, topic].filter(x => x).join(' '),
         'service.name': config.service || `${tracer._service}-pubsub`,
         'pubsub.method': cfg.method,
         'pubsub.project_id': this.projectId,
@@ -38,17 +38,17 @@ function createWrapRequest (tracer, config) {
   }
 }
 
-function createWrapSubsciptionEmit (tracer, config) {
+function createWrapSubscriptionEmit (tracer, config) {
   return function wrapSubscriptionEmit (emit) {
-    return function wrappedSubscriptionEmit (eventName, message) {
+    return function emitWithTrace (eventName, message) {
       if (eventName !== 'message' || !message) {
         return emit.apply(this, arguments)
       }
 
-      const topic = this.metadata ? this.metadata.topic : 'default'
+      const topic = this.metadata && this.metadata.topic
       const tags = {
         component: '@google-cloud/pubsub',
-        'resource.name': `receive:${topic}`,
+        'resource.name': topic,
         'service.name': config.service || `${tracer._service}-pubsub`,
         'pubsub.project_id': this.pubsub.projectId,
         'pubsub.topic': topic,
@@ -68,7 +68,7 @@ module.exports = [
     versions: ['>=1.1'],
     patch ({ PubSub, Subscription }, tracer, config) {
       this.wrap(PubSub.prototype, 'request', createWrapRequest(tracer, config))
-      this.wrap(Subscription.prototype, 'emit', createWrapSubsciptionEmit(tracer, config))
+      this.wrap(Subscription.prototype, 'emit', createWrapSubscriptionEmit(tracer, config))
     },
     unpatch ({ PubSub, Subscription }) {
       this.unwrap(PubSub.prototype, 'request')

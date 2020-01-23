@@ -367,7 +367,7 @@ jobs:
         environment:
           - PLUGINS=generic-pool
 
-  node-google-pubsub:
+  node-google-cloud-pubsub:
     <<: *node-plugin-base
     docker:
       - image: node:8
@@ -852,7 +852,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-generic-pool
-      - node-gcloud-pubsub
+      - node-google-cloud-pubsub
       - node-graphql
       - node-grpc
       - node-hapi
@@ -1007,7 +1007,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-generic-pool
-      - node-gcloud-pubsub
+      - node-google-cloud-pubsub
       - node-graphql
       - node-grpc
       - node-hapi
