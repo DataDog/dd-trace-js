@@ -225,6 +225,64 @@ describe('Tracer', () => {
           .catch(done)
       })
     })
+
+    describe('when there is no parent span', () => {
+      it('should not trace if `orphanable: false`', () => {
+        sinon.spy(tracer, 'startSpan')
+
+        tracer.trace('name', { orphanable: false }, () => {})
+
+        expect(tracer.startSpan).to.have.not.been.called
+      })
+
+      it('should trace if `orphanable: true`', () => {
+        sinon.spy(tracer, 'startSpan')
+
+        tracer.trace('name', { orhpanable: true }, () => {})
+
+        expect(tracer.startSpan).to.have.been.called
+      })
+
+      it('should trace if `orphanable: undefined`', () => {
+        sinon.spy(tracer, 'startSpan')
+
+        tracer.trace('name', {}, () => {})
+
+        expect(tracer.startSpan).to.have.been.called
+      })
+    })
+
+    describe('when there is a parent span', () => {
+      it('should trace if `orphanable: false`', () => {
+        tracer.scope().activate(tracer.startSpan('parent'), () => {
+          sinon.spy(tracer, 'startSpan')
+
+          tracer.trace('name', { orhpanable: false }, () => {})
+
+          expect(tracer.startSpan).to.have.been.called
+        })
+      })
+
+      it('should trace if `orphanable: true`', () => {
+        tracer.scope().activate(tracer.startSpan('parent'), () => {
+          sinon.spy(tracer, 'startSpan')
+
+          tracer.trace('name', { orphanable: true }, () => {})
+
+          expect(tracer.startSpan).to.have.been.called
+        })
+      })
+
+      it('should trace if `orphanable: undefined`', () => {
+        tracer.scope().activate(tracer.startSpan('parent'), () => {
+          sinon.spy(tracer, 'startSpan')
+
+          tracer.trace('name', {}, () => {})
+
+          expect(tracer.startSpan).to.have.been.called
+        })
+      })
+    })
   })
 
   describe('wrap', () => {
@@ -316,9 +374,9 @@ describe('Tracer', () => {
       })
     })
 
-    context('when there is no parent span', () => {
-      it('should not trace if `requireParent: true`', () => {
-        const fn = tracer.wrap('name', {}, () => {}, true)
+    describe('when there is no parent span', () => {
+      it('should not trace if `orphanable: false`', () => {
+        const fn = tracer.wrap('name', { orphanable: false }, () => {})
 
         sinon.spy(tracer, 'trace')
 
@@ -327,8 +385,8 @@ describe('Tracer', () => {
         expect(tracer.trace).to.have.not.been.called
       })
 
-      it('should trace if `requireParent: false`', () => {
-        const fn = tracer.wrap('name', {}, () => {}, false)
+      it('should trace if `orphanable: true`', () => {
+        const fn = tracer.wrap('name', { orhpanable: true }, () => {})
 
         sinon.spy(tracer, 'trace')
 
@@ -337,7 +395,7 @@ describe('Tracer', () => {
         expect(tracer.trace).to.have.been.called
       })
 
-      it('should trace if `requireParent: undefined`', () => {
+      it('should trace if `orphanable: undefined`', () => {
         const fn = tracer.wrap('name', {}, () => {})
 
         sinon.spy(tracer, 'trace')
@@ -348,10 +406,10 @@ describe('Tracer', () => {
       })
     })
 
-    context('when there is a parent span', () => {
-      it('should trace if `requireParent: true`', () => {
+    describe('when there is a parent span', () => {
+      it('should trace if `orphanable: false`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
-          const fn = tracer.wrap('name', {}, () => {}, true)
+          const fn = tracer.wrap('name', { orhpanable: false }, () => {})
 
           sinon.spy(tracer, 'trace')
 
@@ -361,10 +419,9 @@ describe('Tracer', () => {
         })
       })
 
-      it('should trace if `requireParent: false`', () => {
+      it('should trace if `orphanable: true`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
-          tracer.startSpan('parent')
-          const fn = tracer.wrap('name', {}, () => {}, false)
+          const fn = tracer.wrap('name', { orphanable: true }, () => {})
 
           sinon.spy(tracer, 'trace')
 
@@ -374,9 +431,8 @@ describe('Tracer', () => {
         })
       })
 
-      it('should trace if `requireParent: undefined`', () => {
+      it('should trace if `orphanable: undefined`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
-          tracer.startSpan('parent')
           const fn = tracer.wrap('name', {}, () => {})
 
           sinon.spy(tracer, 'trace')

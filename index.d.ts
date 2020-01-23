@@ -69,6 +69,9 @@ export declare interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
+   *
+   * If the `orphanable` option is set to false, the function will not be traced
+   * unless there is already an active span or `childOf` option.
    */
   trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
   trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
@@ -86,13 +89,10 @@ export declare interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
-   *
-   * If the `requiresParent` option is true, the wrapped function will not be
-   * traced unless there is an already active span to be its parent.
    */
   wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: WrapOptions & TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => WrapOptions & TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -352,18 +352,12 @@ export declare interface TracerOptions {
    * @default 'debug'
    */
   logLevel?: 'error' | 'debug'
-}
 
-
-/**
- * List of options available to wrap.
- */
-export declare interface WrapOptions {
   /**
-   * Whether to require a parent span in order to trace.
-   * @default false
+   * If false, require a parent in order to trace.
+   * @default true
    */
-  requiresParent?: boolean
+  orphanable?: boolean
 }
 
 /** @hidden */
