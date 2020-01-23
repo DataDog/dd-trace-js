@@ -122,6 +122,12 @@ function addTag (meta, metrics, key, value, seen) {
     case 'object':
       if (value === null) break
 
+      // Special case for Node.js Buffer and URL
+      if (isNodeBuffer(value) || isUrl(value)) {
+        metrics[key] = value.toString()
+        break
+      }
+
       if (!Array.isArray(value)) {
         addObjectTag(meta, metrics, key, value, seen)
         break
@@ -155,6 +161,18 @@ function serialize (obj) {
   } catch (e) {
     log.error(e)
   }
+}
+
+function isNodeBuffer (obj) {
+  return obj.constructor && obj.constructor.name === 'Buffer' &&
+    typeof obj.readInt8 === 'function' &&
+    typeof obj.toString === 'function'
+}
+
+function isUrl (obj) {
+  return obj.constructor && obj.constructor.name === 'URL' &&
+    typeof obj.href === 'string' &&
+    typeof obj.toString === 'function'
 }
 
 module.exports = format
