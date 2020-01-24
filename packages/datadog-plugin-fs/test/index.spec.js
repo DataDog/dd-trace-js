@@ -277,6 +277,18 @@ describe('Plugin', () => {
           tested(fs, [__filename, { flag: 'r+' }], done)
         })
 
+        it('should not fail if options is a string', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.flag': 'r',
+              'file.path': __filename
+            }
+          })
+
+          tested(fs, [__filename, 'utf8'], done)
+        })
+
         it('should handle errors', () =>
           testHandleErrors(fs, resource, tested, ['/badfilename', { flag: 'r' }], agent))
       })
