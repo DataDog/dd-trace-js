@@ -12,7 +12,7 @@ function createWrapRequest (tracer, config) {
         'resource.name': [cfg.method, topic].filter(x => x).join(' '),
         'service.name': config.service || `${tracer._service}-pubsub`,
         'pubsub.method': cfg.method,
-        'pubsub.project_id': this.projectId,
+        'gcloud.project_id': this.projectId,
         'pubsub.topic': topic,
         'span.kind': 'producer'
       }
@@ -49,8 +49,8 @@ function createWrapSubscriptionEmit (tracer, config) {
       const tags = {
         component: '@google-cloud/pubsub',
         'resource.name': topic,
-        'service.name': config.service || `${tracer._service}-pubsub`,
-        'pubsub.project_id': this.pubsub.projectId,
+        'service.name': config.service || tracer._service,
+        'gcloud.project_id': this.pubsub.projectId,
         'pubsub.topic': topic,
         'span.kind': 'consumer'
       }

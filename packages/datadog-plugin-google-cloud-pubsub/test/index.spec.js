@@ -232,15 +232,16 @@ describe('Plugin', () => {
 
       function expectSpanWithDefaults (expected) {
         const prefixedResource = [expected.meta['pubsub.method'], resource].filter(x => x).join(' ')
+        const service = expected.meta['pubsub.method'] ? 'test-pubsub' : 'test'
         expected = withDefaults({
           name: 'pubsub.request',
           resource: prefixedResource,
-          service: 'test-pubsub',
+          service,
           error: 0,
           meta: {
             component: '@google-cloud/pubsub',
             'pubsub.topic': resource,
-            'pubsub.project_id': project
+            'gcloud.project_id': project
           }
         }, expected)
         return expectSomeSpan(agent, expected)
