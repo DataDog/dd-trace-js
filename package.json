@@ -14,6 +14,7 @@
     "prepublishOnly": "node scripts/prepublish.js",
     "postpublish": "node scripts/postpublish.js",
     "bench": "node benchmark",
+    "bench:e2e": "cd benchmark/e2e && node benchmark-run.js",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
     "lint": "node scripts/check_licenses.js && eslint .",
@@ -60,6 +61,7 @@
     "lodash.sortby": "^4.7.0",
     "lodash.uniq": "^4.5.0",
     "methods": "^1.1.2",
+    "mnemonist": "^0.32.0",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
     "nan": "^2.12.1",
@@ -79,6 +81,7 @@
   "devDependencies": {
     "@babel/core": "^7.6.4",
     "@babel/preset-env": "^7.6.3",
+    "autocannon": "^4.5.2",
     "axios": "^0.18.0",
     "babel-loader": "^8.0.6",
     "benchmark": "^2.1.4",
