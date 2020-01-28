@@ -123,7 +123,7 @@ module.exports = [
   },
   {
     name: 'koa-router',
-    versions: ['>=7'],
+    versions: ['7'],
     patch (Router, tracer, config) {
       this.wrap(Router.prototype, 'register', createWrapRegister(tracer, config))
     },
