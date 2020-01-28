@@ -74,7 +74,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].metrics).to.have.property('http.status_code', 200)
+                expect(traces[0][0].metrics).to.have.property('http.status_code', '200')
               })
               .then(done)
               .catch(done)
@@ -326,7 +326,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0].metrics).to.have.property('http.status_code', 200)
+                expect(traces[0][0].metrics).to.have.property('http.status_code', '200')
               })
               .then(done)
               .catch(done)
