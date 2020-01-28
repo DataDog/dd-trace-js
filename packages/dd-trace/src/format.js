@@ -58,6 +58,10 @@ function extractTags (trace, span) {
       case 'resource.name':
         addTag(trace, {}, map[tag], tags[tag])
         break
+      // HACK: remove when backend supports numeric status code
+      case 'http.status_code':
+        addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
+        break
       case HOSTNAME_KEY:
       case ANALYTICS:
         break
