@@ -52,7 +52,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].metrics).to.have.property('http.status_code', 200)
+              expect(spans[0].meta).to.have.property('http.status_code', '200')
 
               expect(spans[1]).to.have.property('name', 'koa.middleware')
               expect(spans[1]).to.have.property('service', 'test')
@@ -87,7 +87,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].metrics).to.have.property('http.status_code', 200)
+              expect(spans[0].meta).to.have.property('http.status_code', '200')
 
               expect(spans[1]).to.have.property('name', 'koa.middleware')
               expect(spans[1]).to.have.property('service', 'test')
