@@ -13,8 +13,10 @@ function createWrapRequest (tracer, config) {
         'service.name': config.service || `${tracer._service}-pubsub`,
         'pubsub.method': cfg.method,
         'gcloud.project_id': this.projectId,
-        'pubsub.topic': topic,
-        'span.kind': 'producer'
+        'pubsub.topic': topic
+      }
+      if (cfg.method === 'publish') {
+        tags['span.kind'] = 'producer'
       }
       cb = tracer.scope().bind(cb)
       return tracer.trace('pubsub.request', { tags }, (span, done) => {
