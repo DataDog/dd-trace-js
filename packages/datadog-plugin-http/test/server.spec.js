@@ -61,7 +61,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('span.kind', 'server')
             expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-            expect(traces[0][0].metrics).to.have.property('http.status_code', '200')
+            expect(traces[0][0].meta).to.have.property('http.status_code', '200')
           })
           .then(done)
           .catch(done)
