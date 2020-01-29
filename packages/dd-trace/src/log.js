@@ -1,7 +1,5 @@
 'use strict'
 
-const memoize = require('lodash.memoize')
-
 const _default = {
   debug: message => console.log(message), /* eslint-disable-line no-console */
   error: err => console.error(err) /* eslint-disable-line no-console */
@@ -30,6 +28,19 @@ const _checkLogLevel = (logLevel) => {
   }
 
   return _logLevels[_defaultLogLevel]
+}
+
+const memoize = func => {
+  const cache = {}
+  const memoized = function (key) {
+    if (!cache[key]) {
+      cache[key] = func.apply(this, arguments)
+    }
+
+    return cache[key]
+  }
+
+  return memoized
 }
 
 const log = {

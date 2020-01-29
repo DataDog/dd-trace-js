@@ -1,5 +1,6 @@
 'use strict'
 
+const URL = require('url-parse')
 const { Reference, REFERENCE_CHILD_OF } = require('opentracing')
 const { REFERENCE_NOOP } = require('../../dd-trace/src/constants')
 const tx = require('../../dd-trace/src/plugins/util/http')
