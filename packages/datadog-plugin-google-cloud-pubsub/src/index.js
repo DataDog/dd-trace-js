@@ -3,10 +3,7 @@
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (cfg = { reqOpts: {} }, cb) {
-      let topic
-      if (cfg.reqOpts) {
-        topic = cfg.reqOpts[cfg.method === 'createTopic' ? 'name' : 'topic']
-      }
+      const topic = getTopic(cfg)
       const tags = {
         component: '@google-cloud/pubsub',
         'resource.name': [cfg.method, topic].filter(x => x).join(' '),
@@ -61,6 +58,12 @@ function createWrapSubscriptionEmit (tracer, config) {
         return emit.apply(this, arguments)
       })
     }
+  }
+}
+
+function getTopic (cfg) {
+  if (cfg.reqOpts) {
+    return cfg.reqOpts[cfg.method === 'createTopic' ? 'name' : 'topic']
   }
 }
 

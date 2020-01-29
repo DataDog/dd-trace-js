@@ -5,11 +5,6 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const plugin = require('../src')
 const id = require('../../dd-trace/src/id')
 
-const BASE_PROJECT_ID = `test-project-${id()}-`
-let projectCounter = 0
-const BASE_TOPIC = `test-topic-${id()}-`
-let topicCounter = 0
-
 wrapIt()
 
 describe('Plugin', () => {
@@ -250,11 +245,11 @@ describe('Plugin', () => {
 })
 
 function getProjectId () {
-  return BASE_PROJECT_ID + projectCounter++
+  return `test-project-${id()}`
 }
 
 function getTopic () {
-  return BASE_TOPIC + topicCounter++
+  return `test-topic-${id()}`
 }
 
 function publish (topic, options) {
