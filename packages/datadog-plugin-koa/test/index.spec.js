@@ -250,11 +250,11 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions(plugin, 'koa-router', routerVersion => {
+        withVersions(plugin, ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
           let Router
 
           beforeEach(() => {
-            Router = require(`../../../versions/koa-router@${routerVersion}`).get()
+            Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
           })
 
           it('should do automatic instrumentation on routers', done => {
@@ -318,16 +318,19 @@ describe('Plugin', () => {
             })
           })
 
-          it('should support nested routers', done => {
+          it.only('should support nested routers', done => {
             const app = new Koa()
             const forums = new Router()
+            const discussions = new Router()
             const posts = new Router()
 
-            posts.get('/:pid', (ctx, next) => {
+            posts.get('/posts/:pid', (ctx, next) => {
               ctx.body = ''
             })
 
-            forums.use('/forums/:fid/posts', posts.routes(), posts.allowedMethods())
+            discussions.use('/discussions/:did', posts.routes(), posts.allowedMethods())
+
+            forums.use('/forums/:fid', discussions.routes(), discussions.allowedMethods())
 
             app.use(forums.routes())
 
@@ -335,15 +338,16 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/forums/123/posts/456`)
+                expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/discussions/:did/posts/:pid')
+                expect(spans[0].meta)
+                  .to.have.property('http.url', `http://localhost:${port}/forums/123/discussions/456/posts/789`)
               })
               .then(done)
               .catch(done)
 
             appListener = app.listen(port, 'localhost', () => {
               axios
-                .get(`http://localhost:${port}/forums/123/posts/456`)
+                .get(`http://localhost:${port}/forums/123/discussions/456/posts/789`)
                 .catch(done)
             })
           })
