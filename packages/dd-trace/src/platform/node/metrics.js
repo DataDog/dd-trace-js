@@ -57,7 +57,6 @@ module.exports = function () {
       client = new Client({
         host: this._config.hostname,
         port: this._config.dogstatsd.port,
-        prefix: 'runtime.node.',
         tags
       })
 
