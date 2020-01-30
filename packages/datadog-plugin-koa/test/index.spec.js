@@ -275,7 +275,8 @@ describe('Plugin', () => {
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
 
-                expect(spans[1]).to.have.property('resource', 'dispatch')
+                expect(spans[1]).to.have.property('resource')
+                expect(spans[1].resource).to.match(/^dispatch/)
 
                 expect(spans[2]).to.have.property('resource', 'handle')
               })
@@ -318,7 +319,7 @@ describe('Plugin', () => {
             })
           })
 
-          it.only('should support nested routers', done => {
+          it('should support nested routers', done => {
             const app = new Koa()
             const forums = new Router()
             const discussions = new Router()
@@ -440,7 +441,8 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                 expect(spans[0].error).to.equal(1)
 
-                expect(spans[1]).to.have.property('resource', 'dispatch')
+                expect(spans[1]).to.have.property('resource')
+                expect(spans[1].resource).to.match(/^dispatch/)
                 expect(spans[1].meta).to.include({
                   'error.type': error.name
                 })
