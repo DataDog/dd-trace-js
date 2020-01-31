@@ -431,6 +431,7 @@ interface Plugins {
   "fastify": plugins.fastify;
   "fs": plugins.fs;
   "generic-pool": plugins.generic_pool;
+  "google-cloud-pubsub": plugins.google_cloud_pubsub;
   "graphql": plugins.graphql;
   "grpc": plugins.grpc;
   "hapi": plugins.hapi;
@@ -702,6 +703,12 @@ declare namespace plugins {
    * module to bind the callbacks the the caller context.
    */
   interface generic_pool extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
+   */
+  interface google_cloud_pubsub extends Integration {}
 
   /**
    * This plugin automatically instruments the
