@@ -78,9 +78,10 @@ function createWrapRoutes (tracer, config) {
           Object.defineProperty(ctx, 'router', {
             set (value) {
               router = value
-              router.stack.forEach(layer => {
+
+              for (const layer of router.stack) {
                 wrapStack(layer)
-              })
+              }
             },
 
             get () {
@@ -103,13 +104,15 @@ function wrapStack (layer) {
   layer.stack = layer.stack.map(middleware => {
     if (typeof middleware !== 'function') return middleware
 
+    const wrappedMiddleware = wrapMiddleware(middleware)
+
     return function (ctx, next) {
       if (!ctx || !web.active(ctx.req)) return middleware.apply(this, arguments)
 
       web.exitRoute(ctx.req)
       web.enterRoute(ctx.req, layer.path)
 
-      return wrapMiddleware(middleware).apply(this, arguments)
+      return wrappedMiddleware.apply(this, arguments)
     }
   })
 }
