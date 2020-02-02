@@ -26,9 +26,7 @@ const span = {
     _tags: {
       resource: '/resource',
       type: 'web',
-      error: true
-    },
-    _metrics: {
+      error: true,
       [SAMPLE_RATE_METRIC_KEY]: 1
     },
     _sampling: {},

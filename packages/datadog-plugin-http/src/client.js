@@ -158,8 +158,8 @@ function patch (http, methodName, tracer, config) {
   }
 
   function normalizeArgs (inputURL, inputOptions, callback) {
-    let options = typeof inputURL === 'string' ? url.parse(inputURL) : Object.assign({}, inputURL)
-    options.headers = options.headers || {}
+    let options = normalizeURL(inputURL)
+
     if (typeof inputOptions === 'function') {
       callback = inputOptions
     } else if (typeof inputOptions === 'object') {
@@ -167,6 +167,22 @@ function patch (http, methodName, tracer, config) {
     }
     const uri = extractUrl(options)
     return { uri, options, callback }
+  }
+
+  function normalizeURL (inputURL) {
+    let options
+
+    if (typeof inputURL === 'string') {
+      options = url.parse(inputURL)
+    } else {
+      options = {}
+      for (const key in inputURL) {
+        options[key] = inputURL[key]
+      }
+    }
+
+    options.headers = options.headers || {}
+    return options
   }
 }
 

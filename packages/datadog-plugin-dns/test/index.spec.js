@@ -53,8 +53,10 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'dns.address': '127.0.0.1',
-            'dns.port': '22',
             'span.kind': 'client'
+          })
+          expect(traces[0][0].metrics).to.deep.include({
+            'dns.port': 22
           })
         })
         .then(done)

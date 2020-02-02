@@ -409,13 +409,13 @@ describe('plugins/util/web', () => {
       it('should add response tags to the span', () => {
         req.method = 'GET'
         req.url = '/user/123'
-        res.statusCode = '200'
+        res.statusCode = 200
 
         res.end()
 
         expect(tags).to.include({
           [RESOURCE_NAME]: 'GET',
-          [HTTP_STATUS_CODE]: '200'
+          [HTTP_STATUS_CODE]: 200
         })
       })
 

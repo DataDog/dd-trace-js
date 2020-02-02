@@ -22,7 +22,6 @@ function format (span) {
 
   extractError(formatted, span)
   extractTags(formatted, span)
-  extractMetrics(formatted, span)
   extractAnalytics(formatted, span)
 
   return formatted
@@ -46,16 +45,18 @@ function formatSpan (span) {
 }
 
 function extractTags (trace, span) {
-  const origin = span.context()._trace.origin
-  const tags = span.context()._tags
-  const hostname = span.context()._hostname
+  const context = span.context()
+  const origin = context._trace.origin
+  const tags = context._tags
+  const hostname = context._hostname
+  const priority = context._sampling.priority
 
   Object.keys(tags).forEach(tag => {
     switch (tag) {
       case 'service.name':
       case 'span.type':
       case 'resource.name':
-        addTag(trace, map[tag], tags[tag])
+        addTag(trace, {}, map[tag], tags[tag])
         break
       case HOSTNAME_KEY:
       case ANALYTICS:
@@ -70,19 +71,17 @@ function extractTags (trace, span) {
       case 'error.stack':
         trace.error = 1
       default: // eslint-disable-line no-fallthrough
-        addTag(trace.meta, tag, tags[tag])
+        addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   })
 
-  if (origin) {
-    addTag(trace.meta, ORIGIN_KEY, origin)
-  }
-
   if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, 'language', 'javascript')
+    addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
-  addTag(trace.meta, HOSTNAME_KEY, hostname)
+  addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
+  addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
+  addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
 }
 
 function extractError (trace, span) {
@@ -92,20 +91,6 @@ function extractError (trace, span) {
     trace.meta['error.msg'] = error.message
     trace.meta['error.type'] = error.name
     trace.meta['error.stack'] = error.stack
-  }
-}
-
-function extractMetrics (trace, span) {
-  const spanContext = span.context()
-
-  Object.keys(spanContext._metrics).forEach(metric => {
-    if (typeof spanContext._metrics[metric] === 'number') {
-      trace.metrics[metric] = spanContext._metrics[metric]
-    }
-  })
-
-  if (spanContext._sampling.priority !== undefined) {
-    trace.metrics[SAMPLING_PRIORITY_KEY] = spanContext._sampling.priority
   }
 }
 
@@ -123,27 +108,37 @@ function extractAnalytics (trace, span) {
   }
 }
 
-function addTag (meta, key, value, seen) {
+function addTag (meta, metrics, key, value, seen) {
   switch (typeof value) {
     case 'string':
       meta[key] = value
+      break
+    case 'number':
+      if (isNaN(value)) break
+      metrics[key] = value
       break
     case 'undefined':
       break
     case 'object':
       if (value === null) break
 
+      // Special case for Node.js Buffer and URL
+      if (isNodeBuffer(value) || isUrl(value)) {
+        metrics[key] = value.toString()
+        break
+      }
+
       if (!Array.isArray(value)) {
-        addObjectTag(meta, key, value, seen)
+        addObjectTag(meta, metrics, key, value, seen)
         break
       }
 
     default: // eslint-disable-line no-fallthrough
-      addTag(meta, key, serialize(value))
+      addTag(meta, metrics, key, serialize(value))
   }
 }
 
-function addObjectTag (meta, key, value, seen) {
+function addObjectTag (meta, metrics, key, value, seen) {
   seen = seen || []
 
   if (~seen.indexOf(value)) {
@@ -154,7 +149,7 @@ function addObjectTag (meta, key, value, seen) {
   seen.push(value)
 
   Object.keys(value).forEach(prop => {
-    addTag(meta, `${key}.${prop}`, value[prop], seen)
+    addTag(meta, metrics, `${key}.${prop}`, value[prop], seen)
   })
 
   seen.pop()
@@ -166,6 +161,18 @@ function serialize (obj) {
   } catch (e) {
     log.error(e)
   }
+}
+
+function isNodeBuffer (obj) {
+  return obj.constructor && obj.constructor.name === 'Buffer' &&
+    typeof obj.readInt8 === 'function' &&
+    typeof obj.toString === 'function'
+}
+
+function isUrl (obj) {
+  return obj.constructor && obj.constructor.name === 'URL' &&
+    typeof obj.href === 'string' &&
+    typeof obj.toString === 'function'
 }
 
 module.exports = format

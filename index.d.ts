@@ -69,6 +69,9 @@ export declare interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
+   *
+   * If the `orphanable` option is set to false, the function will not be traced
+   * unless there is already an active span or `childOf` option.
    */
   trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
   trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
@@ -87,8 +90,9 @@ export declare interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
   wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -264,6 +268,12 @@ export declare interface TracerOptions {
     b3?: boolean
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to spans and metrics.
+     * @default false
+     */
+    runtimeId?: boolean
+
+    /**
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
@@ -342,6 +352,12 @@ export declare interface TracerOptions {
    * @default 'debug'
    */
   logLevel?: 'error' | 'debug'
+
+  /**
+   * If false, require a parent in order to trace.
+   * @default true
+   */
+  orphanable?: boolean
 }
 
 /** @hidden */
@@ -351,6 +367,20 @@ interface EventEmitter {
   off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
+}
+
+/** @hidden */
+declare type anyObject = {
+  [key: string]: any;
+};
+
+/** @hidden */
+interface TransportRequestParams {
+  method: string;
+  path: string;
+  body?: anyObject;
+  bulkBody?: anyObject;
+  querystring?: anyObject;
 }
 
 /**
@@ -399,6 +429,7 @@ interface Plugins {
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
   "fastify": plugins.fastify;
+  "fs": plugins.fs;
   "generic-pool": plugins.generic_pool;
   "graphql": plugins.graphql;
   "grpc": plugins.grpc;
@@ -643,7 +674,17 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [elasticsearch](https://github.com/elastic/elasticsearch-js) module.
    */
-  interface elasticsearch extends Instrumentation {}
+  interface elasticsearch extends Instrumentation {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the query span finishes.
+       */
+      query?: (span?: opentracing.Span, params?: TransportRequestParams) => any;
+    };
+  }
 
   /**
    * This plugin automatically instruments the
@@ -656,6 +697,12 @@ declare namespace plugins {
    * [fastify](https://www.fastify.io/) module.
    */
   interface fastify extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [fs](https://nodejs.org/api/fs.html) module.
+   */
+  interface fs extends Instrumentation {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)

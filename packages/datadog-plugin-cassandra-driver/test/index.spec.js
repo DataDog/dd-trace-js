@@ -148,7 +148,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should run event liteners in the correct scope', done => {
+        it('should run event listeners in the correct scope', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const emitter = client.stream('SELECT now() FROM local;')
@@ -156,7 +156,7 @@ describe('Plugin', () => {
           const scope = tracer.scope()
 
           scope.activate(span, () => {
-            emitter.on('readable', () => {
+            emitter.once('readable', () => {
               expect(scope.active()).to.equal(span)
               done()
             })

@@ -12,6 +12,7 @@ module.exports = {
   'elasticsearch': require('../../../datadog-plugin-elasticsearch/src'),
   'express': require('../../../datadog-plugin-express/src'),
   'fastify': require('../../../datadog-plugin-fastify/src'),
+  'fs': require('../../../datadog-plugin-fs/src'),
   'generic-pool': require('../../../datadog-plugin-generic-pool/src'),
   'graphql': require('../../../datadog-plugin-graphql/src'),
   'grpc': require('../../../datadog-plugin-grpc/src'),

@@ -43,6 +43,7 @@ tracer.init({
   trackAsyncScope: false,
   experimental: {
     b3: true,
+    runtimeId: true,
     exporter: 'log',
     peers: ['foo', /bar/],
     sampler: {
@@ -117,6 +118,13 @@ const graphqlOptions = {
   signature: false
 };
 
+const elasticsearchOptions = {
+  service: 'test',
+  hooks: {
+    query: (span, params) => {},
+  },
+};
+
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('bluebird');
@@ -126,11 +134,12 @@ tracer.use('cassandra-driver');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
 tracer.use('dns');
-tracer.use('elasticsearch');
+tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
+tracer.use('fs');
 tracer.use('generic-pool');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });

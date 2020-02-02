@@ -91,11 +91,13 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
-            'tcp.remote.port': `${port}`,
             'tcp.local.address': '127.0.0.1',
-            'tcp.local.port': `${socket.localPort}`,
-            'out.host': 'localhost',
-            'out.port': `${port}`
+            'out.host': 'localhost'
+          })
+          expect(traces[0][0].metrics).to.deep.include({
+            'out.port': port,
+            'tcp.remote.port': port,
+            'tcp.local.port': socket.localPort
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })
@@ -121,11 +123,13 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
-            'tcp.remote.port': `${port}`,
             'tcp.local.address': '127.0.0.1',
-            'tcp.local.port': `${socket.localPort}`,
-            'out.host': 'localhost',
-            'out.port': `${port}`
+            'out.host': 'localhost'
+          })
+          expect(traces[0][0].metrics).to.deep.include({
+            'out.port': port,
+            'tcp.remote.port': port,
+            'tcp.local.port': socket.localPort
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })
@@ -180,12 +184,14 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
-            'tcp.remote.port': `${port}`,
             'out.host': 'localhost',
-            'out.port': `${port}`,
             'error.type': error.name,
             'error.msg': error.message,
             'error.stack': error.stack
+          })
+          expect(traces[0][0].metrics).to.deep.include({
+            'out.port': port,
+            'tcp.remote.port': port
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
         })
