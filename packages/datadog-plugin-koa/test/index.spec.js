@@ -628,11 +628,11 @@ describe('Plugin', () => {
             })
           })
 
-          withVersions(plugin, 'koa-router', routerVersion => {
+          withVersions(plugin, ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
             let Router
 
             beforeEach(() => {
-              Router = require(`../../../versions/koa-router@${routerVersion}`).get()
+              Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
             })
 
             it('should do automatic instrumentation on routers', done => {

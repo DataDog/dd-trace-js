@@ -37,7 +37,7 @@ function createWrapCreateContext () {
   }
 }
 
-function createWrapUse () {
+function createWrapUse (tracer, config) {
   return function wrapUse (use) {
     return function useWithTrace () {
       const result = use.apply(this, arguments)
@@ -46,7 +46,7 @@ function createWrapUse () {
 
       const fn = this.middleware.pop()
 
-      this.middleware.push(wrapMiddleware(fn))
+      this.middleware.push(wrapMiddleware(fn, config))
 
       return result
     }
