@@ -69,3 +69,7 @@ services:
       - BUCKET_1_PER_SECOND=5
     ports:
       - "127.0.0.1:9231:9231"
+  google-cloud-pubsub:
+    image: kinok/google-pubsub-emulator
+    ports:
+      - "127.0.0.1:8042:8042"

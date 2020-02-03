@@ -19,7 +19,11 @@ function expectSomeSpan (agent, expected) {
     // Throw the error for the least wrong span, since it's most likely to be
     // the one we're looking for. If for whatever reason it isn't, we can
     // always debug here and look at the scoreErrors array.
-    throw scoredErrors.sort((a, b) => a.score - b.score)[0].err
+    const error = scoredErrors.sort((a, b) => a.score - b.score)[0].err
+    // We'll append all the spans to this error message so it's visible in test
+    // output.
+    error.message += '\n\nCandidate Traces:\n' + JSON.stringify(traces, null, 2)
+    throw error
   })
 }
 
@@ -64,8 +68,19 @@ function isObject (obj) {
   return obj && typeof obj === 'object'
 }
 
+function withDefaults (defaults, obj) {
+  const newObj = Object.assign({}, defaults, obj)
+  for (const propName in defaults) {
+    if (isObject(defaults[propName]) && isObject(obj[propName])) {
+      newObj[propName] = withDefaults(defaults[propName], obj[propName])
+    }
+  }
+  return newObj
+}
+
 module.exports = {
   compare,
   deepInclude,
-  expectSomeSpan
+  expectSomeSpan,
+  withDefaults
 }

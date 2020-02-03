@@ -141,6 +141,7 @@ tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
 tracer.use('fs');
 tracer.use('generic-pool');
+tracer.use('google-cloud-pubsub');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
 tracer.use('grpc');

@@ -12,6 +12,7 @@ const createEvent = (name) => {
 
 describe('dd-trace', () => {
   let tracer
+  let fetch
 
   beforeEach(() => {
     tracer = window.ddtrace.tracer
@@ -21,19 +22,33 @@ describe('dd-trace', () => {
     })
   })
 
-  afterEach(() => {
-    window.fetch.restore && window.fetch.restore()
-  })
+  if (window.fetch) {
+    beforeEach(() => {
+      fetch = sinon.stub(window, 'fetch').returns({
+        then: resolve => resolve()
+      })
+    })
+
+    afterEach(() => {
+      window.fetch && window.fetch.restore()
+    })
+  } else {
+    beforeEach(() => {
+      fetch = sinon.stub(window.XMLHttpRequest.prototype, 'send')
+    })
+
+    afterEach(() => {
+      window.XMLHttpRequest.prototype.restore && window.XMLHttpRequest.prototype.restore()
+    })
+  }
 
   it('should record and send a trace to the agent', () => {
-    sinon.stub(window, 'fetch').returns(Promise.resolve())
-
     const span = tracer.startSpan('test.request')
 
     span.finish()
 
     window.dispatchEvent(createEvent('visibilitychange'))
 
-    expect(window.fetch).to.have.been.called
+    window.fetch && expect(fetch).to.have.been.called
   })
 })

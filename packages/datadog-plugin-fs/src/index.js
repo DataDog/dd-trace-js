@@ -315,7 +315,7 @@ function makeFSFlagTags (resourceName, path, options, defaultFlag, config, trace
 }
 
 function makeFSTags (resourceName, path, options, config, tracer) {
-  path = options && 'fd' in options ? options.fd : path
+  path = options && typeof options === 'object' && 'fd' in options ? options.fd : path
   const tags = {
     'component': 'fs',
     'resource.name': resourceName,
