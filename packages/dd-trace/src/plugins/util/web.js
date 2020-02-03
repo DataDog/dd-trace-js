@@ -91,7 +91,7 @@ const web = {
   wrapMiddleware (req, middleware, config, name, fn) {
     if (!this.active(req)) return fn()
 
-    if (config && config.middleware === false) return this.wrapMiddlewareErrors(fn, req)
+    if (config && config.middleware === false) return this.reactivateAndWrapMiddlewareErrors(fn, req)
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)
@@ -107,9 +107,9 @@ const web = {
   },
 
   // catch errors and apply to active span
-  wrapMiddlewareErrors (fn, req) {
+  reactivateAndWrapMiddlewareErrors (fn, req) {
     try {
-      return fn()
+      return this.reactivate(req, fn)
     } catch (e) {
       const activeSpan = this.active(req)
       if (activeSpan) {

@@ -1,4 +1,3 @@
-
 'use strict'
 
 const axios = require('axios')
@@ -715,7 +714,7 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {
             res.statusCode = 400
-            res.status(400).send()
+            throw new Error('boom')
           })
 
           getPort().then(port => {
@@ -986,40 +985,6 @@ describe('Plugin', () => {
             })
           })
         })
-
-        it('should only handle errors for configured status codes', done => {
-          const app = express()
-
-          app.use((req, res, next) => {
-            next()
-          })
-
-          app.get('/user', (req, res) => {
-            res.statusCode = 400
-            res.status(400).send()
-          })
-
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
-
-                expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('http.status_code', '400')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 400
-                })
-                .catch(done)
-            })
-          })
-        })
       })
 
       describe('with configuration for middleware disabled', () => {
@@ -1047,13 +1012,13 @@ describe('Plugin', () => {
           app.use((req, res, next) => {
             span = tracer.scope().active()
 
-            tracer.scope().activate(null, () => next())
+            next()
           })
 
           app.get('/user', (req, res) => {
             res.status(200).send()
             try {
-              expect(tracer.scope().active()).to.be.null.and.equal(span)
+              expect(tracer.scope().active()).to.equal(span)
               done()
             } catch (e) {
               done(e)
@@ -1073,26 +1038,25 @@ describe('Plugin', () => {
 
           const app = express()
 
-          const span = {}
+          app.use((req, res, next) => {
+            next()
+          })
 
-          app.get(
-            '/user',
-            (req, res, next) => {
-              tracer.scope().activate(span, () => next())
-            },
-            (req, res, next) => {
-              res.status(200).send()
-
-              try {
-                expect(tracer.scope().active()).to.deep.equal(span)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }
-          )
+          app.get('/user', (req, res, next) => {
+            res.status(200).send()
+          })
 
           getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /user')
+                expect(traces.length).to.equal(1)
+              })
+              .then(done)
+              .catch(done)
+
             appListener = app.listen(port, 'localhost', () => {
               axios.get(`http://localhost:${port}/user`)
                 .catch(done)
@@ -1117,7 +1081,7 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('error', 1)
               expect(spans[0]).to.have.property('resource', 'GET /user')
-              expect(spans[0].meta).to.have.property('http.status_code', '500')
+              expect(spans[0].metrics).to.have.property('http.status_code', 500)
 
               done()
             })
@@ -1151,7 +1115,7 @@ describe('Plugin', () => {
 
                 expect(spans[0]).to.have.property('error', 0)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].meta).to.have.property('http.status_code', '400')
+                expect(spans[0].metrics).to.have.property('http.status_code', 400)
               })
               .then(done)
               .catch(done)
@@ -1208,7 +1172,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].metrics).to.have.property('http.status_code', 500)
               })
               .then(done)
               .catch(done)

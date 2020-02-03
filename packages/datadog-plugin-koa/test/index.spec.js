@@ -519,7 +519,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].metrics).to.have.property('http.status_code', 200)
 
                 expect(spans).to.have.length(1)
               })
@@ -552,7 +552,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].metrics).to.have.property('http.status_code', 200)
 
                 expect(spans).to.have.length(1)
               })
@@ -566,7 +566,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not run middleware in the request scope', done => {
+          it('should run middleware in the request scope', done => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
             const app = new Koa()
@@ -574,11 +574,11 @@ describe('Plugin', () => {
             app.use((ctx, next) => {
               ctx.body = ''
 
-              expect(tracer.scope().active()).to.be.null
+              expect(tracer.scope().active()).to.not.be.null
 
               return next()
                 .then(() => {
-                  expect(tracer.scope().active()).to.be.null
+                  expect(tracer.scope().active()).to.not.be.null
                   done()
                 })
                 .catch(done)
@@ -600,14 +600,14 @@ describe('Plugin', () => {
 
             app.use((ctx, next) => {
               span = tracer.scope().active()
-              return tracer.scope().activate(null, () => next())
+              return next()
             })
 
             app.use(ctx => {
               ctx.body = ''
 
               try {
-                expect(tracer.scope().active()).to.be.null.and.equal(span)
+                expect(tracer.scope().active()).to.equal(span)
                 done()
               } catch (e) {
                 done(e)
