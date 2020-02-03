@@ -1081,7 +1081,7 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('error', 1)
               expect(spans[0]).to.have.property('resource', 'GET /user')
-              expect(spans[0].metrics).to.have.property('http.status_code', 500)
+              expect(spans[0].meta).to.have.property('http.status_code', '500')
 
               done()
             })
@@ -1115,7 +1115,7 @@ describe('Plugin', () => {
 
                 expect(spans[0]).to.have.property('error', 0)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
-                expect(spans[0].metrics).to.have.property('http.status_code', 400)
+                expect(spans[0].meta).to.have.property('http.status_code', '400')
               })
               .then(done)
               .catch(done)
@@ -1172,7 +1172,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].metrics).to.have.property('http.status_code', 500)
+                expect(spans[0].meta).to.have.property('http.status_code', '500')
               })
               .then(done)
               .catch(done)
