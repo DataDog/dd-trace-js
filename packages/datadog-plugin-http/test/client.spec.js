@@ -123,7 +123,6 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                console.log(traces[0][0].meta)
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
               .then(done)
