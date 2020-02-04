@@ -128,11 +128,20 @@ async function testBoth (url, duration, prof) {
 
   airProcess2.kill()
 
+  const { subProcess: airProcess3 } = await forkProcess('./app.js', {
+    execArgv: execArgv.concat(process.execArgv),
+    env: Object.assign({}, process.env, { ASYNC_HOOKS: '1' })
+  })
+
+  const resultWithAsyncHooks = await runTest(url, duration)
+
+  airProcess3.kill()
+
   console.log(`>>>>>> RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
 
-  logResult(resultWithoutTracer, resultWithTracer, 'requests')
-  logResult(resultWithoutTracer, resultWithTracer, 'latency')
-  logResult(resultWithoutTracer, resultWithTracer, 'throughput')
+  logResult(resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, 'requests')
+  logResult(resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, 'latency')
+  logResult(resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, 'throughput')
 
   console.log(`<<<<<< RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
 }
@@ -141,14 +150,15 @@ function pad (str, num) {
   return Array(num - String(str).length).fill(' ').join('') + str
 }
 
-function logResult (resultWithoutTracer, resultWithTracer, type) {
+function logResult (resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, type) {
   console.log(`\n${type.toUpperCase()}:`)
-  console.log(`                without tracer     with tracer`)
+  console.log(`                  without tracer        with async_hooks             with tracer`)
   for (const name in resultWithoutTracer[type]) {
     console.log(
       pad(name, 7),
-      `\t${pad(resultWithoutTracer[type][name], 14)}`,
-      `\t${pad(resultWithTracer[type][name], 14)}`
+      `\t${pad(resultWithoutTracer[type][name], 16)}`,
+      `\t${pad(resultWithAsyncHooks[type][name], 16)}`,
+      `\t${pad(resultWithTracer[type][name], 16)}`
     )
   }
 }
