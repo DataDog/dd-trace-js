@@ -2,7 +2,7 @@
 
 const { AssertionError } = require('assert')
 
-function expectSomeSpan (agent, expected) {
+function expectSomeSpan (agent, expected, timeout) {
   return agent.use(traces => {
     const scoredErrors = []
     for (const trace of traces) {
@@ -24,7 +24,7 @@ function expectSomeSpan (agent, expected) {
     // output.
     error.message += '\n\nCandidate Traces:\n' + JSON.stringify(traces, null, 2)
     throw error
-  })
+  }, timeout)
 }
 
 // This is a bit like chai's `expect(expected).to.deep.include(actual)`, except
