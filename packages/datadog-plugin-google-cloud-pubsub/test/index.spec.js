@@ -241,7 +241,7 @@ describe('Plugin', () => {
             'gcloud.project_id': project
           }
         }, expected)
-        return expectSomeSpan(agent, expected, TIMEOUT)
+        return expectSomeSpan(agent, expected, { timeoutMs: TIMEOUT })
       }
     })
   })
