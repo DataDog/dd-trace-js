@@ -60,7 +60,7 @@ module.exports = {
   },
 
   // Register a callback with expectations to be run on every agent call.
-  use (callback) {
+  use (callback, timeoutMs = 1000) {
     const deferred = {}
     const promise = new Promise((resolve, reject) => {
       deferred.resolve = resolve
@@ -71,7 +71,7 @@ module.exports = {
       if (error) {
         deferred.reject(error)
       }
-    }, 1000)
+    }, timeoutMs)
 
     let error
 
