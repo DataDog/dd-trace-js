@@ -182,6 +182,11 @@ function patch (http, methodName, tracer, config) {
     }
 
     options.headers = options.headers || {}
+
+    if (!options.path && inputURL instanceof url.URL) {
+      options.path = `${options.pathname || ''}${options.search || ''}`
+    }
+
     return options
   }
 }
