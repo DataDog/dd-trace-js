@@ -149,12 +149,23 @@ function patch (http, methodName, tracer, config) {
     const uri = options
     const agent = options.agent || http.globalAgent
 
-    return typeof uri === 'string' ? uri : url.format({
-      protocol: options.protocol || agent.protocol,
-      hostname: options.hostname || options.host || 'localhost',
-      port: options.port,
-      pathname: options.path || options.pathname || '/'
-    })
+    if (options instanceof url.URL) {
+      // maintain parity with legacy url defaults
+      options.protocol = options.protocol || agent.protocol
+      options.hostname = options.hostname || 'localhost'
+      options.pathname = options.pathname || '/'
+      
+      return url.format(options)
+    } else {
+      var output = typeof uri === 'string' ? uri : url.format({
+        protocol: options.protocol || agent.protocol,
+        hostname: options.hostname || options.host || 'localhost',
+        port: options.port,
+        pathname: options.path || options.pathname || '/'
+      })
+
+      return output
+    }
   }
 
   function normalizeArgs (inputURL, inputOptions, callback) {
@@ -174,6 +185,8 @@ function patch (http, methodName, tracer, config) {
 
     if (typeof inputURL === 'string') {
       options = url.parse(inputURL)
+    } else if (inputURL instanceof url.URL) {
+      options = inputURL
     } else {
       options = {}
       for (const key in inputURL) {
@@ -182,10 +195,6 @@ function patch (http, methodName, tracer, config) {
     }
 
     options.headers = options.headers || {}
-
-    if (!options.path && inputURL instanceof url.URL) {
-      options.path = `${options.pathname || ''}${options.search || ''}`
-    }
 
     return options
   }
