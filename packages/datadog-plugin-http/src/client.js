@@ -154,17 +154,15 @@ function patch (http, methodName, tracer, config) {
       options.protocol = options.protocol || agent.protocol
       options.hostname = options.hostname || 'localhost'
       options.pathname = options.pathname || '/'
-      
+
       return url.format(options)
     } else {
-      var output = typeof uri === 'string' ? uri : url.format({
+      return typeof uri === 'string' ? uri : url.format({
         protocol: options.protocol || agent.protocol,
         hostname: options.hostname || options.host || 'localhost',
         port: options.port,
         pathname: options.path || options.pathname || '/'
       })
-
-      return output
     }
   }
 
