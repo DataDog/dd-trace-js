@@ -171,6 +171,7 @@ function patch (http, methodName, tracer, config) {
     const uri = url.format(inputURL)
     const options = inputURL
 
+    console.log(uri, options)
     return { uri, options, callback }
   }
 
