@@ -156,7 +156,6 @@ function patch (http, methodName, tracer, config) {
       inputURL = urlToOptions(inputURL)
     }
 
-    // possible case missing for else
     if (typeof inputOptions === 'function') {
       callback = inputOptions
       inputOptions = inputURL || {}
@@ -166,25 +165,26 @@ function patch (http, methodName, tracer, config) {
 
     // normalize getHeaders
     inputURL.headers = inputURL.headers || {}
-    // inputURL.hostname = inputURL.host || inputURL.hostname || 'localhost'
 
     const uri = url.format(inputURL)
-    const options = inputURL
+    // const options = inputURL
 
-    console.log(uri, options)
-    return { uri, options, callback }
+    return { uri, options: inputURL, callback }
   }
 
   // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
   function urlToOptions (url) {
+    const agent = url.agent || http.globalAgent
     const options = {
-      protocol: url.protocol,
+      protocol: url.protocol || agent.protocol,
       hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
         ? url.hostname.slice(1, -1)
-        : url.hostname,
+        : url.hostname ||
+        url.host ||
+        'localhost',
       hash: url.hash,
       search: url.search,
-      pathname: url.pathname,
+      pathname: url.pathname || url.path || '/',
       path: `${url.pathname || ''}${url.search || ''}`,
       href: url.href
     }
