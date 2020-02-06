@@ -145,55 +145,54 @@ function patch (http, methodName, tracer, config) {
     })
   }
 
-  function extractUrl (options) {
-    const uri = options
-    const agent = options.agent || http.globalAgent
-
-    if (options instanceof url.URL) {
-      // maintain parity with legacy url defaults
-      options.protocol = options.protocol || agent.protocol
-      options.hostname = options.hostname || 'localhost'
-      options.pathname = options.pathname || '/'
-
-      return url.format(options)
-    } else {
-      return typeof uri === 'string' ? uri : url.format({
-        protocol: options.protocol || agent.protocol,
-        hostname: options.hostname || options.host || 'localhost',
-        port: options.port,
-        pathname: options.path || options.pathname || '/'
-      })
-    }
-  }
-
   function normalizeArgs (inputURL, inputOptions, callback) {
-    let options = normalizeURL(inputURL)
+    if (typeof inputURL === 'string') {
+      try {
+        inputURL = urlToOptions(new url.URL(inputURL))
+      } catch (e) {
+        inputURL = url.parse(inputURL)
+      }
+    } else if (inputURL instanceof url.URL) {
+      inputURL = urlToOptions(inputURL)
+    }
 
+    // possible case missing for else
     if (typeof inputOptions === 'function') {
       callback = inputOptions
+      inputOptions = inputURL || {}
     } else if (typeof inputOptions === 'object') {
-      options = Object.assign(options, inputOptions)
+      inputURL = Object.assign(inputURL || {}, inputOptions)
     }
-    const uri = extractUrl(options)
+
+    // normalize getHeaders
+    inputURL.headers = inputURL.headers || {}
+    // inputURL.hostname = inputURL.host || inputURL.hostname || 'localhost'
+
+    const uri = url.format(inputURL)
+    const options = inputURL
+
     return { uri, options, callback }
   }
 
-  function normalizeURL (inputURL) {
-    let options
-
-    if (typeof inputURL === 'string') {
-      options = url.parse(inputURL)
-    } else if (inputURL instanceof url.URL) {
-      options = inputURL
-    } else {
-      options = {}
-      for (const key in inputURL) {
-        options[key] = inputURL[key]
-      }
+  // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
+  function urlToOptions (url) {
+    const options = {
+      protocol: url.protocol,
+      hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
+        ? url.hostname.slice(1, -1)
+        : url.hostname,
+      hash: url.hash,
+      search: url.search,
+      pathname: url.pathname,
+      path: `${url.pathname || ''}${url.search || ''}`,
+      href: url.href
     }
-
-    options.headers = options.headers || {}
-
+    if (url.port !== '') {
+      options.port = Number(url.port)
+    }
+    if (url.username || url.password) {
+      options.auth = `${url.username}:${url.password}`
+    }
     return options
   }
 }
