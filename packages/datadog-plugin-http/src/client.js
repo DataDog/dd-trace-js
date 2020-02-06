@@ -167,7 +167,6 @@ function patch (http, methodName, tracer, config) {
     inputURL.headers = inputURL.headers || {}
 
     const uri = url.format(inputURL)
-    // const options = inputURL
 
     return { uri, options: inputURL, callback }
   }
