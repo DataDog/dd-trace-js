@@ -91,6 +91,7 @@ const web = {
   wrapMiddleware (req, middleware, config, name, fn) {
     if (!this.active(req)) return fn()
 
+    console.log("is it there? ", req._datadog.config.middleware)
     if (config && config.middleware === false) return this.reactivateAndWrapMiddlewareErrors(fn, req)
 
     const tracer = req._datadog.tracer
