@@ -15,7 +15,7 @@ function createWrapConnect (tracer, config) {
 
       if (!app) return app
 
-      app.use = createWrapUse(config)(app.use)
+      app.use = createWrapUse()(app.use)
       app.handle = createWrapHandle(tracer, config)(app.handle)
 
       return app
@@ -25,9 +25,7 @@ function createWrapConnect (tracer, config) {
   }
 }
 
-function createWrapUse (config) {
-  config = web.normalizeConfig(config)
-
+function createWrapUse () {
   return function wrapUse (use) {
     if (typeof use !== 'function') return use
 
@@ -40,7 +38,7 @@ function createWrapUse (config) {
       const layer = this.stack[index]
 
       if (layer && layer.handle) {
-        this.stack[index].handle = wrapLayerHandle(layer, config)
+        this.stack[index].handle = wrapLayerHandle(layer)
       }
 
       return result
@@ -66,30 +64,30 @@ function unwrapConnect (connect) {
   connect._datadog_wrapper = connect
 }
 
-function wrapLayerHandle (layer, config) {
+function wrapLayerHandle (layer) {
   if (typeof layer.handle !== 'function') return layer.handle
 
   const handle = layer.handle
 
   if (layer.handle.length === 4) {
     return function (error, req, res, next) {
-      return callLayerHandle(layer, handle, req, config, [error, req, res, wrapNext(layer, req, next)])
+      return callLayerHandle(layer, handle, req, [error, req, res, wrapNext(layer, req, next)])
     }
   } else {
     return function (req, res, next) {
-      return callLayerHandle(layer, handle, req, config, [req, res, wrapNext(layer, req, next)])
+      return callLayerHandle(layer, handle, req, [req, res, wrapNext(layer, req, next)])
     }
   }
 }
 
-function callLayerHandle (layer, handle, req, config, args) {
+function callLayerHandle (layer, handle, req, args) {
   const route = layer.route
 
   if (route !== '/') {
     web.enterRoute(req, route)
   }
 
-  return web.wrapMiddleware(req, handle, config, 'connect.middleware', () => {
+  return web.wrapMiddleware(req, handle, 'connect.middleware', () => {
     return handle.apply(layer, args)
   })
 }
@@ -124,7 +122,7 @@ module.exports = [
     name: 'connect',
     versions: ['2.2.2'],
     patch (connect, tracer, config) {
-      this.wrap(connect.proto, 'use', createWrapUse(config))
+      this.wrap(connect.proto, 'use', createWrapUse())
       this.wrap(connect.proto, 'handle', createWrapHandle(tracer, config))
     },
     unpatch (connect) {
