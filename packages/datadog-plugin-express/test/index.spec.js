@@ -720,7 +720,6 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent.use(traces => {
               const spans = sort(traces[0])
-
               expect(spans[0]).to.have.property('error', 0)
               expect(spans[0]).to.have.property('resource', 'GET /user')
               expect(spans[0].meta).to.have.property('http.status_code', '400')
@@ -1096,7 +1095,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should only handle errors for configured status codes', done => {
+        it('should mark middleware errors regardless of status codes configuration', done => {
           const app = express()
 
           app.use((req, res, next) => {
@@ -1105,7 +1104,7 @@ describe('Plugin', () => {
 
           app.get('/user', (req, res) => {
             res.statusCode = 400
-            res.status(400).send()
+            throw new Error('boom')
           })
 
           getPort().then(port => {
@@ -1113,7 +1112,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 0)
+                expect(spans[0]).to.have.property('error', 1)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('http.status_code', '400')
               })
