@@ -37,35 +37,33 @@ function createWrapProcessParams (tracer, config) {
   }
 }
 
-function createWrapRouterMethod (config) {
-  return function wrapRouterMethod (original) {
-    return function methodWithTrace (fn) {
-      const offset = this.stack ? [].concat(this.stack).length : 0
-      const router = original.apply(this, arguments)
+function wrapRouterMethod (original) {
+  return function methodWithTrace (fn) {
+    const offset = this.stack ? [].concat(this.stack).length : 0
+    const router = original.apply(this, arguments)
 
-      if (typeof this.stack === 'function') {
-        this.stack = [{ handle: this.stack }]
-      }
-
-      wrapStack(this.stack, offset, extractMatchers(fn), config)
-
-      return router
+    if (typeof this.stack === 'function') {
+      this.stack = [{ handle: this.stack }]
     }
+
+    wrapStack(this.stack, offset, extractMatchers(fn))
+
+    return router
   }
 }
 
-function wrapLayerHandle (layer, handle, config) {
+function wrapLayerHandle (layer, handle) {
   handle._name = handle._name || layer.name
 
   let wrapCallHandle
 
   if (handle.length === 4) {
     wrapCallHandle = function (error, req, res, next) {
-      return callHandle(layer, handle, req, config, [error, req, res, wrapNext(layer, req, next)])
+      return callHandle(layer, handle, req, [error, req, res, wrapNext(layer, req, next)])
     }
   } else {
     wrapCallHandle = function (req, res, next) {
-      return callHandle(layer, handle, req, config, [req, res, wrapNext(layer, req, next)])
+      return callHandle(layer, handle, req, [req, res, wrapNext(layer, req, next)])
     }
   }
 
@@ -76,12 +74,12 @@ function wrapLayerHandle (layer, handle, config) {
   return wrapCallHandle
 }
 
-function wrapStack (stack, offset, matchers, config) {
+function wrapStack (stack, offset, matchers) {
   [].concat(stack).slice(offset).forEach(layer => {
     if (layer.__handle) { // express-async-errors
-      layer.__handle = wrapLayerHandle(layer, layer.__handle, config)
+      layer.__handle = wrapLayerHandle(layer, layer.__handle)
     } else {
-      layer.handle = wrapLayerHandle(layer, layer.handle, config)
+      layer.handle = wrapLayerHandle(layer, layer.handle)
     }
 
     layer._datadog_matchers = matchers
@@ -92,7 +90,7 @@ function wrapStack (stack, offset, matchers, config) {
           layer.route.stack = [{ handle: layer.route.stack }]
         }
 
-        layer.route[method] = createWrapRouterMethod(config)(layer.route[method])
+        layer.route[method] = wrapRouterMethod(layer.route[method])
       })
     }
   })
@@ -114,8 +112,8 @@ function wrapNext (layer, req, next) {
   }
 }
 
-function callHandle (layer, handle, req, config, args) {
-  return web.wrapMiddleware(req, handle, config, 'express.middleware', () => {
+function callHandle (layer, handle, req, args) {
+  return web.wrapMiddleware(req, handle, 'express.middleware', () => {
     return handle.apply(layer, args)
   })
 }
@@ -159,8 +157,8 @@ module.exports = {
   patch (Router, tracer, config) {
     this.wrap(Router.prototype, 'handle', createWrapHandle(tracer, config))
     this.wrap(Router.prototype, 'process_params', createWrapProcessParams(tracer, config))
-    this.wrap(Router.prototype, 'use', createWrapRouterMethod(config))
-    this.wrap(Router.prototype, 'route', createWrapRouterMethod(config))
+    this.wrap(Router.prototype, 'use', wrapRouterMethod)
+    this.wrap(Router.prototype, 'route', wrapRouterMethod)
   },
   unpatch (Router) {
     this.unwrap(Router.prototype, 'handle')
