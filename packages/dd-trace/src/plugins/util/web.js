@@ -162,7 +162,8 @@ const web = {
         span: null,
         paths: [],
         middleware: [],
-        beforeEnd: []
+        beforeEnd: [],
+        config: {}
       }
     })
   },
