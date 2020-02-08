@@ -1,5 +1,6 @@
 'use strict'
 
+const methods = require('methods').concat('all')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 function createWrapFastify (tracer, config) {
@@ -15,10 +16,18 @@ function createWrapFastify (tracer, config) {
     fastify._datadog_wrapper = function () {
       const app = fastify.apply(this, arguments)
 
-      if (app && typeof app.addHook === 'function') {
+      if (!app) return app
+
+      if (typeof app.addHook === 'function') {
         app.addHook('onRequest', createOnRequest(tracer, config))
         app.addHook('preHandler', preHandler)
       }
+
+      methods.forEach(method => {
+        app[method] = wrapMethod(app[method])
+      })
+
+      app.route = wrapRoute(app.route)
 
       return app
     }
@@ -55,6 +64,36 @@ function wrapSend (send) {
     web.addError(req, payload)
 
     return send.apply(this, arguments)
+  }
+}
+
+function wrapRoute (route) {
+  if (typeof route !== 'function') return route
+
+  return function routeWithTrace (opts) {
+    opts.handler = wrapHandler(opts.handler)
+
+    return route.apply(this, arguments)
+  }
+}
+
+function wrapMethod (method) {
+  if (typeof method !== 'function') return method
+
+  return function methodWithTrace (url, opts, handler) {
+    const lastIndex = arguments.length - 1
+
+    arguments[lastIndex] = wrapHandler(arguments[lastIndex])
+
+    return method.apply(this, arguments)
+  }
+}
+
+function wrapHandler (handler) {
+  return function handlerWithTrace (request, reply) {
+    const req = getReq(request)
+
+    return web.reactivate(req, () => handler.apply(this, arguments))
   }
 }
 

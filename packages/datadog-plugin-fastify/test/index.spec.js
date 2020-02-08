@@ -141,6 +141,49 @@ describe('Plugin', () => {
           })
         })
 
+        it('should run POST handlers in the request scope', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          app.post('/user', (request, reply) => {
+            expect(tracer.scope().active()).to.not.be.null
+            reply.send()
+          })
+
+          getPort().then(port => {
+            app.listen(port, 'localhost', () => {
+              axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
+                .then(() => done())
+                .catch(done)
+            })
+          })
+        })
+
+        it('should run routes in the request scope', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          app.use((req, res, next) => {
+            expect(tracer.scope().active()).to.not.be.null
+            next()
+          })
+
+          app.route({
+            method: 'POST',
+            url: '/user',
+            handler: (request, reply) => {
+              expect(tracer.scope().active()).to.not.be.null
+              reply.send()
+            }
+          })
+
+          getPort().then(port => {
+            app.listen(port, 'localhost', () => {
+              axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
+                .then(() => done())
+                .catch(done)
+            })
+          })
+        })
+
         it('should run hooks in the request scope', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
