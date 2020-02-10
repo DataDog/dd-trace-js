@@ -73,68 +73,55 @@ describe('Plugin', () => {
           return agent.load(plugin, 'aws-sdk')
         })
         describe('createTable', () => {
+          const operationName = "createTable"
+          const service = "DynamoDB"
+          const resource = `${service}_${operationName}`
+
           it('should instrument service methods with a callback', (done) => {
-              agent
-                .use(traces => {
-                  
-                  expect(traces[0][0]).to.have.property('resource', 'request')
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                })
-                .then(done)
-                .catch(done)
-
-
-              ddb.createTable(ddb_params, function(err_create, data_create) {
-                console.log('ok?')
-                if (err_create) {
-                  console.log("Error creating", err_create);
-
-                } else {
-                  console.log("Table Created", data_create);
-
-                  ddb.deleteTable({TableName: ddb_params.TableName}, function(err_data, data_delete) {
-                    if (err_data) {
-                      console.log("Error deleting", err_delete);
-                    } else {
-                      console.log('Table Deleled', data_delete)
-                    }
-                  })
-                }
+            agent
+              .use(traces => {
+                
+                expect(traces[0][0]).to.have.property('resource', resource)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
               })
+              .then(done)
+              .catch(done)
+
+
+            ddb[operationName](ddb_params, function(err_create, data_create) {
+              if (err_create) {
+              } else {
+                ddb.deleteTable({TableName: ddb_params.TableName}, function(err_data, data_delete) {
+                  if (err_data) {
+                  } else {
+                  }
+                })
+              }
+            })
           })
 
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'request')
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0]).to.have.property('resource', resource)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
               })
               .then(done)
               .catch(done)
 
-            const table_request = ddb.createTable(ddb_params)
+            const table_request = ddb[operationName](ddb_params)
 
             const response = table_request.send()
-
-            // Promise.all([response]).then((results) => {
-
-            //   var delete_request = ddb.deleteTable({TableName: ddb_params.TableName})
-
-            //   delete_request.send()
-
-            //   Promise.all([delete_request]).then( (delete_results) => {
-            //     console.log('done both', delete_results[0])
-            //   })
-            // })
           })
 
           it('should instrument service methods using promise()', (done) => {
-            const table_request =  ddb.createTable(ddb_params).promise()
+
+            const table_request =  ddb[operationName](ddb_params).promise()
             const delete_request = ddb.deleteTable({TableName: ddb_params.TableName}).promise()
 
             agent.use(traces => {
-                            expect(traces[0][0]).to.have.property('resource', 'request')
-                            expect(traces[0][0]).to.have.property('name', 'aws.request')
+                            expect(traces[0][0]).to.have.property('resource', resource)
+                            expect(traces[0][0]).to.have.property('name', 'aws.http')
                           }).then(done).catch(done)
           })
         })

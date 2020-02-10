@@ -11,22 +11,29 @@ function createWrapRequest (tracer, config) {
       // if (!params) return request.apply(this, arguments)
       // ^do the same if tracer not enabled
 
+      const serviceName = this.api && this.api.abbreviation
       // look how ruby/java are defining these details
       let tags = {
         'service.name': config.service || `${tracer._service}-aws`,
-        'resource.name': 'request',
+        'resource.name': `${serviceName}_${operation}`,
+        'span.kind': 'client',
         'span.type': 'http',
-        'aws.operation': operation
+        'aws.agent': 'js-aws-sdk',
+        'aws.operation': operation,
+        'aws.region': request.httpRequest && request.httpRequest.region || this.config.region,
+        'aws.service': serviceName,
+        'component': serviceName
       }
 
       const childOf = tracer.scope().active()
+      const span = tracer.startSpan('aws.http', {
+        childOf,
+        tags: tags
+      })
+
+      analyticsSampler.sample(span, config.analytics)
 
       if (typeof cb === 'function') {
-        const span = tracer.startSpan('aws.request', {
-          childOf,
-          tags: tags
-        })
-
         return tracer.scope().activate(span, () => {
           return request.call(this, operation, params, wrapCallback(tracer, span, cb, childOf))
          }) 
@@ -35,13 +42,14 @@ function createWrapRequest (tracer, config) {
         const awsRequest = request.apply(this, arguments)
 
         awsRequest.on('send', function(response) {
-          console.log('starting ', operation)
           tracer.scope().activate(span)
-
         })
 
         awsRequest.on('complete', function(response) {
-          console.log('finishing', operation)
+          if(response.requestId) {
+            span.addTags('aws.requestId')
+          }
+          
           if (response.error) {
             
           } else {
@@ -60,15 +68,11 @@ function wrapCallback (tracer, span, done, parent) {
   return function (err) {
     finish(span, err)
 
-    console.log('invoked?')
     if (typeof done === 'function') {
       tracer.scope().activate(parent, () => {
         done.apply(null, arguments)
       })
-    } else {
-      console.log('uh oh')
     }
-    
   }
 }
 
@@ -106,7 +110,7 @@ function getHooks (config) {
 module.exports = [
   {
     name: 'aws-sdk',
-    versions: ['>=2'],
+    versions: ['>=2.0'],
     patch (AWS, tracer, config) {
 
       // console.log('trying to patch', AWS.Service, AWS.Service.prototype)
