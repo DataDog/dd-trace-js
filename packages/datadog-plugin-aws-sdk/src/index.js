@@ -5,85 +5,66 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 function createWrapRequest (tracer, config) {
   config = normalizeConfig(config)
-  return function wrapRequest (request) {
 
-    // (operation, params, callback)
+  return function wrapRequest (request) {
     return function requestWithTrace (operation, params, cb) {
       // if (!params) return request.apply(this, arguments)
-
-
-      // const tags = {
-      //   [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-      //   [Tags.DB_TYPE]: 'elasticsearch',
-      //   'service.name': config.service || `${tracer._service}-aws`,
-      //   'resource.name': `${params.method} ${quantizePath(params.path)}`,
-      //   'span.type': 'elasticsearch',
-      //   'elasticsearch.url': params.path,
-      //   'elasticsearch.method': params.method,
-      //   'elasticsearch.params': JSON.stringify(params.querystring || params.query)
-      // }
+      // ^do the same if tracer not enabled
 
       // look how ruby/java are defining these details
       let tags = {
         'service.name': config.service || `${tracer._service}-aws`,
         'resource.name': 'request',
-        'span.type': 'http'
+        'span.type': 'http',
+        'aws.operation': operation
       }
 
       const childOf = tracer.scope().active()
-      const span = tracer.startSpan('aws.request', {
-        childOf,
-        tags: tags
-      })
 
-      // if (params.body) {
-      //   span.setTag('elasticsearch.body', JSON.stringify(params.body))
-      // }
+      if (typeof cb === 'function') {
+        const span = tracer.startSpan('aws.request', {
+          childOf,
+          tags: tags
+        })
 
-      analyticsSampler.sample(span, config.analytics)
+        return tracer.scope().activate(span, () => {
+          return request.call(this, operation, params, wrapCallback(tracer, span, cb, childOf))
+         }) 
+      } else {
+        
+        const awsRequest = request.apply(this, arguments)
 
-      // cb = request.length === 2 || typeof options === 'function'
-      //   ? tracer.scope().bind(options, childOf)
-      //   : tracer.scope().bind(cb, childOf)
+        awsRequest.on('send', function(response) {
+          console.log('starting ', operation)
+          tracer.scope().activate(span)
 
-      // if typeof cb === 'function'
-      tracer.scope().bind(cb, childOf)
+        })
 
-      return tracer.scope().activate(span, () => {
-      //   if (typeof cb === 'function') {
-      //     if (request.length === 2) {
-      //       return request.call(this, params, wrapCallback(tracer, span, params, config, cb))
-      //     } else {
-        console.log('ok and in here')
-        console.log('params', operation)
-        // console.log('options', params)
-        // console.log('cb', this)
-        return request.call(this, operation, params, wrapCallback(tracer, span, cb))
-        //   }
-        // } else {
-        //   const promise = request.apply(this, arguments)
+        awsRequest.on('complete', function(response) {
+          console.log('finishing', operation)
+          if (response.error) {
+            
+          } else {
+            // we can use response.data here
+          }
+          finish(span, response.error)
+        })
 
-        //   if (promise && typeof promise.then === 'function') {
-        //     promise.then(() => finish(span, params, config), e => finish(span, params, config, e))
-        //   } else {
-        //     finish(span, params, config)
-        //   }
-
-        //   return promise
-        // }
-      // })
-      })
+        return awsRequest
+      }      
     }
   }
 }
 
-function wrapCallback (tracer, span, done) {
+function wrapCallback (tracer, span, done, parent) {
   return function (err) {
     finish(span, err)
 
     console.log('invoked?')
     if (typeof done === 'function') {
-      done.apply(null, arguments)
+      tracer.scope().activate(parent, () => {
+        done.apply(null, arguments)
+      })
     } else {
       console.log('uh oh')
     }
@@ -129,8 +110,6 @@ module.exports = [
     patch (AWS, tracer, config) {
 
       // console.log('trying to patch', AWS.Service, AWS.Service.prototype)
-
-
 
       this.wrap(AWS.Service.prototype, 'makeRequest', createWrapRequest(tracer, config))
     },
