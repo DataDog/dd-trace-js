@@ -20,8 +20,8 @@ class Scope extends Base {
 
     this._trackAsyncScope = config.trackAsyncScope
     this._current = null
-    this._spans = Object.create(null)
-    this._types = Object.create(null)
+    this._spans = new Map()
+    this._types = new Map()
     this._weaks = new WeakMap()
     this._promises = [false]
     this._stack = []
@@ -101,16 +101,17 @@ class Scope extends Base {
   _init (asyncId, type, triggerAsyncId, resource) {
     if (!this._enabled) return
 
-    this._spans[asyncId] = this._current
-    this._types[asyncId] = type
+    this._spans.set(asyncId, this._current)
+    this._types.set(asyncId, type)
 
     if (hasKeepAliveBug && (type === 'TCPWRAP' || type === 'HTTPPARSER')) {
       this._destroy(this._weaks.get(resource))
       this._weaks.set(resource, asyncId)
     }
 
-    platform.metrics().increment('runtime.node.async.resources')
-    platform.metrics().increment('runtime.node.async.resources.by.type', `resource_type:${type}`)
+    const metrics = platform.metrics()
+    metrics.increment('runtime.node.async.resources')
+    metrics.increment('runtime.node.async.resources.by.type', `resource_type:${type}`)
 
     if (this._trackAsyncScope && type === 'PROMISE') {
       this._initPromise()
@@ -119,7 +120,7 @@ class Scope extends Base {
 
   _before (asyncId) {
     this._depth === 0 && this._exitNative()
-    this._enter(this._spans[asyncId])
+    this._enter(this._spans.get(asyncId))
   }
 
   _after () {
@@ -127,15 +128,16 @@ class Scope extends Base {
   }
 
   _destroy (asyncId) {
-    const type = this._types[asyncId]
+    const type = this._types.get(asyncId)
 
     if (type) {
-      platform.metrics().decrement('runtime.node.async.resources')
-      platform.metrics().decrement('runtime.node.async.resources.by.type', `resource_type:${type}`)
+      const metrics = platform.metrics()
+      metrics.decrement('runtime.node.async.resources')
+      metrics.decrement('runtime.node.async.resources.by.type', `resource_type:${type}`)
     }
 
-    delete this._spans[asyncId]
-    delete this._types[asyncId]
+    this._spans.delete(asyncId)
+    this._types.delete(asyncId)
   }
 }
 
