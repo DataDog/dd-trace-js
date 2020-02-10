@@ -3,11 +3,11 @@
 module.exports = {
   'amqp10': require('../../../datadog-plugin-amqp10/src'),
   'amqplib': require('../../../datadog-plugin-amqplib/src'),
+  'aws-sdk': require('../../../datadog-plugin-aws-sdk/src'),
   'bluebird': require('../../../datadog-plugin-bluebird/src'),
   'bunyan': require('../../../datadog-plugin-bunyan/src'),
   'cassandra-driver': require('../../../datadog-plugin-cassandra-driver/src'),
   'connect': require('../../../datadog-plugin-connect/src'),
-  'couchbase': require('../../../datadog-plugin-couchbase/src'),
   'dns': require('../../../datadog-plugin-dns/src'),
   'elasticsearch': require('../../../datadog-plugin-elasticsearch/src'),
   'express': require('../../../datadog-plugin-express/src'),

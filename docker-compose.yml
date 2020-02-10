@@ -73,3 +73,9 @@ services:
     image: kinok/google-pubsub-emulator
     ports:
       - "127.0.0.1:8042:8042"
+  localstack:
+      image: localstack/localstack
+      ports:
+        - "127.0.0.1:4569:4569"
+      environment:
+        - LOCALSTACK_SERVICES=dynamodb:4569

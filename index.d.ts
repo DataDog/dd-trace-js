@@ -420,6 +420,7 @@ export declare interface Scope {
 interface Plugins {
   "amqp10": plugins.amqp10;
   "amqplib": plugins.amqplib;
+  "aws-sdk": plugins.aws_sdk;
   "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
@@ -625,6 +626,12 @@ declare namespace plugins {
    * [amqplib](https://github.com/squaremo/amqp.node) module.
    */
   interface amqplib extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
+   */
+  interface aws_sdk extends Instrumentation {}
 
   /**
    * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
