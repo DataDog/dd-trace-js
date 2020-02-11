@@ -8,12 +8,12 @@ function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (operation, params, cb) {
       const serviceName = awsHelpers.normalizeServiceName(this)
-      // look how ruby/java are defining these details
+
+      //TODO: should tablename/streamname/etc be part of resurce?
       let baseTags = {
         [Tags.SPAN_KIND]: 'client',
         'span.type': 'http',
         'service.name': config.service || `${tracer._service}-aws`,
-        'resource.name': `${serviceName}_${operation}`,
         'aws.agent': 'js-aws-sdk',
         'aws.operation': operation,
         'aws.region': request.httpRequest && request.httpRequest.region || this.config.region,
@@ -27,11 +27,15 @@ function createWrapRequest (tracer, config) {
         tags: baseTags
       })
 
+      //sync with serverless on how to normalize to fit existing conventions
+      // <operation>_<specialityvalue>
+      awsHelpers.addResourceAndSpecialtyTags(span, operation, params)
+
       analyticsSampler.sample(span, config.analytics)
 
       if (typeof cb === 'function') {
         return tracer.scope().activate(span, () => {
-          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf, this))
+          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf))
          }) 
       } else {
         
@@ -42,7 +46,7 @@ function createWrapRequest (tracer, config) {
         })
 
         awsRequest.on('complete', function(response) {
-          awsHelpers.addAdditionalTags(span, this)
+          awsHelpers.addAdditionalTags(span, response, this)
           awsHelpers.finish(span, response.error)
         })
 
@@ -61,9 +65,6 @@ module.exports = [
     name: 'aws-sdk',
     versions: ['>=2.0'],
     patch (AWS, tracer, config) {
-
-      // console.log('trying to patch', AWS.Service, AWS.Service.prototype)
-
       this.wrap(AWS.Service.prototype, 'makeRequest', createWrapRequest(tracer, config))
     },
     unpatch (Transport) {
