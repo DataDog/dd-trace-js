@@ -1,3 +1,5 @@
+'use strict'
+
 const fixtures = {
   ddb: {
     AttributeDefinitions: [
@@ -39,6 +41,5 @@ const fixtures = {
     Body: 'Hello World!'
   }
 }
-
 
 module.exports = fixtures

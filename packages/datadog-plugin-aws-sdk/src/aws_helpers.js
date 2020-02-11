@@ -1,3 +1,5 @@
+'use strict'
+
 const awsHelpers = {
   wrapCallback (tracer, span, done, parent) {
     return function (err, response) {

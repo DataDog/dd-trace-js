@@ -8,6 +8,7 @@ module.exports = {
   'bunyan': require('../../../datadog-plugin-bunyan/src'),
   'cassandra-driver': require('../../../datadog-plugin-cassandra-driver/src'),
   'connect': require('../../../datadog-plugin-connect/src'),
+  'couchbase': require('../../../datadog-plugin-couchbase/src'),
   'dns': require('../../../datadog-plugin-dns/src'),
   'elasticsearch': require('../../../datadog-plugin-elasticsearch/src'),
   'express': require('../../../datadog-plugin-express/src'),
