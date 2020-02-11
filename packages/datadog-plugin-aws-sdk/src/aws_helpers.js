@@ -22,7 +22,7 @@ const awsHelpers = {
       })
 
       if (err.requestId) {
-        span.addTags( {'aws.requestId': err.requestId} )
+        span.addTags({ 'aws.requestId': err.requestId })
       }
     }
 
@@ -32,10 +32,10 @@ const awsHelpers = {
   addAdditionalTags (span, context, extra) {
     if (span) {
       if (context.requestId) {
-        span.addTags( {'aws.requestId': context.requestId} )
+        span.addTags({ 'aws.requestId': context.requestId })
       }
       if (context.httpRequest && context.httpRequest.endpoint) {
-       span.addTags( {'aws.url': context.httpRequest.endpoint.href} ) 
+        span.addTags({ 'aws.url': context.httpRequest.endpoint.href })
       }
     }
   },
@@ -52,7 +52,7 @@ const awsHelpers = {
       serviceName = serviceName.trim().replace(/\s/g, '')
 
       if (serviceName.startsWith(prefix)) {
-        return `${serviceName.slice(0,prefix.length)}.${serviceName.slice(prefix.length)}`
+        return `${serviceName.slice(0, prefix.length)}.${serviceName.slice(prefix.length)}`
       } else if (serviceName.startsWith(invalidPrefix)) {
         return `${prefix}.${serviceName.slice(invalidPrefix.length)}`
       } else {
@@ -63,30 +63,30 @@ const awsHelpers = {
     }
   },
 
-  addResourceAndSpecialtyTags(span, operation, params) {
+  addResourceAndSpecialtyTags (span, operation, params) {
     const tags = {}
     // TODO: move to case statement
     if (operation && params) {
-      //dynamoDB TableName
-      if(params.TableName) {
+      // dynamoDB TableName
+      if (params.TableName) {
         tags['resource.name'] = `${operation}_${params.TableName}`
         tags['aws.table.name'] = params.TableName
       }
 
-      //kenesis StreamName
-      if(params.StreamName) {
+      // kenesis StreamName
+      if (params.StreamName) {
         tags['resource.name'] = `${operation}_${params.StreamName}`
         tags['aws.stream.name'] = params.StreamName
       }
 
       // s3 Bucket
-      if(params.Bucket) {
-        tags['resource.name'] =`${operation}_${params.Bucket}`
+      if (params.Bucket) {
+        tags['resource.name'] = `${operation}_${params.Bucket}`
         tags['aws.bucket.name'] = params.Bucket
       }
     }
 
-    if(!tags['resource.name']) {
+    if (!tags['resource.name']) {
       // default
       tags['resource.name'] = operation || 'Amazon'
     }
