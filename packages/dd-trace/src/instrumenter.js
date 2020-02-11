@@ -52,6 +52,7 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
+          if (name === 'fs') return // disabling fs for now
           this._set(plugins[name], { name, config: {} })
         })
     }
