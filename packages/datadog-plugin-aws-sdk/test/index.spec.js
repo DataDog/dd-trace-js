@@ -43,30 +43,30 @@ describe('Plugin', () => {
         describe('DynamoDB', () => {
           const operationName = "createTable"
           const service = "DynamoDB"
-          const resource = `${service}_${operationName}`
+          const resource = `Amazon.${service}_${operationName}`
 
-          it('should instrument service methods with a callback', (done) => {
-            agent
-              .use(traces => {
+          // it('should instrument service methods with a callback', (done) => {
+          //   agent
+          //     .use(traces => {
                 
-                expect(traces[0][0]).to.have.property('resource', resource)
-                expect(traces[0][0]).to.have.property('name', 'aws.http')
-              })
-              .then(done)
-              .catch(done)
+          //       expect(traces[0][0]).to.have.property('resource', resource)
+          //       expect(traces[0][0]).to.have.property('name', 'aws.http')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
 
-            ddb[operationName](ddb_params, function(err_create, data_create) {
-              if (err_create) {
-              } else {
-                ddb.deleteTable({TableName: ddb_params.TableName}, function(err_data, data_delete) {
-                  if (err_data) {
-                  } else {
-                  }
-                })
-              }
-            })
-          })
+          //   ddb[operationName](ddb_params, function(err_create, data_create) {
+          //     if (err_create) {
+          //     } else {
+          //       ddb.deleteTable({TableName: ddb_params.TableName}, function(err_data, data_delete) {
+          //         if (err_data) {
+          //         } else {
+          //         }
+          //       })
+          //     }
+          //   })
+          // })
 
           it('should instrument service methods without a callback', (done) => {
             agent

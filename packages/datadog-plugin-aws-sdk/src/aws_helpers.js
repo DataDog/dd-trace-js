@@ -2,7 +2,7 @@ const helpers = {
   wrapCallback (tracer, span, done, parent, context) {
     return function (err, data) {
       this.addAdditionalTags(span, context)
-      finish(span, err)
+      this.finish(span, err)
 
       if (typeof done === 'function') {
         tracer.scope().activate(parent, () => {
@@ -10,7 +10,7 @@ const helpers = {
         })
       }
     }
-  }
+  },
 
   finish (span, err) {
     if (err) {
@@ -22,15 +22,25 @@ const helpers = {
     }
 
     span.finish()
-  }
+  },
 
   addAdditionalTags(span, context) {
     if (span) {
       if (context.requestId) {
         span.addTags('aws.requestId', context.requestId)
       }
+
+      //dynamoDB TableName
+      if (context.params && context.params.TableName) {
+        span.addTags('aws.table.name', context.params.TableName)
+      }
+
+      if (context.httpRequest && context.httpRequest.endpoint) {
+       span.addTags('aws.url', context.httpRequest.endpoint.href) 
+      }
+
     }
-  }
+  },
 
   // names are inconsistently prefixed with AWS or Amazon
   // standarize to Amazon.SQS/Amazon.S3/Amazon.DynamoDB etc

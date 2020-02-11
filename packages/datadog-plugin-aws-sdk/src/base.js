@@ -42,10 +42,7 @@ function createWrapRequest (tracer, config) {
         })
 
         awsRequest.on('complete', function(response) {
-          if(response.requestId) {
-            span.addTags('aws.requestId', response.requestId)
-          }
-
+          awsHelpers.addAdditionalTags(span, this)
           awsHelpers.finish(span, response.error)
         })
 
