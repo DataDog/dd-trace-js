@@ -1,48 +1,13 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-// const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const plugin = require('../src')
-// const id = require('../../dd-trace/src/id')
+const fixtures = require('./aws_fixtures.js')
 
 wrapIt()
 
-// The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
-const TIMEOUT = 60000
-
 describe('Plugin', () => {
   let tracer
-  const ddb_params = {
-    AttributeDefinitions: [
-      {
-        AttributeName: 'CUSTOMER_ID',
-        AttributeType: 'N'
-      },
-      {
-        AttributeName: 'CUSTOMER_NAME',
-        AttributeType: 'S'
-      }
-    ],
-    KeySchema: [
-      {
-        AttributeName: 'CUSTOMER_ID',
-        KeyType: 'HASH'
-      },
-      {
-        AttributeName: 'CUSTOMER_NAME',
-        KeyType: 'RANGE'
-      }
-    ],
-    ProvisionedThroughput: {
-      ReadCapacityUnits: 1,
-      WriteCapacityUnits: 1
-    },
-    TableName: 'CUSTOMER_LIST',
-    StreamSpecification: {
-      StreamEnabled: false
-    }
-  };  
-
 
   describe('aws-sdk', function () {
     before(() => {
@@ -56,11 +21,14 @@ describe('Plugin', () => {
       agent.close()
       agent.wipe()
     })
+
     withVersions(plugin, 'aws-sdk', version => {
       let ep_dynamo
       let ddb
 
-      describe('without configuration', () => {
+      describe('DynamoDB', () => {
+        const ddb_params = fixtures.ddb
+
         beforeEach(() => {
           tracer = require('../../dd-trace')
 
@@ -72,7 +40,7 @@ describe('Plugin', () => {
 
           return agent.load(plugin, 'aws-sdk')
         })
-        describe('createTable', () => {
+        describe('DynamoDB', () => {
           const operationName = "createTable"
           const service = "DynamoDB"
           const resource = `${service}_${operationName}`
