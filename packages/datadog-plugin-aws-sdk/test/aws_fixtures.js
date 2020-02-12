@@ -33,6 +33,26 @@ fixtures['ddb'] = {
   }
 }
 
+fixtures['ddb_batch'] = {
+  RequestItems: {
+    [fixtures.ddb.TableName]: { // table name
+      Keys: [
+        {
+          key: {
+            N: "CUSTOMER_ID"
+          }
+        },
+        {
+          key: {
+            S: "CUSTOMER_NAME"
+          }
+        }
+      ],
+      ConsistentRead: true
+    }
+  }
+}
+
 fixtures['kinesis'] = {
   ShardCount: 1,
   StreamName: 'test_aws_stream'
@@ -52,24 +72,24 @@ fixtures['sqs'] = {
   }
 }
 
-fixtures['ddb_batch'] = {
-  RequestItems: {
-    [fixtures.ddb.TableName]: { // table name
-      Keys: [
-        {
-          key: {
-            N: "CUSTOMER_ID"
-          }
-        },
-        {
-          key: {
-            S: "CUSTOMER_NAME"
-          }
-        }
-      ],
-      ConsistentRead: true
-    }
-  }
+fixtures['sns'] = {
+  Name: "example_aws_topic"
+}
+
+fixtures['sns_publish'] = {
+  Message: 'STRING_VALUE', /* required */
+  MessageAttributes: {
+    '<String>': {
+      DataType: 'STRING_VALUE', /* required */
+      BinaryValue: Buffer.from('example string value') || 'STRING_VALUE'  // Strings will be Base-64 encoded on your behalf ,
+      StringValue: 'STRING_VALUE'
+    },
+  },
+  MessageStructure: 'STRING_VALUE',
+  PhoneNumber: 'STRING_VALUE',
+  Subject: 'STRING_VALUE',
+  TargetArn: 'STRING_VALUE',
+  TopicArn: 'example_aws_topic'
 }
 
 module.exports = fixtures

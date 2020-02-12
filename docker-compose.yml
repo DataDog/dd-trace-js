@@ -80,6 +80,7 @@ services:
         - "127.0.0.1:4568:4568"
         - "127.0.0.1:4572:4572"
         - "127.0.0.1:4576:4576"
+        - "127.0.0.1:4575:4575"
       environment:
-        - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576
+        - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575
         - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amz-id-2

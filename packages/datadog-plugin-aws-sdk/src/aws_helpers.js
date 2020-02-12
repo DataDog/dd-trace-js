@@ -4,7 +4,7 @@ const awsHelpers = {
   wrapCallback (tracer, span, done, parent) {
     return function (err, response) {
       // "this" should refer to response object https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
-      awsHelpers.addAdditionalTags(span, this, response)
+      awsHelpers.addAdditionalTags(span, this)
       awsHelpers.finish(span, err)
 
       if (typeof done === 'function') {
@@ -31,13 +31,20 @@ const awsHelpers = {
     span.finish()
   },
 
-  addAdditionalTags (span, context, extra) {
+  addAdditionalTags (span, context) {
     if (span) {
       if (context.requestId) {
         span.addTags({ 'aws.requestId': context.requestId })
       }
       if (context.httpRequest && context.httpRequest.endpoint) {
         span.addTags({ 'aws.url': context.httpRequest.endpoint.href })
+      }
+
+      // SNS.createTopic is invoked with name but returns full arn in response data
+      // which is used elsewhere to refer to topic
+      if(context.data && context.data.TopicArn && context.request && context.request.operation) {
+        span.addTags({ 'aws.topic.name': context.data.TopicArn }) 
+        span.addTags({ 'resource.name': `${context.request.operation}_${context.data.TopicArn}` }) 
       }
     }
   },
@@ -109,6 +116,11 @@ const awsHelpers = {
         tags['resource.name'] = `${operation}_${params.QueueName}`
         tags['aws.queue.name'] = params.QueueName
       }
+
+      if (params.TopicArn) {
+        tags['resource.name'] = `${operation}_${params.TopicArn}`
+        tags['aws.topic.name'] = params.TopicArn
+      }      
     }
 
     if (!tags['resource.name']) {

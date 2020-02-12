@@ -11,6 +11,7 @@ function waitforAWS () {
     const ep_kinesis = new AWS.Endpoint('http://localhost:4568');
     const ep_s3 = new AWS.Endpoint('http://localhost:4572');
     const ep_sqs = new AWS.Endpoint('http://localhost:4576');
+    const ep_sns = new AWS.Endpoint('http://localhost:4575');
 
     // Set the region 
     AWS.config.update({region: 'REGION'});
@@ -19,6 +20,7 @@ function waitforAWS () {
     const kinesis = new AWS.Kinesis({endpoint: ep_kinesis});
     const s3 = new AWS.S3({endpoint: ep_s3, s3ForcePathStyle: true});
     const sqs = new AWS.SQS({endpoint: ep_sqs});
+    const sns = new AWS.SQS({endpoint: ep_sns});
 
     operation.attempt(currentAttempt => {
       Promise.all([
@@ -26,6 +28,7 @@ function waitforAWS () {
         kinesis.listStreams({}).promise(),
         s3.listBuckets({}).promise(),
         sqs.listQueues({}).promise(),
+        sns.listTopics({}).promise()
       ]).then( data => {
         resolve()
       }).catch( err => {

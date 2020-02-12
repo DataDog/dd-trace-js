@@ -45,7 +45,7 @@ function createWrapRequest (tracer, config) {
         })
 
         awsRequest.on('complete', response => {
-          awsHelpers.addAdditionalTags(span, response, this)
+          awsHelpers.addAdditionalTags(span, response)
           awsHelpers.finish(span, response.error)
         })
 
