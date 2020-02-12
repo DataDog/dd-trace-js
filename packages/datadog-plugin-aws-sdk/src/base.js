@@ -5,6 +5,8 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const awsHelpers = require('./aws_helpers')
 
 function createWrapRequest (tracer, config) {
+  config = normalizeConfig(config)
+
   return function wrapRequest (request) {
     return function requestWithTrace (operation, params, cb) {
       const serviceName = awsHelpers.normalizeServiceName(this)
@@ -35,7 +37,7 @@ function createWrapRequest (tracer, config) {
 
       if (typeof cb === 'function') {
         return tracer.scope().activate(span, () => {
-          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf))
+          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf, config))
         })
       } else {
         const awsRequest = request.apply(this, arguments)
@@ -46,7 +48,8 @@ function createWrapRequest (tracer, config) {
 
         awsRequest.on('complete', response => {
           awsHelpers.addAdditionalTags(span, response)
-          awsHelpers.finish(span, response.error)
+          config.hooks.addTags(span, params, response.data)
+          awsHelpers.finish(span, response.error, config)
         })
 
         return awsRequest
@@ -55,9 +58,20 @@ function createWrapRequest (tracer, config) {
   }
 }
 
-// function quantizePath (path) {
-//   return path && path.replace(/[0-9]+/g, '?')
-// }
+function normalizeConfig (config) {
+  const hooks = getHooks(config)
+
+  return Object.assign({}, config, {
+    hooks
+  })
+}
+
+function getHooks (config) {
+  const noop = () => {}
+  const addTags = (config.hooks && config.hooks.addTags) || noop
+
+  return { addTags }
+}
 
 module.exports = [
   {
