@@ -55,7 +55,9 @@ class BrowserExporter {
 }
 
 function send (url, body, callback) {
-  if (window.fetch) {
+  if (window.navigator && window.navigator.sendBeacon) {
+    window.navigator.sendBeacon(url, body)
+  } else if (window.fetch) {
     window.fetch(url, { body, method: 'POST', keepalive: true, mode: 'no-cors' })
       .then(callback, callback)
   } else {
