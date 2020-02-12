@@ -2,7 +2,7 @@
 
 const platform = require('../../platform')
 const log = require('../../log')
-const encode = require('../../encode')
+const encode = require('../../encode/index')
 const tracerVersion = require('../../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
@@ -10,39 +10,33 @@ const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer {
   constructor (url, prioritySampler) {
-    this._queue = []
     this._url = url
     this._prioritySampler = prioritySampler
-    this._size = 0
+
+    this._reset()
   }
 
   get length () {
-    return this._queue.length
+    return this._count
   }
 
   append (spans) {
     log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
-    const buffer = encode(spans)
+    this._encode(spans)
 
-    log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
-
-    if (buffer.length + this._size > MAX_SIZE) {
+    if (this._offset > MAX_SIZE) {
       this.flush()
     }
-
-    this._size += buffer.length
-    this._queue.push(buffer)
   }
 
   flush () {
-    if (this._queue.length > 0) {
-      const data = platform.msgpack.prefix(this._queue)
+    if (this._count > 0) {
+      const data = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
 
-      this._request(data, this._queue.length)
+      this._request(data, this._count)
 
-      this._queue = []
-      this._size = 0
+      this._reset()
     }
   }
 
@@ -105,6 +99,42 @@ class Writer {
     if (value) {
       headers[key] = value
     }
+  }
+
+  _encode (trace) {
+    const offset = this._offset
+
+    try {
+      this._offset = encode(this._buffer, this._offset, trace)
+      this._count++
+    } catch (e) {
+      if (e.name.startsWith('RangeError')) {
+        if (offset === 0) {
+          return log.error('Dropping trace because its payload is too large.')
+        }
+
+        this._offset = offset
+
+        this.flush()
+        this._encode(trace)
+      } else {
+        log.error(e)
+      }
+      console.log(e)
+
+      return
+    }
+
+    log.debug(() => [
+      'Added encoded trace to buffer:',
+      this._buffer.slice(offset, this._offset).toString('hex').match(/../g).join(' ')
+    ].join(' '))
+  }
+
+  _reset () {
+    this._buffer = Buffer.allocUnsafe(10 * 1024 * 1024) // 10mb
+    this._offset = 5 // we'll use these first bytes to hold an array prefix
+    this._count = 0
   }
 }
 
