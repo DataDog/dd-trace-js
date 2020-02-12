@@ -25,6 +25,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'aws-sdk', version => {
       describe('DynamoDB', () => {
         const ddb_params = fixtures.ddb
+        const ddb_batch_params = fixtures.ddb_batch
         let ep_dynamo
         let ddb
 
@@ -53,7 +54,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
 
                 // requestID will randomly not exist on resp headers for dynamoDB, it's unclear why it may be due to test env
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -74,7 +75,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
 
                 // this randomly doesn't exist on resp headers for dynamoDB, it's unclear why it may be due to test env
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -96,6 +97,20 @@ describe('Plugin', () => {
               // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
             }).then(done).catch(done)
           })
+
+          it('should collect table name metadata for batch operations', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `batchGetItem_${ddb_params.TableName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+              }).then(done).catch(done)  
+            }
+
+            const batch_item_request = ddb.batchGetItem(ddb_batch_params).promise()
+            batch_item_request.then(checkTraces).catch(checkTraces) 
+          })          
         })
       })
 
@@ -218,6 +233,70 @@ describe('Plugin', () => {
 
             const s3_request = s3[operationName]({Bucket: s3_params.Bucket}).promise()
             s3_request.then(checkTraces).catch(checkTraces)            
+          })
+        })
+      })
+
+
+      describe('SQS', () => {
+        const sqs_params = fixtures.sqs
+        let ep_sqs
+        let sqs
+
+        beforeEach(() => {
+          tracer = require('../../dd-trace')
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()          
+          const ep_sqs = new AWS.Endpoint('http://localhost:4576')
+          AWS.config.update({ region: 'REGION' })
+
+          sqs = new AWS.SQS({ endpoint: ep_sqs })
+          return agent.load(plugin, 'aws-sdk')
+        })
+
+        describe('without configuration', () => {
+          const operationName = "createQueue"
+          const service = "SQS"
+
+          it('should instrument service methods with a callback', (done) => {
+            agent
+              .use(traces => {
+                
+                expect(traces[0][0]).to.have.property('resource', `${operationName}_${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+              }).then(done).catch(done)                  
+
+            sqs[operationName](sqs_params, function(err_create, data_create) {})
+          })
+
+          it('should instrument service methods without a callback', (done) => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName}_${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+              })
+              .then(done)
+              .catch(done)
+
+            const sqs_request = sqs[operationName](sqs_params)
+            const response = sqs_request.send()
+          })
+
+          it('should instrument service methods using promise()', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName}_${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+              }).then(done).catch(done)  
+            }
+
+            const sqs_request = sqs[operationName](sqs_params).promise()
+            sqs_request.then(checkTraces).catch(checkTraces)            
           })
         })
       })

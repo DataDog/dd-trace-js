@@ -75,6 +75,24 @@ const awsHelpers = {
         tags['aws.table.name'] = params.TableName
       }
 
+      // batch operations have different format, collect table name for batch
+      // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchGetItem-property`
+      // dynamoDB batch TableName
+      if (params.RequestItems) {
+        if (typeof params.RequestItems === 'object') {
+          if (Object.keys(params.RequestItems).length === 1) {
+            let tableName = Object.keys(params.RequestItems)[0]
+
+            tags['resource.name'] = `${operation}_${tableName}`
+            tags['aws.table.name'] = tableName            
+          }
+        }
+      }
+
+      // TODO: DynamoDB.DocumentClient does batches on multiple tables
+      // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB/DocumentClient.html#batchGet-property
+      // Delegates to single table batch operation, but it may be useful to create a parent span here
+
       // kenesis StreamName
       if (params.StreamName) {
         tags['resource.name'] = `${operation}_${params.StreamName}`
@@ -85,6 +103,11 @@ const awsHelpers = {
       if (params.Bucket) {
         tags['resource.name'] = `${operation}_${params.Bucket}`
         tags['aws.bucket.name'] = params.Bucket
+      }
+
+      if (params.QueueName) {
+        tags['resource.name'] = `${operation}_${params.QueueName}`
+        tags['aws.queue.name'] = params.QueueName
       }
     }
 
