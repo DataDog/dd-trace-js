@@ -9,14 +9,14 @@ function createWrapRequest (tracer, config) {
     return function requestWithTrace (operation, params, cb) {
       const serviceName = awsHelpers.normalizeServiceName(this)
 
-      //TODO: should tablename/streamname/etc be part of resurce?
-      let baseTags = {
+      // TODO: should tablename/streamname/etc be part of resurce?
+      const baseTags = {
         [Tags.SPAN_KIND]: 'client',
         'span.type': 'http',
         'service.name': config.service || `${tracer._service}-aws`,
         'aws.agent': 'js-aws-sdk',
         'aws.operation': operation,
-        'aws.region': request.httpRequest && request.httpRequest.region || this.config.region,
+        'aws.region': (request.httpRequest && request.httpRequest.region) || this.config.region,
         'aws.service': serviceName,
         'component': serviceName
       }
@@ -27,7 +27,7 @@ function createWrapRequest (tracer, config) {
         tags: baseTags
       })
 
-      //sync with serverless on how to normalize to fit existing conventions
+      // sync with serverless on how to normalize to fit existing conventions
       // <operation>_<specialityvalue>
       awsHelpers.addResourceAndSpecialtyTags(span, operation, params)
 
@@ -36,22 +36,21 @@ function createWrapRequest (tracer, config) {
       if (typeof cb === 'function') {
         return tracer.scope().activate(span, () => {
           return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf))
-         }) 
+        })
       } else {
-        
         const awsRequest = request.apply(this, arguments)
 
-        awsRequest.on('send', function(response) {
+        awsRequest.on('send', response => {
           tracer.scope().activate(span)
         })
 
-        awsRequest.on('complete', function(response) {
+        awsRequest.on('complete', response => {
           awsHelpers.addAdditionalTags(span, response, this)
           awsHelpers.finish(span, response.error)
         })
 
         return awsRequest
-      }      
+      }
     }
   }
 }
@@ -67,7 +66,7 @@ module.exports = [
     patch (AWS, tracer, config) {
       this.wrap(AWS.Service.prototype, 'makeRequest', createWrapRequest(tracer, config))
     },
-    unpatch (Transport) {
+    unpatch (AWS) {
       this.unwrap(AWS.Service.prototype, 'makeRequest')
     }
   }
