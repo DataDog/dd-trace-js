@@ -9,12 +9,12 @@ const DELIMITER = '\r\n'
 // TODO: flush more often
 
 class BrowserExporter {
-  constructor ({ clientToken, url, env }) {
+  constructor ({ clientToken, url, site, env }) {
     this._queue = []
     this._flushing = false
     this._clientToken = clientToken
     this._env = env
-    this._url = url || new URL('https://public-trace-http-intake.logs.datadoghq.com')
+    this._url = url || new URL(`https://public-trace-http-intake.logs.${site}`)
     this._size = 0
 
     window.addEventListener('beforeunload', () => this._flush())
