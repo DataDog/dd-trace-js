@@ -3,7 +3,7 @@
 const RetryOperation = require('../operation')
 const { AWS } = require('../../../../../versions/@google-cloud/pubsub').get()
 
-function waitforAWS () {
+function waitForAWS () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('aws-sdk')
 

@@ -39,12 +39,12 @@ fixtures['ddb_batch'] = {
       Keys: [
         {
           key: {
-            N: "CUSTOMER_ID"
+            N: 'CUSTOMER_ID'
           }
         },
         {
           key: {
-            S: "CUSTOMER_NAME"
+            S: 'CUSTOMER_NAME'
           }
         }
       ],
@@ -73,7 +73,7 @@ fixtures['sqs'] = {
 }
 
 fixtures['sns'] = {
-  Name: "example_aws_topic"
+  Name: 'example_aws_topic'
 }
 
 fixtures['sns_publish'] = {
@@ -81,9 +81,9 @@ fixtures['sns_publish'] = {
   MessageAttributes: {
     '<String>': {
       DataType: 'STRING_VALUE', /* required */
-      BinaryValue: Buffer.from('example string value') || 'STRING_VALUE'  // Strings will be Base-64 encoded on your behalf ,
+      BinaryValue: Buffer.from('example string value') || 'STRING_VALUE', // Strings get Base-64 encoded
       StringValue: 'STRING_VALUE'
-    },
+    }
   },
   MessageStructure: 'STRING_VALUE',
   PhoneNumber: 'STRING_VALUE',

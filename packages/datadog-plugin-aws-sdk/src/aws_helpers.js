@@ -42,9 +42,9 @@ const awsHelpers = {
 
       // SNS.createTopic is invoked with name but returns full arn in response data
       // which is used elsewhere to refer to topic
-      if(context.data && context.data.TopicArn && context.request && context.request.operation) {
-        span.addTags({ 'aws.topic.name': context.data.TopicArn }) 
-        span.addTags({ 'resource.name': `${context.request.operation}_${context.data.TopicArn}` }) 
+      if (context.data && context.data.TopicArn && context.request && context.request.operation) {
+        span.addTags({ 'aws.topic.name': context.data.TopicArn })
+        span.addTags({ 'resource.name': `${context.request.operation}_${context.data.TopicArn}` })
       }
     }
   },
@@ -88,10 +88,10 @@ const awsHelpers = {
       if (params.RequestItems) {
         if (typeof params.RequestItems === 'object') {
           if (Object.keys(params.RequestItems).length === 1) {
-            let tableName = Object.keys(params.RequestItems)[0]
+            const tableName = Object.keys(params.RequestItems)[0]
 
             tags['resource.name'] = `${operation}_${tableName}`
-            tags['aws.table.name'] = tableName            
+            tags['aws.table.name'] = tableName
           }
         }
       }
@@ -120,7 +120,7 @@ const awsHelpers = {
       if (params.TopicArn) {
         tags['resource.name'] = `${operation}_${params.TopicArn}`
         tags['aws.topic.name'] = params.TopicArn
-      }      
+      }
     }
 
     if (!tags['resource.name']) {
