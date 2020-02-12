@@ -70,6 +70,9 @@ describe('Plugin', () => {
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)             
 
                 // this randomly doesn't exist on resp headers for dynamoDB, it's unclear why it may be due to test env
                 // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
@@ -90,6 +93,9 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('name', 'aws.http')
               expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
               expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+              expect(traces[0][0].meta['aws.region']).to.be.a('string')
+              expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+              expect(traces[0][0].meta).to.have.property('aws.operation', operationName)              
 
               // this randomly doesn't exist on resp headers for dynamoDB, it's unclear why it may be due to test env
               // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
@@ -104,6 +110,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
                 expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', 'batchGetItem')
               }).then(done).catch(done)  
             }
 
@@ -138,6 +147,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.stream.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               }).then(done).catch(done)                  
 
             kinesis[operationName](kinesis_params, function(err_create, data_create) {})
@@ -151,6 +163,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.stream.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
               .then(done)
               .catch(done)
@@ -167,11 +182,14 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
                 expect(traces[0][0].meta['aws.stream.name']).to.be.a('string')
-              }).then(done).catch(done)  
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)                
+              }).then(done).catch(done)
             }
 
             const stream_request = kinesis[operationName](kinesis_params).promise()
-            stream_request.then(checkTraces).catch(checkTraces)            
+            stream_request.then(checkTraces).catch(checkTraces)
           })
         })
       })
@@ -202,6 +220,9 @@ describe('Plugin', () => {
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta['aws.bucket.name']).to.be.a('string')
                 // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               }).then(done).catch(done)                  
 
             s3[operationName]({Bucket: s3_params.Bucket}, function(err_create, data_create) {})
@@ -215,6 +236,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.bucket.name']).to.be.a('string')
                 // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
               .then(done)
               .catch(done)
@@ -231,6 +255,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.bucket.name']).to.be.a('string')
                 // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               }).then(done).catch(done)  
             }
 
@@ -268,6 +295,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               }).then(done).catch(done)                  
 
             sqs[operationName](sqs_params, function(err_create, data_create) {})
@@ -281,6 +311,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
               .then(done)
               .catch(done)
@@ -297,6 +330,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               }).then(done).catch(done)  
             }
 
@@ -357,6 +393,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               }).then(done).catch(done)
 
             const topic_request = sns.getTopicAttributes({TopicArn: topicArn}, function(err_create, data_create) {})
@@ -370,6 +409,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
               .then(done)
               .catch(done)
@@ -386,7 +428,10 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
-              }).then(done).catch(done)  
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+              }).then(done).catch(done)
             }
 
             const sns_request = sns[operationName]({TopicArn: topicArn}).promise()
@@ -401,6 +446,9 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', 'createTopic')
               }).then(done).catch(done)  
             }
 
