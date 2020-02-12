@@ -7,20 +7,20 @@ function waitForAWS () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('aws-sdk')
 
-    const ep_dynamo = new AWS.Endpoint('http://localhost:4569');
-    const ep_kinesis = new AWS.Endpoint('http://localhost:4568');
-    const ep_s3 = new AWS.Endpoint('http://localhost:4572');
-    const ep_sqs = new AWS.Endpoint('http://localhost:4576');
-    const ep_sns = new AWS.Endpoint('http://localhost:4575');
+    const epDynamo = new AWS.Endpoint('http://localhost:4569')
+    const epKinesis = new AWS.Endpoint('http://localhost:4568')
+    const epS3 = new AWS.Endpoint('http://localhost:4572')
+    const epSqs = new AWS.Endpoint('http://localhost:4576')
+    const epSns = new AWS.Endpoint('http://localhost:4575')
 
-    // Set the region 
-    AWS.config.update({region: 'REGION'});
+    // Set the region
+    AWS.config.update({ region: 'us-east-1' })
 
-    const ddb = new AWS.DynamoDB({endpoint: ep_dynamo});
-    const kinesis = new AWS.Kinesis({endpoint: ep_kinesis});
-    const s3 = new AWS.S3({endpoint: ep_s3, s3ForcePathStyle: true});
-    const sqs = new AWS.SQS({endpoint: ep_sqs});
-    const sns = new AWS.SQS({endpoint: ep_sns});
+    const ddb = new AWS.DynamoDB({ endpoint: epDynamo })
+    const kinesis = new AWS.Kinesis({ endpoint: epKinesis })
+    const s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
+    const sqs = new AWS.SQS({ endpoint: epSqs })
+    const sns = new AWS.SQS({ endpoint: epSns })
 
     operation.attempt(currentAttempt => {
       Promise.all([
@@ -29,13 +29,12 @@ function waitForAWS () {
         s3.listBuckets({}).promise(),
         sqs.listQueues({}).promise(),
         sns.listTopics({}).promise()
-      ]).then( data => {
+      ]).then(data => {
         resolve()
-      }).catch( err => {
+      }).catch(err => {
         if (operation.retry(err)) return
         if (err) return reject(err)
       })
-
     })
   })
 }

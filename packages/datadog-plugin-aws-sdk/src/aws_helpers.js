@@ -16,7 +16,7 @@ const awsHelpers = {
   },
 
   finish (span, err) {
-    if (err) {      
+    if (err) {
       span.addTags({
         'error.type': err.name,
         'error.msg': err.message,
@@ -42,7 +42,7 @@ const awsHelpers = {
         span.addTags({ 'aws.url': context.request.httpRequest.endpoint.href })
       }
 
-      //status code and content length to match what serverless captures
+      // status code and content length to match what serverless captures
       if (context.httpResponse) {
         if (context.httpResponse.headers && context.httpResponse.headers['content-length']) {
           span.addTags({ 'http.content_length': context.httpResponse.headers['content-length'].toString() })
@@ -50,8 +50,8 @@ const awsHelpers = {
 
         if (context.httpResponse.statusCode) {
           span.addTags({ 'http.status_code': context.httpResponse.statusCode.toString() })
-        }        
-      }      
+        }
+      }
 
       // SNS.createTopic is invoked with name but returns full arn in response data
       // which is used elsewhere to refer to topic
@@ -93,7 +93,8 @@ const awsHelpers = {
       if (params.TableName) {
         tags['resource.name'] = `${operation} ${params.TableName}`
         tags['aws.dynamodb.table_name'] = params.TableName
-        tags['span.type'] = 'dynamodb'        
+        // match serverless convention
+        tags['span.type'] = 'dynamodb'
       }
 
       // batch operations have different format, collect table name for batch
@@ -106,6 +107,7 @@ const awsHelpers = {
 
             tags['resource.name'] = `${operation} ${tableName}`
             tags['aws.dynamodb.table_name'] = tableName
+            // match serverless convention
             tags['span.type'] = 'dynamodb'
           }
         }
