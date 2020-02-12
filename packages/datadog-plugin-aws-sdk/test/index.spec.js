@@ -49,13 +49,13 @@ describe('Plugin', () => {
           it('should instrument service methods with a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${ddbParams.TableName}`)           
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)           
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
 
-                // requestID will randomly not exist on resp headers for dynamoDB, it's unclear why it may be due to test env
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                // request_id will randomly not exist on resp headers for dynamoDB, it's unclear why it may be due to test env
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -66,16 +66,18 @@ describe('Plugin', () => {
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${ddbParams.TableName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)             
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
 
                 // this randomly doesn't exist on resp headers for dynamoDB, it's unclear why it may be due to test env
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -89,36 +91,63 @@ describe('Plugin', () => {
             // const delete_request = ddb.deleteTable( {TableName: ddbParams.TableName} ).promise()
 
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('resource', `${operationName}_${ddbParams.TableName}`)
+              expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
               expect(traces[0][0]).to.have.property('name', 'aws.http')
               expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-              expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+              expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
               expect(traces[0][0].meta['aws.region']).to.be.a('string')
               expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
-              expect(traces[0][0].meta).to.have.property('aws.operation', operationName)              
+              expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+              expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+              expect(traces[0][0].meta['http.content_length']).to.be.a('string')
 
               // this randomly doesn't exist on resp headers for dynamoDB, it's unclear why it may be due to test env
-              // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+              // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
             }).then(done).catch(done)
           })
 
           it('should collect table name metadata for batch operations', (done) => {
             function checkTraces() {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `batchGetItem_${ddbParams.TableName}`)
+                expect(traces[0][0]).to.have.property('resource', `batchGetItem ${ddbParams.TableName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
-                expect(traces[0][0].meta['aws.table.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', 'batchGetItem')
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')                
               }).then(done).catch(done)  
             }
 
             const batch_item_request = ddb.batchGetItem(ddbBatchParams).promise()
             batch_item_request.then(checkTraces).catch(checkTraces) 
-          })          
+          })
+
+          it('should mark error responses', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+
+                // for some reason this fails to exist on error responses in testing env
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+              }).then(done).catch(done)  
+            }
+
+            const table_request =  ddb[operationName]({"TableName": ddbParams.TableName, "BadParam": "badvalue"}).promise()
+            table_request.then(checkTraces).catch(checkTraces)
+          })
         })
       })
 
@@ -142,14 +171,16 @@ describe('Plugin', () => {
           it('should instrument service methods with a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${kinesis_params.StreamName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${kinesis_params.StreamName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.stream.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)                  
 
             kinesis[operationName](kinesis_params, function(err_create, data_create) {})
@@ -158,14 +189,16 @@ describe('Plugin', () => {
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${kinesis_params.StreamName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${kinesis_params.StreamName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.stream.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -177,20 +210,47 @@ describe('Plugin', () => {
           it('should instrument service methods using promise()', (done) => {
             function checkTraces() {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${kinesis_params.StreamName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${kinesis_params.StreamName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
-                expect(traces[0][0].meta['aws.stream.name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)                
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)
             }
 
             const stream_request = kinesis[operationName](kinesis_params).promise()
             stream_request.then(checkTraces).catch(checkTraces)
           })
+
+          it('should mark error responses', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${kinesis_params.StreamName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+
+                // for some reason this fails to exist on error responses in testing env
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                // expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                // expect(traces[0][0].meta['http.content_length']).to.be.a('string')
+              }).then(done).catch(done)
+            }
+
+            const stream_request = kinesis[operationName]({StreamName: kinesis_params.StreamName, "IllegalKey": "IllegalValue"}).promise()
+            stream_request.then(checkTraces).catch(checkTraces)
+          })          
         })
       })
 
@@ -215,14 +275,16 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${s3_params.Bucket}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3_params.Bucket}`)
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
-                expect(traces[0][0].meta['aws.bucket.name']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)                  
 
             s3[operationName]({Bucket: s3_params.Bucket}, function(err_create, data_create) {})
@@ -231,14 +293,16 @@ describe('Plugin', () => {
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${s3_params.Bucket}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3_params.Bucket}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.bucket.name']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -250,20 +314,48 @@ describe('Plugin', () => {
           it('should instrument service methods using promise()', (done) => {
             function checkTraces() {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${s3_params.Bucket}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3_params.Bucket}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.bucket.name']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)  
             }
 
             const s3_request = s3[operationName]({Bucket: s3_params.Bucket}).promise()
             s3_request.then(checkTraces).catch(checkTraces)            
           })
+
+
+          it('should mark error responses', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3_params.Bucket}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+
+                // for some reason this fails to exist on error responses in testing env
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                // expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                // expect(traces[0][0].meta['http.content_length']).to.be.a('string')                
+              }).then(done).catch(done)  
+            }
+
+            const s3_request = s3[operationName]({Bucket: s3_params.Bucket, "IllegalKey": "IllegalValue"}).promise()
+            s3_request.then(checkTraces).catch(checkTraces)            
+          })          
         })
       })
 
@@ -290,14 +382,16 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqs_params.QueueName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)                  
 
             sqs[operationName](sqs_params, function(err_create, data_create) {})
@@ -306,14 +400,16 @@ describe('Plugin', () => {
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqs_params.QueueName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -325,19 +421,47 @@ describe('Plugin', () => {
           it('should instrument service methods using promise()', (done) => {
             function checkTraces() {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqs_params.QueueName}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.queue.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
+              }).then(done).catch(done)  
+            }
+
+            const sqs_request = sqs[operationName](sqs_params).promise()
+            sqs_request.then(checkTraces).catch(checkTraces)
+
+          it('should mark error responses', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqs_params.QueueName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+
+
+                // for some reason this fails to exist on error responses in testing env
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                // expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                // expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)  
             }
 
             const sqs_request = sqs[operationName](sqs_params).promise()
             sqs_request.then(checkTraces).catch(checkTraces)            
+          })            
           })
         })
       })
@@ -375,10 +499,12 @@ describe('Plugin', () => {
           sns = new AWS.SNS({ endpoint: ep_sns })
 
           // cleanup topics
-          return Promise.all([topicArn, topicArnTwo]
-            .filter( arn => arn !== undefined )
-            .map( arn => sns.deleteTopic({TopicArn: arn}).promise())
-            ).catch()
+          return sns.listTopics({}).promise().then(data => {
+            if (data && data.Topics && data.Topics.length > 0) {
+              Promise.all(data.Topics.filter( arn => arn !== undefined )
+                .map( arn => sns.deleteTopic({TopicArn: arn.TopicArn}).promise()))
+            }
+          })
         })        
 
         describe('without configuration', () => {
@@ -388,14 +514,16 @@ describe('Plugin', () => {
           it('should instrument service methods with a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${topicArn}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${topicArn}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)
 
             const topic_request = sns.getTopicAttributes({TopicArn: topicArn}, function(err_create, data_create) {})
@@ -404,14 +532,16 @@ describe('Plugin', () => {
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${topicArn}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${topicArn}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               })
               .then(done)
               .catch(done)
@@ -423,14 +553,16 @@ describe('Plugin', () => {
           it('should instrument service methods using promise()', (done) => {
             function checkTraces() {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}_${topicArn}`)
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${topicArn}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')
               }).then(done).catch(done)
             }
 
@@ -441,14 +573,16 @@ describe('Plugin', () => {
           it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
             function checkTraces() {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `createTopic_${topicArnTwo}`)
+                expect(traces[0][0]).to.have.property('resource', `createTopic ${topicArnTwo}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.http')
                 expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                expect(traces[0][0].meta['aws.topic.name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.requestId']).to.be.a('string')
+                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
+                expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
                 expect(traces[0][0].meta).to.have.property('aws.operation', 'createTopic')
+                expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                expect(traces[0][0].meta['http.content_length']).to.be.a('string')                
               }).then(done).catch(done)  
             }
 
@@ -457,6 +591,31 @@ describe('Plugin', () => {
             }).catch( err => {
             }).finally(checkTraces)
           })
+
+          it('should mark error responses', (done) => {
+            function checkTraces() {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${topicArn}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.http')
+                expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')                
+
+                // for some reason this fails to exist on error responses in testing env
+                // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                // expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                // expect(traces[0][0].meta['http.content_length']).to.be.a('string')                
+              }).then(done).catch(done)
+            }
+
+            const sns_request = sns.getTopicAttributes({TopicArn: topicArn, "IllegalKey": "IllegalValue"}).promise()
+            sns_request.then(checkTraces).catch(checkTraces)
+          })          
         })
       })
     })

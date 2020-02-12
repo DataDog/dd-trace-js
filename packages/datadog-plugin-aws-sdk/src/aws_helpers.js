@@ -16,15 +16,16 @@ const awsHelpers = {
   },
 
   finish (span, err) {
-    if (err) {
+    if (err) {      
       span.addTags({
         'error.type': err.name,
         'error.msg': err.message,
         'error.stack': err.stack
       })
 
+      // console.log('err is', err)
       if (err.requestId) {
-        span.addTags({ 'aws.requestId': err.requestId })
+        span.addTags({ 'aws.request_id': err.requestId })
       }
     }
 
@@ -34,17 +35,29 @@ const awsHelpers = {
   addAdditionalTags (span, context) {
     if (span) {
       if (context.requestId) {
-        span.addTags({ 'aws.requestId': context.requestId })
+        span.addTags({ 'aws.request_id': context.requestId })
       }
-      if (context.httpRequest && context.httpRequest.endpoint) {
-        span.addTags({ 'aws.url': context.httpRequest.endpoint.href })
+
+      if (context.request && context.request.httpRequest && context.request.httpRequest.endpoint) {
+        span.addTags({ 'aws.url': context.request.httpRequest.endpoint.href })
       }
+
+      //status code and content length to match what serverless captures
+      if (context.httpResponse) {
+        if (context.httpResponse.headers && context.httpResponse.headers['content-length']) {
+          span.addTags({ 'http.content_length': context.httpResponse.headers['content-length'].toString() })
+        }
+
+        if (context.httpResponse.statusCode) {
+          span.addTags({ 'http.status_code': context.httpResponse.statusCode.toString() })
+        }        
+      }      
 
       // SNS.createTopic is invoked with name but returns full arn in response data
       // which is used elsewhere to refer to topic
       if (context.data && context.data.TopicArn && context.request && context.request.operation) {
-        span.addTags({ 'aws.topic.name': context.data.TopicArn })
-        span.addTags({ 'resource.name': `${context.request.operation}_${context.data.TopicArn}` })
+        span.addTags({ 'aws.sns.topic_arn': context.data.TopicArn })
+        span.addTags({ 'resource.name': `${context.request.operation} ${context.data.TopicArn}` })
       }
     }
   },
@@ -78,8 +91,9 @@ const awsHelpers = {
     if (operation && params) {
       // dynamoDB TableName
       if (params.TableName) {
-        tags['resource.name'] = `${operation}_${params.TableName}`
-        tags['aws.table.name'] = params.TableName
+        tags['resource.name'] = `${operation} ${params.TableName}`
+        tags['aws.dynamodb.table_name'] = params.TableName
+        tags['span.type'] = 'dynamodb'        
       }
 
       // batch operations have different format, collect table name for batch
@@ -90,8 +104,9 @@ const awsHelpers = {
           if (Object.keys(params.RequestItems).length === 1) {
             const tableName = Object.keys(params.RequestItems)[0]
 
-            tags['resource.name'] = `${operation}_${tableName}`
-            tags['aws.table.name'] = tableName
+            tags['resource.name'] = `${operation} ${tableName}`
+            tags['aws.dynamodb.table_name'] = tableName
+            tags['span.type'] = 'dynamodb'
           }
         }
       }
@@ -102,30 +117,36 @@ const awsHelpers = {
 
       // kenesis StreamName
       if (params.StreamName) {
-        tags['resource.name'] = `${operation}_${params.StreamName}`
-        tags['aws.stream.name'] = params.StreamName
+        tags['resource.name'] = `${operation} ${params.StreamName}`
+        tags['aws.kinesis.stream_name'] = params.StreamName
       }
 
       // s3 Bucket
       if (params.Bucket) {
-        tags['resource.name'] = `${operation}_${params.Bucket}`
-        tags['aws.bucket.name'] = params.Bucket
+        tags['resource.name'] = `${operation} ${params.Bucket}`
+        tags['aws.s3.bucket_name'] = params.Bucket
       }
 
+      // sqs queue
       if (params.QueueName) {
-        tags['resource.name'] = `${operation}_${params.QueueName}`
-        tags['aws.queue.name'] = params.QueueName
+        tags['resource.name'] = `${operation} ${params.QueueName}`
+        tags['aws.sqs.queue_name'] = params.QueueName
       }
 
+      // sns topic
       if (params.TopicArn) {
-        tags['resource.name'] = `${operation}_${params.TopicArn}`
-        tags['aws.topic.name'] = params.TopicArn
+        tags['resource.name'] = `${operation} ${params.TopicArn}`
+        tags['aws.sns.topic_arn'] = params.TopicArn
       }
     }
 
+    // defaults
     if (!tags['resource.name']) {
-      // default
       tags['resource.name'] = operation || 'Amazon'
+    }
+
+    if (!tags['span.type']) {
+      tags['span.type'] = 'http'
     }
 
     span.addTags(tags)
