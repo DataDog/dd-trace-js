@@ -363,12 +363,13 @@ describe('Plugin', () => {
             epKinesis = new AWS.Endpoint('http://localhost:4568')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
             return agent.load(plugin, 'aws-sdk', {
-              hooks: { addCustomTags: (span, params) => {
+              hooks: {
+                addCustomTags: (span, params) => {
                   span.addTags({
                     'aws.specialValue': 'foo',
                     'aws.paramsStreamName': params.StreamName
                   })
-                } 
+                }
               }
             })
           })
@@ -416,14 +417,15 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                   expect(traces[0][0].meta).to.have.property('aws.paramsStreamName', kinesisParams.StreamName)
 
-                  // this randomly doesn't exist on resp headers for dynamoDB, it's unclear why it may be due to test env
+                  // this randomly doesn't exist on resp headers for dynamoDB,
+                  // it's unclear why it may be due to test env
                   expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
                 }).then(done).catch(done)
               }
 
               const streamRequest = kinesis[operationName](kinesisParams).promise()
               streamRequest.then(checkTraces).catch(checkTraces)
-            }) 
+            })
           })
         })
       })
@@ -431,7 +433,7 @@ describe('Plugin', () => {
       describe('S3', () => {
         const s3Params = fixtures.s3
         const operationName = 'createBucket'
-        const service = 'S3'        
+        const service = 'S3'
         let epS3
         let s3
 
@@ -530,19 +532,20 @@ describe('Plugin', () => {
           })
         })
 
-
         describe('with configuration', () => {
           beforeEach(() => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epS3 = new AWS.Endpoint('http://localhost:4572')
             s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
+
             return agent.load(plugin, 'aws-sdk', {
-              hooks: { addCustomTags: (span, params) => {
+              hooks: {
+                addCustomTags: (span, params) => {
                   span.addTags({
                     'aws.specialValue': 'foo',
                     'aws.paramsBucket': params.Bucket
                   })
-                } 
+                }
               }
             })
           })
@@ -596,7 +599,7 @@ describe('Plugin', () => {
 
               const s3Request = s3[operationName]({ Bucket: s3Params.Bucket }).promise()
               s3Request.then(checkTraces).catch(checkTraces)
-            }) 
+            })
           })
         })
       })

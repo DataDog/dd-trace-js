@@ -34,6 +34,8 @@ function createWrapRequest (tracer, config) {
 
       analyticsSampler.sample(span, config.analytics)
 
+      // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
+      // master/doc_source/using-a-callback-function.md#using-an-anonymous-callback-function
       if (typeof cb === 'function') {
         return tracer.scope().activate(span, () => {
           return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf, config))
@@ -45,6 +47,8 @@ function createWrapRequest (tracer, config) {
           tracer.scope().activate(span)
         })
 
+        // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
+        // master/doc_source/using-a-response-event-handler.md#the-complete-event
         awsRequest.on('complete', response => {
           awsHelpers.addAdditionalTags(span, response)
           config.hooks.addCustomTags(span, params)
