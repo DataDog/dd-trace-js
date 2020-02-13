@@ -11,7 +11,7 @@ function createWrapRequest (tracer, config) {
     return function requestWithTrace (operation, params, cb) {
       const serviceName = awsHelpers.normalizeServiceName(this)
 
-      // TODO: should tablename/streamname/etc be part of resurce?
+      // TODO: should tablename/streamname/etc be part of resource?
       const baseTags = {
         [Tags.SPAN_KIND]: 'client',
         'span.type': 'http',
@@ -47,8 +47,8 @@ function createWrapRequest (tracer, config) {
         })
 
         awsRequest.on('complete', response => {
-          awsHelpers.addAdditionalTags(span, response)
-          config.hooks.addTags(span, params, response.data)
+          awsHelpers.addAdditionalTags(span, response) 
+          config.hooks.addCustomTags(span, params)
           awsHelpers.finish(span, response.error, config)
         })
 
@@ -68,9 +68,9 @@ function normalizeConfig (config) {
 
 function getHooks (config) {
   const noop = () => {}
-  const addTags = (config.hooks && config.hooks.addTags) || noop
+  const addCustomTags = (config.hooks && config.hooks.addCustomTags) || noop
 
-  return { addTags }
+  return { addCustomTags }
 }
 
 module.exports = [

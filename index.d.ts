@@ -631,7 +631,17 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
    */
-  interface aws_sdk extends Instrumentation {}
+  interface aws_sdk extends Instrumentation {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the aws span finishes.
+       */
+      addCustomTags?: (span?: opentracing.Span, params?: anyObject) => any;
+    };
+  }
 
   /**
    * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)

@@ -5,7 +5,8 @@ const awsHelpers = {
     return function (err, response) {
       // "this" should refer to response object https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
       awsHelpers.addAdditionalTags(span, this)
-      config.hooks.addTags(span, this.params, this.data)
+
+      config.hooks.addCustomTags(span, this.request.params)
       awsHelpers.finish(span, err, config)
 
       if (typeof done === 'function') {
