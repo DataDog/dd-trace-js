@@ -3,7 +3,7 @@
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../src/id')
-const { Int64BE, Uint64BE } = require('int64-buffer') // TODO: remove dependency
+const { Int64BE } = require('int64-buffer') // TODO: remove dependency
 
 describe('encode', () => {
   let encode
@@ -29,7 +29,10 @@ describe('encode', () => {
       duration: 456
     }]
 
-    const buffer = encode(data)
+    let buffer = Buffer.alloc(1024)
+    const offset = encode(buffer, 0, data)
+    buffer = buffer.slice(0, offset)
+
     const decoded = msgpack.decode(buffer, { codec })
 
     expect(decoded).to.be.instanceof(Array)

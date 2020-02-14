@@ -78,5 +78,6 @@ module.exports = {
   null: Buffer.alloc(1, 0xc0),
   uint8: Buffer.alloc(1, 0xcc),
   uint32: Buffer.alloc(1, 0xce),
-  uint64: Buffer.alloc(1, 0xcf)
+  uint64: Buffer.alloc(1, 0xcf),
+  int64: Buffer.alloc(1, 0xd3)
 }
