@@ -1,6 +1,6 @@
 'use strict'
 
-const Uint64BE = require('int64-buffer').Uint64BE
+const { Int64BE, Uint64BE } = require('int64-buffer')
 const util = require('./util')
 const tokens = require('./tokens')
 const cachedString = require('./cache')(1024)
@@ -31,15 +31,15 @@ const {
   offset += 8
 
   offset += copy(buffer, offset, fields.start)
-  offset += copy(buffer, offset, tokens.uint64)
+  offset += copy(buffer, offset, tokens.int64)
   const startOffset = offset
-  new Uint64BE(buffer, offset, 0) // eslint-disable-line no-new
+  new Int64BE(buffer, offset, 0) // eslint-disable-line no-new
   offset += 8
 
   offset += copy(buffer, offset, fields.duration)
-  offset += copy(buffer, offset, tokens.uint64)
+  offset += copy(buffer, offset, tokens.int64)
   const durationOffset = offset
-  new Uint64BE(buffer, offset, 0) // eslint-disable-line no-new
+  new Int64BE(buffer, offset, 0) // eslint-disable-line no-new
   offset += 8
 
   offset += copy(buffer, offset, fields.error)

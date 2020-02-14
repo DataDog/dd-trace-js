@@ -2,7 +2,9 @@
 
 const URL = require('url-parse')
 
-describe('Writer', () => {
+const id = require('../../../src/id')
+
+describe.skip('Writer', () => {
   let Writer
   let writer
   let trace
@@ -36,7 +38,13 @@ describe('Writer', () => {
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {},
+        _tags: {
+          trace_id: id('1'),
+          span_id: id('2'),
+          parent_id: id('0'),
+          start: 3,
+          duration: 4
+        },
         _traceFlags: {}
       })
     }
