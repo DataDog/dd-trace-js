@@ -113,7 +113,11 @@ const web = {
       return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
     } catch (e) {
       if (activeSpan) {
-        activeSpan.setTag('error', e)
+        activeSpan.addTags({
+          'error.type': e.name,
+          'error.msg': e.message,
+          'error.stack': e.stack
+        })
       }
 
       throw (e)
