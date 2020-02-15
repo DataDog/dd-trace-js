@@ -108,7 +108,7 @@ const web = {
   },
 
   // catch errors and apply to active span
-  reactivateAndBindMiddlewareErrors (fn, req, tracer, activeSpan) {
+  bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
     try {
       return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
     } catch (e) {
