@@ -1010,14 +1010,14 @@ describe('Plugin', () => {
 
           app.use((req, res, next) => {
             span = tracer.scope().active()
-
+            tracer.scope().activate(null, () => next())
             next()
           })
 
           app.get('/user', (req, res) => {
             res.status(200).send()
             try {
-              expect(tracer.scope().active()).to.equal(span)
+              expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
               done()
             } catch (e) {
               done(e)
@@ -1032,7 +1032,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should not activate a span for every middleware on a route with middleware disabled ', done => {
+        it('should not do automatic instrumentation on middleware', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
           const app = express()

@@ -606,6 +606,7 @@ describe('Plugin', () => {
 
             app.use((ctx, next) => {
               span = tracer.scope().active()
+              tracer.scope().activate(null, () => next())
               return next()
             })
 
@@ -613,7 +614,7 @@ describe('Plugin', () => {
               ctx.body = ''
 
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
                 done()
               } catch (e) {
                 done(e)

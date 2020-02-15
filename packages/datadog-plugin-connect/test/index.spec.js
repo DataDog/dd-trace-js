@@ -727,7 +727,7 @@ describe('Plugin', () => {
 
           app.use((req, res, next) => {
             span = tracer.scope().active()
-
+            tracer.scope().activate(null, () => next())
             next()
           })
 
@@ -735,7 +735,7 @@ describe('Plugin', () => {
             res.end()
 
             try {
-              expect(tracer.scope().active()).to.equal(span)
+              expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
               done()
             } catch (e) {
               done(e)
