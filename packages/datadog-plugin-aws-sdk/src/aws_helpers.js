@@ -1,7 +1,7 @@
 'use strict'
 
 const awsHelpers = {
-  wrapCallback (tracer, span, done, parent, config) {
+  wrapCallback (span, boundCallback, config) {
     return function (err, response) {
       // "this" should refer to response object https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
       awsHelpers.addAdditionalTags(span, this)
@@ -9,10 +9,8 @@ const awsHelpers = {
       config.hooks.addCustomTags(span, this.request.params)
       awsHelpers.finish(span, err, config)
 
-      if (typeof done === 'function') {
-        tracer.scope().activate(parent, () => {
-          done.apply(null, arguments)
-        })
+      if (typeof boundCallback === 'function') {
+        boundCallback.apply(null, arguments)
       }
     }
   },

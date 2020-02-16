@@ -37,25 +37,27 @@ function createWrapRequest (tracer, config) {
       // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
       // master/doc_source/using-a-callback-function.md#using-an-anonymous-callback-function
       if (typeof cb === 'function') {
-        return tracer.scope().activate(span, () => {
-          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf, config))
-        })
-      } else {
-        const awsRequest = request.apply(this, arguments)
+        const boundReq = tracer.scope().bind(request, span)
+        const boundCb = tracer.scope().bind(cb, childOf)
 
-        awsRequest.on('send', response => {
+        return boundReq.call(this, operation, params, awsHelpers.wrapCallback(span, boundCb, config))
+      } else {
+        const awsReq = request.apply(this, arguments)
+        const boundAwsReq = tracer.scope().bind(awsReq, span)
+
+        boundAwsReq.on('send', response => {
           tracer.scope().activate(span)
         })
 
         // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
         // master/doc_source/using-a-response-event-handler.md#the-complete-event
-        awsRequest.on('complete', response => {
+        boundAwsReq.on('complete', response => {
           awsHelpers.addAdditionalTags(span, response)
           config.hooks.addCustomTags(span, params)
           awsHelpers.finish(span, response.error, config)
         })
 
-        return awsRequest
+        return boundAwsReq
       }
     }
   }
