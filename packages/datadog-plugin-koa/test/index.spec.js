@@ -606,8 +606,7 @@ describe('Plugin', () => {
 
             app.use((ctx, next) => {
               span = tracer.scope().active()
-              tracer.scope().activate(null, () => next())
-              return next()
+              return tracer.scope().activate(null, () => next())
             })
 
             app.use(ctx => {
