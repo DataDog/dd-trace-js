@@ -146,29 +146,39 @@ function patch (http, methodName, tracer, config) {
   }
 
   function normalizeArgs (inputURL, inputOptions, callback) {
-    if (typeof inputURL === 'string') {
-      try {
-        inputURL = urlToOptions(new url.URL(inputURL))
-      } catch (e) {
-        inputURL = url.parse(inputURL)
-      }
-    } else if (inputURL instanceof url.URL) {
-      inputURL = urlToOptions(inputURL)
-    }
+    inputURL = normalizeOptions(inputURL)
 
-    if (typeof inputOptions === 'function') {
-      callback = inputOptions
-      inputOptions = inputURL || {}
-    } else if (typeof inputOptions === 'object') {
-      inputURL = Object.assign(inputURL || {}, inputOptions)
-    }
+    [callback, inputOptions] = normalizeCallback(inputURL, callback, inputURL)
 
-    // normalize getHeaders
-    inputURL.headers = inputURL.headers || {}
+    inputURL = coaleseOptions(inputURL, inputOptions)
 
+    // normalize urlString
     const uri = url.format(inputURL)
 
     return { uri, options: inputURL, callback }
+  }
+
+  function normalizeCallback (inputOptions, callback, inputURL) {
+    if (typeof inputOptions === 'function') {
+      return [inputOptions, inputURL || {}]
+    } else {
+      return [callback, inputOptions]
+    }
+  }
+
+  function coaleseOptions (inputURL, inputOptions) {
+    let coalesedOptions
+
+    if (typeof inputOptions === 'object') {
+      coalesedOptions = Object.assign(inputURL || {}, inputOptions)
+    } else {
+      coalesedOptions = inputURL
+    }
+
+    // normalize getHeaders
+    coalesedOptions.headers = coalesedOptions.headers || {}
+
+    return coalesedOptions
   }
 
   // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
@@ -194,6 +204,20 @@ function patch (http, methodName, tracer, config) {
       options.auth = `${url.username}:${url.password}`
     }
     return options
+  }
+
+  function normalizeOptions (inputURL) {
+    if (typeof inputURL === 'string') {
+      try {
+        return urlToOptions(new url.URL(inputURL))
+      } catch (e) {
+        return url.parse(inputURL)
+      }
+    } else if (inputURL instanceof url.URL) {
+      return urlToOptions(inputURL)
+    } else {
+      return inputURL
+    }
   }
 }
 
