@@ -262,7 +262,16 @@ describe('Plugin', () => {
             AWS.config.update({ region: 'REGION' })
             epKinesis = new AWS.Endpoint('http://localhost:4568')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
+
             return agent.load(plugin, 'aws-sdk')
+          })
+
+          afterEach(() => {
+            kinesis.listStreams({}).promise().then(data => {
+              if (data && data.StreamNames && data.StreamNames.length > 0) {
+                data.StreamNames.forEach(streamName => kinesis.deleteStream({ StreamName: streamName }, () => {}))
+              }
+            })
           })
 
           describe('instrumentation', () => {

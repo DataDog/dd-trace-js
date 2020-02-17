@@ -28,10 +28,6 @@ function createWrapRequest (tracer, config) {
         tags: baseTags
       })
 
-      // sync with serverless on how to normalize to fit existing conventions
-      // <operation>_<specialityvalue>
-      awsHelpers.addResourceAndSpecialtyTags(span, operation, params)
-
       analyticsSampler.sample(span, config.analytics)
 
       // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
@@ -40,7 +36,7 @@ function createWrapRequest (tracer, config) {
         const boundReq = tracer.scope().bind(request, span)
         const boundCb = tracer.scope().bind(cb, childOf)
 
-        return boundReq.call(this, operation, params, awsHelpers.wrapCallback(span, boundCb, config))
+        return boundReq.call(this, operation, params, awsHelpers.wrapCallback(span, boundCb, config, serviceName))
       } else {
         const awsReq = request.apply(this, arguments)
         const boundAwsReq = tracer.scope().bind(awsReq, span)
@@ -52,7 +48,9 @@ function createWrapRequest (tracer, config) {
         // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
         // master/doc_source/using-a-response-event-handler.md#the-complete-event
         boundAwsReq.on('complete', response => {
-          awsHelpers.addAdditionalTags(span, response)
+          // response is same AWS.Response object
+          // as https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
+          awsHelpers.addAwsTags(span, response, serviceName)
           config.hooks.addCustomTags(span, params)
           awsHelpers.finish(span, response.error, config)
         })
