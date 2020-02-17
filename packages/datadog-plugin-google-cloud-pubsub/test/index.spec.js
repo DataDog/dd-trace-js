@@ -7,11 +7,14 @@ const id = require('../../dd-trace/src/id')
 
 wrapIt()
 
+// The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
+const TIMEOUT = 60000
+
 describe('Plugin', () => {
   let tracer
 
   describe('google-cloud-pubsub', function () {
-    this.timeout(5000) // The roundtrip to the pubsub emulator takes time
+    this.timeout(TIMEOUT)
 
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8042'
@@ -238,7 +241,7 @@ describe('Plugin', () => {
             'gcloud.project_id': project
           }
         }, expected)
-        return expectSomeSpan(agent, expected)
+        return expectSomeSpan(agent, expected, { timeoutMs: TIMEOUT })
       }
     })
   })

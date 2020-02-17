@@ -75,6 +75,7 @@ describe('Config', () => {
 
   it('should initialize from environment variables with url taking precedence', () => {
     platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:7777')
+    platform.env.withArgs('DD_SITE').returns('datadoghq.eu')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
@@ -89,6 +90,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
   })
@@ -103,6 +105,7 @@ describe('Config', () => {
       enabled: false,
       debug: true,
       analytics: true,
+      site: 'datadoghq.eu',
       hostname: 'agent',
       port: 6218,
       dogstatsd: {
@@ -134,6 +137,7 @@ describe('Config', () => {
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('analytics', true)
+    expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.property('port', '6218')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
@@ -167,6 +171,7 @@ describe('Config', () => {
       debug: true,
       hostname: 'agent',
       url: 'https://agent2:7777',
+      site: 'datadoghq.eu',
       port: 6218,
       service: 'service',
       env: 'test',
@@ -182,6 +187,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -205,6 +211,7 @@ describe('Config', () => {
 
   it('should give priority to the options', () => {
     platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:6218')
+    platform.env.withArgs('DD_SITE').returns('datadoghq.eu')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
@@ -224,6 +231,7 @@ describe('Config', () => {
       debug: false,
       analytics: false,
       protocol: 'https',
+      site: 'datadoghq.com',
       hostname: 'server',
       port: 7777,
       dogstatsd: {
@@ -246,6 +254,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
+    expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('service', 'test')
