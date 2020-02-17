@@ -32,8 +32,29 @@ function createWrapQuery (tracer, config) {
       }
 
       const originalCallback = pgQuery.callback
-      const statement = pgQuery.text
+      const statement = (pgQuery.cursor && pgQuery.cursor.text) || pgQuery.text
       const params = this.connectionParameters
+
+      function finishSpan (err) {
+        if (err) {
+          span.addTags({
+            'error.type': err.name,
+            'error.msg': err.message,
+            'error.stack': err.stack
+          })
+        }
+
+        span.finish()
+      }
+
+      function isReadableStream (query) {
+        return query.readable && typeof query.on === 'function'
+      }
+
+      if (isReadableStream(pgQuery)) {
+        pgQuery.on('close', function () { finishSpan() })
+        pgQuery.on('error', function (err) { finishSpan(err) })
+      }
 
       span.setTag('resource.name', statement)
 
@@ -47,15 +68,7 @@ function createWrapQuery (tracer, config) {
       }
 
       pgQuery.callback = scope.bind((err, res) => {
-        if (err) {
-          span.addTags({
-            'error.type': err.name,
-            'error.msg': err.message,
-            'error.stack': err.stack
-          })
-        }
-
-        span.finish()
+        finishSpan(err)
 
         if (originalCallback) {
           originalCallback(err, res)
