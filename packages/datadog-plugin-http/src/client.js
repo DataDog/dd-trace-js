@@ -172,10 +172,13 @@ function patch (http, methodName, tracer, config) {
       coalesedOptions = inputURL
     }
 
-    // normalize getHeaders
-    coalesedOptions.headers = coalesedOptions.headers || {}
+    coalesedOptions.headers = normalizeHeaders(coalesedOptions)
 
     return coalesedOptions
+  }
+
+  function normalizeHeaders (options) {
+    return options.headers || {}
   }
 
   // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
