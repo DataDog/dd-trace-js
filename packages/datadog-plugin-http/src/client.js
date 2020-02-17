@@ -148,14 +148,11 @@ function patch (http, methodName, tracer, config) {
   function normalizeArgs (inputURL, inputOptions, callback) {
     inputURL = normalizeOptions(inputURL)
 
-    [callback, inputOptions] = normalizeCallback(inputURL, callback, inputURL)
+    const [callbackNormalilzed, inputOptionsNormalized] = normalizeCallback(inputOptions, callback, inputURL)
+    const coalesedOptions = coaleseOptions(inputURL, inputOptionsNormalized)
+    const uri = url.format(coalesedOptions)
 
-    inputURL = coaleseOptions(inputURL, inputOptions)
-
-    // normalize urlString
-    const uri = url.format(inputURL)
-
-    return { uri, options: inputURL, callback }
+    return { uri: uri, options: coalesedOptions, callback: callbackNormalilzed }
   }
 
   function normalizeCallback (inputOptions, callback, inputURL) {
