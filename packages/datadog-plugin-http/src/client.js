@@ -145,14 +145,15 @@ function patch (http, methodName, tracer, config) {
     })
   }
 
-  function normalizeArgs (inputURL, inputOptions, callback) {
+  function normalizeArgs (inputURL, inputOptions, cb) {
     inputURL = normalizeOptions(inputURL)
 
-    const [callbackNormalilzed, inputOptionsNormalized] = normalizeCallback(inputOptions, callback, inputURL)
-    const coalesedOptions = coaleseOptions(inputURL, inputOptionsNormalized)
-    const uri = url.format(coalesedOptions)
+    const [callback, inputOptionsNormalized] = normalizeCallback(inputOptions, cb, inputURL)
+    const options = combineOptions(inputURL, inputOptionsNormalized)
+    normalizeHeaders(options)
+    const uri = url.format(options)
 
-    return { uri: uri, options: coalesedOptions, callback: callbackNormalilzed }
+    return { uri, options, callback }
   }
 
   function normalizeCallback (inputOptions, callback, inputURL) {
@@ -163,22 +164,16 @@ function patch (http, methodName, tracer, config) {
     }
   }
 
-  function coaleseOptions (inputURL, inputOptions) {
-    let coalesedOptions
-
+  function combineOptions (inputURL, inputOptions) {
     if (typeof inputOptions === 'object') {
-      coalesedOptions = Object.assign(inputURL || {}, inputOptions)
+      return Object.assign(inputURL || {}, inputOptions)
     } else {
-      coalesedOptions = inputURL
+      return inputURL
     }
-
-    coalesedOptions.headers = normalizeHeaders(coalesedOptions)
-
-    return coalesedOptions
   }
 
   function normalizeHeaders (options) {
-    return options.headers || {}
+    options.headers = options.headers || {}
   }
 
   // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
