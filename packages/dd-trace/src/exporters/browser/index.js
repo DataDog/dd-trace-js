@@ -22,11 +22,8 @@ class BrowserExporter {
   }
 
   export (spans) {
-    const env = this._env
-    const meta = {
-      '_dd.source': 'browser'
-    }
-    const json = JSON.stringify({ spans, env, meta })
+    const meta = this._traceMeta()
+    const json = JSON.stringify({ spans, meta })
     const size = json.length + (this._queue.length > 0 ? DELIMITER.length : 0)
 
     if (this._size + size > MAX_SIZE) {
@@ -55,6 +52,16 @@ class BrowserExporter {
       this._flushing = false
     })
   }
+
+  _traceMeta () {
+    const meta = {
+      '_dd.source': 'browser'
+    }
+
+    addTag(meta, 'env', this._env)
+
+    return meta
+  }
 }
 
 function send (url, body, callback) {
@@ -70,6 +77,12 @@ function send (url, body, callback) {
     req.addEventListener('loadend', callback)
     req.send(body)
   }
+}
+
+function addTag (meta, key, value) {
+  if (!value) return
+
+  meta[key] = value
 }
 
 module.exports = BrowserExporter
