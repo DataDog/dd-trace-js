@@ -23,7 +23,10 @@ class BrowserExporter {
 
   export (spans) {
     const env = this._env
-    const json = JSON.stringify({ spans, env })
+    const meta = {
+      '_dd.source': 'browser'
+    }
+    const json = JSON.stringify({ spans, env, meta })
     const size = json.length + (this._queue.length > 0 ? DELIMITER.length : 0)
 
     if (this._size + size > MAX_SIZE) {
