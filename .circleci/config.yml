@@ -851,6 +851,7 @@ workflows:
       - node-bench-latest
       - node-amqplib
       - node-amqp10
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
@@ -1006,6 +1007,7 @@ workflows:
       - node-bench-latest
       - node-amqplib
       - node-amqp10
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
