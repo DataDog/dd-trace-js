@@ -1,16 +1,16 @@
 'use strict'
 
 const awsHelpers = {
-  wrapCallback (span, boundCallback, config, serviceName) {
+  wrapCallback (tracer, span, callback, parent, config) {
     return function (err, response) {
       // "this" should refer to response object https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
-      awsHelpers.addAwsTags(span, this, serviceName)
+      awsHelpers.addAwsResponseTags(span, this)
 
       config.hooks.addCustomTags(span, this.request.params)
-      awsHelpers.finish(span, err, config)
+      awsHelpers.finish(span, err)
 
-      if (typeof boundCallback === 'function') {
-        boundCallback.apply(null, arguments)
+      if (typeof callback === 'function') {
+        return tracer.scope().activate(parent, () => callback.apply(null, arguments))
       }
     }
   },
@@ -31,35 +31,48 @@ const awsHelpers = {
     span.finish()
   },
 
-  addAwsTags (span, context, serviceName) {
+  addAwsRequestTags (span, request, operation, params, serviceName) {
     if (span) {
-      if (context.requestId) {
-        span.addTags({ 'aws.request_id': context.requestId })
-      }
-
-      if (context.request && context.request.httpRequest && context.request.httpRequest.endpoint) {
-        span.addTags({ 'aws.url': context.request.httpRequest.endpoint.href })
-      }
-
-      // status code and content length to match what serverless captures
-      if (context.httpResponse) {
-        if (context.httpResponse.headers && context.httpResponse.headers['content-length']) {
-          span.addTags({ 'http.content_length': context.httpResponse.headers['content-length'].toString() })
-        }
-
-        if (context.httpResponse.statusCode) {
-          span.addTags({ 'http.status_code': context.httpResponse.statusCode.toString() })
-        }
+      if (request && request.httpRequest && context.request.httpRequest.endpoint) {
+        span.addTags({ 'aws.url': request.httpRequest.endpoint.href })
       }
 
       // sync with serverless on how to normalize to fit existing conventions
       // <operation>_<specialityvalue>
-      this.addResourceAndSpecialtyTags(span,
-        context.request.operation,
-        context.request.params,
-        serviceName,
-        context.data
+      this.addAwsServiceTags(span,
+        operation,
+        params,
+        serviceName
       )
+    }
+  },
+
+  addAwsResponseTags (span, response) {
+    if (span) {
+      if (response.requestId) {
+        span.addTags({ 'aws.request_id': response.requestId })
+      }
+
+      // status code and content length to match what serverless captures
+      if (response.httpResponse) {
+        if (response.httpResponse.headers && response.httpResponse.headers['content-length']) {
+          span.addTags({ 'http.content_length': response.httpResponse.headers['content-length'].toString() })
+        }
+
+        if (response.httpResponse.statusCode) {
+          span.addTags({ 'http.status_code': response.httpResponse.statusCode.toString() })
+        }
+      }
+
+      // SNS.createTopic is invoked with name but returns full arn in response data
+      // which is used elsewhere to refer to topic
+      if (response.data && response.data.TopicArn && response.request.operation) {
+        span.addTags({ 'aws.sns.topic_arn': response.data.TopicArn })
+        span.addTags({ 'resource.name': `${response.request.operation} ${response.data.TopicArn}` })
+      }
+
+      // TODO: should arn be sanitized or quantized in some way here,
+      // for example if it contains a phone number?
     }
   },
 
@@ -86,7 +99,7 @@ const awsHelpers = {
     }
   },
 
-  addResourceAndSpecialtyTags (span, operation, params, serviceName, responseData) {
+  addAwsServiceTags (span, operation, params, serviceName) {
     const tags = {}
     // TODO: move to case statement
     if (operation && params) {
@@ -153,13 +166,6 @@ const awsHelpers = {
           if (params.TopicArn) {
             tags['resource.name'] = `${operation} ${params.TopicArn}`
             tags['aws.sns.topic_arn'] = params.TopicArn
-          }
-
-          // SNS.createTopic is invoked with name but returns full arn in response data
-          // which is used elsewhere to refer to topic
-          if (responseData && responseData.TopicArn && operation) {
-            tags['aws.sns.topic_arn'] = responseData.TopicArn
-            tags['resource.name'] = `${operation} ${responseData.TopicArn}`
           }
 
           // TODO: should arn be sanitized or quantized in some way here,

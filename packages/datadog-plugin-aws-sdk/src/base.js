@@ -28,15 +28,16 @@ function createWrapRequest (tracer, config) {
         tags: baseTags
       })
 
+      awsHelpers.addAwsRequestTags(span, request, operation, params, serviceName)
+
       analyticsSampler.sample(span, config.analytics)
 
       // https://github.com/awsdocs/aws-javascript-developer-guide-v2/blob/
       // master/doc_source/using-a-callback-function.md#using-an-anonymous-callback-function
       if (typeof cb === 'function') {
-        const boundReq = tracer.scope().bind(request, span)
-        const boundCb = tracer.scope().bind(cb, childOf)
-
-        return boundReq.call(this, operation, params, awsHelpers.wrapCallback(span, boundCb, config, serviceName))
+        return tracer.scope().activate(span, () => {
+          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf, config))
+        })
       } else {
         const awsReq = request.apply(this, arguments)
         const boundAwsReq = tracer.scope().bind(awsReq, span)
@@ -50,7 +51,7 @@ function createWrapRequest (tracer, config) {
         boundAwsReq.on('complete', response => {
           // response is same AWS.Response object
           // as https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
-          awsHelpers.addAwsTags(span, response, serviceName)
+          awsHelpers.addAwsResponseTags(span, response)
           config.hooks.addCustomTags(span, params)
           awsHelpers.finish(span, response.error, config)
         })
