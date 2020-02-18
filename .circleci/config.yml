@@ -1,4 +1,4 @@
-version: 2.1
+version: 2.0
 
 orbs:
   win: circleci/windows@1.0.0
@@ -264,6 +264,18 @@ jobs:
         environment:
           - QPIDD_ADMIN_USERNAME=admin
           - QPIDD_ADMIN_PASSWORD=admin
+
+  node-aws-sdk:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=aws-sdk
+          - PLUGINS=aws-sdk
+      - image: localstack/localstack
+        environment:
+          - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575
+          - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amz-id-2
 
   node-bluebird:
     <<: *node-plugin-base
