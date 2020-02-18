@@ -118,7 +118,7 @@ const awsHelpers = {
 
           // TODO: DynamoDB.DocumentClient does batches on multiple tables
           // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB/DocumentClient.html#batchGet-property
-          // Delegates to single table batch operation, but it may be useful to create a parent span here
+          // it may be useful to have a different resource naming convention here to show all table names
           break
 
         case 'Amazon.Kinesis':
@@ -161,6 +161,9 @@ const awsHelpers = {
             tags['aws.sns.topic_arn'] = responseData.TopicArn
             tags['resource.name'] = `${operation} ${responseData.TopicArn}`
           }
+
+          // TODO: should arn be sanitized or quantized in some way here,
+          // for example if it contains a phone number?
 
           break
       }
