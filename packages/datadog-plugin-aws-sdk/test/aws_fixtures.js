@@ -33,6 +33,29 @@ fixtures['ddb'] = {
   }
 }
 
+fixtures['ddb_put_item'] = {
+  TableName: 'CUSTOMER_LIST',
+  Item: {
+    'CUSTOMER_ID': { N: '001' },
+    'CUSTOMER_NAME': { S: 'Richard Roe' }
+  }
+}
+
+fixtures['ddb_get_item'] = {
+  TableName: 'CUSTOMER_LIST',
+  Key: {
+    'CUSTOMER_ID': { N: '001' }
+  }
+}
+
+fixtures['ddb_delete_item'] = {
+  TableName: 'CUSTOMER_LIST',
+  Key: {
+    'CUSTOMER_ID': { N: '001' },
+    'CUSTOMER_NAME': { S: 'Richard Roe' }
+  }
+}
+
 fixtures['ddb_batch'] = {
   RequestItems: {
     [fixtures.ddb.TableName]: { // table name

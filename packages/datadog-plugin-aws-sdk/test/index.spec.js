@@ -16,57 +16,57 @@ describe('Plugin', () => {
     withVersions(plugin, 'aws-sdk', version => {
       describe('DynamoDB', () => {
         const ddbParams = fixtures.ddb
+        const ddbPutItemParams = fixtures.ddb_put_item
+        const ddbGetItemParams = fixtures.ddb_get_item
+        const ddbDeleteItemParams = fixtures.ddb_delete_item
         const ddbBatchParams = fixtures.ddb_batch
-        const operationName = 'createTable'
+        const operationName = 'getItem'
         const service = 'DynamoDB'
         let epDynamo
         let ddb
 
         describe('without configuration', () => {
-          beforeEach(() => {
+          beforeEach(async () => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-
             AWS.config.update({ region: 'REGION' })
             epDynamo = new AWS.Endpoint('http://localhost:4569')
             ddb = new AWS.DynamoDB({ endpoint: epDynamo })
+
+            await ddb.createTable(ddbParams).promise()
+            await ddb.putItem(ddbPutItemParams).promise()
             agent.load(plugin, 'aws-sdk')
           })
 
-          afterEach(() => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            AWS.config.update({ region: 'REGION' })
-            epDynamo = new AWS.Endpoint('http://localhost:4569')
-            ddb = new AWS.DynamoDB({ endpoint: epDynamo })
-
-            ddb.listTables({}).promise().then(data => {
-              if (data && data.TableNames && data.TableNames.length > 0) {
-                ddb.deleteTable({ TableName: ddbParams.TableName }).promise()
-              }
-            })
+          afterEach(async () => {
+            const data = await ddb.listTables({}).promise()
+            if (data && data.TableNames && data.TableNames.length > 0) {
+              await ddb.deleteItem(ddbDeleteItemParams).promise()
+              await ddb.deleteTable({ TableName: ddbParams.TableName }).promise()
+            }
           })
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.http')
-                  expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                  expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta['http.status_code']).to.be.a('string')
-                  expect(traces[0][0].meta['http.content_length']).to.be.a('string')
+              ddb[operationName](ddbGetItemParams, () => {
+                agent
+                  .use(traces => {
+                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
+                    expect(traces[0][0]).to.have.property('name', 'aws.http')
+                    expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                    expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
+                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                    expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                    expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                    expect(traces[0][0].meta['http.content_length']).to.be.a('string')
 
-                  // request_id will randomly not exist on resp headers for dynamoDB,
-                  // it's unclear why it may be due to test env
-                  // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
-                })
-                .then(done)
-                .catch(done)
-
-              ddb[operationName](ddbParams, () => {})
+                    // request_id will randomly not exist on resp headers for dynamoDB,
+                    // it's unclear why it may be due to test env
+                    // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                  })
+                  .then(done)
+                  .catch(done)
+              })
             })
 
             it('should instrument service methods without a callback', (done) => {
@@ -89,14 +89,14 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              const tableRequest = ddb[operationName](ddbParams)
+              const tableRequest = ddb[operationName](ddbGetItemParams)
               tableRequest.send()
             })
 
             it('should instrument service methods using promise()', (done) => {
               function checkTraces () {
                 agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
+                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbGetItemParams.TableName}`)
                   expect(traces[0][0]).to.have.property('name', 'aws.http')
                   expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
                   expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
@@ -112,7 +112,7 @@ describe('Plugin', () => {
                 }).then(done).catch(done)
               }
 
-              const tableRequest = ddb[operationName](ddbParams).promise()
+              const tableRequest = ddb[operationName](ddbGetItemParams).promise()
               tableRequest.then(checkTraces).catch(checkTraces)
             })
 
@@ -165,12 +165,15 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          beforeEach(() => {
+          beforeEach(async () => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-
             AWS.config.update({ region: 'REGION' })
             epDynamo = new AWS.Endpoint('http://localhost:4569')
             ddb = new AWS.DynamoDB({ endpoint: epDynamo })
+
+            await ddb.createTable(ddbParams).promise()
+            await ddb.putItem(ddbPutItemParams).promise()
+
             agent.load(plugin, 'aws-sdk', {
               hooks: { addCustomTags: (span, params) => {
                 span.addTags({
@@ -182,43 +185,38 @@ describe('Plugin', () => {
             })
           })
 
-          afterEach(() => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            AWS.config.update({ region: 'REGION' })
-            epDynamo = new AWS.Endpoint('http://localhost:4569')
-            ddb = new AWS.DynamoDB({ endpoint: epDynamo })
-
-            ddb.listTables({}).promise().then(data => {
-              if (data && data.TableNames && data.TableNames.length > 0) {
-                ddb.deleteTable({ TableName: ddbParams.TableName }).promise()
-              }
-            })
+          afterEach(async () => {
+            const data = await ddb.listTables({}).promise()
+            if (data && data.TableNames && data.TableNames.length > 0) {
+              await ddb.deleteItem(ddbDeleteItemParams).promise()
+              await ddb.deleteTable({ TableName: ddbParams.TableName }).promise()
+            }
           })
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.http')
-                  expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                  expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta['http.status_code']).to.be.a('string')
-                  expect(traces[0][0].meta['http.content_length']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                  expect(traces[0][0].meta).to.have.property('aws.paramsTableName', ddbParams.TableName)
+              ddb[operationName](ddbGetItemParams, () => {
+                agent
+                  .use(traces => {
+                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
+                    expect(traces[0][0]).to.have.property('name', 'aws.http')
+                    expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
+                    expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
+                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                    expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
+                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                    expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+                    expect(traces[0][0].meta['http.content_length']).to.be.a('string')
+                    expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
+                    expect(traces[0][0].meta).to.have.property('aws.paramsTableName', ddbParams.TableName)
 
-                  // request_id will randomly not exist on resp headers for dynamoDB,
-                  // it's unclear why it may be due to test env
-                  // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
-                })
-                .then(done)
-                .catch(done)
-
-              ddb[operationName](ddbParams, () => {})
+                    // request_id will randomly not exist on resp headers for dynamoDB,
+                    // it's unclear why it may be due to test env
+                    // expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
+                  })
+                  .then(done)
+                  .catch(done)
+              })
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
@@ -242,7 +240,7 @@ describe('Plugin', () => {
                 }).then(done).catch(done)
               }
 
-              const tableRequest = ddb[operationName](ddbParams).promise()
+              const tableRequest = ddb[operationName](ddbGetItemParams).promise()
               tableRequest.then(checkTraces).catch(checkTraces)
             })
           })
