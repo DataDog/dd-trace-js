@@ -112,7 +112,7 @@ const web = {
     try {
       return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
     } catch (e) {
-      web.addError(req, e)
+      web.addError(req, e) // TODO: remove when error formatting is moved to Span
       throw e
     }
   },
