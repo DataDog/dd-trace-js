@@ -720,6 +720,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent.use(traces => {
               const spans = sort(traces[0])
+
               expect(spans[0]).to.have.property('error', 0)
               expect(spans[0]).to.have.property('resource', 'GET /user')
               expect(spans[0].meta).to.have.property('http.status_code', '400')
@@ -1011,7 +1012,6 @@ describe('Plugin', () => {
           app.use((req, res, next) => {
             span = tracer.scope().active()
             tracer.scope().activate(null, () => next())
-            next()
           })
 
           app.get('/user', (req, res) => {
