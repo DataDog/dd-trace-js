@@ -17,6 +17,7 @@ module.exports = {
   'google-cloud-pubsub': require('../../../datadog-plugin-google-cloud-pubsub/src'),
   'graphql': require('../../../datadog-plugin-graphql/src'),
   'grpc': require('../../../datadog-plugin-grpc/src'),
+  'kubets': require('../../../datadog-plugin-kubets/src'),
   'hapi': require('../../../datadog-plugin-hapi/src'),
   'http': require('../../../datadog-plugin-http/src'),
   'http2': require('../../../datadog-plugin-http2/src'),
