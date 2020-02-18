@@ -80,7 +80,7 @@ function getHooks (config) {
 module.exports = [
   {
     name: 'aws-sdk',
-    versions: ['>=2.0'],
+    versions: ['>=2.3.0'],
     patch (AWS, tracer, config) {
       this.wrap(AWS.Service.prototype, 'makeRequest', createWrapRequest(tracer, config))
     },
