@@ -98,6 +98,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0]).to.not.be.undefined
               })
               .then(done)
@@ -153,6 +154,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
               .then(done)
@@ -179,6 +181,7 @@ describe('Plugin', () => {
             getPort().then(port => {
               agent
                 .use(traces => {
+                  expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                   expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 })
                 .then(done)
@@ -202,6 +205,7 @@ describe('Plugin', () => {
             getPort().then(port => {
               agent
                 .use(traces => {
+                  expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                   expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 })
                 .then(done)
@@ -225,7 +229,7 @@ describe('Plugin', () => {
           it('should support configuration as an WHATWG URL object', async () => {
             const app = express()
             const port = await getPort()
-            const url = new URL(`${protocol}:localhost:${port}/user`)
+            const url = new URL(`${protocol}://localhost:${port}/user`)
 
             app.get('/user', (req, res) => res.status(200).send())
 
@@ -235,6 +239,7 @@ describe('Plugin', () => {
             })
 
             await agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
             })
           })
