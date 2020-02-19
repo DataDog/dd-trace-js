@@ -4,7 +4,7 @@ const URL = require('url-parse')
 
 const id = require('../../../src/id')
 
-describe.skip('Writer', () => {
+describe('Writer', () => {
   let Writer
   let writer
   let trace
@@ -12,6 +12,7 @@ describe.skip('Writer', () => {
   let platform
   let response
   let format
+  let encodedLength
   let encode
   let url
   let prioritySampler
@@ -66,7 +67,12 @@ describe.skip('Writer', () => {
     }
 
     format = sinon.stub().withArgs(span).returns('formatted')
-    encode = sinon.stub().withArgs(['formatted']).returns('encoded')
+
+    encodedLength = 12
+    encode = function (buf) {
+      buf[0] = 101
+      return encodedLength
+    }
 
     url = {
       protocol: 'http:',
@@ -86,7 +92,7 @@ describe.skip('Writer', () => {
       '../../platform': platform,
       '../../log': log,
       '../../format': format,
-      '../../encode': encode,
+      '../../encode/index': encode,
       '../../../lib/version': 'tracerVersion'
     })
     writer = new Writer(url, prioritySampler)
@@ -105,16 +111,17 @@ describe.skip('Writer', () => {
     it('should append a trace', () => {
       writer.append([span])
 
-      expect(writer._queue).to.deep.include('encoded')
+      expect(writer._offset).to.equal(12)
     })
 
     it('should flush when full', () => {
+      encodedLength = 8 * 1024 * 1024
       writer.append([span])
-      writer._size = 8 * 1024 * 1024
+      encodedLength = 12
       writer.append([span])
 
       expect(writer.length).to.equal(1)
-      expect(writer._queue).to.deep.include('encoded')
+      expect(writer._buffer[0]).to.equal(101)
     })
   })
 
@@ -133,7 +140,7 @@ describe.skip('Writer', () => {
     })
 
     it('should flush its traces to the agent', () => {
-      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns(['prefixed'])
+      platform.msgpack.prefix.returns(['prefixed'])
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
