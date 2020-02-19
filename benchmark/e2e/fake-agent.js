@@ -1,8 +1,8 @@
 'use strict'
 const fs = require('fs')
 const http = require('http')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+// const msgpack = require('msgpack-lite')
+// const codec = msgpack.createCodec({ int64: true })
 
 const output = fs.createWriteStream(`./spans.nsjson`)
 

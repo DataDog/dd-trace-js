@@ -25,7 +25,7 @@ class Writer {
 
     this._encode(spans)
 
-    if (this._offset > MAX_SIZE) {
+    if (this._offset >= MAX_SIZE) {
       this.flush()
     }
   }
@@ -120,7 +120,6 @@ class Writer {
       } else {
         log.error(e)
       }
-      console.log(e)
 
       return
     }
