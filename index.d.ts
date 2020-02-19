@@ -542,6 +542,13 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
+
+    /**
+     * Whether to enable instrumention of <plugin>.middleware spans
+     *
+     * @default true
+     */
+    middleware?: boolean;
   }
 
   /** @hidden */
