@@ -272,8 +272,6 @@ jobs:
         environment:
           - SERVICES=aws-sdk
           - PLUGINS=aws-sdk
-          - AWS_SECRET_ACCESS_KEY=0000000000/00000000000000000000000000000
-          - AWS_ACCESS_KEY_ID=00000000000000000000          
       - image: localstack/localstack
         environment:
           - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575
