@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const { AWS } = require('../../../../../versions/@google-cloud/pubsub').get()
+const { AWS } = require('../../../../../versions/aws-sdk').get()
 
 function waitForAWS () {
   return new Promise((resolve, reject) => {

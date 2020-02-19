@@ -127,7 +127,7 @@ const elasticsearchOptions = {
 const awsSdkOptions = {
   service: 'test',
   hooks: {
-    addCustomTags: (span, params) => {},
+    http: (span, response) => {},
   }
 };
 

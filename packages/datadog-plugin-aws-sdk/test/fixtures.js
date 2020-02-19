@@ -44,13 +44,6 @@ fixtures['ddb_put_item'] = {
 fixtures['ddb_get_item'] = {
   TableName: 'CUSTOMER_LIST',
   Key: {
-    'CUSTOMER_ID': { N: '001' }
-  }
-}
-
-fixtures['ddb_delete_item'] = {
-  TableName: 'CUSTOMER_LIST',
-  Key: {
     'CUSTOMER_ID': { N: '001' },
     'CUSTOMER_NAME': { S: 'Richard Roe' }
   }
@@ -76,18 +69,21 @@ fixtures['ddb_batch'] = {
   }
 }
 
-fixtures['kinesis'] = {
-  ShardCount: 1,
+fixtures['kinesis_describe'] = {
   StreamName: 'test_aws_stream'
 }
 
-fixtures['s3'] = {
+fixtures['s3_put'] = {
   Bucket: 'test-aws-bucket-9bd88aa3-6fc1-44bd-ae3a-ba25f49c3eef',
   Key: 'test.txt',
   Body: 'Hello World!'
 }
 
-fixtures['sqs'] = {
+fixtures['s3_create'] = {
+  Bucket: 'test-aws-bucket-9bd88aa3-6fc1-44bd-ae3a-ba25f49c3eef'
+}
+
+fixtures['sqs_create'] = {
   QueueName: 'SQS_QUEUE_NAME',
   Attributes: {
     'DelaySeconds': '60',
@@ -95,8 +91,16 @@ fixtures['sqs'] = {
   }
 }
 
-fixtures['sns'] = {
+fixtures['sqs_get'] = {
+  QueueUrl: undefined
+}
+
+fixtures['sns_create'] = {
   Name: 'example_aws_topic'
+}
+
+fixtures['sns_get'] = {
+  TopicArn: undefined
 }
 
 fixtures['sns_publish'] = {
