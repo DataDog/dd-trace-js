@@ -64,6 +64,7 @@ function encode (buffer, offset, trace) {
 
     span.parent_id && fieldCount++
     span.type && fieldCount++
+    span.metrics && fieldCount++
 
     offset += copy(buffer, offset, tokens.map[fieldCount])
 
@@ -91,6 +92,11 @@ function encode (buffer, offset, trace) {
 
     offset += copy(buffer, offset, fields.meta)
     offset = writeMap(buffer, offset, span.meta)
+
+    if (span.metrics) {
+      offset += copy(buffer, offset, fields.metrics)
+      offset = writeMap(buffer, offset, span.metrics)
+    }
   }
 
   buffer.write('', offset) // throw if offset is out of bounds
@@ -107,8 +113,14 @@ function copyHeader (buffer, offset, span) {
   return copy(buffer, offset, headerBuffer)
 }
 
-function write (buffer, offset, str) {
-  return copy(buffer, offset, cachedString(str))
+function write (buffer, offset, val) {
+  if (typeof val === 'string') {
+    return copy(buffer, offset, cachedString(val))
+  } else { // val is number
+    buffer.writeUInt8(0xcb, offset)
+    buffer.writeDoubleBE(val, offset + 1)
+    return 9
+  }
 }
 
 function copy (buffer, offset, source, sourceStart, sourceEnd) {
@@ -161,6 +173,7 @@ function getFields () {
     'type',
     'error',
     'meta',
+    'metrics',
     'start',
     'duration'
   ].reduce((prev, next) => {
