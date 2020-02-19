@@ -25,6 +25,9 @@ describe('encode', () => {
       meta: {
         bar: 'baz'
       },
+      metrics: {
+        example: 1
+      },
       start: 123,
       duration: 456
     }]
@@ -45,5 +48,7 @@ describe('encode', () => {
     expect(decoded[0].duration).to.be.instanceof(Int64BE)
     expect(decoded[0].duration.toString()).to.equal(data[0].duration.toString())
     expect(decoded[0].name).to.equal(data[0].name)
+    expect(decoded[0].meta).to.deep.equal({ bar: 'baz' })
+    expect(decoded[0].metrics).to.deep.equal({ example: 1 })
   })
 })
