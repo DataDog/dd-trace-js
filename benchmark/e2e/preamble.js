@@ -1,8 +1,8 @@
 'use strict'
 
-if (process.env.DD_ENABLE) {
+if (process.env.DD_BENCH_TRACE_ENABLE) {
   require('../..').init({})
-} else if (process.env.ASYNC_HOOKS) {
+} else if (process.env.DD_BENCH_ASYNC_HOOKS) {
   const asyncHooks = require('async_hooks')
   const hook = asyncHooks.createHook({
     init () {},

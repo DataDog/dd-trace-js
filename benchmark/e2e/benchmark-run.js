@@ -9,17 +9,9 @@ const { get: _get } = require('http')
 const path = require('path')
 const mongoService = require('../../packages/dd-trace/test/setup/services/mongo')
 const autocannon = require('autocannon')
+const { chdir: cd } = process
 
-function cd (dir) {
-  console.log('> cd', dir)
-  process.chdir(dir)
-}
-
-function delay (ms) {
-  return new Promise((resolve, reject) => {
-    setTimeout(resolve, ms)
-  })
-}
+const preambleArgs = ['--require', '../preamble.js']
 
 function sh (cmd) {
   return new Promise((resolve, reject) => {
@@ -35,7 +27,7 @@ function forkProcess (file, options = {}) {
     console.log(`> node ${options.execArgv ? options.execArgv.join(' ') + ' ' : ''}${file}`)
     options.stdio = 'pipe'
     const subProcess = fork(file, options)
-    console.log('>> PID', subProcess.pid)
+    console.log('## PID', subProcess.pid)
     subProcess.on('message', message => {
       if (message.ready) {
         resolve({ subProcess })
@@ -70,7 +62,7 @@ async function checkDb () {
   console.log('# checking that db is populated')
   cd('acmeair-nodejs')
   const { subProcess } = await forkProcess('./app.js', {
-    execArgv: process.execArgv.concat(['--require', '../datadog.js'])
+    execArgv: process.execArgv.concat(preambleArgs)
   })
 
   const customers = await get('http://localhost:9080/rest/api/config/countCustomers')
@@ -82,6 +74,7 @@ async function checkDb () {
 
   subProcess.kill()
   cd(__dirname)
+  console.log('# db is populated')
 }
 
 async function ensureAppIsInstalled () {
@@ -96,76 +89,73 @@ async function ensureAppIsInstalled () {
   }
 }
 
-function runTest (url, duration) {
-  return autocannon({ url, duration })
-}
-
-async function testBoth (url, duration, prof) {
-  cd(__dirname)
-  const { subProcess: agentProcess } = await forkProcess('./fake-agent.js')
-  cd('acmeair-nodejs')
-  const execArgv = ['--require', '../datadog.js']
+async function testOneScenario (url, duration, prof, additionalEnv = {}) {
+  const execArgv = preambleArgs.slice()
   if (prof) {
     execArgv.unshift('--prof')
   }
-  const { subProcess: airProcess } = await forkProcess('./app.js', {
+  const { subProcess } = await forkProcess('./app.js', {
     execArgv: execArgv.concat(process.execArgv),
-    env: Object.assign({}, process.env, { DD_ENABLE: '1' })
+    env: Object.assign({}, process.env, additionalEnv)
   })
 
-  await delay(2000)
+  const results = await autocannon({ url, duration })
 
-  const resultWithTracer = await runTest(url, duration)
+  subProcess.kill()
+  return results
+}
 
-  airProcess.kill()
-  agentProcess.kill()
+async function withFakeAgent (fn) {
+  console.log('# Starting fake agent')
+  const { subProcess } = await forkProcess('../fake-agent.js')
+  await fn()
+  subProcess.kill()
+}
 
-  const { subProcess: airProcess2 } = await forkProcess('./app.js', {
-    execArgv: execArgv.concat(process.execArgv)
+async function testBoth (url, duration, prof) {
+  cd(path.join(__dirname, 'acmeair-nodejs'))
+  const results = {}
+  await withFakeAgent(async () => {
+    console.log(' # Running with the tracer ...')
+    results.withTracer = await testOneScenario(url, duration, prof, { DD_BENCH_TRACE_ENABLE: 1 })
   })
 
-  const resultWithoutTracer = await runTest(url, duration)
+  console.log('# Running without the tracer (control) ...')
+  results.withoutTracer = await testOneScenario(url, duration, prof)
 
-  airProcess2.kill()
-
-  const { subProcess: airProcess3 } = await forkProcess('./app.js', {
-    execArgv: execArgv.concat(process.execArgv),
-    env: Object.assign({}, process.env, { ASYNC_HOOKS: '1' })
-  })
-
-  const resultWithAsyncHooks = await runTest(url, duration)
-
-  airProcess3.kill()
+  console.log('# Running with async_hooks ...')
+  results.withAsyncHooks = await testOneScenario(url, duration, prof, { DD_BENCH_ASYNC_HOOKS: 1 })
 
   console.log(`>>>>>> RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
 
-  logResult(resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, 'requests')
-  logResult(resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, 'latency')
-  logResult(resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, 'throughput')
+  logResult(results, 'requests')
+  logResult(results, 'latency')
+  logResult(results, 'throughput')
 
   console.log(`<<<<<< RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
+  cd(__dirname)
 }
 
 function pad (str, num) {
   return Array(num - String(str).length).fill(' ').join('') + str
 }
 
-function logResult (resultWithoutTracer, resultWithAsyncHooks, resultWithTracer, type) {
+function logResult (results, type) {
   console.log(`\n${type.toUpperCase()}:`)
   console.log(`                  without tracer        with async_hooks             with tracer`)
-  for (const name in resultWithoutTracer[type]) {
+  for (const name in results.withoutTracer[type]) {
     console.log(
       pad(name, 7),
-      `\t${pad(resultWithoutTracer[type][name], 16)}`,
-      `\t${pad(resultWithAsyncHooks[type][name], 16)}`,
-      `\t${pad(resultWithTracer[type][name], 16)}`
+      `\t${pad(results.withoutTracer[type][name], 16)}`,
+      `\t${pad(results.withAsyncHooks[type][name], 16)}`,
+      `\t${pad(results.withTracer[type][name], 16)}`
     )
   }
 }
 
 async function main () {
-  const duration = process.env.DURATION ? parseInt(process.env.DURATION) : 10
-  const prof = !!process.env.PROF
+  const duration = parseInt(process.env.DD_BENCH_DURATION || '10')
+  const prof = !!process.env.DD_BENCH_PROF
   await ensureAppIsInstalled()
   console.log('# checking that mongo is alive')
   await mongoService()

@@ -257,7 +257,9 @@ function wrapEnd (req) {
   res.writeHead = wrapWriteHead(req)
 
   let _end = req._datadog.end = res.end = function () {
-    for (const beforeEnd of req._datadog.beforeEnd) beforeEnd()
+    for (const beforeEnd of req._datadog.beforeEnd) {
+      beforeEnd()
+    }
 
     finishMiddleware(req, res)
 
