@@ -92,7 +92,7 @@ describe('Writer', () => {
       '../../platform': platform,
       '../../log': log,
       '../../format': format,
-      '../../encode/index': encode,
+      '../../encode': encode,
       '../../../lib/version': 'tracerVersion'
     })
     writer = new Writer(url, prioritySampler)
