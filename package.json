@@ -12,8 +12,6 @@
     "bundle": "webpack --display-modules",
     "prepublishOnly": "node scripts/prepublish.js",
     "postpublish": "node scripts/postpublish.js",
-    "install": "node scripts/post_install.js",
-    "install:rebuild": "node-gyp-build",
     "bench": "node benchmark",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
