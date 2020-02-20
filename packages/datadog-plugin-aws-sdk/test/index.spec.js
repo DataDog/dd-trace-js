@@ -889,7 +889,10 @@ describe('Plugin', () => {
 
             sns.createTopic({ Name: 'example_topic_two' }).promise().then(data => {
               topicArn = data.TopicArn
-            }).catch(err => {}).finally(checkTraces)
+              checkTraces()
+            }).catch(err => {
+              checkTraces()
+            })
           })
 
           it('should mark error responses', (done) => {
