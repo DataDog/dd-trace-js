@@ -2,7 +2,7 @@
 
 const platform = require('../../platform')
 const log = require('../../log')
-const encode = require('../../encode/index')
+const encode = require('../../encode')
 const tracerVersion = require('../../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
@@ -131,7 +131,9 @@ class Writer {
   }
 
   _reset () {
-    this._buffer = Buffer.allocUnsafe(10 * 1024 * 1024) // 10mb
+    if (!this._buffer) {
+      this._buffer = Buffer.allocUnsafe(10 * 1024 * 1024) // 10mb
+    }
     this._offset = 5 // we'll use these first bytes to hold an array prefix
     this._count = 0
   }
