@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const fixtures = require('./fixtures.js')
+const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
 wrapIt()
 
@@ -102,27 +103,36 @@ describe('Plugin', () => {
               tableRequest.send()
             })
 
-            it('should instrument service methods using promise()', (done) => {
-              function checkTraces () {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbGetItemParams.TableName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.http')
-                  expect(traces[0][0].meta).to.have.property('aws.service', `Amazon.${service}`)
-                  expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.agent', 'js-aws-sdk')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta['http.status_code']).to.be.a('string')
+            it('should instrument service methods using promise()', async () => {
+              const expected = {
+                error: 0,
+                name: 'aws.http',
+                resource: `${operationName} ${ddbGetItemParams.TableName}`,
+                meta: {
+                  'aws.dynamodb.table_name': ddbGetItemParams.TableName,
+                  'aws.region': 'REGION',
+                  'aws.agent': 'js-aws-sdk',
+                  'aws.operation': operationName,
+                  'http.status_code': '200',
+                  'aws.service': `Amazon.${service}`
+                }
+              }
+
+              const expectationsPromise = expectSomeSpan(agent, expected)
+              const checkTraces = async () => {
+                await agent.use(traces => {
+                  expect(traces[0][0].meta['aws.url']).to.be.a('string')
                   expect(traces[0][0].meta['http.content_length']).to.be.a('string')
 
                   // this randomly doesn't exist on resp headers for dynamoDB,
                   // it's unclear why it may be due to test env
                   expect(traces[0][0].meta['aws.request_id']).to.be.a('string')
-                }).then(done).catch(done)
+                })
+                await expectationsPromise
               }
 
-              const tableRequest = ddb[operationName](ddbGetItemParams).promise()
-              tableRequest.then(checkTraces).catch(checkTraces)
+              await ddb[operationName](ddbGetItemParams).promise()
+              return checkTraces()
             })
 
             it('should collect table name metadata for batch operations', (done) => {

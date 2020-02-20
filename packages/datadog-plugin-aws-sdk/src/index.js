@@ -17,8 +17,9 @@ function createWrapRequest (tracer, config) {
         'service.name': config.service ? `${config.service}-${serviceName}` : `${tracer._service}-${serviceName}`,
         'aws.agent': 'js-aws-sdk',
         'aws.operation': operation,
-        'aws.region': (request.httpRequest && request.httpRequest.region) || this.config.region,
+        'aws.region': this.config.region,
         'aws.service': serviceName,
+        'aws.url': this.endpoint && this.endpoint.href,
         'component': serviceName
       }
       let span
@@ -29,8 +30,6 @@ function createWrapRequest (tracer, config) {
           tags: baseTags
         })
 
-        awsHelpers.addRequestTags(span, request, operation, params, serviceName)
-
         analyticsSampler.sample(span, config.analytics)
 
         // when passed a callback makeRequest will call `.send` on the AWS.Request
@@ -39,7 +38,12 @@ function createWrapRequest (tracer, config) {
         // https://github.com/aws/aws-sdk-js/blob/
         // 9c191bbdbf32a8a3fa31219e369006f852318a1f/lib/service.js#L202-L206
         return tracer.scope().activate(span, () => {
-          return request.call(this, operation, params, awsHelpers.wrapCallback(tracer, span, cb, childOf, config))
+          return request.call(
+            this,
+            operation,
+            params,
+            awsHelpers.wrapCallback(tracer, span, cb, childOf, config, serviceName)
+          )
         })
       } else {
         const awsReq = request.apply(this, arguments)
@@ -57,7 +61,6 @@ function createWrapRequest (tracer, config) {
             tags: baseTags
           })
 
-          awsHelpers.addRequestTags(span, request, operation, params, serviceName)
           analyticsSampler.sample(span, config.analytics)
           tracer.scope().activate(span)
         })
@@ -67,9 +70,8 @@ function createWrapRequest (tracer, config) {
 
           // response is same AWS.Response object
           // as https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
-          awsHelpers.addResponseTags(span, response)
-          config.hooks.http(span, response)
-          awsHelpers.finish(span, response.error, config)
+          awsHelpers.addResponseTags(span, response, serviceName, config)
+          awsHelpers.finish(span, response.error)
         })
 
         return boundAwsReq

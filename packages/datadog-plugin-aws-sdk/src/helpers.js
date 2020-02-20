@@ -1,11 +1,10 @@
 'use strict'
 
 const helpers = {
-  wrapCallback (tracer, span, callback, parent, config) {
+  wrapCallback (tracer, span, callback, parent, config, serviceName) {
     return function (err, response) {
       // "this" should refer to response object https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
-      helpers.addResponseTags(span, this)
-      config.hooks.http(span, this)
+      helpers.addResponseTags(span, this, serviceName, config)
       helpers.finish(span, err)
 
       if (typeof callback === 'function') {
@@ -21,31 +20,6 @@ const helpers = {
     }
 
     span.finish()
-  },
-
-  addRequestTags (span, request, operation, params, serviceName) {
-    if (!span) return
-
-    if (request && request.httpRequest && context.request.httpRequest.endpoint) {
-      span.addTags({ 'aws.url': request.httpRequest.endpoint.href })
-    }
-
-    // sync with serverless on how to normalize to fit existing conventions
-    // <operation>_<specialityvalue>
-    this.addServiceTags(span,
-      operation,
-      params,
-      serviceName
-    )
-  },
-
-  // TODO: split into easier to handle small functions
-  addResponseTags (span, response) {
-    if (!span) return
-
-    this.addRequestIdTag(span, response)
-    this.addHttpResponseTags(span, response)
-    this.addSnsResponseTags(span, response)
   },
 
   // TODO: split into easier to handle small functions
@@ -72,7 +46,25 @@ const helpers = {
     }
   },
 
-  addServiceTags (span, operation, params, serviceName) {
+  // TODO: split into easier to handle small functions
+  addResponseTags (span, response, serviceName, config) {
+    if (!span) return
+
+    if (response.request) {
+      this.addServicesTags(span, response, serviceName)
+    }
+
+    this.addRequestIdTag(span, response)
+    this.addHttpResponseTags(span, response)
+    config.hooks.http(span, response)
+  },
+
+  addServicesTags (span, response, serviceName) {
+    if (!span) return
+
+    const params = response.request.params
+    const operation = response.request.operation
+
     if (operation && params) {
       switch (serviceName) {
         case 'Amazon.DynamoDB':
@@ -92,7 +84,7 @@ const helpers = {
           break
 
         case 'Amazon.SNS':
-          this.addSnsTags(span, params, operation)
+          this.addSnsTags(span, params, operation, response)
           break
       }
     } else {
@@ -172,12 +164,15 @@ const helpers = {
     })
   },
 
-  addSnsTags (span, params, operation) {
+  addSnsTags (span, params, operation, response) {
     // sns topic
-    if (!params.TopicArn) return
+    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return
+
+    // SNS.createTopic is invoked with name but returns full arn in response data
+    // which is used elsewhere to refer to topic
     span.addTags({
-      'resource.name': `${operation} ${params.TopicArn}`,
-      'aws.sns.topic_arn': params.TopicArn
+      'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
+      'aws.sns.topic_arn': params.TopicArn || response.data.TopicArn
     })
 
     // TODO: should arn be sanitized or quantized in some way here,
@@ -205,18 +200,6 @@ const helpers = {
         span.addTags({ 'http.status_code': res.httpResponse.statusCode.toString() })
       }
     }
-  },
-
-  addSnsResponseTags (span, res) {
-    // SNS.createTopic is invoked with name but returns full arn in response data
-    // which is used elsewhere to refer to topic
-    if (res.data && res.data.TopicArn && res.request.operation) {
-      span.addTags({ 'aws.sns.topic_arn': res.data.TopicArn })
-      span.addTags({ 'resource.name': `${res.request.operation} ${res.data.TopicArn}` })
-    }
-
-    // TODO: should arn be sanitized or quantized in some way here,
-    // for example if it contains a phone number?
   }
 }
 

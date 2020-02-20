@@ -103,20 +103,4 @@ fixtures['sns_get'] = {
   TopicArn: undefined
 }
 
-fixtures['sns_publish'] = {
-  Message: 'STRING_VALUE', /* required */
-  MessageAttributes: {
-    '<String>': {
-      DataType: 'STRING_VALUE', /* required */
-      BinaryValue: Buffer.from('example string value') || 'STRING_VALUE', // Strings get Base-64 encoded
-      StringValue: 'STRING_VALUE'
-    }
-  },
-  MessageStructure: 'STRING_VALUE',
-  PhoneNumber: 'STRING_VALUE',
-  Subject: 'STRING_VALUE',
-  TargetArn: 'STRING_VALUE',
-  TopicArn: 'example_aws_topic'
-}
-
 module.exports = fixtures
