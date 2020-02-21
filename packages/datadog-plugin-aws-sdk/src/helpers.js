@@ -1,18 +1,6 @@
 'use strict'
 
 const helpers = {
-  wrapCallback (tracer, span, callback, parent, config, serviceName) {
-    return function (err, response) {
-      // "this" should refer to response object https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
-      helpers.addResponseTags(span, this, serviceName, config)
-      helpers.finish(span, err)
-
-      if (typeof callback === 'function') {
-        return tracer.scope().activate(parent, () => callback.apply(null, arguments))
-      }
-    }
-  },
-
   finish (span, err) {
     if (err) {
       span.setTag('error', err)
