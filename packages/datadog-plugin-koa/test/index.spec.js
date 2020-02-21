@@ -287,6 +287,15 @@ describe('Plugin', () => {
               axios
                 .get(`http://localhost:${port}/user/123`)
                 .catch(done)
+
+              axios
+                .get(`http://localhost:${port}/user/123`)
+              axios
+                .get(`http://localhost:${port}/user/123`)
+              axios
+                .get(`http://localhost:${port}/user/123`)
+              axios
+                .get(`http://localhost:${port}/user/123`)
             })
           })
 

@@ -79,6 +79,10 @@ function createWrapRoutes (tracer, config) {
             set (value) {
               router = value
 
+              if (router._dd_patched) return
+
+              router._dd_patched = true
+
               for (const layer of router.stack) {
                 wrapStack(layer)
               }
