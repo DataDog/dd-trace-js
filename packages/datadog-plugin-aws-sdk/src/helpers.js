@@ -23,30 +23,6 @@ const helpers = {
   },
 
   // TODO: split into easier to handle small functions
-  // names are inconsistently prefixed with AWS or Amazon
-  // standarize to Amazon.SQS/Amazon.S3/Amazon.DynamoDB etc
-  normalizeServiceName (context) {
-    const prefix = 'Amazon'
-    const invalidPrefix = 'AWS'
-
-    if (context.api && context.api.abbreviation) {
-      let serviceName = context.api.abbreviation
-
-      serviceName = serviceName.trim().replace(/\s/g, '')
-
-      if (serviceName.startsWith(prefix)) {
-        return `${serviceName.slice(0, prefix.length)}.${serviceName.slice(prefix.length)}`
-      } else if (serviceName.startsWith(invalidPrefix)) {
-        return `${prefix}.${serviceName.slice(invalidPrefix.length)}`
-      } else {
-        return `${prefix}.${serviceName}`
-      }
-    } else {
-      return prefix
-    }
-  },
-
-  // TODO: split into easier to handle small functions
   addResponseTags (span, response, serviceName, config) {
     if (!span) return
 
@@ -56,7 +32,7 @@ const helpers = {
 
     this.addRequestIdTag(span, response)
     this.addHttpResponseTags(span, response)
-    config.hooks.http(span, response)
+    config.hooks.request(span, response)
   },
 
   addServicesTags (span, response, serviceName) {
@@ -67,23 +43,23 @@ const helpers = {
 
     if (operation && params) {
       switch (serviceName) {
-        case 'Amazon.DynamoDB':
+        case 'dynamodb':
           this.addDynamoDbTags(span, params, operation)
           break
 
-        case 'Amazon.Kinesis':
+        case 'kinesis':
           this.addKinesisTags(span, params, operation)
           break
 
-        case 'Amazon.S3':
+        case 's3':
           this.addS3Tags(span, params, operation)
           break
 
-        case 'Amazon.SQS':
+        case 'sqs':
           this.addSqsTags(span, params, operation)
           break
 
-        case 'Amazon.SNS':
+        case 'sns':
           this.addSnsTags(span, params, operation, response)
           break
       }
@@ -183,7 +159,7 @@ const helpers = {
     if (!span) return
 
     if (res.requestId) {
-      span.addTags({ 'aws.request_id': res.requestId })
+      span.addTags({ 'aws.response.request_id': res.requestId })
     }
   },
 

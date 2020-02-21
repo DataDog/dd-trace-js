@@ -9,23 +9,24 @@ function createWrapRequest (tracer, config) {
 
   return function wrapRequest (request) {
     return function requestWithTrace (operation, params, cb) {
-      const serviceName = awsHelpers.normalizeServiceName(this)
+      const serviceName = this.serviceIdentifier
       const childOf = tracer.scope().active()
       const baseTags = {
         [Tags.SPAN_KIND]: 'client',
         'span.type': 'http',
-        'service.name': config.service ? `${config.service}-${serviceName}` : `${tracer._service}-${serviceName}`,
-        'aws.agent': 'js-aws-sdk',
+        'service.name': config.service
+          ? `${config.service}-aws-${serviceName}`
+          : `${tracer._service}-aws-${serviceName}`,
         'aws.operation': operation,
         'aws.region': this.config.region,
-        'aws.service': serviceName,
+        'aws.service': this.api.className,
         'aws.url': this.endpoint && this.endpoint.href,
-        'component': serviceName
+        'component': 'aws-sdk'
       }
       let span
 
       if (typeof cb === 'function') {
-        span = tracer.startSpan('aws.http', {
+        span = tracer.startSpan('aws.request', {
           childOf,
           tags: baseTags
         })
@@ -56,7 +57,7 @@ function createWrapRequest (tracer, config) {
         boundAwsReq.on('validate', () => {
           if (span) return
 
-          span = tracer.startSpan('aws.http', {
+          span = tracer.startSpan('aws.request', {
             childOf,
             tags: baseTags
           })
@@ -90,15 +91,15 @@ function normalizeConfig (config) {
 
 function getHooks (config) {
   const noop = () => {}
-  const http = (config.hooks && config.hooks.http) || noop
+  const request = (config.hooks && config.hooks.request) || noop
 
-  return { http }
+  return { request }
 }
 
 module.exports = [
   {
     name: 'aws-sdk',
-    versions: ['>=2.3.0'],
+    versions: ['>=2.6.5'],
     patch (AWS, tracer, config) {
       this.wrap(AWS.Service.prototype, 'makeRequest', createWrapRequest(tracer, config))
     },

@@ -127,7 +127,7 @@ const elasticsearchOptions = {
 const awsSdkOptions = {
   service: 'test',
   hooks: {
-    http: (span, response) => {},
+    request: (span, response) => {},
   }
 };
 

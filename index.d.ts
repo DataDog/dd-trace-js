@@ -639,7 +639,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the aws span finishes.
        */
-      http?: (span?: opentracing.Span, response?: anyObject) => any;
+      request?: (span?: opentracing.Span, response?: anyObject) => any;
     };
   }
 
