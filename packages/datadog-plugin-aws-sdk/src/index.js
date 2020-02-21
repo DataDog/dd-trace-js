@@ -28,7 +28,6 @@ function createWrapRequest (tracer, config) {
         }
         let span
 
-        const boundAwsSend = tracer.scope().bind(send, childOf)
         const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, childOf) : cb
 
         this.on('validate', () => {
@@ -50,7 +49,7 @@ function createWrapRequest (tracer, config) {
           awsHelpers.finish(span, response.error)
         })
 
-        return boundAwsSend.call(this, boundCb)
+        return send.call(this, boundCb)
       }
     }
   }
