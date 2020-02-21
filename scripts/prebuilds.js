@@ -43,16 +43,20 @@ function extractPrebuilds () {
 
 function validatePrebuilds () {
   platforms.forEach(platform => {
-    fs.readdirSync(path.join(os.tmpdir(), 'prebuilds', platform))
-      .filter(file => /^node-\d+\.node$/.test(file))
-      .forEach(file => {
-        const content = fs.readFileSync(path.join('prebuilds', platform, file))
-        const sum = fs.readFileSync(path.join('prebuilds', platform, `${file}.sha1`), 'ascii')
+    try {
+      fs.readdirSync(path.join(os.tmpdir(), 'prebuilds', platform))
+        .filter(file => /^node-\d+\.node$/.test(file))
+        .forEach(file => {
+          const content = fs.readFileSync(path.join('prebuilds', platform, file))
+          const sum = fs.readFileSync(path.join('prebuilds', platform, `${file}.sha1`), 'ascii')
 
-        if (sum !== checksum(content)) {
-          throw new Error(`Invalid checksum for "prebuilds/${platform}/${file}".`)
-        }
-      })
+          if (sum !== checksum(content)) {
+            throw new Error(`Invalid checksum for "prebuilds/${platform}/${file}".`)
+          }
+        })
+    } catch (e) {
+      // skip missing platforms
+    }
   })
 }
 

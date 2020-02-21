@@ -6,6 +6,7 @@
   "browser": "browser.js",
   "typings": "index.d.ts",
   "scripts": {
+    "install": "node-gyp-build",
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
     "prebuilds": "node scripts/prebuilds.js",
