@@ -921,6 +921,105 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('General Service', () => {
+        // we do not instrument route53 at this time specifically
+        // this is meant to demonstrate defaults for non instrumented service
+        // if we do later add specific metadata for route53, need to update to a different service
+        const operationName = 'listHealthChecks'
+        const serviceName = 'route53'
+        const className = 'Route53'
+        let epRoute53
+        let route53
+
+        beforeEach(done => {
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          epRoute53 = new AWS.Endpoint('http://localhost:4580')
+          AWS.config.update({ region: 'us-east-1' })
+          route53 = new AWS.Route53({ endpoint: epRoute53 })
+          agent.load(plugin, 'aws-sdk')
+          done()
+        })
+
+        describe('without configuration', () => {
+          it('should instrument service methods with a callback', (done) => {
+            route53[operationName]({}, (err, response) => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('resource', `${operationName}`)
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                }).then(done).catch(done)
+            })
+          })
+
+          it('should instrument service methods without a callback', (done) => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0].service).to.include(serviceName)
+                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+              })
+              .then(done)
+              .catch(done)
+
+            const route53Request = route53[operationName]({})
+            route53Request.send()
+          })
+
+          if (semver.intersects(version, '>=2.3.0')) {
+            it('should instrument service methods using promise()', (done) => {
+              function checkTraces () {
+                agent.use(traces => {
+                  expect(traces[0][0]).to.have.property('resource', `${operationName}`)
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                }).then(done).catch(done)
+              }
+
+              const route53Request = route53[operationName]({}).promise()
+              route53Request.then(checkTraces).catch(checkTraces)
+            })
+          }
+
+          it('should mark error responses', (done) => {
+            route53[operationName]({
+              'IllegalKey': 'IllegalValue'
+            }, () => {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0].service).to.include(serviceName)
+                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+
+                // for some reason this fails to exist on error responses in testing env
+                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+              }).then(done).catch(done)
+            })
+          })
+        })
+      })
     })
   })
 })

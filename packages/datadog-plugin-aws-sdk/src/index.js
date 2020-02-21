@@ -50,8 +50,6 @@ function createWrapRequest (tracer, config) {
         const awsReq = request.apply(this, arguments)
         const boundAwsReq = tracer.scope().bind(awsReq, childOf)
 
-        // The state machine has garaunteed first and last events, validate / complete
-        // instrumenting those ensures requests w/out callback gets started/ended correctly
         // https://github.com/aws/aws-sdk-js/blob/38bf84c144281f696768e8c64500f2847fe6f298/lib/request.js#L142
         // https://github.com/aws/aws-sdk-js/blob/38bf84c144281f696768e8c64500f2847fe6f298/lib/request.js#L328-L332
         boundAwsReq.on('validate', () => {
@@ -69,8 +67,6 @@ function createWrapRequest (tracer, config) {
         boundAwsReq.on('complete', response => {
           if (!span) return
 
-          // response is same AWS.Response object
-          // as https://github.com/aws/aws-sdk-js/issues/781#issuecomment-156250427
           awsHelpers.addResponseTags(span, response, serviceName, config)
           awsHelpers.finish(span, response.error)
         })

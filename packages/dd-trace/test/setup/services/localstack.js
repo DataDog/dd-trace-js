@@ -14,12 +14,14 @@ function waitForAWS () {
     const epS3 = new AWS.Endpoint('http://localhost:4572')
     const epSqs = new AWS.Endpoint('http://localhost:4576')
     const epSns = new AWS.Endpoint('http://localhost:4575')
+    const epRoute53 = new AWS.Endpoint('http://localhost:4580')
 
     // Set the region
     AWS.config.update({ region: 'us-east-1' })
 
     const ddb = new AWS.DynamoDB({ endpoint: epDynamo })
     const kinesis = new AWS.Kinesis({ endpoint: epKinesis })
+    const route53 = new AWS.Route53({ endpoint: epRoute53 })
     const s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
     const sqs = new AWS.SQS({ endpoint: epSqs })
     const sns = new AWS.SQS({ endpoint: epSns })
@@ -30,7 +32,8 @@ function waitForAWS () {
         kinesis.listStreams({}).promise(),
         s3.listBuckets({}).promise(),
         sqs.listQueues({}).promise(),
-        sns.listTopics({}).promise()
+        sns.listTopics({}).promise(),
+        route53.listHealthChecks({}).promise()
       ]).then(data => {
         resolve()
       }).catch(err => {
