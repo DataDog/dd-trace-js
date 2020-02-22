@@ -67,39 +67,14 @@ function createWrapRegister (tracer, config) {
   }
 }
 
-function createWrapRoutes (tracer, config) {
-  return function wrapRoutes (routes) {
-    return function routesWithTrace () {
-      const dispatch = routes.apply(this, arguments)
-      const dispatchWithTrace = function (ctx, next) {
-        if (!ctx.router) {
-          let router
+function createWrapRouterUse (tracer, config) {
+  return function wrapUse (use) {
+    return function useWithTrace () {
+      const router = use.apply(this, arguments)
 
-          Object.defineProperty(ctx, 'router', {
-            set (value) {
-              router = value
+      router.stack.forEach(wrapStack)
 
-              if (router._dd_patched) return
-
-              router._dd_patched = true
-
-              for (const layer of router.stack) {
-                wrapStack(layer)
-              }
-            },
-
-            get () {
-              return router
-            }
-          })
-        }
-
-        return dispatch.apply(this, arguments)
-      }
-
-      dispatchWithTrace.router = dispatch.router
-
-      return dispatchWithTrace
+      return router
     }
   }
 }
@@ -108,9 +83,11 @@ function wrapStack (layer) {
   layer.stack = layer.stack.map(middleware => {
     if (typeof middleware !== 'function') return middleware
 
+    middleware = middleware._dd_original || middleware
+
     const wrappedMiddleware = wrapMiddleware(middleware)
 
-    return function (ctx, next) {
+    const handler = function (ctx, next) {
       if (!ctx || !web.active(ctx.req)) return middleware.apply(this, arguments)
 
       web.exitRoute(ctx.req)
@@ -118,6 +95,10 @@ function wrapStack (layer) {
 
       return wrappedMiddleware.apply(this, arguments)
     }
+
+    handler._dd_original = middleware
+
+    return handler
   })
 }
 
@@ -168,34 +149,24 @@ module.exports = [
     name: '@koa/router',
     versions: ['>=8'],
     patch (Router, tracer, config) {
-      this.wrap(Router.prototype, 'routes', createWrapRoutes(tracer, config))
-      this.wrap(Router.prototype, 'middleware', createWrapRoutes(tracer, config))
-    },
-    unpatch (Router) {
-      this.unwrap(Router.prototype, 'routes')
-      this.unwrap(Router.prototype, 'middleware')
-    }
-  },
-  {
-    name: 'koa-router',
-    versions: ['>7'],
-    patch (Router, tracer, config) {
-      this.wrap(Router.prototype, 'routes', createWrapRoutes(tracer, config))
-      this.wrap(Router.prototype, 'middleware', createWrapRoutes(tracer, config))
-    },
-    unpatch (Router) {
-      this.unwrap(Router.prototype, 'routes')
-      this.unwrap(Router.prototype, 'middleware')
-    }
-  },
-  {
-    name: 'koa-router',
-    versions: ['7'],
-    patch (Router, tracer, config) {
       this.wrap(Router.prototype, 'register', createWrapRegister(tracer, config))
+      this.wrap(Router.prototype, 'use', createWrapRouterUse(tracer, config))
     },
     unpatch (Router) {
       this.unwrap(Router.prototype, 'register')
+      this.unwrap(Router.prototype, 'use')
+    }
+  },
+  {
+    name: 'koa-router',
+    versions: ['>=7'],
+    patch (Router, tracer, config) {
+      this.wrap(Router.prototype, 'register', createWrapRegister(tracer, config))
+      this.wrap(Router.prototype, 'use', createWrapRouterUse(tracer, config))
+    },
+    unpatch (Router) {
+      this.unwrap(Router.prototype, 'register')
+      this.unwrap(Router.prototype, 'use')
     }
   }
 ]
