@@ -1013,6 +1013,52 @@ describe('Plugin', () => {
             })
           })
         })
+
+        describe('scope', () => {
+          let tracer
+
+          beforeEach(() => {
+            tracer = require('../../dd-trace')
+          })
+
+          it('should bind child spans to the correct active span', (done) => {
+            let activeSpanName
+
+            agent.use(traces => {
+              expect(traces[0][0].meta['name']).to.equal(activeSpanName)
+            }).then(done).catch(done)
+
+            const tableRequest = route53[operationName]({})
+
+            tableRequest.on('send', () => {
+              try {
+                activeSpanName = tracer.scope().active()._spanContext.tags._name
+              } catch (e) {
+                activeSpanName = undefined
+              }
+            })
+
+            tableRequest.send()
+          })
+
+          it('should bind callbacks to the correct active span', (done) => {
+            let activeSpanName
+            const parentName = 'parent'
+
+            tracer.trace(parentName, () => {
+              route53[operationName]({}, () => {
+                try {
+                  activeSpanName = tracer.scope().active()._spanContext._name
+                } catch (e) {
+                  activeSpanName = undefined
+                }
+
+                expect(activeSpanName).to.equal(parentName)
+                done()
+              })
+            })
+          })
+        })
       })
     })
   })

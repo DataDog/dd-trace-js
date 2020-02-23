@@ -9,48 +9,42 @@ function createWrapRequest (tracer, config) {
 
   return function wrapRequest (send) {
     return function requestWithTrace (cb) {
-      if (!this.service) {
-        send.apply(this, arguments)
-      } else {
-        const serviceName = this.service.serviceIdentifier
-        const childOf = tracer.scope().active()
-        const baseTags = {
-          [Tags.SPAN_KIND]: 'client',
-          'span.type': 'http',
-          'service.name': config.service
-            ? `${config.service}-aws-${serviceName}`
-            : `${tracer._service}-aws-${serviceName}`,
-          'aws.operation': this.operation,
-          'aws.region': this.service.config.region,
-          'aws.service': this.service.api.className,
-          'aws.url': this.service.endpoint && this.service.endpoint.href,
-          'component': 'aws-sdk'
-        }
-        let span
+      if (!this.service) return send.apply(this, arguments)
 
-        const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, childOf) : cb
-
-        this.on('validate', () => {
-          if (span) return
-
-          span = tracer.startSpan('aws.request', {
-            childOf,
-            tags: baseTags
-          })
-
-          analyticsSampler.sample(span, config.analytics)
-          tracer.scope().activate(span)
-        })
-
-        this.on('complete', response => {
-          if (!span) return
-
-          awsHelpers.addResponseTags(span, response, serviceName, config)
-          awsHelpers.finish(span, response.error)
-        })
-
-        return send.call(this, boundCb)
+      const serviceName = this.service.serviceIdentifier
+      const childOf = tracer.scope().active()
+      const baseTags = {
+        [Tags.SPAN_KIND]: 'client',
+        'span.type': 'http',
+        'service.name': config.service
+          ? `${config.service}-aws-${serviceName}`
+          : `${tracer._service}-aws-${serviceName}`,
+        'aws.operation': this.operation,
+        'aws.region': this.service.config.region,
+        'aws.service': this.service.api.className,
+        'aws.url': this.service.endpoint && this.service.endpoint.href,
+        'component': 'aws-sdk'
       }
+
+      const span = tracer.startSpan('aws.request', {
+        childOf,
+        tags: baseTags
+      })
+
+      const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, span) : cb
+
+      this.on('complete', response => {
+        if (!span) return
+
+        awsHelpers.addResponseTags(span, response, serviceName, config)
+        awsHelpers.finish(span, response.error)
+      })
+
+      analyticsSampler.sample(span, config.analytics)
+
+      return tracer.scope().activate(span, () => {
+        return send.call(this, boundCb)
+      })
     }
   }
 }
