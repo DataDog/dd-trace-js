@@ -31,7 +31,7 @@ function createWrapRequest (tracer, config) {
         tags: baseTags
       })
 
-      const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, span) : cb
+      const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, childOf) : cb
 
       this.on('complete', response => {
         if (!span) return
