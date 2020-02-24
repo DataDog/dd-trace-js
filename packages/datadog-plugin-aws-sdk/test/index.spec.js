@@ -8,6 +8,8 @@ const semver = require('semver')
 
 wrapIt()
 
+const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
+
 describe('Plugin', () => {
   describe('aws-sdk', function () {
     before(() => {
@@ -933,7 +935,7 @@ describe('Plugin', () => {
           epRoute53 = new AWS.Endpoint('http://localhost:4580')
           AWS.config.update({ region: 'us-east-1' })
           route53 = new AWS.Route53({ endpoint: epRoute53 })
-          agent.load(plugin, 'aws-sdk')
+          agent.load(plugin, ['aws-sdk', 'http'])
           done()
         })
 
@@ -942,14 +944,15 @@ describe('Plugin', () => {
             route53[operationName]({}, (err, response) => {
               agent
                 .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                  const spans = sort(traces[0])
+                  expect(spans[0]).to.have.property('resource', `${operationName}`)
+                  expect(spans[0]).to.have.property('name', 'aws.request')
+                  expect(spans[0].service).to.include(serviceName)
+                  expect(spans[0].meta).to.have.property('aws.service', className)
+                  expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+                  // expect(spans[0].meta['aws.response.request_id']).to.be.a('string')
+                  expect(spans[0].meta['aws.region']).to.be.a('string')
+                  expect(spans[0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
             })
           })
@@ -957,13 +960,14 @@ describe('Plugin', () => {
           it('should instrument service methods without a callback', (done) => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                const spans = sort(traces[0])
+                expect(spans[0]).to.have.property('resource', `${operationName}`)
+                expect(spans[0]).to.have.property('name', 'aws.request')
+                expect(spans[0].service).to.include(serviceName)
+                expect(spans[0].meta).to.have.property('aws.service', className)
+                expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+                expect(spans[0].meta['aws.region']).to.be.a('string')
+                expect(spans[0].meta).to.have.property('aws.operation', operationName)
               })
               .then(done)
               .catch(done)
@@ -976,14 +980,15 @@ describe('Plugin', () => {
             it('should instrument service methods using promise()', (done) => {
               function checkTraces () {
                 agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                  const spans = sort(traces[0])
+                  expect(spans[0]).to.have.property('resource', `${operationName}`)
+                  expect(spans[0]).to.have.property('name', 'aws.request')
+                  expect(spans[0].service).to.include(serviceName)
+                  expect(spans[0].meta).to.have.property('aws.service', className)
+                  expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+                  // expect(spans[0].meta['aws.response.request_id']).to.be.a('string')
+                  expect(spans[0].meta['aws.region']).to.be.a('string')
+                  expect(spans[0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
               }
 
@@ -997,16 +1002,17 @@ describe('Plugin', () => {
               'IllegalKey': 'IllegalValue'
             }, () => {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta['error.type']).to.be.a('string')
-                expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+                const spans = sort(traces[0])
+                expect(spans[0]).to.have.property('resource', `${operationName}`)
+                expect(spans[0]).to.have.property('name', 'aws.request')
+                expect(spans[0].service).to.include(serviceName)
+                expect(spans[0].meta).to.have.property('aws.service', className)
+                expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+                expect(spans[0].meta['aws.region']).to.be.a('string')
+                expect(spans[0].meta).to.have.property('aws.operation', operationName)
+                expect(spans[0].meta['error.type']).to.be.a('string')
+                expect(spans[0].meta['error.msg']).to.be.a('string')
+                expect(spans[0].meta['error.stack']).to.be.a('string')
 
                 // for some reason this fails to exist on error responses in testing env
               }).then(done).catch(done)
@@ -1022,22 +1028,13 @@ describe('Plugin', () => {
           })
 
           it('should bind child spans to the correct active span', (done) => {
-            let activeSpanName
-
             agent.use(traces => {
-              expect(traces[0][0].meta['name']).to.equal(activeSpanName)
+              const spans = sort(traces[0])
+              expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
+              expect(spans.length).to.equal(2)
             }).then(done).catch(done)
 
             const tableRequest = route53[operationName]({})
-
-            tableRequest.on('send', () => {
-              try {
-                activeSpanName = tracer.scope().active()._spanContext.tags._name
-              } catch (e) {
-                activeSpanName = undefined
-              }
-            })
-
             tableRequest.send()
           })
 
