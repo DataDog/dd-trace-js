@@ -5,6 +5,10 @@ const util = require('./util')
 const tokens = require('./tokens')
 const cachedString = require('./cache')(1024)
 
+const MAX_SIZE = 8 * 1024 * 1024 // 8MB
+
+let overflow = false
+
 const fields = getFields()
 
 const {
@@ -58,6 +62,10 @@ const {
 
 function encode (buffer, offset, trace) {
   offset = writeArrayPrefix(buffer, offset, trace)
+  if (overflow) {
+    overflow = false
+    return
+  }
 
   for (const span of trace) {
     let fieldCount = 9
@@ -69,37 +77,64 @@ function encode (buffer, offset, trace) {
     offset += copy(buffer, offset, tokens.map[fieldCount])
 
     offset += copyHeader(buffer, offset, span)
+    if (overflow) {
+      break
+    }
 
     if (span.parent_id) {
       offset += copy(buffer, offset, fields.parent_id)
       offset += copy(buffer, offset, tokens.uint64)
       offset += copy(buffer, offset, span.parent_id.toBuffer())
+      if (overflow) {
+        break
+      }
     }
 
     offset += copy(buffer, offset, fields.name)
     offset += write(buffer, offset, span.name)
+    if (overflow) {
+      break
+    }
 
     offset += copy(buffer, offset, fields.resource)
     offset += write(buffer, offset, span.resource)
+    if (overflow) {
+      break
+    }
 
     offset += copy(buffer, offset, fields.service)
     offset += write(buffer, offset, span.service)
+    if (overflow) {
+      break
+    }
 
     if (span.type) {
       offset += copy(buffer, offset, fields.type)
       offset += write(buffer, offset, span.type)
+      if (overflow) {
+        break
+      }
     }
 
     offset += copy(buffer, offset, fields.meta)
     offset = writeMap(buffer, offset, span.meta)
+    if (overflow) {
+      break
+    }
 
     if (span.metrics) {
       offset += copy(buffer, offset, fields.metrics)
       offset = writeMap(buffer, offset, span.metrics)
+      if (overflow) {
+        break
+      }
     }
   }
 
-  buffer.write('', offset) // throw if offset is out of bounds
+  if (overflow) {
+    overflow = false
+    offset = false
+  }
 
   return offset
 }
@@ -117,6 +152,10 @@ function write (buffer, offset, val) {
   if (typeof val === 'string') {
     return copy(buffer, offset, cachedString(val))
   } else { // val is number
+    if (offset + 9 > MAX_SIZE) {
+      overflow = true
+      return
+    }
     buffer.writeUInt8(0xcb, offset)
     buffer.writeDoubleBE(val, offset + 1)
     return 9
@@ -125,6 +164,10 @@ function write (buffer, offset, val) {
 
 function copy (buffer, offset, source, sourceStart, sourceEnd) {
   const length = source.length
+  if (length + offset > MAX_SIZE) {
+    overflow = true
+    return
+  }
 
   sourceStart = sourceStart || 0
   sourceEnd = sourceEnd || length
@@ -141,10 +184,20 @@ function writeMap (buffer, offset, map) {
   const keys = Object.keys(map)
 
   offset += copy(buffer, offset, tokens.map[keys.length])
+  if (overflow) {
+    return
+  }
 
   for (let i = 0, l = keys.length; i < l; i++) {
     offset += write(buffer, offset, keys[i])
+    if (overflow) {
+      return
+    }
+
     offset += write(buffer, offset, map[keys[i]])
+    if (overflow) {
+      return
+    }
   }
 
   return offset
@@ -159,7 +212,11 @@ function writePrefix (buffer, offset, length, tokens, startByte) {
 }
 
 function writeArrayPrefix (buffer, offset, array) {
-  return offset + writePrefix(buffer, offset, array.length, tokens.array, 0xdc)
+  offset += writePrefix(buffer, offset, array.length, tokens.array, 0xdc)
+  if (offset > MAX_SIZE) {
+    overflow = true
+  }
+  return offset
 }
 
 function getFields () {
