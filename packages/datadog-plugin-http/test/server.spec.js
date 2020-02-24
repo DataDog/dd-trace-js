@@ -7,7 +7,6 @@ const axios = require('axios')
 wrapIt()
 
 describe('Plugin', () => {
-  let plugin
   let http
   let listener
   let appListener
@@ -17,7 +16,6 @@ describe('Plugin', () => {
 
   describe('http/server', () => {
     beforeEach(() => {
-      plugin = require('../src/server')
       tracer = require('../../dd-trace')
       listener = (req, res) => {
         app && app(req, res)

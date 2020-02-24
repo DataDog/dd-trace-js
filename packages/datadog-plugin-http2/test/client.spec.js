@@ -16,7 +16,6 @@ wrapIt()
 const describe = () => {} // temporarily disable HTTP2 client plugin tests
 
 describe('Plugin', () => {
-  let plugin
   let http2
   let appListener
   let tracer
@@ -37,7 +36,6 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        plugin = require('../src/client')
         tracer = require('../../dd-trace')
         appListener = null
       })

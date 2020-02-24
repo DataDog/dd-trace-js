@@ -2,7 +2,6 @@
 
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 wrapIt()
 

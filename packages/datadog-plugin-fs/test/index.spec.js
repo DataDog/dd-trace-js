@@ -2,7 +2,6 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const plugin = require('../src')
 
 const realFS = Object.assign({}, require('fs'))
 const os = require('os')

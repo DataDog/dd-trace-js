@@ -15,7 +15,6 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 wrapIt()
 
 describe('Plugin', () => {
-  let plugin
   let express
   let http
   let appListener
@@ -36,7 +35,6 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        plugin = require('../src/client')
         tracer = require('../../dd-trace')
         appListener = null
       })
