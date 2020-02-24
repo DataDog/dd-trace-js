@@ -26,7 +26,7 @@ describe('Plugin', () => {
         })
 
         describe('without configuration', () => {
-          beforeEach(() => agent.load(plugin, 'rhea'))
+          beforeEach(() => agent.load('rhea'))
 
           beforeEach(done => {
             container = require(`../../../versions/rhea@${version}`).get()
@@ -111,7 +111,7 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          beforeEach(() => agent.load(plugin, 'rhea', {
+          beforeEach(() => agent.load('rhea', {
             service: 'a_test_service'
           }))
 
@@ -176,7 +176,7 @@ describe('Plugin', () => {
         })
 
         describe('with defaults', () => {
-          beforeEach(() => agent.load(plugin, 'rhea'))
+          beforeEach(() => agent.load('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -277,7 +277,7 @@ describe('Plugin', () => {
         })
 
         describe('with pre-settled messages', () => {
-          beforeEach(() => agent.load(plugin, 'rhea'))
+          beforeEach(() => agent.load('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -346,7 +346,7 @@ describe('Plugin', () => {
         })
 
         describe('with manually settled messages', () => {
-          beforeEach(() => agent.load(plugin, 'rhea'))
+          beforeEach(() => agent.load('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -427,7 +427,7 @@ describe('Plugin', () => {
         })
 
         describe('on disconnect', () => {
-          beforeEach(() => agent.load(plugin, 'rhea'))
+          beforeEach(() => agent.load('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()

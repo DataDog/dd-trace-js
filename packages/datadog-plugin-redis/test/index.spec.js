@@ -26,7 +26,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'redis')
+          return agent.load('redis')
         })
 
         after(() => {
@@ -132,7 +132,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(plugin, 'redis', { service: 'custom' })
+          return agent.load('redis', { service: 'custom' })
         })
 
         after(() => {

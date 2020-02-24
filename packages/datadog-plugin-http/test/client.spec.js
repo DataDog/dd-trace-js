@@ -50,7 +50,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'http')
+          return agent.load('http')
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -655,7 +655,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -699,7 +699,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -743,7 +743,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -787,7 +787,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -867,7 +867,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')

@@ -35,7 +35,7 @@ describe('Plugin', () => {
 
     describe('without configuration', () => {
       beforeEach(() => {
-        return agent.load(plugin, 'http2')
+        return agent.load('http2')
           .then(() => {
             http2 = require('http2')
           })

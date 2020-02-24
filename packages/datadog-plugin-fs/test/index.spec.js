@@ -22,7 +22,7 @@ describe('Plugin', () => {
     let tmpdir
     let tracer
     afterEach(() => agent.close())
-    beforeEach(() => agent.load(plugin, 'fs').then(() => {
+    beforeEach(() => agent.load('fs').then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
     }))

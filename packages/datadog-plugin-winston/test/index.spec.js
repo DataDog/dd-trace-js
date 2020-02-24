@@ -40,7 +40,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'winston', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        return agent.load(plugin, 'winston')
+        return agent.load('winston')
       })
 
       afterEach(() => {

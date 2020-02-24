@@ -13,7 +13,7 @@ describe('Plugin', () => {
   describe('limitd-client', () => {
     withVersions(plugin, 'limitd-client', version => {
       beforeEach(done => {
-        agent.load(plugin, 'limitd-client')
+        agent.load('limitd-client')
           .then(() => {
             tracer = require('../../dd-trace')
             LimitdClient = require(`../../../versions/limitd-client@${version}`).get()

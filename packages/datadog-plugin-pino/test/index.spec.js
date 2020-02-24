@@ -29,7 +29,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'pino', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        return agent.load(plugin, 'pino')
+        return agent.load('pino')
       })
 
       afterEach(() => {

@@ -21,7 +21,7 @@ module.exports = (name, factory, versionRange) => {
 
         describe('without configuration', () => {
           beforeEach(() => {
-            return agent.load(plugin, name)
+            return agent.load(name)
           })
 
           beforeEach(() => {

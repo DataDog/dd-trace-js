@@ -28,7 +28,7 @@ describe('Plugin', () => {
     })
 
     beforeEach(() => {
-      return agent.load(plugin, 'net')
+      return agent.load('net')
         .then(() => {
           net = require(`net`)
           tracer = require('../../dd-trace')

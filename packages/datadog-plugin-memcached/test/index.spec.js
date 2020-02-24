@@ -22,7 +22,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(plugin, 'memcached'))
+        before(() => agent.load('memcached'))
         after(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', done => {
@@ -138,7 +138,7 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => agent.load(plugin, 'memcached', { service: 'custom' }))
+        before(() => agent.load('memcached', { service: 'custom' }))
         after(() => agent.close())
 
         beforeEach(() => {

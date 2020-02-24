@@ -31,7 +31,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(plugin, 'koa'))
+        before(() => agent.load('koa'))
         after(() => agent.close())
 
         it('should do automatic instrumentation on 2.x middleware', done => {
@@ -503,7 +503,7 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => agent.load(plugin, 'koa', { middleware: false }))
+        before(() => agent.load('koa', { middleware: false }))
         after(() => agent.close())
 
         describe('middleware set to false', () => {

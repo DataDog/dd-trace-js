@@ -163,7 +163,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'graphql')
+          return agent.load('graphql')
             .then(() => {
               tracer = require('../../dd-trace')
               graphql = require(`../../../versions/graphql@${version}`).get()
@@ -986,7 +986,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql', {
+          return agent.load('graphql', {
             service: 'test',
             variables: variables => Object.assign({}, variables, { who: 'REDACTED' })
           })
@@ -1045,7 +1045,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql', {
+          return agent.load('graphql', {
             variables: ['title']
           })
         })
@@ -1084,7 +1084,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql', { depth: 0 })
+          return agent.load('graphql', { depth: 0 })
         })
 
         after(() => {
@@ -1155,7 +1155,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql', { depth: 2 })
+          return agent.load('graphql', { depth: 2 })
         })
 
         after(() => {
@@ -1207,7 +1207,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql', { collapse: false })
+          return agent.load('graphql', { collapse: false })
         })
 
         after(() => {
@@ -1261,7 +1261,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql', { signature: false })
+          return agent.load('graphql', { signature: false })
         })
 
         after(() => {
@@ -1298,7 +1298,7 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load(plugin, 'graphql')
+          return agent.load('graphql')
             .then(() => {
               graphql = require(`../../../versions/graphql@${version}`).get()
 

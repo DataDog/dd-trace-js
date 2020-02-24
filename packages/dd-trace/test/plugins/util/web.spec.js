@@ -716,7 +716,7 @@ describe('plugins/util/web', () => {
     let http
 
     beforeEach(done => {
-      agent.load(null, 'express')
+      agent.load('express')
         .then(getPort)
         .then(_port => {
           port = _port

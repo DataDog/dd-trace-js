@@ -16,7 +16,7 @@ describe('Plugin', () => {
     })
 
     beforeEach(() => {
-      return agent.load(plugin, 'dns')
+      return agent.load('dns')
         .then(() => {
           dns = require('dns')
           tracer = require('../../dd-trace')
