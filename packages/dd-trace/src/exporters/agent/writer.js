@@ -101,27 +101,17 @@ class Writer {
     }
   }
 
-  _encode (trace) {
+  _encode (trace, attempts = 0) {
     const offset = this._offset
-
-    try {
-      this._offset = encode(this._buffer, this._offset, trace)
-      this._count++
-    } catch (e) {
-      if (e.name.startsWith('RangeError')) {
-        if (offset === 0) {
-          return log.error('Dropping trace because its payload is too large.')
-        }
-
-        this._offset = offset
-
-        this.flush()
-        this._encode(trace)
-      } else {
-        log.error(e)
+    this._offset = encode(this._buffer, this._offset, trace)
+    if (!this._offset) { // we hit MAX_SIZE
+      if (attempts === 1) { // trace is too big for agent
+        return log.error('Dropping trace because its payload is too large.')
       }
-
-      return
+      this.flush()
+      this._encode(trace, attempts + 1)
+    } else {
+      this._count++
     }
 
     log.debug(() => [
