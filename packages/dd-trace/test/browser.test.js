@@ -22,7 +22,15 @@ describe('dd-trace', () => {
     })
   })
 
-  if (window.fetch) {
+  if (window.navigator && window.navigator.sendBeacon) {
+    beforeEach(() => {
+      fetch = sinon.stub(window.navigator, 'sendBeacon')
+    })
+
+    afterEach(() => {
+      window.navigator.sendBeacon.restore()
+    })
+  } else if (window.fetch) {
     beforeEach(() => {
       fetch = sinon.stub(window, 'fetch').returns({
         then: resolve => resolve()

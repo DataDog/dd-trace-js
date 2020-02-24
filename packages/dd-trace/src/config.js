@@ -18,6 +18,7 @@ class Config {
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
     const env = coalesce(options.env, platform.env('DD_ENV'))
     const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), platform.env('DD_TRACE_URL'), null)
+    const site = coalesce(options.site, platform.env('DD_SITE'), 'datadoghq.com')
     const hostname = coalesce(
       options.hostname,
       platform.env('DD_AGENT_HOST'),
@@ -56,6 +57,7 @@ class Config {
     this.logInjection = String(logInjection) === 'true'
     this.env = env
     this.url = url && new URL(url)
+    this.site = site
     this.hostname = hostname || (this.url && this.url.hostname)
     this.port = String(port || (this.url && this.url.port))
     this.flushInterval = flushInterval

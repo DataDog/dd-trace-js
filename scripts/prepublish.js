@@ -7,6 +7,8 @@ const checksum = require('checksum')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const rimraf = require('rimraf')
+const tar = require('tar')
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
@@ -49,7 +51,7 @@ getPipeline()
   .then(getPrebuildArtifacts)
   .then(downloadArtifacts)
   .then(validatePrebuilds)
-  .then(copyPrebuilds)
+  .then(extractPrebuilds)
   .then(bundle)
   .catch(e => {
     process.exitCode = 1
@@ -154,16 +156,16 @@ function validatePrebuilds () {
   }
 }
 
-function copyPrebuilds () {
-  const basename = path.normalize(path.join(__dirname, '..'))
-  const filename = 'prebuilds.tgz'
+function extractPrebuilds () {
+  rimraf.sync('prebuilds')
 
-  fs.copyFileSync(
-    path.join(os.tmpdir(), filename),
-    path.join(basename, filename)
-  )
+  return tar.extract({
+    file: path.join(os.tmpdir(), 'prebuilds.tgz'),
+    cwd: path.join(__dirname, '..')
+  })
 }
 
 function bundle () {
+  rimraf.sync('dist')
   exec('yarn bundle')
 }

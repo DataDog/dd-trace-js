@@ -9,12 +9,12 @@ const DELIMITER = '\r\n'
 // TODO: flush more often
 
 class BrowserExporter {
-  constructor ({ clientToken, url, env }) {
+  constructor ({ clientToken, url, site, env }) {
     this._queue = []
     this._flushing = false
     this._clientToken = clientToken
     this._env = env
-    this._url = url || new URL('https://public-trace-http-intake.logs.datadoghq.com')
+    this._url = url || new URL(`https://public-trace-http-intake.logs.${site}`)
     this._size = 0
 
     window.addEventListener('beforeunload', () => this._flush())
@@ -22,8 +22,8 @@ class BrowserExporter {
   }
 
   export (spans) {
-    const env = this._env
-    const json = JSON.stringify({ spans, env })
+    const meta = this._traceMeta()
+    const json = JSON.stringify({ spans, meta })
     const size = json.length + (this._queue.length > 0 ? DELIMITER.length : 0)
 
     if (this._size + size > MAX_SIZE) {
@@ -52,10 +52,22 @@ class BrowserExporter {
       this._flushing = false
     })
   }
+
+  _traceMeta () {
+    const meta = {
+      '_dd.source': 'browser'
+    }
+
+    addTag(meta, 'env', this._env)
+
+    return meta
+  }
 }
 
 function send (url, body, callback) {
-  if (window.fetch) {
+  if (window.navigator && window.navigator.sendBeacon) {
+    window.navigator.sendBeacon(url, body)
+  } else if (window.fetch) {
     window.fetch(url, { body, method: 'POST', keepalive: true, mode: 'no-cors' })
       .then(callback, callback)
   } else {
@@ -65,6 +77,12 @@ function send (url, body, callback) {
     req.addEventListener('loadend', callback)
     req.send(body)
   }
+}
+
+function addTag (meta, key, value) {
+  if (!value) return
+
+  meta[key] = value
 }
 
 module.exports = BrowserExporter

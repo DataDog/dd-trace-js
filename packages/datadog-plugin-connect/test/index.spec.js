@@ -583,6 +583,233 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should do automatic instrumentation on app routes', done => {
+          const app = connect()
+
+          app.use('/user', (req, res) => {
+            res.statusCode = 200
+            res.end()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'custom')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET /user')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle middleware errors', done => {
+          const app = connect()
+          const error = new Error('boom')
+
+          app.use((req, res) => { throw error })
+          app.use((error, req, res, next) => {
+            res.statusCode = 500
+            res.end()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[1]).to.have.property('error', 1)
+                expect(spans[1].meta).to.have.property('error.type', error.name)
+                expect(spans[1].meta).to.have.property('error.msg', error.message)
+                expect(spans[1].meta).to.have.property('error.stack', error.stack)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle request errors', done => {
+          const app = connect()
+          const error = new Error('boom')
+
+          app.use(() => { throw error })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('http.status_code', '500')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+      })
+
+      describe('with middleware disabled', () => {
+        before(() => {
+          return agent.load(plugin, 'connect', {
+            middleware: false
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          connect = require(`../../../versions/connect@${version}`).get()
+        })
+
+        it('should not do automatic instrumentation on middleware', done => {
+          const app = connect()
+
+          app.use(function named (req, res, next) { next() })
+          app.use('/app/user', (req, res) => res.end())
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans).to.have.length(1)
+                expect(spans[0]).to.have.property('resource', 'GET /app/user')
+                expect(spans[0]).to.have.property('name', 'connect.request')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app/user/1`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should not activate a scope per middleware', done => {
+          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+          const app = connect()
+
+          let span
+
+          app.use((req, res, next) => {
+            span = tracer.scope().active()
+            tracer.scope().activate(null, () => next())
+            next()
+          })
+
+          app.use('/user', (req, res) => {
+            res.end()
+
+            try {
+              expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          getPort().then(port => {
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle middleware errors', done => {
+          const app = connect()
+          const error = new Error('boom')
+
+          app.use((req, res) => { throw error })
+          app.use((error, req, res, next) => {
+            res.statusCode = 500
+            res.end()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                expect(spans[0].meta).to.have.property('http.status_code', '500')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle request errors', done => {
+          const app = connect()
+          const error = new Error('boom')
+
+          app.use(() => { throw error })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('http.status_code', '500')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = http.createServer(app).listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
       })
     })
   })

@@ -2,6 +2,9 @@
 
 let kDirReadPromisified
 let kDirClosePromisified
+let kHandle
+
+const ddFhSym = Symbol('ddFileHandle')
 
 const tagMakers = {
   open: createOpenTags,
@@ -166,6 +169,9 @@ function createOpenTags (resourceName, config, tracer) {
 
 function createCloseTags (resourceName, config, tracer) {
   return function closeTags (fd) {
+    if (typeof fd === 'undefined' && this && this[ddFhSym]) {
+      fd = this[ddFhSym].fd
+    }
     if (typeof fd !== 'number' || !Number.isInteger(fd)) {
       return
     }
@@ -289,6 +295,7 @@ function createWrapCb (tracer, config, name, tagMaker) {
 
 function createWrap (tracer, config, name, tagMaker) {
   const makeTags = tagMaker(name, config, tracer)
+
   return function wrapSyncFunction (fn) {
     return tracer.wrap('fs.operation', function () {
       const tags = makeTags.apply(this, arguments)
@@ -351,7 +358,11 @@ function makeFSTags (resourceName, path, options, config, tracer) {
 function getFileHandlePrototype (fs) {
   return fs.promises.open(__filename, 'r')
     .then(fh => {
+      if (!kHandle) {
+        kHandle = Reflect.ownKeys(fh).find(key => typeof key === 'symbol' && key.toString().includes('kHandle'))
+      }
       fh.close()
+
       return Object.getPrototypeOf(fh)
     })
 }
@@ -372,9 +383,9 @@ function patchClassicFunctions (fs, tracer, config) {
 }
 
 function patchFileHandle (fs, tracer, config) {
-  getFileHandlePrototype(fs).then(fileHandlePrototype => {
+  getFileHandlePrototype(fs).then((fileHandlePrototype) => {
     for (const name of Reflect.ownKeys(fileHandlePrototype)) {
-      if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+      if (typeof name !== 'string' || name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
         continue
       }
       let tagMaker
@@ -384,6 +395,23 @@ function patchFileHandle (fs, tracer, config) {
       } else {
         tagMaker = createFDTags
       }
+
+      const instrumenter = this
+
+      const desc = Reflect.getOwnPropertyDescriptor(fileHandlePrototype, kHandle)
+      if (!desc || !desc.get) {
+        Reflect.defineProperty(fileHandlePrototype, kHandle, {
+          get () {
+            return this[ddFhSym]
+          },
+          set (h) {
+            this[ddFhSym] = h
+            instrumenter.wrap(this, 'close', createWrap(tracer, config, 'filehandle.close', tagMakers.close))
+          },
+          configurable: true
+        })
+      }
+
       this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name, tagMaker))
     }
   })
@@ -419,11 +447,12 @@ function unpatchClassicFunctions (fs) {
 function unpatchFileHandle (fs) {
   getFileHandlePrototype(fs).then(fileHandlePrototype => {
     for (const name of Reflect.ownKeys(fileHandlePrototype)) {
-      if (name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+      if (typeof name !== 'string' || name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
         continue
       }
       this.unwrap(fileHandlePrototype, name)
     }
+    delete fileHandlePrototype[kHandle]
   })
 }
 

@@ -894,10 +894,16 @@ describe('Plugin', () => {
 
       describeThreeWays('link', (resource, tested) => {
         let link
+        let sourceFile
         beforeEach(() => {
+          sourceFile = path.join(tmpdir, 'source')
+          realFS.writeFileSync(sourceFile, '')
           link = path.join(tmpdir, 'link')
         })
         afterEach(() => {
+          try {
+            realFS.unlinkSync(sourceFile)
+          } catch (e) { /* */ }
           try {
             realFS.unlinkSync(link)
           } catch (e) { /* */ }
@@ -907,11 +913,11 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.src': __filename,
+              'file.src': sourceFile,
               'file.dest': link
             }
           })
-          tested(fs, [__filename, link], done)
+          tested(fs, [sourceFile, link], done)
         })
 
         it('should handle errors', () =>
@@ -1428,6 +1434,7 @@ describe('Plugin', () => {
           afterEach(async () => {
             try {
               await filehandle.close()
+              realFS.closeSync(filehandle.fd)
             } catch (e) { /* */ }
             await fs.promises.unlink(filename)
           })
@@ -1659,7 +1666,7 @@ describe('Plugin', () => {
           })
 
           describe('close', () => {
-            it('should be instrumented', (done) => {
+            it('should be instrumented', function (done) {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.close',
                 meta: {
@@ -1743,9 +1750,9 @@ function mkExpected (props) {
   return expected
 }
 
-function expectOneSpan (agent, done, expected) {
+function expectOneSpan (agent, done, expected, timeout) {
   expected = mkExpected(expected)
-  expectSomeSpan(agent, expected).then(done, done)
+  expectSomeSpan(agent, expected, timeout).then(done, done)
 }
 
 function testHandleErrors (fs, name, tested, args, agent) {

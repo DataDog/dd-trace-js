@@ -501,6 +501,176 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with configuration', () => {
+        before(() => agent.load(plugin, 'koa', { middleware: false }))
+        after(() => agent.close())
+
+        describe('middleware set to false', () => {
+          it('should not do automatic instrumentation on 2.x middleware', done => {
+            const app = new Koa()
+
+            app.use(function handle (ctx) {
+              ctx.body = ''
+            })
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('name', 'koa.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+
+                expect(spans).to.have.length(1)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+
+          it('should not do automatic instrumentation on 1.x middleware', done => {
+            const app = new Koa()
+
+            app.use(function * handle (next) {
+              this.body = ''
+              yield next
+            })
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('name', 'koa.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+
+                expect(spans).to.have.length(1)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+
+          it('should run middleware in the request scope', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+            const app = new Koa()
+
+            app.use((ctx, next) => {
+              ctx.body = ''
+
+              expect(tracer.scope().active()).to.not.be.null
+
+              return next()
+                .then(() => {
+                  expect(tracer.scope().active()).to.not.be.null
+                  done()
+                })
+                .catch(done)
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app/user/123`)
+                .catch(done)
+            })
+          })
+
+          it('should not activate a scope per middleware', done => {
+            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+            const app = new Koa()
+
+            let span
+
+            app.use((ctx, next) => {
+              span = tracer.scope().active()
+              return tracer.scope().activate(null, () => next())
+            })
+
+            app.use(ctx => {
+              ctx.body = ''
+
+              try {
+                expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+
+            getPort().then(port => {
+              appListener = app.listen(port, 'localhost', () => {
+                axios.get(`http://localhost:${port}/user`)
+                  .catch(done)
+              })
+            })
+          })
+
+          withVersions(plugin, ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+            let Router
+
+            beforeEach(() => {
+              Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
+            })
+
+            it('should handle request errors', done => {
+              const error = new Error('boom')
+              const app = new Koa()
+              const router = new Router({
+                prefix: '/user'
+              })
+
+              router.get('/:id', (ctx, next) => {
+                throw error
+              })
+
+              app.silent = true
+              app
+                .use(router.routes())
+                .use(router.allowedMethods())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  expect(spans[0].error).to.equal(1)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(() => {})
+              })
+            })
+          })
+        })
+      })
     })
   })
 })

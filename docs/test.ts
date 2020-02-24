@@ -82,7 +82,8 @@ const httpOptions = {
   whitelist: ['url', /url/, url => true],
   blacklist: ['url', /url/, url => true],
   validateStatus: code => code < 400,
-  headers: ['host']
+  headers: ['host'],
+  middleware: true
 };
 
 const httpServerOptions = {

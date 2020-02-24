@@ -145,44 +145,74 @@ function patch (http, methodName, tracer, config) {
     })
   }
 
-  function extractUrl (options) {
-    const uri = options
-    const agent = options.agent || http.globalAgent
+  function normalizeArgs (inputURL, inputOptions, cb) {
+    inputURL = normalizeOptions(inputURL)
 
-    return typeof uri === 'string' ? uri : url.format({
-      protocol: options.protocol || agent.protocol,
-      hostname: options.hostname || options.host || 'localhost',
-      port: options.port,
-      pathname: options.path || options.pathname || '/'
-    })
-  }
+    const [callback, inputOptionsNormalized] = normalizeCallback(inputOptions, cb, inputURL)
+    const options = combineOptions(inputURL, inputOptionsNormalized)
+    normalizeHeaders(options)
+    const uri = url.format(options)
 
-  function normalizeArgs (inputURL, inputOptions, callback) {
-    let options = normalizeURL(inputURL)
-
-    if (typeof inputOptions === 'function') {
-      callback = inputOptions
-    } else if (typeof inputOptions === 'object') {
-      options = Object.assign(options, inputOptions)
-    }
-    const uri = extractUrl(options)
     return { uri, options, callback }
   }
 
-  function normalizeURL (inputURL) {
-    let options
-
-    if (typeof inputURL === 'string') {
-      options = url.parse(inputURL)
+  function normalizeCallback (inputOptions, callback, inputURL) {
+    if (typeof inputOptions === 'function') {
+      return [inputOptions, inputURL || {}]
     } else {
-      options = {}
-      for (const key in inputURL) {
-        options[key] = inputURL[key]
-      }
+      return [callback, inputOptions]
     }
+  }
 
+  function combineOptions (inputURL, inputOptions) {
+    if (typeof inputOptions === 'object') {
+      return Object.assign(inputURL || {}, inputOptions)
+    } else {
+      return inputURL
+    }
+  }
+
+  function normalizeHeaders (options) {
     options.headers = options.headers || {}
+  }
+
+  // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
+  function urlToOptions (url) {
+    const agent = url.agent || http.globalAgent
+    const options = {
+      protocol: url.protocol || agent.protocol,
+      hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
+        ? url.hostname.slice(1, -1)
+        : url.hostname ||
+        url.host ||
+        'localhost',
+      hash: url.hash,
+      search: url.search,
+      pathname: url.pathname || url.path || '/',
+      path: `${url.pathname || ''}${url.search || ''}`,
+      href: url.href
+    }
+    if (url.port !== '') {
+      options.port = Number(url.port)
+    }
+    if (url.username || url.password) {
+      options.auth = `${url.username}:${url.password}`
+    }
     return options
+  }
+
+  function normalizeOptions (inputURL) {
+    if (typeof inputURL === 'string') {
+      try {
+        return urlToOptions(new url.URL(inputURL))
+      } catch (e) {
+        return url.parse(inputURL)
+      }
+    } else if (inputURL instanceof url.URL) {
+      return urlToOptions(inputURL)
+    } else {
+      return inputURL
+    }
   }
 }
 
