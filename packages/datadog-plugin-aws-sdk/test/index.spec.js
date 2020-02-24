@@ -10,6 +10,11 @@ wrapIt()
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
+const closeAndWipeAgent = () => {
+  agent.close()
+  agent.wipe()
+}
+
 describe('Plugin', () => {
   describe('aws-sdk', function () {
     before(() => {
@@ -22,10 +27,10 @@ describe('Plugin', () => {
       delete process.env['AWS_ACCESS_KEY_ID']
     })
 
-    afterEach(() => {
-      agent.close()
-      agent.wipe()
-    })
+    // afterEach(() => {
+    //   agent.close()
+    //   agent.wipe()
+    // })
 
     withVersions(plugin, 'aws-sdk', version => {
       describe('DynamoDB', () => {
@@ -41,9 +46,8 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          beforeEach((done) => {
+          before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-
             AWS.config.update({ region: 'REGION' })
             epDynamo = new AWS.Endpoint('http://localhost:4569')
             ddb = new AWS.DynamoDB({ endpoint: epDynamo })
@@ -56,15 +60,17 @@ describe('Plugin', () => {
             })
           })
 
-          afterEach((done) => {
+          after((done) => {
             ddb.listTables({}, (err, res) => {
               if (res.TableNames && res.TableNames.length > 0) {
                 ddb.deleteItem(ddbGetItemParams, () => {
                   ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
+                    closeAndWipeAgent()
                     done()
                   })
                 })
               } else {
+                closeAndWipeAgent()
                 done()
               }
             })
@@ -192,7 +198,7 @@ describe('Plugin', () => {
 
         describe('with configuration', () => {
           // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          beforeEach((done) => {
+          before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
             epDynamo = new AWS.Endpoint('http://localhost:4569')
@@ -214,15 +220,17 @@ describe('Plugin', () => {
             })
           })
 
-          afterEach((done) => {
+          after((done) => {
             ddb.listTables({}, (err, res) => {
               if (res.data && res.data.TableNames && res.data.TableNames.length > 0) {
                 ddb.deleteItem(ddbGetItemParams, () => {
                   ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
+                    closeAndWipeAgent()
                     done()
-                  }).catch(done)
+                  })
                 })
               } else {
+                closeAndWipeAgent()
                 done()
               }
             })
@@ -286,12 +294,17 @@ describe('Plugin', () => {
         let kinesis
 
         describe('without configuration', () => {
-          beforeEach((done) => {
+          before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
             epKinesis = new AWS.Endpoint('http://localhost:4568')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
             agent.load(plugin, 'aws-sdk')
+            done()
+          })
+
+          after((done) => {
+            closeAndWipeAgent()
             done()
           })
 
@@ -386,7 +399,7 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          beforeEach((done) => {
+          before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
             epKinesis = new AWS.Endpoint('http://localhost:4568')
@@ -402,6 +415,11 @@ describe('Plugin', () => {
                 }
               }
             })
+            done()
+          })
+
+          after((done) => {
+            closeAndWipeAgent()
             done()
           })
 
@@ -470,7 +488,7 @@ describe('Plugin', () => {
         let s3
 
         describe('without configuration', () => {
-          beforeEach(done => {
+          before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epS3 = new AWS.Endpoint('http://localhost:4572')
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
@@ -481,11 +499,12 @@ describe('Plugin', () => {
             })
           })
 
-          afterEach(done => {
+          after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epS3 = new AWS.Endpoint('http://localhost:4572')
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
             s3.deleteBucket(s3Params, () => {
+              closeAndWipeAgent()
               done()
             })
           })
@@ -573,7 +592,7 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          beforeEach(done => {
+          before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epS3 = new AWS.Endpoint('http://localhost:4572')
             AWS.config.update({ region: 'us-east-1' })
@@ -593,11 +612,12 @@ describe('Plugin', () => {
             })
           })
 
-          afterEach(done => {
+          after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epS3 = new AWS.Endpoint('http://localhost:4572')
             s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
             s3.deleteBucket(s3Params, () => {
+              closeAndWipeAgent()
               done()
             })
           })
@@ -661,7 +681,7 @@ describe('Plugin', () => {
         let epSqs
         let sqs
 
-        beforeEach(done => {
+        before(done => {
           const AWS = require(`../../../versions/aws-sdk@${version}`).get()
           epSqs = new AWS.Endpoint('http://localhost:4576')
           AWS.config.update({ region: 'REGION' })
@@ -677,12 +697,13 @@ describe('Plugin', () => {
           })
         })
 
-        afterEach(done => {
+        after(done => {
           const AWS = require(`../../../versions/aws-sdk@${version}`).get()
           epSqs = new AWS.Endpoint('http://localhost:4576')
           sqs = new AWS.SQS({ endpoint: epSqs })
 
           sqs.deleteQueue(sqsGetParams, () => {
+            closeAndWipeAgent()
             done()
           })
         })
@@ -781,7 +802,7 @@ describe('Plugin', () => {
         let sns
         let topicArn
 
-        beforeEach(done => {
+        before(done => {
           const AWS = require(`../../../versions/aws-sdk@${version}`).get()
           epSns = new AWS.Endpoint('http://localhost:4575')
 
@@ -799,7 +820,7 @@ describe('Plugin', () => {
           })
         })
 
-        afterEach(done => {
+        after(done => {
           const AWS = require(`../../../versions/aws-sdk@${version}`).get()
           epSns = new AWS.Endpoint('http://localhost:4575')
           // region has to be a real region
@@ -810,9 +831,11 @@ describe('Plugin', () => {
           sns.listTopics({}, (err, res) => {
             if (res.Topics && res.Topics.length > 0) {
               sns.deleteTopic({ TopicArn: topicArn }, () => {
+                closeAndWipeAgent()
                 done()
               })
             } else {
+              closeAndWipeAgent()
               done()
             }
           })
@@ -936,6 +959,11 @@ describe('Plugin', () => {
           AWS.config.update({ region: 'us-east-1' })
           route53 = new AWS.Route53({ endpoint: epRoute53 })
           agent.load(plugin, ['aws-sdk', 'http'])
+          done()
+        })
+
+        afterEach(done => {
+          closeAndWipeAgent()
           done()
         })
 
