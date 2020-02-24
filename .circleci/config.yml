@@ -270,8 +270,8 @@ jobs:
     docker:
       - image: node:8
         environment:
-          - SERVICES=aws-sdk
-          - PLUGINS=aws-sdk
+          - SERVICES=aws-sdk|http
+          - PLUGINS=aws-sdk|http
       - image: localstack/localstack
         environment:
           - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,route53:4580
