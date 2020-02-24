@@ -20,8 +20,8 @@ function createWrapRequest (tracer, config) {
           ? `${config.service}-aws-${serviceName}`
           : `${tracer._service}-aws-${serviceName}`,
         'aws.operation': this.operation,
-        'aws.region': this.service.config.region,
-        'aws.service': this.service.api.className,
+        'aws.region': this.service.config && this.service.config.region,
+        'aws.service': this.service.api && this.service.api.className,
         'aws.url': this.service.endpoint && this.service.endpoint.href,
         'component': 'aws-sdk'
       }
