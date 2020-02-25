@@ -14,6 +14,7 @@
     "prepublishOnly": "node scripts/prepublish.js",
     "postpublish": "node scripts/postpublish.js",
     "bench": "node benchmark",
+    "bench:e2e": "cd benchmark/e2e && node benchmark-run.js",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
     "lint": "node scripts/check_licenses.js && eslint .",

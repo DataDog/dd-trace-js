@@ -82,11 +82,9 @@ async function ensureAppIsInstalled () {
   if (!(await exists(path.join(__dirname, 'acmeair-nodejs')))) {
     await sh('git clone git@github.com:acmeair/acmeair-nodejs.git')
   }
-  if (!(await exists(path.join(__dirname, 'acmeair-nodejs', 'node_modules')))) {
-    cd('acmeair-nodejs')
-    await sh('npm install')
-    cd(__dirname)
-  }
+  cd('acmeair-nodejs')
+  await sh('yarn')
+  cd(__dirname)
 }
 
 async function testOneScenario (url, duration, prof, additionalEnv = {}) {
@@ -113,6 +111,7 @@ async function withFakeAgent (fn) {
 }
 
 async function testBoth (url, duration, prof) {
+  // TODO We should have ways of invoking the individual tests in isolation
   cd(path.join(__dirname, 'acmeair-nodejs'))
   const results = {}
   await withFakeAgent(async () => {
