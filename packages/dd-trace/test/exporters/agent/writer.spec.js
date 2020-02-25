@@ -113,16 +113,6 @@ describe('Writer', () => {
 
       expect(writer._offset).to.equal(12)
     })
-
-    it('should flush when full', () => {
-      encodedLength = 8 * 1024 * 1024
-      writer.append([span])
-      encodedLength = 12
-      writer.append([span])
-
-      expect(writer.length).to.equal(1)
-      expect(writer._buffer[0]).to.equal(101)
-    })
   })
 
   describe('flush', () => {
