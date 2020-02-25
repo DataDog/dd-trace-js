@@ -49,6 +49,10 @@ const helpers = {
         case 'sns':
           this.addSnsTags(params, operation, response, tags)
           break
+
+        case 'cloudwatchlogs':
+          this.addCwLogsTags(params, operation, tags)
+          break
       }
     }
 
@@ -144,6 +148,16 @@ const helpers = {
 
     // TODO: should arn be sanitized or quantized in some way here,
     // for example if it contains a phone number?
+  },
+
+  addCwLogsTags (params, operation, tags) {
+    // cloudwatach log group name
+    if (!params.logGroupName) return
+
+    Object.assign(tags, {
+      'resource.name': `${operation} ${params.logGroupName}`,
+      'aws.cloudwatch_logs.log_group_name': params.logGroupName
+    })
   },
 
   addRequestIdTag (span, res) {
