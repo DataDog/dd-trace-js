@@ -84,10 +84,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta['aws.region']).to.be.a('string')
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                     expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-
-                    // request_id will randomly not exist on resp headers for dynamoDB,
-                    // it's unclear why it may be due to test env
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   })
                   .then(done)
                   .catch(done)
@@ -105,10 +101,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-
-                  // this randomly doesn't exist on resp headers for dynamoDB,
-                  // it's unclear why it may be due to test env
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 })
                 .then(done)
                 .catch(done)
@@ -137,10 +129,6 @@ describe('Plugin', () => {
                   await agent.use(traces => {
                     expect(traces[0][0].meta['aws.url']).to.be.a('string')
                     expect(traces[0][0].service).to.include(serviceName)
-
-                    // this randomly doesn't exist on resp headers for dynamoDB,
-                    // it's unclear why it may be due to test env
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   })
                   await expectationsPromise
                 }
@@ -182,9 +170,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta['error.type']).to.be.a('string')
                   expect(traces[0][0].meta['error.msg']).to.be.a('string')
                   expect(traces[0][0].meta['error.stack']).to.be.a('string')
-
-                  // for some reason this fails to exist on error responses in testing env
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 }).then(done).catch(done)
               })
             })
@@ -246,10 +231,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                     expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                     expect(traces[0][0].meta).to.have.property('aws.paramsTableName', ddbParams.TableName)
-
-                    // request_id will randomly not exist on resp headers for dynamoDB,
-                    // it's unclear why it may be due to test env
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   })
                   .then(done)
                   .catch(done)
@@ -268,9 +249,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                 expect(traces[0][0].meta).to.have.property('aws.paramsTableName', ddbParams.TableName)
-
-                // this randomly doesn't exist on resp headers for dynamoDB,
-                // it's unclear why it may be due to test env
               }).then(done).catch(done)
 
               const tableRequest = ddb[operationName](ddbGetItemParams)
@@ -315,7 +293,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].service).to.include(serviceName)
                     expect(traces[0][0].meta).to.have.property('aws.service', className)
                     expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                     expect(traces[0][0].meta['aws.region']).to.be.a('string')
                     expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
@@ -334,7 +311,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 })
@@ -356,7 +332,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].service).to.include(serviceName)
                     expect(traces[0][0].meta).to.have.property('aws.service', className)
                     expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                     expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
                     expect(traces[0][0].meta['aws.region']).to.be.a('string')
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
@@ -431,15 +406,10 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('aws.service', className)
                     expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                     expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                     expect(traces[0][0].meta['aws.region']).to.be.a('string')
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                     expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                     expect(traces[0][0].meta).to.have.property('aws.paramsStreamName', kinesisDescribeParams.StreamName)
-
-                    // request_id will randomly not exist on resp headers for dynamoDB,
-                    // it's unclear why it may be due to test env
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   })
                   .then(done)
                   .catch(done)
@@ -456,15 +426,10 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', className)
                 expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                 expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                 expect(traces[0][0].meta).to.have.property('aws.paramsStreamName', kinesisDescribeParams.StreamName)
-
-                // this randomly doesn't exist on resp headers for dynamoDB,
-                // it's unclear why it may be due to test env
-                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
               }).then(done).catch(done)
 
               const streamRequest = kinesis[operationName](kinesisDescribeParams)
@@ -515,7 +480,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                     expect(traces[0][0]).to.have.property('name', 'aws.request')
                     expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                     expect(traces[0][0].meta['aws.region']).to.be.a('string')
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                   }).then(done).catch(done)
@@ -531,7 +495,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 })
@@ -552,7 +515,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('aws.service', className)
                     expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                     expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                     expect(traces[0][0].meta['aws.region']).to.be.a('string')
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                   }).then(done).catch(done)
@@ -577,9 +539,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta['error.type']).to.be.a('string')
                   expect(traces[0][0].meta['error.msg']).to.be.a('string')
                   expect(traces[0][0].meta['error.stack']).to.be.a('string')
-
-                  // for some reason this fails to exist on error responses in testing env
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 }).then(done).catch(done)
               })
             })
@@ -632,10 +591,6 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                     expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                     expect(traces[0][0].meta).to.have.property('aws.paramsBucket', s3Params.Bucket)
-
-                    // request_id will randomly not exist on resp headers
-                    // it's unclear why it may be due to test env
-                    // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   })
                   .then(done)
                   .catch(done)
@@ -655,9 +610,6 @@ describe('Plugin', () => {
 
                 expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
                 expect(traces[0][0].meta).to.have.property('aws.paramsBucket', s3Params.Bucket)
-
-                // request_id will randomly not exist on resp headers
-                // it's unclear why it may be due to test env
               }).then(done).catch(done)
 
               const s3Request = s3[operationName](s3Params)
@@ -714,7 +666,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -730,7 +681,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', className)
                 expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                 expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
@@ -751,7 +701,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -779,8 +728,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta['error.type']).to.be.a('string')
                 expect(traces[0][0].meta['error.msg']).to.be.a('string')
                 expect(traces[0][0].meta['error.stack']).to.be.a('string')
-
-                // for some reason this fails to exist on error responses in testing env
               }).then(done).catch(done)
             })
           })
@@ -847,7 +794,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -863,7 +809,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', className)
                 expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                 expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
@@ -884,7 +829,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -906,7 +850,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', className)
                 expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                 expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.operation', 'createTopic')
               }).then(done).catch(done)
@@ -930,8 +873,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta['error.type']).to.be.a('string')
                 expect(traces[0][0].meta['error.msg']).to.be.a('string')
                 expect(traces[0][0].meta['error.stack']).to.be.a('string')
-
-                // for some reason this fails to exist on error responses in testing env
               }).then(done).catch(done)
             })
           })
@@ -985,7 +926,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -1001,7 +941,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('aws.service', className)
                 expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                 expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
               })
@@ -1022,7 +961,6 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('aws.service', className)
                   expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                   expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
                   expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -1091,7 +1029,6 @@ describe('Plugin', () => {
                   expect(spans[0].service).to.include(serviceName)
                   expect(spans[0].meta).to.have.property('aws.service', className)
                   expect(spans[0].meta).to.have.property('component', 'aws-sdk')
-                  // expect(spans[0].meta['aws.response.request_id']).to.be.a('string')
                   expect(spans[0].meta['aws.region']).to.be.a('string')
                   expect(spans[0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -1127,7 +1064,6 @@ describe('Plugin', () => {
                   expect(spans[0].service).to.include(serviceName)
                   expect(spans[0].meta).to.have.property('aws.service', className)
                   expect(spans[0].meta).to.have.property('component', 'aws-sdk')
-                  // expect(spans[0].meta['aws.response.request_id']).to.be.a('string')
                   expect(spans[0].meta['aws.region']).to.be.a('string')
                   expect(spans[0].meta).to.have.property('aws.operation', operationName)
                 }).then(done).catch(done)
@@ -1154,8 +1090,6 @@ describe('Plugin', () => {
                 expect(spans[0].meta['error.type']).to.be.a('string')
                 expect(spans[0].meta['error.msg']).to.be.a('string')
                 expect(spans[0].meta['error.stack']).to.be.a('string')
-
-                // for some reason this fails to exist on error responses in testing env
               }).then(done).catch(done)
             })
           })
