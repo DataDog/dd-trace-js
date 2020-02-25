@@ -24,10 +24,6 @@ class Writer {
     log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
     this._encode(spans)
-
-    if (this._offset >= MAX_SIZE) {
-      this.flush()
-    }
   }
 
   flush () {
@@ -101,17 +97,17 @@ class Writer {
     }
   }
 
-  _encode (trace, attempts = 0) {
+  _encode (trace) {
     const offset = this._offset
-    this._offset = encode(this._buffer, this._offset, trace)
-    if (!this._offset) { // we hit MAX_SIZE
-      if (attempts === 1) { // trace is too big for agent
-        return log.error('Dropping trace because its payload is too large.')
-      }
-      this.flush()
-      this._encode(trace, attempts + 1)
-    } else {
+    try {
+      this._offset = encode(this._buffer, this._offset, trace, this)
       this._count++
+    } catch (e) {
+      if (e instanceof RangeError) {
+        log.error(e.message)
+      } else {
+        throw e
+      }
     }
 
     log.debug(() => [
@@ -121,9 +117,7 @@ class Writer {
   }
 
   _reset () {
-    if (!this._buffer) {
-      this._buffer = Buffer.allocUnsafe(10 * 1024 * 1024) // 10mb
-    }
+    this._buffer = Buffer.allocUnsafe(MAX_SIZE)
     this._offset = 5 // we'll use these first bytes to hold an array prefix
     this._count = 0
   }

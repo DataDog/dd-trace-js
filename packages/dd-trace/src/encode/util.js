@@ -26,6 +26,26 @@ function writeUInt32 (buffer, value, offset) {
   return 4
 }
 
+function writeUInt64 (buffer, value, offset) {
+  buffer[offset + 7] = value & 255
+  value = value >> 8
+  buffer[offset + 6] = value & 255
+  value = value >> 8
+  buffer[offset + 5] = value & 255
+  value = value >> 8
+  buffer[offset + 4] = value & 255
+  value = value >> 8
+  buffer[offset + 3] = value & 255
+  value = value >> 8
+  buffer[offset + 2] = value & 255
+  value = value >> 8
+  buffer[offset + 1] = value & 255
+  value = value >> 8
+  buffer[offset + 0] = value & 255
+
+  return 8
+}
+
 function write (buffer, string, offset) {
   let index = offset || (offset |= 0)
   const length = string.length
@@ -61,5 +81,6 @@ module.exports = {
   writeUInt8,
   writeUInt16,
   writeUInt32,
+  writeUInt64,
   write
 }

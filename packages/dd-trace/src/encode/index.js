@@ -1,13 +1,14 @@
 'use strict'
 
-const { Int64BE, Uint64BE } = require('int64-buffer')
 const util = require('./util')
 const tokens = require('./tokens')
 const cachedString = require('./cache')(1024)
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 
-let overflow = false
+let buffer
+let writer
+let traceOffset
 
 const fields = getFields()
 
@@ -19,36 +20,32 @@ const {
   durationOffset,
   errorOffset
 } = (() => {
-  const buffer = Buffer.alloc(1024)
+  buffer = Buffer.alloc(1024)
   let offset = 0
 
-  offset += copy(buffer, offset, fields.trace_id)
-  offset += copy(buffer, offset, tokens.uint64)
+  offset = copy(offset, fields.trace_id)
+  offset = copy(offset, tokens.uint64)
   const traceIdOffset = offset
-  new Uint64BE(buffer, offset, 0) // eslint-disable-line no-new
-  offset += 8
+  offset += 8 // the uint64 will live here
 
-  offset += copy(buffer, offset, fields.span_id)
-  offset += copy(buffer, offset, tokens.uint64)
+  offset = copy(offset, fields.span_id)
+  offset = copy(offset, tokens.uint64)
   const spanIdOffset = offset
-  new Uint64BE(buffer, offset, 0) // eslint-disable-line no-new
-  offset += 8
+  offset += 8 // the uint64 will live here
 
-  offset += copy(buffer, offset, fields.start)
-  offset += copy(buffer, offset, tokens.int64)
+  offset = copy(offset, fields.start)
+  offset = copy(offset, tokens.int64)
   const startOffset = offset
-  new Int64BE(buffer, offset, 0) // eslint-disable-line no-new
-  offset += 8
+  offset += 8 // the int64 will live here
 
-  offset += copy(buffer, offset, fields.duration)
-  offset += copy(buffer, offset, tokens.int64)
+  offset = copy(offset, fields.duration)
+  offset = copy(offset, tokens.int64)
   const durationOffset = offset
-  new Int64BE(buffer, offset, 0) // eslint-disable-line no-new
-  offset += 8
+  offset += 8 // the int64 will live here
 
-  offset += copy(buffer, offset, fields.error)
+  offset = copy(offset, fields.error)
   const errorOffset = offset
-  offset += copy(buffer, offset, tokens.int[0])
+  offset = copy(offset, tokens.int[0])
 
   return {
     headerBuffer: buffer.slice(0, offset),
@@ -60,12 +57,11 @@ const {
   }
 })()
 
-function encode (buffer, offset, trace) {
-  offset = writeArrayPrefix(buffer, offset, trace)
-  if (overflow) {
-    overflow = false
-    return
-  }
+function encode (initBuffer, offset, trace, initWriter) {
+  traceOffset = offset
+  buffer = initBuffer
+  writer = initWriter
+  offset = writeArrayPrefix(offset, trace)
 
   for (const span of trace) {
     let fieldCount = 9
@@ -74,149 +70,109 @@ function encode (buffer, offset, trace) {
     span.type && fieldCount++
     span.metrics && fieldCount++
 
-    offset += copy(buffer, offset, tokens.map[fieldCount])
+    offset = copy(offset, tokens.map[fieldCount])
 
-    offset += copyHeader(buffer, offset, span)
-    if (overflow) {
-      break
-    }
+    offset = copyHeader(offset, span)
 
     if (span.parent_id) {
-      offset += copy(buffer, offset, fields.parent_id)
-      offset += copy(buffer, offset, tokens.uint64)
-      offset += copy(buffer, offset, span.parent_id.toBuffer())
-      if (overflow) {
-        break
-      }
+      offset = copy(offset, fields.parent_id)
+      offset = copy(offset, tokens.uint64)
+      offset = copy(offset, span.parent_id.toBuffer())
     }
 
-    offset += copy(buffer, offset, fields.name)
-    offset += write(buffer, offset, span.name)
-    if (overflow) {
-      break
-    }
+    offset = copy(offset, fields.name)
+    offset = write(offset, span.name)
 
-    offset += copy(buffer, offset, fields.resource)
-    offset += write(buffer, offset, span.resource)
-    if (overflow) {
-      break
-    }
+    offset = copy(offset, fields.resource)
+    offset = write(offset, span.resource)
 
-    offset += copy(buffer, offset, fields.service)
-    offset += write(buffer, offset, span.service)
-    if (overflow) {
-      break
-    }
+    offset = copy(offset, fields.service)
+    offset = write(offset, span.service)
 
     if (span.type) {
-      offset += copy(buffer, offset, fields.type)
-      offset += write(buffer, offset, span.type)
-      if (overflow) {
-        break
-      }
+      offset = copy(offset, fields.type)
+      offset = write(offset, span.type)
     }
 
-    offset += copy(buffer, offset, fields.meta)
-    offset = writeMap(buffer, offset, span.meta)
-    if (overflow) {
-      break
-    }
+    offset = copy(offset, fields.meta)
+    offset = writeMap(offset, span.meta)
 
     if (span.metrics) {
-      offset += copy(buffer, offset, fields.metrics)
-      offset = writeMap(buffer, offset, span.metrics)
-      if (overflow) {
-        break
-      }
+      offset = copy(offset, fields.metrics)
+      offset = writeMap(offset, span.metrics)
     }
-  }
-
-  if (overflow) {
-    overflow = false
-    offset = false
   }
 
   return offset
 }
 
-function copyHeader (buffer, offset, span) {
-  copy(headerBuffer, traceIdOffset, span.trace_id.toBuffer())
-  copy(headerBuffer, spanIdOffset, span.span_id.toBuffer())
-  new Uint64BE(headerBuffer, startOffset, span.start) // eslint-disable-line no-new
-  new Uint64BE(headerBuffer, durationOffset, span.duration) // eslint-disable-line no-new
-  copy(headerBuffer, errorOffset, tokens.int[span.error])
-  return copy(buffer, offset, headerBuffer)
+function checkOffset (offset, length) {
+  const currentOffset = offset
+  if (offset + length > MAX_SIZE) {
+    if (traceOffset === 5) {
+      throw new RangeError('Trace is too big for payload.')
+    }
+    writer.flush()
+    const currentBuffer = buffer
+    buffer = writer._buffer
+    offset = writer._offset
+    offset = copy(offset, currentBuffer.slice(traceOffset, currentOffset))
+  }
+  return offset
 }
 
-function write (buffer, offset, val) {
+function copyHeader (offset, span) {
+  headerBuffer.set(span.trace_id.toBuffer(), traceIdOffset)
+  headerBuffer.set(span.span_id.toBuffer(), spanIdOffset)
+  util.writeUInt64(headerBuffer, span.start, startOffset)
+  util.writeUInt64(headerBuffer, span.duration, durationOffset)
+  headerBuffer.set(tokens.int[span.error], errorOffset)
+  return copy(offset, headerBuffer)
+}
+
+function write (offset, val) {
   if (typeof val === 'string') {
-    return copy(buffer, offset, cachedString(val))
+    return copy(offset, cachedString(val))
   } else { // val is number
-    if (offset + 9 > MAX_SIZE) {
-      overflow = true
-      return
-    }
+    offset = checkOffset(offset, 9)
     buffer.writeUInt8(0xcb, offset)
     buffer.writeDoubleBE(val, offset + 1)
-    return 9
+    return offset + 9
   }
 }
 
-function copy (buffer, offset, source, sourceStart, sourceEnd) {
+function copy (offset, source) {
   const length = source.length
-  if (length + offset > MAX_SIZE) {
-    overflow = true
-    return
-  }
 
-  sourceStart = sourceStart || 0
-  sourceEnd = sourceEnd || length
-
-  if (sourceStart !== 0 || sourceEnd !== length) {
-    source = source.slice(sourceEnd, sourceEnd)
-  }
+  offset = checkOffset(offset, length)
   buffer.set(source, offset)
 
-  return source.length
+  return offset + length
 }
 
-function writeMap (buffer, offset, map) {
+function writeMap (offset, map) {
   const keys = Object.keys(map)
 
-  offset += copy(buffer, offset, tokens.map[keys.length])
-  if (overflow) {
-    return
-  }
+  offset = copy(offset, tokens.map[keys.length])
 
   for (let i = 0, l = keys.length; i < l; i++) {
-    offset += write(buffer, offset, keys[i])
-    if (overflow) {
-      return
-    }
-
-    offset += write(buffer, offset, map[keys[i]])
-    if (overflow) {
-      return
-    }
+    offset = write(offset, keys[i])
+    offset = write(offset, map[keys[i]])
   }
 
   return offset
 }
 
-function writePrefix (buffer, offset, length, tokens, startByte) {
+function writePrefix (offset, length, tokens, startByte) {
   if (length <= 0xffff) {
-    return copy(buffer, offset, tokens[length])
+    return copy(offset, tokens[length])
   }
 
-  return util.writeUInt8(buffer, startByte + 1, offset) + util.writeUInt32(buffer, length, offset + 1)
+  return offset + util.writeUInt8(buffer, startByte + 1, offset) + util.writeUInt32(buffer, length, offset + 1)
 }
 
-function writeArrayPrefix (buffer, offset, array) {
-  offset += writePrefix(buffer, offset, array.length, tokens.array, 0xdc)
-  if (offset > MAX_SIZE) {
-    overflow = true
-  }
-  return offset
+function writeArrayPrefix (offset, array) {
+  return writePrefix(offset, array.length, tokens.array, 0xdc)
 }
 
 function getFields () {
