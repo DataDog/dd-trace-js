@@ -103,4 +103,8 @@ fixtures['sns_get'] = {
   TopicArn: undefined
 }
 
+fixtures['cw_logs_create'] = {
+  logGroupName: 'example_cw_log_group'
+}
+
 module.exports = fixtures

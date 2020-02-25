@@ -27,11 +27,6 @@ describe('Plugin', () => {
       delete process.env['AWS_ACCESS_KEY_ID']
     })
 
-    // afterEach(() => {
-    //   agent.close()
-    //   agent.wipe()
-    // })
-
     withVersions(plugin, 'aws-sdk', version => {
       describe('DynamoDB', () => {
         const ddbParams = fixtures.ddb
@@ -937,6 +932,124 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta['error.stack']).to.be.a('string')
 
                 // for some reason this fails to exist on error responses in testing env
+              }).then(done).catch(done)
+            })
+          })
+        })
+      })
+
+      describe('Cloudwatch Logs', () => {
+        const cwCreateParams = fixtures.cw_logs_create
+        const operationName = 'describeLogStreams'
+        const serviceName = 'cloudwatchlogs'
+        const className = 'CloudWatchLogs'
+        let epCwLogs
+        let cwLogs
+
+        before(done => {
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          epCwLogs = new AWS.Endpoint('http://localhost:4586')
+
+          // region has to be a real region
+          AWS.config.update({ region: 'us-east-1' })
+          cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+          cwLogs.createLogGroup(cwCreateParams, (err, res) => {
+            agent.load(plugin, 'aws-sdk')
+            done()
+          })
+        })
+
+        after(done => {
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          epCwLogs = new AWS.Endpoint('http://localhost:4586')
+          // region has to be a real region
+          AWS.config.update({ region: 'us-east-1' })
+          cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+          // cleanup log groups
+          cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
+            closeAndWipeAgent()
+            done()
+          })
+        })
+
+        describe('without configuration', () => {
+          it('should instrument service methods with a callback', (done) => {
+            cwLogs[operationName](cwCreateParams, () => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
+                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                }).then(done).catch(done)
+            })
+          })
+
+          it('should instrument service methods without a callback', (done) => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0].service).to.include(serviceName)
+                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
+                // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+              })
+              .then(done)
+              .catch(done)
+
+            const cwLogsRequest = cwLogs[operationName](cwCreateParams)
+            cwLogsRequest.send()
+          })
+
+          if (semver.intersects(version, '>=2.3.0')) {
+            it('should instrument service methods using promise()', (done) => {
+              function checkTraces () {
+                agent.use(traces => {
+                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
+                  // expect(traces[0][0].meta['aws.response.request_id']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                }).then(done).catch(done)
+              }
+
+              const cwLogsRequest = cwLogs[operationName](cwCreateParams).promise()
+              cwLogsRequest.then(checkTraces).catch(checkTraces)
+            })
+          }
+
+          it('should mark error responses', (done) => {
+            cwLogs.describeLogStreams({
+              logGroupName: cwCreateParams.logGroupName,
+              'IllegalKey': 'IllegalValue'
+            }, () => {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
+                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0].service).to.include(serviceName)
+                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
               }).then(done).catch(done)
             })
           })
