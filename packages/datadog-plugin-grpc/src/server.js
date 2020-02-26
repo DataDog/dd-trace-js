@@ -18,9 +18,8 @@ function createWrapHandler (tracer, config, handler) {
       if (!server || !server.type) return false
       if (!args[0]) return false
       if (server.type !== 'unary' && !isEmitter(args[0])) return false
-      if (server.type === 'unary' && typeof args[1] !== 'function') return false
 
-      return true
+      return !(server.type === 'unary' && typeof args[1] !== 'function');
     }
 
     return function funcWithTrace (call, callback) {
