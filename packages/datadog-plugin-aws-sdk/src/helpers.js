@@ -1,5 +1,6 @@
 'use strict'
 
+const DEFAULT = 'default'
 const Services = {
   cloudwatchlogs: require('./services/cloudwatchlogs'),
   dynamodb: require('./services/dynamodb'),
@@ -8,10 +9,8 @@ const Services = {
   redshift: require('./services/redshift'),
   sns: require('./services/sns'),
   sqs: require('./services/sqs'),
-  default: require('./services/base')
+  [DEFAULT]: require('./services/base')
 }
-
-const DEFAULT = 'default'
 
 function getService (serviceName) {
   if (Services[serviceName]) {
@@ -25,7 +24,10 @@ const helpers = {
   finish (span, err) {
     if (err) {
       span.setTag('error', err)
-      this.addRequestIdTag(span, err)
+
+      if (err.requestId) {
+        span.addTags({ 'aws.response.request_id': err.requestId })
+      }
     }
 
     span.finish()
@@ -38,7 +40,6 @@ const helpers = {
       this.addServicesTags(span, response, serviceName)
     }
 
-    this.addRequestIdTag(span, response)
     config.hooks.request(span, response)
   },
 
@@ -50,14 +51,6 @@ const helpers = {
     const service = getService(serviceName)
 
     service.addTags(span, params, operation, response)
-  },
-
-  addRequestIdTag (span, res) {
-    if (!span) return
-
-    if (res.requestId) {
-      span.addTags({ 'aws.response.request_id': res.requestId })
-    }
   }
 }
 
