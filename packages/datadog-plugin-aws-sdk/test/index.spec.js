@@ -80,6 +80,35 @@ const baseSpecPromise = (done, agent, service, operation, serviceName, klass, fi
   serviceRequest.then(checkTraces).catch(checkTraces)
 }
 
+const baseSpecScope = (done, agent, service, operation, fixture) => {
+  agent.use(traces => {
+    const spans = sort(traces[0])
+    expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
+    expect(spans.length).to.equal(2)
+  }).then(done).catch(done)
+
+  const serviceRequest = service[operation](fixture)
+  serviceRequest.send()
+}
+
+const baseSpecBindCallback = (done, agent, service, operation, fixture, tracer) => {
+  let activeSpanName
+  const parentName = 'parent'
+
+  tracer.trace(parentName, () => {
+    service[operation](fixture, () => {
+      try {
+        activeSpanName = tracer.scope().active()._spanContext._name
+      } catch (e) {
+        activeSpanName = undefined
+      }
+
+      expect(activeSpanName).to.equal(parentName)
+      done()
+    })
+  })
+}
+
 describe('Plugin', () => {
   describe('aws-sdk', function () {
     before(() => {
@@ -160,15 +189,27 @@ describe('Plugin', () => {
             it('should collect table name metadata for batch operations', (done) => {
               ddb.batchGetItem(ddbBatchParams, (err, resp) => {
                 agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `batchGetItem ${ddbParams.TableName}`)
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', klass)
-                  expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', 'batchGetItem')
+                  const spans = sort(traces[0])
+                  expect(spans[0]).to.have.property('resource', `batchGetItem ${ddbParams.TableName}`)
+                  expect(spans[0].service).to.include(serviceName)
+                  expect(spans[0].meta).to.have.property('aws.service', klass)
+                  expect(spans[0].meta['aws.dynamodb.table_name']).to.be.a('string')
+                  expect(spans[0].meta).to.have.property('aws.operation', 'batchGetItem')
                 }).then(done).catch(done)
               })
             })
           })
+
+          // describe('scope', () => {
+          //   it('should bind child spans to the correct active span', (done) => {
+          //     baseSpecScope(done, agent, ddb, operation, ddbGetItemParams)
+          //   })
+
+          //   it('should bind callbacks to the correct active span', (done) => {
+          //     tracer = require('../../dd-trace')
+          //     baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
+          //   })
+          // })
         })
 
         describe('with configuration', () => {
@@ -218,6 +259,55 @@ describe('Plugin', () => {
 
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata, true)
+            })
+          })
+        })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before((done) => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            AWS.config.update({ region: 'REGION' })
+            epDynamo = new AWS.Endpoint('http://localhost:4569')
+            ddb = new AWS.DynamoDB({ endpoint: epDynamo })
+
+            ddb.createTable(ddbParams, () => {
+              ddb.putItem(ddbPutItemParams, () => {
+                agent.load(plugin, ['aws-sdk', 'http'])
+                done()
+              })
+            })
+          })
+
+          after((done) => {
+            ddb.listTables({}, (err, res) => {
+              if (res.TableNames && res.TableNames.length > 0) {
+                ddb.deleteItem(ddbGetItemParams, () => {
+                  ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
+                    closeAndWipeAgent()
+                    done()
+                  })
+                })
+              } else {
+                closeAndWipeAgent()
+                done()
+              }
+            })
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, ddb, operation, ddbGetItemParams)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
             })
           })
         })
@@ -301,6 +391,39 @@ describe('Plugin', () => {
 
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata, true)
+            })
+          })
+        })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before((done) => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            AWS.config.update({ region: 'REGION' })
+            epKinesis = new AWS.Endpoint('http://localhost:4568')
+            kinesis = new AWS.Kinesis({ endpoint: epKinesis })
+            agent.load(plugin, ['aws-sdk', 'http'])
+            done()
+          })
+
+          after((done) => {
+            closeAndWipeAgent()
+            done()
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, kinesis, operation, kinesisParams)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, kinesis, operation, kinesisParams, tracer)
             })
           })
         })
@@ -400,6 +523,46 @@ describe('Plugin', () => {
             })
           })
         })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epS3 = new AWS.Endpoint('http://localhost:4572')
+            s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
+
+            s3.createBucket({ Bucket: s3Params.Bucket }, () => {
+              agent.load(plugin, ['aws-sdk', 'http'])
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epS3 = new AWS.Endpoint('http://localhost:4572')
+            s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
+            s3.deleteBucket(s3Params, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, s3, operation, s3Params)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, s3, operation, s3Params, tracer)
+            })
+          })
+        })
       })
 
       describe('SQS', () => {
@@ -413,50 +576,146 @@ describe('Plugin', () => {
         let epSqs
         let sqs
 
-        before(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epSqs = new AWS.Endpoint('http://localhost:4576')
-          AWS.config.update({ region: 'REGION' })
+        describe('without configuration', () => {
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSqs = new AWS.Endpoint('http://localhost:4576')
+            AWS.config.update({ region: 'REGION' })
 
-          sqs = new AWS.SQS({ endpoint: epSqs })
-          sqs.createQueue(sqsCreateParams, (err, res) => {
-            if (res.QueueUrl) {
-              sqsGetParams.QueueUrl = res.QueueUrl
+            sqs = new AWS.SQS({ endpoint: epSqs })
+            sqs.createQueue(sqsCreateParams, (err, res) => {
+              if (res.QueueUrl) {
+                sqsGetParams.QueueUrl = res.QueueUrl
+              }
+
+              agent.load(plugin, 'aws-sdk')
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSqs = new AWS.Endpoint('http://localhost:4576')
+            sqs = new AWS.SQS({ endpoint: epSqs })
+
+            sqs.deleteQueue(sqsGetParams, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should instrument service methods with a callback', (done) => {
+              baseSpecCallback(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+            })
+
+            it('should instrument service methods without a callback', (done) => {
+              baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+            })
+
+            if (semver.intersects(version, '>=2.3.0')) {
+              it('should instrument service methods using promise()', (done) => {
+                baseSpecPromise(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+              })
             }
 
-            agent.load(plugin, 'aws-sdk')
-            done()
-          })
-        })
-
-        after(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epSqs = new AWS.Endpoint('http://localhost:4576')
-          sqs = new AWS.SQS({ endpoint: epSqs })
-
-          sqs.deleteQueue(sqsGetParams, () => {
-            closeAndWipeAgent()
-            done()
-          })
-        })
-
-        describe('without configuration', () => {
-          it('should instrument service methods with a callback', (done) => {
-            baseSpecCallback(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
-          })
-
-          it('should instrument service methods without a callback', (done) => {
-            baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
-          })
-
-          if (semver.intersects(version, '>=2.3.0')) {
-            it('should instrument service methods using promise()', (done) => {
-              baseSpecPromise(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+            it('should mark error responses', (done) => {
+              baseSpecError(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
             })
-          }
+          })
+        })
 
-          it('should mark error responses', (done) => {
-            baseSpecError(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+        describe('with configuration', () => {
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSqs = new AWS.Endpoint('http://localhost:4576')
+            AWS.config.update({ region: 'REGION' })
+
+            sqs = new AWS.SQS({ endpoint: epSqs })
+            sqs.createQueue(sqsCreateParams, (err, res) => {
+              if (res.QueueUrl) {
+                sqsGetParams.QueueUrl = res.QueueUrl
+              }
+
+              agent.load(plugin, 'aws-sdk', {
+                hooks: {
+                  request: (span, response) => {
+                    span.addTags({
+                      'aws.specialValue': 'foo',
+                      ['aws.params' + key]: response.request.params[key]
+                    })
+                  }
+                }
+              })
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSqs = new AWS.Endpoint('http://localhost:4576')
+            sqs = new AWS.SQS({ endpoint: epSqs })
+
+            sqs.deleteQueue(sqsGetParams, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should handle hooks appropriately with a callback', (done) => {
+              baseSpecCallback(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata, true)
+            })
+
+            it('should handle hooks appropriately without a callback', (done) => {
+              baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata, true)
+            })
+          })
+        })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSqs = new AWS.Endpoint('http://localhost:4576')
+            AWS.config.update({ region: 'REGION' })
+
+            sqs = new AWS.SQS({ endpoint: epSqs })
+            sqs.createQueue(sqsCreateParams, (err, res) => {
+              if (res.QueueUrl) {
+                sqsGetParams.QueueUrl = res.QueueUrl
+              }
+
+              agent.load(plugin, ['aws-sdk', 'http'])
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSqs = new AWS.Endpoint('http://localhost:4576')
+            sqs = new AWS.SQS({ endpoint: epSqs })
+
+            sqs.deleteQueue(sqsGetParams, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, sqs, operation, sqsGetParams)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, sqs, operation, sqsGetParams, tracer)
+            })
           })
         })
       })
@@ -473,78 +732,198 @@ describe('Plugin', () => {
         let sns
         let topicArn
 
-        before(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epSns = new AWS.Endpoint('http://localhost:4575')
+        describe('without configuration', () => {
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSns = new AWS.Endpoint('http://localhost:4575')
 
-          // region has to be a real region
-          AWS.config.update({ region: 'us-east-1' })
-          sns = new AWS.SNS({ endpoint: epSns })
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            sns = new AWS.SNS({ endpoint: epSns })
 
-          sns.createTopic(snsCreateParams, (err, res) => {
-            if (res.TopicArn) {
-              snsGetParams.TopicArn = res.TopicArn
-            }
+            sns.createTopic(snsCreateParams, (err, res) => {
+              if (res.TopicArn) {
+                snsGetParams.TopicArn = res.TopicArn
+              }
 
-            agent.load(plugin, 'aws-sdk')
-            done()
+              agent.load(plugin, 'aws-sdk')
+              done()
+            })
           })
-        })
 
-        after(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epSns = new AWS.Endpoint('http://localhost:4575')
-          // region has to be a real region
-          AWS.config.update({ region: 'us-east-1' })
-          sns = new AWS.SNS({ endpoint: epSns })
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSns = new AWS.Endpoint('http://localhost:4575')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            sns = new AWS.SNS({ endpoint: epSns })
 
-          // cleanup topics
-          sns.listTopics({}, (err, res) => {
-            if (res.Topics && res.Topics.length > 0) {
-              sns.deleteTopic({ TopicArn: topicArn }, () => {
+            // cleanup topics
+            sns.listTopics({}, (err, res) => {
+              if (res.Topics && res.Topics.length > 0) {
+                sns.deleteTopic({ TopicArn: topicArn }, () => {
+                  closeAndWipeAgent()
+                  done()
+                })
+              } else {
                 closeAndWipeAgent()
                 done()
+              }
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should instrument service methods with a callback', (done) => {
+              baseSpecCallback(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+            })
+
+            it('should instrument service methods without a callback', (done) => {
+              baseSpecAsync(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+            })
+
+            if (semver.intersects(version, '>=2.3.0')) {
+              it('should instrument service methods using promise()', (done) => {
+                baseSpecPromise(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
               })
-            } else {
-              closeAndWipeAgent()
-              done()
             }
+
+            it('should mark error responses', (done) => {
+              baseSpecError(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+            })
+
+            it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
+              sns.createTopic({ Name: 'example_topic_two' }, (err, res) => {
+                topicArn = res.TopicArn
+
+                agent.use(traces => {
+                  expect(traces[0][0]).to.have.property('resource', `createTopic ${topicArn}`)
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', klass)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', 'createTopic')
+                }).then(done).catch(done)
+              })
+            })
           })
         })
 
-        describe('without configuration', () => {
-          it('should instrument service methods with a callback', (done) => {
-            baseSpecCallback(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
-          })
+        describe('with configuration', () => {
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSns = new AWS.Endpoint('http://localhost:4575')
 
-          it('should instrument service methods without a callback', (done) => {
-            baseSpecAsync(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
-          })
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            sns = new AWS.SNS({ endpoint: epSns })
 
-          if (semver.intersects(version, '>=2.3.0')) {
-            it('should instrument service methods using promise()', (done) => {
-              baseSpecPromise(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+            sns.createTopic(snsCreateParams, (err, res) => {
+              if (res.TopicArn) {
+                snsGetParams.TopicArn = res.TopicArn
+              }
+
+              agent.load(plugin, 'aws-sdk', {
+                hooks: {
+                  request: (span, response) => {
+                    span.addTags({
+                      'aws.specialValue': 'foo',
+                      ['aws.params' + key]: response.request.params[key]
+                    })
+                  }
+                }
+              })
+              done()
             })
-          }
-
-          it('should mark error responses', (done) => {
-            baseSpecError(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
           })
 
-          it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
-            sns.createTopic({ Name: 'example_topic_two' }, (err, res) => {
-              topicArn = res.TopicArn
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSns = new AWS.Endpoint('http://localhost:4575')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            sns = new AWS.SNS({ endpoint: epSns })
 
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `createTopic ${topicArn}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', klass)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', 'createTopic')
-              }).then(done).catch(done)
+            // cleanup topics
+            sns.listTopics({}, (err, res) => {
+              if (res.Topics && res.Topics.length > 0) {
+                sns.deleteTopic({ TopicArn: topicArn }, () => {
+                  closeAndWipeAgent()
+                  done()
+                })
+              } else {
+                closeAndWipeAgent()
+                done()
+              }
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should handle hooks appropriately with a callback', (done) => {
+              baseSpecCallback(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata, true)
+            })
+
+            it('should handle hooks appropriately without a callback', (done) => {
+              baseSpecAsync(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata, true)
+            })
+          })
+        })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSns = new AWS.Endpoint('http://localhost:4575')
+
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            sns = new AWS.SNS({ endpoint: epSns })
+
+            sns.createTopic(snsCreateParams, (err, res) => {
+              if (res.TopicArn) {
+                snsGetParams.TopicArn = res.TopicArn
+              }
+
+              agent.load(plugin, ['aws-sdk', 'http'])
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epSns = new AWS.Endpoint('http://localhost:4575')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            sns = new AWS.SNS({ endpoint: epSns })
+
+            // cleanup topics
+            sns.listTopics({}, (err, res) => {
+              if (res.Topics && res.Topics.length > 0) {
+                sns.deleteTopic({ TopicArn: topicArn }, () => {
+                  closeAndWipeAgent()
+                  done()
+                })
+              } else {
+                closeAndWipeAgent()
+                done()
+              }
+            })
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, sns, operation, snsGetParams)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, sns, operation, snsGetParams, tracer)
             })
           })
         })
@@ -560,51 +939,149 @@ describe('Plugin', () => {
         let epCwLogs
         let cwLogs
 
-        before(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epCwLogs = new AWS.Endpoint('http://localhost:4586')
-
-          // region has to be a real region
-          AWS.config.update({ region: 'us-east-1' })
-          cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
-
-          cwLogs.createLogGroup(cwCreateParams, (err, res) => {
-            agent.load(plugin, 'aws-sdk')
-            done()
-          })
-        })
-
-        after(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epCwLogs = new AWS.Endpoint('http://localhost:4586')
-          // region has to be a real region
-          AWS.config.update({ region: 'us-east-1' })
-          cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
-
-          // cleanup log groups
-          cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
-            closeAndWipeAgent()
-            done()
-          })
-        })
-
         describe('without configuration', () => {
-          it('should instrument service methods with a callback', (done) => {
-            baseSpecCallback(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
-          })
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epCwLogs = new AWS.Endpoint('http://localhost:4586')
 
-          it('should instrument service methods without a callback', (done) => {
-            baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
-          })
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
 
-          if (semver.intersects(version, '>=2.3.0')) {
-            it('should instrument service methods using promise()', (done) => {
-              baseSpecPromise(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+            cwLogs.createLogGroup(cwCreateParams, (err, res) => {
+              agent.load(plugin, 'aws-sdk')
+              done()
             })
-          }
+          })
 
-          it('should mark error responses', (done) => {
-            baseSpecError(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+            // cleanup log groups
+            cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should instrument service methods with a callback', (done) => {
+              baseSpecCallback(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+            })
+
+            it('should instrument service methods without a callback', (done) => {
+              baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+            })
+
+            if (semver.intersects(version, '>=2.3.0')) {
+              it('should instrument service methods using promise()', (done) => {
+                baseSpecPromise(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+              })
+            }
+
+            it('should mark error responses', (done) => {
+              baseSpecError(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+            })
+          })
+        })
+
+        describe('with configuration', () => {
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+            cwLogs.createLogGroup(cwCreateParams, (err, res) => {
+              agent.load(plugin, 'aws-sdk', {
+                hooks: {
+                  request: (span, response) => {
+                    span.addTags({
+                      'aws.specialValue': 'foo',
+                      ['aws.params' + key]: response.request.params[key]
+                    })
+                  }
+                }
+              })
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+            // cleanup log groups
+            cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should handle hooks appropriately with a callback', (done) => {
+              baseSpecCallback(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata, true)
+            })
+
+            it('should handle hooks appropriately without a callback', (done) => {
+              baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata, true)
+            })
+          })
+        })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+            cwLogs.createLogGroup(cwCreateParams, (err, res) => {
+              agent.load(plugin, ['aws-sdk', 'http'])
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
+
+            // cleanup log groups
+            cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, cwLogs, operation, cwCreateParams)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, cwLogs, operation, cwCreateParams, tracer)
+            })
           })
         })
       })
@@ -620,51 +1097,151 @@ describe('Plugin', () => {
         let epRedshift
         let redshift
 
-        before(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epRedshift = new AWS.Endpoint('http://localhost:4577')
-
-          // region has to be a real region
-          AWS.config.update({ region: 'us-east-1' })
-          redshift = new AWS.Redshift({ endpoint: epRedshift })
-
-          redshift.createCluster(redshiftCreateParams, (err, res) => {
-            agent.load(plugin, 'aws-sdk')
-            done()
-          })
-        })
-
-        after(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epRedshift = new AWS.Endpoint('http://localhost:4586')
-          // region has to be a real region
-          AWS.config.update({ region: 'us-east-1' })
-          redshift = new AWS.Redshift({ endpoint: epRedshift })
-
-          // cleanup clusters
-          redshift.deleteCluster(redshiftGetParams, () => {
-            closeAndWipeAgent()
-            done()
-          })
-        })
-
         describe('without configuration', () => {
-          it('should instrument service methods with a callback', (done) => {
-            baseSpecCallback(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
-          })
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRedshift = new AWS.Endpoint('http://localhost:4577')
 
-          it('should instrument service methods without a callback', (done) => {
-            baseSpecAsync(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
-          })
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            redshift = new AWS.Redshift({ endpoint: epRedshift })
 
-          if (semver.intersects(version, '>=2.3.0')) {
-            it('should instrument service methods using promise()', (done) => {
-              baseSpecPromise(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+            redshift.createCluster(redshiftCreateParams, (err, res) => {
+              agent.load(plugin, 'aws-sdk')
+              done()
             })
-          }
+          })
 
-          it('should mark error responses', (done) => {
-            baseSpecError(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRedshift = new AWS.Endpoint('http://localhost:4586')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+            // cleanup clusters
+            redshift.deleteCluster(redshiftGetParams, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should instrument service methods with a callback', (done) => {
+              baseSpecCallback(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+            })
+
+            it('should instrument service methods without a callback', (done) => {
+              baseSpecAsync(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+            })
+
+            if (semver.intersects(version, '>=2.3.0')) {
+              it('should instrument service methods using promise()', (done) => {
+                baseSpecPromise(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+              })
+            }
+
+            it('should mark error responses', (done) => {
+              baseSpecError(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+            })
+          })
+        })
+
+        describe('with configuration', () => {
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRedshift = new AWS.Endpoint('http://localhost:4577')
+
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+            redshift.createCluster(redshiftCreateParams, (err, res) => {
+              agent.load(plugin, 'aws-sdk', {
+                hooks: {
+                  request: (span, response) => {
+                    span.addTags({
+                      'aws.specialValue': 'foo',
+                      ['aws.params' + key]: response.request.params[key]
+                    })
+                  }
+                }
+              })
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRedshift = new AWS.Endpoint('http://localhost:4586')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+            // cleanup clusters
+            redshift.deleteCluster(redshiftGetParams, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('instrumentation', () => {
+            it('should handle hooks appropriately with a callback', (done) => {
+              baseSpecCallback(done, agent, redshift, operation, serviceName,
+                klass, redshiftGetParams, key, metadata, true)
+            })
+
+            it('should handle hooks appropriately without a callback', (done) => {
+              baseSpecAsync(done, agent, redshift, operation, serviceName,
+                klass, redshiftGetParams, key, metadata, true)
+            })
+          })
+        })
+
+        describe('scope', () => {
+          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
+          before(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRedshift = new AWS.Endpoint('http://localhost:4577')
+
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+            redshift.createCluster(redshiftCreateParams, (err, res) => {
+              agent.load(plugin, ['aws-sdk', 'http'])
+              done()
+            })
+          })
+
+          after(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRedshift = new AWS.Endpoint('http://localhost:4586')
+            // region has to be a real region
+            AWS.config.update({ region: 'us-east-1' })
+            redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+            // cleanup clusters
+            redshift.deleteCluster(redshiftGetParams, () => {
+              closeAndWipeAgent()
+              done()
+            })
+          })
+
+          describe('context propagation', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
+              baseSpecScope(done, agent, redshift, operation, redshiftGetParams)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              baseSpecBindCallback(done, agent, redshift, operation, redshiftGetParams, tracer)
+            })
           })
         })
       })
@@ -679,23 +1256,39 @@ describe('Plugin', () => {
         let epRoute53
         let route53
 
-        beforeEach(done => {
-          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-          epRoute53 = new AWS.Endpoint('http://localhost:4580')
-          AWS.config.update({ region: 'us-east-1' })
-          route53 = new AWS.Route53({ endpoint: epRoute53 })
-          agent.load(plugin, ['aws-sdk', 'http'])
-          done()
-        })
-
-        afterEach(done => {
-          closeAndWipeAgent()
-          done()
-        })
-
         describe('without configuration', () => {
-          it('should instrument service methods with a callback', (done) => {
-            route53[operation]({}, (err, response) => {
+          beforeEach(done => {
+            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+            epRoute53 = new AWS.Endpoint('http://localhost:4580')
+            AWS.config.update({ region: 'us-east-1' })
+            route53 = new AWS.Route53({ endpoint: epRoute53 })
+            agent.load(plugin, ['aws-sdk', 'http'])
+            done()
+          })
+
+          afterEach(done => {
+            closeAndWipeAgent()
+            done()
+          })
+
+          describe('instrumentation', () => {
+            it('should instrument service methods with a callback', (done) => {
+              route53[operation]({}, (err, response) => {
+                agent
+                  .use(traces => {
+                    const spans = sort(traces[0])
+                    expect(spans[0]).to.have.property('resource', `${operation}`)
+                    expect(spans[0]).to.have.property('name', 'aws.request')
+                    expect(spans[0].service).to.include(serviceName)
+                    expect(spans[0].meta).to.have.property('aws.service', klass)
+                    expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+                    expect(spans[0].meta['aws.region']).to.be.a('string')
+                    expect(spans[0].meta).to.have.property('aws.operation', operation)
+                  }).then(done).catch(done)
+              })
+            })
+
+            it('should instrument service methods without a callback', (done) => {
               agent
                 .use(traces => {
                   const spans = sort(traces[0])
@@ -706,32 +1299,38 @@ describe('Plugin', () => {
                   expect(spans[0].meta).to.have.property('component', 'aws-sdk')
                   expect(spans[0].meta['aws.region']).to.be.a('string')
                   expect(spans[0].meta).to.have.property('aws.operation', operation)
-                }).then(done).catch(done)
+                })
+                .then(done)
+                .catch(done)
+
+              const route53Request = route53[operation]({})
+              route53Request.send()
             })
-          })
 
-          it('should instrument service methods without a callback', (done) => {
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('resource', `${operation}`)
-                expect(spans[0]).to.have.property('name', 'aws.request')
-                expect(spans[0].service).to.include(serviceName)
-                expect(spans[0].meta).to.have.property('aws.service', klass)
-                expect(spans[0].meta).to.have.property('component', 'aws-sdk')
-                expect(spans[0].meta['aws.region']).to.be.a('string')
-                expect(spans[0].meta).to.have.property('aws.operation', operation)
+            if (semver.intersects(version, '>=2.3.0')) {
+              it('should instrument service methods using promise()', (done) => {
+                function checkTraces () {
+                  agent.use(traces => {
+                    const spans = sort(traces[0])
+                    expect(spans[0]).to.have.property('resource', `${operation}`)
+                    expect(spans[0]).to.have.property('name', 'aws.request')
+                    expect(spans[0].service).to.include(serviceName)
+                    expect(spans[0].meta).to.have.property('aws.service', klass)
+                    expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+                    expect(spans[0].meta['aws.region']).to.be.a('string')
+                    expect(spans[0].meta).to.have.property('aws.operation', operation)
+                  }).then(done).catch(done)
+                }
+
+                const route53Request = route53[operation]({}).promise()
+                route53Request.then(checkTraces).catch(checkTraces)
               })
-              .then(done)
-              .catch(done)
+            }
 
-            const route53Request = route53[operation]({})
-            route53Request.send()
-          })
-
-          if (semver.intersects(version, '>=2.3.0')) {
-            it('should instrument service methods using promise()', (done) => {
-              function checkTraces () {
+            it('should mark error responses', (done) => {
+              route53[operation]({
+                'IllegalKey': 'IllegalValue'
+              }, () => {
                 agent.use(traces => {
                   const spans = sort(traces[0])
                   expect(spans[0]).to.have.property('resource', `${operation}`)
@@ -741,67 +1340,47 @@ describe('Plugin', () => {
                   expect(spans[0].meta).to.have.property('component', 'aws-sdk')
                   expect(spans[0].meta['aws.region']).to.be.a('string')
                   expect(spans[0].meta).to.have.property('aws.operation', operation)
+                  expect(spans[0].meta['error.type']).to.be.a('string')
+                  expect(spans[0].meta['error.msg']).to.be.a('string')
+                  expect(spans[0].meta['error.stack']).to.be.a('string')
                 }).then(done).catch(done)
-              }
-
-              const route53Request = route53[operation]({}).promise()
-              route53Request.then(checkTraces).catch(checkTraces)
+              })
             })
-          }
+          })
 
-          it('should mark error responses', (done) => {
-            route53[operation]({
-              'IllegalKey': 'IllegalValue'
-            }, () => {
+          describe('scope', () => {
+            let tracer
+
+            beforeEach(() => {
+              tracer = require('../../dd-trace')
+            })
+
+            it('should bind child spans to the correct active span', (done) => {
               agent.use(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('resource', `${operation}`)
-                expect(spans[0]).to.have.property('name', 'aws.request')
-                expect(spans[0].service).to.include(serviceName)
-                expect(spans[0].meta).to.have.property('aws.service', klass)
-                expect(spans[0].meta).to.have.property('component', 'aws-sdk')
-                expect(spans[0].meta['aws.region']).to.be.a('string')
-                expect(spans[0].meta).to.have.property('aws.operation', operation)
-                expect(spans[0].meta['error.type']).to.be.a('string')
-                expect(spans[0].meta['error.msg']).to.be.a('string')
-                expect(spans[0].meta['error.stack']).to.be.a('string')
+                expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
+                expect(spans.length).to.equal(2)
               }).then(done).catch(done)
+
+              const tableRequest = route53[operation]({})
+              tableRequest.send()
             })
-          })
-        })
 
-        describe('scope', () => {
-          let tracer
+            it('should bind callbacks to the correct active span', (done) => {
+              let activeSpanName
+              const parentName = 'parent'
 
-          beforeEach(() => {
-            tracer = require('../../dd-trace')
-          })
+              tracer.trace(parentName, () => {
+                route53[operation]({}, () => {
+                  try {
+                    activeSpanName = tracer.scope().active()._spanContext._name
+                  } catch (e) {
+                    activeSpanName = undefined
+                  }
 
-          it('should bind child spans to the correct active span', (done) => {
-            agent.use(traces => {
-              const spans = sort(traces[0])
-              expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-              expect(spans.length).to.equal(2)
-            }).then(done).catch(done)
-
-            const tableRequest = route53[operation]({})
-            tableRequest.send()
-          })
-
-          it('should bind callbacks to the correct active span', (done) => {
-            let activeSpanName
-            const parentName = 'parent'
-
-            tracer.trace(parentName, () => {
-              route53[operation]({}, () => {
-                try {
-                  activeSpanName = tracer.scope().active()._spanContext._name
-                } catch (e) {
-                  activeSpanName = undefined
-                }
-
-                expect(activeSpanName).to.equal(parentName)
-                done()
+                  expect(activeSpanName).to.equal(parentName)
+                  done()
+                })
               })
             })
           })
