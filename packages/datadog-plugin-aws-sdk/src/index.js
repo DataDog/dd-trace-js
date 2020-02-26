@@ -13,9 +13,8 @@ function createWrapRequest (tracer, config) {
 
       const serviceName = this.service.serviceIdentifier
       const childOf = tracer.scope().active()
-      const baseTags = {
+      const tags = {
         [Tags.SPAN_KIND]: 'client',
-        'span.type': 'http',
         'service.name': config.service
           ? `${config.service}-aws-${serviceName}`
           : `${tracer._service}-aws-${serviceName}`,
@@ -28,7 +27,7 @@ function createWrapRequest (tracer, config) {
 
       const span = tracer.startSpan('aws.request', {
         childOf,
-        tags: baseTags
+        tags
       })
 
       const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, childOf) : cb
