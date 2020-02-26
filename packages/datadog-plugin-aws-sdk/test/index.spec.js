@@ -3,7 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const fixtures = require('./fixtures/base')
-const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const semver = require('semver')
 
 wrapIt()
@@ -13,6 +12,72 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 const closeAndWipeAgent = () => {
   agent.close()
   agent.wipe()
+}
+
+const baseSpecCheck = (done, agent, operation, serviceName, klass, fixture, key, metadata, config) => {
+  agent
+    .use(traces => {
+      const spans = sort(traces[0])
+      expect(spans[0]).to.have.property('resource', `${operation} ${fixture[key]}`)
+      expect(spans[0]).to.have.property('name', 'aws.request')
+      expect(spans[0].meta).to.have.property('aws.service', klass)
+      expect(spans[0].service).to.include(serviceName)
+      expect(spans[0].meta['aws.' + metadata]).to.be.a('string')
+      expect(spans[0].meta['aws.region']).to.be.a('string')
+      expect(spans[0].meta).to.have.property('aws.operation', operation)
+      expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+
+      if (config) {
+        expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
+        expect(traces[0][0].meta).to.have.property('aws.params' + key, fixture[key])
+      }
+    })
+    .then(done)
+    .catch(done)
+}
+
+const baseSpecError = (done, agent, service, operation, serviceName, klass, fixture, key, metadata) => {
+  service[operation]({
+    [key]: fixture[key],
+    'BadParam': 'badvalue'
+  }, (err, response) => {
+    agent.use(traces => {
+      const spans = sort(traces[0])
+      expect(spans[0]).to.have.property('resource', `${operation} ${fixture[key]}`)
+      expect(spans[0]).to.have.property('name', 'aws.request')
+      expect(spans[0].service).to.include(serviceName)
+      expect(spans[0].meta).to.have.property('aws.service', klass)
+      expect(spans[0].meta['aws.' + metadata]).to.be.a('string')
+      expect(spans[0].meta['aws.region']).to.be.a('string')
+      expect(spans[0].meta).to.have.property('aws.operation', operation)
+      expect(spans[0].meta).to.have.property('component', 'aws-sdk')
+      expect(spans[0].meta['error.type']).to.be.a('string')
+      expect(spans[0].meta['error.msg']).to.be.a('string')
+      expect(spans[0].meta['error.stack']).to.be.a('string')
+    }).then(done).catch(done)
+  })
+}
+
+const baseSpecCallback = (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) => {
+  service[operation](fixture, (err, data) => {
+    baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
+  })
+}
+
+const baseSpecAsync = (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) => {
+  baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
+
+  const serviceRequest = service[operation](fixture)
+  serviceRequest.send()
+}
+
+const baseSpecPromise = (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) => {
+  function checkTraces () {
+    baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
+  }
+
+  const serviceRequest = service[operation](fixture).promise()
+  serviceRequest.then(checkTraces).catch(checkTraces)
 }
 
 describe('Plugin', () => {
@@ -33,9 +98,11 @@ describe('Plugin', () => {
         const ddbPutItemParams = fixtures.dynamodb.put
         const ddbGetItemParams = fixtures.dynamodb.get
         const ddbBatchParams = fixtures.dynamodb.batch
-        const operationName = 'getItem'
+        const operation = 'getItem'
         const serviceName = 'dynamodb'
-        const className = 'DynamoDB'
+        const klass = 'DynamoDB'
+        const key = 'TableName'
+        const metadata = 'dynamodb.table_name'
         let epDynamo
         let ddb
 
@@ -73,67 +140,20 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              ddb[operationName](ddbGetItemParams, (err, data) => {
-                agent
-                  .use(traces => {
-                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  })
-                  .then(done)
-                  .catch(done)
-              })
+              baseSpecCallback(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                })
-                .then(done)
-                .catch(done)
+              baseSpecAsync(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
+            })
 
-              const tableRequest = ddb[operationName](ddbGetItemParams)
-              tableRequest.send()
+            it('should mark error responses', (done) => {
+              baseSpecError(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
-              it('should instrument service methods using promise()', async () => {
-                const expected = {
-                  error: 0,
-                  name: 'aws.request',
-                  resource: `${operationName} ${ddbGetItemParams.TableName}`,
-                  meta: {
-                    'aws.dynamodb.table_name': ddbGetItemParams.TableName,
-                    'aws.region': 'REGION',
-                    'aws.operation': operationName,
-                    'aws.service': className,
-                    'component': 'aws-sdk'
-                  }
-                }
-
-                const expectationsPromise = expectSomeSpan(agent, expected)
-                const checkTraces = async () => {
-                  await agent.use(traces => {
-                    expect(traces[0][0].service).to.include(serviceName)
-                  })
-                  await expectationsPromise
-                }
-
-                await ddb[operationName](ddbGetItemParams).promise()
-                return checkTraces()
+              it('should instrument service methods using promise()', (done) => {
+                baseSpecPromise(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
               })
             }
 
@@ -141,34 +161,10 @@ describe('Plugin', () => {
               ddb.batchGetItem(ddbBatchParams, (err, resp) => {
                 agent.use(traces => {
                   expect(traces[0][0]).to.have.property('resource', `batchGetItem ${ddbParams.TableName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
                   expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('aws.service', klass)
                   expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
                   expect(traces[0][0].meta).to.have.property('aws.operation', 'batchGetItem')
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                }).then(done).catch(done)
-              })
-            })
-
-            it('should mark error responses', (done) => {
-              ddb[operationName]({
-                'TableName': ddbParams.TableName,
-                'BadParam': 'badvalue'
-              }, (err, response) => {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['error.type']).to.be.a('string')
-                  expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                  expect(traces[0][0].meta['error.stack']).to.be.a('string')
                 }).then(done).catch(done)
               })
             })
@@ -189,7 +185,7 @@ describe('Plugin', () => {
                   hooks: { request: (span, response) => {
                     span.addTags({
                       'aws.specialValue': 'foo',
-                      'aws.paramsTableName': response.request.params.TableName
+                      ['aws.params' + key]: response.request.params[key]
                     })
                   }
                   }
@@ -217,51 +213,23 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              ddb[operationName](ddbGetItemParams, () => {
-                agent
-                  .use(traces => {
-                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                    expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                    expect(traces[0][0].meta).to.have.property('aws.paramsTableName', ddbParams.TableName)
-                  })
-                  .then(done)
-                  .catch(done)
-              })
+              baseSpecCallback(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${ddbParams.TableName}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta['aws.dynamodb.table_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                expect(traces[0][0].meta).to.have.property('aws.paramsTableName', ddbParams.TableName)
-              }).then(done).catch(done)
-
-              const tableRequest = ddb[operationName](ddbGetItemParams)
-              tableRequest.send()
+              baseSpecAsync(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata, true)
             })
           })
         })
       })
 
       describe('Kinesis', () => {
-        const kinesisDescribeParams = fixtures.kinesis.describe
-        const operationName = 'describeStream'
+        const kinesisParams = fixtures.kinesis.describe
+        const operation = 'describeStream'
         const serviceName = 'kinesis'
-        const className = 'Kinesis'
+        const klass = 'Kinesis'
+        const key = 'StreamName'
+        const metadata = 'kinesis.stream_name'
         let epKinesis
         let kinesis
 
@@ -282,87 +250,21 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              kinesis[operationName](kinesisDescribeParams, (err, resp) => {
-                agent
-                  .use(traces => {
-                    expect(traces[0][0]).to.have.property('resource',
-                      `${operationName} ${kinesisDescribeParams.StreamName}`
-                    )
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  }).then(done).catch(done)
-              })
+              baseSpecCallback(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource',
-                    `${operationName} ${kinesisDescribeParams.StreamName}`
-                  )
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                })
-                .then(done)
-                .catch(done)
-
-              const streamRequest = kinesis[operationName](kinesisDescribeParams)
-              streamRequest.send()
+              baseSpecAsync(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                function checkTraces () {
-                  agent.use(traces => {
-                    expect(traces[0][0]).to.have.property('resource',
-                      `${operationName} ${kinesisDescribeParams.StreamName}`
-                    )
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  }).then(done).catch(done)
-                }
-
-                const streamRequest = kinesis[operationName](kinesisDescribeParams).promise()
-                streamRequest.then(checkTraces).catch(checkTraces)
+                baseSpecPromise(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              kinesis[operationName]({
-                StreamName: kinesisDescribeParams.StreamName,
-                'IllegalKey': 'IllegalValue'
-              }, () => {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource',
-                    `${operationName} ${kinesisDescribeParams.StreamName}`
-                  )
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta['error.type']).to.be.a('string')
-                  expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                  expect(traces[0][0].meta['error.stack']).to.be.a('string')
-                }).then(done).catch(done)
-              })
+              baseSpecError(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
             })
           })
         })
@@ -379,7 +281,7 @@ describe('Plugin', () => {
                 request: (span, response) => {
                   span.addTags({
                     'aws.specialValue': 'foo',
-                    'aws.paramsStreamName': response.request.params.StreamName
+                    ['aws.params' + key]: response.request.params[key]
                   })
                 }
               }
@@ -394,45 +296,11 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              kinesis[operationName](kinesisDescribeParams, () => {
-                agent
-                  .use(traces => {
-                    expect(traces[0][0]).to.have.property('resource',
-                      `${operationName} ${kinesisDescribeParams.StreamName}`
-                    )
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                    expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                    expect(traces[0][0].meta).to.have.property('aws.paramsStreamName', kinesisDescribeParams.StreamName)
-                  })
-                  .then(done)
-                  .catch(done)
-              })
+              baseSpecCallback(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource',
-                  `${operationName} ${kinesisDescribeParams.StreamName}`
-                )
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.kinesis.stream_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                expect(traces[0][0].meta).to.have.property('aws.paramsStreamName', kinesisDescribeParams.StreamName)
-              }).then(done).catch(done)
-
-              const streamRequest = kinesis[operationName](kinesisDescribeParams)
-              streamRequest.send()
+              baseSpecAsync(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata, true)
             })
           })
         })
@@ -440,9 +308,11 @@ describe('Plugin', () => {
 
       describe('S3', () => {
         const s3Params = fixtures.s3.create
-        const operationName = 'listObjects'
+        const operation = 'listObjects'
         const serviceName = 's3'
-        const className = 'S3'
+        const klass = 'S3'
+        const key = 'Bucket'
+        const metadata = 's3.bucket_name'
         let epS3
         let s3
 
@@ -470,76 +340,21 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              s3[operationName](s3Params, () => {
-                agent
-                  .use(traces => {
-                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3Params.Bucket}`)
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  }).then(done).catch(done)
-              })
+              baseSpecCallback(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3Params.Bucket}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                })
-                .then(done)
-                .catch(done)
-
-              const s3Request = s3[operationName](s3Params)
-              s3Request.send()
+              baseSpecAsync(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                function checkTraces () {
-                  agent.use(traces => {
-                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3Params.Bucket}`)
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  }).then(done).catch(done)
-                }
-
-                const s3Request = s3[operationName](s3Params).promise()
-                s3Request.then(checkTraces).catch(checkTraces)
+                baseSpecPromise(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              s3[operationName]({ Bucket: s3Params.Bucket, 'IllegalKey': 'IllegalValue' }, () => {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3Params.Bucket}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                  expect(traces[0][0].meta['error.type']).to.be.a('string')
-                  expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                  expect(traces[0][0].meta['error.stack']).to.be.a('string')
-                }).then(done).catch(done)
-              })
+              baseSpecError(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
             })
           })
         })
@@ -548,15 +363,15 @@ describe('Plugin', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epS3 = new AWS.Endpoint('http://localhost:4572')
-            AWS.config.update({ region: 'us-east-1' })
-            s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
+            s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
+
             s3.createBucket({ Bucket: s3Params.Bucket }, () => {
               agent.load(plugin, 'aws-sdk', {
                 hooks: {
                   request: (span, response) => {
                     span.addTags({
                       'aws.specialValue': 'foo',
-                      'aws.paramsBucket': response.request.params.Bucket
+                      ['aws.params' + key]: response.request.params[key]
                     })
                   }
                 }
@@ -577,42 +392,11 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              s3[operationName](s3Params, () => {
-                agent
-                  .use(traces => {
-                    expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3Params.Bucket}`)
-                    expect(traces[0][0]).to.have.property('name', 'aws.request')
-                    expect(traces[0][0].service).to.include(serviceName)
-                    expect(traces[0][0].meta).to.have.property('aws.service', className)
-                    expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                    expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                    expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                    expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                    expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                    expect(traces[0][0].meta).to.have.property('aws.paramsBucket', s3Params.Bucket)
-                  })
-                  .then(done)
-                  .catch(done)
-              })
+              baseSpecCallback(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${s3Params.Bucket}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.s3.bucket_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-
-                expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-                expect(traces[0][0].meta).to.have.property('aws.paramsBucket', s3Params.Bucket)
-              }).then(done).catch(done)
-
-              const s3Request = s3[operationName](s3Params)
-              s3Request.send()
+              baseSpecAsync(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata, true)
             })
           })
         })
@@ -621,9 +405,11 @@ describe('Plugin', () => {
       describe('SQS', () => {
         const sqsCreateParams = fixtures.sqs.create
         const sqsGetParams = fixtures.sqs.get
-        const operationName = 'receiveMessage'
+        const operation = 'receiveMessage'
         const serviceName = 'sqs'
-        const className = 'SQS'
+        const klass = 'SQS'
+        const key = 'QueueUrl'
+        const metadata = 'sqs.queue_name'
         let epSqs
         let sqs
 
@@ -656,79 +442,21 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           it('should instrument service methods with a callback', (done) => {
-            sqs[operationName](sqsGetParams, () => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqsGetParams.QueueUrl}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-            })
+            baseSpecCallback(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
           })
 
           it('should instrument service methods without a callback', (done) => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqsGetParams.QueueUrl}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-              })
-              .then(done)
-              .catch(done)
-
-            const sqsRequest = sqs[operationName](sqsGetParams)
-            sqsRequest.send()
+            baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
           })
 
           if (semver.intersects(version, '>=2.3.0')) {
             it('should instrument service methods using promise()', (done) => {
-              function checkTraces () {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqsGetParams.QueueUrl}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-              }
-
-              const sqsRequest = sqs[operationName](sqsGetParams).promise()
-              sqsRequest.then(checkTraces).catch(checkTraces)
+              baseSpecPromise(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
             })
           }
 
           it('should mark error responses', (done) => {
-            sqs[operationName]({
-              'QueueUrl': sqsGetParams.QueueUrl,
-              'IllegalKey': 'IllegalValue'
-            }, () => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${sqsGetParams.QueueUrl}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.sqs.queue_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta['error.type']).to.be.a('string')
-                expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                expect(traces[0][0].meta['error.stack']).to.be.a('string')
-              }).then(done).catch(done)
-            })
+            baseSpecError(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
           })
         })
       })
@@ -736,9 +464,11 @@ describe('Plugin', () => {
       describe('SNS', () => {
         const snsCreateParams = fixtures.sns.create
         const snsGetParams = fixtures.sns.get
-        const operationName = 'getTopicAttributes'
+        const operation = 'getTopicAttributes'
         const serviceName = 'sns'
-        const className = 'SNS'
+        const klass = 'SNS'
+        const key = 'TopicArn'
+        const metadata = 'sns.topic_arn'
         let epSns
         let sns
         let topicArn
@@ -784,59 +514,22 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           it('should instrument service methods with a callback', (done) => {
-            sns[operationName](snsGetParams, () => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${snsGetParams.TopicArn}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-            })
+            baseSpecCallback(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
           })
 
           it('should instrument service methods without a callback', (done) => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${snsGetParams.TopicArn}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-              })
-              .then(done)
-              .catch(done)
-
-            const snsRequest = sns[operationName](snsGetParams)
-            snsRequest.send()
+            baseSpecAsync(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
           })
 
           if (semver.intersects(version, '>=2.3.0')) {
             it('should instrument service methods using promise()', (done) => {
-              function checkTraces () {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${snsGetParams.TopicArn}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-              }
-
-              const snsRequest = sns[operationName](snsGetParams).promise()
-              snsRequest.then(checkTraces).catch(checkTraces)
+              baseSpecPromise(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
             })
           }
+
+          it('should mark error responses', (done) => {
+            baseSpecError(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+          })
 
           it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
             sns.createTopic({ Name: 'example_topic_two' }, (err, res) => {
@@ -846,32 +539,11 @@ describe('Plugin', () => {
                 expect(traces[0][0]).to.have.property('resource', `createTopic ${topicArn}`)
                 expect(traces[0][0]).to.have.property('name', 'aws.request')
                 expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('aws.service', klass)
                 expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
                 expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
                 expect(traces[0][0].meta['aws.region']).to.be.a('string')
                 expect(traces[0][0].meta).to.have.property('aws.operation', 'createTopic')
-              }).then(done).catch(done)
-            })
-          })
-
-          it('should mark error responses', (done) => {
-            sns.getTopicAttributes({
-              TopicArn: snsGetParams.TopicArn,
-              'IllegalKey': 'IllegalValue'
-            }, () => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${snsGetParams.TopicArn}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.sns.topic_arn']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta['error.type']).to.be.a('string')
-                expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                expect(traces[0][0].meta['error.stack']).to.be.a('string')
               }).then(done).catch(done)
             })
           })
@@ -880,9 +552,11 @@ describe('Plugin', () => {
 
       describe('Cloudwatch Logs', () => {
         const cwCreateParams = fixtures.cloudwatchlogs.create
-        const operationName = 'describeLogStreams'
+        const operation = 'describeLogStreams'
         const serviceName = 'cloudwatchlogs'
-        const className = 'CloudWatchLogs'
+        const klass = 'CloudWatchLogs'
+        const key = 'logGroupName'
+        const metadata = 'cloudwatch_logs.log_group_name'
         let epCwLogs
         let cwLogs
 
@@ -916,79 +590,21 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           it('should instrument service methods with a callback', (done) => {
-            cwLogs[operationName](cwCreateParams, () => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-            })
+            baseSpecCallback(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
           })
 
           it('should instrument service methods without a callback', (done) => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-              })
-              .then(done)
-              .catch(done)
-
-            const cwLogsRequest = cwLogs[operationName](cwCreateParams)
-            cwLogsRequest.send()
+            baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
           })
 
           if (semver.intersects(version, '>=2.3.0')) {
             it('should instrument service methods using promise()', (done) => {
-              function checkTraces () {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-              }
-
-              const cwLogsRequest = cwLogs[operationName](cwCreateParams).promise()
-              cwLogsRequest.then(checkTraces).catch(checkTraces)
+              baseSpecPromise(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
             })
           }
 
           it('should mark error responses', (done) => {
-            cwLogs.describeLogStreams({
-              logGroupName: cwCreateParams.logGroupName,
-              'IllegalKey': 'IllegalValue'
-            }, () => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${operationName} ${cwCreateParams.logGroupName}`)
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.cloudwatch_logs.log_group_name']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta['error.type']).to.be.a('string')
-                expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                expect(traces[0][0].meta['error.stack']).to.be.a('string')
-              }).then(done).catch(done)
-            })
+            baseSpecError(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
           })
         })
       })
@@ -996,9 +612,11 @@ describe('Plugin', () => {
       describe('Redshift', () => {
         const redshiftCreateParams = fixtures.redshift.create
         const redshiftGetParams = fixtures.redshift.get
-        const operationName = 'describeClusters'
+        const operation = 'describeClusters'
         const serviceName = 'redshift'
-        const className = 'Redshift'
+        const klass = 'Redshift'
+        const key = 'ClusterIdentifier'
+        const metadata = 'redshift.cluster_identifier'
         let epRedshift
         let redshift
 
@@ -1032,87 +650,21 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           it('should instrument service methods with a callback', (done) => {
-            redshift[operationName](redshiftGetParams, () => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('resource',
-                    `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
-                  )
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-            })
+            baseSpecCallback(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
           })
 
           it('should instrument service methods without a callback', (done) => {
-            agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource',
-                  `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
-                )
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-              })
-              .then(done)
-              .catch(done)
-
-            const redshiftRequest = redshift[operationName](redshiftGetParams)
-            redshiftRequest.send()
+            baseSpecAsync(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
           })
 
           if (semver.intersects(version, '>=2.3.0')) {
             it('should instrument service methods using promise()', (done) => {
-              function checkTraces () {
-                agent.use(traces => {
-                  expect(traces[0][0]).to.have.property('resource',
-                    `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
-                  )
-                  expect(traces[0][0]).to.have.property('name', 'aws.request')
-                  expect(traces[0][0].service).to.include(serviceName)
-                  expect(traces[0][0].meta).to.have.property('aws.service', className)
-                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                  expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
-                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                }).then(done).catch(done)
-              }
-
-              const redshiftRequest = redshift[operationName](redshiftGetParams).promise()
-              redshiftRequest.then(checkTraces).catch(checkTraces)
+              baseSpecPromise(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
             })
           }
 
           it('should mark error responses', (done) => {
-            redshift.describeClusters({
-              ClusterIdentifier: redshiftGetParams.ClusterIdentifier,
-              'IllegalKey': 'IllegalValue'
-            }, () => {
-              agent.use(traces => {
-                expect(traces[0][0]).to.have.property('resource',
-                  `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
-                )
-                expect(traces[0][0]).to.have.property('name', 'aws.request')
-                expect(traces[0][0].service).to.include(serviceName)
-                expect(traces[0][0].meta).to.have.property('aws.service', className)
-                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
-                expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
-                expect(traces[0][0].meta['aws.region']).to.be.a('string')
-                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
-                expect(traces[0][0].meta['error.type']).to.be.a('string')
-                expect(traces[0][0].meta['error.msg']).to.be.a('string')
-                expect(traces[0][0].meta['error.stack']).to.be.a('string')
-              }).then(done).catch(done)
-            })
+            baseSpecError(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
           })
         })
       })
@@ -1121,9 +673,9 @@ describe('Plugin', () => {
         // we do not instrument route53 at this time specifically
         // this is meant to demonstrate defaults for non instrumented service
         // if we do later add specific metadata for route53, need to update to a different service
-        const operationName = 'listHealthChecks'
+        const operation = 'listHealthChecks'
         const serviceName = 'route53'
-        const className = 'Route53'
+        const klass = 'Route53'
         let epRoute53
         let route53
 
@@ -1143,17 +695,17 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           it('should instrument service methods with a callback', (done) => {
-            route53[operationName]({}, (err, response) => {
+            route53[operation]({}, (err, response) => {
               agent
                 .use(traces => {
                   const spans = sort(traces[0])
-                  expect(spans[0]).to.have.property('resource', `${operationName}`)
+                  expect(spans[0]).to.have.property('resource', `${operation}`)
                   expect(spans[0]).to.have.property('name', 'aws.request')
                   expect(spans[0].service).to.include(serviceName)
-                  expect(spans[0].meta).to.have.property('aws.service', className)
+                  expect(spans[0].meta).to.have.property('aws.service', klass)
                   expect(spans[0].meta).to.have.property('component', 'aws-sdk')
                   expect(spans[0].meta['aws.region']).to.be.a('string')
-                  expect(spans[0].meta).to.have.property('aws.operation', operationName)
+                  expect(spans[0].meta).to.have.property('aws.operation', operation)
                 }).then(done).catch(done)
             })
           })
@@ -1162,18 +714,18 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('resource', `${operationName}`)
+                expect(spans[0]).to.have.property('resource', `${operation}`)
                 expect(spans[0]).to.have.property('name', 'aws.request')
                 expect(spans[0].service).to.include(serviceName)
-                expect(spans[0].meta).to.have.property('aws.service', className)
+                expect(spans[0].meta).to.have.property('aws.service', klass)
                 expect(spans[0].meta).to.have.property('component', 'aws-sdk')
                 expect(spans[0].meta['aws.region']).to.be.a('string')
-                expect(spans[0].meta).to.have.property('aws.operation', operationName)
+                expect(spans[0].meta).to.have.property('aws.operation', operation)
               })
               .then(done)
               .catch(done)
 
-            const route53Request = route53[operationName]({})
+            const route53Request = route53[operation]({})
             route53Request.send()
           })
 
@@ -1182,34 +734,34 @@ describe('Plugin', () => {
               function checkTraces () {
                 agent.use(traces => {
                   const spans = sort(traces[0])
-                  expect(spans[0]).to.have.property('resource', `${operationName}`)
+                  expect(spans[0]).to.have.property('resource', `${operation}`)
                   expect(spans[0]).to.have.property('name', 'aws.request')
                   expect(spans[0].service).to.include(serviceName)
-                  expect(spans[0].meta).to.have.property('aws.service', className)
+                  expect(spans[0].meta).to.have.property('aws.service', klass)
                   expect(spans[0].meta).to.have.property('component', 'aws-sdk')
                   expect(spans[0].meta['aws.region']).to.be.a('string')
-                  expect(spans[0].meta).to.have.property('aws.operation', operationName)
+                  expect(spans[0].meta).to.have.property('aws.operation', operation)
                 }).then(done).catch(done)
               }
 
-              const route53Request = route53[operationName]({}).promise()
+              const route53Request = route53[operation]({}).promise()
               route53Request.then(checkTraces).catch(checkTraces)
             })
           }
 
           it('should mark error responses', (done) => {
-            route53[operationName]({
+            route53[operation]({
               'IllegalKey': 'IllegalValue'
             }, () => {
               agent.use(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('resource', `${operationName}`)
+                expect(spans[0]).to.have.property('resource', `${operation}`)
                 expect(spans[0]).to.have.property('name', 'aws.request')
                 expect(spans[0].service).to.include(serviceName)
-                expect(spans[0].meta).to.have.property('aws.service', className)
+                expect(spans[0].meta).to.have.property('aws.service', klass)
                 expect(spans[0].meta).to.have.property('component', 'aws-sdk')
                 expect(spans[0].meta['aws.region']).to.be.a('string')
-                expect(spans[0].meta).to.have.property('aws.operation', operationName)
+                expect(spans[0].meta).to.have.property('aws.operation', operation)
                 expect(spans[0].meta['error.type']).to.be.a('string')
                 expect(spans[0].meta['error.msg']).to.be.a('string')
                 expect(spans[0].meta['error.stack']).to.be.a('string')
@@ -1232,7 +784,7 @@ describe('Plugin', () => {
               expect(spans.length).to.equal(2)
             }).then(done).catch(done)
 
-            const tableRequest = route53[operationName]({})
+            const tableRequest = route53[operation]({})
             tableRequest.send()
           })
 
@@ -1241,7 +793,7 @@ describe('Plugin', () => {
             const parentName = 'parent'
 
             tracer.trace(parentName, () => {
-              route53[operationName]({}, () => {
+              route53[operation]({}, () => {
                 try {
                   activeSpanName = tracer.scope().active()._spanContext._name
                 } catch (e) {
