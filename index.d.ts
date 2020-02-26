@@ -459,6 +459,7 @@ interface Plugins {
   "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
+  "kubets": plugins.kubets;
 }
 
 /** @hidden */
@@ -978,6 +979,12 @@ declare namespace plugins {
    * on the tracer.
    */
   interface winston extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [kubets](https://github.com/yomanz/kubets/) module.
+   */
+  interface kubets extends Integration {}
 }
 
 /**
