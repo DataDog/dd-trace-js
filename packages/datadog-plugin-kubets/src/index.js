@@ -3,19 +3,31 @@
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 function addTagsForRequest (tracer, config, span, request) {
+  const body = request.getBody();
+
   span.addTags({
     'service.name': config.service || `${tracer._service}-kubets`,
     channel: request.getChannel(),
-    body: request.getBody(),
-    metadata: request.getMetadata()
-  })
+    body: (typeof body === 'string' ? body : body.toString()) || 'No body specified',
+    metadata: request.getMetadata() || 'No metadata specified'
+  });
   span.setTag('type.query') // TODO: Differentiate between query and events
 }
 
 function createWrapSendRequest (tracer, config) {
   return function wrapSendRequest (sendFunction) { // This runs BEFORE the function
+    const isValid = (that, request) => {
+      return true;
+    };
+
     return function sendRequestWithTrace (request) { // This is the Request kubets class, this is where it gets ran
-      const span = tracer.startSpan('kubets.request')
+      if (!isValid(this, arguments)) return sendFunction.apply(this, arguments); // TODO: Prevents errors stopping execution.
+      const span = tracer.startSpan('kubets.request', {
+        tags: {
+          'component': 'kubets'
+        }
+      }) // TODO: Look into childOf (idk if that's needed as its req-res)
+
       addTagsForRequest(tracer, config, span, request)
 
       analyticsSampler.sample(span, config.analytics, true)
