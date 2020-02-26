@@ -2,7 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
-const fixtures = require('./fixtures.js')
+const fixtures = require('./fixtures/base')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const semver = require('semver')
 
@@ -29,10 +29,10 @@ describe('Plugin', () => {
 
     withVersions(plugin, 'aws-sdk', version => {
       describe('DynamoDB', () => {
-        const ddbParams = fixtures.ddb
-        const ddbPutItemParams = fixtures.ddb_put_item
-        const ddbGetItemParams = fixtures.ddb_get_item
-        const ddbBatchParams = fixtures.ddb_batch
+        const ddbParams = fixtures.dynamodb.create
+        const ddbPutItemParams = fixtures.dynamodb.put
+        const ddbGetItemParams = fixtures.dynamodb.get
+        const ddbBatchParams = fixtures.dynamodb.batch
         const operationName = 'getItem'
         const serviceName = 'dynamodb'
         const className = 'DynamoDB'
@@ -127,7 +127,6 @@ describe('Plugin', () => {
                 const expectationsPromise = expectSomeSpan(agent, expected)
                 const checkTraces = async () => {
                   await agent.use(traces => {
-                    expect(traces[0][0].meta['aws.url']).to.be.a('string')
                     expect(traces[0][0].service).to.include(serviceName)
                   })
                   await expectationsPromise
@@ -259,7 +258,7 @@ describe('Plugin', () => {
       })
 
       describe('Kinesis', () => {
-        const kinesisDescribeParams = fixtures.kinesis_describe
+        const kinesisDescribeParams = fixtures.kinesis.describe
         const operationName = 'describeStream'
         const serviceName = 'kinesis'
         const className = 'Kinesis'
@@ -440,7 +439,7 @@ describe('Plugin', () => {
       })
 
       describe('S3', () => {
-        const s3Params = fixtures.s3_create
+        const s3Params = fixtures.s3.create
         const operationName = 'listObjects'
         const serviceName = 's3'
         const className = 'S3'
@@ -620,8 +619,8 @@ describe('Plugin', () => {
       })
 
       describe('SQS', () => {
-        const sqsCreateParams = fixtures.sqs_create
-        const sqsGetParams = fixtures.sqs_get
+        const sqsCreateParams = fixtures.sqs.create
+        const sqsGetParams = fixtures.sqs.get
         const operationName = 'receiveMessage'
         const serviceName = 'sqs'
         const className = 'SQS'
@@ -735,8 +734,8 @@ describe('Plugin', () => {
       })
 
       describe('SNS', () => {
-        const snsCreateParams = fixtures.sns_create
-        const snsGetParams = fixtures.sns_get
+        const snsCreateParams = fixtures.sns.create
+        const snsGetParams = fixtures.sns.get
         const operationName = 'getTopicAttributes'
         const serviceName = 'sns'
         const className = 'SNS'
@@ -880,7 +879,7 @@ describe('Plugin', () => {
       })
 
       describe('Cloudwatch Logs', () => {
-        const cwCreateParams = fixtures.cw_logs_create
+        const cwCreateParams = fixtures.cloudwatchlogs.create
         const operationName = 'describeLogStreams'
         const serviceName = 'cloudwatchlogs'
         const className = 'CloudWatchLogs'
@@ -995,8 +994,8 @@ describe('Plugin', () => {
       })
 
       describe('Redshift', () => {
-        const redshiftCreateParams = fixtures.redshift_create_params
-        const redshiftGetParams = fixtures.redshift_get_params
+        const redshiftCreateParams = fixtures.redshift.create
+        const redshiftGetParams = fixtures.redshift.get
         const operationName = 'describeClusters'
         const serviceName = 'redshift'
         const className = 'Redshift'
