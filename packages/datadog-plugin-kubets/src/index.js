@@ -7,7 +7,7 @@ function addTagsForRequest (tracer, config, span, request) {
 
   span.addTags({
     'service.name': config.service || `${tracer._service}-kubets`,
-    channel: request.getChannel(),
+    channel: request.getChannel() || 'No channel specified',
     body: (typeof body === 'string' ? body : body.toString()) || 'No body specified',
     metadata: request.getMetadata() || 'No metadata specified'
   });
