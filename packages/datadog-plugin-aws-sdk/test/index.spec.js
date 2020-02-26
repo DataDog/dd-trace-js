@@ -994,6 +994,130 @@ describe('Plugin', () => {
         })
       })
 
+      describe('Redshift', () => {
+        const redshiftCreateParams = fixtures.redshift_create_params
+        const redshiftGetParams = fixtures.redshift_get_params
+        const operationName = 'describeClusters'
+        const serviceName = 'redshift'
+        const className = 'Redshift'
+        let epRedshift
+        let redshift
+
+        before(done => {
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          epRedshift = new AWS.Endpoint('http://localhost:4577')
+
+          // region has to be a real region
+          AWS.config.update({ region: 'us-east-1' })
+          redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+          redshift.createCluster(redshiftCreateParams, (err, res) => {
+            agent.load(plugin, 'aws-sdk')
+            done()
+          })
+        })
+
+        after(done => {
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          epRedshift = new AWS.Endpoint('http://localhost:4586')
+          // region has to be a real region
+          AWS.config.update({ region: 'us-east-1' })
+          redshift = new AWS.Redshift({ endpoint: epRedshift })
+
+          // cleanup clusters
+          redshift.deleteCluster(redshiftGetParams, () => {
+            closeAndWipeAgent()
+            done()
+          })
+        })
+
+        describe('without configuration', () => {
+          it('should instrument service methods with a callback', (done) => {
+            redshift[operationName](redshiftGetParams, () => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('resource',
+                    `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
+                  )
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                }).then(done).catch(done)
+            })
+          })
+
+          it('should instrument service methods without a callback', (done) => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource',
+                  `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
+                )
+                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0].service).to.include(serviceName)
+                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+              })
+              .then(done)
+              .catch(done)
+
+            const redshiftRequest = redshift[operationName](redshiftGetParams)
+            redshiftRequest.send()
+          })
+
+          if (semver.intersects(version, '>=2.3.0')) {
+            it('should instrument service methods using promise()', (done) => {
+              function checkTraces () {
+                agent.use(traces => {
+                  expect(traces[0][0]).to.have.property('resource',
+                    `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
+                  )
+                  expect(traces[0][0]).to.have.property('name', 'aws.request')
+                  expect(traces[0][0].service).to.include(serviceName)
+                  expect(traces[0][0].meta).to.have.property('aws.service', className)
+                  expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                  expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
+                  expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                  expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                }).then(done).catch(done)
+              }
+
+              const redshiftRequest = redshift[operationName](redshiftGetParams).promise()
+              redshiftRequest.then(checkTraces).catch(checkTraces)
+            })
+          }
+
+          it('should mark error responses', (done) => {
+            redshift.describeClusters({
+              ClusterIdentifier: redshiftGetParams.ClusterIdentifier,
+              'IllegalKey': 'IllegalValue'
+            }, () => {
+              agent.use(traces => {
+                expect(traces[0][0]).to.have.property('resource',
+                  `${operationName} ${redshiftCreateParams.ClusterIdentifier}`
+                )
+                expect(traces[0][0]).to.have.property('name', 'aws.request')
+                expect(traces[0][0].service).to.include(serviceName)
+                expect(traces[0][0].meta).to.have.property('aws.service', className)
+                expect(traces[0][0].meta).to.have.property('component', 'aws-sdk')
+                expect(traces[0][0].meta['aws.redshift.cluster_identifier']).to.be.a('string')
+                expect(traces[0][0].meta['aws.region']).to.be.a('string')
+                expect(traces[0][0].meta).to.have.property('aws.operation', operationName)
+                expect(traces[0][0].meta['error.type']).to.be.a('string')
+                expect(traces[0][0].meta['error.msg']).to.be.a('string')
+                expect(traces[0][0].meta['error.stack']).to.be.a('string')
+              }).then(done).catch(done)
+            })
+          })
+        })
+      })
+
       describe('General Service', () => {
         // we do not instrument route53 at this time specifically
         // this is meant to demonstrate defaults for non instrumented service

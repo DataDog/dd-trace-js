@@ -107,4 +107,15 @@ fixtures['cw_logs_create'] = {
   logGroupName: 'example_cw_log_group'
 }
 
+fixtures['redshift_create_params'] = {
+  ClusterIdentifier: 'example_redshift_cluster',
+  MasterUserPassword: 'example_user_password',
+  MasterUsername: 'example_username',
+  NodeType: 'ds2.large'
+}
+
+fixtures['redshift_get_params'] = {
+  ClusterIdentifier: 'example_redshift_cluster'
+}
+
 module.exports = fixtures

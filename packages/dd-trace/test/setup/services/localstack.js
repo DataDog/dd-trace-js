@@ -16,6 +16,7 @@ function waitForAWS () {
     const epSns = new AWS.Endpoint('http://localhost:4575')
     const epRoute53 = new AWS.Endpoint('http://localhost:4580')
     const epCwLogs = new AWS.Endpoint('http://localhost:4586')
+    const epRedshift = new AWS.Endpoint('http://localhost:4577')
 
     // Set the region
     AWS.config.update({ region: 'us-east-1' })
@@ -27,6 +28,7 @@ function waitForAWS () {
     const sqs = new AWS.SQS({ endpoint: epSqs })
     const sns = new AWS.SQS({ endpoint: epSns })
     const cwLogs = new AWS.SQS({ endpoint: epCwLogs })
+    const redshift = new AWS.Redshift({ endpoint: epRedshift })
 
     operation.attempt(currentAttempt => {
       Promise.all([
@@ -36,7 +38,8 @@ function waitForAWS () {
         sqs.listQueues({}).promise(),
         sns.listTopics({}).promise(),
         route53.listHealthChecks({}).promise(),
-        cwLogs.describeDestinations({}).promise()
+        cwLogs.describeDestinations({}).promise(),
+        redshift.describeClusters({}).promise()
       ]).then(data => {
         resolve()
       }).catch(err => {

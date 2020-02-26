@@ -85,7 +85,8 @@ services:
         - "127.0.0.1:4575:4575"
         - "127.0.0.1:4580:4580"
         - "127.0.0.1:4586:4586"
+        - "127.0.0.1:4577:4577"
       environment:
-        - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,route53:4580,logs:4586
+        - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,redshift:4577,route53:4580,logs:4586
         - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
         - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
