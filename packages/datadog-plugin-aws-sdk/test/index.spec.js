@@ -80,17 +80,6 @@ const baseSpecPromise = (done, agent, service, operation, serviceName, klass, fi
   serviceRequest.then(checkTraces).catch(checkTraces)
 }
 
-const baseSpecScope = (done, agent, service, operation, fixture) => {
-  agent.use(traces => {
-    const spans = sort(traces[0])
-    expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-    expect(spans.length).to.equal(2)
-  }).then(done).catch(done)
-
-  const serviceRequest = service[operation](fixture)
-  serviceRequest.send()
-}
-
 const baseSpecBindCallback = (done, agent, service, operation, fixture, tracer) => {
   let activeSpanName
   const parentName = 'parent'
@@ -198,18 +187,12 @@ describe('Plugin', () => {
                 }).then(done).catch(done)
               })
             })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
+            })
           })
-
-          // describe('scope', () => {
-          //   it('should bind child spans to the correct active span', (done) => {
-          //     baseSpecScope(done, agent, ddb, operation, ddbGetItemParams)
-          //   })
-
-          //   it('should bind callbacks to the correct active span', (done) => {
-          //     tracer = require('../../dd-trace')
-          //     baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
-          //   })
-          // })
         })
 
         describe('with configuration', () => {
@@ -262,55 +245,6 @@ describe('Plugin', () => {
             })
           })
         })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before((done) => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            AWS.config.update({ region: 'REGION' })
-            epDynamo = new AWS.Endpoint('http://localhost:4569')
-            ddb = new AWS.DynamoDB({ endpoint: epDynamo })
-
-            ddb.createTable(ddbParams, () => {
-              ddb.putItem(ddbPutItemParams, () => {
-                agent.load(plugin, ['aws-sdk', 'http'])
-                done()
-              })
-            })
-          })
-
-          after((done) => {
-            ddb.listTables({}, (err, res) => {
-              if (res.TableNames && res.TableNames.length > 0) {
-                ddb.deleteItem(ddbGetItemParams, () => {
-                  ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
-                    closeAndWipeAgent()
-                    done()
-                  })
-                })
-              } else {
-                closeAndWipeAgent()
-                done()
-              }
-            })
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, ddb, operation, ddbGetItemParams)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
-            })
-          })
-        })
       })
 
       describe('Kinesis', () => {
@@ -356,6 +290,11 @@ describe('Plugin', () => {
             it('should mark error responses', (done) => {
               baseSpecError(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
             })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, kinesis, operation, kinesisParams, tracer)
+            })
           })
         })
 
@@ -391,39 +330,6 @@ describe('Plugin', () => {
 
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata, true)
-            })
-          })
-        })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before((done) => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            AWS.config.update({ region: 'REGION' })
-            epKinesis = new AWS.Endpoint('http://localhost:4568')
-            kinesis = new AWS.Kinesis({ endpoint: epKinesis })
-            agent.load(plugin, ['aws-sdk', 'http'])
-            done()
-          })
-
-          after((done) => {
-            closeAndWipeAgent()
-            done()
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, kinesis, operation, kinesisParams)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, kinesis, operation, kinesisParams, tracer)
             })
           })
         })
@@ -479,6 +385,11 @@ describe('Plugin', () => {
             it('should mark error responses', (done) => {
               baseSpecError(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
             })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, s3, operation, s3Params, tracer)
+            })
           })
         })
 
@@ -520,46 +431,6 @@ describe('Plugin', () => {
 
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata, true)
-            })
-          })
-        })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epS3 = new AWS.Endpoint('http://localhost:4572')
-            s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
-
-            s3.createBucket({ Bucket: s3Params.Bucket }, () => {
-              agent.load(plugin, ['aws-sdk', 'http'])
-              done()
-            })
-          })
-
-          after(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epS3 = new AWS.Endpoint('http://localhost:4572')
-            s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
-            s3.deleteBucket(s3Params, () => {
-              closeAndWipeAgent()
-              done()
-            })
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, s3, operation, s3Params)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, s3, operation, s3Params, tracer)
             })
           })
         })
@@ -622,6 +493,11 @@ describe('Plugin', () => {
             it('should mark error responses', (done) => {
               baseSpecError(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
             })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, sqs, operation, sqsGetParams, tracer)
+            })
           })
         })
 
@@ -669,52 +545,6 @@ describe('Plugin', () => {
 
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata, true)
-            })
-          })
-        })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4576')
-            AWS.config.update({ region: 'REGION' })
-
-            sqs = new AWS.SQS({ endpoint: epSqs })
-            sqs.createQueue(sqsCreateParams, (err, res) => {
-              if (res.QueueUrl) {
-                sqsGetParams.QueueUrl = res.QueueUrl
-              }
-
-              agent.load(plugin, ['aws-sdk', 'http'])
-              done()
-            })
-          })
-
-          after(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4576')
-            sqs = new AWS.SQS({ endpoint: epSqs })
-
-            sqs.deleteQueue(sqsGetParams, () => {
-              closeAndWipeAgent()
-              done()
-            })
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, sqs, operation, sqsGetParams)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, sqs, operation, sqsGetParams, tracer)
             })
           })
         })
@@ -789,6 +619,11 @@ describe('Plugin', () => {
 
             it('should mark error responses', (done) => {
               baseSpecError(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+            })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, sns, operation, snsGetParams, tracer)
             })
 
             it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
@@ -869,64 +704,6 @@ describe('Plugin', () => {
             })
           })
         })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSns = new AWS.Endpoint('http://localhost:4575')
-
-            // region has to be a real region
-            AWS.config.update({ region: 'us-east-1' })
-            sns = new AWS.SNS({ endpoint: epSns })
-
-            sns.createTopic(snsCreateParams, (err, res) => {
-              if (res.TopicArn) {
-                snsGetParams.TopicArn = res.TopicArn
-              }
-
-              agent.load(plugin, ['aws-sdk', 'http'])
-              done()
-            })
-          })
-
-          after(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSns = new AWS.Endpoint('http://localhost:4575')
-            // region has to be a real region
-            AWS.config.update({ region: 'us-east-1' })
-            sns = new AWS.SNS({ endpoint: epSns })
-
-            // cleanup topics
-            sns.listTopics({}, (err, res) => {
-              if (res.Topics && res.Topics.length > 0) {
-                sns.deleteTopic({ TopicArn: topicArn }, () => {
-                  closeAndWipeAgent()
-                  done()
-                })
-              } else {
-                closeAndWipeAgent()
-                done()
-              }
-            })
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, sns, operation, snsGetParams)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, sns, operation, snsGetParams, tracer)
-            })
-          })
-        })
       })
 
       describe('Cloudwatch Logs', () => {
@@ -986,6 +763,11 @@ describe('Plugin', () => {
             it('should mark error responses', (done) => {
               baseSpecError(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
             })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, cwLogs, operation, cwCreateParams, tracer)
+            })
           })
         })
 
@@ -1034,53 +816,6 @@ describe('Plugin', () => {
 
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata, true)
-            })
-          })
-        })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epCwLogs = new AWS.Endpoint('http://localhost:4586')
-
-            // region has to be a real region
-            AWS.config.update({ region: 'us-east-1' })
-            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
-
-            cwLogs.createLogGroup(cwCreateParams, (err, res) => {
-              agent.load(plugin, ['aws-sdk', 'http'])
-              done()
-            })
-          })
-
-          after(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epCwLogs = new AWS.Endpoint('http://localhost:4586')
-            // region has to be a real region
-            AWS.config.update({ region: 'us-east-1' })
-            cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
-
-            // cleanup log groups
-            cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
-              closeAndWipeAgent()
-              done()
-            })
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, cwLogs, operation, cwCreateParams)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, cwLogs, operation, cwCreateParams, tracer)
             })
           })
         })
@@ -1144,6 +879,11 @@ describe('Plugin', () => {
             it('should mark error responses', (done) => {
               baseSpecError(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
             })
+
+            it('should bind callbacks to the correct active span', (done) => {
+              const tracer = require('../../dd-trace')
+              baseSpecBindCallback(done, agent, redshift, operation, redshiftGetParams, tracer)
+            })
           })
         })
 
@@ -1194,53 +934,6 @@ describe('Plugin', () => {
             it('should handle hooks appropriately without a callback', (done) => {
               baseSpecAsync(done, agent, redshift, operation, serviceName,
                 klass, redshiftGetParams, key, metadata, true)
-            })
-          })
-        })
-
-        describe('scope', () => {
-          // keeping these non-async as aws-sdk <2.3 doesnt support `.promise()`
-          before(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRedshift = new AWS.Endpoint('http://localhost:4577')
-
-            // region has to be a real region
-            AWS.config.update({ region: 'us-east-1' })
-            redshift = new AWS.Redshift({ endpoint: epRedshift })
-
-            redshift.createCluster(redshiftCreateParams, (err, res) => {
-              agent.load(plugin, ['aws-sdk', 'http'])
-              done()
-            })
-          })
-
-          after(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRedshift = new AWS.Endpoint('http://localhost:4586')
-            // region has to be a real region
-            AWS.config.update({ region: 'us-east-1' })
-            redshift = new AWS.Redshift({ endpoint: epRedshift })
-
-            // cleanup clusters
-            redshift.deleteCluster(redshiftGetParams, () => {
-              closeAndWipeAgent()
-              done()
-            })
-          })
-
-          describe('context propagation', () => {
-            let tracer
-
-            beforeEach(() => {
-              tracer = require('../../dd-trace')
-            })
-
-            it('should bind child spans to the correct active span', (done) => {
-              baseSpecScope(done, agent, redshift, operation, redshiftGetParams)
-            })
-
-            it('should bind callbacks to the correct active span', (done) => {
-              baseSpecBindCallback(done, agent, redshift, operation, redshiftGetParams, tracer)
             })
           })
         })
