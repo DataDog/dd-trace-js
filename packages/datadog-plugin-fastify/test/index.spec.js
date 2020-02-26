@@ -24,7 +24,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'fastify')
+          return agent.load('fastify')
         })
 
         after(() => {

@@ -22,7 +22,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'amqplib')
+          return agent.load('amqplib')
         })
 
         after(() => {
@@ -238,7 +238,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(plugin, 'amqplib', { service: 'test' })
+          return agent.load('amqplib', { service: 'test' })
         })
 
         after(() => {

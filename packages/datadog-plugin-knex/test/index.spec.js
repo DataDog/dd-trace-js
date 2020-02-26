@@ -24,7 +24,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, ['knex'])
+          return agent.load(['knex'])
             .then(() => {
               knex = require(`../../../versions/knex@${version}`).get()
               client = knex({

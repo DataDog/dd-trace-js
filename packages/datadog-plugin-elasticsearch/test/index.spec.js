@@ -19,7 +19,7 @@ describe('Plugin', () => {
         let client
 
         before(() => {
-          return agent.load(plugin, 'elasticsearch')
+          return agent.load('elasticsearch')
         })
 
         after(() => {
@@ -215,7 +215,7 @@ describe('Plugin', () => {
         let client
 
         before(() => {
-          return agent.load(plugin, 'elasticsearch', {
+          return agent.load('elasticsearch', {
             service: 'test',
             hooks: { query: (span, params) => {
               span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })

@@ -12,7 +12,6 @@ wrapIt()
 const describe = () => {} // temporarily disable HTTP2 server plugin tests
 
 describe('Plugin', () => {
-  let plugin
   let http2
   let app
   let appListener
@@ -23,7 +22,6 @@ describe('Plugin', () => {
 
   describe('http2/server', () => {
     beforeEach(() => {
-      plugin = require('../src/server')
       tracer = require('../../dd-trace')
     })
 
@@ -35,7 +33,7 @@ describe('Plugin', () => {
 
     describe('without configuration', () => {
       beforeEach(() => {
-        return agent.load(plugin, 'http2')
+        return agent.load('http2')
           .then(() => {
             http2 = require('http2')
           })

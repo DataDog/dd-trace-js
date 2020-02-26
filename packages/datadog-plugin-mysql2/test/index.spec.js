@@ -19,7 +19,7 @@ describe('Plugin', () => {
         let connection
 
         before(() => {
-          return agent.load(plugin, 'mysql2')
+          return agent.load('mysql2')
         })
 
         after(() => {
@@ -173,7 +173,7 @@ describe('Plugin', () => {
         let connection
 
         before(() => {
-          return agent.load(plugin, 'mysql2', { service: 'custom' })
+          return agent.load('mysql2', { service: 'custom' })
         })
 
         after(() => {
@@ -212,7 +212,7 @@ describe('Plugin', () => {
         let pool
 
         before(() => {
-          return agent.load(plugin, 'mysql2')
+          return agent.load('mysql2')
         })
 
         after(() => {

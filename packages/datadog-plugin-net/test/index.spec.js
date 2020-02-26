@@ -2,7 +2,6 @@
 
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 wrapIt()
 
@@ -28,7 +27,7 @@ describe('Plugin', () => {
     })
 
     beforeEach(() => {
-      return agent.load(plugin, 'net')
+      return agent.load('net')
         .then(() => {
           net = require(`net`)
           tracer = require('../../dd-trace')

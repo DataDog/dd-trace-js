@@ -15,7 +15,6 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 wrapIt()
 
 describe('Plugin', () => {
-  let plugin
   let express
   let http
   let appListener
@@ -36,7 +35,6 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        plugin = require('../src/client')
         tracer = require('../../dd-trace')
         appListener = null
       })
@@ -50,7 +48,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'http')
+          return agent.load('http')
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -655,7 +653,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -699,7 +697,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -743,7 +741,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -787,7 +785,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -867,7 +865,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http', config)
+          return agent.load('http', config)
             .then(() => {
               http = require(protocol)
               express = require('express')
