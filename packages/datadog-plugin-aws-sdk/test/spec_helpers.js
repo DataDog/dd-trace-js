@@ -3,7 +3,7 @@
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 const helpers = {
-  baseSpecCheck (done, agent, operation, serviceName, klass, fixture, key, metadata, config) {
+  baseSpecCheck (done, agent, operation, serviceName, klass, fixture, key, metadata, testHooks) {
     agent
       .use(traces => {
         const spans = sort(traces[0])
@@ -16,7 +16,7 @@ const helpers = {
         expect(spans[0].meta).to.have.property('aws.operation', operation)
         expect(spans[0].meta).to.have.property('component', 'aws-sdk')
 
-        if (config) {
+        if (testHooks) {
           expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
           expect(traces[0][0].meta).to.have.property('aws.params' + key, fixture[key])
         }
@@ -47,23 +47,23 @@ const helpers = {
     })
   },
 
-  baseSpecCallback (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) {
+  baseSpecCallback (done, agent, service, operation, serviceName, klass, fixture, key, metadata, testHooks) {
     service[operation](fixture, (err, data) => {
-      this.baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
+      this.baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, testHooks)
     })
   },
 
-  baseSpecAsync (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) {
-    this.baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
+  baseSpecAsync (done, agent, service, operation, serviceName, klass, fixture, key, metadata, testHooks) {
+    this.baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, testHooks)
 
     const serviceRequest = service[operation](fixture)
     serviceRequest.send()
   },
 
-  baseSpecPromise (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) {
+  baseSpecPromise (done, agent, service, operation, serviceName, klass, fixture, key, metadata, testHooks) {
     const baseSpecCheck = this.baseSpecCheck
     function checkTraces () {
-      baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
+      baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, testHooks)
     }
 
     const serviceRequest = service[operation](fixture).promise()
@@ -86,6 +86,47 @@ const helpers = {
         done()
       })
     })
+  },
+
+  baseSpecs (semver, version, agent, getService, operation, serviceName, klass, fixture, key, metadata, testHooks) {
+    if (!testHooks) {
+      it('should instrument service methods with a callback', (done) => {
+        this.baseSpecCallback(done, agent, getService(), operation,
+          serviceName, klass, fixture, key, metadata)
+      })
+
+      it('should instrument service methods without a callback', (done) => {
+        this.baseSpecAsync(done, agent, getService(), operation,
+          serviceName, klass, fixture, key, metadata)
+      })
+
+      it('should mark error responses', (done) => {
+        this.baseSpecError(done, agent, getService(), operation,
+          serviceName, klass, fixture, key, metadata)
+      })
+
+      if (semver.intersects(version, '>=2.3.0')) {
+        it('should instrument service methods using promise()', (done) => {
+          this.baseSpecPromise(done, agent, getService(), operation,
+            serviceName, klass, fixture, key, metadata)
+        })
+      }
+
+      it('should bind callbacks to the correct active span', (done) => {
+        const tracer = require('../../dd-trace')
+        this.baseSpecBindCallback(done, agent, getService(), operation, fixture, tracer)
+      })
+    } else {
+      it('should handle hooks appropriately with a callback', (done) => {
+        helpers.baseSpecCallback(done, agent, getService(), operation,
+          serviceName, klass, fixture, key, metadata, testHooks)
+      })
+
+      it('should handle hooks appropriately without a callback', (done) => {
+        helpers.baseSpecAsync(done, agent, getService(), operation,
+          serviceName, klass, fixture, key, metadata, testHooks)
+      })
+    }
   }
 }
 
