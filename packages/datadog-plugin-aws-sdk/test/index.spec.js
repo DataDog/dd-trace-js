@@ -51,7 +51,7 @@ describe('Plugin', () => {
 
             ddb.createTable(ddbParams, () => {
               ddb.putItem(ddbPutItemParams, () => {
-                agent.load(plugin, 'aws-sdk')
+                agent.load('aws-sdk')
                 done()
               })
             })
@@ -126,7 +126,7 @@ describe('Plugin', () => {
 
             ddb.createTable(ddbParams, () => {
               ddb.putItem(ddbPutItemParams, () => {
-                agent.load(plugin, 'aws-sdk', {
+                agent.load('aws-sdk', {
                   hooks: { request: (span, response) => {
                     span.addTags({
                       'aws.specialValue': 'foo',
@@ -186,7 +186,7 @@ describe('Plugin', () => {
             AWS.config.update({ region: 'REGION' })
             epKinesis = new AWS.Endpoint('http://localhost:4568')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
-            agent.load(plugin, 'aws-sdk')
+            agent.load('aws-sdk')
             done()
           })
 
@@ -232,7 +232,7 @@ describe('Plugin', () => {
             epKinesis = new AWS.Endpoint('http://localhost:4568')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
 
-            agent.load(plugin, 'aws-sdk', {
+            agent.load('aws-sdk', {
               hooks: {
                 request: (span, response) => {
                   span.addTags({
@@ -281,7 +281,7 @@ describe('Plugin', () => {
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
 
             s3.createBucket({ Bucket: s3Params.Bucket }, () => {
-              agent.load(plugin, 'aws-sdk')
+              agent.load('aws-sdk')
               done()
             })
           })
@@ -334,7 +334,7 @@ describe('Plugin', () => {
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
 
             s3.createBucket({ Bucket: s3Params.Bucket }, () => {
-              agent.load(plugin, 'aws-sdk', {
+              agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
                     span.addTags({
@@ -395,7 +395,7 @@ describe('Plugin', () => {
                 sqsGetParams.QueueUrl = res.QueueUrl
               }
 
-              agent.load(plugin, 'aws-sdk')
+              agent.load('aws-sdk')
               done()
             })
           })
@@ -454,7 +454,7 @@ describe('Plugin', () => {
                 sqsGetParams.QueueUrl = res.QueueUrl
               }
 
-              agent.load(plugin, 'aws-sdk', {
+              agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
                     span.addTags({
@@ -519,7 +519,7 @@ describe('Plugin', () => {
                 snsGetParams.TopicArn = res.TopicArn
               }
 
-              agent.load(plugin, 'aws-sdk')
+              agent.load('aws-sdk')
               done()
             })
           })
@@ -607,7 +607,7 @@ describe('Plugin', () => {
                 snsGetParams.TopicArn = res.TopicArn
               }
 
-              agent.load(plugin, 'aws-sdk', {
+              agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
                     span.addTags({
@@ -676,7 +676,7 @@ describe('Plugin', () => {
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
 
             cwLogs.createLogGroup(cwCreateParams, (err, res) => {
-              agent.load(plugin, 'aws-sdk')
+              agent.load('aws-sdk')
               done()
             })
           })
@@ -736,7 +736,7 @@ describe('Plugin', () => {
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
 
             cwLogs.createLogGroup(cwCreateParams, (err, res) => {
-              agent.load(plugin, 'aws-sdk', {
+              agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
                     span.addTags({
@@ -799,7 +799,7 @@ describe('Plugin', () => {
             redshift = new AWS.Redshift({ endpoint: epRedshift })
 
             redshift.createCluster(redshiftCreateParams, (err, res) => {
-              agent.load(plugin, 'aws-sdk')
+              agent.load('aws-sdk')
               done()
             })
           })
@@ -859,7 +859,7 @@ describe('Plugin', () => {
             redshift = new AWS.Redshift({ endpoint: epRedshift })
 
             redshift.createCluster(redshiftCreateParams, (err, res) => {
-              agent.load(plugin, 'aws-sdk', {
+              agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
                     span.addTags({
@@ -917,7 +917,7 @@ describe('Plugin', () => {
             epRoute53 = new AWS.Endpoint('http://localhost:4580')
             AWS.config.update({ region: 'us-east-1' })
             route53 = new AWS.Route53({ endpoint: epRoute53 })
-            agent.load(plugin, ['aws-sdk', 'http'])
+            agent.load(['aws-sdk', 'http'])
             done()
           })
 
