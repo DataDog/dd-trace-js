@@ -124,8 +124,8 @@ function checkOffset (offset, length) {
 function copyHeader (offset, span) {
   headerBuffer.set(span.trace_id.toBuffer(), traceIdOffset)
   headerBuffer.set(span.span_id.toBuffer(), spanIdOffset)
-  util.writeUInt64(headerBuffer, span.start, startOffset)
-  util.writeUInt64(headerBuffer, span.duration, durationOffset)
+  util.writeInt64(headerBuffer, span.start, startOffset)
+  util.writeInt64(headerBuffer, span.duration, durationOffset)
   headerBuffer.set(tokens.int[span.error], errorOffset)
   return copy(offset, headerBuffer)
 }

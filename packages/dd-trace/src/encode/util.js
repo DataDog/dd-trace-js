@@ -1,5 +1,7 @@
 'use strict'
 
+const { Int64BE } = require('int64-buffer') // TODO remove dependency
+
 function writeUInt8 (buffer, value, offset) {
   buffer[offset] = value
 
@@ -26,23 +28,8 @@ function writeUInt32 (buffer, value, offset) {
   return 4
 }
 
-function writeUInt64 (buffer, value, offset) {
-  buffer[offset + 7] = value & 255
-  value = value >> 8
-  buffer[offset + 6] = value & 255
-  value = value >> 8
-  buffer[offset + 5] = value & 255
-  value = value >> 8
-  buffer[offset + 4] = value & 255
-  value = value >> 8
-  buffer[offset + 3] = value & 255
-  value = value >> 8
-  buffer[offset + 2] = value & 255
-  value = value >> 8
-  buffer[offset + 1] = value & 255
-  value = value >> 8
-  buffer[offset + 0] = value & 255
-
+function writeInt64 (buffer, value, offset) {
+  new Int64BE(buffer, offset, value) // eslint-disable-line no-new
   return 8
 }
 
@@ -81,6 +68,6 @@ module.exports = {
   writeUInt8,
   writeUInt16,
   writeUInt32,
-  writeUInt64,
+  writeInt64,
   write
 }
