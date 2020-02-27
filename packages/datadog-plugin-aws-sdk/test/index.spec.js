@@ -712,7 +712,7 @@ describe('Plugin', () => {
         const serviceName = 'cloudwatchlogs'
         const klass = 'CloudWatchLogs'
         const key = 'logGroupName'
-        const metadata = 'cloudwatch_logs.log_group_name'
+        const metadata = 'cloudwatch.logs.log_group_name'
         let epCwLogs
         let cwLogs
 

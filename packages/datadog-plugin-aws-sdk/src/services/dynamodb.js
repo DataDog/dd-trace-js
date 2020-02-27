@@ -1,8 +1,8 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class DynamoDbService extends BaseService {
+class DynamoDb extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
@@ -46,4 +46,4 @@ class DynamoDbService extends BaseService {
   }
 }
 
-module.exports = DynamoDbService
+module.exports = DynamoDb

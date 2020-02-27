@@ -1,23 +1,20 @@
 'use strict'
 
-const DEFAULT = 'default'
-const Services = {
-  cloudwatchlogs: require('./services/cloudwatchlogs'),
-  dynamodb: require('./services/dynamodb'),
-  kinesis: require('./services/kinesis'),
-  s3: require('./services/s3'),
-  redshift: require('./services/redshift'),
-  sns: require('./services/sns'),
-  sqs: require('./services/sqs'),
-  [DEFAULT]: require('./services/base')
+const base = 'base'
+const services = {
+  cloudwatchlogs: getService('cloudwatchlogs'),
+  dynamodb: getService('dynamodb'),
+  kinesis: getService('kinesis'),
+  s3: getService('s3'),
+  redshift: getService('redshift'),
+  sns: getService('sns'),
+  sqs: getService('sqs'), 
+  [base]: getService(base)
 }
 
 function getService (serviceName) {
-  if (Services[serviceName]) {
-    return new Services[serviceName]()
-  } else {
-    return new Services[DEFAULT]()
-  }
+  const Service = require(`./services/${serviceName}`)
+  return new Service()
 }
 
 const helpers = {
@@ -48,7 +45,7 @@ const helpers = {
 
     const params = response.request.params
     const operation = response.request.operation
-    const service = getService(serviceName)
+    const service = services[serviceName] || services[base]
 
     service.addTags(span, params, operation, response)
   }

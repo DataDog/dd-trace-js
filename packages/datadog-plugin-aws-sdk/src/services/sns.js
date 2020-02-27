@@ -1,8 +1,8 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class SnsService extends BaseService {
+class Sns extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
@@ -23,4 +23,4 @@ class SnsService extends BaseService {
   }
 }
 
-module.exports = SnsService
+module.exports = Sns

@@ -1,8 +1,8 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class CloudwatchLogsService extends BaseService {
+class CloudwatchLogs extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
@@ -11,9 +11,9 @@ class CloudwatchLogsService extends BaseService {
 
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.logGroupName}`,
-      'aws.cloudwatch_logs.log_group_name': params.logGroupName
+      'aws.cloudwatch.logs.log_group_name': params.logGroupName
     })
   }
 }
 
-module.exports = CloudwatchLogsService
+module.exports = CloudwatchLogs

@@ -1,6 +1,6 @@
 'use strict'
 
-class BaseService {
+class Base {
   addTags (span, params, operation, response) {
     const tags = Object.assign({
       'aws.response.request_id': response.requestId,
@@ -15,4 +15,4 @@ class BaseService {
   }
 }
 
-module.exports = BaseService
+module.exports = Base

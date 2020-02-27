@@ -1,8 +1,8 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class KinesisService extends BaseService {
+class Kinesis extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
@@ -15,4 +15,4 @@ class KinesisService extends BaseService {
   }
 }
 
-module.exports = KinesisService
+module.exports = Kinesis

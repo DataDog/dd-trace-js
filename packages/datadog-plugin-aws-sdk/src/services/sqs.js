@@ -1,8 +1,8 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class SqsService extends BaseService {
+class Sqs extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
@@ -16,4 +16,4 @@ class SqsService extends BaseService {
   }
 }
 
-module.exports = SqsService
+module.exports = Sqs

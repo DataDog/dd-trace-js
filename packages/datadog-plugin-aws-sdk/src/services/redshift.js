@@ -1,8 +1,8 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class RedshiftService extends BaseService {
+class Redshift extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
@@ -16,4 +16,4 @@ class RedshiftService extends BaseService {
   }
 }
 
-module.exports = RedshiftService
+module.exports = Redshift
