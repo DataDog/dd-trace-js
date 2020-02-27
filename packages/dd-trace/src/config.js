@@ -76,7 +76,7 @@ class Config {
       b3: !(!options.experimental || !options.experimental.b3),
       runtimeId: !(!options.experimental || !options.experimental.runtimeId),
       exporter: options.experimental && options.experimental.exporter,
-      peers: (options.experimental && options.experimental.peers) || [],
+      peers: (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
       sampler
     }
     this.reportHostname = String(reportHostname) === 'true'
