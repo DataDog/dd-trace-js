@@ -21,7 +21,7 @@ describe('Plugin', () => {
         let client
 
         before(() => {
-          return agent.load(plugin, 'cassandra-driver')
+          return agent.load('cassandra-driver')
         })
 
         after(() => {
@@ -168,7 +168,7 @@ describe('Plugin', () => {
         let client
 
         before(() => {
-          return agent.load(plugin, 'cassandra-driver', { service: 'custom' })
+          return agent.load('cassandra-driver', { service: 'custom' })
         })
 
         after(() => {
@@ -209,7 +209,7 @@ describe('Plugin', () => {
           let client
 
           before(() => {
-            return agent.load(plugin, 'cassandra-driver')
+            return agent.load('cassandra-driver')
           })
 
           after(() => {

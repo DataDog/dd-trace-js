@@ -2,7 +2,6 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 wrapIt()
 
@@ -16,7 +15,7 @@ describe('Plugin', () => {
     })
 
     beforeEach(() => {
-      return agent.load(plugin, 'dns')
+      return agent.load('dns')
         .then(() => {
           dns = require('dns')
           tracer = require('../../dd-trace')

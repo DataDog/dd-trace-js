@@ -21,7 +21,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'couchbase').then(() => {
+          return agent.load('couchbase').then(() => {
             couchbase = require(`../../../versions/couchbase@${version}`).get()
             N1qlQuery = couchbase.N1qlQuery
           })

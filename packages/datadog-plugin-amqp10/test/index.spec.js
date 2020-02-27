@@ -34,7 +34,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'amqp10')
+          return agent.load('amqp10')
             .then(() => {
               const amqp = require(`../../../versions/amqp10@${version}`).get()
               const None = amqp.Policy.Utils.SenderCallbackPolicies.None
@@ -173,7 +173,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'amqp10', { service: 'test' })
+          return agent.load('amqp10', { service: 'test' })
             .then(() => {
               const amqp = require(`../../../versions/amqp10@${version}`).get()
 

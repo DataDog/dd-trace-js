@@ -37,7 +37,7 @@ describe('Plugin', () => {
       })
 
       before(() => {
-        return agent.load(plugin, 'hapi')
+        return agent.load('hapi')
           .then(() => {
             Hapi = require(`../../../versions/${module}@${version}`).get()
           })

@@ -35,7 +35,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          agent.load(plugin, 'google-cloud-pubsub')
+          agent.load('google-cloud-pubsub')
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
@@ -205,7 +205,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          agent.load(plugin, 'google-cloud-pubsub', {
+          agent.load('google-cloud-pubsub', {
             service: 'a_test_service'
           })
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()

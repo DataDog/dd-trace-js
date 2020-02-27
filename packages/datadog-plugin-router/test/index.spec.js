@@ -43,7 +43,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'router')
+          return agent.load('router')
         })
 
         after(() => {

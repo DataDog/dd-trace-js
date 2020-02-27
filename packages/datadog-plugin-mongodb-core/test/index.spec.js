@@ -38,7 +38,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'mongodb-core')
+          return agent.load('mongodb-core')
         })
 
         after(() => {
@@ -334,7 +334,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(plugin, 'mongodb-core', { service: 'custom' })
+          return agent.load('mongodb-core', { service: 'custom' })
         })
 
         after(() => {

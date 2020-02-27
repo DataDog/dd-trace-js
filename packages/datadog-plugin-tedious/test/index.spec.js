@@ -23,7 +23,7 @@ describe('Plugin', () => {
       let config
 
       beforeEach(() => {
-        return agent.load(plugin, 'tedious').then(() => {
+        return agent.load('tedious').then(() => {
           tds = require(`../../../versions/tedious@${version}`).get()
         })
       })

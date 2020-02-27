@@ -2,7 +2,6 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const plugin = require('../src')
 
 const realFS = Object.assign({}, require('fs'))
 const os = require('os')
@@ -22,7 +21,7 @@ describe('Plugin', () => {
     let tmpdir
     let tracer
     afterEach(() => agent.close())
-    beforeEach(() => agent.load(plugin, 'fs').then(() => {
+    beforeEach(() => agent.load('fs').then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
     }))

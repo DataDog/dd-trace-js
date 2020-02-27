@@ -28,7 +28,7 @@ describe('Plugin', () => {
       Object.keys(clients).forEach(implementation => {
         describe(`when using ${implementation}.Client`, () => {
           before(() => {
-            return agent.load(plugin, 'pg')
+            return agent.load('pg')
           })
 
           after(() => {
@@ -135,7 +135,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(plugin, 'pg', { service: 'custom' })
+          return agent.load('pg', { service: 'custom' })
         })
 
         after(() => {

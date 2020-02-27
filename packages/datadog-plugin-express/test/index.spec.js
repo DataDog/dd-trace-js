@@ -26,7 +26,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'express')
+          return agent.load('express')
         })
 
         after(() => {
@@ -892,7 +892,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(plugin, 'express', {
+          return agent.load('express', {
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent']
@@ -989,7 +989,7 @@ describe('Plugin', () => {
 
       describe('with configuration for middleware disabled', () => {
         before(() => {
-          return agent.load(plugin, 'express', {
+          return agent.load('express', {
             middleware: false
           })
         })

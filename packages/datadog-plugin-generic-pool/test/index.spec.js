@@ -21,7 +21,7 @@ describe('Plugin', () => {
 
     withVersions(plugin, 'generic-pool', '2', version => {
       beforeEach(() => {
-        return agent.load(plugin, 'generic-pool')
+        return agent.load('generic-pool')
           .then(() => {
             genericPool = require(`../../../versions/generic-pool@${version}`).get()
           })
@@ -61,7 +61,7 @@ describe('Plugin', () => {
 
     withVersions(plugin, 'generic-pool', '>=3', version => {
       beforeEach(() => {
-        return agent.load(plugin, 'generic-pool')
+        return agent.load('generic-pool')
           .then(() => {
             genericPool = require(`../../../versions/generic-pool@${version}`).get()
           })

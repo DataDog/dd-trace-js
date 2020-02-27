@@ -29,7 +29,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'bunyan', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        return agent.load(plugin, 'bunyan')
+        return agent.load('bunyan')
       })
 
       afterEach(() => {

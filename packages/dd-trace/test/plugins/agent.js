@@ -16,7 +16,7 @@ let tracer = null
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
-  load (plugin, pluginName, config) {
+  load (pluginName, config) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))

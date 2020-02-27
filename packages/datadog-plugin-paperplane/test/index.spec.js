@@ -56,7 +56,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(plugin, 'paperplane')
+          return agent.load('paperplane')
         })
 
         after(() => {
@@ -452,7 +452,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(plugin, 'paperplane', {
+          return agent.load('paperplane', {
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent']

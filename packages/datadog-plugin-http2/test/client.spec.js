@@ -16,7 +16,6 @@ wrapIt()
 const describe = () => {} // temporarily disable HTTP2 client plugin tests
 
 describe('Plugin', () => {
-  let plugin
   let http2
   let appListener
   let tracer
@@ -37,7 +36,6 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        plugin = require('../src/client')
         tracer = require('../../dd-trace')
         appListener = null
       })
@@ -51,7 +49,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load(plugin, 'http2')
+          return agent.load('http2')
             .then(() => {
               http2 = require('http2')
             })
@@ -643,7 +641,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http2', config)
+          return agent.load('http2', config)
             .then(() => {
               http2 = require('http2')
             })
@@ -690,7 +688,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http2', config)
+          return agent.load('http2', config)
             .then(() => {
               http2 = require('http2')
             })
@@ -737,7 +735,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http2', config)
+          return agent.load('http2', config)
             .then(() => {
               http2 = require('http2')
             })
@@ -782,7 +780,7 @@ describe('Plugin', () => {
             }
           }
 
-          return agent.load(plugin, 'http2', config)
+          return agent.load('http2', config)
             .then(() => {
               http2 = require('http2')
             })
