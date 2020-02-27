@@ -45,7 +45,7 @@ tracer.init({
     b3: true,
     runtimeId: true,
     exporter: 'log',
-    peers: ['foo', /bar/],
+    distributedTracingOriginWhitelist: ['foo', /bar/],
     sampler: {
       sampleRate: 1,
       rateLimit: 1000,
