@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const fixtures = require('./fixtures/base')
+const helpers = require('./spec_helpers')
 const semver = require('semver')
 
 wrapIt()
@@ -12,90 +13,6 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 const closeAndWipeAgent = () => {
   agent.close()
   agent.wipe()
-}
-
-const baseSpecCheck = (done, agent, operation, serviceName, klass, fixture, key, metadata, config) => {
-  agent
-    .use(traces => {
-      const spans = sort(traces[0])
-      expect(spans[0]).to.have.property('resource', `${operation} ${fixture[key]}`)
-      expect(spans[0]).to.have.property('name', 'aws.request')
-      expect(spans[0].meta).to.have.property('aws.service', klass)
-      expect(spans[0].service).to.include(serviceName)
-      expect(spans[0].meta['aws.' + metadata]).to.be.a('string')
-      expect(spans[0].meta['aws.region']).to.be.a('string')
-      expect(spans[0].meta).to.have.property('aws.operation', operation)
-      expect(spans[0].meta).to.have.property('component', 'aws-sdk')
-
-      if (config) {
-        expect(traces[0][0].meta).to.have.property('aws.specialValue', 'foo')
-        expect(traces[0][0].meta).to.have.property('aws.params' + key, fixture[key])
-      }
-    })
-    .then(done)
-    .catch(done)
-}
-
-const baseSpecError = (done, agent, service, operation, serviceName, klass, fixture, key, metadata) => {
-  service[operation]({
-    [key]: fixture[key],
-    'BadParam': 'badvalue'
-  }, (err, response) => {
-    agent.use(traces => {
-      const spans = sort(traces[0])
-      expect(spans[0]).to.have.property('resource', `${operation} ${fixture[key]}`)
-      expect(spans[0]).to.have.property('name', 'aws.request')
-      expect(spans[0].service).to.include(serviceName)
-      expect(spans[0].meta).to.have.property('aws.service', klass)
-      expect(spans[0].meta['aws.' + metadata]).to.be.a('string')
-      expect(spans[0].meta['aws.region']).to.be.a('string')
-      expect(spans[0].meta).to.have.property('aws.operation', operation)
-      expect(spans[0].meta).to.have.property('component', 'aws-sdk')
-      expect(spans[0].meta['error.type']).to.be.a('string')
-      expect(spans[0].meta['error.msg']).to.be.a('string')
-      expect(spans[0].meta['error.stack']).to.be.a('string')
-    }).then(done).catch(done)
-  })
-}
-
-const baseSpecCallback = (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) => {
-  service[operation](fixture, (err, data) => {
-    baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
-  })
-}
-
-const baseSpecAsync = (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) => {
-  baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
-
-  const serviceRequest = service[operation](fixture)
-  serviceRequest.send()
-}
-
-const baseSpecPromise = (done, agent, service, operation, serviceName, klass, fixture, key, metadata, config) => {
-  function checkTraces () {
-    baseSpecCheck(done, agent, operation, serviceName, klass, fixture, key, metadata, config)
-  }
-
-  const serviceRequest = service[operation](fixture).promise()
-  serviceRequest.then(checkTraces).catch(checkTraces)
-}
-
-const baseSpecBindCallback = (done, agent, service, operation, fixture, tracer) => {
-  let activeSpanName
-  const parentName = 'parent'
-
-  tracer.trace(parentName, () => {
-    service[operation](fixture, () => {
-      try {
-        activeSpanName = tracer.scope().active()._spanContext._name
-      } catch (e) {
-        activeSpanName = undefined
-      }
-
-      expect(activeSpanName).to.equal(parentName)
-      done()
-    })
-  })
 }
 
 describe('Plugin', () => {
@@ -158,20 +75,24 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
+              helpers.baseSpecCallback(done, agent, ddb, operation,
+                serviceName, klass, ddbGetItemParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
+              helpers.baseSpecAsync(done, agent, ddb, operation,
+                serviceName, klass, ddbGetItemParams, key, metadata)
             })
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
+              helpers.baseSpecError(done, agent, ddb, operation,
+                serviceName, klass, ddbGetItemParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata)
+                helpers.baseSpecPromise(done, agent, ddb, operation,
+                  serviceName, klass, ddbGetItemParams, key, metadata)
               })
             }
 
@@ -190,7 +111,7 @@ describe('Plugin', () => {
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
+              helpers.baseSpecBindCallback(done, agent, ddb, operation, ddbGetItemParams, tracer)
             })
           })
         })
@@ -237,11 +158,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, ddb, operation,
+                serviceName, klass, ddbGetItemParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, ddb, operation, serviceName, klass, ddbGetItemParams, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, ddb, operation,
+                serviceName, klass, ddbGetItemParams, key, metadata, true)
             })
           })
         })
@@ -274,26 +197,30 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
+              helpers.baseSpecCallback(done, agent, kinesis, operation,
+                serviceName, klass, kinesisParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
+              helpers.baseSpecAsync(done, agent, kinesis, operation,
+                serviceName, klass, kinesisParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
+                helpers.baseSpecPromise(done, agent, kinesis, operation,
+                  serviceName, klass, kinesisParams, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata)
+              helpers.baseSpecError(done, agent, kinesis, operation,
+                serviceName, klass, kinesisParams, key, metadata)
             })
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, kinesis, operation, kinesisParams, tracer)
+              helpers.baseSpecBindCallback(done, agent, kinesis, operation, kinesisParams, tracer)
             })
           })
         })
@@ -325,11 +252,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, kinesis, operation,
+                serviceName, klass, kinesisParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, kinesis, operation, serviceName, klass, kinesisParams, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, kinesis, operation,
+                serviceName, klass, kinesisParams, key, metadata, true)
             })
           })
         })
@@ -369,26 +298,31 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
+              helpers.baseSpecCallback(done, agent, s3, operation,
+                serviceName, klass, s3Params, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
+              helpers.baseSpecAsync(done, agent, s3, operation,
+                serviceName, klass, s3Params, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
+                helpers.baseSpecPromise(done, agent, s3, operation,
+                  serviceName, klass, s3Params, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata)
+              helpers.baseSpecError(done, agent, s3, operation,
+                serviceName, klass, s3Params, key, metadata)
             })
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, s3, operation, s3Params, tracer)
+              helpers.baseSpecBindCallback(done, agent, s3, operation,
+                s3Params, tracer)
             })
           })
         })
@@ -426,11 +360,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, s3, operation,
+                serviceName, klass, s3Params, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, s3, operation, serviceName, klass, s3Params, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, s3, operation,
+                serviceName, klass, s3Params, key, metadata, true)
             })
           })
         })
@@ -477,26 +413,31 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+              helpers.baseSpecCallback(done, agent, sqs, operation,
+                serviceName, klass, sqsGetParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+              helpers.baseSpecAsync(done, agent, sqs, operation,
+                serviceName, klass, sqsGetParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+                helpers.baseSpecPromise(done, agent, sqs, operation,
+                  serviceName, klass, sqsGetParams, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata)
+              helpers.baseSpecError(done, agent, sqs, operation,
+                serviceName, klass, sqsGetParams, key, metadata)
             })
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, sqs, operation, sqsGetParams, tracer)
+              helpers.baseSpecBindCallback(done, agent, sqs, operation,
+                sqsGetParams, tracer)
             })
           })
         })
@@ -540,11 +481,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, sqs, operation,
+                serviceName, klass, sqsGetParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, sqs, operation, serviceName, klass, sqsGetParams, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, sqs, operation,
+                serviceName, klass, sqsGetParams, key, metadata, true)
             })
           })
         })
@@ -604,26 +547,31 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+              helpers.baseSpecCallback(done, agent, sns, operation,
+                serviceName, klass, snsGetParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+              helpers.baseSpecAsync(done, agent, sns, operation,
+                serviceName, klass, snsGetParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+                helpers.baseSpecPromise(done, agent, sns, operation,
+                  serviceName, klass, snsGetParams, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata)
+              helpers.baseSpecError(done, agent, sns, operation,
+                serviceName, klass, snsGetParams, key, metadata)
             })
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, sns, operation, snsGetParams, tracer)
+              helpers.baseSpecBindCallback(done, agent, sns, operation,
+                snsGetParams, tracer)
             })
 
             it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
@@ -696,11 +644,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, sns, operation,
+                serviceName, klass, snsGetParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, sns, operation, serviceName, klass, snsGetParams, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, sns, operation,
+                serviceName, klass, snsGetParams, key, metadata, true)
             })
           })
         })
@@ -747,26 +697,31 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+              helpers.baseSpecCallback(done, agent, cwLogs, operation,
+                serviceName, klass, cwCreateParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+              helpers.baseSpecAsync(done, agent, cwLogs, operation,
+                serviceName, klass, cwCreateParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+                helpers.baseSpecPromise(done, agent, cwLogs, operation,
+                  serviceName, klass, cwCreateParams, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata)
+              helpers.baseSpecError(done, agent, cwLogs, operation,
+                serviceName, klass, cwCreateParams, key, metadata)
             })
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, cwLogs, operation, cwCreateParams, tracer)
+              helpers.baseSpecBindCallback(done, agent, cwLogs, operation,
+                cwCreateParams, tracer)
             })
           })
         })
@@ -811,11 +766,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, cwLogs, operation,
+                serviceName, klass, cwCreateParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, cwLogs, operation, serviceName, klass, cwCreateParams, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, cwLogs, operation,
+                serviceName, klass, cwCreateParams, key, metadata, true)
             })
           })
         })
@@ -863,26 +820,31 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
-              baseSpecCallback(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+              helpers.baseSpecCallback(done, agent, redshift, operation,
+                serviceName, klass, redshiftGetParams, key, metadata)
             })
 
             it('should instrument service methods without a callback', (done) => {
-              baseSpecAsync(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+              helpers.baseSpecAsync(done, agent, redshift, operation,
+                serviceName, klass, redshiftGetParams, key, metadata)
             })
 
             if (semver.intersects(version, '>=2.3.0')) {
               it('should instrument service methods using promise()', (done) => {
-                baseSpecPromise(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+                helpers.baseSpecPromise(done, agent, redshift, operation,
+                  serviceName, klass, redshiftGetParams, key, metadata)
               })
             }
 
             it('should mark error responses', (done) => {
-              baseSpecError(done, agent, redshift, operation, serviceName, klass, redshiftGetParams, key, metadata)
+              helpers.baseSpecError(done, agent, redshift, operation,
+                serviceName, klass, redshiftGetParams, key, metadata)
             })
 
             it('should bind callbacks to the correct active span', (done) => {
               const tracer = require('../../dd-trace')
-              baseSpecBindCallback(done, agent, redshift, operation, redshiftGetParams, tracer)
+              helpers.baseSpecBindCallback(done, agent, redshift, operation,
+                redshiftGetParams, tracer)
             })
           })
         })
@@ -927,13 +889,13 @@ describe('Plugin', () => {
 
           describe('instrumentation', () => {
             it('should handle hooks appropriately with a callback', (done) => {
-              baseSpecCallback(done, agent, redshift, operation, serviceName,
-                klass, redshiftGetParams, key, metadata, true)
+              helpers.baseSpecCallback(done, agent, redshift, operation,
+                serviceName, klass, redshiftGetParams, key, metadata, true)
             })
 
             it('should handle hooks appropriately without a callback', (done) => {
-              baseSpecAsync(done, agent, redshift, operation, serviceName,
-                klass, redshiftGetParams, key, metadata, true)
+              helpers.baseSpecAsync(done, agent, redshift, operation,
+                serviceName, klass, redshiftGetParams, key, metadata, true)
             })
           })
         })

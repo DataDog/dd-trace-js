@@ -8,7 +8,7 @@ const services = {
   s3: getService('s3'),
   redshift: getService('redshift'),
   sns: getService('sns'),
-  sqs: getService('sqs'), 
+  sqs: getService('sqs'),
   [base]: getService(base)
 }
 
