@@ -6,7 +6,6 @@ class Redshift extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
-    // redshift cluster name
     if (!params || !params.ClusterIdentifier) return tags
 
     return Object.assign(tags, {

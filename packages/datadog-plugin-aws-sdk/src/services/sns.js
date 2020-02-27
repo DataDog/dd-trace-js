@@ -8,11 +8,8 @@ class Sns extends Base {
 
     if (!params) return tags
 
-    // sns topic
     if (!params.TopicArn && !(response.data && response.data.TopicArn)) return tags
 
-    // SNS.createTopic is invoked with name but returns full arn in response data
-    // which is used elsewhere to refer to topic
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': params.TopicArn || response.data.TopicArn

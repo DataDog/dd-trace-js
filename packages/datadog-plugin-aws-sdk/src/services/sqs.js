@@ -6,7 +6,6 @@ class Sqs extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
-    // sqs queue
     if (!params || (!params.QueueName && !params.QueueUrl)) return tags
 
     return Object.assign(tags, {

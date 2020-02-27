@@ -1,12 +1,11 @@
 'use strict'
 
-const BaseService = require('./base')
+const Base = require('./base')
 
-class S3Service extends BaseService {
+class S3 extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
-    // s3 Bucket
     if (!params || !params.Bucket) return tags
 
     return Object.assign(tags, {
@@ -16,4 +15,4 @@ class S3Service extends BaseService {
   }
 }
 
-module.exports = S3Service
+module.exports = S3

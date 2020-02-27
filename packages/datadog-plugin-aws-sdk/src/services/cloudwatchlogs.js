@@ -6,7 +6,6 @@ class CloudwatchLogs extends Base {
   _addServiceTags (params, operation, response) {
     const tags = {}
 
-    // cloudwatach log group name
     if (!params || !params.logGroupName) return tags
 
     return Object.assign(tags, {

@@ -7,7 +7,6 @@ class DynamoDb extends Base {
     const tags = {}
 
     if (params) {
-      // dynamoDB TableName
       if (params.TableName) {
         Object.assign(tags, {
           'resource.name': `${operation} ${params.TableName}`,
