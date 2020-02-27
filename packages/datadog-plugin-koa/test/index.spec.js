@@ -2,6 +2,7 @@
 
 const axios = require('axios')
 const getPort = require('get-port')
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
@@ -352,6 +353,42 @@ describe('Plugin', () => {
                 .catch(done)
             })
           })
+
+          if (semver.intersects(routerVersion, '8.0.3')) {
+            it('should support reused routers', done => {
+              const app = new Koa()
+              const first = new Router()
+              const second = new Router()
+              const child = new Router()
+
+              child.get('/child', (ctx, next) => {
+                ctx.body = ''
+              })
+
+              first.use('/first', child.routes())
+              second.use('/second', child.routes())
+
+              app.use(first.routes())
+              app.use(second.routes())
+
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('resource', 'GET /first/child')
+                  expect(spans[0].meta)
+                    .to.have.property('http.url', `http://localhost:${port}/first/child`)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/first/child`)
+                  .catch(done)
+              })
+            })
+          }
 
           it('should only match the current HTTP method', done => {
             const app = new Koa()
