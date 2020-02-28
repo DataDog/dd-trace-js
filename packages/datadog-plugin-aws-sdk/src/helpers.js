@@ -1,6 +1,5 @@
 'use strict'
 
-const base = 'base'
 const services = {
   cloudwatchlogs: getService('cloudwatchlogs'),
   dynamodb: getService('dynamodb'),
@@ -8,8 +7,7 @@ const services = {
   s3: getService('s3'),
   redshift: getService('redshift'),
   sns: getService('sns'),
-  sqs: getService('sqs'),
-  [base]: getService(base)
+  sqs: getService('sqs')
 }
 
 function getService (serviceName) {
@@ -45,9 +43,13 @@ const helpers = {
 
     const params = response.request.params
     const operation = response.request.operation
-    const service = services[serviceName] || services[base]
+    const extraTags = services[serviceName] ? services[serviceName].generateTags(params, operation, response) : {}
+    const tags = Object.assign({
+      'aws.response.request_id': response.requestId,
+      'resource.name': operation
+    }, extraTags)
 
-    service.addTags(span, params, operation, response)
+    span.addTags(tags)
   }
 }
 

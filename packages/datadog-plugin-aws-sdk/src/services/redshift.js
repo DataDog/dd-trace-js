@@ -1,9 +1,7 @@
 'use strict'
 
-const Base = require('./base')
-
-class Redshift extends Base {
-  _addServiceTags (params, operation, response) {
+class Redshift {
+  generateTags (params, operation, response) {
     const tags = {}
 
     if (!params || !params.ClusterIdentifier) return tags

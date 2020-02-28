@@ -1,9 +1,7 @@
 'use strict'
 
-const Base = require('./base')
-
-class Sns extends Base {
-  _addServiceTags (params, operation, response) {
+class Sns {
+  generateTags (params, operation, response) {
     const tags = {}
 
     if (!params) return tags

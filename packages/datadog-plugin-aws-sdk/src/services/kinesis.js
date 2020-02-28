@@ -1,9 +1,7 @@
 'use strict'
 
-const Base = require('./base')
-
-class Kinesis extends Base {
-  _addServiceTags (params, operation, response) {
+class Kinesis {
+  generateTags (params, operation, response) {
     const tags = {}
 
     if (!params || !params.StreamName) return tags

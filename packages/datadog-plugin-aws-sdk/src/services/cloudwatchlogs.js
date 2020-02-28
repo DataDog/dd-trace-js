@@ -1,9 +1,7 @@
 'use strict'
 
-const Base = require('./base')
-
-class CloudwatchLogs extends Base {
-  _addServiceTags (params, operation, response) {
+class CloudwatchLogs {
+  generateTags (params, operation, response) {
     const tags = {}
 
     if (!params || !params.logGroupName) return tags

@@ -1,9 +1,7 @@
 'use strict'
 
-const Base = require('./base')
-
-class Sqs extends Base {
-  _addServiceTags (params, operation, response) {
+class Sqs {
+  generateTags (params, operation, response) {
     const tags = {}
 
     if (!params || (!params.QueueName && !params.QueueUrl)) return tags

@@ -1,9 +1,7 @@
 'use strict'
 
-const Base = require('./base')
-
-class S3 extends Base {
-  _addServiceTags (params, operation, response) {
+class S3 {
+  generateTags (params, operation, response) {
     const tags = {}
 
     if (!params || !params.Bucket) return tags
