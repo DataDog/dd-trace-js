@@ -125,8 +125,16 @@ const elasticsearchOptions = {
   },
 };
 
+const awsSdkOptions = {
+  service: 'test',
+  hooks: {
+    request: (span, response) => {},
+  }
+};
+
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('bluebird');
 tracer.use('bunyan');
 tracer.use('couchbase');
