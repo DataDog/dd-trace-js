@@ -10,9 +10,8 @@ wrapIt()
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
-const closeAndWipeAgent = () => {
-  agent.close()
-  agent.wipe()
+const closeAndWipeAgent = async () => {
+  await agent.close()
 }
 
 describe('Plugin', () => {
@@ -52,8 +51,7 @@ describe('Plugin', () => {
 
             ddb.createTable(ddbParams, () => {
               ddb.putItem(ddbPutItemParams, () => {
-                agent.load('aws-sdk')
-                done()
+                agent.load('aws-sdk').then(done)
               })
             })
           })
@@ -63,13 +61,11 @@ describe('Plugin', () => {
               if (res.TableNames && res.TableNames.length > 0) {
                 ddb.deleteItem(ddbGetItemParams, () => {
                   ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
-                    closeAndWipeAgent()
-                    done()
+                    closeAndWipeAgent().then(done)
                   })
                 })
               } else {
-                closeAndWipeAgent()
-                done()
+                closeAndWipeAgent().then(done)
               }
             })
           })
@@ -111,8 +107,7 @@ describe('Plugin', () => {
                     })
                   }
                   }
-                })
-                done()
+                }).then(done)
               })
             })
           })
@@ -122,13 +117,11 @@ describe('Plugin', () => {
               if (res.data && res.data.TableNames && res.data.TableNames.length > 0) {
                 ddb.deleteItem(ddbGetItemParams, () => {
                   ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
-                    closeAndWipeAgent()
-                    done()
+                    closeAndWipeAgent().then(done)
                   })
                 })
               } else {
-                closeAndWipeAgent()
-                done()
+                closeAndWipeAgent().then(done)
               }
             })
           })
@@ -157,13 +150,11 @@ describe('Plugin', () => {
             AWS.config.update({ region: 'REGION' })
             epKinesis = new AWS.Endpoint('http://localhost:4568')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
-            agent.load('aws-sdk')
-            done()
+            agent.load('aws-sdk').then(done)
           })
 
           after((done) => {
-            closeAndWipeAgent()
-            done()
+            closeAndWipeAgent().then(done)
           })
 
           describe('instrumentation', () => {
@@ -188,13 +179,11 @@ describe('Plugin', () => {
                   })
                 }
               }
-            })
-            done()
+            }).then(done)
           })
 
           after((done) => {
-            closeAndWipeAgent()
-            done()
+            closeAndWipeAgent().then(done)
           })
 
           describe('instrumentation', () => {
@@ -222,8 +211,7 @@ describe('Plugin', () => {
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
 
             s3.createBucket({ Bucket: s3Params.Bucket }, () => {
-              agent.load('aws-sdk')
-              done()
+              agent.load('aws-sdk').then(done)
             })
           })
 
@@ -232,8 +220,7 @@ describe('Plugin', () => {
             epS3 = new AWS.Endpoint('http://localhost:4572')
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
             s3.deleteBucket(s3Params, () => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -259,8 +246,7 @@ describe('Plugin', () => {
                     })
                   }
                 }
-              })
-              done()
+              }).then(done)
             })
           })
 
@@ -269,8 +255,7 @@ describe('Plugin', () => {
             epS3 = new AWS.Endpoint('http://localhost:4572')
             s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
             s3.deleteBucket(s3Params, () => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -305,8 +290,7 @@ describe('Plugin', () => {
                 sqsGetParams.QueueUrl = res.QueueUrl
               }
 
-              agent.load('aws-sdk')
-              done()
+              agent.load('aws-sdk').then(done)
             })
           })
 
@@ -316,8 +300,7 @@ describe('Plugin', () => {
             sqs = new AWS.SQS({ endpoint: epSqs })
 
             sqs.deleteQueue(sqsGetParams, () => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -348,8 +331,7 @@ describe('Plugin', () => {
                     })
                   }
                 }
-              })
-              done()
+              }).then(done)
             })
           })
 
@@ -359,8 +341,7 @@ describe('Plugin', () => {
             sqs = new AWS.SQS({ endpoint: epSqs })
 
             sqs.deleteQueue(sqsGetParams, () => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -398,8 +379,7 @@ describe('Plugin', () => {
                 snsGetParams.TopicArn = res.TopicArn
               }
 
-              agent.load('aws-sdk')
-              done()
+              agent.load('aws-sdk').then(done)
             })
           })
 
@@ -414,12 +394,10 @@ describe('Plugin', () => {
             sns.listTopics({}, (err, res) => {
               if (res.Topics && res.Topics.length > 0) {
                 sns.deleteTopic(res.Topics[0], () => {
-                  closeAndWipeAgent()
-                  done()
+                  closeAndWipeAgent().then(done)
                 })
               } else {
-                closeAndWipeAgent()
-                done()
+                closeAndWipeAgent().then(done)
               }
             })
           })
@@ -470,8 +448,7 @@ describe('Plugin', () => {
                     })
                   }
                 }
-              })
-              done()
+              }).then(done)
             })
           })
 
@@ -486,12 +463,10 @@ describe('Plugin', () => {
             sns.listTopics({}, (err, res) => {
               if (res.Topics && res.Topics.length > 0) {
                 sns.deleteTopic({ TopicArn: topicArn }, () => {
-                  closeAndWipeAgent()
-                  done()
+                  closeAndWipeAgent().then(done)
                 })
               } else {
-                closeAndWipeAgent()
-                done()
+                closeAndWipeAgent().then(done)
               }
             })
           })
@@ -524,8 +499,7 @@ describe('Plugin', () => {
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
 
             cwLogs.createLogGroup(cwCreateParams, (err, res) => {
-              agent.load('aws-sdk')
-              done()
+              agent.load('aws-sdk').then(done)
             })
           })
 
@@ -538,8 +512,7 @@ describe('Plugin', () => {
 
             // cleanup log groups
             cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -568,8 +541,7 @@ describe('Plugin', () => {
                     })
                   }
                 }
-              })
-              done()
+              }).then(done)
             })
           })
 
@@ -582,8 +554,7 @@ describe('Plugin', () => {
 
             // cleanup log groups
             cwLogs.deleteLogGroup(cwCreateParams, (err, res) => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -616,8 +587,7 @@ describe('Plugin', () => {
             redshift = new AWS.Redshift({ endpoint: epRedshift })
 
             redshift.createCluster(redshiftCreateParams, (err, res) => {
-              agent.load('aws-sdk')
-              done()
+              agent.load('aws-sdk').then(done)
             })
           })
 
@@ -630,8 +600,7 @@ describe('Plugin', () => {
 
             // cleanup clusters
             redshift.deleteCluster(redshiftGetParams, () => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -660,8 +629,7 @@ describe('Plugin', () => {
                     })
                   }
                 }
-              })
-              done()
+              }).then(done)
             })
           })
 
@@ -674,8 +642,7 @@ describe('Plugin', () => {
 
             // cleanup clusters
             redshift.deleteCluster(redshiftGetParams, () => {
-              closeAndWipeAgent()
-              done()
+              closeAndWipeAgent().then(done)
             })
           })
 
@@ -702,13 +669,11 @@ describe('Plugin', () => {
             epRoute53 = new AWS.Endpoint('http://localhost:4580')
             AWS.config.update({ region: 'us-east-1' })
             route53 = new AWS.Route53({ endpoint: epRoute53 })
-            agent.load(['aws-sdk', 'http'])
-            done()
+            agent.load(['aws-sdk', 'http']).then(done)
           })
 
           afterEach(done => {
-            closeAndWipeAgent()
-            done()
+            closeAndWipeAgent().then(done)
           })
 
           describe('instrumentation', () => {
