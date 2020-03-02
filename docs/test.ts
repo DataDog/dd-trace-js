@@ -1,4 +1,4 @@
-import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope } from '..';
+import ddTrace, { trace, tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
 import { SERVER, CLIENT, PRODUCER, CONSUMER } from '../ext/kinds'
@@ -264,3 +264,20 @@ const emitter = {
 
 scope.bind(emitter);
 scope.bind(emitter, span);
+
+@trace()
+class DecoratedClass {
+  @trace()
+  public decoratedMethod () {}
+
+  @trace({
+    serviceName: 'test-service',
+    resourceName: 'test-resource',
+    spanName: 'test-span',
+    appAnalytics: true,
+    tags: { foo: 'bar' },
+  })
+  public configuredDecoratedMethod () {}
+}
+
+new DecoratedClass(); // Instantiated here to prevent unused variable error
