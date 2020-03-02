@@ -267,6 +267,11 @@ scope.bind(emitter, span);
 
 @trace()
 class DecoratedClass {
+  public decoratedMethod () {}
+  public configuredDecoratedMethod () {}
+}
+
+class DecoratedMethod {
   @trace()
   public decoratedMethod () {}
 
@@ -279,5 +284,3 @@ class DecoratedClass {
   })
   public configuredDecoratedMethod () {}
 }
-
-new DecoratedClass(); // Instantiated here to prevent unused variable error

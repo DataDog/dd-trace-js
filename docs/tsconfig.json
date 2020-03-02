@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "target": "ES5",
     "lib": ["es2017"],
     "moduleResolution": "node",
     "module": "commonjs",
@@ -7,6 +8,7 @@
     "experimentalDecorators": true
   },
   "files": [
-    "../index.d.ts"
+    "../index.d.ts",
+    "./test.ts"
   ]
 }

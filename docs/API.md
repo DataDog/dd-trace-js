@@ -223,7 +223,7 @@ class EmailQueue {
 ```
 
 **Note**:
-- If using _typescript_, you need to set `"experimentalDecorators": true` in your `tsconfig.json` to enable decorator syntax.
+- If using _typescript_, you need to set `"experimentalDecorators": true` in your `tsconfig.json` to enable decorator syntax. You will likely also have to set your target in `tsconfig.json`.
 - If using _javascript_, you need to use `@babel/plugin-proposal-decorators` to enable decorator syntax.
 
 <h2 id="integrations">Integrations</h2>
