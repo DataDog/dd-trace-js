@@ -188,6 +188,40 @@ outerEmitter.emit('request')
 
 See the [API documentation](./interfaces/scope.html) for more details.
 
+<h2 id="decorator">Decorator</h2>
+
+A decorator is available to facilitate tracing class methods. If used on a class, all methods will be traced. Individual methods can be decorated as well. The decorator takes an optional configuration parameter that allows renaming the span and adding tags.
+
+```javascript
+const trace = require('dd-trace').trace
+
+// Trace *all* methods of a class
+@trace()
+class GameChanger {
+    public foo() {} // This will be traced
+    private bar() {} // This will be traced
+}
+
+// Trace *individual* methods of a class
+class GameChanger {
+    @trace()
+    public foo() {} // This will be traced
+    private bar() {} // This will NOT be traced
+}
+
+// The decorator can be configured to override the defaults
+class EmailQueue {
+    @trace({
+      serviceName: 'queue',
+      resourceName: 'pop',
+      spanName: 'queue.message',
+      appAnalytics: true,
+      tags: { appName: 'gamechanger' }
+    })
+    public async pop() {}
+}
+```
+
 <h2 id="integrations">Integrations</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
