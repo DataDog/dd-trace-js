@@ -97,7 +97,7 @@ class Decorator {
         key
       )
 
-      if (typeof key === 'string' && typeof descriptor?.value === 'function') {
+      if (typeof key === 'string' && descriptor && typeof descriptor.value === 'function') {
         Object.defineProperty(
           constructor.prototype,
           key,

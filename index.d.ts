@@ -1007,10 +1007,16 @@ interface Constructor {
  *
  * @param config Optional configuration for the span that will be created for this trace.
  */
-export declare function trace(config?: TraceConfig): {
+declare function trace(config?: TraceConfig): {
   (target: Constructor): void;
   <T>(target: Record<string, any>, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<T>): void;
 };
+
+interface Decorator {
+  trace,
+}
+
+export declare const decorator: Decorator;
 
 /**
  * Singleton returned by the module. It has to be initialized before it will

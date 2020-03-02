@@ -11,4 +11,4 @@ const Decorator = require('./src/decorator')
 module.exports = new TracerProxy()
 module.exports.default = module.exports
 module.exports.tracer = module.exports
-module.exports.trace = new Decorator(module.exports).trace
+module.exports.decorator = new Decorator(module.exports)

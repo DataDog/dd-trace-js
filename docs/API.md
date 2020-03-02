@@ -193,7 +193,7 @@ See the [API documentation](./interfaces/scope.html) for more details.
 A decorator is available to facilitate tracing class methods. If used on a class, all methods will be traced. Individual methods can be decorated as well. The decorator takes an optional configuration parameter that allows renaming the span and adding tags.
 
 ```javascript
-const trace = require('dd-trace').trace
+const { trace } = require('dd-trace').decorator
 
 // Trace *all* methods of a class
 @trace()
