@@ -222,6 +222,10 @@ class EmailQueue {
 }
 ```
 
+**Note**:
+- If using _typescript_, you need to set `"experimentalDecorators": true` in your `tsconfig.json` to enable decorator syntax.
+- If using _javascript_, you need to use `@babel/plugin-proposal-decorators` to enable decorator syntax.
+
 <h2 id="integrations">Integrations</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
