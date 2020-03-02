@@ -173,7 +173,8 @@ describe('Decorator', () => {
             serviceName: 'test-service',
             resourceName: 'test-resource',
             spanName: 'test-span',
-            appAnalytics: true
+            appAnalytics: true,
+            tags: { foo: 'bar' }
           })
           decoratedMethod () {}
         }
@@ -187,6 +188,7 @@ describe('Decorator', () => {
         expect(spanOptions.tags[tags.SERVICE_NAME]).to.equal('service.name-test-service')
         expect(spanOptions.tags[tags.RESOURCE_NAME]).to.equal('test-resource')
         expect(spanOptions.tags[tags.ANALYTICS]).to.be.true
+        expect(spanOptions.tags.foo).to.equal('bar')
 
         spy.restore()
       })
