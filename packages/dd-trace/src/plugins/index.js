@@ -26,6 +26,7 @@ module.exports = {
   'koa': require('../../../datadog-plugin-koa/src'),
   'limitd-client': require('../../../datadog-plugin-limitd-client/src'),
   'memcached': require('../../../datadog-plugin-memcached/src'),
+  'microgateway-core': require('../../../datadog-plugin-microgateway-core/src'),
   'mongodb-core': require('../../../datadog-plugin-mongodb-core/src'),
   'mysql': require('../../../datadog-plugin-mysql/src'),
   'mysql2': require('../../../datadog-plugin-mysql2/src'),
