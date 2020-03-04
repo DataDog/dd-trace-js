@@ -3,7 +3,6 @@
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
-const id = require('./id')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -20,7 +19,7 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
-  extractError(formatted, span)
+  extractError(formatted, span.context()._tags)
   extractTags(formatted, span)
   extractAnalytics(formatted, span)
 
@@ -90,8 +89,8 @@ function extractTags (trace, span) {
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
 }
 
-function extractError (trace, span) {
-  const error = span.context()._tags['error']
+function extractError (trace, tags) {
+  const error = tags['error']
 
   if (error instanceof Error) {
     trace.meta['error.msg'] = error.message

@@ -10,7 +10,6 @@ const {
   SAMPLING_AGENT_DECISION
 } = require('./constants')
 
-const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
 const MANUAL_KEEP = ext.tags.MANUAL_KEEP
 const MANUAL_DROP = ext.tags.MANUAL_DROP
@@ -43,7 +42,7 @@ class PrioritySampler {
 
     if (context._sampling.priority !== undefined) return
 
-    const tag = this._getPriority(context._tags)
+    const tag = this._getPriority(context._spanData)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -84,13 +83,19 @@ class PrioritySampler {
     return typeof span.context === 'function' ? span.context() : span
   }
 
-  _getPriority (tags) {
-    if (tags.hasOwnProperty(MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
+  _getPriority (spanData) {
+    if (
+      (spanData.metrics.hasOwnProperty(MANUAL_KEEP) && spanData.metrics[MANUAL_KEEP]) ||
+      (spanData.meta.hasOwnProperty(MANUAL_KEEP) && spanData.meta[MANUAL_KEEP])
+    ) {
       return USER_KEEP
-    } else if (tags.hasOwnProperty(MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+    } else if (
+      (spanData.metrics.hasOwnProperty(MANUAL_DROP) && spanData.metrics[MANUAL_DROP]) ||
+      (spanData.meta.hasOwnProperty(MANUAL_DROP) && spanData.meta[MANUAL_DROP])
+    ) {
       return USER_REJECT
     } else {
-      const priority = parseInt(tags[SAMPLING_PRIORITY], 10)
+      const priority = parseInt(spanData.metrics[SAMPLING_PRIORITY], 10)
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP
@@ -101,7 +106,7 @@ class PrioritySampler {
   }
 
   _isSampledByRule (context, rule) {
-    context._tags[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._spanData.metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
 
     return rule.sampler.isSampled(context)
   }
@@ -109,16 +114,16 @@ class PrioritySampler {
   _isSampledByRateLimit (context) {
     const allowed = this._limiter.isAllowed()
 
-    context._tags[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+    context._spanData.metrics[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
 
     return allowed
   }
 
   _isSampledByAgent (context) {
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    const key = `service:${context._service},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._tags[SAMPLING_AGENT_DECISION] = sampler.rate()
+    context._spanData.metrics[SAMPLING_AGENT_DECISION] = sampler.rate()
 
     return sampler.isSampled(context)
   }
@@ -139,7 +144,7 @@ class PrioritySampler {
 
   _matchRule (context, rule) {
     const name = context._name
-    const service = context._tags['service.name']
+    const service = context._service
 
     if (rule.name instanceof RegExp && !rule.name.test(name)) return false
     if (rule.name && rule.name !== name) return false

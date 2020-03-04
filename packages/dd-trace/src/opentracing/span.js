@@ -29,7 +29,9 @@ class DatadogSpan extends Span {
 
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
-    this._spanContext._tags = tags
+    // this._spanContext._tags = tags
+    debugger; // eslint-disable-line
+    this._addTags(tags)
     this._spanContext._hostname = hostname
 
     this._startTime = startTime

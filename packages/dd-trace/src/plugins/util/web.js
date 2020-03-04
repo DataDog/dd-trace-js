@@ -375,9 +375,9 @@ function addResponseTags (req) {
 
 function addResourceTag (req) {
   const span = req._datadog.span
-  const tags = span.context()._tags
+  const context = span.context()
 
-  if (tags['resource.name']) return
+  if (context._resource) return
 
   const resource = [req.method]
     .concat(tags[HTTP_ROUTE])

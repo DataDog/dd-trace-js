@@ -46,6 +46,8 @@ aliasToData('_traceId', 'trace_id')
 aliasToData('_spanId', 'span_id')
 aliasToData('_parentId', 'parent_id')
 aliasToData('_name', 'name')
+aliasToData('_service', 'service')
+aliasToData('_resource', 'resource')
 
 module.exports = DatadogSpanContext
 
