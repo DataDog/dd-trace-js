@@ -30,18 +30,13 @@ function format (span) {
 function formatSpan (span) {
   const spanContext = span.context()
 
-  return {
-    trace_id: spanContext._traceId,
-    span_id: spanContext._spanId,
-    parent_id: spanContext._parentId || id('0'),
-    name: serialize(spanContext._name),
-    resource: serialize(spanContext._name),
-    error: 0,
-    meta: {},
-    metrics: {},
-    start: Math.round(span._startTime * 1e6),
-    duration: Math.round(span._duration * 1e6)
-  }
+  const spanData = spanContext._spanData
+  console.log(spanData)
+
+  spanData.name = serialize(spanContext._name)
+  spanData.resource = serialize(spanContext._name)
+
+  return spanData
 }
 
 function extractTags (trace, span) {

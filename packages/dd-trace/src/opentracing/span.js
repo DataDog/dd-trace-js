@@ -26,14 +26,28 @@ class DatadogSpan extends Span {
     this._sampler = sampler
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._startTime = startTime
 
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
     this._spanContext._hostname = hostname
 
+    this._startTime = startTime
+
     this._handle = platform.metrics().track(this)
+  }
+
+  set _startTime (val) {
+    this._spanContext._spanData.start = Math.round(val * 1e6)
+  }
+  get _startTime () {
+    return this._spanContext._spanData.start
+  }
+  set _duration (val) {
+    this._spanContext._spanData.duration = Math.round(val * 1e6)
+  }
+  get _duration () {
+    return this._spanContext._spanData.duration
   }
 
   toString () {
