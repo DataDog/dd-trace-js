@@ -1,8 +1,15 @@
 'use strict'
 
 const log = require('./log')
+const { extractJustTags, extractError } = require('./format')
 
-function add (carrier, keyValuePairs) {
+function addToObject (carrier, keyValuePairs) {
+  Object.keys(keyValuePairs).forEach(key => {
+    carrier[key] = keyValuePairs[key]
+  })
+}
+
+function add (carrier, keyValuePairs, baseAdd = addToObject) {
   if (!carrier || !keyValuePairs) return
 
   if (typeof keyValuePairs === 'string') {
@@ -28,12 +35,17 @@ function add (carrier, keyValuePairs) {
   }
 
   try {
-    Object.keys(keyValuePairs).forEach(key => {
-      carrier[key] = keyValuePairs[key]
-    })
+    baseAdd(carrier, keyValuePairs)
   } catch (e) {
     log.error(e)
   }
 }
 
-module.exports = { add }
+function addToSpanContext (spanContext, keyValuePairs) {
+  add(spanContext._spanData, keyValuePairs, (spanData, tags) => {
+    extractError(spanData, tags)
+    extractJustTags(spanData, tags)
+  })
+}
+
+module.exports = { add, addToSpanContext }

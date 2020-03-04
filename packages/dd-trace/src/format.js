@@ -27,11 +27,13 @@ function format (span) {
   return formatted
 }
 
+format.extractJustTags = extractJustTags
+format.extractError = extractError
+
 function formatSpan (span) {
   const spanContext = span.context()
 
   const spanData = spanContext._spanData
-  console.log(spanData)
 
   spanData.name = serialize(spanContext._name)
   spanData.resource = serialize(spanContext._name)
@@ -39,13 +41,8 @@ function formatSpan (span) {
   return spanData
 }
 
-function extractTags (trace, span) {
-  const context = span.context()
-  const origin = context._trace.origin
-  const tags = context._tags
-  const hostname = context._hostname
-  const priority = context._sampling.priority
-
+// trace here is actually a spanData
+function extractJustTags (trace, tags) {
   for (const tag in tags) {
     switch (tag) {
       case 'service.name':
@@ -73,6 +70,16 @@ function extractTags (trace, span) {
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   }
+}
+
+function extractTags (trace, span) {
+  const context = span.context()
+  const origin = context._trace.origin
+  const tags = context._tags
+  const hostname = context._hostname
+  const priority = context._sampling.priority
+
+  extractJustTags(trace, tags)
 
   if (span.tracer()._service === tags['service.name']) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')

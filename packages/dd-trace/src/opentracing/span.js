@@ -114,7 +114,7 @@ class DatadogSpan extends Span {
   }
 
   _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
+    tagger.addToSpanContext(this._spanContext, keyValuePairs)
   }
 
   _finish (finishTime) {
