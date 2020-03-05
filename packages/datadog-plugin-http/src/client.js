@@ -37,8 +37,11 @@ function patch (http, methodName, tracer, config) {
         return request.apply(this, arguments)
       }
 
-      const uri = args.uri
       const options = args.options
+      const hostname = options.hostname || options.host || 'localhost'
+      const host = options.port ? `${hostname}:${options.port}` : hostname
+      const path = options.path ? options.path.split(/[?#]/)[0] : '/'
+      const uri = `${options.protocol}//${host}${path}`
 
       let callback = args.callback
 
@@ -188,7 +191,7 @@ function patch (http, methodName, tracer, config) {
         'localhost',
       hash: url.hash,
       search: url.search,
-      pathname: url.pathname || url.path || '/',
+      pathname: url.pathname,
       path: `${url.pathname || ''}${url.search || ''}`,
       href: url.href
     }

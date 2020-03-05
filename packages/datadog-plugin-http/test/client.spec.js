@@ -48,7 +48,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('http')
+          return agent.load('http', { server: false })
             .then(() => {
               http = require(protocol)
               express = require('express')
@@ -131,7 +131,7 @@ describe('Plugin', () => {
               protocol: `${protocol}:`,
               hostname: 'localhost',
               port,
-              pathname: '/user'
+              path: '/user'
             }
 
             appListener = server(app, port, () => {
