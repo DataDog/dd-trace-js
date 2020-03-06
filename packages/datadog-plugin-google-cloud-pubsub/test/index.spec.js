@@ -8,7 +8,7 @@ const id = require('../../dd-trace/src/id')
 wrapIt()
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
-const TIMEOUT = 60000
+const TIMEOUT = 5000
 
 describe('Plugin', () => {
   let tracer
@@ -17,7 +17,7 @@ describe('Plugin', () => {
     this.timeout(TIMEOUT)
 
     before(() => {
-      process.env.PUBSUB_EMULATOR_HOST = 'localhost:8042'
+      process.env.PUBSUB_EMULATOR_HOST = 'localhost:8085'
     })
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST

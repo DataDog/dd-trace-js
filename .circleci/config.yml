@@ -278,7 +278,7 @@ jobs:
           - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - FORCE_NONINTERACTIVE=true
-          - START_WEB=0          
+          - START_WEB=0
 
   node-bluebird:
     <<: *node-plugin-base
@@ -389,7 +389,7 @@ jobs:
         environment:
           - SERVICES=google-cloud-pubsub
           - PLUGINS=google-cloud-pubsub
-      - image: kinok/google-pubsub-emulator
+      - image: knarz/pubsub-emulator
 
   node-graphql:
     <<: *node-plugin-base
