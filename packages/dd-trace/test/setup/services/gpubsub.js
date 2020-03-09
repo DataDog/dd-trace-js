@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-process.env.PUBSUB_EMULATOR_HOST = 'localhost:8042'
+process.env.PUBSUB_EMULATOR_HOST = 'localhost:8085'
 const { PubSub } = require('../../../../../versions/@google-cloud/pubsub').get()
 
 function waitForGpubsub () {
