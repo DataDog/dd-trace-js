@@ -54,10 +54,11 @@ describe('Tracer', () => {
 
       tracer.trace('name', options, span => {
         expect(span).to.be.instanceof(Span)
-        expect(span.context()._tags).to.include(options.tags)
-        expect(span.context()._tags).to.include({
-          [SERVICE_NAME]: 'service',
-          [RESOURCE_NAME]: 'resource',
+        const tags = flatTags(span)
+        expect(tags).to.include(options.tags)
+        expect(tags).to.include({
+          service: 'service',
+          resource: 'resource',
           [SPAN_TYPE]: 'type'
         })
       })
@@ -65,7 +66,7 @@ describe('Tracer', () => {
 
     it('should support analytics', () => {
       tracer.trace('name', { analytics: 0.5 }, span => {
-        expect(span.context()._tags).to.have.property(ANALYTICS, 0.5)
+        expect(flatTags(span)).to.have.property(ANALYTICS, 0.5)
       })
     })
 
@@ -80,7 +81,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(childOf, () => {
         tracer.trace('name', {}, span => {
-          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
+          expect(span.context()._spanData.parent_id.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })
@@ -91,7 +92,7 @@ describe('Tracer', () => {
 
       tracer.scope().activate(root, () => {
         tracer.trace('name', { childOf }, span => {
-          expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
+          expect(span.context()._spanData.parent_id.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })
@@ -160,7 +161,7 @@ describe('Tracer', () => {
 
         tracer.trace('name', {}, (_span, _done) => {
           span = _span
-          tags = span.context()._tags
+          tags = flatTags(span)
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -209,12 +210,12 @@ describe('Tracer', () => {
         tracer
           .trace('name', {}, _span => {
             span = _span
-            tags = span.context()._tags
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
           .catch(e => {
             expect(span.finish).to.have.been.called
+            tags = flatTags(span)
             expect(tags).to.include({
               'error.type': e.name,
               'error.msg': e.message,
@@ -445,3 +446,21 @@ describe('Tracer', () => {
     })
   })
 })
+
+function flatTags (spanContext) {
+  if (spanContext._spanContext) {
+    spanContext = spanContext._spanContext
+  }
+  const data = spanContext._spanData
+  const tags = {}
+
+  for (const name in data) {
+    if (name === 'metrics' || name === 'meta') {
+      for (const subName in data[name]) {
+        tags[subName] = data[name][subName]
+      }
+    }
+    tags[name] = data[name]
+  }
+  return tags
+}

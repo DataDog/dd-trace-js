@@ -21,23 +21,27 @@ describe('format', () => {
 
   beforeEach(() => {
     spanContext = {
-      _traceId: spanId,
-      _spanId: spanId,
-      _parentId: spanId,
       _tags: {},
+      _spanData: {
+        trace_id: spanId,
+        span_id: spanId,
+        parent_id: spanId,
+        name: 'operation',
+        metrics: {},
+        meta: {},
+        start: 1500000000000.123456,
+        duration: 100
+      },
       _metrics: {},
       _sampling: {},
-      _trace: {},
-      _name: 'operation'
+      _trace: {}
     }
 
     span = {
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
         _service: 'test'
-      }),
-      _startTime: 1500000000000.123456,
-      _duration: 100
+      })
     }
 
     platform = {
@@ -53,29 +57,29 @@ describe('format', () => {
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
-      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
-      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
-      expect(trace.parent_id.toString()).to.equal(span.context()._parentId.toString())
-      expect(trace.name).to.equal(span.context()._name)
-      expect(trace.resource).to.equal(span.context()._name)
+      expect(trace.trace_id.toString()).to.equal(span.context()._spanData.trace_id.toString())
+      expect(trace.span_id.toString()).to.equal(span.context()._spanData.span_id.toString())
+      expect(trace.parent_id.toString()).to.equal(span.context()._spanData.parent_id.toString())
+      expect(trace.name).to.equal(span.context()._spanData.name)
+      expect(trace.resource).to.equal(span.context()._spanData.name)
       expect(trace.error).to.equal(0)
-      expect(trace.start).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.equal(span._duration * 1e6)
+      expect(trace.start).to.equal(span.context()._spanData.start)
+      expect(trace.duration).to.equal(span.context()._spanData.duration)
     })
 
     it('should always set a parent ID', () => {
-      span.context()._parentId = null
+      span.context()._spanData.parent_id = null
 
       trace = format(span)
 
-      expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
-      expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
+      expect(trace.trace_id.toString()).to.equal(span.context()._spanData.trace_id.toString())
+      expect(trace.span_id.toString()).to.equal(span.context()._spanData.span_id.toString())
       expect(trace.parent_id.toString()).to.equal('0000000000000000')
-      expect(trace.name).to.equal(span.context()._name)
-      expect(trace.resource).to.equal(span.context()._name)
-      expect(trace.error).to.equal(0)
-      expect(trace.start).to.equal(span._startTime * 1e6)
-      expect(trace.duration).to.equal(span._duration * 1e6)
+      expect(trace.name).to.equal(span.context()._spanData.name)
+      expect(trace.resource).to.equal(span.context()._spanData.name)
+      expect(trace.error).to.equal(1)
+      expect(trace.start).to.equal(span.context()._spanData.start)
+      expect(trace.duration).to.equal(span.context()._spanData.duration)
     })
 
     it('should extract Datadog specific tags', () => {
