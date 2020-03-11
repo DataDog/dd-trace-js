@@ -73,7 +73,9 @@ function extractTags (trace, span) {
       case 'error.type':
       case 'error.msg':
       case 'error.stack':
-        trace.error = 1
+        if (tags['span.kind'] !== 'internal') {
+          trace.error = 1
+        }
       default: // eslint-disable-line no-fallthrough
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }

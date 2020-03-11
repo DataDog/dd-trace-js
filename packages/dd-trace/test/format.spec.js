@@ -253,6 +253,17 @@ describe('format', () => {
       expect(trace.error).to.equal(1)
     })
 
+    it('should not set the error flag for internal spans', () => {
+      spanContext._tags['error.type'] = 'Error'
+      spanContext._tags['error.msg'] = 'boom'
+      spanContext._tags['error.stack'] = ''
+      spanContext._tags['span.kind'] = 'internal'
+
+      trace = format(span)
+
+      expect(trace.error).to.equal(0)
+    })
+
     it('should sanitize the input', () => {
       spanContext._name = null
       spanContext._tags = {

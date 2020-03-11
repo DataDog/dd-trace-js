@@ -1739,7 +1739,7 @@ describe('Plugin', () => {
 })
 
 function mkExpected (props) {
-  const meta = Object.assign({ component: 'fs' }, props.meta)
+  const meta = Object.assign({ component: 'fs', 'span.kind': 'internal' }, props.meta)
   const expected = Object.assign({
     name: 'fs.operation',
     error: 0,
