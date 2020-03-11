@@ -244,6 +244,9 @@ tracer.use('pg', {
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
+<h5 id="aws-sdk"></h5>
+<h5 id="aws-sdk-tags"></h5>
+<h5 id="aws-sdk-config"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="couchbase"></h5>
 <h5 id="dns"></h5>
@@ -307,6 +310,7 @@ tracer.use('pg', {
 
 * [amqp10](./interfaces/plugins.amqp10.html)
 * [amqplib](./interfaces/plugins.amqplib.html)
+* [aws-sdk](./interfaces/plugins.aws_sdk.html)
 * [bluebird](./interfaces/plugins.bluebird.html)
 * [couchbase](./interfaces/plugins.couchbase.html)
 * [bunyan](./interfaces/plugins.bunyan.html)

@@ -265,6 +265,21 @@ jobs:
           - QPIDD_ADMIN_USERNAME=admin
           - QPIDD_ADMIN_PASSWORD=admin
 
+  node-aws-sdk:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=aws-sdk
+          - PLUGINS=aws-sdk
+      - image: localstack/localstack
+        environment:
+          - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,redshift:4577,route53:4580,logs:4586
+          - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          - FORCE_NONINTERACTIVE=true
+          - START_WEB=0
+
   node-bluebird:
     <<: *node-plugin-base
     docker:
@@ -374,7 +389,7 @@ jobs:
         environment:
           - SERVICES=google-cloud-pubsub
           - PLUGINS=google-cloud-pubsub
-      - image: kinok/google-pubsub-emulator
+      - image: knarz/pubsub-emulator
 
   node-graphql:
     <<: *node-plugin-base
@@ -841,6 +856,7 @@ workflows:
       - node-bench-latest
       - node-amqplib
       - node-amqp10
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
@@ -996,6 +1012,7 @@ workflows:
       - node-bench-latest
       - node-amqplib
       - node-amqp10
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
