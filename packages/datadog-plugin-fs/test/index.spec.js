@@ -1763,6 +1763,7 @@ function testHandleErrors (fs, name, tested, args, agent) {
     tested(fs, args, null, err => {
       expectOneSpan(agent, done, {
         resource: name,
+        error: 0,
         meta: {
           'error.type': err.name,
           'error.msg': err.message,
