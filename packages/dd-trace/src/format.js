@@ -66,7 +66,7 @@ function extractTags (trace, span) {
       case ANALYTICS:
         break
       case 'error':
-        if (tags[tag]) {
+        if (tags[tag] === true || tags[tag] === '1') {
           trace.error = 1
         }
         break

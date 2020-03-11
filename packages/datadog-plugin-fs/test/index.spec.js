@@ -105,7 +105,6 @@ describe('Plugin', () => {
           fs.open(filename, 'r', (err) => {
             expectOneSpan(agent, done, {
               resource: 'open',
-              error: 1,
               meta: {
                 'file.flag': 'r',
                 'file.path': filename,
@@ -163,7 +162,6 @@ describe('Plugin', () => {
             fs.promises.open(filename, 'r').catch((err) => {
               expectOneSpan(agent, done, {
                 resource: 'promises.open',
-                error: 1,
                 meta: {
                   'file.flag': 'r',
                   'file.path': filename,
@@ -219,7 +217,6 @@ describe('Plugin', () => {
           } catch (err) {
             expectOneSpan(agent, done, {
               resource: 'openSync',
-              error: 1,
               meta: {
                 'file.flag': 'r',
                 'file.path': filename,
@@ -1763,7 +1760,6 @@ function testHandleErrors (fs, name, tested, args, agent) {
     tested(fs, args, null, err => {
       expectOneSpan(agent, done, {
         resource: name,
-        error: 1,
         meta: {
           'error.type': err.name,
           'error.msg': err.message,

@@ -253,10 +253,19 @@ describe('format', () => {
       expect(trace.error).to.equal(1)
     })
 
-    it('should not set the error flag for internal spans', () => {
+    it('should not set the error flag for internal spans with error tags', () => {
       spanContext._tags['error.type'] = 'Error'
       spanContext._tags['error.msg'] = 'boom'
       spanContext._tags['error.stack'] = ''
+      spanContext._tags['span.kind'] = 'internal'
+
+      trace = format(span)
+
+      expect(trace.error).to.equal(0)
+    })
+
+    it('should not set the error flag for internal spans with error tag', () => {
+      spanContext._tags['error'] = new Error('boom')
       spanContext._tags['span.kind'] = 'internal'
 
       trace = format(span)
