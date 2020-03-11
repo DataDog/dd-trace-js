@@ -66,13 +66,14 @@ function extractTags (trace, span) {
       case ANALYTICS:
         break
       case 'error':
-        if (tags[tag] === true || tags[tag] === '1') {
+        if (tags[tag] && tags['span.kind'] !== 'internal') {
           trace.error = 1
         }
         break
       case 'error.type':
       case 'error.msg':
       case 'error.stack':
+        // HACK: remove when implemented in the backend
         if (tags['span.kind'] !== 'internal') {
           trace.error = 1
         }
