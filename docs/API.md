@@ -242,6 +242,7 @@ tracer.use('pg', {
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
+<h5 id="microgateway-core"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongodb-core-tags"></h5>
 <h5 id="mongodb-core-config"></h5>
