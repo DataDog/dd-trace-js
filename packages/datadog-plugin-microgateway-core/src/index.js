@@ -45,7 +45,7 @@ function createWrapPluginsFactory (tracer, config) {
 }
 
 function wrapNext (req, next) {
-  return function (err) {
+  return function nextWithTrace (err) {
     web.addError(req, err)
 
     return next.apply(this, arguments)
