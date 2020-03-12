@@ -46,7 +46,7 @@ describe('dd-trace', () => {
 
       const payload = msgpack.decode(req.body, { codec })
 
-      expect(payload[0][0].trace_id.toString()).to.equal(span.context()._traceId.toString(10))
+      expect(payload[0][0].trace_id.toString()).to.equal(span.context()._spanData.trace_id.toString(10))
       expect(payload[0][0].span_id.toString()).to.equal(span.context()._spanId.toString(10))
       expect(payload[0][0].service).to.equal('test')
       expect(payload[0][0].name).to.equal('hello')

@@ -59,7 +59,7 @@ describe('Tracer', () => {
         expect(tags).to.include({
           service: 'service',
           resource: 'resource',
-          [SPAN_TYPE]: 'type'
+          type: 'type'
         })
       })
     })
@@ -116,18 +116,16 @@ describe('Tracer', () => {
 
     it('should handle exceptions', () => {
       let span
-      let tags
 
       try {
         tracer.trace('name', {}, _span => {
           span = _span
-          tags = span.context()._tags
           sinon.spy(span, 'finish')
           throw new Error('boom')
         })
       } catch (e) {
         expect(span.finish).to.have.been.called
-        expect(tags).to.include({
+        expect(flatTags(span)).to.include({
           'error.type': e.name,
           'error.msg': e.message,
           'error.stack': e.stack
@@ -156,12 +154,10 @@ describe('Tracer', () => {
       it('should handle errors', () => {
         const error = new Error('boom')
         let span
-        let tags
         let done
 
         tracer.trace('name', {}, (_span, _done) => {
           span = _span
-          tags = flatTags(span)
           sinon.spy(span, 'finish')
           done = _done
         })
@@ -169,7 +165,7 @@ describe('Tracer', () => {
         done(error)
 
         expect(span.finish).to.have.been.called
-        expect(tags).to.include({
+        expect(flatTags(span)).to.include({
           'error.type': error.name,
           'error.msg': error.message,
           'error.stack': error.stack

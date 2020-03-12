@@ -29,7 +29,7 @@ class SpanProcessor {
   _erase (trace) {
     trace.finished.forEach(span => {
       span.context()._tags = {}
-      span.context()._spanData = {}
+      // span.context()._spanData = {}
     })
 
     trace.started = []

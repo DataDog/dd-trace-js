@@ -43,7 +43,8 @@ describe('Span', () => {
     }
 
     tagger = {
-      add: sinon.spy()
+      add: sinon.spy(),
+      addToSpanContext: sinon.spy()
     }
 
     Span = proxyquire('../src/opentracing/span', {
@@ -87,7 +88,7 @@ describe('Span', () => {
   })
 
   it('should set the sample rate metric from the sampler', () => {
-    expect(span.context()._tags).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
+    expect(span.context()._spanData.metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
   it('should keep track of its memory lifecycle', () => {
@@ -151,7 +152,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, { foo: 'bar' })
+      expect(tagger.addToSpanContext).to.have.been.calledWith(span.context(), { foo: 'bar' })
     })
   })
 
@@ -165,7 +166,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, tags)
+      expect(tagger.addToSpanContext).to.have.been.calledWith(span.context(), tags)
     })
   })
 

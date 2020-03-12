@@ -85,13 +85,13 @@ class PrioritySampler {
 
   _getPriority (spanData) {
     if (
-      (spanData.metrics.hasOwnProperty(MANUAL_KEEP) && spanData.metrics[MANUAL_KEEP]) ||
-      (spanData.meta.hasOwnProperty(MANUAL_KEEP) && spanData.meta[MANUAL_KEEP])
+      (spanData.metrics.hasOwnProperty(MANUAL_KEEP) && spanData.metrics[MANUAL_KEEP] !== false) ||
+      (spanData.meta.hasOwnProperty(MANUAL_KEEP) && spanData.meta[MANUAL_KEEP] !== false)
     ) {
       return USER_KEEP
     } else if (
-      (spanData.metrics.hasOwnProperty(MANUAL_DROP) && spanData.metrics[MANUAL_DROP]) ||
-      (spanData.meta.hasOwnProperty(MANUAL_DROP) && spanData.meta[MANUAL_DROP])
+      (spanData.metrics.hasOwnProperty(MANUAL_DROP) && spanData.metrics[MANUAL_DROP] !== false) ||
+      (spanData.meta.hasOwnProperty(MANUAL_DROP) && spanData.meta[MANUAL_DROP] !== false)
     ) {
       return USER_REJECT
     } else {

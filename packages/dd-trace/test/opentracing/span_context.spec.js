@@ -34,12 +34,18 @@ describe('SpanContext', () => {
     const spanContext = new SpanContext(props)
 
     expect(spanContext).to.deep.equal({
-      _traceId: '123',
-      _spanId: '456',
-      _parentId: '789',
-      _name: 'test',
+      __proto__: SpanContext.prototype,
       _isFinished: true,
       _tags: {},
+      _spanData: {
+        error: 0,
+        meta: {},
+        metrics: {},
+        name: 'test',
+        parent_id: '789',
+        span_id: '456',
+        trace_id: '123'
+      },
       _sampling: { priority: 2 },
       _baggageItems: { foo: 'bar' },
       _traceFlags: {
@@ -61,12 +67,20 @@ describe('SpanContext', () => {
     })
 
     expect(spanContext).to.deep.equal({
-      _traceId: '123',
-      _spanId: '456',
-      _parentId: null,
-      _name: undefined,
+      __proto__: SpanContext.prototype,
       _isFinished: false,
       _tags: {},
+      _spanData: {
+        error: 0,
+        meta: {},
+        metrics: {},
+        name: undefined,
+        parent_id: {
+          _buffer: spanContext._spanData.parent_id._buffer
+        },
+        span_id: '456',
+        trace_id: '123'
+      },
       _sampling: {},
       _baggageItems: {},
       _traceFlags: {

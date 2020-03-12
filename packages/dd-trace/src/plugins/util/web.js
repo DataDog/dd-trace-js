@@ -384,7 +384,10 @@ function addResourceTag (req) {
     .filter(val => val)
     .join(' ')
 
+  console.log('before', span.context()._spanData)
+  console.log(RESOURCE_NAME, resource)
   span.setTag(RESOURCE_NAME, resource)
+  console.log('after', span.context()._spanData)
 }
 
 function addHeaders (req) {

@@ -21,7 +21,10 @@ describe('PrioritySampler', () => {
 
   beforeEach(() => {
     context = {
-      _tags: {},
+      _spanData: {
+        metrics: {},
+        meta: {}
+      },
       _sampling: {}
     }
 
@@ -87,7 +90,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should set the priority from the corresponding tag', () => {
-      context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
+      context._spanData.metrics[SAMPLING_PRIORITY] = `${USER_KEEP}`
 
       prioritySampler.sample(span)
 
@@ -97,7 +100,7 @@ describe('PrioritySampler', () => {
     it('should freeze the sampling priority once set', () => {
       prioritySampler.sample(span)
 
-      context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
+      context._spanData.metrics[SAMPLING_PRIORITY] = `${USER_KEEP}`
 
       prioritySampler.sample(span)
 
@@ -111,7 +114,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support manual keep', () => {
-      context._tags[MANUAL_KEEP] = undefined
+      context._spanData.metrics[MANUAL_KEEP] = undefined
 
       prioritySampler.sample(context)
 
@@ -119,7 +122,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support manual drop', () => {
-      context._tags[MANUAL_DROP] = undefined
+      context._spanData.metrics[MANUAL_DROP] = undefined
 
       prioritySampler.sample(context)
 
@@ -127,7 +130,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support opentracing keep', () => {
-      context._tags['sampling.priority'] = 1
+      context._spanData.metrics['sampling.priority'] = 1
 
       prioritySampler.sample(context)
 
@@ -135,7 +138,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support opentracing drop', () => {
-      context._tags['sampling.priority'] = 0
+      context._spanData.metrics['sampling.priority'] = 0
 
       prioritySampler.sample(context)
 
@@ -156,7 +159,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support a sample rate from a rule on service as string', () => {
-      context._tags['service.name'] = 'test'
+      context._spanData.metrics['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
         rules: [
@@ -170,7 +173,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support a sample rate from a rule on service as string as regex', () => {
-      context._tags['service.name'] = 'test'
+      context._spanData.metrics['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
         rules: [
@@ -185,7 +188,7 @@ describe('PrioritySampler', () => {
 
     it('should support a sample rate from a rule on name as string', () => {
       context._name = 'foo'
-      context._tags['service.name'] = 'test'
+      context._spanData.metrics['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
         rules: [
@@ -200,7 +203,7 @@ describe('PrioritySampler', () => {
 
     it('should support a sample rate from a rule on name as regex', () => {
       context._name = 'foo'
-      context._tags['service.name'] = 'test'
+      context._spanData.metrics['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
         rules: [
@@ -262,7 +265,7 @@ describe('PrioritySampler', () => {
     it('should add metrics for agent sample rate', () => {
       prioritySampler.sample(span)
 
-      expect(context._tags).to.have.property('_dd.agent_psr', 1)
+      expect(context._spanData.metrics).to.have.property('_dd.agent_psr', 1)
     })
 
     it('should add metrics for rule sample rate', () => {
@@ -271,8 +274,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(context._tags).to.have.property('_dd.rule_psr', 0)
-      expect(context._tags).to.not.have.property('_dd.limit_psr')
+      expect(context._spanData.metrics).to.have.property('_dd.rule_psr', 0)
+      expect(context._spanData.metrics).to.not.have.property('_dd.limit_psr')
     })
 
     it('should add metrics for rate limiter sample rate', () => {
@@ -282,8 +285,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(context._tags).to.have.property('_dd.rule_psr', 0.5)
-      expect(context._tags).to.have.property('_dd.limit_psr', 1)
+      expect(context._spanData.metrics).to.have.property('_dd.rule_psr', 0.5)
+      expect(context._spanData.metrics).to.have.property('_dd.limit_psr', 1)
     })
   })
 
@@ -299,7 +302,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should update service rates', () => {
-      context._tags[SERVICE_NAME] = 'hello'
+      context._spanData.service = 'hello'
 
       prioritySampler.update({
         'service:hello,env:test': AUTO_REJECT

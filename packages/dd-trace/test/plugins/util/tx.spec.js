@@ -21,8 +21,8 @@ describe('plugins/util/tx', () => {
     it('should set the out.host and out.port tags', () => {
       tx.setHost(span, 'example.com', '1234')
 
-      expect(span.context()._tags).to.have.property('out.host', 'example.com')
-      expect(span.context()._tags).to.have.property('out.port', '1234')
+      expect(span.context()._spanData.meta).to.have.property('out.host', 'example.com')
+      expect(span.context()._spanData.meta).to.have.property('out.port', '1234')
     })
   })
 
@@ -42,7 +42,7 @@ describe('plugins/util/tx', () => {
         const callback = sinon.spy()
         const error = new Error('boom')
         const wrapper = tx.wrap(span, callback)
-        const tags = span.context()._tags
+        const tags = span.context()._spanData.meta
 
         wrapper(error)
 
@@ -83,7 +83,7 @@ describe('plugins/util/tx', () => {
       it('should set the error tags when the promise is rejected', () => {
         const error = new Error('boom')
         const promise = Promise.reject(error)
-        const tags = span.context()._tags
+        const tags = span.context()._spanData.meta
 
         tx.wrap(span, promise)
 
