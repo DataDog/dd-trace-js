@@ -66,14 +66,17 @@ function extractTags (trace, span) {
       case ANALYTICS:
         break
       case 'error':
-        if (tags[tag]) {
+        if (tags[tag] && tags['span.kind'] !== 'internal') {
           trace.error = 1
         }
         break
       case 'error.type':
       case 'error.msg':
       case 'error.stack':
-        trace.error = 1
+        // HACK: remove when implemented in the backend
+        if (tags['span.kind'] !== 'internal') {
+          trace.error = 1
+        }
       default: // eslint-disable-line no-fallthrough
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }

@@ -325,6 +325,7 @@ function makeFSTags (resourceName, path, options, config, tracer) {
   path = options && typeof options === 'object' && 'fd' in options ? options.fd : path
   const tags = {
     'component': 'fs',
+    'span.kind': 'internal',
     'resource.name': resourceName,
     'service.name': config.service || `${tracer._service}-fs`
   }
