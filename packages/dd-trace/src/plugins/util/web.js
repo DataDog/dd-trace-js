@@ -125,11 +125,7 @@ const web = {
 
     if (span) {
       if (error) {
-        span.addTags({
-          'error.type': error.name,
-          'error.msg': error.message,
-          'error.stack': error.stack
-        })
+        span.addTags({ error })
       }
 
       span.finish()
@@ -384,10 +380,7 @@ function addResourceTag (req) {
     .filter(val => val)
     .join(' ')
 
-  console.log('before', span.context()._spanData)
-  console.log(RESOURCE_NAME, resource)
   span.setTag(RESOURCE_NAME, resource)
-  console.log('after', span.context()._spanData)
 }
 
 function addHeaders (req) {

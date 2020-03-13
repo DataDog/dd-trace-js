@@ -10,7 +10,6 @@ class DatadogSpanContext extends SpanContext {
 
     props = props || {}
 
-    console.log(props)
     this._spanData = {
       name: props.name,
       trace_id: props.traceId,

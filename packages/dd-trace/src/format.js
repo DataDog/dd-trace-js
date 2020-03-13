@@ -19,7 +19,7 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
-  extractError(formatted, span.context()._tags)
+  extractError(formatted, span.context()._spanData, span.context()._tags)
   extractTags(formatted, span)
   extractAnalytics(formatted, span)
 
@@ -89,8 +89,23 @@ function extractTags (trace, span) {
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
 }
 
-function extractError (trace, tags) {
-  const error = tags['error']
+function extractError (trace, spanData, tags) {
+  if (spanData) {
+    if (
+      (
+        !('error' in spanData) &&
+        !(spanData.meta && 'error.type' in spanData.meta) &&
+        !('error.type' in spanData)
+      ) && (
+        !tags || (!('error' in tags) && !('error.type' in tags))
+      )
+    ) {
+      trace.error = 0
+      return
+    }
+  }
+
+  const error = spanData.error || tags.error
 
   if (error instanceof Error) {
     trace.meta['error.msg'] = error.message

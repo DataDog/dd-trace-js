@@ -150,7 +150,7 @@ describe('format', () => {
     it('should extract errors', () => {
       const error = new Error('boom')
 
-      spanContext._tags['error'] = error
+      spanContext._spanData.error = error
       trace = format(span)
 
       expect(trace.meta['error.msg']).to.equal(error.message)

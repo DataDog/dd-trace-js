@@ -41,11 +41,7 @@ function wrapPromise (span, promise) {
 
 function finish (span, error) {
   if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
+    span.addTags({ error })
   }
 
   span.finish()
