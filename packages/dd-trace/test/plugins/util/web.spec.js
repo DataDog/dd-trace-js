@@ -417,7 +417,7 @@ describe('plugins/util/web', () => {
 
         expect(tags).to.include({
           resource: 'GET',
-          [HTTP_STATUS_CODE]: 200
+          [HTTP_STATUS_CODE]: '200'
         })
       })
 

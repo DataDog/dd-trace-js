@@ -75,9 +75,7 @@ describe('SpanContext', () => {
         meta: {},
         metrics: {},
         name: undefined,
-        parent_id: {
-          _buffer: spanContext._spanData.parent_id._buffer
-        },
+        parent_id: null,
         span_id: '456',
         trace_id: '123'
       },

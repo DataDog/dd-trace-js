@@ -77,7 +77,7 @@ describe('format', () => {
       expect(trace.parent_id.toString()).to.equal('0000000000000000')
       expect(trace.name).to.equal(span.context()._spanData.name)
       expect(trace.resource).to.equal(span.context()._spanData.name)
-      expect(trace.error).to.equal(1)
+      expect(trace.error).to.equal(0)
       expect(trace.start).to.equal(span.context()._spanData.start)
       expect(trace.duration).to.equal(span.context()._spanData.duration)
     })
@@ -258,7 +258,7 @@ describe('format', () => {
     })
 
     it('should sanitize the input', () => {
-      spanContext._name = null
+      spanContext._spanData.name = null
       spanContext._tags = {
         'foo.bar': null,
         'baz.qux': undefined

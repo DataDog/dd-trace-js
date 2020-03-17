@@ -3,6 +3,7 @@
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
+const id = require('./id')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -33,9 +34,13 @@ function formatSpan (span) {
   const spanContext = span.context()
 
   const spanData = spanContext._spanData
+  if (spanData.parent_id === null) {
+    spanData.parent_id = id('0000000000000000')
+  }
 
-  spanData.name = serialize(spanContext._name)
-  spanData.resource = serialize(spanContext._name)
+  spanData.name = serialize(spanData.name)
+  spanData.resource = serialize(spanData.resource || spanData.name)
+  spanData.error = spanData.error || 0
 
   return spanData
 }
@@ -54,7 +59,7 @@ function extractJustTags (trace, tags) {
         addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
         break
       case HOSTNAME_KEY:
-      case ANALYTICS:
+      // case ANALYTICS: // XXX TODO (bengl) what is this line for??
         break
       case 'error':
         if (tags[tag]) {

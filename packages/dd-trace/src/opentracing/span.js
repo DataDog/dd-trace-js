@@ -30,7 +30,6 @@ class DatadogSpan extends Span {
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
     // this._spanContext._tags = tags
-    debugger; // eslint-disable-line
     this._addTags(tags)
     this._spanContext._hostname = hostname
 
@@ -53,8 +52,9 @@ class DatadogSpan extends Span {
   }
 
   toString () {
+    return ''
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name']
+    const resourceName = spanContext._resource
     const resource = resourceName.length > 100
       ? `${resourceName.substring(0, 97)}...`
       : resourceName
@@ -62,7 +62,7 @@ class DatadogSpan extends Span {
       traceId: spanContext._traceId,
       spanId: spanContext._spanId,
       parentId: spanContext._parentId,
-      service: spanContext._tags['service.name'],
+      service: spanContext._service,
       name: spanContext._name,
       resource
     })

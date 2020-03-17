@@ -2,8 +2,6 @@
 
 const SpanContext = require('opentracing').SpanContext
 
-const id = require('../id')
-
 class DatadogSpanContext extends SpanContext {
   constructor (props) {
     super()
@@ -14,7 +12,7 @@ class DatadogSpanContext extends SpanContext {
       name: props.name,
       trace_id: props.traceId,
       span_id: props.spanId,
-      parent_id: props.parentId || id(0),
+      parent_id: props.parentId || null,
       error: 0,
       metrics: {},
       meta: {}

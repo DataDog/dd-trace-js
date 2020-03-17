@@ -184,7 +184,7 @@ const web = {
     const error = req._datadog.error
 
     if (!req._datadog.config.validateStatus(statusCode)) {
-      span.setTag(ERROR, error || true)
+      span.addTags({ error: error || 1 })
     }
   },
 
@@ -376,7 +376,7 @@ function addResourceTag (req) {
   if (context._resource) return
 
   const resource = [req.method]
-    .concat(tags[HTTP_ROUTE])
+    .concat(context._spanData.meta[HTTP_ROUTE])
     .filter(val => val)
     .join(' ')
 

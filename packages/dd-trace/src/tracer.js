@@ -108,11 +108,7 @@ class DatadogTracer extends Tracer {
 
 function addError (span, error) {
   if (error && error instanceof Error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
+    span.addTags({ error })
   }
 }
 

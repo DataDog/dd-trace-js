@@ -43,7 +43,6 @@ describe('Span', () => {
     }
 
     tagger = {
-      add: sinon.spy(),
       addToSpanContext: sinon.spy()
     }
 
@@ -85,10 +84,7 @@ describe('Span', () => {
     expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context()._trace).to.equal(parent._trace)
-  })
-
-  it('should set the sample rate metric from the sampler', () => {
-    expect(span.context()._spanData.metrics).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
+    expect(tagger.addToSpanContext).to.have.been.calledWith(span.context(), { [SAMPLE_RATE_METRIC_KEY]: 1 })
   })
 
   it('should keep track of its memory lifecycle', () => {
