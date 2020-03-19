@@ -75,7 +75,6 @@
     "require-in-the-middle": "^2.2.2",
     "semver": "^5.5.0",
     "shimmer": "^1.2.0",
-    "tar": "^4.4.8",
     "url-parse": "^1.4.3",
     "whatwg-fetch": "^3.0.0"
   },
@@ -117,6 +116,7 @@
     "sinon": "^8.0.4",
     "sinon-chai": "^3.4.0",
     "tape": "^4.9.1",
+    "tar": "^4.4.8",
     "webpack": "^4.40.2",
     "webpack-cli": "^3.3.9"
   }
