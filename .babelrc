@@ -5,5 +5,11 @@
         "ie": "10"
       }
     }]
+  ],
+  "plugins": [
+    ["@babel/plugin-proposal-decorators", {
+      "legacy": true
+      }
+    ]
   ]
 }

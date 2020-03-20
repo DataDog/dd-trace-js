@@ -1004,6 +1004,37 @@ declare namespace plugins {
   interface winston extends Integration {}
 }
 
+interface TraceConfig {
+  className?: string;
+  methodName?: string;
+  serviceName?: string;
+  spanName?: string;
+  resourceName?: string;
+  /** Cause the span to show up in trace search and analytics */
+  appAnalytics?: boolean;
+  tags?: { [key: string]: any };
+}
+
+interface Constructor {
+  new (...args: any[]): any;
+}
+
+/**
+ * This decorator will cause the methods of a class, or an individual method, to be traced by the APM.
+ *
+ * @param config Optional configuration for the span that will be created for this trace.
+ */
+declare function trace(config?: TraceConfig): {
+  (target: Constructor): void;
+  <T>(target: Record<string, any>, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<T>): void;
+};
+
+interface Decorator {
+  trace,
+}
+
+export declare const decorator: Decorator;
+
 /**
  * Singleton returned by the module. It has to be initialized before it will
  * start tracing. If not initialized, or initialized and disabled, it will use
