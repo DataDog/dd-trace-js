@@ -135,7 +135,7 @@ function getBasedir (id) {
 }
 
 function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => semver.satisfies(version, range)))
+  return !version || (ranges && ranges.some(range => semver.satisfies(semver.coerce(version), range)))
 }
 
 function getVersion (moduleBaseDir) {
