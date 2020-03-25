@@ -443,6 +443,7 @@ interface Plugins {
   "koa": plugins.koa;
   "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
+  "microgateway-core": plugins.microgateway_core;
   "mongodb-core": plugins.mongodb_core;
   "mysql": plugins.mysql;
   "mysql2": plugins.mysql2;
@@ -896,6 +897,12 @@ declare namespace plugins {
    * [memcached](https://github.com/3rd-Eden/memcached) module.
    */
   interface memcached extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [microgateway-core](https://github.com/apigee/microgateway-core) module.
+   */
+  interface microgateway_core extends HttpServer {}
 
   /**
    * This plugin automatically instruments the

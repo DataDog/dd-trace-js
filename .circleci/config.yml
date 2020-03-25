@@ -462,6 +462,13 @@ jobs:
           - PLUGINS=memcached
       - image: memcached:1.5-alpine
 
+  node-microgateway-core:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=microgateway-core
+
   node-tedious:
     <<: *node-plugin-base
     docker:
@@ -880,8 +887,8 @@ workflows:
       - node-koa
       # - node-limitd-client
       - node-memcached
+      - node-microgateway-core
       - node-mongodb-core
-      - node-tedious
       - node-mysql
       - node-net
       - node-paperplane
@@ -893,6 +900,7 @@ workflows:
       - node-redis
       - node-restify
       - node-router
+      - node-tedious
       - node-when
       - node-winston
   prebuild:
@@ -1036,6 +1044,7 @@ workflows:
       - node-koa
       # - node-limitd-client
       - node-memcached
+      - node-microgateway-core
       - node-mongodb-core
       - node-mysql
       - node-net
