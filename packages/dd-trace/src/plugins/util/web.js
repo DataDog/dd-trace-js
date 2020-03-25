@@ -218,10 +218,9 @@ function startSpan (tracer, config, req, res, name) {
 }
 
 function configureDatadogObject (tracer, span, req, res) {
-  const ddObj = req._datadog
-  ddObj.tracer = tracer
-  ddObj.span = span
-  ddObj.res = res
+  req._datadog.tracer = tracer
+  req._datadog.span = span
+  req._datadog.res = res
 }
 
 function finish (req, res) {
@@ -257,9 +256,7 @@ function wrapEnd (req) {
   res.writeHead = wrapWriteHead(req)
 
   let _end = req._datadog.end = res.end = function () {
-    for (const beforeEnd of req._datadog.beforeEnd) {
-      beforeEnd()
-    }
+    req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
 
     finishMiddleware(req, res)
 

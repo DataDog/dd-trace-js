@@ -34,8 +34,6 @@ let sampler
 const spanStub = require('./stubs/span')
 const span = format(spanStub)
 
-const buffer = Buffer.alloc(10 * 1024 * 1024)
-
 suite
   .add('DatadogTracer#startSpan', {
     onStart () {
@@ -95,7 +93,7 @@ suite
   })
   .add('encode', {
     fn () {
-      encode(buffer, 0, [span])
+      encode([span])
     }
   })
   .add('id', {

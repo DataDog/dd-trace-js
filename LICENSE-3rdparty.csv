@@ -13,7 +13,6 @@ require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
-require,mnemonist,MIT,Copyright 2016 Guillaume Plique (Yomguithereal)
 require,nan,MIT,Copyright 2018 NAN contributors
 require,node-gyp-build,MIT,Copyright 2017 Mathias Buus
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
@@ -28,7 +27,6 @@ require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 require,whatwg-fetch,MIT,Copyright 2014-2016 GitHub Inc.
 dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
-dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton

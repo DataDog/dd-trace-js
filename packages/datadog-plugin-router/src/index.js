@@ -4,8 +4,6 @@ const METHODS = require('methods').concat('all')
 const pathToRegExp = require('path-to-regexp')
 const web = require('../../dd-trace/src/plugins/util/web')
 
-const regexpCache = Object.create(null)
-
 function createWrapHandle (tracer, config) {
   return function wrapHandle (handle) {
     return function handleWithTracer (req, res, done) {
@@ -129,7 +127,7 @@ function extractMatchers (fn) {
 
   return arg.map(pattern => ({
     path: pattern instanceof RegExp ? `(${pattern})` : pattern,
-    test: layer => !isFastStar(layer) && !isFastSlash(layer) && cachedPathToRegExp(pattern).test(layer.path)
+    test: layer => !isFastStar(layer) && !isFastSlash(layer) && pathToRegExp(pattern).test(layer.path)
   }))
 }
 
@@ -151,16 +149,6 @@ function isFastSlash (layer) {
 
 function flatten (arr) {
   return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
-}
-
-function cachedPathToRegExp (pattern) {
-  const maybeCached = regexpCache[pattern]
-  if (maybeCached) {
-    return maybeCached
-  }
-  const regexp = pathToRegExp(pattern)
-  regexpCache[pattern] = regexp
-  return regexp
 }
 
 module.exports = {
