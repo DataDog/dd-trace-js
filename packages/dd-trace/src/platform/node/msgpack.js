@@ -1,22 +1,22 @@
 'use strict'
 
 module.exports = {
-  prefix (contents, count) {
-    let start
+  prefix (array) {
+    let buffer
 
-    if (count <= 0xf) { // fixarray
-      start = 4
-      contents.fill(0x90 + count, 4, 5)
-    } else if (count <= 0xffff) { // array 16
-      start = 2
-      contents.fill(0xdc, 2, 3)
-      contents.writeUInt16BE(count, 3)
+    if (array.length <= 0xf) { // fixarray
+      buffer = Buffer.alloc(1)
+      buffer.fill(0x90 + array.length)
+    } else if (array.length <= 0xffff) { // array 16
+      buffer = Buffer.alloc(3)
+      buffer.fill(0xdc, 0, 1)
+      buffer.writeUInt16BE(array.length, 1)
     } else { // array 32
-      start = 0
-      contents.fill(0xdd, 0, 1)
-      contents.writeUInt32BE(count, 1)
+      buffer = Buffer.alloc(5)
+      buffer.fill(0xdd, 0, 1)
+      buffer.writeUInt32BE(array.length, 1)
     }
 
-    return [contents.slice(start)]
+    return [buffer].concat(array)
   }
 }

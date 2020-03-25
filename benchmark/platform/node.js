@@ -9,15 +9,22 @@ platform.use(node)
 
 const suite = benchmark('platform (node)')
 
+const traceStub = require('../stubs/trace')
 const spanStub = require('../stubs/span')
 const config = new Config('bench', {})
 
 platform.configure(config)
+platform.metrics().start()
 
 suite
   .add('now', {
     fn () {
       platform.now()
+    }
+  })
+  .add('msgpack#prefix', {
+    fn () {
+      platform.msgpack.prefix(traceStub)
     }
   })
   .add('metrics#track', {
