@@ -57,6 +57,10 @@
     {
       "name": "pg-native",
       "versions": ["3.0.0"]
+    },
+    {
+      "name": "pg-cursor",
+      "versions": ["2.1.6"]
     }
   ]
 }
