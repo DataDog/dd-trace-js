@@ -33,6 +33,7 @@ class DatadogTracer extends Tracer {
     const Exporter = platform.exporter(config.experimental.exporter)
 
     this._service = config.service
+    this._version = config.version
     this._env = config.env
     this._tags = config.tags
     this._logInjection = config.logInjection
@@ -65,10 +66,6 @@ class DatadogTracer extends Tracer {
 
     const tags = {
       'service.name': this._service
-    }
-
-    if (this._env) {
-      tags.env = this._env
     }
 
     const span = new Span(this, this._processor, this._sampler, this._prioritySampler, {

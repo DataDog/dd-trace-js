@@ -10,9 +10,21 @@ const id = require('./id')
 const runtimeId = `${id().toString()}${id().toString()}`
 
 class Config {
-  constructor (service, options) {
+  constructor (options) {
     options = options || {}
 
+    const service = coalesce(
+      options.service,
+      platform.env('DD_SERVICE'),
+      platform.env('DD_SERVICE_NAME'),
+      platform.service(),
+      'node'
+    )
+    const version = coalesce(
+      options.version,
+      platform.env('DD_VERSION'),
+      platform.version()
+    )
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
@@ -44,6 +56,7 @@ class Config {
     tagger.add(tags, platform.env('DD_TRACE_TAGS'))
     tagger.add(tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
     tagger.add(tags, options.tags)
+    tagger.add(tags, { service, env, version })
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
 
@@ -64,7 +77,8 @@ class Config {
     this.sampleRate = sampleRate
     this.logger = options.logger
     this.plugins = !!plugins
-    this.service = coalesce(options.service, platform.env('DD_SERVICE_NAME'), service, 'node')
+    this.service = service
+    this.version = version
     this.analytics = String(analytics) === 'true'
     this.tags = tags
     this.dogstatsd = {

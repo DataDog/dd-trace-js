@@ -237,6 +237,12 @@ export declare interface TracerOptions {
   env?: string;
 
   /**
+   * The version number of the application. If not set, the version
+   * will attempted to be inferred from package.json.
+   */
+  version?: string;
+
+  /**
    * Percentage of spans to sample as a float between 0 and 1.
    * @default 1
    */

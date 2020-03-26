@@ -6,7 +6,9 @@ describe('Config', () => {
 
   beforeEach(() => {
     platform = {
-      env: sinon.stub()
+      env: sinon.stub(),
+      service: sinon.stub(),
+      version: sinon.stub()
     }
 
     Config = proxyquire('../src/config', {
@@ -25,7 +27,7 @@ describe('Config', () => {
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('trackAsyncScope', true)
-    expect(config).to.have.deep.property('tags', {})
+    expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
@@ -36,9 +38,21 @@ describe('Config', () => {
   })
 
   it('should initialize from the default service', () => {
-    const config = new Config('test')
+    platform.service.returns('test')
+
+    const config = new Config()
 
     expect(config).to.have.property('service', 'test')
+    expect(config.tags).to.have.property('service', 'test')
+  })
+
+  it('should initialize from the default version', () => {
+    platform.version.returns('1.2.3')
+
+    const config = new Config()
+
+    expect(config).to.have.property('version', '1.2.3')
+    expect(config.tags).to.have.property('version', '1.2.3')
   })
 
   it('should initialize from environment variables', () => {
@@ -48,7 +62,8 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
-    platform.env.withArgs('DD_SERVICE_NAME').returns('service')
+    platform.env.withArgs('DD_SERVICE').returns('service')
+    platform.env.withArgs('DD_VERSION').returns('1.0.0')
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
@@ -65,11 +80,13 @@ describe('Config', () => {
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
+    expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('clientToken', '789')
-    expect(config).to.have.deep.property('tags', { foo: 'bar', baz: 'qux' })
+    expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
+    expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
   })
 
@@ -80,7 +97,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
-    platform.env.withArgs('DD_SERVICE_NAME').returns('service')
+    platform.env.withArgs('DD_SERVICE').returns('service')
     platform.env.withArgs('DD_ENV').returns('test')
 
     const config = new Config()
@@ -101,7 +118,7 @@ describe('Config', () => {
       'foo': 'bar'
     }
     const logLevel = 'error'
-    const config = new Config('test', {
+    const config = new Config({
       enabled: false,
       debug: true,
       analytics: true,
@@ -112,6 +129,7 @@ describe('Config', () => {
         port: 5218
       },
       service: 'service',
+      version: '0.1.0',
       env: 'test',
       sampleRate: 0.5,
       logger,
@@ -142,10 +160,14 @@ describe('Config', () => {
     expect(config).to.have.property('port', '6218')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
+    expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
     expect(config.tags).to.have.property('foo', 'bar')
+    expect(config.tags).to.have.property('service', 'service')
+    expect(config.tags).to.have.property('version', '0.1.0')
+    expect(config.tags).to.have.property('env', 'test')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('trackAsyncScope', false)
@@ -166,7 +188,7 @@ describe('Config', () => {
   it('should initialize from the options with url taking precedence', () => {
     const logger = {}
     const tags = { foo: 'bar' }
-    const config = new Config('test', {
+    const config = new Config({
       enabled: false,
       debug: true,
       hostname: 'agent',
@@ -206,7 +228,7 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.property('hostname', 'agent')
-    expect(config).to.have.deep.property('tags', { foo: 'foo', baz: 'qux' })
+    expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
   })
 
   it('should give priority to the options', () => {
@@ -218,7 +240,8 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
-    platform.env.withArgs('DD_SERVICE_NAME').returns('service')
+    platform.env.withArgs('DD_SERVICE').returns('service')
+    platform.env.withArgs('DD_VERSION').returns('0.0.0')
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
@@ -226,7 +249,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_APP_KEY').returns('456')
     platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
 
-    const config = new Config('test', {
+    const config = new Config({
       enabled: true,
       debug: false,
       analytics: false,
@@ -240,6 +263,7 @@ describe('Config', () => {
       runtimeMetrics: false,
       reportHostname: false,
       service: 'test',
+      version: '1.0.0',
       env: 'development',
       clientToken: '789',
       tags: {
@@ -258,9 +282,11 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('service', 'test')
+    expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientToken', '789')
-    expect(config).to.have.deep.property('tags', { foo: 'foo', baz: 'qux' })
+    expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
+    expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
   })
 
   it('should give priority to the options especially url', () => {
@@ -272,7 +298,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_SERVICE_NAME').returns('service')
     platform.env.withArgs('DD_ENV').returns('test')
 
-    const config = new Config('test', {
+    const config = new Config({
       enabled: true,
       debug: false,
       url: 'https://agent3:7778',
@@ -292,9 +318,24 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
   })
 
+  it('should give priority to individual options over tags', () => {
+    platform.env.withArgs('DD_SERVICE').returns('test')
+    platform.env.withArgs('DD_ENV').returns('dev')
+    platform.env.withArgs('DD_VERSION').returns('1.0.0')
+    platform.env.withArgs('DD_TAGS', 'service=foo,env=bar,version=0.0.0')
+
+    const config = new Config()
+
+    expect(config.tags).to.include({
+      service: 'test',
+      env: 'dev',
+      version: '1.0.0'
+    })
+  })
+
   it('should sanitize the sample rate to be between 0 and 1', () => {
-    expect(new Config('test', { sampleRate: -1 })).to.have.property('sampleRate', 0)
-    expect(new Config('test', { sampleRate: 2 })).to.have.property('sampleRate', 1)
-    expect(new Config('test', { sampleRate: NaN })).to.have.property('sampleRate', 1)
+    expect(new Config({ sampleRate: -1 })).to.have.property('sampleRate', 0)
+    expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
+    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', 1)
   })
 })

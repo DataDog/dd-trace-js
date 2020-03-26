@@ -390,8 +390,6 @@ describe('Platform', () => {
 
         platform = {
           _config: {
-            service: 'service',
-            env: 'test',
             hostname: 'localhost',
             dogstatsd: {
               port: 8125
@@ -422,8 +420,6 @@ describe('Platform', () => {
           expect(Client).to.have.been.calledWithMatch({
             host: 'localhost',
             tags: [
-              'service:service',
-              'env:test',
               'str:bar',
               'invalid:t_e_s_t5-:./'
             ]

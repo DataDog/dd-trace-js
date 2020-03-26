@@ -27,13 +27,7 @@ reset()
 module.exports = function () {
   return metrics || (metrics = { // cache the metrics instance
     start: (options) => {
-      const tags = [
-        `service:${this._config.service}`
-      ]
-
-      if (this._config.env) {
-        tags.push(`env:${this._config.env}`)
-      }
+      const tags = []
 
       Object.keys(this._config.tags)
         .filter(key => typeof this._config.tags[key] === 'string')

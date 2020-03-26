@@ -11,7 +11,7 @@ const suite = benchmark('platform (node)')
 
 const traceStub = require('../stubs/trace')
 const spanStub = require('../stubs/span')
-const config = new Config('bench', {})
+const config = new Config()
 
 platform.configure(config)
 platform.metrics().start()
