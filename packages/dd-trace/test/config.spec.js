@@ -8,7 +8,7 @@ describe('Config', () => {
     platform = {
       env: sinon.stub(),
       service: sinon.stub(),
-      version: sinon.stub()
+      appVersion: sinon.stub()
     }
 
     Config = proxyquire('../src/config', {
@@ -47,7 +47,7 @@ describe('Config', () => {
   })
 
   it('should initialize from the default version', () => {
-    platform.version.returns('1.2.3')
+    platform.appVersion.returns('1.2.3')
 
     const config = new Config()
 
