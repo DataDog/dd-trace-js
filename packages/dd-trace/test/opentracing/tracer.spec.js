@@ -277,19 +277,6 @@ describe('Tracer', () => {
       expect(span.addTags).to.have.been.calledWith(fields.tags)
     })
 
-    it('should add the env tag from the env option', () => {
-      config.env = 'test'
-
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
-        tags: {
-          'env': 'test'
-        }
-      })
-    })
-
     it('should return a noop span when not sampled', () => {
       sampler.isSampled.returns(false)
 
