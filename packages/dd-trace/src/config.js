@@ -23,7 +23,7 @@ class Config {
     const version = coalesce(
       options.version,
       platform.env('DD_VERSION'),
-      platform.version()
+      platform.appVersion()
     )
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
