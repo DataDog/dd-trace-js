@@ -87,6 +87,16 @@ function withVersions (plugin, modules, range, cb) {
       .forEach(instrumentation => {
         instrumentation.versions
           .forEach(version => {
+            const nodePath = process.env.NODE_PATH
+
+            if (instrumentation.peers) {
+              instrumentation.peers.forEach(peer => {
+                process.env.NODE_PATH = `${__dirname}/../../../../versions/${peer}/node_modules`
+              })
+
+              require('module').Module._initPaths()
+            }
+
             try {
               const min = semver.coerce(version).version
               require(`../../../../versions/${moduleName}@${min}`).get()
@@ -106,6 +116,11 @@ function withVersions (plugin, modules, range, cb) {
             }
 
             agent.wipe()
+
+            if (instrumentation.peers) {
+              process.env.NODE_PATH = nodePath
+              require('module').Module._initPaths()
+            }
           })
       })
 
