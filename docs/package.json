@@ -9,7 +9,7 @@
   "license": "BSD-3-Clause",
   "private": true,
   "devDependencies": {
-    "typedoc": "^0.14.2",
-    "typescript": "^3.3.3"
+    "typedoc": "^0.17.3",
+    "typescript": "^3.8.3"
   }
 }
