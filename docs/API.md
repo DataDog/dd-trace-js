@@ -15,7 +15,7 @@ This library instruments the most popular JavaScript modules out of the box.
 
 If you aren’t using supported library instrumentation (see [Compatibility](https://docs.datadoghq.com/tracing/setup/nodejs/#compatibility)), you may want to manually instrument your code.
 
-This can be done using the [tracer.trace()](#opentracing-api) and the [tracer.wrap()](#scope-manager) methods. The span lifecycle and scope management is handled automatically by these methods.
+This can be done using the [tracer.trace()](./interfaces/tracer.html#trace) and the [tracer.wrap()](./interfaces/tracer.html#wrap) methods which handle the span lifecycle and scope management automatically. In some rare cases the scope needs to be handled manually as well in which case the [tracer.scope()](./interfaces/tracer.html#scope) method is provided.
 
 For example:
 
@@ -35,7 +35,7 @@ app.get('/users', (req, res) => {
 
 The different ways to use the above methods are described below.
 
-<h3 id="tracer-trace">tracer.trace()</h3>
+<h3 id="tracer-trace">tracer.trace(name[, options], callback)</h3>
 
 This method allows you to trace a specific operation at the moment it is executed. It supports synchronous and asynchronous operations depending on how it's called.
 
@@ -98,7 +98,7 @@ async function handle () {
 
 Any error from the awaited handler will automatically be added to the span.
 
-<h3 id="tracer-wrap">tracer.wrap()</h3>
+<h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
 This method works very similarly to `tracer.trace()` except it wraps a function so that `tracer.trace()` is called automatically every time the function is called. This makes it easier to patch entire functions that have already been defined, or that are returned from code that cannot be edited easily.
 
@@ -123,11 +123,9 @@ function handle (a, b, c, callback) {
 const handleWithTrace = tracer.wrap('web.request', handle)
 ```
 
-<h3 id="scope-manager">Scope Manager</h3>
+<h3 id="scope-manager">tracer.scope()</h3>
 
-In order to provide context propagation, this library includes a scope manager.
-A scope is basically a wrapper around a span that can cross both synchronous and
-asynchronous contexts.
+In order to provide context propagation, this library includes a scope manager available with `tracer.scope()`. A scope is basically a wrapper around a span that can cross both synchronous and asynchronous contexts.
 
 In most cases, it's not necessary to interact with the scope manager since `tracer.trace()` activates the span on its scope, and uses the  active span on the current scope if available as its parent. This should only be used directly for edge cases, like an internal queue of functions that are executed on a timer for example in which case the scope is lost.
 
