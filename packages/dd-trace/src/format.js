@@ -8,6 +8,7 @@ const id = require('./id')
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
+const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
@@ -64,6 +65,9 @@ function extractTags (trace, span) {
         break
       case HOSTNAME_KEY:
       case ANALYTICS:
+        break
+      case MEASURED:
+        addTag({}, trace.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
       case 'error':
         if (tags[tag] && tags['span.kind'] !== 'internal') {

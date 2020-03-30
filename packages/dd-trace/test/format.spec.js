@@ -7,6 +7,7 @@ const id = require('../src/id')
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
+const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
@@ -481,6 +482,24 @@ describe('format', () => {
       spanContext._tags[ANALYTICS] = '0.5'
       trace = format(span)
       expect(trace.metrics[ANALYTICS_KEY]).to.equal(0.5)
+    })
+
+    it('should accept a boolean for measured', () => {
+      spanContext._tags[MEASURED] = true
+      trace = format(span)
+      expect(trace.metrics[MEASURED]).to.equal(1)
+    })
+
+    it('should accept a numeric value for measured', () => {
+      spanContext._tags[MEASURED] = 0
+      trace = format(span)
+      expect(trace.metrics[MEASURED]).to.equal(0)
+    })
+
+    it('should accept undefined for measured', () => {
+      spanContext._tags[MEASURED] = undefined
+      trace = format(span)
+      expect(trace.metrics[MEASURED]).to.equal(1)
     })
   })
 })

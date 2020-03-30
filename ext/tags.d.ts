@@ -8,6 +8,7 @@ declare const tags: {
   ERROR: 'error'
   MANUAL_KEEP: 'manual.keep'
   MANUAL_DROP: 'manual.drop'
+  MEASURED: '_dd.measured'
   HTTP_URL: 'http.url'
   HTTP_METHOD: 'http.method'
   HTTP_STATUS_CODE: 'http.status_code'

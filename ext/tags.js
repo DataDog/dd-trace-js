@@ -11,6 +11,7 @@ const tags = {
   ERROR: 'error',
   MANUAL_KEEP: 'manual.keep',
   MANUAL_DROP: 'manual.drop',
+  MEASURED: '_dd.measured',
 
   // HTTP
   HTTP_URL: 'http.url',
