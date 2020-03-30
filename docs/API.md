@@ -144,22 +144,6 @@ If you aren’t using supported library instrumentation (see [Compatibility](htt
 
 This can be done using the [tracer.trace()](./interfaces/tracer.html#trace) and the [tracer.wrap()](./interfaces/tracer.html#wrap) methods which handle the span lifecycle and scope management automatically. In some rare cases the scope needs to be handled manually as well in which case the [tracer.scope()](./interfaces/tracer.html#scope) method is provided.
 
-For example:
-
-```javascript
-const tracer = require('dd-trace').init()
-const app = require('./app')
-const { getUsers } = require('./db')
-
-app.get('/users', (req, res) => {
-  tracer.trace('web.request', () => {
-    getUsers()
-      .then(users => res.send(users))
-      .catch(() => res.status(500).send())
-  })
-})
-```
-
 The different ways to use the above methods are described below.
 
 <h3 id="tracer-trace">tracer.trace(name[, options], callback)</h3>
