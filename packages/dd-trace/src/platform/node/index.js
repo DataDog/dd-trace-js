@@ -5,7 +5,6 @@ const crypto = require('./crypto')
 const now = require('./now')
 const env = require('./env')
 const validate = require('./validate')
-const service = require('./service')
 const request = require('./request')
 const msgpack = require('./msgpack')
 const metrics = require('./metrics')
@@ -14,6 +13,7 @@ const hostname = require('./hostname')
 const Loader = require('./loader')
 const Scope = require('../../scope/async_hooks')
 const exporter = require('./exporter')
+const pkg = require('./pkg')
 
 const emitter = new EventEmitter()
 
@@ -27,7 +27,8 @@ const platform = {
   env,
   tags: () => ({}),
   validate,
-  service,
+  service: () => process.env['AWS_LAMBDA_FUNCTION_NAME'] || pkg.name,
+  appVersion: () => pkg.version,
   request,
   msgpack,
   metrics,

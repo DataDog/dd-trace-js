@@ -7,10 +7,16 @@ class LogPropagator {
   inject (spanContext, carrier) {
     if (!carrier) return
 
+    const tags = spanContext._tags
+
     carrier.dd = {
       trace_id: spanContext.toTraceId(),
       span_id: spanContext.toSpanId()
     }
+
+    if (tags.service) carrier.dd.service = tags.service
+    if (tags.version) carrier.dd.version = tags.version
+    if (tags.env) carrier.dd.env = tags.env
   }
 
   extract (carrier) {

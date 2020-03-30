@@ -323,7 +323,8 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | -------------- | ------------------------------ | ----------- | ----------- |
 | enabled        | `DD_TRACE_ENABLED`             | `true`      | Whether to enable the tracer. |
 | debug          | `DD_TRACE_DEBUG`               | `false`     | Enable debug logging in the tracer. |
-| service        | `DD_SERVICE_NAME`              | -           | The service name to be used for this program. |
+| service        | `DD_SERVICE`                   | -           | The service name to be used for this program. Defaults to value of the `name` field in `package.json`. |
+| version        | `DD_VERSION`                   | -           | The version number of the application. Defaults to value of the `version` field in `package.json`. |
 | url            | `DD_TRACE_AGENT_URL`           | -           | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
 | hostname       | `DD_TRACE_AGENT_HOSTNAME`      | `localhost` | The address of the agent that the tracer will submit to. |
 | port           | `DD_TRACE_AGENT_PORT`          | `8126`      | The port of the trace agent that the tracer will submit to. |

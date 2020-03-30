@@ -38,6 +38,7 @@ tracer.init({
   logInjection: true,
   analytics: true,
   env: 'test',
+  version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
   trackAsyncScope: false,

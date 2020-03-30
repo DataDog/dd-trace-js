@@ -24,7 +24,12 @@ describe('LogPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('-456', 10)
+        spanId: id('-456', 10),
+        tags: {
+          service: 'test',
+          env: 'dev',
+          version: '1.0.0'
+        }
       })
 
       propagator.inject(spanContext, carrier)
@@ -32,7 +37,10 @@ describe('LogPropagator', () => {
       expect(carrier).to.deep.include({
         dd: {
           trace_id: '123',
-          span_id: '18446744073709551160' // -456 casted to uint64
+          span_id: '18446744073709551160', // -456 casted to uint64
+          service: 'test',
+          env: 'dev',
+          version: '1.0.0'
         }
       })
     })

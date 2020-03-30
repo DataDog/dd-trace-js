@@ -130,58 +130,36 @@ describe('Platform', () => {
     })
 
     describe('service', () => {
-      let current
-      let service
-      let readPkgUp
-
       beforeEach(() => {
-        readPkgUp = {
-          sync: sinon.stub()
-        }
-
         platform = require('../../../src/platform/node')
-        service = proxyquire('../src/platform/node/service', {
-          'read-pkg-up': readPkgUp
-        })
-
-        current = platform._service
       })
 
       afterEach(() => {
-        platform._service = current
         delete process.env['AWS_LAMBDA_FUNCTION_NAME']
       })
 
-      it('should load the service name from the user module', () => {
-        const name = require('./load/direct')
+      it('should load the service name from the main module', () => {
+        const name = platform.service()
 
-        expect(name).to.equal('foo')
-      })
-
-      it('should not load the service name if the module information is unavailable', () => {
-        readPkgUp.sync.returns({ pkg: undefined })
-
-        service.call(platform)
-
-        expect(platform._service).to.be.undefined
+        expect(name).to.equal('mocha')
       })
 
       it('should use the use the lambda function name as the service when in AWS Lambda', () => {
         process.env['AWS_LAMBDA_FUNCTION_NAME'] = 'my-function-name'
-        const result = service()
+        const result = platform.service()
         expect(result).to.equal('my-function-name')
       })
+    })
 
-      it('should work even in subfolders', () => {
-        const name = require('./load/indirect')
-
-        expect(name).to.equal('foo')
+    describe('appVersion', () => {
+      beforeEach(() => {
+        platform = require('../../../src/platform/node')
       })
 
-      it('should work even in dependencies', () => {
-        const name = require('./load/node_modules/dep')
+      it('should load the version number from the main module', () => {
+        const version = platform.appVersion()
 
-        expect(name).to.equal('foo')
+        expect(version).to.match(/^\d+.\d+.\d+/)
       })
     })
 
@@ -390,8 +368,6 @@ describe('Platform', () => {
 
         platform = {
           _config: {
-            service: 'service',
-            env: 'test',
             hostname: 'localhost',
             dogstatsd: {
               port: 8125
@@ -422,8 +398,6 @@ describe('Platform', () => {
           expect(Client).to.have.been.calledWithMatch({
             host: 'localhost',
             tags: [
-              'service:service',
-              'env:test',
               'str:bar',
               'invalid:t_e_s_t5-:./'
             ]

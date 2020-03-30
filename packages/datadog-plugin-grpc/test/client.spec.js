@@ -74,16 +74,17 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getUnary',
-                meta: {
-                  'grpc.method.name': 'getUnary',
-                  'grpc.method.service': 'TestService',
-                  'grpc.method.package': 'test',
-                  'grpc.method.path': '/test.TestService/getUnary',
-                  'grpc.method.kind': kinds.unary,
-                  'span.kind': 'client',
-                  'component': 'grpc'
-                }
+                resource: '/test.TestService/getUnary'
+              })
+
+              expect(traces[0][0].meta).to.include({
+                'grpc.method.name': 'getUnary',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': kinds.unary,
+                'span.kind': 'client',
+                'component': 'grpc'
               })
 
               expect(traces[0][0].metrics).to.include({
@@ -108,16 +109,17 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getServerStream',
-                meta: {
-                  'grpc.method.name': 'getServerStream',
-                  'grpc.method.service': 'TestService',
-                  'grpc.method.package': 'test',
-                  'grpc.method.path': '/test.TestService/getServerStream',
-                  'grpc.method.kind': kinds.server_stream,
-                  'span.kind': 'client',
-                  'component': 'grpc'
-                }
+                resource: '/test.TestService/getServerStream'
+              })
+
+              expect(traces[0][0].meta).to.include({
+                'grpc.method.name': 'getServerStream',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getServerStream',
+                'grpc.method.kind': kinds.server_stream,
+                'span.kind': 'client',
+                'component': 'grpc'
               })
 
               expect(traces[0][0].metrics).to.include({
@@ -144,16 +146,17 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getClientStream',
-                meta: {
-                  'grpc.method.name': 'getClientStream',
-                  'grpc.method.service': 'TestService',
-                  'grpc.method.package': 'test',
-                  'grpc.method.path': '/test.TestService/getClientStream',
-                  'grpc.method.kind': kinds.client_stream,
-                  'span.kind': 'client',
-                  'component': 'grpc'
-                }
+                resource: '/test.TestService/getClientStream'
+              })
+
+              expect(traces[0][0].meta).to.include({
+                'grpc.method.name': 'getClientStream',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getClientStream',
+                'grpc.method.kind': kinds.client_stream,
+                'span.kind': 'client',
+                'component': 'grpc'
               })
 
               expect(traces[0][0].metrics).to.include({
@@ -313,16 +316,17 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getUnary',
-                meta: {
-                  'grpc.method.name': 'getUnary',
-                  'grpc.method.service': 'TestService',
-                  'grpc.method.package': 'test',
-                  'grpc.method.path': '/test.TestService/getUnary',
-                  'grpc.method.kind': kinds.unary,
-                  'span.kind': 'client',
-                  'component': 'grpc'
-                }
+                resource: '/test.TestService/getUnary'
+              })
+
+              expect(traces[0][0].meta).to.include({
+                'grpc.method.name': 'getUnary',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': kinds.unary,
+                'span.kind': 'client',
+                'component': 'grpc'
               })
 
               expect(traces[0][0].metrics).to.deep.include({
