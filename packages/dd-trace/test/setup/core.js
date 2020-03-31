@@ -100,7 +100,27 @@ function withVersions (plugin, modules, range, cb) {
       .sort(v => v[0].localeCompare(v[0]))
       .map(v => Object.assign({}, v[1], { version: v[0] }))
       .forEach(v => {
-        describe(`with ${moduleName} ${v.range} (${v.version})`, () => cb(v.test, moduleName))
+        const versionPath = `${__dirname}/../../../../versions/${moduleName}@${v.test}/node_modules`
+
+        describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
+          let nodePath
+
+          before(() => {
+            nodePath = process.env.NODE_PATH
+            process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
+              .filter(x => x)
+              .join(';')
+
+            require('module').Module._initPaths()
+          })
+
+          cb(v.test, moduleName)
+
+          after(() => {
+            process.env.NODE_PATH = nodePath
+            require('module').Module._initPaths()
+          })
+        })
       })
   })
 }
