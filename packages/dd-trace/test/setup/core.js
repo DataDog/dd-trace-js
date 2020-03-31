@@ -87,25 +87,11 @@ function withVersions (plugin, modules, range, cb) {
       .forEach(instrumentation => {
         instrumentation.versions
           .forEach(version => {
-            try {
-              const min = semver.coerce(version).version
-              require(`../../../../versions/${moduleName}@${min}`).get()
-              testVersions.set(min, { range: version, test: min })
-            } catch (e) {
-              // skip unsupported version
-            }
+            const min = semver.coerce(version).version
+            const max = require(`../../../../versions/${moduleName}@${version}`).version()
 
-            agent.wipe()
-
-            try {
-              const max = require(`../../../../versions/${moduleName}@${version}`).version()
-              require(`../../../../versions/${moduleName}@${version}`).get()
-              testVersions.set(max, { range: version, test: version })
-            } catch (e) {
-              // skip unsupported version
-            }
-
-            agent.wipe()
+            testVersions.set(min, { range: version, test: min })
+            testVersions.set(max, { range: version, test: version })
           })
       })
 
@@ -116,7 +102,5 @@ function withVersions (plugin, modules, range, cb) {
       .forEach(v => {
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => cb(v.test, moduleName))
       })
-
-    agent.wipe()
   })
 }
