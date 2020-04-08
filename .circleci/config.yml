@@ -161,6 +161,15 @@ prebuild-job: &prebuild-job
         - master
         - /v\d+\.\d+/
 
+deply-reliability:
+  docker:
+    - image: node
+  steps:
+    - checkout
+    - run:
+        name: deploy reliability
+        command: node scripts/deploy_reliability.js
+
 jobs:
   # Linting
 
@@ -903,6 +912,13 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - deploy-reliability:
+          filters:
+            branches:
+              only:
+                - master
+                - testing
+
   prebuild:
     jobs:
       # Linux x64
