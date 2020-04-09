@@ -34,8 +34,13 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       contextValue._datadog_graphql = { source, span, fields: {} }
 
       return call(execute, span, this, [args], (err, res) => {
-        finishResolvers(contextValue)
-        finish(err || (res && res.errors && res.errors[0]), span)
+        finishResolvers(contextValue, config)
+
+        finish(err || (res && res.errors && res.errors[0]), span, undefined, (span) => config.hooks.execute(
+          span,
+          args,
+          res
+        ))
       })
     }
   }
@@ -47,6 +52,8 @@ function createWrapParse (tracer, config) {
       const span = startSpan(tracer, config, 'parse')
 
       analyticsSampler.sample(span, config.analytics)
+
+      const parseHook = (span) => config.hooks.parse(span, { source })
 
       try {
         const document = parse.apply(this, arguments)
@@ -60,11 +67,11 @@ function createWrapParse (tracer, config) {
 
         addDocumentTags(span, document)
 
-        finish(null, span)
+        finish(null, span, undefined, parseHook)
 
         return document
       } catch (e) {
-        finish(e, span)
+        finish(e, span, undefined, parseHook)
         throw e
       }
     }
@@ -92,7 +99,9 @@ function createWrapValidate (tracer, config) {
           const span = startSpan(tracer, config, 'validate', { startTime })
           addDocumentTags(span, document)
           analyticsSampler.sample(span, config.analytics)
-          finish(error, span)
+          finish(error, span, undefined, (span) => config.hooks.validate(span, {
+            source: document && document._datadog_source
+          }))
         }
       }
     }
@@ -318,7 +327,7 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   return span
 }
 
-function finish (error, span, finishTime) {
+function finish (error, span, finishTime, hook) {
   if (error) {
     span.addTags({
       'error.type': error.name,
@@ -327,16 +336,18 @@ function finish (error, span, finishTime) {
     })
   }
 
+  if (hook) hook(span)
+
   span.finish(finishTime)
 }
 
-function finishResolvers (contextValue) {
+function finishResolvers (contextValue, config) {
   const fields = contextValue._datadog_graphql.fields
 
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
 
-    finish(field.error, field.span, field.finishTime)
+    finish(field.error, field.span, field.finishTime, (span) => config.hooks.resolve(span, { field: key }))
   })
 }
 
@@ -396,7 +407,8 @@ function validateConfig (config) {
   return Object.assign({}, config, {
     depth: getDepth(config),
     variables: getVariablesFilter(config),
-    collapse: config.collapse === undefined || !!config.collapse
+    collapse: config.collapse === undefined || !!config.collapse,
+    hooks: getHooks(config)
   })
 }
 
@@ -447,6 +459,16 @@ function pathToArray (path) {
     curr = curr.prev
   }
   return flattened.reverse()
+}
+
+function getHooks (config) {
+  const noop = () => {}
+  const parse = (config.hooks && config.hooks.parse) || noop
+  const validate = (config.hooks && config.hooks.validate) || noop
+  const execute = (config.hooks && config.hooks.execute) || noop
+  const resolve = (config.hooks && config.hooks.resolve) || noop
+
+  return { parse, validate, execute, resolve }
 }
 
 module.exports = [
