@@ -1290,6 +1290,148 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with hooks configuration', () => {
+        const config = {
+          hooks: {
+            parse: sinon.spy((span, args) => {}),
+            validate: sinon.spy((span, args) => {}),
+            execute: sinon.spy((span, args, res) => {}),
+            resolve: sinon.spy((span, args) => {})
+          }
+        }
+
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', config)
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        afterEach(() => Object.keys(config.hooks).forEach(
+          key => config.hooks[key].resetHistory()
+        ))
+
+        after(() => agent.close())
+
+        it('should run the parse hook before graphql.parse span is finished', done => {
+          const source = `query MyQuery { hello(name: "world") }`
+          graphql.parse(source)
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('name', 'graphql.parse')
+              expect(config.hooks.parse).to.have.been.calledOnce
+
+              const span = config.hooks.parse.firstCall.args[0]
+              const args = config.hooks.parse.firstCall.args[1]
+
+              expect(span.context()._name).to.equal('graphql.parse')
+              expect(args.source).to.equal(source)
+            })
+            .then(done)
+            .catch(done)
+        })
+
+        it('should run the validate hook before graphql.validate span is finished', done => {
+          const source = `query MyQuery { hello(name: "world") }`
+          const document = graphql.parse(source)
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(1)
+              expect(spans[0]).to.have.property('name', 'graphql.validate')
+              expect(config.hooks.validate).to.have.been.calledOnce
+
+              const span = config.hooks.validate.firstCall.args[0]
+              const args = config.hooks.validate.firstCall.args[1]
+
+              expect(span.context()._name).to.equal('graphql.validate')
+              expect(args.source).to.equal(source)
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.validate(schema, document)
+        })
+
+        it('should run the execute hook before graphql.execute span is finished', done => {
+          const source = `query MyQuery { hello(name: "world") }`
+          const document = graphql.parse(source)
+          graphql.validate(schema, document)
+
+          const params = {
+            schema,
+            document,
+            rootValue: {
+              hello: () => 'world'
+            },
+            contextValue: {},
+            variableValues: { who: 'world' },
+            operationName: 'MyQuery',
+            fieldResolver: (source, args, contextValue, info) => args.name
+          }
+
+          let result
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(2)
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(config.hooks.execute).to.have.been.calledOnce
+
+              const span = config.hooks.execute.firstCall.args[0]
+              const args = config.hooks.execute.firstCall.args[1]
+              const res = config.hooks.execute.firstCall.args[2]
+
+              expect(span.context()._name).to.equal('graphql.execute')
+              expect(args).to.equal(params)
+              expect(res).to.equal(result)
+            })
+            .then(done)
+            .catch(done)
+
+          Promise.resolve(graphql.execute(params))
+            .then(res => {
+              result = res
+            })
+        })
+
+        it('should run the resolve hook before graphql.resolve span is finished', done => {
+          const source = `query MyQuery { hello(name: "world") }`
+          const document = graphql.parse(source)
+          graphql.validate(schema, document)
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(2)
+              expect(spans[1]).to.have.property('name', 'graphql.resolve')
+              expect(config.hooks.resolve).to.have.been.calledOnce
+
+              const span = config.hooks.resolve.firstCall.args[0]
+              const args = config.hooks.resolve.firstCall.args[1]
+
+              expect(span.context()._name).to.equal('graphql.resolve')
+              expect(args.field).to.equal('hello')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.execute({ schema, document })
+        })
+      })
+
       withVersions(plugin, 'apollo-server-core', apolloVersion => {
         let runQuery
         let mergeSchemas
