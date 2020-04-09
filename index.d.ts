@@ -1,6 +1,7 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
+import { ExecutionArgs, ExecutionResult } from "graphql"
 
 export { SpanOptions };
 
@@ -796,6 +797,20 @@ declare namespace plugins {
      * @default true
      */
     signature?: boolean;
+
+    /**
+     * An object of optional callbacks to be executed during the respective
+     * phase of a GraphQL operation. Undefined callbacks default to a noop
+     * function.
+     * 
+     * @defaul {}
+     */
+    hooks?: {
+      parse?: (span: Span, args: { source: string }) => void;
+      validate?: (span: Span, args: { source: string }) => void;
+      execute?: (span: Span, args: ExecutionArgs, res: ExecutionResult) => void;
+      resolve?: (span: Span, args: { field: string }) => void;
+    }
   }
 
   /**

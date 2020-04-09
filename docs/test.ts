@@ -116,7 +116,13 @@ const graphqlOptions = {
   depth: 2,
   variables: ({ foo, baz }) => ({ foo }),
   collapse: false,
-  signature: false
+  signature: false,
+  hooks: {
+    parse: (span, args) => {},
+    validate: (span, args) => {},
+    execute: (span, args, res) => {},
+    resolve: (span, args) => {}
+  }
 };
 
 const elasticsearchOptions = {
