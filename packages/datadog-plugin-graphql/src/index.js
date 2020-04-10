@@ -325,11 +325,7 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
 
 function finish (error, span, finishTime, hook) {
   if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
+    span.setTag('error', error)
   }
 
   if (hook) hook(span)
