@@ -53,8 +53,6 @@ function createWrapParse (tracer, config) {
 
       analyticsSampler.sample(span, config.analytics)
 
-      const parseHook = (span) => config.hooks.parse(span, { source })
-
       try {
         const document = parse.apply(this, arguments)
         const operation = getOperation(document)
@@ -67,11 +65,11 @@ function createWrapParse (tracer, config) {
 
         addDocumentTags(span, document)
 
-        finish(null, span, undefined, parseHook)
+        finish(null, span)
 
         return document
       } catch (e) {
-        finish(e, span, undefined, parseHook)
+        finish(e, span)
         throw e
       }
     }
@@ -99,9 +97,7 @@ function createWrapValidate (tracer, config) {
           const span = startSpan(tracer, config, 'validate', { startTime })
           addDocumentTags(span, document)
           analyticsSampler.sample(span, config.analytics)
-          finish(error, span, undefined, (span) => config.hooks.validate(span, {
-            source: document && document._datadog_source
-          }))
+          finish(error, span)
         }
       }
     }
@@ -347,7 +343,7 @@ function finishResolvers (contextValue, config) {
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
 
-    finish(field.error, field.span, field.finishTime, (span) => config.hooks.resolve(span, { field: key }))
+    finish(field.error, field.span, field.finishTime)
   })
 }
 
@@ -463,12 +459,9 @@ function pathToArray (path) {
 
 function getHooks (config) {
   const noop = () => {}
-  const parse = (config.hooks && config.hooks.parse) || noop
-  const validate = (config.hooks && config.hooks.validate) || noop
   const execute = (config.hooks && config.hooks.execute) || noop
-  const resolve = (config.hooks && config.hooks.resolve) || noop
 
-  return { parse, validate, execute, resolve }
+  return { execute }
 }
 
 module.exports = [

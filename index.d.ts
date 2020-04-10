@@ -806,10 +806,7 @@ declare namespace plugins {
      * @defaul {}
      */
     hooks?: {
-      parse?: (span: Span, args: { source: string }) => void;
-      validate?: (span: Span, args: { source: string }) => void;
       execute?: (span: Span, args: ExecutionArgs, res: ExecutionResult) => void;
-      resolve?: (span: Span, args: { field: string }) => void;
     }
   }
 

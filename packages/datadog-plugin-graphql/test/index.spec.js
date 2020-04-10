@@ -1317,51 +1317,6 @@ describe('Plugin', () => {
 
         after(() => agent.close())
 
-        it('should run the parse hook before graphql.parse span is finished', done => {
-          const source = `query MyQuery { hello(name: "world") }`
-          graphql.parse(source)
-
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans[0]).to.have.property('name', 'graphql.parse')
-              expect(config.hooks.parse).to.have.been.calledOnce
-
-              const span = config.hooks.parse.firstCall.args[0]
-              const args = config.hooks.parse.firstCall.args[1]
-
-              expect(span.context()._name).to.equal('graphql.parse')
-              expect(args.source).to.equal(source)
-            })
-            .then(done)
-            .catch(done)
-        })
-
-        it('should run the validate hook before graphql.validate span is finished', done => {
-          const source = `query MyQuery { hello(name: "world") }`
-          const document = graphql.parse(source)
-
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('name', 'graphql.validate')
-              expect(config.hooks.validate).to.have.been.calledOnce
-
-              const span = config.hooks.validate.firstCall.args[0]
-              const args = config.hooks.validate.firstCall.args[1]
-
-              expect(span.context()._name).to.equal('graphql.validate')
-              expect(args.source).to.equal(source)
-            })
-            .then(done)
-            .catch(done)
-
-          graphql.validate(schema, document)
-        })
-
         it('should run the execute hook before graphql.execute span is finished', done => {
           const source = `query MyQuery { hello(name: "world") }`
           const document = graphql.parse(source)
@@ -1404,31 +1359,6 @@ describe('Plugin', () => {
             .then(res => {
               result = res
             })
-        })
-
-        it('should run the resolve hook before graphql.resolve span is finished', done => {
-          const source = `query MyQuery { hello(name: "world") }`
-          const document = graphql.parse(source)
-          graphql.validate(schema, document)
-
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans).to.have.length(2)
-              expect(spans[1]).to.have.property('name', 'graphql.resolve')
-              expect(config.hooks.resolve).to.have.been.calledOnce
-
-              const span = config.hooks.resolve.firstCall.args[0]
-              const args = config.hooks.resolve.firstCall.args[1]
-
-              expect(span.context()._name).to.equal('graphql.resolve')
-              expect(args.field).to.equal('hello')
-            })
-            .then(done)
-            .catch(done)
-
-          graphql.execute({ schema, document })
         })
       })
 

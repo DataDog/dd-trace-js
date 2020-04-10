@@ -118,10 +118,7 @@ const graphqlOptions = {
   collapse: false,
   signature: false,
   hooks: {
-    parse: (span, args) => {},
-    validate: (span, args) => {},
     execute: (span, args, res) => {},
-    resolve: (span, args) => {}
   }
 };
 
