@@ -1,7 +1,6 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
-import { ExecutionArgs, ExecutionResult } from "graphql"
 
 export { SpanOptions };
 
@@ -806,7 +805,7 @@ declare namespace plugins {
      * @defaul {}
      */
     hooks?: {
-      execute?: (span: Span, args: ExecutionArgs, res: ExecutionResult) => void;
+      execute?: (span: Span, args: any, res: any) => void;
     }
   }
 
