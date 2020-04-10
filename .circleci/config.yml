@@ -161,7 +161,7 @@ prebuild-job: &prebuild-job
         - master
         - /v\d+\.\d+/
 
-deply-reliability:
+deploy-reliability:
   docker:
     - image: node
   steps:
