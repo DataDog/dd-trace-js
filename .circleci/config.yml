@@ -848,6 +848,15 @@ jobs:
           name: Integration tests
           command: yarn test:browser
 
+  deploy-reliability:
+    docker:
+      - image: node
+    steps:
+      - checkout
+      - run:
+          name: deploy reliability
+          command: node scripts/deploy_reliability.js
+
 workflows:
   version: 2
   build:
@@ -903,6 +912,13 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - deploy-reliability:
+          filters:
+            branches:
+              only:
+                - master
+                - testing
+
   prebuild:
     jobs:
       # Linux x64
