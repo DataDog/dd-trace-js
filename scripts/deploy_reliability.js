@@ -27,6 +27,6 @@ s3.putObject({ Bucket, Key, Body }, (err, data) => {
     console.error('S3 upload failed because of:')
     console.error(err)
   } else {
-    console.log('uploaded:', data.Location)
+    console.log('uploaded:', data)
   }
 })
