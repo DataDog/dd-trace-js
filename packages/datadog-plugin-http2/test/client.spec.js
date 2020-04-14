@@ -13,8 +13,6 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 wrapIt()
 
-const describe = () => {} // temporarily disable HTTP2 client plugin tests
-
 describe('Plugin', () => {
   let http2
   let appListener
