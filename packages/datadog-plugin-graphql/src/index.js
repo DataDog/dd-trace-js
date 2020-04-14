@@ -36,13 +36,9 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       return call(execute, span, this, [args], (err, res) => {
         finishResolvers(contextValue, config)
 
-        const executeHook = (span) => config.hooks.execute(
-          span,
-          getExecutionContext(args, res),
-          res
-        )
-
-        finish(err || (res && res.errors && res.errors[0]), span, undefined, executeHook)
+        setError(span, err || (res && res.errors && res.errors[0]))
+        config.hooks.execute(span, getExecutionContext(args, res), res)
+        finish(span)
       })
     }
   }
@@ -67,11 +63,12 @@ function createWrapParse (tracer, config) {
 
         addDocumentTags(span, document)
 
-        finish(null, span)
+        finish(span)
 
         return document
       } catch (e) {
-        finish(e, span)
+        setError(span, e)
+        finish(span)
         throw e
       }
     }
@@ -99,7 +96,8 @@ function createWrapValidate (tracer, config) {
           const span = startSpan(tracer, config, 'validate', { startTime })
           addDocumentTags(span, document)
           analyticsSampler.sample(span, config.analytics)
-          finish(error, span)
+          setError(span, error)
+          finish(span)
         }
       }
     }
@@ -325,13 +323,13 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   return span
 }
 
-function finish (error, span, finishTime, hook) {
+function setError (span, error) {
   if (error) {
     span.setTag('error', error)
   }
+}
 
-  if (hook) hook(span)
-
+function finish (span, finishTime) {
   span.finish(finishTime)
 }
 
@@ -341,7 +339,8 @@ function finishResolvers (contextValue, config) {
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
 
-    finish(field.error, field.span, field.finishTime)
+    setError(field.span, field.error)
+    finish(field.span, field.finishTime)
   })
 }
 
