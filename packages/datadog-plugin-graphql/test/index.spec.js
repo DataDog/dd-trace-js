@@ -1318,7 +1318,12 @@ describe('Plugin', () => {
         after(() => agent.close())
 
         it('should run the execute hook before graphql.execute span is finished', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = `
+            fragment queryFields on Query {
+              hello(name: "world")
+            }
+            query MyQuery { ...queryFields }
+          `
           const document = graphql.parse(source)
           graphql.validate(schema, document)
 
@@ -1340,16 +1345,29 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
+              expect(spans).to.have.length(1)
               expect(spans[0]).to.have.property('name', 'graphql.execute')
               expect(config.hooks.execute).to.have.been.calledOnce
 
               const span = config.hooks.execute.firstCall.args[0]
-              const args = config.hooks.execute.firstCall.args[1]
+              const context = config.hooks.execute.firstCall.args[1]
               const res = config.hooks.execute.firstCall.args[2]
 
               expect(span.context()._name).to.equal('graphql.execute')
-              expect(args).to.equal(params)
+
+              expect(context).to.include({
+                schema: params.schema,
+                rootValue: params.rootValue,
+                contextValue: params.contextValue,
+                variableValues: params.variableValues,
+                fieldResolver: params.fieldResolver
+              })
+              expect(context).to.have.property('fragments')
+              expect(context.fragments).to.have.property('queryFields')
+              expect(context.operation.name.value).to.equal(params.operationName)
+              expect(context).to.have.property('errors')
+              expect(context.errors).to.be.deep.equal([])
+
               expect(res).to.equal(result)
             })
             .then(done)

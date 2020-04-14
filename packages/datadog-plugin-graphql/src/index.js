@@ -16,7 +16,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       const source = document && document._datadog_source
       const fieldResolver = args.fieldResolver || defaultFieldResolver
       const contextValue = args.contextValue = args.contextValue || {}
-      const operation = getOperation(document, args.operationName)
+      const operation = args.operation = getOperation(document, args.operationName)
 
       if (contextValue._datadog_graphql) {
         return execute.apply(this, arguments)
@@ -36,11 +36,13 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       return call(execute, span, this, [args], (err, res) => {
         finishResolvers(contextValue, config)
 
-        finish(err || (res && res.errors && res.errors[0]), span, undefined, (span) => config.hooks.execute(
+        const executeHook = (span) => config.hooks.execute(
           span,
-          args,
+          getExecutionContext(args, res),
           res
-        ))
+        )
+
+        finish(err || (res && res.errors && res.errors[0]), span, undefined, executeHook)
       })
     }
   }
@@ -392,6 +394,33 @@ function getOperation (document, operationName) {
       .find(def => operationName === (def.name && def.name.value))
   } else {
     return definitions.find(def => types.indexOf(def.operation) !== -1)
+  }
+}
+
+function getFragments (document) {
+  if (!document || !Array.isArray(document.definitions)) {
+    return []
+  }
+
+  return document.definitions.reduce((acc, d) => {
+    if (d.kind !== 'FragmentDefinition') return acc
+    return {
+      ...acc,
+      [d.name.value]: d
+    }
+  }, {})
+}
+
+function getExecutionContext (args, res) {
+  return {
+    schema: args.schema,
+    fragments: getFragments(args.document),
+    rootValue: args.rootValue || {},
+    contextValue: args.contextValue,
+    operation: args.operation || getOperation(args.document, args.operationName),
+    variableValues: args.variableValues || {},
+    fieldResolver: args.fieldResolver,
+    errors: (res && res.errors) || []
   }
 }
 
