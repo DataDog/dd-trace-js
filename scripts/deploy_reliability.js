@@ -1,3 +1,6 @@
+/* eslint-disable no-console */
+'use strict'
+
 const AWS = require('aws-sdk')
 
 const DDTRACE_VERSION = require('../packages/dd-trace/lib/version')
