@@ -38,10 +38,11 @@ function patch (http, methodName, tracer, config) {
       }
 
       const options = args.options
+      const protocol = options.protocol || 'http:'
       const hostname = options.hostname || options.host || 'localhost'
       const host = options.port ? `${hostname}:${options.port}` : hostname
       const path = options.path ? options.path.split(/[?#]/)[0] : '/'
-      const uri = `${options.protocol}//${host}${path}`
+      const uri = `${protocol}//${host}${path}`
 
       let callback = args.callback
 
