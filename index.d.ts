@@ -802,7 +802,7 @@ declare namespace plugins {
      * phase of a GraphQL operation. Undefined callbacks default to a noop
      * function.
      * 
-     * @defaul {}
+     * @default {}
      */
     hooks?: {
       execute?: (span: Span, args: any, res: any) => void;
