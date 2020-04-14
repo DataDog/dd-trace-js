@@ -338,4 +338,14 @@ describe('Config', () => {
     expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
     expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', 1)
   })
+
+  it('should ignore empty service names', () => {
+    platform.env.withArgs('DD_SERVICE').returns('')
+
+    const config = new Config()
+
+    expect(config.tags).to.include({
+      service: 'node'
+    })
+  })
 })

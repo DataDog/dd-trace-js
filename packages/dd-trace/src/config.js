@@ -13,13 +13,12 @@ class Config {
   constructor (options) {
     options = options || {}
 
-    const service = coalesce(
-      options.service,
-      platform.env('DD_SERVICE'),
-      platform.env('DD_SERVICE_NAME'),
-      platform.service(),
+    const service = options.service ||
+      platform.env('DD_SERVICE') ||
+      platform.env('DD_SERVICE_NAME') ||
+      platform.service() ||
       'node'
-    )
+
     const version = coalesce(
       options.version,
       platform.env('DD_VERSION'),
