@@ -27,6 +27,7 @@ require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 require,whatwg-fetch,MIT,Copyright 2014-2016 GitHub Inc.
 dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
+dev,aws-sdk,Apache-2.0,Copyright 2012-2017 Amazon.com, Inc. or its affiliates.
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton

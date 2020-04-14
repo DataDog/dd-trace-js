@@ -21,7 +21,7 @@ const Bucket = 'datadog-reliability-env'
 const Key = `node/${process.env.CIRCLE_BRANCH}.txt`
 
 const s3 = new AWS.S3()
-s3.client.putObject({ Bucket, Key, Body }, (err, data) => {
+s3.putObject({ Bucket, Key, Body }, (err, data) => {
   if (err) {
     process.exitCode = 1
     console.error('S3 upload failed because of:')
