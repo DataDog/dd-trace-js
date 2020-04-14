@@ -853,6 +853,9 @@ jobs:
       - image: node
     steps:
       - checkout
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
       - run:
           name: deploy reliability
           command: node scripts/deploy_reliability.js
