@@ -161,15 +161,6 @@ prebuild-job: &prebuild-job
         - master
         - /v\d+\.\d+/
 
-deploy-reliability:
-  docker:
-    - image: node
-  steps:
-    - checkout
-    - run:
-        name: deploy reliability
-        command: node scripts/deploy_reliability.js
-
 jobs:
   # Linting
 
@@ -856,6 +847,15 @@ jobs:
       - run:
           name: Integration tests
           command: yarn test:browser
+
+  deploy-reliability:
+    docker:
+      - image: node
+    steps:
+      - checkout
+      - run:
+          name: deploy reliability
+          command: node scripts/deploy_reliability.js
 
 workflows:
   version: 2
