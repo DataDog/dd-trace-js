@@ -4,7 +4,7 @@ const path = require('path')
 const readPkgUp = require('read-pkg-up')
 
 function findRoot () {
-  return path.dirname(require.main.filename)
+  return require.main ? path.dirname(require.main.filename) : process.cwd()
 }
 
 function findPkg () {
