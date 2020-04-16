@@ -338,7 +338,9 @@ function wrapEvents (req) {
 }
 
 function reactivate (req, fn) {
-  return req._datadog.tracer.scope().activate(req._datadog.span, fn)
+  return req._datadog
+    ? req._datadog.tracer.scope().activate(req._datadog.span, fn)
+    : fn()
 }
 
 function addRequestTags (req) {

@@ -96,9 +96,9 @@ describe('Plugin', () => {
 
         it('should propagate context to plugins', done => {
           const onrequest = (req, res, options, cb) => {
-            cb()
-
             expect(tracer.scope().active()).to.not.be.null
+
+            tracer.scope().activate(null, () => cb())
           }
 
           const first = {
