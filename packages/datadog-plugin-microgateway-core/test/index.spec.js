@@ -96,9 +96,9 @@ describe('Plugin', () => {
 
         it('should propagate context to plugins', done => {
           const onrequest = (req, res, options, cb) => {
-            cb()
-
             expect(tracer.scope().active()).to.not.be.null
+
+            tracer.scope().activate(null, () => cb())
           }
 
           const first = {
@@ -121,7 +121,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
           const plugin = {
             init: (config, logging, stats) => ({
-              onrequest: (req, res, options, cb) => {
+              onrequest: function (req, res, cb) {
                 cb(error)
               }
             })
