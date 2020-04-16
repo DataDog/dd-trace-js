@@ -121,7 +121,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
           const plugin = {
             init: (config, logging, stats) => ({
-              onrequest: function (req, res, cb) {
+              onrequest: (req, res, options, cb) => {
                 cb(error)
               }
             })
