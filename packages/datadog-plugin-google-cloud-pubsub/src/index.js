@@ -70,7 +70,7 @@ function getTopic (cfg) {
 module.exports = [
   {
     name: '@google-cloud/pubsub',
-    versions: ['>=1.1'],
+    versions: ['>=1.2'],
     patch ({ PubSub, Subscription }, tracer, config) {
       this.wrap(PubSub.prototype, 'request', createWrapRequest(tracer, config))
       this.wrap(Subscription.prototype, 'emit', createWrapSubscriptionEmit(tracer, config))
