@@ -58,7 +58,7 @@ describe('Plugin', () => {
 
           after((done) => {
             ddb.listTables({}, (err, res) => {
-              if (res.TableNames && res.TableNames.length > 0) {
+              if (res && res.TableNames && res.TableNames.length > 0) {
                 ddb.deleteItem(ddbGetItemParams, () => {
                   ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
                     closeAndWipeAgent().then(done)
@@ -76,6 +76,8 @@ describe('Plugin', () => {
 
             it('should collect table name metadata for batch operations', (done) => {
               ddb.batchGetItem(ddbBatchParams, (err, resp) => {
+                if (err) return done(err)
+
                 agent.use(traces => {
                   const spans = sort(traces[0])
                   expect(spans[0]).to.have.property('resource', `batchGetItem ${ddbParams.TableName}`)
@@ -114,7 +116,7 @@ describe('Plugin', () => {
 
           after((done) => {
             ddb.listTables({}, (err, res) => {
-              if (res.data && res.data.TableNames && res.data.TableNames.length > 0) {
+              if (res && res.data && res.data.TableNames && res.data.TableNames.length > 0) {
                 ddb.deleteItem(ddbGetItemParams, () => {
                   ddb.deleteTable({ TableName: ddbParams.TableName }, () => {
                     closeAndWipeAgent().then(done)
@@ -286,6 +288,7 @@ describe('Plugin', () => {
 
             sqs = new AWS.SQS({ endpoint: epSqs })
             sqs.createQueue(sqsCreateParams, (err, res) => {
+              if (err) return done(err)
               if (res.QueueUrl) {
                 sqsGetParams.QueueUrl = res.QueueUrl
               }
@@ -318,6 +321,7 @@ describe('Plugin', () => {
 
             sqs = new AWS.SQS({ endpoint: epSqs })
             sqs.createQueue(sqsCreateParams, (err, res) => {
+              if (err) return done(err)
               if (res.QueueUrl) {
                 sqsGetParams.QueueUrl = res.QueueUrl
               }
@@ -375,6 +379,7 @@ describe('Plugin', () => {
             sns = new AWS.SNS({ endpoint: epSns })
 
             sns.createTopic(snsCreateParams, (err, res) => {
+              if (err) return done(err)
               if (res.TopicArn) {
                 snsGetParams.TopicArn = res.TopicArn
               }
@@ -392,7 +397,7 @@ describe('Plugin', () => {
 
             // cleanup topics
             sns.listTopics({}, (err, res) => {
-              if (res.Topics && res.Topics.length > 0) {
+              if (res && res.Topics && res.Topics.length > 0) {
                 sns.deleteTopic(res.Topics[0], () => {
                   closeAndWipeAgent().then(done)
                 })
@@ -408,6 +413,8 @@ describe('Plugin', () => {
 
             it('should use the response data topicArn for resource and metadata when creating topic', (done) => {
               sns.createTopic({ Name: 'example_topic_two' }, (err, res) => {
+                if (err) return done(err)
+
                 topicArn = res.TopicArn
 
                 agent.use(traces => {
@@ -435,6 +442,7 @@ describe('Plugin', () => {
             sns = new AWS.SNS({ endpoint: epSns })
 
             sns.createTopic(snsCreateParams, (err, res) => {
+              if (err) return done(err)
               if (res.TopicArn) {
                 snsGetParams.TopicArn = res.TopicArn
               }
@@ -461,7 +469,7 @@ describe('Plugin', () => {
 
             // cleanup topics
             sns.listTopics({}, (err, res) => {
-              if (res.Topics && res.Topics.length > 0) {
+              if (res && res.Topics && res.Topics.length > 0) {
                 sns.deleteTopic({ TopicArn: topicArn }, () => {
                   closeAndWipeAgent().then(done)
                 })
@@ -499,6 +507,8 @@ describe('Plugin', () => {
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
 
             cwLogs.createLogGroup(cwCreateParams, (err, res) => {
+              if (err) return done(err)
+
               agent.load('aws-sdk').then(done)
             })
           })
@@ -532,6 +542,8 @@ describe('Plugin', () => {
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
 
             cwLogs.createLogGroup(cwCreateParams, (err, res) => {
+              if (err) return done(err)
+
               agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
@@ -587,6 +599,8 @@ describe('Plugin', () => {
             redshift = new AWS.Redshift({ endpoint: epRedshift })
 
             redshift.createCluster(redshiftCreateParams, (err, res) => {
+              if (err) return done(err)
+
               agent.load('aws-sdk').then(done)
             })
           })
@@ -620,6 +634,8 @@ describe('Plugin', () => {
             redshift = new AWS.Redshift({ endpoint: epRedshift })
 
             redshift.createCluster(redshiftCreateParams, (err, res) => {
+              if (err) return done(err)
+
               agent.load('aws-sdk', {
                 hooks: {
                   request: (span, response) => {
@@ -679,6 +695,8 @@ describe('Plugin', () => {
           describe('instrumentation', () => {
             it('should instrument service methods with a callback', (done) => {
               route53[operation]({}, (err, response) => {
+                if (err) return done(err)
+
                 agent
                   .use(traces => {
                     const spans = sort(traces[0])
