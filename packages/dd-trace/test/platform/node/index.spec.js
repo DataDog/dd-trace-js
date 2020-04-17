@@ -1,6 +1,7 @@
 'use strict'
 
 const nock = require('nock')
+const os = require('os')
 const semver = require('semver')
 const { execSync } = require('child_process')
 
@@ -13,14 +14,16 @@ describe('Platform', () => {
   describe('Node', () => {
     let platform
 
-    describe('in pre-require', () => {
-      it('should load the package.json correctly', () => {
-        const pkg = JSON.parse(execSync(`node --require ./pkg-loader.js -e ""`, {
-          cwd: __dirname
-        }).toString())
-        expect(pkg.name).to.equal('dd-trace')
+    if (os.platform() !== 'win32') {
+      describe('in pre-require', () => {
+        it('should load the package.json correctly', () => {
+          const pkg = JSON.parse(execSync(`node --require ./pkg-loader.js -e ""`, {
+            cwd: __dirname
+          }).toString())
+          expect(pkg.name).to.equal('dd-trace')
+        })
       })
-    })
+    }
 
     describe('name', () => {
       beforeEach(() => {
