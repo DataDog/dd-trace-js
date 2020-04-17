@@ -54,14 +54,8 @@ ddb['batch'] = {
     'CUSTOMER_LIST': {
       Keys: [
         {
-          key: {
-            N: 'CUSTOMER_ID'
-          }
-        },
-        {
-          key: {
-            S: 'CUSTOMER_NAME'
-          }
+          'CUSTOMER_ID': { N: '001' },
+          'CUSTOMER_NAME': { S: 'Richard Roe' }
         }
       ],
       ConsistentRead: true
