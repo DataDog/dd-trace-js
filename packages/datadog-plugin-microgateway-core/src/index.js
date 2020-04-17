@@ -118,11 +118,18 @@ function wrapListeners (handler) {
 }
 
 function wrapExport (fn, wrapper) {
-  fn._datadog_wrapper = wrapper
-
-  return function () {
+  const props = Object.keys(fn)
+  const shim = function () {
     return fn._datadog_wrapper.apply(this, arguments)
   }
+
+  for (const prop of props) {
+    shim[prop] = fn[prop]
+  }
+
+  fn._datadog_wrapper = wrapper
+
+  return shim
 }
 
 function unwrapExport (fn) {

@@ -4,6 +4,7 @@ const axios = require('axios')
 const http = require('http')
 const getPort = require('get-port')
 const os = require('os')
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const proxy = require('./proxy')
@@ -172,6 +173,12 @@ describe('Plugin', () => {
 
           axios.get('http://localhost:' + gatewayPort + '/v1/foo').catch(() => {})
         })
+
+        if (semver.intersects(version, '>=2.3.3')) {
+          it('should re-expose any exports', () => {
+            expect(Gateway.Logging).to.be.an('object')
+          })
+        }
       })
     })
   })
