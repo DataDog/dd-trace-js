@@ -16,7 +16,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       const source = document && document._datadog_source
       const fieldResolver = args.fieldResolver || defaultFieldResolver
       const contextValue = args.contextValue = args.contextValue || {}
-      const operation = args.operation = getOperation(document, args.operationName)
+      const operation = getOperation(document, args.operationName)
 
       if (contextValue._datadog_graphql) {
         return execute.apply(this, arguments)
@@ -333,7 +333,7 @@ function finish (span, finishTime) {
   span.finish(finishTime)
 }
 
-function finishResolvers (contextValue, config) {
+function finishResolvers (contextValue) {
   const fields = contextValue._datadog_graphql.fields
 
   Object.keys(fields).reverse().forEach(key => {
@@ -416,7 +416,7 @@ function getExecutionContext (args, res) {
     fragments: getFragments(args.document),
     rootValue: args.rootValue || {},
     contextValue: args.contextValue,
-    operation: args.operation || getOperation(args.document, args.operationName),
+    operation: getOperation(args.document, args.operationName),
     variableValues: args.variableValues || {},
     fieldResolver: args.fieldResolver,
     errors: (res && res.errors) || []

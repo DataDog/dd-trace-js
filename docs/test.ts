@@ -118,7 +118,7 @@ const graphqlOptions = {
   collapse: false,
   signature: false,
   hooks: {
-    execute: (span, args, res) => {},
+    execute: (span, context, res) => {},
   }
 };
 

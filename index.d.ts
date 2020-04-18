@@ -805,7 +805,7 @@ declare namespace plugins {
      * @default {}
      */
     hooks?: {
-      execute?: (span: Span, args: any, res: any) => void;
+      execute?: (span?: Span, context?: any, res?: any) => void;
     }
   }
 

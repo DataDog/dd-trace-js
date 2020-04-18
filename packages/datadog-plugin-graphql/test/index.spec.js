@@ -1293,10 +1293,7 @@ describe('Plugin', () => {
       describe('with hooks configuration', () => {
         const config = {
           hooks: {
-            parse: sinon.spy((span, args) => {}),
-            validate: sinon.spy((span, args) => {}),
-            execute: sinon.spy((span, args, res) => {}),
-            resolve: sinon.spy((span, args) => {})
+            execute: sinon.spy((span, context, res) => {})
           }
         }
 
