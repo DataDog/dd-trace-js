@@ -741,6 +741,13 @@ declare namespace plugins {
    */
   interface google_cloud_pubsub extends Integration {}
 
+  /** @hidden */
+  interface ExecutionContext {
+    rootValue: any,
+    contextValue: any,
+    variableValues: any,
+  }
+
   /**
    * This plugin automatically instruments the
    * [graphql](https://github.com/graphql/graphql-js) module.
@@ -805,7 +812,7 @@ declare namespace plugins {
      * @default {}
      */
     hooks?: {
-      execute?: (span?: Span, context?: any, res?: any) => void;
+      execute?: (span?: Span, context?: ExecutionContext, res?: any) => void;
     }
   }
 

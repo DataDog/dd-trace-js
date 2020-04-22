@@ -37,7 +37,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
         finishResolvers(contextValue, config)
 
         setError(span, err || (res && res.errors && res.errors[0]))
-        config.hooks.execute(span, getExecutionContext(args, res), res)
+        config.hooks.execute(span, getExecutionContext(args), res)
         finish(span)
       })
     }
@@ -396,30 +396,11 @@ function getOperation (document, operationName) {
   }
 }
 
-function getFragments (document) {
-  if (!document || !Array.isArray(document.definitions)) {
-    return []
-  }
-
-  return document.definitions.reduce((acc, d) => {
-    if (d.kind !== 'FragmentDefinition') return acc
-    return {
-      ...acc,
-      [d.name.value]: d
-    }
-  }, {})
-}
-
-function getExecutionContext (args, res) {
+function getExecutionContext (args) {
   return {
-    schema: args.schema,
-    fragments: getFragments(args.document),
     rootValue: args.rootValue || {},
     contextValue: args.contextValue,
-    operation: getOperation(args.document, args.operationName),
-    variableValues: args.variableValues || {},
-    fieldResolver: args.fieldResolver,
-    errors: (res && res.errors) || []
+    variableValues: args.variableValues || {}
   }
 }
 

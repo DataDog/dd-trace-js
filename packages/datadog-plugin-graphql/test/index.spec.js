@@ -1351,20 +1351,11 @@ describe('Plugin', () => {
               const res = config.hooks.execute.firstCall.args[2]
 
               expect(span.context()._name).to.equal('graphql.execute')
-
               expect(context).to.include({
-                schema: params.schema,
                 rootValue: params.rootValue,
                 contextValue: params.contextValue,
-                variableValues: params.variableValues,
-                fieldResolver: params.fieldResolver
+                variableValues: params.variableValues
               })
-              expect(context).to.have.property('fragments')
-              expect(context.fragments).to.have.property('queryFields')
-              expect(context.operation.name.value).to.equal(params.operationName)
-              expect(context).to.have.property('errors')
-              expect(context.errors).to.be.deep.equal([])
-
               expect(res).to.equal(result)
             })
             .then(done)
