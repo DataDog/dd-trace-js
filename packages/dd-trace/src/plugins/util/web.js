@@ -67,9 +67,9 @@ const web = {
     if (!req._datadog.instrumented) {
       wrapEnd(req)
       wrapEvents(req)
-    }
 
-    req._datadog.instrumented = true
+      req._datadog.instrumented = true
+    }
 
     return callback && tracer.scope().activate(span, () => callback(span))
   },
