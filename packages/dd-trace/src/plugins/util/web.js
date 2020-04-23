@@ -64,8 +64,12 @@ const web = {
 
     analyticsSampler.sample(span, config.analytics, true)
 
-    wrapEnd(req)
-    wrapEvents(req)
+    if (!req._datadog.instrumented) {
+      wrapEnd(req)
+      wrapEvents(req)
+    }
+
+    req._datadog.instrumented = true
 
     return callback && tracer.scope().activate(span, () => callback(span))
   },
@@ -251,16 +255,14 @@ function wrapEnd (req) {
   const res = req._datadog.res
   const end = res.end
 
-  if (end === req._datadog.end) return
-
   res.writeHead = wrapWriteHead(req)
 
-  let _end = req._datadog.end = res.end = function () {
+  res._datadog_end = function () {
     req._datadog.beforeEnd.forEach(beforeEnd => beforeEnd())
 
     finishMiddleware(req, res)
 
-    const returnValue = end.apply(this, arguments)
+    const returnValue = end.apply(res, arguments)
 
     finish(req, res)
 
@@ -270,10 +272,10 @@ function wrapEnd (req) {
   Object.defineProperty(res, 'end', {
     configurable: true,
     get () {
-      return _end
+      return this._datadog_end
     },
     set (value) {
-      _end = scope.bind(value, req._datadog.span)
+      this._datadog_end = scope.bind(value, req._datadog.span)
     }
   })
 }
@@ -330,11 +332,8 @@ function splitHeader (str) {
 function wrapEvents (req) {
   const scope = req._datadog.tracer.scope()
   const res = req._datadog.res
-  const on = res.on
 
-  if (on === req._datadog.on) return
-
-  req._datadog.on = scope.bind(res, req._datadog.span).on
+  scope.bind(res, req._datadog.span)
 }
 
 function reactivate (req, fn) {
