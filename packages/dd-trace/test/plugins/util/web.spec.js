@@ -765,6 +765,37 @@ describe('plugins/util/web', () => {
       req.on('error', done)
     })
 
+    it('should run res.end handlers in the request scope for clones', done => {
+      let handler
+
+      const interval = setInterval(() => {
+        if (handler) {
+          handler()
+          clearInterval(interval)
+        }
+      })
+
+      app.use((req, res) => {
+        const clone = Object.create(res)
+
+        clone.end = function () {
+          res.end.apply(this, arguments)
+
+          try {
+            expect(tracer.scope().active()).to.not.be.null
+            done()
+          } catch (e) {
+            done(e)
+          }
+        }
+
+        handler = () => clone.end()
+      })
+
+      const req = http.get(`http://127.0.0.1:${port}`)
+      req.on('error', done)
+    })
+
     it('should run "finish" event handlers in the request scope', done => {
       app.use((req, res, next) => {
         res.on('finish', () => {
