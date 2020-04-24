@@ -742,10 +742,15 @@ declare namespace plugins {
   interface google_cloud_pubsub extends Integration {}
 
   /** @hidden */
-  interface ExecutionContext {
-    rootValue: any,
-    contextValue: any,
-    variableValues: any,
+  interface ExecutionArgs {
+    schema: any,
+    document: any,
+    rootValue?: any,
+    contextValue?: any,
+    variableValues?: any,
+    operationName?: string,
+    fieldResolver?: any,
+    typeResolver?: any,
   }
 
   /**
@@ -812,7 +817,7 @@ declare namespace plugins {
      * @default {}
      */
     hooks?: {
-      execute?: (span?: Span, context?: ExecutionContext, res?: any) => void;
+      execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
     }
   }
 

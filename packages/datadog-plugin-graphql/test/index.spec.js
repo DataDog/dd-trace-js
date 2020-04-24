@@ -1333,7 +1333,8 @@ describe('Plugin', () => {
             contextValue: {},
             variableValues: { who: 'world' },
             operationName: 'MyQuery',
-            fieldResolver: (source, args, contextValue, info) => args.name
+            fieldResolver: (source, args, contextValue, info) => args.name,
+            typeResolver: (value, context, info, abstractType) => 'Query'
           }
 
           let result
@@ -1347,14 +1348,19 @@ describe('Plugin', () => {
               expect(config.hooks.execute).to.have.been.calledOnce
 
               const span = config.hooks.execute.firstCall.args[0]
-              const context = config.hooks.execute.firstCall.args[1]
+              const args = config.hooks.execute.firstCall.args[1]
               const res = config.hooks.execute.firstCall.args[2]
 
               expect(span.context()._name).to.equal('graphql.execute')
-              expect(context).to.include({
+              expect(args).to.include({
+                schema: params.schema,
+                document: params.document,
                 rootValue: params.rootValue,
                 contextValue: params.contextValue,
-                variableValues: params.variableValues
+                variableValues: params.variableValues,
+                operationName: params.operationName,
+                fieldResolver: params.fieldResolver,
+                typeResolver: params.typeResolver
               })
               expect(res).to.equal(result)
             })

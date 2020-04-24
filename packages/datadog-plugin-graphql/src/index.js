@@ -37,7 +37,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
         finishResolvers(contextValue, config)
 
         setError(span, err || (res && res.errors && res.errors[0]))
-        config.hooks.execute(span, getExecutionContext(args), res)
+        config.hooks.execute(span, args, res)
         finish(span)
       })
     }
@@ -393,14 +393,6 @@ function getOperation (document, operationName) {
       .find(def => operationName === (def.name && def.name.value))
   } else {
     return definitions.find(def => types.indexOf(def.operation) !== -1)
-  }
-}
-
-function getExecutionContext (args) {
-  return {
-    rootValue: args.rootValue || {},
-    contextValue: args.contextValue,
-    variableValues: args.variableValues || {}
   }
 }
 
