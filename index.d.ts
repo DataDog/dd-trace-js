@@ -741,6 +741,18 @@ declare namespace plugins {
    */
   interface google_cloud_pubsub extends Integration {}
 
+  /** @hidden */
+  interface ExecutionArgs {
+    schema: any,
+    document: any,
+    rootValue?: any,
+    contextValue?: any,
+    variableValues?: any,
+    operationName?: string,
+    fieldResolver?: any,
+    typeResolver?: any,
+  }
+
   /**
    * This plugin automatically instruments the
    * [graphql](https://github.com/graphql/graphql-js) module.
@@ -796,6 +808,17 @@ declare namespace plugins {
      * @default true
      */
     signature?: boolean;
+
+    /**
+     * An object of optional callbacks to be executed during the respective
+     * phase of a GraphQL operation. Undefined callbacks default to a noop
+     * function.
+     * 
+     * @default {}
+     */
+    hooks?: {
+      execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
+    }
   }
 
   /**

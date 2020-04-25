@@ -34,8 +34,11 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       contextValue._datadog_graphql = { source, span, fields: {} }
 
       return call(execute, span, this, [args], (err, res) => {
-        finishResolvers(contextValue)
-        finish(err || (res && res.errors && res.errors[0]), span)
+        finishResolvers(contextValue, config)
+
+        setError(span, err || (res && res.errors && res.errors[0]))
+        config.hooks.execute(span, args, res)
+        finish(span)
       })
     }
   }
@@ -60,11 +63,12 @@ function createWrapParse (tracer, config) {
 
         addDocumentTags(span, document)
 
-        finish(null, span)
+        finish(span)
 
         return document
       } catch (e) {
-        finish(e, span)
+        setError(span, e)
+        finish(span)
         throw e
       }
     }
@@ -92,7 +96,8 @@ function createWrapValidate (tracer, config) {
           const span = startSpan(tracer, config, 'validate', { startTime })
           addDocumentTags(span, document)
           analyticsSampler.sample(span, config.analytics)
-          finish(error, span)
+          setError(span, error)
+          finish(span)
         }
       }
     }
@@ -318,15 +323,13 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   return span
 }
 
-function finish (error, span, finishTime) {
+function setError (span, error) {
   if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
+    span.setTag('error', error)
   }
+}
 
+function finish (span, finishTime) {
   span.finish(finishTime)
 }
 
@@ -336,7 +339,8 @@ function finishResolvers (contextValue) {
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
 
-    finish(field.error, field.span, field.finishTime)
+    setError(field.span, field.error)
+    finish(field.span, field.finishTime)
   })
 }
 
@@ -396,7 +400,8 @@ function validateConfig (config) {
   return Object.assign({}, config, {
     depth: getDepth(config),
     variables: getVariablesFilter(config),
-    collapse: config.collapse === undefined || !!config.collapse
+    collapse: config.collapse === undefined || !!config.collapse,
+    hooks: getHooks(config)
   })
 }
 
@@ -447,6 +452,13 @@ function pathToArray (path) {
     curr = curr.prev
   }
   return flattened.reverse()
+}
+
+function getHooks (config) {
+  const noop = () => {}
+  const execute = (config.hooks && config.hooks.execute) || noop
+
+  return { execute }
 }
 
 module.exports = [

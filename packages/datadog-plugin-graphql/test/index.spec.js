@@ -1290,6 +1290,90 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with hooks configuration', () => {
+        const config = {
+          hooks: {
+            execute: sinon.spy((span, context, res) => {})
+          }
+        }
+
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', config)
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        afterEach(() => Object.keys(config.hooks).forEach(
+          key => config.hooks[key].resetHistory()
+        ))
+
+        after(() => agent.close())
+
+        it('should run the execute hook before graphql.execute span is finished', done => {
+          const source = `
+            fragment queryFields on Query {
+              hello(name: "world")
+            }
+            query MyQuery { ...queryFields }
+          `
+          const document = graphql.parse(source)
+          graphql.validate(schema, document)
+
+          const params = {
+            schema,
+            document,
+            rootValue: {
+              hello: () => 'world'
+            },
+            contextValue: {},
+            variableValues: { who: 'world' },
+            operationName: 'MyQuery',
+            fieldResolver: (source, args, contextValue, info) => args.name,
+            typeResolver: (value, context, info, abstractType) => 'Query'
+          }
+
+          let result
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans).to.have.length(1)
+              expect(spans[0]).to.have.property('name', 'graphql.execute')
+              expect(config.hooks.execute).to.have.been.calledOnce
+
+              const span = config.hooks.execute.firstCall.args[0]
+              const args = config.hooks.execute.firstCall.args[1]
+              const res = config.hooks.execute.firstCall.args[2]
+
+              expect(span.context()._name).to.equal('graphql.execute')
+              expect(args).to.include({
+                schema: params.schema,
+                document: params.document,
+                rootValue: params.rootValue,
+                contextValue: params.contextValue,
+                variableValues: params.variableValues,
+                operationName: params.operationName,
+                fieldResolver: params.fieldResolver,
+                typeResolver: params.typeResolver
+              })
+              expect(res).to.equal(result)
+            })
+            .then(done)
+            .catch(done)
+
+          Promise.resolve(graphql.execute(params))
+            .then(res => {
+              result = res
+            })
+        })
+      })
+
       withVersions(plugin, 'apollo-server-core', apolloVersion => {
         let runQuery
         let mergeSchemas
