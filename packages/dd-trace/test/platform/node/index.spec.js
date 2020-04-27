@@ -328,28 +328,28 @@ describe('Platform', () => {
       describe('prefix', () => {
         it('should support fixarray', () => {
           const length = 0xf
-          const array = new Array(length)
-          const prefixed = msgpack.prefix(array)
+          const buffer = Buffer.allocUnsafe(5)
+          const prefixed = msgpack.prefix(buffer, length)
 
-          expect(prefixed.length).to.equal(length + 1)
+          expect(prefixed.length).to.equal(1)
           expect(prefixed[0]).to.deep.equal(Buffer.from([0x9f]))
         })
 
         it('should should support array 16', () => {
           const length = 0xf + 1
-          const array = new Array(length)
-          const prefixed = msgpack.prefix(array)
+          const buffer = Buffer.allocUnsafe(5)
+          const prefixed = msgpack.prefix(buffer, length)
 
-          expect(prefixed.length).to.equal(length + 1)
+          expect(prefixed.length).to.equal(1)
           expect(prefixed[0]).to.deep.equal(Buffer.from([0xdc, 0x00, 0x10]))
         })
 
         it('should should support array 32', () => {
           const length = 0xffff + 1
-          const array = new Array(length)
-          const prefixed = msgpack.prefix(array)
+          const buffer = Buffer.allocUnsafe(5)
+          const prefixed = msgpack.prefix(buffer, length)
 
-          expect(prefixed.length).to.equal(length + 1)
+          expect(prefixed.length).to.equal(1)
           expect(prefixed[0]).to.deep.equal(Buffer.from([0xdd, 0x00, 0x01, 0x00, 0x00]))
         })
       })

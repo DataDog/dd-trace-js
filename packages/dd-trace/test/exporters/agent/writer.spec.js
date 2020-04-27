@@ -2,6 +2,8 @@
 
 const URL = require('url-parse')
 
+const id = require('../../../src/id')
+
 describe('Writer', () => {
   let Writer
   let writer
@@ -10,6 +12,7 @@ describe('Writer', () => {
   let platform
   let response
   let format
+  let encodedLength
   let encode
   let url
   let prioritySampler
@@ -36,7 +39,13 @@ describe('Writer', () => {
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {},
+        _tags: {
+          trace_id: id('1'),
+          span_id: id('2'),
+          parent_id: id('0'),
+          start: 3,
+          duration: 4
+        },
         _traceFlags: {}
       })
     }
@@ -58,7 +67,12 @@ describe('Writer', () => {
     }
 
     format = sinon.stub().withArgs(span).returns('formatted')
-    encode = sinon.stub().withArgs(['formatted']).returns('encoded')
+
+    encodedLength = 12
+    encode = function (buf) {
+      buf[0] = 101
+      return encodedLength
+    }
 
     url = {
       protocol: 'http:',
@@ -97,16 +111,7 @@ describe('Writer', () => {
     it('should append a trace', () => {
       writer.append([span])
 
-      expect(writer._queue).to.deep.include('encoded')
-    })
-
-    it('should flush when full', () => {
-      writer.append([span])
-      writer._size = 8 * 1024 * 1024
-      writer.append([span])
-
-      expect(writer.length).to.equal(1)
-      expect(writer._queue).to.deep.include('encoded')
+      expect(writer._offset).to.equal(12)
     })
   })
 
@@ -125,7 +130,7 @@ describe('Writer', () => {
     })
 
     it('should flush its traces to the agent', () => {
-      platform.msgpack.prefix.withArgs(['encoded', 'encoded']).returns(['prefixed'])
+      platform.msgpack.prefix.returns(['prefixed'])
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
