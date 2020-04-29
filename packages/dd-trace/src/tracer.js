@@ -146,7 +146,7 @@ function getScope (config) {
   if (config.scope === NOOP) {
     Scope = require('./scope/base')
   } else {
-    Scope = platform.Scope
+    Scope = platform.getScope(config.scope)
   }
 
   return new Scope(config)

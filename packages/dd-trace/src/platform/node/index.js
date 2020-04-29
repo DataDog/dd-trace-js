@@ -11,7 +11,7 @@ const metrics = require('./metrics')
 const plugins = require('../../plugins')
 const hostname = require('./hostname')
 const Loader = require('./loader')
-const Scope = require('../../scope/async_hooks')
+const scopes = require('../../../../../ext/scopes')
 const exporter = require('./exporter')
 const pkg = require('./pkg')
 
@@ -37,7 +37,12 @@ const platform = {
   on: emitter.on.bind(emitter),
   off: emitter.removeListener.bind(emitter),
   Loader,
-  Scope,
+  getScope (scope) {
+    if (scope === scopes.ASYNC_LOCAL_STORAGE) {
+      return require('../../scope/async_local_storage')
+    }
+    return require('../../scope/async_hooks')
+  },
   exporter
 }
 
