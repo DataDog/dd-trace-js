@@ -69,12 +69,38 @@ describe('Plugin', () => {
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.have.deep.property('dd', {
+            expect(record.dd).to.deep.include({
               trace_id: span.context().toTraceId(),
               span_id: span.context().toSpanId()
             })
 
             expect(record).to.have.deep.property('msg', 'message')
+          })
+        })
+
+        it('should support errors', () => {
+          tracer.scope().activate(span, () => {
+            const error = new Error('boom')
+
+            logger.info(error)
+
+            const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+            expect(record).to.have.property('msg', error.message)
+            expect(record).to.have.property('type', 'Error')
+            expect(record).to.have.property('stack', error.stack)
+          })
+        })
+
+        it('should not alter the original record', () => {
+          tracer.scope().activate(span, () => {
+            const record = {
+              foo: 'bar'
+            }
+
+            logger.info(record)
+
+            expect(record).to.not.have.property('dd')
           })
         })
       })

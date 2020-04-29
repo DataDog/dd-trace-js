@@ -1,13 +1,34 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/log')
+const { LOG } = require('../../../ext/formats')
 
 function createWrapWrite (tracer, config) {
   return function wrapWrite (write) {
     return function writeWithTrace (chunk, encoding, callback) {
-      arguments[0] = tx.correlate(tracer, chunk)
+      const span = tracer.scope().active()
+
+      tracer.inject(span, LOG, chunk)
 
       return write.apply(this, arguments)
+    }
+  }
+}
+
+function createWrapMethod (tracer, config) {
+  return function wrapMethod (method) {
+    return function methodWithTrace () {
+      const result = method.apply(this, arguments)
+
+      for (const name in this.transports) {
+        const transport = this.transports[name]
+
+        if (transport._dd_patched || typeof transport.log !== 'function') continue
+
+        transport.log = createWrapLog(tracer, config)(transport.log)
+        transport._dd_patched = true
+      }
+
+      return result
     }
   }
 }
@@ -15,28 +36,17 @@ function createWrapWrite (tracer, config) {
 function createWrapLog (tracer, config) {
   return function wrapLog (log) {
     return function logWithTrace (level, msg, meta, callback) {
-      const scope = tracer.scope().active()
+      const span = tracer.scope().active()
 
-      if (!scope || arguments.length < 1) return log.apply(this, arguments)
+      meta = arguments[2] = meta || {}
 
-      for (let i = 0, l = arguments.length; i < l; i++) {
-        if (typeof arguments[i] !== 'object') continue
+      tracer.inject(span, LOG, meta)
 
-        arguments[i] = tx.correlate(tracer, arguments[i])
+      const result = log.apply(this, arguments)
 
-        return log.apply(this, arguments)
-      }
+      delete meta.dd
 
-      meta = tx.correlate(tracer)
-      callback = arguments[arguments.length - 1]
-
-      const index = typeof callback === 'function'
-        ? arguments.length - 1
-        : arguments.length
-
-      Array.prototype.splice.call(arguments, index, 0, meta)
-
-      return log.apply(this, arguments)
+      return result
     }
   }
 }
@@ -57,13 +67,15 @@ module.exports = [
   {
     name: 'winston',
     file: 'lib/winston/logger.js',
-    versions: ['1 - 2'],
+    versions: ['2'],
     patch (logger, tracer, config) {
       if (!tracer._logInjection) return
-      this.wrap(logger.Logger.prototype, 'log', createWrapLog(tracer, config))
+      this.wrap(logger.Logger.prototype, 'configure', createWrapMethod(tracer, config))
+      this.wrap(logger.Logger.prototype, 'add', createWrapMethod(tracer, config))
     },
     unpatch (logger) {
-      this.unwrap(logger.Logger.prototype, 'log')
+      this.unwrap(logger.Logger.prototype, 'configure')
+      this.unwrap(logger.Logger.prototype, 'add')
     }
   }
 ]

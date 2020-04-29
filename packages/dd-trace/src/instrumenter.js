@@ -102,6 +102,31 @@ class Instrumenter {
     })
   }
 
+  wrapExport (moduleExports, wrapper) {
+    if (typeof moduleExports !== 'function') return moduleExports
+
+    const props = Object.keys(moduleExports)
+    const shim = function () {
+      return moduleExports._datadog_wrapper.apply(this, arguments)
+    }
+
+    for (const prop of props) {
+      shim[prop] = moduleExports[prop]
+    }
+
+    moduleExports._datadog_wrapper = wrapper
+
+    return shim
+  }
+
+  unwrapExport (moduleExports) {
+    if (moduleExports && moduleExports._datadog_wrapper) {
+      moduleExports._datadog_wrapper = moduleExports
+    }
+
+    return moduleExports
+  }
+
   load (plugin, meta) {
     if (!this._enabled) return
 

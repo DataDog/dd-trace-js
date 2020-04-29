@@ -10,6 +10,8 @@ describe('Plugin', () => {
   let winston
   let tracer
   let transport
+  let log
+  let spy
   let span
 
   function setup (version, winstonConfiguration) {
@@ -17,11 +19,19 @@ describe('Plugin', () => {
 
     winston = require(`../../../versions/winston@${version}`).get()
 
+    spy = sinon.spy()
+
     class Transport extends winston.Transport {}
 
-    Transport.prototype.log = sinon.spy()
+    if (semver.intersects(version, '>=3')) {
+      log = sinon.spy((meta) => spy(meta.dd))
+    } else {
+      log = sinon.spy((level, msg, meta) => spy(meta.dd))
+    }
 
-    transport = new Transport()
+    Transport.prototype.log = log
+
+    transport = new Transport('test')
 
     if (winston.configure) {
       const configureBlock = {
@@ -63,11 +73,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             winston.info('message')
 
-            if (semver.intersects(version, '>=3')) {
-              expect(transport.log).to.not.have.been.calledWithMatch(meta)
-            } else {
-              expect(transport.log).to.not.have.been.calledWithMatch('info', 'message', meta)
-            }
+            expect(spy).to.not.have.been.calledWithMatch(meta.dd)
           })
         })
       })
@@ -93,11 +99,7 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               winston.info('message')
 
-              if (semver.intersects(version, '>=3')) {
-                expect(transport.log).to.have.been.calledWithMatch(meta)
-              } else {
-                expect(transport.log).to.have.been.calledWithMatch('info', 'message', meta)
-              }
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
             })
           })
 
@@ -120,10 +122,34 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               logger.info('message')
 
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
+            })
+          })
+
+          it('should support errors', () => {
+            const meta = {
+              dd: {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              }
+            }
+
+            const error = new Error('boom')
+
+            tracer.scope().activate(span, () => {
+              winston.error(error)
+
               if (semver.intersects(version, '>=3')) {
-                expect(transport.log).to.have.been.calledWithMatch(meta)
+                const record = log.firstCall.args[0]
+
+                expect(record).to.be.an('error')
+                expect(record.dd).to.deep.include(meta.dd)
               } else {
-                expect(transport.log).to.have.been.calledWithMatch('info', 'message', meta)
+                const record = log.firstCall.args[2]
+
+                expect(record).to.be.an('error')
+                expect(record).to.not.have.property('dd')
+                expect(spy).to.have.been.calledWithMatch(meta.dd)
               }
             })
           })
@@ -140,11 +166,9 @@ describe('Plugin', () => {
                   message: 'message'
                 })
 
-                expect(transport.log).to.have.been.calledWithMatch({
-                  dd: {
-                    trace_id: span.context().toTraceId(),
-                    span_id: span.context().toSpanId()
-                  }
+                expect(spy).to.have.been.calledWithMatch({
+                  trace_id: span.context().toTraceId(),
+                  span_id: span.context().toSpanId()
                 })
               })
             })
@@ -182,9 +206,10 @@ describe('Plugin', () => {
               if (semver.intersects(version, '>=3')) {
                 meta['message'] = interpolatedLog
 
-                expect(transport.log).to.have.been.calledWithMatch(meta)
+                expect(log).to.have.been.calledWithMatch(meta)
               } else {
-                expect(transport.log).to.have.been.calledWithMatch('info', interpolatedLog, meta)
+                expect(log).to.have.been.calledWithMatch('info', interpolatedLog)
+                expect(spy).to.have.been.calledWithMatch(meta.dd)
               }
             })
           })
