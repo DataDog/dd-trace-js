@@ -9,7 +9,11 @@ function createWrapWrite (tracer, config) {
 
       tracer.inject(span, LOG, chunk)
 
-      return write.apply(this, arguments)
+      const result = write.apply(this, arguments)
+
+      delete chunk.dd
+
+      return result
     }
   }
 }

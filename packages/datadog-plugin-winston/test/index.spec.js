@@ -139,18 +139,12 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               winston.error(error)
 
-              if (semver.intersects(version, '>=3')) {
-                const record = log.firstCall.args[0]
+              const index = semver.intersects(version, '>=3') ? 0 : 2
+              const record = log.firstCall.args[index]
 
-                expect(record).to.be.an('error')
-                expect(record.dd).to.deep.include(meta.dd)
-              } else {
-                const record = log.firstCall.args[2]
-
-                expect(record).to.be.an('error')
-                expect(record).to.not.have.property('dd')
-                expect(spy).to.have.been.calledWithMatch(meta.dd)
-              }
+              expect(record).to.be.an('error')
+              expect(record).to.not.have.property('dd')
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
             })
           })
 
@@ -204,13 +198,14 @@ describe('Plugin', () => {
               winston.info(splatFormmatedLog, extra)
 
               if (semver.intersects(version, '>=3')) {
-                meta['message'] = interpolatedLog
-
-                expect(log).to.have.been.calledWithMatch(meta)
+                expect(log).to.have.been.calledWithMatch({
+                  message: interpolatedLog
+                })
               } else {
                 expect(log).to.have.been.calledWithMatch('info', interpolatedLog)
-                expect(spy).to.have.been.calledWithMatch(meta.dd)
               }
+
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
             })
           })
         })
