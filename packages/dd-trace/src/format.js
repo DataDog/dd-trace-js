@@ -52,7 +52,7 @@ function extractTags (trace, span) {
   const hostname = context._hostname
   const priority = context._sampling.priority
 
-  Object.keys(tags).forEach(tag => {
+  for (const tag in tags) {
     switch (tag) {
       case 'service.name':
       case 'span.type':
@@ -84,7 +84,7 @@ function extractTags (trace, span) {
       default: // eslint-disable-line no-fallthrough
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
-  })
+  }
 
   if (span.tracer()._service === tags['service.name']) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')
@@ -159,9 +159,9 @@ function addObjectTag (meta, metrics, key, value, seen) {
 
   seen.push(value)
 
-  Object.keys(value).forEach(prop => {
+  for (const prop in value) {
     addTag(meta, metrics, `${key}.${prop}`, value[prop], seen)
-  })
+  }
 
   seen.pop()
 }

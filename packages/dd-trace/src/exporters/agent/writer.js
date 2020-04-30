@@ -10,39 +10,29 @@ const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer {
   constructor (url, prioritySampler) {
-    this._queue = []
     this._url = url
     this._prioritySampler = prioritySampler
-    this._size = 0
+
+    this._reset()
   }
 
   get length () {
-    return this._queue.length
+    return this._count
   }
 
   append (spans) {
     log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
-    const buffer = encode(spans)
-
-    log.debug(() => `Adding encoded trace to buffer: ${buffer.toString('hex').match(/../g).join(' ')}`)
-
-    if (buffer.length + this._size > MAX_SIZE) {
-      this.flush()
-    }
-
-    this._size += buffer.length
-    this._queue.push(buffer)
+    this._encode(spans)
   }
 
   flush () {
-    if (this._queue.length > 0) {
-      const data = platform.msgpack.prefix(this._queue)
+    if (this._count > 0) {
+      const data = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
 
-      this._request(data, this._queue.length)
+      this._request(data, this._count)
 
-      this._queue = []
-      this._size = 0
+      this._reset()
     }
   }
 
@@ -105,6 +95,31 @@ class Writer {
     if (value) {
       headers[key] = value
     }
+  }
+
+  _encode (trace) {
+    const offset = this._offset
+    try {
+      this._offset = encode(this._buffer, this._offset, trace, this)
+      this._count++
+    } catch (e) {
+      if (e instanceof RangeError) {
+        log.error(e.message)
+      } else {
+        throw e
+      }
+    }
+
+    log.debug(() => [
+      'Added encoded trace to buffer:',
+      this._buffer.slice(offset, this._offset).toString('hex').match(/../g).join(' ')
+    ].join(' '))
+  }
+
+  _reset () {
+    this._buffer = Buffer.allocUnsafe(MAX_SIZE)
+    this._offset = 5 // we'll use these first bytes to hold an array prefix
+    this._count = 0
   }
 }
 
