@@ -81,5 +81,17 @@ module.exports = [
       this.unwrap(logger.Logger.prototype, 'configure')
       this.unwrap(logger.Logger.prototype, 'add')
     }
+  },
+  {
+    name: 'winston',
+    file: 'lib/winston/logger.js',
+    versions: ['1'],
+    patch (logger, tracer, config) {
+      if (!tracer._logInjection) return
+      this.wrap(logger.Logger.prototype, 'add', createWrapMethod(tracer, config))
+    },
+    unpatch (logger) {
+      this.unwrap(logger.Logger.prototype, 'add')
+    }
   }
 ]
