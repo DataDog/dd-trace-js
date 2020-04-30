@@ -31,7 +31,7 @@ describe('Plugin', () => {
 
     Transport.prototype.log = log
 
-    transport = new Transport('test')
+    transport = new Transport()
 
     if (winston.configure) {
       const configureBlock = {
