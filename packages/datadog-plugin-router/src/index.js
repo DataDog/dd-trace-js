@@ -16,29 +16,6 @@ function createWrapHandle (tracer, config) {
   }
 }
 
-function createWrapProcessParams (tracer, config) {
-  return function wrapProcessParams (processParams) {
-    return function processParamsWithTrace (layer, called, req, res, done) {
-      const matchers = layer._datadog_matchers
-
-      req = done ? req : called
-
-      if (web.active(req) && matchers) {
-        // Try to guess which path actually matched
-        for (let i = 0; i < matchers.length; i++) {
-          if (matchers[i].test(layer)) {
-            web.enterRoute(req, matchers[i].path)
-
-            break
-          }
-        }
-      }
-
-      return processParams.apply(this, arguments)
-    }
-  }
-}
-
 function wrapRouterMethod (original) {
   return function methodWithTrace (fn) {
     const offset = this.stack ? [].concat(this.stack).length : 0
@@ -115,6 +92,19 @@ function wrapNext (layer, req, next) {
 }
 
 function callHandle (layer, handle, req, args) {
+  const matchers = layer._datadog_matchers
+
+  if (web.active(req) && matchers) {
+    // Try to guess which path actually matched
+    for (let i = 0; i < matchers.length; i++) {
+      if (matchers[i].test(layer)) {
+        web.enterRoute(req, matchers[i].path)
+
+        break
+      }
+    }
+  }
+
   return web.wrapMiddleware(req, handle, 'express.middleware', () => {
     return handle.apply(layer, args)
   })
@@ -168,13 +158,11 @@ module.exports = {
   versions: ['>=1'],
   patch (Router, tracer, config) {
     this.wrap(Router.prototype, 'handle', createWrapHandle(tracer, config))
-    this.wrap(Router.prototype, 'process_params', createWrapProcessParams(tracer, config))
     this.wrap(Router.prototype, 'use', wrapRouterMethod)
     this.wrap(Router.prototype, 'route', wrapRouterMethod)
   },
   unpatch (Router) {
     this.unwrap(Router.prototype, 'handle')
-    this.unwrap(Router.prototype, 'process_params')
     this.unwrap(Router.prototype, 'use')
     this.unwrap(Router.prototype, 'route')
   }

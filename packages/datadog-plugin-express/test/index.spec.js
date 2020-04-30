@@ -461,7 +461,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should not lose the current path on error', done => {
+        it('should not lose the current path on app error', done => {
           const app = express()
 
           app.get('/app', (req, res, next) => {
@@ -486,6 +486,41 @@ describe('Plugin', () => {
               axios
                 .get(`http://localhost:${port}/app`)
                 .catch(done)
+            })
+          })
+        })
+
+        it('should not lose the current path on router error', done => {
+          const app = express()
+          const Router = express.Router
+
+          const routerA = Router()
+          const routerB = Router()
+
+          routerA.get('/a', (req, res) => {
+            throw new Error()
+          })
+          routerB.get('/b', (req, res) => {
+            res.status(200).send()
+          })
+
+          app.use('/v1', routerA)
+          app.use('/v1', routerB)
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /v1/a')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/v1/a`)
+                .catch(() => {})
             })
           })
         })
