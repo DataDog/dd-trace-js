@@ -19,8 +19,6 @@ node-core-base: &node-core-base
       run:
         name: Install dependencies
         command: yarn install --ignore-engines
-        environment:
-          DD_NATIVE_METRICS: "false"
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
@@ -65,8 +63,6 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Install dependencies
         command: yarn install
-        environment:
-          DD_NATIVE_METRICS: "false"
     - &save-yarn-cache
       save_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
