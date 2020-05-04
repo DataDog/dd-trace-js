@@ -62,6 +62,7 @@ function getPipeline () {
   return fetch(`project/github/DataDog/dd-trace-js/pipeline?branch=${branch}`)
     .then(response => {
       const pipeline = response.data.items
+        .filter(item => item.trigger.type !== 'schedule')
         .find(item => item.vcs.revision === revision)
 
       if (!pipeline) {
