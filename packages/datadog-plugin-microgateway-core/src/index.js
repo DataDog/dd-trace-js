@@ -20,13 +20,13 @@ function createWrapGateway (tracer, config) {
   config = web.normalizeConfig(config)
 
   return function wrapGateway (Gateway) {
-    return wrapExport(Gateway, function GatewayWithTrace (config) {
+    return function GatewayWithTrace (config) {
       const gateway = Gateway.apply(this, arguments)
 
       gateway.addPlugin = wrapAddPlugin(gateway.addPlugin)
 
       return gateway
-    })
+    }
   }
 }
 
@@ -34,7 +34,7 @@ function createWrapConfigProxyFactory (tracer, config) {
   config = web.normalizeConfig(config)
 
   return function wrapConfigProxyFactory (configProxyFactory) {
-    return wrapExport(configProxyFactory, function configProxyFactoryWithTrace () {
+    return function configProxyFactoryWithTrace () {
       const configProxy = configProxyFactory.apply(this, arguments)
 
       return function configProxyWithTrace (req, res, next) {
@@ -46,7 +46,7 @@ function createWrapConfigProxyFactory (tracer, config) {
           return configProxy.call(this, req, res, wrapNext(req, next))
         })
       }
-    })
+    }
   }
 }
 
@@ -54,13 +54,13 @@ function createWrapPluginsFactory (tracer, config) {
   config = web.normalizeConfig(config)
 
   return function wrapPluginsFactory (pluginsFactory) {
-    return wrapExport(pluginsFactory, function pluginsFactoryWithTrace (plugins) {
+    return function pluginsFactoryWithTrace (plugins) {
       const pluginsMiddleware = pluginsFactory.apply(this, arguments)
 
       return function pluginsMiddlewareWithTrace (req, res, next) {
         return pluginsMiddleware.call(this, req, res, wrapNext(req, next))
       }
-    })
+    }
   }
 }
 
@@ -117,34 +117,15 @@ function wrapListeners (handler) {
   }
 }
 
-function wrapExport (fn, wrapper) {
-  const props = Object.keys(fn)
-  const shim = function () {
-    return fn._datadog_wrapper.apply(this, arguments)
-  }
-
-  for (const prop of props) {
-    shim[prop] = fn[prop]
-  }
-
-  fn._datadog_wrapper = wrapper
-
-  return shim
-}
-
-function unwrapExport (fn) {
-  fn._datadog_wrapper = fn
-}
-
 module.exports = [
   {
     name: 'microgateway-core',
     versions: ['>=2.1'],
     patch (Gateway, tracer, config) {
-      return createWrapGateway(tracer, config)(Gateway)
+      return this.wrapExport(Gateway, createWrapGateway(tracer, config)(Gateway))
     },
     unpatch (Gateway) {
-      unwrapExport(Gateway)
+      this.unwrapExport(Gateway)
     }
   },
   {
@@ -152,10 +133,11 @@ module.exports = [
     versions: ['>=2.1'],
     file: 'lib/config-proxy-middleware.js',
     patch (configProxyFactory, tracer, config) {
-      return createWrapConfigProxyFactory(tracer, config)(configProxyFactory)
+      const wrapper = createWrapConfigProxyFactory(tracer, config)(configProxyFactory)
+      return this.wrapExport(configProxyFactory, wrapper)
     },
     unpatch (configProxyFactory) {
-      unwrapExport(configProxyFactory)
+      this.unwrapExport(configProxyFactory)
     }
   },
   {
@@ -163,10 +145,11 @@ module.exports = [
     versions: ['>=2.1'],
     file: 'lib/plugins-middleware.js',
     patch (pluginsFactory, tracer, config) {
-      return createWrapPluginsFactory(tracer, config)(pluginsFactory)
+      const wrapper = createWrapPluginsFactory(tracer, config)(pluginsFactory)
+      return this.wrapExport(pluginsFactory, wrapper)
     },
     unpatch (pluginsFactory) {
-      unwrapExport(pluginsFactory)
+      this.unwrapExport(pluginsFactory)
     }
   }
 ]

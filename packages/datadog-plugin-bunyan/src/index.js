@@ -1,11 +1,13 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/log')
+const { LOG } = require('../../../ext/formats')
 
 function createWrapEmit (tracer, config) {
   return function wrapEmit (emit) {
     return function emitWithTrace (rec, noemit) {
-      arguments[0] = tx.correlate(tracer, rec)
+      const span = tracer.scope().active()
+
+      tracer.inject(span, LOG, rec)
 
       return emit.apply(this, arguments)
     }

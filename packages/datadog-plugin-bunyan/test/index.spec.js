@@ -68,10 +68,21 @@ describe('Plugin', () => {
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.have.deep.property('dd', {
+            expect(record.dd).to.deep.include({
               trace_id: span.context().toTraceId(),
               span_id: span.context().toSpanId()
             })
+          })
+        })
+
+        it('should not mutate the original record', () => {
+          tracer.scope().activate(span, () => {
+            const record = { foo: 'bar' }
+
+            logger.info(record)
+
+            expect(stream.write).to.have.been.called
+            expect(record).to.not.have.property('dd')
           })
         })
       })
