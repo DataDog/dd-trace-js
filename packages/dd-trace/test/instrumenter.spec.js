@@ -324,6 +324,47 @@ describe('Instrumenter', () => {
         expect(shimmer.massUnwrap).to.have.been.calledWith([obj], ['method'])
       })
     })
+
+    describe('wrapExport', () => {
+      it('should wrap the exported function', () => {
+        const fn = () => 'foo'
+        const wrapper = () => fn() + 'bar'
+        const shim = instrumenter.wrapExport(fn, wrapper)
+
+        expect(shim).to.not.equal(fn)
+        expect(shim()).to.equal('foobar')
+      })
+
+      it('should leave non-functions untouched', () => {
+        const obj = {}
+        const wrapper = () => {}
+        const shim = instrumenter.wrapExport(obj, wrapper)
+
+        expect(shim).to.equal(obj)
+      })
+    })
+
+    describe('unwrapExport', () => {
+      it('should unwrap the exported function', () => {
+        const fn = () => 'foo'
+        const wrapper = () => fn() + 'bar'
+        const shim = instrumenter.wrapExport(fn, wrapper)
+
+        instrumenter.unwrapExport(fn)
+
+        expect(shim()).to.equal('foo')
+      })
+
+      it('should leave non-functions untouched', () => {
+        const obj = {}
+        const wrapper = () => {}
+        const shim = instrumenter.wrapExport(obj, wrapper)
+
+        instrumenter.unwrapExport(obj)
+
+        expect(shim).to.equal(obj)
+      })
+    })
   })
 
   describe('with integrations disabled', () => {

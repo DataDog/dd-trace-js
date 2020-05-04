@@ -1,35 +1,39 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/log')
+const { LOG } = require('../../../ext/formats')
 
-function createWrapWrite (tracer, config) {
-  return function wrapWrite (write) {
-    return function writeWithTrace (obj, msg, num) {
-      arguments[0] = tx.correlate(tracer, obj)
+function createWrapPino (tracer, config) {
+  return function wrapPino (pino) {
+    return function pinoWithTrace () {
+      const instance = pino.apply(this, arguments)
+      const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-      return write.apply(this, arguments)
+      Object.defineProperty(instance, asJsonSym, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: createWrapAsJson(tracer, config)(instance[asJsonSym])
+      })
+
+      return instance
     }
   }
 }
 
-function createWrapGenLog (tracer, config) {
-  return function wrapGenLog (genLog) {
-    return function genLogWithTrace (z) {
-      const log = genLog(z)
+function createWrapAsJson (tracer, config) {
+  return function wrapAsJson (asJson) {
+    return function asJsonWithTrace (obj, msg, num, time) {
+      const span = tracer.scope().active()
 
-      return function logWithTrace (a, b, c, d, e, f, g, h, i, j, k) {
-        const args = [a, b, c, d, e, f, g, h, i, j, k].slice(0, arguments.length)
+      obj = arguments[0] = obj || {}
 
-        if (!a) {
-          args[0] = {}
-        } else if (typeof a !== 'object') {
-          args.unshift({})
-        }
+      tracer.inject(span, LOG, obj)
 
-        args[0] = tx.correlate(tracer, args[0])
+      const json = asJson.apply(this, arguments)
 
-        return log.apply(this, args)
-      }
+      obj && delete obj.dd
+
+      return json
     }
   }
 }
@@ -37,36 +41,13 @@ function createWrapGenLog (tracer, config) {
 module.exports = [
   {
     name: 'pino',
-    versions: ['>=5'],
+    versions: ['2 - 3', '4', '>=5'],
     patch (pino, tracer, config) {
       if (!tracer._logInjection) return
-      this.wrap(Object.getPrototypeOf(pino()), pino.symbols.writeSym, createWrapWrite(tracer, config))
+      return this.wrapExport(pino, createWrapPino(tracer, config)(pino))
     },
     unpatch (pino) {
-      this.unwrap(Object.getPrototypeOf(pino()), pino.symbols.writeSym)
-    }
-  },
-  {
-    name: 'pino',
-    versions: ['4'],
-    file: 'lib/tools.js',
-    patch (tools, tracer, config) {
-      if (!tracer._logInjection) return
-      this.wrap(tools, 'genLog', createWrapGenLog(tracer, config))
-    },
-    unpatch (tools) {
-      this.unwrap(tools, 'genLog')
-    }
-  },
-  {
-    name: 'pino',
-    versions: ['2 - 3'],
-    patch (pino, tracer, config) {
-      if (!tracer._logInjection) return
-      this.wrap(Object.getPrototypeOf(pino()), 'asJson', createWrapWrite(tracer, config))
-    },
-    unpatch (pino) {
-      this.unwrap(Object.getPrototypeOf(pino()), 'asJson')
+      return this.unwrapExport(pino)
     }
   }
 ]
