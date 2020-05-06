@@ -5,7 +5,7 @@
 !packages/*/src/**/*
 !packages/*/index.js
 !prebuilds/**/*
-!scripts/postinstall.js
+!scripts/**/*
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
