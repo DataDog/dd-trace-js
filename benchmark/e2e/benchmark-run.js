@@ -131,7 +131,21 @@ async function testBoth (url, duration, prof) {
   logResult(results, 'latency')
   logResult(results, 'throughput')
 
-  console.log(`<<<<<< RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
+  console.log('\n\nSUMMARY:')
+  console.log(
+    'avg latency overhead %',
+    (results.withTracer.latency.average / results.withoutTracer.latency.average - 1) * 100
+  )
+  console.log(
+    'avg requests overhead %',
+    (results.withoutTracer.requests.average / results.withTracer.requests.average - 1) * 100
+  )
+  console.log(
+    'avg throughput overhead %',
+    (results.withoutTracer.throughput.average / results.withTracer.throughput.average - 1) * 100
+  )
+
+  console.log(`\n<<<<<< RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
   cd(__dirname)
 }
 
@@ -155,13 +169,13 @@ function logResult (results, type) {
 async function main () {
   const duration = parseInt(process.env.DD_BENCH_DURATION || '10')
   const prof = !!process.env.DD_BENCH_PROF
+  const url = process.argv[2] || 'http://localhost:9080/rest/api/config/countCustomers'
   await ensureAppIsInstalled()
   console.log('# checking that mongo is alive')
   await mongoService()
   console.log('# it is alive')
   await checkDb()
-  await testBoth('http://localhost:9080/', duration, prof)
-  await testBoth('http://localhost:9080/rest/api/config/countCustomers', duration, prof)
+  await testBoth(url, duration, prof)
 }
 
 main().catch(e => {
