@@ -32,6 +32,9 @@
           "-std=c++11",
           "-Wall",
           "-Werror"
+        ],
+        "cflags_cc": [
+          "-Wno-cast-function-type"
         ]
       }],
       ["OS == 'win'", {
