@@ -3,7 +3,6 @@ require,@types/node,MIT,Copyright Authors
 require,container-info,MIT,Copyright 2018 Stephen Belanger
 require,core-js,MIT,Copyright 2014-2020 Denis Pushkarev
 require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
-require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
@@ -47,6 +46,7 @@ dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
+dev,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 dev,karma,MIT,Copyright 2011-2019 Google, Inc.
 dev,karma-browserstack-launcher,MIT,Copyright 2011-2013 Google, Inc.
 dev,karma-chrome-launcher,MIT,Copyright 2011-2013 Google, Inc.
