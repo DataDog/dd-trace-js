@@ -104,7 +104,7 @@ module.exports = function (config) {
       }
     }
 
-    opts.reporters = 'BrowserStack'
+    opts.reporters = ['BrowserStack']
 
     for (const browser in opts.customLaunchers) {
       opts.browsers.push(browser)
