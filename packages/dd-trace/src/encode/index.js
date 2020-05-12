@@ -121,9 +121,19 @@ function checkOffset (offset, length) {
   return offset
 }
 
+function lightCopyIdToHeader (src, offset) {
+  for (let i = 0; i < 8; i++) {
+    headerBuffer[offset + i] = src[i]
+  }
+}
+
 function copyHeader (offset, span) {
-  headerBuffer.set(span.trace_id.toBuffer(), traceIdOffset)
-  headerBuffer.set(span.span_id.toBuffer(), spanIdOffset)
+  const traceId = span.trace_id.toBuffer()
+  for (let i = 0; i < 8; i++) {
+    headerBuffer[traceIdOffset + i] = traceId[i]
+  }
+  lightCopyIdToHeader(span.trace_id.toBuffer(), traceIdOffset)
+  lightCopyIdToHeader(span.span_id.toBuffer(), spanIdOffset)
   util.writeInt64(headerBuffer, span.start, startOffset)
   util.writeInt64(headerBuffer, span.duration, durationOffset)
   headerBuffer.set(tokens.int[span.error], errorOffset)
@@ -145,7 +155,9 @@ function copy (offset, source) {
   const length = source.length
 
   offset = checkOffset(offset, length)
-  buffer.set(source, offset)
+  for (let i = 0; i < length; i++) {
+    buffer[offset + i] = source[i]
+  }
 
   return offset + length
 }
