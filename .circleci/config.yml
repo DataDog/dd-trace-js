@@ -867,6 +867,7 @@ workflows:
       - lint
       - typescript
       - browser
+      - browserstack
       - node-core-8
       - node-core-10
       - node-core-12
@@ -1024,6 +1025,7 @@ workflows:
                 - master
     jobs:
       - browser
+      - browserstack
       - node-core-8
       - node-core-10
       - node-core-12
