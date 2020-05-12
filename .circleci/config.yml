@@ -845,6 +845,21 @@ jobs:
           name: Integration tests
           command: yarn test:browser
 
+  browserstack:
+    docker:
+      - image: circleci/node:10-browsers
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - run:
+          name: Integration tests
+          command: yarn test:browserstack
+
 workflows:
   version: 2
   build:
