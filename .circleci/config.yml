@@ -736,10 +736,10 @@ jobs:
 
   ## Tests
 
-  linux-ia32-14-test:
+  linux-ia32-13-test:
     <<: *test-prebuild-linux-base
     docker:
-      - image: i386/node:14-alpine
+      - image: i386/node:13-alpine
 
   linux-ia32-12-test:
     <<: *test-prebuild-linux-base
