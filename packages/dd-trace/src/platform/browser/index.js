@@ -30,7 +30,7 @@ const platform = {
   on: () => {}, // TODO: add event listener
   off: () => {}, // TODO: add event listener
   Loader,
-  Scope,
+  getScope: () => Scope,
   exporter
 }
 
