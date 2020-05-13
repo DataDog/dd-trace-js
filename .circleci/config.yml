@@ -736,7 +736,7 @@ jobs:
 
   ## Tests
 
-  linux-ia32-13-test:
+  linux-ia32-14-test:
     <<: *test-prebuild-linux-base
     docker:
       - image: i386/node:13-alpine
@@ -1067,7 +1067,7 @@ workflows:
             - linux-x64-12-test
             - linux-x64-10-test
             - linux-x64-8-test
-            - linux-ia32-13-test
+            - linux-ia32-14-test
             - linux-ia32-12-test
             - linux-ia32-10-test
             - linux-ia32-8-test
