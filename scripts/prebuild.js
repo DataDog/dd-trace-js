@@ -41,6 +41,7 @@ function prebuildify () {
       `--devdir=${cache}`,
       '--release',
       '--build_v8_with_gn=false',
+      '--v8_enable_pointer_compression=""',
       '--enable_lto=false'
     ].join(' ')
 
