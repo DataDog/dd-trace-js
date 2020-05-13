@@ -64,7 +64,7 @@ module.exports = function (config) {
     webpack: webpackConfig.find(entry => entry.mode === 'development')
   }
 
-  if (process.env.CI === 'true') {
+  if (process.env.BROWSERSTACK === 'true') {
     // https://github.com/karma-runner/karma-browserstack-launcher
     opts.browserStack = {
       project: 'dd-trace-js'
@@ -104,7 +104,7 @@ module.exports = function (config) {
       }
     }
 
-    opts.reporters.push('BrowserStack')
+    opts.reporters = ['BrowserStack']
 
     for (const browser in opts.customLaunchers) {
       opts.browsers.push(browser)
