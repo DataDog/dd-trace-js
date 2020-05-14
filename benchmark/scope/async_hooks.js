@@ -61,13 +61,21 @@ suite
       inner.emitDestroy()
     }
   })
+  .add('Scope#activate (async)', {
+    defer: true,
+    fn (deferred) {
+      scope.activate(spanStub, () => {
+        queueMicrotask(() => {
+          deferred.resolve()
+        })
+      })
+    }
+  })
   .add('Scope#activate (async/await)', {
     defer: true,
     async fn (deferred) {
       await scope.activate(spanStub, () => {
-        return new Promise((resolve) => resolve())
-          .then(() => { throw new Error('foobar') })
-          .catch((e) => e)
+        return Promise.resolve()
       })
       deferred.resolve()
     }
