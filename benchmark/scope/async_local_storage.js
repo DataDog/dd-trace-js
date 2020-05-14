@@ -9,11 +9,11 @@ const benchmark = require('../benchmark')
 
 platform.use(node)
 
-const suite = benchmark('scope (async_hooks)')
+const suite = benchmark('scope (AsyncLocalStorage)')
 
 const spanStub = require('../stubs/span')
 
-const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
+const Scope = proxyquire('../../packages/dd-trace/src/scope/async_local_storage', {
   '../platform': platform
 })
 
@@ -28,10 +28,6 @@ function activateResource (name) {
     })
   })
 }
-
-let fn
-let promise
-let emitter
 
 suite
   .add('Scope#activate', {
@@ -93,72 +89,6 @@ suite
   .add('Scope#active', {
     fn () {
       scope.active()
-    }
-  })
-  .add('Scope#bind (null)', {
-    fn () {
-      scope.bind(null, {})
-    }
-  })
-  .add('Scope#bind (fn)', {
-    fn () {
-      scope.bind(() => {}, {})
-    }
-  })
-  .add('Scope#bind (fn())', {
-    onStart () {
-      fn = scope.bind(() => {}, {})
-    },
-    fn () {
-      fn()
-    }
-  })
-  .add('Scope#bind (promise)', {
-    fn () {
-      const promise = {
-        then: () => {}
-      }
-
-      scope.bind(promise, {})
-    }
-  })
-  .add('Scope#bind (promise.then)', {
-    onStart () {
-      promise = scope.bind({
-        then: () => {}
-      }, {})
-    },
-    fn () {
-      promise.then(() => {})
-    }
-  })
-  .add('Scope#bind (emitter)', {
-    fn () {
-      const emitter = {
-        addListener: () => {},
-        on: () => {},
-        emit: () => {},
-        removeListener: () => {}
-      }
-
-      scope.bind(emitter, {})
-    }
-  })
-  .add('Scope#bind (emitter.on/off)', {
-    onStart () {
-      emitter = scope.bind({
-        addListener: () => {},
-        on: () => {},
-        emit: () => {},
-        removeListener: () => {},
-        off: () => {}
-      }, {})
-    },
-    fn () {
-      const listener = () => {}
-
-      emitter.on('test', listener)
-      emitter.off('test', listener)
     }
   })
 
