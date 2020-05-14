@@ -202,6 +202,11 @@ jobs:
     docker:
       - image: node:12
 
+  node-core-14:
+    <<: *node-core-base
+    docker:
+      - image: node:14
+
   node-core-latest:
     <<: *node-core-base
     docker:
@@ -369,6 +374,20 @@ jobs:
     <<: *node-plugin-base
     docker:
       - image: node:12
+        environment:
+          - PLUGINS=fs
+
+  node-fs-14:
+    <<: *node-plugin-base
+    docker:
+      - image: node:14
+        environment:
+          - PLUGINS=fs
+
+  node-fs-latest:
+    <<: *node-plugin-base
+    docker:
+      - image: node
         environment:
           - PLUGINS=fs
 
@@ -613,6 +632,12 @@ jobs:
 
   # Prebuilds (linux x64)
 
+  linux-x64-14:
+    <<: *prebuild-linux-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=14 - 15
+
   linux-x64-12:
     <<: *prebuild-linux-base
     environment:
@@ -635,10 +660,10 @@ jobs:
 
   ## Tests
 
-  linux-x64-13-test:
+  linux-x64-14-test:
     <<: *test-prebuild-linux-base
     docker:
-      - image: node:13
+      - image: node:14
 
   linux-x64-12-test:
     <<: *test-prebuild-linux-base
@@ -683,6 +708,12 @@ jobs:
 
   # Prebuilds (linux ia32)
 
+  linux-ia32-14:
+    <<: *prebuild-linux-ia32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=14 - 15
+
   linux-ia32-12:
     <<: *prebuild-linux-ia32-base
     environment:
@@ -705,7 +736,7 @@ jobs:
 
   ## Tests
 
-  linux-ia32-13-test:
+  linux-ia32-14-test:
     <<: *test-prebuild-linux-base
     docker:
       - image: i386/node:13-alpine
@@ -727,6 +758,12 @@ jobs:
 
   # Prebuilds (darwin x64)
 
+  mac-x64-14:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=14 - 15
+
   mac-x64-12:
     <<: *prebuild-darwin-base
     environment:
@@ -746,6 +783,12 @@ jobs:
       - NODE_VERSIONS=8 - 9
 
   # Prebuilds (darwin ia32)
+
+  mac-ia32-14:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=14 - 15
 
   mac-ia32-12:
     <<: *prebuild-darwin-base
@@ -767,6 +810,12 @@ jobs:
 
   # Prebuilds (win32 x64)
 
+  win-x64-14:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=14 - 15
+
   win-x64-12:
     <<: *prebuild-win32-base
     environment:
@@ -786,6 +835,12 @@ jobs:
       - NODE_VERSIONS=8 - 9
 
   # Prebuilds (win32 ia32)
+
+  win-ia32-14:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=14 - 15
 
   win-ia32-12:
     <<: *prebuild-win32-base
@@ -871,6 +926,7 @@ workflows:
       - node-core-8
       - node-core-10
       - node-core-12
+      - node-core-14
       - node-core-latest
       - node-core-windows
       - node-bench-latest
@@ -889,6 +945,8 @@ workflows:
       - node-fs-8
       - node-fs-10
       - node-fs-12
+      - node-fs-14
+      - node-fs-latest
       - node-generic-pool
       - node-google-cloud-pubsub
       - node-graphql
@@ -919,15 +977,17 @@ workflows:
   prebuild:
     jobs:
       # Linux x64
+      - linux-x64-14:
+          <<: *prebuild-job
       - linux-x64-12:
           <<: *prebuild-job
       - linux-x64-10:
           <<: *prebuild-job
       - linux-x64-8:
           <<: *prebuild-job
-      - linux-x64-13-test:
+      - linux-x64-14-test:
           requires:
-            - linux-x64-12
+            - linux-x64-14
       - linux-x64-12-test:
           requires:
             - linux-x64-12
@@ -938,15 +998,17 @@ workflows:
           requires:
             - linux-x64-8
       # Linux ia32
+      - linux-ia32-14:
+          <<: *prebuild-job
       - linux-ia32-12:
           <<: *prebuild-job
       - linux-ia32-10:
           <<: *prebuild-job
       - linux-ia32-8:
           <<: *prebuild-job
-      - linux-ia32-13-test:
+      - linux-ia32-14-test:
           requires:
-            - linux-ia32-12
+            - linux-ia32-14
       - linux-ia32-12-test:
           requires:
             - linux-ia32-12
@@ -963,6 +1025,8 @@ workflows:
       - alpine-ia32:
           <<: *prebuild-job
       # Darwin x64
+      - mac-x64-14:
+          <<: *prebuild-job
       - mac-x64-12:
           <<: *prebuild-job
       - mac-x64-10:
@@ -970,6 +1034,8 @@ workflows:
       - mac-x64-8:
           <<: *prebuild-job
       # Darwin ia32
+      - mac-ia32-14:
+          <<: *prebuild-job
       - mac-ia32-12:
           <<: *prebuild-job
       - mac-ia32-10:
@@ -977,6 +1043,8 @@ workflows:
       - mac-ia32-8:
           <<: *prebuild-job
       # Windows x64
+      - win-x64-14:
+          <<: *prebuild-job
       - win-x64-12:
           <<: *prebuild-job
       - win-x64-10:
@@ -984,6 +1052,8 @@ workflows:
       - win-x64-8:
           <<: *prebuild-job
       # Windows ia32
+      - win-ia32-14:
+          <<: *prebuild-job
       - win-ia32-12:
           <<: *prebuild-job
       - win-ia32-10:
@@ -993,25 +1063,29 @@ workflows:
       # Artifacts
       - prebuilds:
           requires:
-            - linux-x64-13-test
+            - linux-x64-14-test
             - linux-x64-12-test
             - linux-x64-10-test
             - linux-x64-8-test
-            - linux-ia32-13-test
+            - linux-ia32-14-test
             - linux-ia32-12-test
             - linux-ia32-10-test
             - linux-ia32-8-test
             - alpine-x64
             - alpine-ia32
+            - mac-x64-14
             - mac-x64-12
             - mac-x64-10
             - mac-x64-8
+            - mac-ia32-14
             - mac-ia32-12
             - mac-ia32-10
             - mac-ia32-8
+            - win-x64-14
             - win-x64-12
             - win-x64-10
             - win-x64-8
+            - win-ia32-14
             - win-ia32-12
             - win-ia32-10
             - win-ia32-8
@@ -1029,6 +1103,7 @@ workflows:
       - node-core-8
       - node-core-10
       - node-core-12
+      - node-core-14
       - node-core-latest
       - node-core-windows
       - node-bench-latest
@@ -1047,6 +1122,8 @@ workflows:
       - node-fs-8
       - node-fs-10
       - node-fs-12
+      - node-fs-14
+      - node-fs-latest
       - node-generic-pool
       - node-google-cloud-pubsub
       - node-graphql
