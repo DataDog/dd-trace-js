@@ -71,6 +71,16 @@ suite
       })
     }
   })
+  .add('Scope#activate (promise)', {
+    defer: true,
+    fn (deferred) {
+      scope.activate(spanStub, () => {
+        Promise.resolve().then(() => {
+          deferred.resolve()
+        })
+      })
+    }
+  })
   .add('Scope#activate (async/await)', {
     defer: true,
     async fn (deferred) {
