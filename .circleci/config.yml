@@ -708,12 +708,6 @@ jobs:
 
   # Prebuilds (linux ia32)
 
-  linux-ia32-14:
-    <<: *prebuild-linux-ia32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=14 - 15
-
   linux-ia32-12:
     <<: *prebuild-linux-ia32-base
     environment:
@@ -736,7 +730,7 @@ jobs:
 
   ## Tests
 
-  linux-ia32-14-test:
+  linux-ia32-13-test:
     <<: *test-prebuild-linux-base
     docker:
       - image: i386/node:13-alpine
@@ -998,17 +992,15 @@ workflows:
           requires:
             - linux-x64-8
       # Linux ia32
-      - linux-ia32-14:
-          <<: *prebuild-job
       - linux-ia32-12:
           <<: *prebuild-job
       - linux-ia32-10:
           <<: *prebuild-job
       - linux-ia32-8:
           <<: *prebuild-job
-      - linux-ia32-14-test:
+      - linux-ia32-13-test:
           requires:
-            - linux-ia32-14
+            - linux-ia32-12
       - linux-ia32-12-test:
           requires:
             - linux-ia32-12
@@ -1067,7 +1059,7 @@ workflows:
             - linux-x64-12-test
             - linux-x64-10-test
             - linux-x64-8-test
-            - linux-ia32-14-test
+            - linux-ia32-13-test
             - linux-ia32-12-test
             - linux-ia32-10-test
             - linux-ia32-8-test
