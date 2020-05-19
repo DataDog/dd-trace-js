@@ -47,6 +47,18 @@ function createWrapRequest (tracer, config) {
   }
 }
 
+function createWrapSetPromisesDependency (tracer, config, instrumenter, AWS) {
+  return function wrapSetPromisesDependency (setPromisesDependency) {
+    return function setPromisesDependencyWithTrace (dep) {
+      const result = setPromisesDependency.apply(this, arguments)
+
+      instrumenter.wrap(AWS.Request.prototype, 'promise', createWrapRequest(tracer, config))
+
+      return result
+    }
+  }
+}
+
 function normalizeConfig (config) {
   const hooks = getHooks(config)
 
@@ -70,9 +82,11 @@ module.exports = [
     versions: ['>=2.3.0'],
     patch (AWS, tracer, config) {
       this.wrap(AWS.Request.prototype, 'promise', createWrapRequest(tracer, config))
+      this.wrap(AWS.config, 'setPromisesDependency', createWrapSetPromisesDependency(tracer, config, this, AWS))
     },
     unpatch (AWS) {
-      this.wrap(AWS.Request.prototype, 'promise')
+      this.unwrap(AWS.Request.prototype, 'promise')
+      this.unwrap(AWS.config, 'setPromisesDependency')
     }
   },
   {

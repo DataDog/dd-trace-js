@@ -110,6 +110,15 @@ const helpers = {
           this.baseSpecPromise(done, agent, getService(), operation,
             serviceName, klass, fixture, key, metadata)
         })
+
+        it('should instrument service methods using promise() with custom promises', (done) => {
+          const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+
+          AWS.config.setPromisesDependency(null)
+
+          this.baseSpecPromise(done, agent, getService(), operation,
+            serviceName, klass, fixture, key, metadata)
+        })
       }
 
       it('should bind callbacks to the correct active span', (done) => {
