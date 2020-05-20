@@ -944,6 +944,30 @@ describe('Plugin', () => {
           graphql.graphql(schema, source).catch(done)
         })
 
+        it('should handle single fragment definitions', done => {
+          const source = `
+            fragment firstFields on Human {
+              name
+            }
+          `
+
+          agent
+            .use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('service', 'test-graphql')
+              expect(spans[0]).to.have.property('name', 'graphql.parse')
+              expect(spans[0]).to.have.property('resource', 'graphql.parse')
+              expect(spans[0].meta).to.not.have.property('graphql.source')
+              expect(spans[0].meta).to.not.have.property('graphql.operation.type')
+              expect(spans[0].meta).to.not.have.property('graphql.operation.name')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql(schema, source).catch(done)
+        })
+
         // it('should not disable signature with invalid arguments', done => {
         //   agent
         //     .use(traces => {
