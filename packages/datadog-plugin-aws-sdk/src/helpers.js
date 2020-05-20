@@ -50,6 +50,21 @@ const helpers = {
     }, extraTags)
 
     span.addTags(tags)
+  },
+
+  responseExtract (serviceName, request, response, tracer) {
+    if (services[serviceName] && services[serviceName].responseExtract) {
+      const params = request.params
+      const operation = request.operation
+      return services[serviceName].responseExtract(params, operation, response, tracer)
+    }
+  },
+
+  requestInject (span, request, serviceName, tracer) {
+    if (!span) return
+
+    const inject = services[serviceName] && services[serviceName].requestInject
+    if (inject) inject(span, request, tracer)
   }
 }
 

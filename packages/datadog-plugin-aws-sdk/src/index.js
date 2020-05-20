@@ -29,18 +29,37 @@ function createWrapRequest (tracer, config) {
         tags
       })
 
-      const boundCb = typeof cb === 'function' ? tracer.scope().bind(cb, childOf) : cb
-
       this.on('complete', response => {
         if (!span) return
 
-        awsHelpers.addResponseTags(span, response, serviceName, config)
+        awsHelpers.addResponseTags(span, response, serviceName, config, tracer)
         awsHelpers.finish(span, response.error)
       })
 
       analyticsSampler.sample(span, config.analytics)
 
+      awsHelpers.requestInject(span, this, serviceName, tracer)
+
+      const request = this
+
       return tracer.scope().activate(span, () => {
+        let boundCb
+        if (typeof cb === 'function') {
+          boundCb = function wrappedCb (err, resp) {
+            const maybeChildOf = awsHelpers.responseExtract(serviceName, request, resp, tracer)
+            if (maybeChildOf) {
+              const options = {
+                childOf: maybeChildOf,
+                tags: Object.assign({}, tags, { [Tags.SPAN_KIND]: 'server' })
+              }
+              boundCb = tracer.wrap('aws.response', options, cb).call(this, err, resp)
+            } else {
+              boundCb = tracer.scope().bind(cb, childOf).call(this, err, resp)
+            }
+          }
+        } else {
+          boundCb = cb
+        }
         return send.call(this, boundCb)
       })
     }
