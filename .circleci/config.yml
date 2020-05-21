@@ -401,7 +401,7 @@ jobs:
   node-google-cloud-pubsub:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - SERVICES=google-cloud-pubsub
           - PLUGINS=google-cloud-pubsub
