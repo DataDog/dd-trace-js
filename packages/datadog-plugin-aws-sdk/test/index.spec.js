@@ -281,7 +281,7 @@ describe('Plugin', () => {
         let sqs
 
         describe('without configuration', () => {
-          beforeEach(done => {
+          before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epSqs = new AWS.Endpoint('http://localhost:4576')
             AWS.config.update({ region: 'REGION' })
@@ -297,7 +297,7 @@ describe('Plugin', () => {
             })
           })
 
-          afterEach(done => {
+          after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             epSqs = new AWS.Endpoint('http://localhost:4576')
             sqs = new AWS.SQS({ endpoint: epSqs })
@@ -312,36 +312,34 @@ describe('Plugin', () => {
               serviceName, klass, sqsGetParams, key, metadata)
           })
 
-          describe('propagation', () => {
-            it('should work', function (done) {
-              let parentId
-              let traceId
-              agent.use(traces => {
-                expect(traces[0][0].resource.startsWith('sendMessage')).to.equal(true)
-                parentId = traces[0][0].span_id.toString()
-                traceId = traces[0][0].trace_id.toString()
-              })
-              const { QueueUrl } = sqsGetParams
-              sqs.sendMessage({
-                MessageBody: 'test body',
-                QueueUrl
+          it('propagation should work', (done) => {
+            let parentId
+            let traceId
+            agent.use(traces => {
+              expect(traces[0][0].resource.startsWith('sendMessage')).to.equal(true)
+              parentId = traces[0][0].span_id.toString()
+              traceId = traces[0][0].trace_id.toString()
+            })
+            const { QueueUrl } = sqsGetParams
+            sqs.sendMessage({
+              MessageBody: 'test body',
+              QueueUrl
+            }, (err, data) => {
+              if (err) {
+                return done(err)
+              }
+              sqs.receiveMessage({
+                QueueUrl,
+                MessageAttributeNames: ['.*']
               }, (err, data) => {
                 if (err) {
                   return done(err)
                 }
-                sqs.receiveMessage({
-                  QueueUrl,
-                  MessageAttributeNames: ['.*']
-                }, (err, data) => {
-                  if (err) {
-                    return done(err)
-                  }
-                  agent.use(traces => {
-                    expect(parentId).to.be.a('string')
-                    expect(traces[0][0].parent_id.toString()).to.equal(parentId)
-                    expect(traces[0][0].trace_id.toString()).to.equal(traceId)
-                  }).then(done, done)
-                })
+                agent.use(traces => {
+                  expect(parentId).to.be.a('string')
+                  expect(traces[0][0].parent_id.toString()).to.equal(parentId)
+                  expect(traces[0][0].trace_id.toString()).to.equal(traceId)
+                }).then(done, done)
               })
             })
           })
