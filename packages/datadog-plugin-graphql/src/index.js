@@ -63,13 +63,12 @@ function createWrapParse (tracer, config) {
 
         addDocumentTags(span, document)
 
-        finish(span)
-
         return document
       } catch (e) {
         setError(span, e)
-        finish(span)
         throw e
+      } finally {
+        finish(span)
       }
     }
   }
