@@ -118,19 +118,6 @@ describe('Platform', () => {
         expect(udp4.send).to.have.been.calledTwice
       })
 
-      it('should buffer metrics', () => {
-        const value = new Array(1000).map(() => 'a').join()
-        const tags = [`foo:${value}`]
-
-        client = new Client()
-
-        client.gauge('test.avg', 1, tags)
-        client.gauge('test.avg', 1, tags)
-        client.flush()
-
-        expect(udp4.send).to.have.been.calledTwice
-      })
-
       it('should not flush if the queue is empty', () => {
         client = new Client()
 

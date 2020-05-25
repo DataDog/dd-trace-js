@@ -2,6 +2,7 @@
 
 const dgram = require('dgram')
 const lookup = require('dns').lookup // cache to avoid instrumentation
+const log = require('../../log')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -44,6 +45,8 @@ class Client {
 
   _send (address, family, buffer) {
     const socket = family === 6 ? this._udp6 : this._udp4
+
+    log.debug(`Sending to DogStatsD: ${buffer}`)
 
     socket.send(buffer, 0, buffer.length, this._port, address)
   }
