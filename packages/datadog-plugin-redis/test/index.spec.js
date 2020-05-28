@@ -132,7 +132,10 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('redis', { service: 'custom' })
+          return agent.load('redis', {
+            service: 'custom',
+            whitelist: ['get']
+          })
         })
 
         after(() => {
@@ -152,7 +155,20 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
+          client.get('foo', () => {})
           client.on('error', done)
+        })
+
+        it('should be able to filter commands', done => {
+          agent.use(() => {}) // wait for initial command
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'get')
+            })
+            .then(done)
+            .catch(done)
+
+          client.get('foo', () => {})
         })
       })
     })

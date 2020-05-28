@@ -5,7 +5,7 @@ const tx = require('../../dd-trace/src/plugins/util/redis')
 function createWrapSendCommand (tracer, config) {
   return function wrapSendCommand (sendCommand) {
     return function sendCommandWithTrace (command, stream) {
-      if (!command || !command.promise) return sendCommand.apply(this, arguments)
+      if (!command || !command.promise || !config.filter(command.name)) return sendCommand.apply(this, arguments)
 
       const options = this.options || {}
       const db = options.db
@@ -23,6 +23,7 @@ module.exports = {
   name: 'ioredis',
   versions: ['>=2'],
   patch (Redis, tracer, config) {
+    config = tx.normalizeConfig(config)
     this.wrap(Redis.prototype, 'sendCommand', createWrapSendCommand(tracer, config))
   },
   unpatch (Redis) {
