@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 
-const MAX_SIZE = 255 * 1024 // 255kb
+const MAX_SIZE = 50 * 1024 // 50kb
 
 class LogExporter {
   export (spans) {
