@@ -5,6 +5,8 @@ const tx = require('../../dd-trace/src/plugins/util/redis')
 function createWrapInternalSendCommand (tracer, config) {
   return function wrapInternalSendCommand (internalSendCommand) {
     return function internalSendCommandWithTrace (options) {
+      if (!config.filter(options.command)) return internalSendCommand.apply(this, arguments)
+
       const scope = tracer.scope()
       const span = startSpan(tracer, config, this, options.command, options.args)
 
@@ -18,6 +20,8 @@ function createWrapInternalSendCommand (tracer, config) {
 function createWrapSendCommand (tracer, config) {
   return function wrapSendCommand (sendCommand) {
     return function sendCommandWithTrace (command, args, callback) {
+      if (!config.filter(command)) return sendCommand.apply(this, arguments)
+
       const scope = tracer.scope()
       const span = startSpan(tracer, config, this, command, args)
 
@@ -49,6 +53,7 @@ module.exports = [
     name: 'redis',
     versions: ['>=2.6'],
     patch (redis, tracer, config) {
+      config = tx.normalizeConfig(config)
       this.wrap(redis.RedisClient.prototype, 'internal_send_command', createWrapInternalSendCommand(tracer, config))
     },
     unpatch (redis) {
@@ -59,6 +64,7 @@ module.exports = [
     name: 'redis',
     versions: ['>=0.12 <2.6'],
     patch (redis, tracer, config) {
+      config = tx.normalizeConfig(config)
       this.wrap(redis.RedisClient.prototype, 'send_command', createWrapSendCommand(tracer, config))
     },
     unpatch (redis) {

@@ -1,9 +1,19 @@
 'use strict'
 
 const analyticsSampler = require('../../analytics_sampler')
+const urlFilter = require('../util/urlfilter')
 const tx = require('./tx')
 
 const redis = {
+  // Ensure the configuration has the correct structure and defaults.
+  normalizeConfig (config) {
+    const filter = urlFilter.getFilter(config)
+
+    return Object.assign({}, config, {
+      filter
+    })
+  },
+
   // Start a span for a Redis command.
   instrument (tracer, config, db, command, args) {
     const childOf = tracer.scope().active()

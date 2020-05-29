@@ -136,6 +136,12 @@ const awsSdkOptions = {
   }
 };
 
+const redisOptions = {
+  service: 'test',
+  whitelist: ['info', /auth/i, command => true],
+  blacklist: ['info', /auth/i, command => true],
+};
+
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('aws-sdk', awsSdkOptions);
@@ -178,6 +184,7 @@ tracer.use('http2', {
   client: http2ClientOptions
 });
 tracer.use('ioredis');
+tracer.use('ioredis', redisOptions);
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
@@ -196,6 +203,7 @@ tracer.use('promise-js');
 tracer.use('promise');
 tracer.use('q');
 tracer.use('redis');
+tracer.use('redis', redisOptions);
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');

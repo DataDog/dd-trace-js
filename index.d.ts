@@ -901,7 +901,22 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [ioredis](https://github.com/luin/ioredis) module.
    */
-  interface ioredis extends Instrumentation {}
+  interface ioredis extends Instrumentation {
+    /**
+     * List of commands that should be instrumented.
+     *
+     * @default /^.*$/
+     */
+    whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * List of commands that should not be instrumented. Takes precedence over
+     * whitelist if a command matches an entry in both.
+     *
+     * @default []
+     */
+    blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+  }
 
   /**
    * This plugin patches the [knex](https://knexjs.org/)
@@ -999,7 +1014,22 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [redis](https://github.com/NodeRedis/node_redis) module.
    */
-  interface redis extends Instrumentation {}
+  interface redis extends Instrumentation {
+    /**
+     * List of commands that should be instrumented.
+     *
+     * @default /^.*$/
+     */
+    whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * List of commands that should not be instrumented. Takes precedence over
+     * whitelist if a command matches an entry in both.
+     *
+     * @default []
+     */
+    blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+  }
 
   /**
    * This plugin automatically instruments the
