@@ -2,13 +2,15 @@
 
 const log = require('../../log')
 
+const TRACE_PREFIX = '{"traces":[['
+const TRACE_SUFFIX = ']]}\n'
 const MAX_SIZE = 64 * 1024 // 64kb
 
 class LogExporter {
   export (spans) {
     log.debug(() => `Adding trace to queue: ${JSON.stringify(spans)}`)
 
-    let size = 0
+    let size = TRACE_PREFIX.length + TRACE_SUFFIX.length
     let queue = []
 
     for (const span of spans) {
@@ -20,7 +22,7 @@ class LogExporter {
       if (spanStr.length + size + 1 > MAX_SIZE) {
         this._printSpans(queue)
         queue = []
-        size = 0
+        size = TRACE_PREFIX.length + TRACE_SUFFIX.length
       }
       size += spanStr.length + 1 // includes length of ',' character
       queue.push(spanStr)
@@ -31,7 +33,7 @@ class LogExporter {
   }
 
   _printSpans (queue) {
-    let logLine = '{"traces":[['
+    let logLine = TRACE_PREFIX
     let firstTrace = true
     for (const spanStr of queue) {
       if (firstTrace) {
@@ -41,7 +43,7 @@ class LogExporter {
         logLine += ',' + spanStr
       }
     }
-    logLine += ']]}\n'
+    logLine += TRACE_SUFFIX
     process.stdout.write(logLine)
   }
 }
