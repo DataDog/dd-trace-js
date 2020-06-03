@@ -55,12 +55,18 @@ describe('id', () => {
   it('should support hex strings', () => {
     const spanId = id('abcd')
 
-    expect(spanId.toString()).to.equal('abcd')
+    expect(spanId.toString()).to.equal('000000000000abcd')
   })
 
   it('should support number strings', () => {
     const spanId = id('1234', 10)
 
     expect(spanId.toString(10)).to.equal('1234')
+  })
+
+  it('should truncate long hex strings', () => {
+    const spanId = id('1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d')
+
+    expect(spanId.toString()).to.equal('9c0d1e2f3a4b5c6d')
   })
 })

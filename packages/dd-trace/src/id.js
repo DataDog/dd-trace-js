@@ -44,11 +44,17 @@ function createBuffer (value) {
   if (value === '0') return zeroId
   if (!value) return pseudoRandom()
 
-  const size = Math.ceil(value.length / 2)
-  const buffer = new Uint8Array(size)
+  const buffer = new Uint8Array(8)
 
-  for (let i = 0; i < size; i++) {
-    buffer[i] = parseInt(value.substring(i * 2, i * 2 + 2), 16)
+  if (value.length < 16) {
+    value = Array(16 - value.length + 1).join('0') + value
+  }
+
+  const offset = value.length - 16
+
+  for (let i = 0; i < 8; i++) {
+    const cursor = offset + i * 2
+    buffer[i] = parseInt(value.substring(cursor, cursor + 2), 16)
   }
 
   return buffer
