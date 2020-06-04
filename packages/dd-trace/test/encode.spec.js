@@ -51,4 +51,35 @@ describe('encode', () => {
     expect(decoded[0].meta).to.deep.equal({ bar: 'baz' })
     expect(decoded[0].metrics).to.deep.equal({ example: 1 })
   })
+
+  it('should truncate long IDs', () => {
+    const data = [{
+      trace_id: id('ffffffffffffffff1234abcd1234abcd'),
+      span_id: id('ffffffffffffffff1234abcd1234abcd'),
+      parent_id: id('ffffffffffffffff1234abcd1234abcd'),
+      name: 'test',
+      resource: 'test-r',
+      service: 'test-s',
+      type: 'foo',
+      error: 0,
+      meta: {
+        bar: 'baz'
+      },
+      metrics: {
+        example: 1
+      },
+      start: 123,
+      duration: 456
+    }]
+
+    let buffer = Buffer.alloc(1024)
+    const offset = encode(buffer, 0, data)
+    buffer = buffer.slice(0, offset)
+
+    const decoded = msgpack.decode(buffer, { codec })
+
+    expect(decoded[0].trace_id.toString(16)).to.equal('1234abcd1234abcd')
+    expect(decoded[0].span_id.toString(16)).to.equal('1234abcd1234abcd')
+    expect(decoded[0].parent_id.toString(16)).to.equal('1234abcd1234abcd')
+  })
 })

@@ -77,7 +77,7 @@ function encode (initBuffer, offset, trace, initWriter) {
     if (span.parent_id) {
       offset = copy(offset, fields.parent_id)
       offset = copy(offset, tokens.uint64)
-      offset = copy(offset, span.parent_id.toBuffer())
+      offset = writeId(buffer, offset, span.parent_id)
     }
 
     offset = copy(offset, fields.name)
@@ -122,12 +122,21 @@ function checkOffset (offset, length) {
 }
 
 function copyHeader (offset, span) {
-  headerBuffer.set(span.trace_id.toBuffer(), traceIdOffset)
-  headerBuffer.set(span.span_id.toBuffer(), spanIdOffset)
+  writeId(headerBuffer, traceIdOffset, span.trace_id)
+  writeId(headerBuffer, spanIdOffset, span.span_id)
   util.writeInt64(headerBuffer, span.start, startOffset)
   util.writeInt64(headerBuffer, span.duration, durationOffset)
   headerBuffer.set(tokens.int[span.error], errorOffset)
   return copy(offset, headerBuffer)
+}
+
+function writeId (buffer, offset, id) {
+  id = id.toBuffer()
+  if (id.length > 8) {
+    id = id.subarray(id.length - 8, id.length)
+  }
+  buffer.set(id, offset)
+  return offset + 8
 }
 
 function write (offset, val) {
