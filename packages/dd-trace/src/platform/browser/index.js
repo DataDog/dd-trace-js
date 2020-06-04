@@ -31,7 +31,11 @@ const platform = {
   off: () => {}, // TODO: add event listener
   Loader,
   getScope: () => Scope,
-  exporter
+  exporter,
+  profiler: () => ({
+    start: () => {},
+    stop: () => {}
+  })
 }
 
 module.exports = platform

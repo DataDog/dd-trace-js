@@ -27,9 +27,6 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super()
 
-    log.use(config.logger)
-    log.toggle(config.debug, config.logLevel)
-
     const Exporter = platform.exporter(config.experimental.exporter)
 
     this._service = config.service
