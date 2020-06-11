@@ -1,5 +1,7 @@
 'use strict'
 
+const Tags = require('opentracing').Tags
+
 const services = {
   cloudwatchlogs: getService('cloudwatchlogs'),
   dynamodb: getService('dynamodb'),
@@ -50,6 +52,37 @@ const helpers = {
     }, extraTags)
 
     span.addTags(tags)
+  },
+
+  responseExtract (serviceName, request, response, tracer) {
+    if (services[serviceName] && services[serviceName].responseExtract) {
+      const params = request.params
+      const operation = request.operation
+      return services[serviceName].responseExtract(params, operation, response, tracer)
+    }
+  },
+
+  requestInject (span, request, serviceName, tracer) {
+    if (!span) return
+
+    const inject = services[serviceName] && services[serviceName].requestInject
+    if (inject) inject(span, request, tracer)
+  },
+
+  wrapCb (cb, serviceName, tags, request, tracer, childOf) {
+    const awsHelpers = this
+    return function wrappedCb (err, resp) {
+      const maybeChildOf = awsHelpers.responseExtract(serviceName, request, resp, tracer)
+      if (maybeChildOf) {
+        const options = {
+          childOf: maybeChildOf,
+          tags: Object.assign({}, tags, { [Tags.SPAN_KIND]: 'server' })
+        }
+        return tracer.wrap('aws.response', options, cb).call(request, err, resp)
+      } else {
+        return tracer.scope().bind(cb, childOf).call(request, err, resp)
+      }
+    }
   }
 }
 
