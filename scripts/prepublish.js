@@ -84,7 +84,7 @@ function getWorkflow (pipeline) {
         throw new Error(`Workflow ${running.id} is still running for pipeline ${pipeline.id}.`)
       }
 
-      const workflow = workflows[0]
+      const workflow = workflows.find(workflow => workflow.name === 'prebuild')
 
       if (!workflow) {
         throw new Error(`Unable to find CircleCI workflow for pipeline ${pipeline.id}.`)
