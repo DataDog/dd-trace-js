@@ -2,6 +2,7 @@
 
 const kebabCase = require('lodash.kebabcase')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { TEXT_MAP } = require('../../../ext/formats')
 
 let methods = {}
 
@@ -24,7 +25,8 @@ function createWrapSendMessage (tracer, config) {
 function createWrapDispatchMessage (tracer, config) {
   return function wrapDispatchMessage (dispatchMessage) {
     return function dispatchMessageWithTrace (fields, message) {
-      const span = tracer.startSpan('amqp.command')
+      const childOf = tracer.extract(TEXT_MAP, message.properties.headers)
+      const span = tracer.startSpan('amqp.command', { childOf })
 
       addTags(this, tracer, config, span, 'basic.deliver', fields)
 
@@ -47,7 +49,10 @@ function sendWithTrace (send, channel, args, tracer, config, method, fields) {
   const childOf = tracer.scope().active()
   const span = tracer.startSpan('amqp.command', { childOf })
 
+  fields.headers = fields.headers || {}
+
   addTags(channel, tracer, config, span, method, fields)
+  tracer.inject(span, TEXT_MAP, fields.headers)
 
   analyticsSampler.sample(span, config.analytics)
 
