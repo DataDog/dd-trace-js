@@ -199,15 +199,24 @@ describe('Plugin', () => {
               })
             })
 
-            it('should run the delivery callback in the current context', done => {
+            it('should run the delivery callback in the producer context', done => {
               if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
               channel.assertQueue('', {}, (err, ok) => {
                 if (err) return done(err)
 
                 channel.sendToQueue(ok.queue, Buffer.from('content'))
-                channel.consume(ok.queue, () => {
-                  expect(tracer.scope().active()).to.not.be.null
+                channel.consume(ok.queue, msg => {
+                  const traceId = msg.properties.headers['x-datadog-trace-id']
+                  const parentId = msg.properties.headers['x-datadog-parent-id']
+                  const spanContext = tracer.scope().active().context()
+
+                  expect(traceId).to.not.be.undefined
+                  expect(parentId).to.not.be.undefined
+
+                  expect(spanContext._traceId.toString(10)).to.equal(traceId)
+                  expect(spanContext._parentId.toString(10)).to.equal(parentId)
+
                   done()
                 }, {}, err => err && done(err))
               })
