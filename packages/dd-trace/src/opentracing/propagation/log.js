@@ -11,9 +11,11 @@ class LogPropagator {
   inject (spanContext, carrier) {
     if (!carrier) return
 
-    carrier.dd = {
-      trace_id: spanContext.toTraceId(),
-      span_id: spanContext.toSpanId()
+    carrier.dd = {}
+
+    if (spanContext) {
+      carrier.dd.trace_id = spanContext.toTraceId()
+      carrier.dd.span_id = spanContext.toSpanId()
     }
 
     if (this._config.service) carrier.dd.service = this._config.service

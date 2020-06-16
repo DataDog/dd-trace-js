@@ -33,10 +33,18 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
+      expect(carrier).to.have.property('dd')
+      expect(carrier.dd).to.have.property('trace_id', '123')
+      expect(carrier.dd).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
+    })
+
+    it('should inject the global context into the carrier', () => {
+      const carrier = {}
+
+      propagator.inject(null, carrier)
+
       expect(carrier).to.deep.include({
         dd: {
-          trace_id: '123',
-          span_id: '18446744073709551160', // -456 casted to uint64
           service: 'test',
           env: 'dev',
           version: '1.0.0'
