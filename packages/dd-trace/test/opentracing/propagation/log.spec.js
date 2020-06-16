@@ -10,7 +10,11 @@ describe('LogPropagator', () => {
 
   beforeEach(() => {
     LogPropagator = require('../../../src/opentracing/propagation/log')
-    propagator = new LogPropagator()
+    propagator = new LogPropagator({
+      service: 'test',
+      env: 'dev',
+      version: '1.0.0'
+    })
     log = {
       dd: {
         trace_id: '123',
@@ -24,12 +28,7 @@ describe('LogPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('-456', 10),
-        tags: {
-          service: 'test',
-          env: 'dev',
-          version: '1.0.0'
-        }
+        spanId: id('-456', 10)
       })
 
       propagator.inject(spanContext, carrier)

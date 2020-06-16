@@ -47,8 +47,8 @@ class DatadogTracer extends Tracer {
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
-      [formats.BINARY]: new BinaryPropagator(),
-      [formats.LOG]: new LogPropagator()
+      [formats.BINARY]: new BinaryPropagator(config),
+      [formats.LOG]: new LogPropagator(config)
     }
     if (config.reportHostname) {
       this._hostname = platform.hostname()
