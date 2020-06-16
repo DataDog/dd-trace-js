@@ -45,6 +45,8 @@ const tagMakers = {
   mkdtemp: createPathTags
 }
 
+const promisifiable = ['read', 'readv', 'write', 'writev']
+
 const orphanable = false
 
 function createWrapCreateReadStream (config, tracer) {
@@ -80,7 +82,7 @@ function createWrapCreateWriteStream (config, tracer) {
 
 function createWrapExists (config, tracer) {
   return function wrapExists (exists) {
-    return function existsWithTrace (path, cb) {
+    const existsWithTrace = function existsWithTrace (path, cb) {
       if (typeof cb !== 'function') {
         return exists.apply(this, arguments)
       }
@@ -93,6 +95,10 @@ function createWrapExists (config, tracer) {
         return exists.apply(this, arguments)
       })
     }
+
+    copySymbols(exists, existsWithTrace)
+
+    return existsWithTrace
   }
 }
 
@@ -356,6 +362,17 @@ function makeFSTags (resourceName, path, options, config, tracer) {
   return tags
 }
 
+function copySymbols (from, to) {
+  const props = Object.getOwnPropertyDescriptors(from)
+  const keys = Reflect.ownKeys(props)
+
+  for (const key of keys) {
+    if (typeof key !== 'symbol' || to.hasOwnProperty(key)) continue
+
+    Object.defineProperty(to, key, props[key])
+  }
+}
+
 function getFileHandlePrototype (fs) {
   return fs.promises.open(__filename, 'r')
     .then(fh => {
@@ -372,12 +389,16 @@ function patchClassicFunctions (fs, tracer, config) {
   for (const name in fs) {
     if (!fs[name]) continue
     const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
+    const original = fs[name]
     if (tagMakerName in tagMakers) {
       const tagMaker = tagMakers[tagMakerName]
       if (name.endsWith('Sync')) {
         this.wrap(fs, name, createWrap(tracer, config, name, tagMaker))
       } else {
         this.wrap(fs, name, createWrapCb(tracer, config, name, tagMaker))
+      }
+      if (name in promisifiable) {
+        copySymbols(original, fs[name])
       }
     }
   }

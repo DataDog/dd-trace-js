@@ -8,6 +8,7 @@ const os = require('os')
 const path = require('path')
 const semver = require('semver')
 const rimraf = require('rimraf')
+const util = require('util')
 
 const implicitFlag = semver.satisfies(process.versions.node, '>=11.1.0')
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
@@ -514,6 +515,12 @@ describe('Plugin', () => {
           tested(fs, [fd, Buffer.alloc(5), 0, 5, 0], done)
         })
 
+        it('should support promisification', () => {
+          const read = util.promisify(fs.read)
+
+          return read(fd, Buffer.alloc(5), 0, 5, 0)
+        })
+
         it('should handle errors', () =>
           testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
       })
@@ -538,6 +545,12 @@ describe('Plugin', () => {
             }
           })
           tested(fs, [fd, Buffer.from('hello'), 0, 5, 0], done)
+        })
+
+        it('should support promisification', () => {
+          const write = util.promisify(fs.write)
+
+          return write(fd, Buffer.from('hello'), 0, 5, 0)
         })
 
         it('should handle errors', () =>
@@ -565,6 +578,12 @@ describe('Plugin', () => {
               }
             })
             tested(fs, [fd, [Buffer.from('hello')], 0], done)
+          })
+
+          it('should support promisification', () => {
+            const writev = util.promisify(fs.writev)
+
+            return writev(fd, [Buffer.from('hello')], 0)
           })
 
           it('should handle errors', () =>
@@ -1226,6 +1245,12 @@ describe('Plugin', () => {
             }
           })
           fs.exists(__filename, () => {}) // eslint-disable-line node/no-deprecated-api
+        })
+
+        it('should support promisification', () => {
+          const exists = util.promisify(fs.exists) // eslint-disable-line node/no-deprecated-api
+
+          return exists(__filename)
         })
       })
 
