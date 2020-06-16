@@ -515,11 +515,13 @@ describe('Plugin', () => {
           tested(fs, [fd, Buffer.alloc(5), 0, 5, 0], done)
         })
 
-        it('should support promisification', () => {
-          const read = util.promisify(fs.read)
+        if (resource === 'read') {
+          it('should support promisification', () => {
+            const read = util.promisify(fs.read)
 
-          return read(fd, Buffer.alloc(5), 0, 5, 0)
-        })
+            return read(fd, Buffer.alloc(5), 0, 5, 0)
+          })
+        }
 
         it('should handle errors', () =>
           testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
@@ -547,11 +549,13 @@ describe('Plugin', () => {
           tested(fs, [fd, Buffer.from('hello'), 0, 5, 0], done)
         })
 
-        it('should support promisification', () => {
-          const write = util.promisify(fs.write)
+        if (resource === 'write') {
+          it('should support promisification', () => {
+            const write = util.promisify(fs.write)
 
-          return write(fd, Buffer.from('hello'), 0, 5, 0)
-        })
+            return write(fd, Buffer.from('hello'), 0, 5, 0)
+          })
+        }
 
         it('should handle errors', () =>
           testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
@@ -580,11 +584,13 @@ describe('Plugin', () => {
             tested(fs, [fd, [Buffer.from('hello')], 0], done)
           })
 
-          it('should support promisification', () => {
-            const writev = util.promisify(fs.writev)
+          if (resource === 'writev') {
+            it('should support promisification', () => {
+              const writev = util.promisify(fs.writev)
 
-            return writev(fd, [Buffer.from('hello')], 0)
-          })
+              return writev(fd, [Buffer.from('hello')], 0)
+            })
+          }
 
           it('should handle errors', () =>
             testHandleErrors(fs, resource, tested, [8675309, [Buffer.alloc(5)], 0], agent))
