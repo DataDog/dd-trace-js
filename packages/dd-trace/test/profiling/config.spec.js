@@ -34,7 +34,7 @@ describe('config', () => {
       host: os.hostname()
     })
 
-    expect(config.loggers[0]).to.be.an.instanceof(ConsoleLogger)
+    expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(InspectorCpuProfiler)
     expect(config.profilers[1]).to.be.an.instanceof(InspectorHeapProfiler)
@@ -45,7 +45,7 @@ describe('config', () => {
       enabled: false,
       service: 'test',
       version: '1.2.3-test.0',
-      loggers: ['logger'],
+      logger: 'logger',
       exporters: ['exporter'],
       profilers: ['profiler']
     }

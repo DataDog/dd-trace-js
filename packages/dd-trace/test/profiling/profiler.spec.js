@@ -24,7 +24,7 @@ describe('profiler', () => {
   let exporters
   let profilers
   let consoleLogger
-  let loggers
+  let logger
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
@@ -53,7 +53,7 @@ describe('profiler', () => {
       profile: sinon.stub().returns(heapPromise)
     }
 
-    loggers = [consoleLogger]
+    logger = consoleLogger
     exporters = [exporter]
     profilers = [cpuProfiler, heapProfiler]
 
@@ -93,7 +93,7 @@ describe('profiler', () => {
   it('should stop when starting failed', () => {
     cpuProfiler.start.throws()
 
-    profiler.start({ profilers, exporters, loggers })
+    profiler.start({ profilers, exporters, logger })
 
     sinon.assert.calledOnce(cpuProfiler.stop)
     sinon.assert.calledOnce(heapProfiler.stop)
@@ -103,7 +103,7 @@ describe('profiler', () => {
   it('should stop when capturing failed', () => {
     cpuProfiler.profile.throws()
 
-    profiler.start({ profilers, exporters, loggers })
+    profiler.start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
 
@@ -151,7 +151,7 @@ describe('profiler', () => {
   it('should log exporter errors', async () => {
     exporter.export.rejects()
 
-    profiler.start({ profilers, exporters, loggers })
+    profiler.start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
 

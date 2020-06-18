@@ -20,7 +20,7 @@ module.exports = function () {
         service,
         version,
         env,
-        loggers: [logger],
+        logger,
         exporters: [exporter]
       })
     },

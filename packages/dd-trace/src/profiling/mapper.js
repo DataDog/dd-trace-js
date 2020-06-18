@@ -26,9 +26,13 @@ class SourceMapper {
   }
 
   async _createConsumer (url) {
-    const map = await this._resolve(url)
+    try {
+      const map = await this._resolve(url)
 
-    return map ? new SourceMapConsumer(map) : null
+      return map ? new SourceMapConsumer(map) : null
+    } catch (e) {
+      return null
+    }
   }
 
   async _getSource (callFrame) {
@@ -64,23 +68,19 @@ class SourceMapper {
   }
 
   async _resolve (url) {
-    try {
-      const filename = fileURLToPath(url)
-      const code = (await fs.promises.readFile(filename)).toString()
+    const filename = fileURLToPath(url)
+    const code = (await fs.promises.readFile(filename)).toString()
 
-      return await new Promise((resolve, reject) => {
-        sourceMapResolve.resolve(code, filename, fs.readFile, (error, result) => {
-          if (!result || error) return resolve(null)
+    return new Promise((resolve, reject) => {
+      sourceMapResolve.resolve(code, filename, fs.readFile, (error, result) => {
+        if (!result || error) return resolve(null)
 
-          result.map.sourcesContent = result.sourcesContent
-          result.map.sources = result.sourcesResolved
+        result.map.sourcesContent = result.sourcesContent
+        result.map.sources = result.sourcesResolved
 
-          resolve(result.map)
-        })
+        resolve(result.map)
       })
-    } catch (e) {
-      return null
-    }
+    })
   }
 }
 

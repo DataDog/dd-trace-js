@@ -36,9 +36,7 @@ class Config {
       tagger.parse(options.tags),
       tagger.parse({ env, host, service, version })
     )
-    this.loggers = options.loggers || [
-      new ConsoleLogger()
-    ]
+    this.logger = options.logger || new ConsoleLogger()
     this.flushInterval = flushInterval
     this.exporters = options.exporters || [
       new AgentExporter()

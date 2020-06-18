@@ -9,7 +9,6 @@ const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleExporter } = require('./exporters/console')
 const { ConsoleLogger } = require('./loggers/console')
-const { CompositeLogger } = require('./loggers/composite')
 
 const profiler = new Profiler()
 
@@ -22,6 +21,5 @@ module.exports = {
   InspectorHeapProfiler,
   NativeCpuProfiler,
   NativeHeapProfiler,
-  ConsoleLogger,
-  CompositeLogger
+  ConsoleLogger
 }

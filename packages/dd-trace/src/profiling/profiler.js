@@ -3,7 +3,6 @@
 const semver = require('semver')
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
-const { CompositeLogger } = require('./loggers/composite')
 const { SourceMapper } = require('./mapper')
 
 class Profiler extends EventEmitter {
@@ -14,7 +13,7 @@ class Profiler extends EventEmitter {
 
     if (!this._config.enabled) return
 
-    this._logger = new CompositeLogger(this._config)
+    this._logger = this._config.logger
 
     if (!semver.satisfies(process.version, '>=10.12')) {
       this._logger.error('Profiling could not be started because it requires Node >=10.12')
