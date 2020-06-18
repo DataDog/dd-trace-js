@@ -2,10 +2,8 @@
 
 const { perftools } = require('../../../../protobuf/profile')
 
-class Profile extends perftools.profiles.Profile {
+class Profile {
   constructor (sampleType, periodType, period) {
-    super()
-
     this._stringTable = new Map([['', 0]])
     this._locations = new Map()
     this._functions = new Map()

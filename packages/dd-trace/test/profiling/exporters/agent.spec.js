@@ -5,7 +5,10 @@ const express = require('express')
 const upload = require('multer')()
 const getPort = require('get-port')
 const { gunzipSync } = require('zlib')
+const { perftools } = require('../../../../../protobuf/profile')
 const { Profile } = require('../../../src/profiling/profile')
+
+const { decode, encode } = perftools.profiles.Profile
 
 const createProfile = (periodType) => {
   const profile = new Profile([periodType], periodType, 1000)
@@ -75,11 +78,11 @@ describe('exporters/agent', () => {
         expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
         expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
 
-        const cpuProfile = Profile.decode(gunzipSync(req.files[0].buffer))
-        const heapProfile = Profile.decode(gunzipSync(req.files[1].buffer))
+        const cpuProfile = decode(gunzipSync(req.files[0].buffer))
+        const heapProfile = decode(gunzipSync(req.files[1].buffer))
 
-        expect(cpuProfile).to.deep.equal(Profile.decode(Profile.encode(profiles.cpu).finish()))
-        expect(heapProfile).to.deep.equal(Profile.decode(Profile.encode(profiles.heap).finish()))
+        expect(cpuProfile).to.deep.equal(decode(encode(profiles.cpu).finish()))
+        expect(heapProfile).to.deep.equal(decode(encode(profiles.heap).finish()))
 
         done()
       } catch (e) {

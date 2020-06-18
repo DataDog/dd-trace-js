@@ -80,9 +80,9 @@ class Profiler extends EventEmitter {
     const { tags } = this._config
 
     this._config.exporters
-      .map(exporter => exporter.export({ profiles, start, end, tags }))
-      .map(promise => {
-        promise.catch((e) => this._logger.error(e))
+      .map(exporter => {
+        return exporter.export({ profiles, start, end, tags })
+          .catch((e) => this._logger.error(e))
       })
   }
 }
