@@ -20,12 +20,4 @@ describe('util', () => {
       expect(util.maybeRequire('_invalid_')).to.be.null
     })
   })
-
-  describe('coalesce', () => {
-    it('should return the first defined non-null value', () => {
-      expect(util.coalesce(null, false)).to.be.false
-      expect(util.coalesce(undefined, 'test')).to.equal('test')
-      expect(util.coalesce(0, 'test')).to.equal(0)
-    })
-  })
 })

@@ -1,12 +1,12 @@
 'use strict'
 
+const coalesce = require('koalas')
 const os = require('os')
 const { AgentExporter } = require('./exporters/agent')
 const { InspectorCpuProfiler } = require('./profilers/inspector/cpu')
 const { InspectorHeapProfiler } = require('./profilers/inspector/heap')
 const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
-const { coalesce } = require('./util')
 const platform = require('../platform')
 
 const {
