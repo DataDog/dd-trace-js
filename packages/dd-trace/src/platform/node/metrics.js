@@ -268,22 +268,26 @@ function unpackHistogram (buffer) {
 }
 
 function captureNativeMetrics () {
-  const rawStats = nativeMetrics.dump()
+  const rawStats = nativeMetrics.dump(
+    nativeMetrics.strings,
+    nativeMetrics.processBuffer,
+    nativeMetrics.eventLoopBuffer
+  )
 
   const elapsedTime = process.hrtime(time)
 
   time = process.hrtime()
 
   const elapsedUs = elapsedTime[0] * 1e6 + elapsedTime[1] / 1e3
-  const userPercent = 100 * rawStats.cpu[0] / elapsedUs
-  const systemPercent = 100 * rawStats.cpu[1] / elapsedUs
+  const userPercent = 100 * nativeMetrics.processBuffer[0] / elapsedUs
+  const systemPercent = 100 * nativeMetrics.processBuffer[1] / elapsedUs
   const totalPercent = userPercent + systemPercent
 
   client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
   client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
   client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 
-  histogram('runtime.node.event_loop.delay', unpackHistogram(rawStats.eventLoop))
+  histogram('runtime.node.event_loop.delay', unpackHistogram(nativeMetrics.eventLoopBuffer))
 
   Object.keys(rawStats.gc).forEach(type => {
     const hist = unpackHistogram(rawStats.gc[type])
@@ -295,7 +299,7 @@ function captureNativeMetrics () {
   })
 
   for (let offset = 0; offset < rawStats.heap.length / 5; offset += 5) {
-    const tags = [`heap_space:${rawStats.strings[rawStats.heap[offset + 0]]}`]
+    const tags = [`heap_space:${nativeMetrics.strings[rawStats.heap[offset + 0]]}`]
 
     client.gauge('runtime.node.heap.size.by.space', rawStats.heap[offset + 1], tags)
     client.gauge('runtime.node.heap.used_size.by.space', rawStats.heap[offset + 2], tags)
@@ -305,14 +309,13 @@ function captureNativeMetrics () {
 
   client.gauge('runtime.node.spans.finished', rawStats.spans[0])
   client.gauge('runtime.node.spans.unfinished', rawStats.spans[1])
-
   const finishedEnd = Number(rawStats.spans[2]) + 2
   for (let i = 2; i < finishedEnd; i += 1) {
-    const name = rawStats.strings[rawStats.spans[i]]
+    const name = nativeMetrics.strings[rawStats.spans[i]]
     client.gauge('runtime.node.spans.finished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
   }
   for (let i = finishedEnd; i < rawStats.spans.length; i += 1) {
-    const name = rawStats.strings[rawStats.spans[i]]
+    const name = nativeMetrics.strings[rawStats.spans[i]]
     client.gauge('runtime.node.spans.unfinished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
   }
 }

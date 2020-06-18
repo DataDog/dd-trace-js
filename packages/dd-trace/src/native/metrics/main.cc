@@ -18,14 +18,15 @@
 #include <v8.h>
 
 using Napi::Array;
+using Napi::BigUint64Array;
 using Napi::CallbackInfo;
 using Napi::Env;
 using Napi::Error;
+using Napi::Float64Array;
 using Napi::Function;
 using Napi::Number;
 using Napi::Object;
 using Napi::String;
-using Napi::TypedArrayOf;
 using Napi::Value;
 
 class Histogram {
@@ -59,9 +60,7 @@ class Histogram {
     digest_ = std::make_shared<tdigest::TDigest>(1000);
   }
 
-  Value ToValue(Env env) {
-    auto a = TypedArrayOf<uint64_t>::New(env, 7);
-
+  void ToValue(BigUint64Array& a) {
     a[0] = min_;
     a[1] = max_;
     a[2] = sum_;
@@ -69,8 +68,6 @@ class Histogram {
     a[4] = count_;
     a[5] = Percentile(0.50);
     a[6] = Percentile(0.95);
-
-    return a;
   }
 
  private:
@@ -81,19 +78,11 @@ class Histogram {
   std::shared_ptr<tdigest::TDigest> digest_;
 };
 
-typedef std::function<uint64_t(std::string)> StringInterner;
-class Collector {
- public:
-  virtual void Start() = 0;
-  virtual void Stop() = 0;
-  virtual void Dump(Env, Object&, StringInterner) = 0;
-};
-
 
   ///////////////////
  // GC STATISTICS //
 ///////////////////
-class GCStat : public Collector {
+class GCStat {
  public:
   GCStat() {
     types_[v8::GCType::kGCTypeScavenge] = "scavenge";
@@ -104,6 +93,33 @@ class GCStat : public Collector {
   }
 
   ~GCStat() { Stop(); }
+
+  void Start() {
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    isolate->AddGCPrologueCallback(OnPrologue, this);
+    isolate->AddGCEpilogueCallback(OnEpilogue, this);
+  }
+
+  void Stop() {
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    if (isolate) {
+      isolate->RemoveGCPrologueCallback(OnPrologue, this);
+      isolate->RemoveGCEpilogueCallback(OnEpilogue, this);
+    }
+  }
+
+  void Dump(Env env, Object& o) {
+    auto gc = Object::New(env);
+
+    for (auto& it : pause_) {
+      auto a = BigUint64Array::New(env, 7);
+      it.second.ToValue(a);
+      gc[types_[it.first]] = a;
+      it.second.Reset();
+    }
+
+    o["gc"] = gc;
+  }
 
  private:
   static void OnPrologue(v8::Isolate*, v8::GCType, v8::GCCallbackFlags, void* data) {
@@ -123,31 +139,6 @@ class GCStat : public Collector {
     self->pause_[v8::GCType::kGCTypeAll].Add(usage);
   }
 
-  void Start() {
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    isolate->AddGCPrologueCallback(OnPrologue, this);
-    isolate->AddGCEpilogueCallback(OnEpilogue, this);
-  }
-
-  void Stop() {
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    if (isolate) {
-      isolate->RemoveGCPrologueCallback(OnPrologue, this);
-      isolate->RemoveGCEpilogueCallback(OnEpilogue, this);
-    }
-  }
-
-  void Dump(Env env, Object& o, StringInterner) {
-    auto gc = Object::New(env);
-
-    for (auto& it : pause_) {
-      gc[types_[it.first]] = it.second.ToValue(env);
-      it.second.Reset();
-    }
-
-    o["gc"] = gc;
-  }
-
   std::map<v8::GCType, Histogram> pause_;
   std::map<v8::GCType, std::string> types_;
   uint64_t start_time_;
@@ -157,7 +148,7 @@ class GCStat : public Collector {
   ///////////////////////////
  // EVENT LOOP STATISTICS //
 ///////////////////////////
-class EventLoopStat : public Collector {
+class EventLoopStat {
  public:
   EventLoopStat() {
     uv_prepare_init(uv_default_loop(), &prepare_handle_);
@@ -172,6 +163,22 @@ class EventLoopStat : public Collector {
   }
 
   ~EventLoopStat() { Stop(); }
+
+  void Start() {
+    uv_prepare_start(&prepare_handle_, OnPrepare);
+    uv_check_start(&check_handle_, OnCheck);
+  }
+
+  void Stop() {
+    uv_prepare_stop(&prepare_handle_);
+    uv_check_stop(&check_handle_);
+    histogram_.Reset();
+  }
+
+  void Dump(BigUint64Array& a) {
+    histogram_.ToValue(a);
+    histogram_.Reset();
+  }
 
  private:
   static void OnPrepare(uv_prepare_t* handle) {
@@ -196,22 +203,6 @@ class EventLoopStat : public Collector {
     self->check_time_ = check_time;
   }
 
-  void Start() {
-    uv_prepare_start(&prepare_handle_, OnPrepare);
-    uv_check_start(&check_handle_, OnCheck);
-  }
-
-  void Stop() {
-    uv_prepare_stop(&prepare_handle_);
-    uv_check_stop(&check_handle_);
-    histogram_.Reset();
-  }
-
-  void Dump(Env env, Object& o, StringInterner) {
-    o["eventLoop"] = histogram_.ToValue(env);
-    histogram_.Reset();
-  }
-
   uv_check_t check_handle_;
   uv_prepare_t prepare_handle_;
   uint64_t check_time_;
@@ -220,30 +211,63 @@ class EventLoopStat : public Collector {
   Histogram histogram_;
 };
 
+  ///////////////////
+ // PROCESS STATS //
+///////////////////
+
+static uint64_t time_to_micro(uv_timeval_t timeval) {
+  return timeval.tv_sec * 1000 * 1000 + timeval.tv_usec;
+}
+
+class ProcessStat {
+ public:
+  void Dump(Float64Array& a) {
+    uv_rusage_t usage;
+    uv_getrusage(&usage);
+
+    a[0] = time_to_micro(usage.ru_utime) - time_to_micro(usage_.ru_utime);
+    a[1] = time_to_micro(usage.ru_stime) - time_to_micro(usage_.ru_stime);
+
+    usage_ = usage;
+  }
+
+ private:
+  uv_rusage_t usage_;
+};
+
+  ///////////////////////
+ // STRING INTERNING //
+///////////////////////
+static std::unordered_map<std::string, uint64_t> interned_strings;
+static uint64_t InternString(std::string s, Array& a) {
+  auto it = interned_strings.find(s);
+  if (it != interned_strings.end()) {
+    return it->second;
+  }
+  uint64_t id = interned_strings.size();
+  interned_strings[s] = id;
+  a[id] = s;
+  return id;
+}
+
 
   /////////////////////
  // HEAP STATISTICS //
 /////////////////////
-class HeapStat : public Collector {
+class HeapStat {
  public:
-  ~HeapStat() { Stop(); }
-
- private:
-  void Start() {}
-  void Stop() {}
-
-  void Dump(Env env, Object& o, StringInterner intern) {
+  void Dump(Env env, Object& o, Array& strings) {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
     const size_t spaces = isolate->NumberOfHeapSpaces();
 
-    auto a = TypedArrayOf<uint64_t>::New(env, spaces * 5);
+    auto a = BigUint64Array::New(env, spaces * 5);
 
     v8::HeapSpaceStatistics stats;
     for (size_t i = 0; i < spaces; i += 1) {
       auto offset = i * 5;
       if (isolate->GetHeapSpaceStatistics(&stats, i)) {
-        a[offset + 0] = intern(stats.space_name());
+        a[offset + 0] = InternString(stats.space_name(), strings);
         a[offset + 1] = stats.space_size();
         a[offset + 2] = stats.space_used_size();
         a[offset + 3] = stats.space_available_size();
@@ -257,39 +281,11 @@ class HeapStat : public Collector {
   }
 };
 
-static uint64_t time_to_micro(uv_timeval_t timeval) {
-  return timeval.tv_sec * 1000 * 1000 + timeval.tv_usec;
-}
-
-class ProcessStat : public Collector {
- public:
-  ~ProcessStat() { Stop(); }
-
- private:
-  void Start() {}
-  void Stop() {}
-
-  void Dump(Env env, Object& o, StringInterner) {
-    uv_rusage_t usage;
-    uv_getrusage(&usage);
-
-    auto a = TypedArrayOf<double>::New(env, 2);
-    a[0] = time_to_micro(usage.ru_utime) - time_to_micro(usage_.ru_utime);
-    a[1] = time_to_micro(usage.ru_stime) - time_to_micro(usage_.ru_stime);
-
-    o["cpu"] = a;
-
-    usage_ = usage;
-  }
-
-  uv_rusage_t usage_;
-};
-
 
   ///////////////////
  // SPAN TRACKING //
 ///////////////////
-class SpanTracker : public Collector {
+class SpanTracker {
  public:
   ~SpanTracker() {
     Stop();
@@ -344,7 +340,6 @@ class SpanTracker : public Collector {
     finished_[name] += 1;
   }
 
- private:
   void Start() {
     running_ = true;
   }
@@ -357,26 +352,27 @@ class SpanTracker : public Collector {
     unfinished_.clear();
   }
 
-  void Dump(Env env, Object& o, StringInterner intern) {
-    auto a = TypedArrayOf<uint64_t>::New(env, 3 + (finished_.size() * 2) + (unfinished_.size() * 2));
+  void Dump(Env env, Object& o, Array& strings) {
+    auto a = BigUint64Array::New(env, 3 + (finished_.size() * 2) + (unfinished_.size() * 2));
     a[0] = finished_total_;
     a[1] = unfinished_total_;
 
     size_t i = 0;
     a[i++] = finished_.size();
     for (auto it : finished_) {
-      a[i++] = intern(it.first);
+      a[i++] = InternString(it.first, strings);
       a[i++] = it.second;
     }
 
     for (auto it : unfinished_) {
-      a[i++] = intern(it.first);
+      a[i++] = InternString(it.first, strings);
       a[i++] = it.second;
     }
 
     o["spans"] = a;
   }
 
+ private:
   bool running_ = false;
   std::unordered_map<std::string, uint64_t> unfinished_;
   std::unordered_map<std::string, uint64_t> finished_;
@@ -392,18 +388,11 @@ class SpanTracker : public Collector {
  // STATIC INSTANCES //
 //////////////////////
 
+static ProcessStat process;
 static GCStat gc;
 static EventLoopStat ev;
 static HeapStat heap;
-static ProcessStat process;
 static SpanTracker spans;
-static Collector* collectors[] = {
-    &gc,
-    &ev,
-    &heap,
-    &process,
-    &spans,
-};
 
 
   /////////////////
@@ -417,9 +406,9 @@ static Value Start(const CallbackInfo& info) {
     NAPI_THROW(Error::New(info.Env(), "Already started"), {});
   }
 
-  for (auto& c : collectors) {
-    c->Start();
-  }
+  gc.Start();
+  ev.Start();
+  spans.Start();
 
   running = true;
 
@@ -431,9 +420,9 @@ static Value Stop(const CallbackInfo& info) {
     NAPI_THROW(Error::New(info.Env(), "Already stopped"), {});
   }
 
-  for (auto& c : collectors) {
-    c->Stop();
-  }
+  gc.Start();
+  ev.Start();
+  spans.Start();
 
   running = false;
 
@@ -447,19 +436,17 @@ static Value Dump(const CallbackInfo& info) {
   }
 
   auto o = Object::New(env);
-  auto strings = Array::New(env);
-  o["strings"] = strings;
-  uint64_t id_counter = 0;
-  auto intern_string = [&](std::string s) {
-    auto id = id_counter;
-    id_counter += 1;
-    strings[id] = s;
-    return id;
-  };
+  auto strings = info[0].As<Array>();
 
-  for (auto& c : collectors) {
-    c->Dump(env, o, intern_string);
-  }
+  gc.Dump(env, o);
+  spans.Dump(env, o, strings);
+  heap.Dump(env, o, strings);
+
+  auto process_a = info[1].As<Float64Array>();
+  process.Dump(process_a);
+
+  auto ev_a = info[2].As<BigUint64Array>();
+  ev.Dump(ev_a);
 
   return o;
 }
@@ -481,6 +468,10 @@ Object Init(Env env, Object exports) {
   exports["dump"] = Function::New(env, Dump);
   exports["track"] = Function::New(env, Track);
   exports["finish"] = Function::New(env, Finish);
+
+  exports["processBuffer"] = Float64Array::New(env, 2);
+  exports["eventLoopBuffer"] = BigUint64Array::New(env, 7);
+  exports["strings"] = Array::New(env);
 
   return exports;
 }

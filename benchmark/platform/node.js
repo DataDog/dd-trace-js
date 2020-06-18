@@ -61,7 +61,11 @@ suite
   })
   .add('native metrics', {
     fn () {
-      nativeMetrics.dump()
+      nativeMetrics.dump(
+        nativeMetrics.strings,
+        nativeMetrics.processBuffer,
+        nativeMetrics.eventLoopBuffer
+      )
     }
   })
 
