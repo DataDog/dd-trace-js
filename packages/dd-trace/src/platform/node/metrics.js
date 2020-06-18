@@ -267,6 +267,7 @@ function unpackHistogram (buffer) {
   }
 }
 
+// https://source.chromium.org/chromium/chromium/src/+/master:v8/include/v8.h?q=GCType
 const kGCTypeScavenge = 1 << 0
 const kGCTypeMarkSweepCompact = 1 << 1
 const kGCTypeIncrementalMarking = 1 << 2

@@ -13,6 +13,7 @@
 
 #include <tdigest/TDigest.h>
 
+#define NAPI_VERSION 1 // https://nodejs.org/api/n-api.html#n_api_n_api_version_matrix
 #include <napi.h>
 #include <uv.h>
 #include <v8.h>
