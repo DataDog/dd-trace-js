@@ -11,7 +11,7 @@
     "prebuild": "node scripts/prebuild.js",
     "prebuilds": "node scripts/prebuilds.js",
     "bundle": "webpack --display-modules",
-    "proto": "pbjs -t static-module -w commonjs -o proto/profile.js proto/profile.proto && pbts -o proto/profile.d.ts proto/profile.js",
+    "protobuf": "pbjs -t static-module -w commonjs -o protobuf/profile.js protobuf/profile.proto && pbts -o protobuf/profile.d.ts protobuf/profile.js",
     "prepublishOnly": "node scripts/prepublish.js",
     "postpublish": "node scripts/postpublish.js",
     "bench": "node benchmark",

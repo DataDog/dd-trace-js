@@ -3,6 +3,6 @@ dist
 docs
 out
 node_modules
-proto
+protobuf
 versions
 acmeair-nodejs

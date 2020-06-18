@@ -1,6 +1,6 @@
 'use strict'
 
-const { perftools } = require('../../../../proto/profile')
+const { perftools } = require('../../../../protobuf/profile')
 
 class Profile extends perftools.profiles.Profile {
   constructor (sampleType, periodType, period) {
