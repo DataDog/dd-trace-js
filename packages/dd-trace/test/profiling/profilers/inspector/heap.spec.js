@@ -15,7 +15,7 @@ describe('profilers/inspector/heap', () => {
   beforeEach(() => {
     InspectorHeapProfiler = require('../../../../src/profiling/profilers/inspector/heap').InspectorHeapProfiler
 
-    mapper = { map: callFrame => Promise.resolve(callFrame) }
+    mapper = { getSource: callFrame => Promise.resolve(callFrame) }
     profiler = new InspectorHeapProfiler()
   })
 

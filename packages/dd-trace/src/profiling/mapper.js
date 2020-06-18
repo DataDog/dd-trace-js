@@ -13,8 +13,15 @@ class SourceMapper {
     this._sources = Object.create(null)
   }
 
-  async map (callFrame) {
-    return this._getSource(callFrame)
+  async getSource (callFrame) {
+    const { url, lineNumber, columnNumber } = callFrame
+    const key = `${url}:${lineNumber}:${columnNumber}`
+
+    if (!this._sources[key]) {
+      this._sources[key] = await this._getMapping(callFrame)
+    }
+
+    return this._sources[key]
   }
 
   async _getConsumer (url) {
@@ -33,17 +40,6 @@ class SourceMapper {
     } catch (e) {
       return null
     }
-  }
-
-  async _getSource (callFrame) {
-    const { url, lineNumber, columnNumber } = callFrame
-    const key = `${url}:${lineNumber}:${columnNumber}`
-
-    if (!this._sources[key]) {
-      this._sources[key] = await this._getMapping(callFrame)
-    }
-
-    return this._sources[key]
   }
 
   async _getMapping (callFrame) {

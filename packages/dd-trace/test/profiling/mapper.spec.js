@@ -27,7 +27,7 @@ describe('mapper', () => {
     const filename = path.join(root, 'dist', `inline.js`)
     const url = pathToFileURL(filename).href
 
-    const source = await mapper.map({ url, lineNumber: 11, columnNumber: 17 })
+    const source = await mapper.getSource({ url, lineNumber: 11, columnNumber: 17 })
 
     expect(source).to.have.property('url', src)
     expect(source).to.have.property('lineNumber', 2)
@@ -39,7 +39,7 @@ describe('mapper', () => {
     const filename = path.join(root, 'dist', `url.js`)
     const url = pathToFileURL(filename).href
 
-    const source = await mapper.map({ url, lineNumber: 11, columnNumber: 17 })
+    const source = await mapper.getSource({ url, lineNumber: 11, columnNumber: 17 })
 
     expect(source).to.have.property('url', src)
     expect(source).to.have.property('lineNumber', 2)
@@ -51,7 +51,7 @@ describe('mapper', () => {
     const filename = path.join(root, 'dist', 'missing.js')
     const url = pathToFileURL(filename).href
 
-    const source = await mapper.map({
+    const source = await mapper.getSource({
       url,
       lineNumber: 11,
       columnNumber: 17,
@@ -67,7 +67,7 @@ describe('mapper', () => {
   it('should fallback for internal modules', async () => {
     const url = `internal.js`
 
-    const source = await mapper.map({
+    const source = await mapper.getSource({
       url,
       lineNumber: 11,
       columnNumber: 17,

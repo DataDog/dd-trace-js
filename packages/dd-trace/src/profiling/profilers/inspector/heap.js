@@ -51,7 +51,7 @@ class InspectorHeapProfiler {
 
     while ((node = nodes.shift())) {
       const { id, selfSize, callFrame, children } = node
-      const { functionName, url, lineNumber } = await this._mapper.map(callFrame)
+      const { functionName, url, lineNumber } = await this._mapper.getSource(callFrame)
       const functionId = profile.addFunction(functionName, url).id
       const locationId = profile.addLocation(functionId, id, lineNumber).id
 

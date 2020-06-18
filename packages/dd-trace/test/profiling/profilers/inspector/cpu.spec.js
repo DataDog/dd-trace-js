@@ -10,7 +10,7 @@ describe('profilers/inspector/cpu', () => {
   beforeEach(() => {
     InspectorCpuProfiler = require('../../../../src/profiling/profilers/inspector/cpu').InspectorCpuProfiler
 
-    mapper = { map: callFrame => Promise.resolve(callFrame) }
+    mapper = { getSource: callFrame => Promise.resolve(callFrame) }
     profiler = new InspectorCpuProfiler()
   })
 
