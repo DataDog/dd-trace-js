@@ -18,7 +18,6 @@
 #include <v8.h>
 
 using Napi::Array;
-using Napi::BigUint64Array;
 using Napi::CallbackInfo;
 using Napi::Env;
 using Napi::Error;
@@ -60,14 +59,14 @@ class Histogram {
     digest_ = std::make_shared<tdigest::TDigest>(1000);
   }
 
-  void ToValue(BigUint64Array& a) {
-    a[0] = min_;
-    a[1] = max_;
-    a[2] = sum_;
-    a[3] = count_ == 0 ? 0 : sum_ / count_;
-    a[4] = count_;
-    a[5] = Percentile(0.50);
-    a[6] = Percentile(0.95);
+  void ToValue(Float64Array& a, size_t offset = 0) {
+    a[offset + 0] = min_;
+    a[offset + 1] = max_;
+    a[offset + 2] = sum_;
+    a[offset + 3] = count_ == 0 ? 0 : sum_ / count_;
+    a[offset + 4] = count_;
+    a[offset + 5] = Percentile(0.50);
+    a[offset + 6] = Percentile(0.95);
   }
 
  private:
@@ -84,14 +83,6 @@ class Histogram {
 ///////////////////
 class GCStat {
  public:
-  GCStat() {
-    types_[v8::GCType::kGCTypeScavenge] = "scavenge";
-    types_[v8::GCType::kGCTypeMarkSweepCompact] = "mark_sweep_compact";
-    types_[v8::GCType::kGCTypeIncrementalMarking] = "incremental_marking";
-    types_[v8::GCType::kGCTypeProcessWeakCallbacks] = "process_weak_callbacks";
-    types_[v8::GCType::kGCTypeAll] = "all";
-  }
-
   ~GCStat() { Stop(); }
 
   void Start() {
@@ -109,16 +100,16 @@ class GCStat {
   }
 
   void Dump(Env env, Object& o) {
-    auto gc = Object::New(env);
+    auto a = Float64Array::New(env, (8 * pause_.size()));
 
+    size_t i = 0;
     for (auto& it : pause_) {
-      auto a = BigUint64Array::New(env, 7);
-      it.second.ToValue(a);
-      gc[types_[it.first]] = a;
-      it.second.Reset();
+      a[i++] = it.first;
+      it.second.ToValue(a, i);
+      i += 7;
     }
 
-    o["gc"] = gc;
+    o["gc"] = a;
   }
 
  private:
@@ -140,7 +131,6 @@ class GCStat {
   }
 
   std::map<v8::GCType, Histogram> pause_;
-  std::map<v8::GCType, std::string> types_;
   uint64_t start_time_;
 };
 
@@ -175,7 +165,7 @@ class EventLoopStat {
     histogram_.Reset();
   }
 
-  void Dump(BigUint64Array& a) {
+  void Dump(Float64Array& a) {
     histogram_.ToValue(a);
     histogram_.Reset();
   }
@@ -261,7 +251,7 @@ class HeapStat {
 
     const size_t spaces = isolate->NumberOfHeapSpaces();
 
-    auto a = BigUint64Array::New(env, spaces * 5);
+    auto a = Float64Array::New(env, spaces * 5);
 
     v8::HeapSpaceStatistics stats;
     for (size_t i = 0; i < spaces; i += 1) {
@@ -353,7 +343,7 @@ class SpanTracker {
   }
 
   void Dump(Env env, Object& o, Array& strings) {
-    auto a = BigUint64Array::New(env, 3 + (finished_.size() * 2) + (unfinished_.size() * 2));
+    auto a = Float64Array::New(env, 3 + (finished_.size() * 2) + (unfinished_.size() * 2));
     a[0] = finished_total_;
     a[1] = unfinished_total_;
 
@@ -445,7 +435,7 @@ static Value Dump(const CallbackInfo& info) {
   auto process_a = info[1].As<Float64Array>();
   process.Dump(process_a);
 
-  auto ev_a = info[2].As<BigUint64Array>();
+  auto ev_a = info[2].As<Float64Array>();
   ev.Dump(ev_a);
 
   return o;
@@ -470,7 +460,7 @@ Object Init(Env env, Object exports) {
   exports["finish"] = Function::New(env, Finish);
 
   exports["processBuffer"] = Float64Array::New(env, 2);
-  exports["eventLoopBuffer"] = BigUint64Array::New(env, 7);
+  exports["eventLoopBuffer"] = Float64Array::New(env, 7);
   exports["strings"] = Array::New(env);
 
   return exports;

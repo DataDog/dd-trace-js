@@ -267,6 +267,19 @@ function unpackHistogram (buffer) {
   }
 }
 
+const kGCTypeScavenge = 1 << 0
+const kGCTypeMarkSweepCompact = 1 << 1
+const kGCTypeIncrementalMarking = 1 << 2
+const kGCTypeProcessWeakCallbacks = 1 << 3
+const kGCTypeAll = kGCTypeScavenge | kGCTypeMarkSweepCompact | kGCTypeIncrementalMarking | kGCTypeProcessWeakCallbacks
+const gcTypeNames = {
+  [kGCTypeScavenge]: 'scavenge',
+  [kGCTypeMarkSweepCompact]: 'mark_sweep_compact',
+  [kGCTypeIncrementalMarking]: 'incremental_marking',
+  [kGCTypeProcessWeakCallbacks]: 'process_weak_callbacks',
+  [kGCTypeAll]: 'all'
+}
+
 function captureNativeMetrics () {
   const rawStats = nativeMetrics.dump(
     nativeMetrics.strings,
@@ -289,14 +302,16 @@ function captureNativeMetrics () {
 
   histogram('runtime.node.event_loop.delay', unpackHistogram(nativeMetrics.eventLoopBuffer))
 
-  Object.keys(rawStats.gc).forEach(type => {
-    const hist = unpackHistogram(rawStats.gc[type])
+  for (let i = 0; i < rawStats.gc.length; i += 8) {
+    const type = gcTypeNames[rawStats.gc[i]]
+
+    const hist = unpackHistogram(rawStats.gc.subarray(i, i + 7))
     if (type === 'all') {
       histogram('runtime.node.gc.pause', hist)
     } else {
       histogram('runtime.node.gc.pause.by.type', hist, [`gc_type:${type}`])
     }
-  })
+  }
 
   for (let offset = 0; offset < rawStats.heap.length / 5; offset += 5) {
     const tags = [`heap_space:${nativeMetrics.strings[rawStats.heap[offset + 0]]}`]
@@ -309,7 +324,7 @@ function captureNativeMetrics () {
 
   client.gauge('runtime.node.spans.finished', rawStats.spans[0])
   client.gauge('runtime.node.spans.unfinished', rawStats.spans[1])
-  const finishedEnd = Number(rawStats.spans[2]) + 2
+  const finishedEnd = rawStats.spans[2] + 2
   for (let i = 2; i < finishedEnd; i += 1) {
     const name = nativeMetrics.strings[rawStats.spans[i]]
     client.gauge('runtime.node.spans.finished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
