@@ -314,25 +314,29 @@ function captureNativeMetrics () {
     }
   }
 
-  for (let offset = 0; offset < rawStats.heap.length / 5; offset += 5) {
-    const tags = [`heap_space:${nativeMetrics.strings[rawStats.heap[offset + 0]]}`]
+  for (let i = 0; i < rawStats.heap.length; i += 5) {
+    const tags = [`heap_space:${nativeMetrics.strings[rawStats.heap[i + 0]]}`]
 
-    client.gauge('runtime.node.heap.size.by.space', rawStats.heap[offset + 1], tags)
-    client.gauge('runtime.node.heap.used_size.by.space', rawStats.heap[offset + 2], tags)
-    client.gauge('runtime.node.heap.available_size.by.space', rawStats.heap[offset + 3], tags)
-    client.gauge('runtime.node.heap.physical_size.by.space', rawStats.heap[offset + 4], tags)
+    client.gauge('runtime.node.heap.size.by.space', rawStats.heap[i + 1], tags)
+    client.gauge('runtime.node.heap.used_size.by.space', rawStats.heap[i + 2], tags)
+    client.gauge('runtime.node.heap.available_size.by.space', rawStats.heap[i + 3], tags)
+    client.gauge('runtime.node.heap.physical_size.by.space', rawStats.heap[i + 4], tags)
   }
 
-  client.gauge('runtime.node.spans.finished', rawStats.spans[0])
-  client.gauge('runtime.node.spans.unfinished', rawStats.spans[1])
-  const finishedEnd = rawStats.spans[2] + 2
-  for (let i = 2; i < finishedEnd; i += 1) {
-    const name = nativeMetrics.strings[rawStats.spans[i]]
-    client.gauge('runtime.node.spans.finished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
-  }
-  for (let i = finishedEnd; i < rawStats.spans.length; i += 1) {
-    const name = nativeMetrics.strings[rawStats.spans[i]]
-    client.gauge('runtime.node.spans.unfinished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
+  {
+    let i = 0
+    client.gauge('runtime.node.spans.finished', rawStats.spans[i++])
+    client.gauge('runtime.node.spans.unfinished', rawStats.spans[i++])
+
+    const totalFinished = rawStats.spawns[i++]
+    for (let j = 0; j < totalFinished; j += 1) {
+      const name = nativeMetrics.strings[rawStats.spans[i++]]
+      client.gauge('runtime.node.spans.finished.by.name', rawStats.spans[i++], [`span_name:${name}`])
+    }
+    while (i < rawStats.spans.length) {
+      const name = nativeMetrics.strings[rawStats.spans[i++]]
+      client.gauge('runtime.node.spans.unfinished.by.name', rawStats.spans[i++], [`span_name:${name}`])
+    }
   }
 }
 

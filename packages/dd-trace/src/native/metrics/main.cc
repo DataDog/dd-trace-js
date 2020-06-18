@@ -31,6 +31,8 @@ using Napi::Value;
 
 class Histogram {
  public:
+  static constexpr size_t BufferSize = 7;
+
   Histogram() { Reset(); }
 
   void Add(uint64_t value) {
@@ -101,13 +103,13 @@ class GCStat {
   }
 
   void Dump(Env env, Object& o) {
-    auto a = Float64Array::New(env, (8 * pause_.size()));
+    auto a = Float64Array::New(env, (1 + Histogram::BufferSize) * pause_.size());
 
     size_t i = 0;
     for (auto& it : pause_) {
       a[i++] = it.first;
       it.second.ToValue(a, i);
-      i += 7;
+      i += Histogram::BufferSize;
     }
 
     o["gc"] = a;
@@ -141,6 +143,8 @@ class GCStat {
 ///////////////////////////
 class EventLoopStat {
  public:
+  static constexpr size_t BufferSize = Histogram::BufferSize;
+
   EventLoopStat() {
     uv_prepare_init(uv_default_loop(), &prepare_handle_);
     uv_unref(reinterpret_cast<uv_handle_t*>(&prepare_handle_));
@@ -212,6 +216,8 @@ static uint64_t time_to_micro(uv_timeval_t timeval) {
 
 class ProcessStat {
  public:
+  static constexpr size_t BufferSize = 2;
+
   void Dump(Float64Array& a) {
     uv_rusage_t usage;
     uv_getrusage(&usage);
@@ -288,7 +294,6 @@ class SpanTracker {
     }
 
     auto context = span["_spanContext"].As<Object>();
-
     std::string name = context.Get("_name").As<String>();
 
     auto id = id_counter_;
@@ -345,10 +350,12 @@ class SpanTracker {
 
   void Dump(Env env, Object& o, Array& strings) {
     auto a = Float64Array::New(env, 3 + (finished_.size() * 2) + (unfinished_.size() * 2));
-    a[0] = finished_total_;
-    a[1] = unfinished_total_;
 
     size_t i = 0;
+
+    a[i++] = finished_total_;
+    a[i++] = unfinished_total_;
+
     a[i++] = finished_.size();
     for (auto it : finished_) {
       a[i++] = InternString(it.first, strings);
@@ -460,8 +467,8 @@ Object Init(Env env, Object exports) {
   exports["track"] = Function::New(env, Track);
   exports["finish"] = Function::New(env, Finish);
 
-  exports["processBuffer"] = Float64Array::New(env, 2);
-  exports["eventLoopBuffer"] = Float64Array::New(env, 7);
+  exports["processBuffer"] = Float64Array::New(env, ProcessStat::BufferSize);
+  exports["eventLoopBuffer"] = Float64Array::New(env, EventLoopStat::BufferSize);
   exports["strings"] = Array::New(env);
 
   return exports;
