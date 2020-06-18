@@ -20,10 +20,12 @@
 using Napi::Array;
 using Napi::CallbackInfo;
 using Napi::Env;
+using Napi::Error;
 using Napi::Function;
 using Napi::Number;
 using Napi::Object;
 using Napi::String;
+using Napi::TypedArrayOf;
 using Napi::Value;
 
 class Histogram {
@@ -58,17 +60,17 @@ class Histogram {
   }
 
   Value ToValue(Env env) {
-    auto o = Object::New(env);
+    auto a = TypedArrayOf<uint64_t>::New(env, 7);
 
-    o["min"] = min_;
-    o["max"] = max_;
-    o["sum"] = sum_;
-    o["avg"] = count_ == 0 ? 0 : sum_ / count_;
-    o["count"] = count_;
-    o["median"] = Percentile(0.50);
-    o["p95"] = Percentile(0.95);
+    a[0] = min_;
+    a[1] = max_;
+    a[2] = sum_;
+    a[3] = count_ == 0 ? 0 : sum_ / count_;
+    a[4] = count_;
+    a[5] = Percentile(0.50);
+    a[6] = Percentile(0.95);
 
-    return o;
+    return a;
   }
 
  private:
@@ -79,11 +81,12 @@ class Histogram {
   std::shared_ptr<tdigest::TDigest> digest_;
 };
 
+typedef std::function<uint64_t(std::string)> StringInterner;
 class Collector {
  public:
   virtual void Start() = 0;
   virtual void Stop() = 0;
-  virtual void Dump(Env, Object&) = 0;
+  virtual void Dump(Env, Object&, StringInterner) = 0;
 };
 
 
@@ -134,7 +137,7 @@ class GCStat : public Collector {
     }
   }
 
-  void Dump(Env env, Object& o) {
+  void Dump(Env env, Object& o, StringInterner) {
     auto gc = Object::New(env);
 
     for (auto& it : pause_) {
@@ -204,7 +207,7 @@ class EventLoopStat : public Collector {
     histogram_.Reset();
   }
 
-  void Dump(Env env, Object& o) {
+  void Dump(Env env, Object& o, StringInterner) {
     o["eventLoop"] = histogram_.ToValue(env);
     histogram_.Reset();
   }
@@ -229,31 +232,28 @@ class HeapStat : public Collector {
   void Start() {}
   void Stop() {}
 
-  void Dump(Env env, Object& o) {
+  void Dump(Env env, Object& o, StringInterner intern) {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+    const size_t spaces = isolate->NumberOfHeapSpaces();
+
+    auto a = TypedArrayOf<uint64_t>::New(env, spaces * 5);
+
     v8::HeapSpaceStatistics stats;
-
-    auto heap = Object::New(env);
-    auto spaces = Array::New(env);
-    heap["spaces"] = spaces;
-
-    for (size_t i = 0; i < isolate->NumberOfHeapSpaces(); i += 1) {
-      v8::HeapSpaceStatistics stats;
-      auto space = Object::New(env);
+    for (size_t i = 0; i < spaces; i += 1) {
+      auto offset = i * 5;
       if (isolate->GetHeapSpaceStatistics(&stats, i)) {
-        space["space_name"] = std::string(stats.space_name());
-        space["space_size"] = stats.space_size();
-        space["space_used_size"] = stats.space_used_size();
-        space["space_available_size"] = stats.space_available_size();
-        space["physical_space_size"] = stats.physical_space_size();
-
-        spaces[i] = space;
+        a[offset + 0] = intern(stats.space_name());
+        a[offset + 1] = stats.space_size();
+        a[offset + 2] = stats.space_used_size();
+        a[offset + 3] = stats.space_available_size();
+        a[offset + 4] = stats.physical_space_size();
       } else {
-        spaces[i] = env.Null();
+        a[offset + 0] = -1;
       }
     }
 
-    o["heap"] = heap;
+    o["heap"] = a;
   }
 };
 
@@ -269,15 +269,15 @@ class ProcessStat : public Collector {
   void Start() {}
   void Stop() {}
 
-  void Dump(Env env, Object& o) {
+  void Dump(Env env, Object& o, StringInterner) {
     uv_rusage_t usage;
     uv_getrusage(&usage);
 
-    auto cpu = Object::New(env);
-    cpu["user"] = time_to_micro(usage.ru_utime) - time_to_micro(usage_.ru_utime);
-    cpu["system"] = time_to_micro(usage.ru_stime) - time_to_micro(usage_.ru_stime);
+    auto a = TypedArrayOf<double>::New(env, 2);
+    a[0] = time_to_micro(usage.ru_utime) - time_to_micro(usage_.ru_utime);
+    a[1] = time_to_micro(usage.ru_stime) - time_to_micro(usage_.ru_stime);
 
-    o["cpu"] = cpu;
+    o["cpu"] = a;
 
     usage_ = usage;
   }
@@ -357,30 +357,24 @@ class SpanTracker : public Collector {
     unfinished_.clear();
   }
 
-  void Dump(Env env, Object& o) {
-    auto spans = Object::New(env);
+  void Dump(Env env, Object& o, StringInterner intern) {
+    auto a = TypedArrayOf<uint64_t>::New(env, 3 + (finished_.size() * 2) + (unfinished_.size() * 2));
+    a[0] = finished_total_;
+    a[1] = unfinished_total_;
 
-    auto total = Object::New(env);
-    total["finished"] = finished_total_;
-    total["unfinished"] = unfinished_total_;
-
-    auto operations = Object::New(env);
-    auto finished = Object::New(env);
-    auto unfinished = Object::New(env);
-    operations["finished"] = finished;
-    operations["unfinished"] = unfinished;
-
+    size_t i = 0;
+    a[i++] = finished_.size();
     for (auto it : finished_) {
-      finished[it.first] = it.second;
+      a[i++] = intern(it.first);
+      a[i++] = it.second;
     }
+
     for (auto it : unfinished_) {
-      unfinished[it.first] = it.second;
+      a[i++] = intern(it.first);
+      a[i++] = it.second;
     }
 
-    spans["operations"] = operations;
-    spans["total"] = total;
-
-    o["spans"] = spans;
+    o["spans"] = a;
   }
 
   bool running_ = false;
@@ -416,29 +410,55 @@ static Collector* collectors[] = {
  // JS BINDINGS //
 /////////////////
 
+static bool running = false;
+
 static Value Start(const CallbackInfo& info) {
+  if (running) {
+    NAPI_THROW(Error::New(info.Env(), "Already started"), {});
+  }
+
   for (auto& c : collectors) {
     c->Start();
   }
+
+  running = true;
 
   return info.Env().Null();
 }
 
 static Value Stop(const CallbackInfo& info) {
+  if (!running) {
+    NAPI_THROW(Error::New(info.Env(), "Already stopped"), {});
+  }
+
   for (auto& c : collectors) {
     c->Stop();
   }
+
+  running = false;
 
   return info.Env().Null();
 }
 
 static Value Dump(const CallbackInfo& info) {
   Env env = info.Env();
+  if (!running) {
+    NAPI_THROW(Error::New(env, "Not running"), {});
+  }
 
-  Object o = Object::New(env);
+  auto o = Object::New(env);
+  auto strings = Array::New(env);
+  o["strings"] = strings;
+  uint64_t id_counter = 0;
+  auto intern_string = [&](std::string s) {
+    auto id = id_counter;
+    id_counter += 1;
+    strings[id] = s;
+    return id;
+  };
 
   for (auto& c : collectors) {
-    c->Dump(env, o);
+    c->Dump(env, o, intern_string);
   }
 
   return o;

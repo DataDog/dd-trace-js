@@ -255,54 +255,65 @@ function captureCommonMetrics () {
   captureHistograms()
 }
 
+function unpackHistogram (buffer) {
+  return {
+    min: buffer[0],
+    max: buffer[1],
+    sum: buffer[2],
+    avg: buffer[3],
+    count: buffer[4],
+    median: buffer[5],
+    p95: buffer[6]
+  }
+}
+
 function captureNativeMetrics () {
-  const stats = nativeMetrics.dump()
-  const spaces = stats.heap.spaces
+  const rawStats = nativeMetrics.dump()
+
   const elapsedTime = process.hrtime(time)
 
   time = process.hrtime()
 
   const elapsedUs = elapsedTime[0] * 1e6 + elapsedTime[1] / 1e3
-  const userPercent = 100 * stats.cpu.user / elapsedUs
-  const systemPercent = 100 * stats.cpu.system / elapsedUs
+  const userPercent = 100 * rawStats.cpu[0] / elapsedUs
+  const systemPercent = 100 * rawStats.cpu[1] / elapsedUs
   const totalPercent = userPercent + systemPercent
 
   client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
   client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
   client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 
-  histogram('runtime.node.event_loop.delay', stats.eventLoop)
+  histogram('runtime.node.event_loop.delay', unpackHistogram(rawStats.eventLoop))
 
-  Object.keys(stats.gc).forEach(type => {
+  Object.keys(rawStats.gc).forEach(type => {
+    const hist = unpackHistogram(rawStats.gc[type])
     if (type === 'all') {
-      histogram('runtime.node.gc.pause', stats.gc[type])
+      histogram('runtime.node.gc.pause', hist)
     } else {
-      histogram('runtime.node.gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
+      histogram('runtime.node.gc.pause.by.type', hist, [`gc_type:${type}`])
     }
   })
 
-  client.gauge('runtime.node.spans.finished', stats.spans.total.finished)
-  client.gauge('runtime.node.spans.unfinished', stats.spans.total.unfinished)
+  for (let offset = 0; offset < rawStats.heap.length / 5; offset += 5) {
+    const tags = [`heap_space:${rawStats.strings[rawStats.heap[offset + 0]]}`]
 
-  for (let i = 0, l = spaces.length; i < l; i++) {
-    const tags = [`heap_space:${spaces[i].space_name}`]
-
-    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tags)
-    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
-    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
-    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
+    client.gauge('runtime.node.heap.size.by.space', rawStats.heap[offset + 1], tags)
+    client.gauge('runtime.node.heap.used_size.by.space', rawStats.heap[offset + 2], tags)
+    client.gauge('runtime.node.heap.available_size.by.space', rawStats.heap[offset + 3], tags)
+    client.gauge('runtime.node.heap.physical_size.by.space', rawStats.heap[offset + 4], tags)
   }
 
-  if (stats.spans.operations) {
-    const operations = stats.spans.operations
+  client.gauge('runtime.node.spans.finished', rawStats.spans[0])
+  client.gauge('runtime.node.spans.unfinished', rawStats.spans[1])
 
-    Object.keys(operations.finished).forEach(name => {
-      client.gauge('runtime.node.spans.finished.by.name', operations.finished[name], [`span_name:${name}`])
-    })
-
-    Object.keys(operations.unfinished).forEach(name => {
-      client.gauge('runtime.node.spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
-    })
+  const finishedEnd = Number(rawStats.spans[2]) + 2
+  for (let i = 2; i < finishedEnd; i += 1) {
+    const name = rawStats.strings[rawStats.spans[i]]
+    client.gauge('runtime.node.spans.finished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
+  }
+  for (let i = finishedEnd; i < rawStats.spans.length; i += 1) {
+    const name = rawStats.strings[rawStats.spans[i]]
+    client.gauge('runtime.node.spans.unfinished.by.name', rawStats.spans[i + 1], [`span_name:${name}`])
   }
 }
 
