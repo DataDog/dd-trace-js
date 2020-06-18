@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@types/node": "^10.12.18",
+    "axios": "^0.19.2",
     "container-info": "^1.0.1",
     "core-js": "^3.6.0",
     "hdr-histogram-js": "^1.1.4",
@@ -88,7 +89,6 @@
     "@babel/core": "^7.6.4",
     "@babel/preset-env": "^7.6.3",
     "autocannon": "^4.5.2",
-    "axios": "^0.19.2",
     "babel-loader": "^8.0.6",
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
