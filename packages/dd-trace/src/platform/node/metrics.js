@@ -338,6 +338,10 @@ function captureNativeMetrics () {
       client.gauge('runtime.node.spans.unfinished.by.name', rawStats.spans[i++], [`span_name:${name}`])
     }
   }
+
+  if (nativeMetrics.strings.length > 10000) {
+    nativeMetrics.clearInternedStrings(nativeMetrics.strings)
+  }
 }
 
 function histogram (name, stats, tags) {

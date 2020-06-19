@@ -460,12 +460,19 @@ static Value Finish(const CallbackInfo& info) {
   return info.Env().Null();
 }
 
+static Value ClearInternedStrings(const CallbackInfo& info) {
+  info[0].As<Array>()["length"] = 0;
+  interned_strings.clear();
+  return info.Env().Null();
+}
+
 Object Init(Env env, Object exports) {
   exports["start"] = Function::New(env, Start);
   exports["stop"] = Function::New(env, Stop);
   exports["dump"] = Function::New(env, Dump);
   exports["track"] = Function::New(env, Track);
   exports["finish"] = Function::New(env, Finish);
+  exports["clearInternedStrings"] = Function::New(env, ClearInternedStrings);
 
   exports["processBuffer"] = Float64Array::New(env, ProcessStat::BufferSize);
   exports["eventLoopBuffer"] = Float64Array::New(env, EventLoopStat::BufferSize);
