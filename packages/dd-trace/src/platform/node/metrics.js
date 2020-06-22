@@ -49,7 +49,7 @@ module.exports = function () {
       }
 
       client = new Client({
-        host: this._config.hostname,
+        host: this._config.dogstatsd.hostname,
         port: this._config.dogstatsd.port,
         tags
       })
