@@ -230,6 +230,14 @@ describe('Plugin', () => {
             helpers.baseSpecs(semver, version, agent, getService, operation,
               serviceName, klass, s3Params, key, metadata)
           })
+
+          it('upload works (regression test for #992)', (done) => {
+            s3.upload({
+              Bucket: s3Params.Bucket,
+              Key: 'testupload',
+              Body: 'some body'
+            }, done)
+          })
         })
 
         describe('with configuration', () => {
