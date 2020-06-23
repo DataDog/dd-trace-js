@@ -231,7 +231,8 @@ describe('Plugin', () => {
               serviceName, klass, s3Params, key, metadata)
           })
 
-          it('upload works (regression test for #992)', (done) => {
+          // Regression test for https://github.com/DataDog/dd-trace-js/issues/992
+          it('upload should not be broken', (done) => {
             s3.upload({
               Bucket: s3Params.Bucket,
               Key: 'testupload',
