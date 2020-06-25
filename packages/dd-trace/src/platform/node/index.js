@@ -45,7 +45,7 @@ const platform = {
     return require('../../scope/async_hooks')
   },
   exporter,
-  profiler
+  profiler: () => profiler(platform._config)
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))
