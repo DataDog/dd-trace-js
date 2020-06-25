@@ -3,7 +3,9 @@
 const log = require('../../log')
 const { profiler, AgentExporter } = require('../../profiling')
 
-module.exports = config => ({
+let cached
+
+module.exports = config => cached || (cached = {
   start: () => {
     const { service, version, env, url, hostname, port } = config
     const { enabled } = config.profiling
