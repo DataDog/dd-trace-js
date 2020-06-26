@@ -413,27 +413,28 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 | Config         | Environment Variable           | Default     | Description |
 | -------------- | ------------------------------ | ----------- | ----------- |
-| enabled        | `DD_TRACE_ENABLED`             | `true`      | Whether to enable the tracer. |
-| debug          | `DD_TRACE_DEBUG`               | `false`     | Enable debug logging in the tracer. |
-| service        | `DD_SERVICE`                   | -           | The service name to be used for this program. Defaults to value of the `name` field in `package.json`. |
-| version        | `DD_VERSION`                   | -           | The version number of the application. Defaults to value of the `version` field in `package.json`. |
-| url            | `DD_TRACE_AGENT_URL`           | -           | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
-| hostname       | `DD_TRACE_AGENT_HOSTNAME`      | `localhost` | The address of the agent that the tracer will submit to. |
-| port           | `DD_TRACE_AGENT_PORT`          | `8126`      | The port of the trace agent that the tracer will submit to. |
-| dogstatsd.port | `DD_DOGSTATSD_PORT`            | `8125`      | The port of the Dogstatsd agent that metrics will be submitted to. |
-| env            | `DD_ENV`                       | -           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
-| logInjection   | `DD_LOGS_INJECTION`            | `false`     | Enable automatic injection of trace IDs in logs for supported logging libraries. |
-| tags           | `DD_TAGS`                      | `{}`        | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
-| sampleRate     | -                              | `1`         | Percentage of spans to sample as a float between 0 and 1. |
-| flushInterval  | -                              | `2000`      | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| runtimeMetrics | `DD_RUNTIME_METRICS_ENABLED`   | `false`     | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
-| profiling | `DD_PROFILING_ENABLED`   | `false`     | Whether to enable profiling. |
-| reportHostname | `DD_TRACE_REPORT_HOSTNAME`     | `false`     | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| experimental   | -                              | `{}`        | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
-| plugins        | -                              | `true`      | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
-| -              | `DD_TRACE_DISABLED_PLUGINS`    | -           | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
-| clientToken    | `DD_CLIENT_TOKEN`              | -           | Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`. |
-| logLevel       | `DD_TRACE_LOG_LEVEL`           | `debug`     | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
+| enabled        | `DD_TRACE_ENABLED`             | `true`         | Whether to enable the tracer. |
+| debug          | `DD_TRACE_DEBUG`               | `false`        | Enable debug logging in the tracer. |
+| service        | `DD_SERVICE`                   | -              | The service name to be used for this program. Defaults to value of the `name` field in `package.json`. |
+| version        | `DD_VERSION`                   | -              | The version number of the application. Defaults to value of the `version` field in `package.json`. |
+| url            | `DD_TRACE_AGENT_URL`           | -              | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
+| hostname       | `DD_TRACE_AGENT_HOSTNAME`      | `localhost`    | The address of the agent that the tracer will submit to. |
+| port           | `DD_TRACE_AGENT_PORT`          | `8126`         | The port of the trace agent that the tracer will submit to. |
+| dogstatsd.port | `DD_DOGSTATSD_PORT`            | `8125`         | The port of the Dogstatsd agent that metrics will be submitted to. |
+| env            | `DD_ENV`                       | -              | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
+| logInjection   | `DD_LOGS_INJECTION`            | `false`        | Enable automatic injection of trace IDs in logs for supported logging libraries. |
+| tags           | `DD_TAGS`                      | `{}`           | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
+| sampleRate     | -                              | `1`            | Percentage of spans to sample as a float between 0 and 1. |
+| flushInterval  | -                              | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
+| lookup         | -                              | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
+| runtimeMetrics | `DD_RUNTIME_METRICS_ENABLED`   | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
+| profiling      | `DD_PROFILING_ENABLED`         | `false`        | Whether to enable profiling. |
+| reportHostname | `DD_TRACE_REPORT_HOSTNAME`     | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
+| experimental   | -                              | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
+| plugins        | -                              | `true`         | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
+| -              | `DD_TRACE_DISABLED_PLUGINS`    | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
+| clientToken    | `DD_CLIENT_TOKEN`              | -              | Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`. |
+| logLevel       | `DD_TRACE_LOG_LEVEL`           | `debug`        | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 

@@ -109,6 +109,7 @@ class Config {
     this.profiling = {
       enabled: String(profilingEnabled) === 'true'
     }
+    this.lookup = options.lookup
 
     if (this.experimental.runtimeId) {
       tagger.add(tags, {
