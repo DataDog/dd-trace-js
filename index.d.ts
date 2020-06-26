@@ -221,6 +221,11 @@ export declare interface TracerOptions {
   port?: number | string;
 
   /**
+   * Whether to enable profiling.
+   */
+  profiling?: boolean
+
+  /**
    * Options specific for the Dogstatsd agent.
    */
   dogstatsd?: {
@@ -813,7 +818,7 @@ declare namespace plugins {
      * An object of optional callbacks to be executed during the respective
      * phase of a GraphQL operation. Undefined callbacks default to a noop
      * function.
-     * 
+     *
      * @default {}
      */
     hooks?: {

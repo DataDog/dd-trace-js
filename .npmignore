@@ -5,6 +5,7 @@
 !packages/*/src/**/*
 !packages/*/index.js
 !prebuilds/**/*
+!protobuf/**/*
 !scripts/**/*
 !CONTRIBUTING.md
 !LICENSE

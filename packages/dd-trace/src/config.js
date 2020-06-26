@@ -14,6 +14,7 @@ class Config {
     options = options || {}
 
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
+    const profilingEnabled = coalesce(options.profiling, platform.env('DD_PROFILING_ENABLED'), false)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
     const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), platform.env('DD_TRACE_URL'), null)
@@ -105,6 +106,9 @@ class Config {
       platform.env('DD_TRACE_LOG_LEVEL'),
       'debug'
     )
+    this.profiling = {
+      enabled: String(profilingEnabled) === 'true'
+    }
 
     if (this.experimental.runtimeId) {
       tagger.add(tags, {

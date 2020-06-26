@@ -13,6 +13,7 @@ const hostname = require('./hostname')
 const Loader = require('./loader')
 const scopes = require('../../../../../ext/scopes')
 const exporter = require('./exporter')
+const profiler = require('./profiler')
 const pkg = require('./pkg')
 
 const emitter = new EventEmitter()
@@ -43,7 +44,10 @@ const platform = {
     }
     return require('../../scope/async_hooks')
   },
-  exporter
+  exporter,
+  profiler () {
+    return profiler(this._config)
+  }
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))

@@ -16,6 +16,7 @@ const asyncHooksScope = new AsyncHooksScope({
 })
 
 chai.use(sinonChai)
+chai.use(require('../asserts/profile'))
 
 global.sinon = sinon
 global.expect = chai.expect
