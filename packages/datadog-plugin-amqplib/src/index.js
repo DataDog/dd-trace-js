@@ -25,7 +25,7 @@ function createWrapSendMessage (tracer, config) {
 function createWrapDispatchMessage (tracer, config) {
   return function wrapDispatchMessage (dispatchMessage) {
     return function dispatchMessageWithTrace (fields, message) {
-      const childOf = tracer.extract(TEXT_MAP, message.properties.headers)
+      const childOf = extract(tracer, message)
       const span = tracer.startSpan('amqp.command', { childOf })
 
       addTags(this, tracer, config, span, 'basic.deliver', fields)
@@ -129,6 +129,12 @@ function addTags (channel, tracer, config, span, method, fields) {
   fieldNames.forEach(field => {
     fields[field] !== undefined && span.setTag(`amqp.${field}`, fields[field])
   })
+}
+
+function extract (tracer, message) {
+  return message
+    ? tracer.extract(TEXT_MAP, message.properties.headers)
+    : null
 }
 
 module.exports = [

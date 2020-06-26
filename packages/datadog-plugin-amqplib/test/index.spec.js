@@ -221,6 +221,17 @@ describe('Plugin', () => {
                 }, {}, err => err && done(err))
               })
             })
+
+            it('should support null messages', done => {
+              channel.assertQueue('queue', {}, () => {
+                channel.consume('queue', (event) => {
+                  expect(event).to.be.null
+                  done()
+                }, {}, () => {
+                  channel.deleteQueue('queue')
+                })
+              })
+            })
           })
         })
 
