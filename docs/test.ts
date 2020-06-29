@@ -64,6 +64,7 @@ tracer.init({
   plugins: false,
   port: 7777,
   dogstatsd: {
+    hostname: 'dsd-agent',
     port: 8888
   },
   flushInterval: 1000,
