@@ -106,9 +106,6 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
-    // dogstatsd.hostname is never set to trace agent URL, since this can
-    // be a Unix Domain Socket, which the internal DogStatsD client does
-    // not currently support.
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
@@ -285,9 +282,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '6218')
-    // dogstatsd.hostname is never set to trace agent URL, since this can
-    // be a Unix Domain Socket, which the internal DogStatsD client does
-    // not currently support.
     expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.property('site', 'datadoghq.com')
