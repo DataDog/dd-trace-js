@@ -116,13 +116,6 @@ describe('Tracer', () => {
     expect(Sampler).to.have.been.calledWith(config.sampleRate)
   })
 
-  it('should support logging', () => {
-    tracer = new Tracer(config)
-
-    expect(log.use).to.have.been.calledWith(config.logger)
-    expect(log.toggle).to.have.been.calledWith(config.debug)
-  })
-
   describe('startSpan', () => {
     it('should start a span', () => {
       fields.tags = { foo: 'bar' }

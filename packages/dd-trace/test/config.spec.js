@@ -358,4 +358,18 @@ describe('Config', () => {
       service: 'node'
     })
   })
+
+  it('should support tags for setting primary fields', () => {
+    const config = new Config({
+      tags: {
+        service: 'service',
+        env: 'test',
+        version: '0.1.0'
+      }
+    })
+
+    expect(config).to.have.property('service', 'service')
+    expect(config).to.have.property('version', '0.1.0')
+    expect(config).to.have.property('env', 'test')
+  })
 })

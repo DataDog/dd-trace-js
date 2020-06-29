@@ -78,9 +78,9 @@ const helpers = {
           childOf: maybeChildOf,
           tags: Object.assign({}, tags, { [Tags.SPAN_KIND]: 'server' })
         }
-        return tracer.wrap('aws.response', options, cb).call(request, err, resp)
+        return tracer.wrap('aws.response', options, cb).call(this, err, resp)
       } else {
-        return tracer.scope().bind(cb, childOf).call(request, err, resp)
+        return tracer.scope().bind(cb, childOf).call(this, err, resp)
       }
     }
   }

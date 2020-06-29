@@ -13,6 +13,7 @@ describe('TracerProxy', () => {
   let config
   let platform
   let analyticsSampler
+  let log
 
   beforeEach(() => {
     tracer = {
@@ -37,6 +38,11 @@ describe('TracerProxy', () => {
       scopeManager: sinon.stub().returns('scopeManager')
     }
 
+    log = {
+      use: sinon.spy(),
+      toggle: sinon.spy()
+    }
+
     instrumenter = {
       enable: sinon.spy(),
       patch: sinon.spy(),
@@ -47,12 +53,20 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
     Instrumenter = sinon.stub().returns(instrumenter)
 
-    config = { enabled: true, experimental: {} }
+    config = {
+      enabled: true,
+      experimental: {},
+      logger: 'logger',
+      debug: true
+    }
     Config = sinon.stub().returns(config)
 
     platform = {
       load: sinon.spy(),
       metrics: sinon.stub().returns({
+        start: sinon.spy()
+      }),
+      profiler: sinon.stub().returns({
         start: sinon.spy()
       })
     }
@@ -67,7 +81,8 @@ describe('TracerProxy', () => {
       './config': Config,
       './platform': platform,
       './analytics_sampler': analyticsSampler,
-      './instrumenter': Instrumenter
+      './instrumenter': Instrumenter,
+      './log': log
     })
 
     proxy = new Proxy()
@@ -110,6 +125,13 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(DatadogTracer).to.not.have.been.called
+      })
+
+      it('should support logging', () => {
+        proxy.init()
+
+        expect(log.use).to.have.been.calledWith(config.logger)
+        expect(log.toggle).to.have.been.calledWith(config.debug)
       })
 
       it('should set up automatic instrumentation', () => {

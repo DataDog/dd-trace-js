@@ -632,8 +632,9 @@ describe('Plugin', () => {
         beforeEach(() => {
           filename = path.join(tmpdir, 'createWriteStream')
         })
-        afterEach(() => {
-          realFS.unlinkSync(filename)
+        afterEach(done => {
+          // swallow errors since we're causing a race condition in one of the tests
+          realFS.unlink(filename, () => done())
         })
 
         it('should be instrumented', (done) => {

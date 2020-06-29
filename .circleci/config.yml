@@ -46,8 +46,21 @@ node-bench-base: &node-bench-base
     - *yarn-install
     - *save-yarn-cache
     - run:
-        name: Benchmark
+        name: Benchmark Tracer
         command: yarn bench
+
+node-bench-profiler-base: &node-bench-profiler-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - run:
+        name: Benchmark Profiler
+        command: yarn bench:profiler
 
 node-plugin-base: &node-plugin-base
   docker:
@@ -182,6 +195,11 @@ jobs:
 
   node-bench-latest:
     <<: *node-bench-base
+    docker:
+      - image: node
+
+  node-bench-profiler-latest:
+    <<: *node-bench-profiler-base
     docker:
       - image: node
 
@@ -924,6 +942,7 @@ workflows:
       - node-core-latest
       - node-core-windows
       - node-bench-latest
+      - node-bench-profiler-latest
       - node-amqplib
       - node-amqp10
       # - node-aws-sdk
@@ -1099,6 +1118,7 @@ workflows:
       - node-core-latest
       - node-core-windows
       - node-bench-latest
+      - node-bench-profiler-latest
       - node-amqplib
       - node-amqp10
       # - node-aws-sdk

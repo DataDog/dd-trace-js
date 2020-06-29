@@ -13,21 +13,10 @@ class Config {
   constructor (options) {
     options = options || {}
 
-    const service = options.service ||
-      platform.env('DD_SERVICE') ||
-      platform.env('DD_SERVICE_NAME') ||
-      platform.service() ||
-      'node'
-
-    const version = coalesce(
-      options.version,
-      platform.env('DD_VERSION'),
-      platform.appVersion()
-    )
     const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
+    const profilingEnabled = coalesce(options.profiling, platform.env('DD_PROFILING_ENABLED'), false)
     const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
     const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
-    const env = coalesce(options.env, platform.env('DD_ENV'))
     const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), platform.env('DD_TRACE_URL'), null)
     const site = coalesce(options.site, platform.env('DD_SITE'), 'datadoghq.com')
     const hostname = coalesce(
@@ -55,6 +44,23 @@ class Config {
     tagger.add(tags, platform.env('DD_TRACE_TAGS'))
     tagger.add(tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
     tagger.add(tags, options.tags)
+
+    const service = options.service ||
+      platform.env('DD_SERVICE') ||
+      platform.env('DD_SERVICE_NAME') ||
+      tags.service ||
+      platform.service() ||
+      'node'
+
+    const version = coalesce(
+      options.version,
+      platform.env('DD_VERSION'),
+      tags.version,
+      platform.appVersion()
+    )
+
+    const env = coalesce(options.env, platform.env('DD_ENV'), tags.env)
+
     tagger.add(tags, { service, env, version })
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
@@ -101,6 +107,9 @@ class Config {
       platform.env('DD_TRACE_LOG_LEVEL'),
       'debug'
     )
+    this.profiling = {
+      enabled: String(profilingEnabled) === 'true'
+    }
 
     if (this.experimental.runtimeId) {
       tagger.add(tags, {
