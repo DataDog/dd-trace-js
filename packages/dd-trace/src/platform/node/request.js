@@ -14,14 +14,16 @@ function request (options, callback) {
   }, options)
 
   const data = [].concat(options.data)
+  const client = options.protocol === 'https:' ? https : http
+  const agent = new client.Agent({ keepAlive: true })
 
+  options.agent = agent
   options.headers['Content-Length'] = byteLength(data)
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  const client = options.protocol === 'https:' ? https : http
   const req = client.request(options, res => {
     let data = ''
 
