@@ -420,7 +420,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | url            | `DD_TRACE_AGENT_URL`           | -           | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
 | hostname       | `DD_TRACE_AGENT_HOSTNAME`      | `localhost` | The address of the agent that the tracer will submit to. |
 | port           | `DD_TRACE_AGENT_PORT`          | `8126`      | The port of the trace agent that the tracer will submit to. |
-| dogstatsd.hostname | `DD_DOGSTATSD_HOSTNAME`    | -           | The address of the Dogstatsd agent that metrics will be submitted to. Falls back to `hostname`. |
+| dogstatsd.hostname | `DD_DOGSTATSD_HOSTNAME`    | -           | The address of the Dogstatsd agent that metrics will be submitted to. Falls back to the same value as the `hostname` option. |
 | dogstatsd.port | `DD_DOGSTATSD_PORT`            | `8125`      | The port of the Dogstatsd agent that metrics will be submitted to. |
 | env            | `DD_ENV`                       | -           | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
 | logInjection   | `DD_LOGS_INJECTION`            | `false`     | Enable automatic injection of trace IDs in logs for supported logging libraries. |
