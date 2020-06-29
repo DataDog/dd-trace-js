@@ -58,6 +58,7 @@ describe('Config', () => {
   it('should initialize from environment variables', () => {
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
+    platform.env.withArgs('DD_DOGSTATSD_HOSTNAME').returns('dsd-agent')
     platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
@@ -78,6 +79,7 @@ describe('Config', () => {
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('analytics', true)
     expect(config).to.have.property('hostname', 'agent')
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
