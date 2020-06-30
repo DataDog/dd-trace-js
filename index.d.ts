@@ -230,6 +230,11 @@ export declare interface TracerOptions {
    */
   dogstatsd?: {
     /**
+     * The hostname of the Dogstatsd agent that the metrics will submitted to.
+     */
+    hostname?: string
+
+    /**
      * The port of the Dogstatsd agent that the metrics will submitted to.
      * @default 8125
      */
