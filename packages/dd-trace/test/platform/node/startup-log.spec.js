@@ -1,7 +1,7 @@
 'use strict'
 
 const os = require('os')
-const tracerVersion = require('../lib/version')
+const tracerVersion = require('../../../lib/version')
 
 describe('startup logging', () => {
   let semverVersion
@@ -10,13 +10,13 @@ describe('startup logging', () => {
   before(() => {
     sinon.stub(console, 'error')
     semverVersion = require('semver/package.json').version
-    delete require.cache[require.resolve('../src/startup-log')]
+    delete require.cache[require.resolve('../../../src/platform/node/startup-log')]
     const {
       setStartupLogConfig,
       setStartupLogPlugins,
       setSamplingRules,
       startupLog
-    } = require('../src/startup-log')
+    } = require('../../../src/platform/node/startup-log')
     setStartupLogPlugins([{ name: 'http' }, { name: 'fs' }, { name: 'semver', versions: [] }])
     setStartupLogConfig({
       env: 'production',
@@ -30,8 +30,8 @@ describe('startup logging', () => {
       sampleRate: 1,
       tags: { version: '1.2.3' },
       logInjection: true,
-      runtimeMetrics: true
-
+      runtimeMetrics: true,
+      startupLogsEnabled: true
     })
     setSamplingRules(['rule1', 'rule2'])
     startupLog({ message: 'Error: fake error' })
@@ -63,7 +63,7 @@ describe('startup logging', () => {
       debug: true,
       analytics_enabled: true,
       sample_rate: 1,
-      app_version: '1.2.3',
+      dd_version: '1.2.3',
       log_injection_enabled: true,
       runtime_metrics_enabled: true
     })

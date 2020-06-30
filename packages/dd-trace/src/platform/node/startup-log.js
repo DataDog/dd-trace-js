@@ -1,16 +1,13 @@
 'use strict'
 
-const logger = require('./log')
+const mainLogger = require('../../log')
 const path = require('path')
+const os = require('os')
 const { inspect } = require('util')
-const tracerVersion = require('../lib/version')
+const tracerVersion = require('../../../lib/version')
 
-let os
-try {
-  os = require('os')
-} catch (e) {
-  // in browser
-}
+const logger = Object.create(mainLogger)
+logger._enabled = true
 
 let config
 let plugins = []
@@ -89,8 +86,8 @@ function startupLog (agentError) {
   out.runtime_metrics_enabled = !!config.runtimeMetrics
   out.integrations_loaded = getIntegrations()
 
-  //// This next bunch is for features supported by other tracers, but not this
-  //// one. They may be implemented in the future.
+  // // This next bunch is for features supported by other tracers, but not this
+  // // one. They may be implemented in the future.
 
   // out.enabled_cli
   // out.sampling_rules_error
@@ -121,14 +118,9 @@ function setSamplingRules (theRules) {
   samplingRules = theRules
 }
 
-module.exports = os ? {
+module.exports = {
   startupLog,
   setStartupLogConfig,
   setStartupLogPlugins,
   setSamplingRules
-} : {
-  startupLog: () => {},
-  setStartupLogConfig: () => {},
-  setStartupLogPlugins: () => {},
-  setSamplingRules: () => {}
 }

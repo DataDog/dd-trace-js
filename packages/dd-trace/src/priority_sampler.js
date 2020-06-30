@@ -3,7 +3,7 @@
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const ext = require('../../../ext')
-const { setSamplingRules } = require('./startup-log')
+const { setSamplingRules } = require('./platform').startupLog
 
 const {
   SAMPLING_RULE_DECISION,

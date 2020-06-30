@@ -4,7 +4,7 @@ const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
 const platform = require('./platform')
-const { setStartupLogConfig } = require('./startup-log')
+const { setStartupLogConfig } = platform.startupLog
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME

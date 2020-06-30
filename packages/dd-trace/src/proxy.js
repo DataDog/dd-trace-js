@@ -7,7 +7,7 @@ const Config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
 const log = require('./log')
-const { setStartupLogPlugins } = require('./startup-log')
+const { setStartupLogPlugins } = platform.startupLog
 const analyticsSampler = require('./analytics_sampler')
 
 const noop = new NoopTracer()

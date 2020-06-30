@@ -7,6 +7,7 @@ const tags = require('./tags')
 const validate = require('./validate')
 const metrics = require('./metrics')
 const plugins = require('../../plugins/browser')
+const startupLog = require('./startup-log')
 const exporter = require('./exporter')
 const Loader = require('./loader')
 const Scope = require('../../scope/zone')
@@ -26,6 +27,7 @@ const platform = {
   appVersion: () => null,
   metrics,
   plugins,
+  startupLog,
   hostname: () => {}, // TODO: add hostname
   on: () => {}, // TODO: add event listener
   off: () => {}, // TODO: add event listener

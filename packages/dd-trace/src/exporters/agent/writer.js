@@ -4,7 +4,6 @@ const platform = require('../../platform')
 const log = require('../../log')
 const encode = require('../../encode')
 const tracerVersion = require('../../../lib/version')
-const { startupLog } = require('../../startup-log')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
@@ -77,7 +76,7 @@ class Writer {
         }
       }
 
-      startupLog(err)
+      platform.startupLog.startupLog(err)
 
       if (err) return log.error(err)
 
