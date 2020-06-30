@@ -1,6 +1,6 @@
 'use strict'
 
-const mainLogger = require('./log')
+const logger = require('./log')
 const path = require('path')
 const { inspect } = require('util')
 const tracerVersion = require('../lib/version')
@@ -11,9 +11,6 @@ try {
 } catch (e) {
   // in browser
 }
-
-const logger = Object.create(mainLogger)
-logger._enabled = process.env.DD_TRACE_STARTUP_LOGS !== '0'
 
 let config
 let plugins = []
@@ -49,6 +46,10 @@ function startupLog (agentError) {
 
   alreadyRan = true
 
+  if (!config.startupLogsEnabled) {
+    return
+  }
+
   const url = config.url || `http://${config.hostname || 'localhost'}:${config.port}`
 
   const out = {
@@ -63,6 +64,7 @@ function startupLog (agentError) {
   out.date = new Date().toISOString()
   out.os_name = os.type()
   out.os_version = os.release()
+  out.architecture = os.arch()
   out.version = tracerVersion
   out.lang = 'nodejs'
   out.lang_version = process.versions.node
@@ -70,7 +72,6 @@ function startupLog (agentError) {
   out.enabled = config.enabled
   out.scope_manager = config.scope
   out.service = config.service
-  // out.enabled_cli // N/A
   out.agent_url = url
   if (agentError) {
     out.agent_error = agentError.message
@@ -79,23 +80,33 @@ function startupLog (agentError) {
   out.analytics_enabled = !!config.analytics
   out.sample_rate = config.sampleRate
   out.sampling_rules = samplingRules
-  // out.sampling_rules_error // N/A
-  // out.integration_XXX_analytics_enabled // N/A
-  // out.integration_XXX_sample_rate // N/A
   out.tags = config.tags
   if (config.tags && config.tags.version) {
-    out.app_version = config.tags.version
+    out.dd_version = config.tags.version
   }
-  // out.service_mapping // N/A
-  // out.service_mapping_error // N/A
+
   out.log_injection_enabled = !!config.logInjection
   out.runtime_metrics_enabled = !!config.runtimeMetrics
   out.integrations_loaded = getIntegrations()
+
+  //// This next bunch is for features supported by other tracers, but not this
+  //// one. They may be implemented in the future.
+
+  // out.enabled_cli
+  // out.sampling_rules_error
+  // out.integration_XXX_analytics_enabled
+  // out.integration_XXX_sample_rate
+  // out.service_mapping
+  // out.service_mapping_error
 
   logger.info('DATADOG TRACER CONFIGURATION', out)
   if (agentError) {
     logger.warn('DATADOG TRACER DIAGNOSTIC', 'Agent Error:', agentError.message)
   }
+
+  config = undefined
+  plugins = undefined
+  samplingRules = undefined
 }
 
 function setStartupLogConfig (aConfig) {
