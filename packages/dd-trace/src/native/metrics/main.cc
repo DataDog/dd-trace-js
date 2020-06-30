@@ -418,9 +418,9 @@ static Value Stop(const CallbackInfo& info) {
     NAPI_THROW(Error::New(info.Env(), "Already stopped"), {});
   }
 
-  gc.Start();
-  ev.Start();
-  spans.Start();
+  gc.Stop();
+  ev.Stop();
+  spans.Stop();
 
   running = false;
 
