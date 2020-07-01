@@ -32,7 +32,7 @@ function getIntegrations () {
   return Array.from(new Set(integrations))
 }
 
-function startupLog (agentError) {
+function startupLog ({ agentError } = {}) {
   if (!config) {
     return
   }

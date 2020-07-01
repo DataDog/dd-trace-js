@@ -76,7 +76,7 @@ class Writer {
         }
       }
 
-      platform.startupLog.startupLog(err)
+      platform.startupLog.startupLog({ agentError: err })
 
       if (err) return log.error(err)
 

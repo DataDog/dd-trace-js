@@ -34,7 +34,7 @@ describe('startup logging', () => {
       startupLogsEnabled: true
     })
     setSamplingRules(['rule1', 'rule2'])
-    startupLog({ message: 'Error: fake error' })
+    startupLog({ agentError: { message: 'Error: fake error' } })
     firstStderrCall = console.error.firstCall /* eslint-disable-line no-console */
     secondStderrCall = console.error.secondCall /* eslint-disable-line no-console */
     console.error.restore() /* eslint-disable-line no-console */
