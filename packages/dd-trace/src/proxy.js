@@ -7,7 +7,7 @@ const Config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
 const log = require('./log')
-const { setStartupLogPlugins } = platform.startupLog
+const { setStartupLogInstrumenter } = platform.startupLog
 const analyticsSampler = require('./analytics_sampler')
 
 const noop = new NoopTracer()
@@ -48,7 +48,7 @@ class Tracer extends BaseTracer {
 
           this._tracer = new DatadogTracer(config)
           this._instrumenter.enable(config)
-          setStartupLogPlugins(this._instrumenter._instrumented.keys())
+          setStartupLogInstrumenter(this._instrumenter)
         }
       } catch (e) {
         log.error(e)

@@ -3,6 +3,6 @@
 module.exports = {
   startupLog: () => {},
   setStartupLogConfig: () => {},
-  setStartupLogPlugins: () => {},
+  setStartupLogInstrumenter: () => {},
   setSamplingRules: () => {}
 }

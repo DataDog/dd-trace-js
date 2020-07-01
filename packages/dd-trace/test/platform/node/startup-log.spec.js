@@ -13,11 +13,17 @@ describe('startup logging', () => {
     delete require.cache[require.resolve('../../../src/platform/node/startup-log')]
     const {
       setStartupLogConfig,
-      setStartupLogPlugins,
+      setStartupLogInstrumenter,
       setSamplingRules,
       startupLog
     } = require('../../../src/platform/node/startup-log')
-    setStartupLogPlugins([{ name: 'http' }, { name: 'fs' }, { name: 'semver', versions: [] }])
+    setStartupLogInstrumenter({
+      _instrumented: {
+        keys () {
+          return [{ name: 'http' }, { name: 'fs' }, { name: 'semver', versions: [] }]
+        }
+      }
+    })
     setStartupLogConfig({
       env: 'production',
       enabled: true,

@@ -10,14 +10,14 @@ const logger = Object.create(mainLogger)
 logger._enabled = true
 
 let config
-let plugins = []
+let instrumenter
 let samplingRules = []
 
 let alreadyRan = false
 
 function getIntegrations () {
   const integrations = []
-  for (const plugin of plugins) {
+  for (const plugin of instrumenter._instrumented.keys()) {
     if (plugin.versions) {
       try {
         const version = require(path.join(plugin.name, 'package.json')).version
@@ -102,7 +102,7 @@ function startupLog ({ agentError } = {}) {
   }
 
   config = undefined
-  plugins = undefined
+  instrumenter = undefined
   samplingRules = undefined
 }
 
@@ -110,8 +110,8 @@ function setStartupLogConfig (aConfig) {
   config = aConfig
 }
 
-function setStartupLogPlugins (thePlugins) {
-  plugins = thePlugins
+function setStartupLogInstrumenter (theInstrumenter) {
+  instrumenter = theInstrumenter
 }
 
 function setSamplingRules (theRules) {
@@ -121,6 +121,6 @@ function setSamplingRules (theRules) {
 module.exports = {
   startupLog,
   setStartupLogConfig,
-  setStartupLogPlugins,
+  setStartupLogInstrumenter,
   setSamplingRules
 }
