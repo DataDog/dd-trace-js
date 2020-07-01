@@ -47,8 +47,8 @@ describe('startup logging', () => {
   })
 
   it('startupLog should be formatted correctly', () => {
-    expect(firstStderrCall.args[0]).to.equal('DATADOG TRACER CONFIGURATION')
-    const logObj = firstStderrCall.args[1]
+    expect(firstStderrCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - ')).to.equal(true)
+    const logObj = JSON.parse(firstStderrCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
     expect(typeof logObj).to.equal('object')
     expect(typeof logObj.date).to.equal('string')
     expect(logObj.date.length).to.equal(new Date().toISOString().length)
@@ -76,13 +76,12 @@ describe('startup logging', () => {
   })
 
   it('startupLog should correctly also output the diagnostic message', () => {
-    expect(secondStderrCall.args[0]).to.equal('DATADOG TRACER DIAGNOSTIC')
-    expect(secondStderrCall.args[1]).to.equal('Agent Error:')
-    expect(secondStderrCall.args[2]).to.equal('Error: fake error')
+    expect(secondStderrCall.args[0]).to.equal('DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
   })
 
   it('setStartupLogPlugins should add plugins to integrations_loaded', () => {
-    const integrationsLoaded = firstStderrCall.args[1].integrations_loaded
+    const logObj = JSON.parse(firstStderrCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const integrationsLoaded = logObj.integrations_loaded
     expect(integrationsLoaded).to.include('fs')
     expect(integrationsLoaded).to.include('http')
     expect(integrationsLoaded).to.include('semver@' + semverVersion)

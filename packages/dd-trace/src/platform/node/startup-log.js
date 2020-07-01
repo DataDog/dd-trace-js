@@ -96,9 +96,9 @@ function startupLog ({ agentError } = {}) {
   // out.service_mapping
   // out.service_mapping_error
 
-  logger.info('DATADOG TRACER CONFIGURATION', out)
+  logger.info('DATADOG TRACER CONFIGURATION - ' + out)
   if (agentError) {
-    logger.warn('DATADOG TRACER DIAGNOSTIC', 'Agent Error:', agentError.message)
+    logger.warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
   }
 
   config = undefined

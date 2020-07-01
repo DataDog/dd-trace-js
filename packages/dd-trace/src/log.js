@@ -1,10 +1,10 @@
 'use strict'
 
 const _default = {
-  debug: (...args) => console.log(...args), /* eslint-disable-line no-console */
-  info: (...args) => console.error(...args), /* eslint-disable-line no-console */
-  warn: (...args) => console.error(...args), /* eslint-disable-line no-console */
-  error: (...args) => console.error(...args) /* eslint-disable-line no-console */
+  debug: msg => console.log(msg), /* eslint-disable-line no-console */
+  info: msg => console.error(msg), /* eslint-disable-line no-console */
+  warn: msg => console.error(msg), /* eslint-disable-line no-console */
+  error: msg => console.error(msg) /* eslint-disable-line no-console */
 }
 
 // based on: https://github.com/trentm/node-bunyan#levels
@@ -38,12 +38,8 @@ const memoize = func => {
   return memoized
 }
 
-function processArgs (args) {
-  if (typeof args[0] === 'function') {
-    args = args[0]()
-    return Array.isArray(args) ? args : [args]
-  }
-  return args
+function processMsg (msg) {
+  return typeof msg === 'function' ? msg() : msg
 }
 
 const log = {
@@ -78,25 +74,25 @@ const log = {
     return this
   },
 
-  debug (...message) {
+  debug (message) {
     if (this._enabled && this._isLogLevelEnabled('debug')) {
-      this._logger.debug(...processArgs(message))
+      this._logger.debug(processMsg(message))
     }
 
     return this
   },
 
-  info (...message) {
+  info (message) {
     if (this._enabled && this._isLogLevelEnabled('info')) {
-      this._logger.info(...processArgs(message))
+      this._logger.info(processMsg(message))
     }
 
     return this
   },
 
-  warn (...message) {
+  warn (message) {
     if (this._enabled && this._isLogLevelEnabled('warn')) {
-      this._logger.warn(...processArgs(message))
+      this._logger.warn(processMsg(message))
     }
 
     return this
