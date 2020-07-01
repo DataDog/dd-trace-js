@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../../../dd-trace/src/log')
+
 class Sqs {
   generateTags (params, operation, response) {
     const tags = {}
@@ -18,10 +20,18 @@ class Sqs {
         (!params.MaxNumberOfMessages || params.MaxNumberOfMessages === 1) &&
         response &&
         response.Messages &&
-        response.Messages[0]
+        response.Messages[0] &&
+        response.Messages[0].MessageAttributes &&
+        response.Messages[0].MessageAttributes._datadog &&
+        response.Messages[0].MessageAttributes._datadog.StringValue
       ) {
-        const msg = response.Messages[0]
-        return tracer.extract('text_map', JSON.parse(msg.MessageAttributes._datadog.StringValue))
+        const textMap = response.Messages[0].MessageAttributes._datadog.StringValue
+        try {
+          return tracer.extract('text_map', JSON.parse(textMap))
+        } catch (err) {
+          log.error(err)
+          return undefined
+        }
       }
     }
   }
