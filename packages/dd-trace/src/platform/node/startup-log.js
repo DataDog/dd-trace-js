@@ -33,7 +33,7 @@ function getIntegrations () {
 }
 
 function startupLog ({ agentError } = {}) {
-  if (!config) {
+  if (!config || !instrumenter) {
     return
   }
 
