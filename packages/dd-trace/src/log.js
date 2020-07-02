@@ -83,6 +83,7 @@ const log = {
   },
 
   info (message) {
+    if (!this._logger.info) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('info')) {
       this._logger.info(processMsg(message))
     }
@@ -91,6 +92,7 @@ const log = {
   },
 
   warn (message) {
+    if (!this._logger.warn) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('warn')) {
       this._logger.warn(processMsg(message))
     }
