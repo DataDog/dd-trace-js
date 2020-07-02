@@ -133,7 +133,25 @@ describe('Span', () => {
       span.setBaggageItem('foo', 'bar')
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
-      expect(parent._baggageItems).to.have.property('foo', 'bar')
+      expect(parent._baggageItems).to.not.have.property('foo', 'bar')
+    })
+
+    it('should pass baggage items to future causal spans', () => {
+      const parent = {
+        traceId: '123',
+        spanId: '456',
+        _baggageItems: {
+          'foo': 'bar'
+        },
+        _trace: {
+          started: ['span'],
+          finished: ['span']
+        }
+      }
+
+      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation', parent })
+
+      expect(span.context()._baggageItems).to.have.property('foo', 'bar')
     })
   })
 

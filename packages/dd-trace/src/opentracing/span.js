@@ -63,7 +63,7 @@ class DatadogSpan extends Span {
         spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
-        baggageItems: parent._baggageItems,
+        baggageItems: Object.assign({}, parent._baggageItems),
         trace: parent._trace
       })
     } else {
