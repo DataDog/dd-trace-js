@@ -38,6 +38,7 @@ class Config {
     const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
     const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
     const clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
+    const startupLogsEnabled = coalesce(platform.env('DD_TRACE_STARTUP_LOGS'), true)
     const tags = {}
 
     tagger.add(tags, platform.env('DD_TAGS'))
@@ -110,6 +111,7 @@ class Config {
     this.profiling = {
       enabled: String(profilingEnabled) === 'true'
     }
+    this.startupLogsEnabled = String(startupLogsEnabled) === 'true'
 
     if (this.experimental.runtimeId) {
       tagger.add(tags, {

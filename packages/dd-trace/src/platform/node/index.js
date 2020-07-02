@@ -15,6 +15,7 @@ const scopes = require('../../../../../ext/scopes')
 const exporter = require('./exporter')
 const profiler = require('./profiler')
 const pkg = require('./pkg')
+const startupLog = require('./startup-log')
 
 const emitter = new EventEmitter()
 
@@ -34,6 +35,7 @@ const platform = {
   msgpack,
   metrics,
   plugins,
+  startupLog,
   hostname,
   on: emitter.on.bind(emitter),
   off: emitter.removeListener.bind(emitter),
