@@ -15,21 +15,34 @@ let samplingRules = []
 
 let alreadyRan = false
 
-function getIntegrations () {
-  const integrations = []
+function getIntegrationsAndAnalytics () {
+  const integrations = new Set()
+  const extras = {}
   for (const plugin of instrumenter._instrumented.keys()) {
     if (plugin.versions) {
       try {
         const version = require(path.join(plugin.name, 'package.json')).version
-        integrations.push(`${plugin.name}@${version}`)
+        integrations.add(`${plugin.name}@${version}`)
       } catch (e) {
-        integrations.push(plugin.name)
+        integrations.add(plugin.name)
       }
     } else {
-      integrations.push(plugin.name)
+      integrations.add(plugin.name)
+    }
+
+    const pluginData = instrumenter._plugins.get(plugin.name)
+    if (pluginData) {
+      const pluginConfig = pluginData.config
+      if (pluginConfig && pluginConfig.analytics) {
+        extras[`integration_${plugin.name}_analytics_enabled`] = true
+        if (typeof pluginConfig.analytics !== 'boolean') {
+          extras[`integration_${plugin.name}_sample_rate`] = pluginConfig.analytics
+        }
+      }
     }
   }
-  return Array.from(new Set(integrations))
+  extras.integrations_loaded = Array.from(integrations)
+  return extras
 }
 
 function startupLog ({ agentError } = {}) {
@@ -84,7 +97,7 @@ function startupLog ({ agentError } = {}) {
 
   out.log_injection_enabled = !!config.logInjection
   out.runtime_metrics_enabled = !!config.runtimeMetrics
-  out.integrations_loaded = getIntegrations()
+  Object.assign(out, getIntegrationsAndAnalytics())
 
   // // This next bunch is for features supported by other tracers, but not this
   // // one. They may be implemented in the future.
