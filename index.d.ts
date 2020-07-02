@@ -1,4 +1,5 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
+import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
@@ -275,6 +276,12 @@ export declare interface TracerOptions {
    * @default true
    */
   trackAsyncScope?: boolean
+
+  /**
+   * Custom function for DNS lookups when sending requests to the agent.
+   * @default dns.lookup()
+   */
+  lookup?: LookupFunction
 
   /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.

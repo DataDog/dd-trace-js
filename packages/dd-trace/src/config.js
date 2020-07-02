@@ -111,6 +111,7 @@ class Config {
     this.profiling = {
       enabled: String(profilingEnabled) === 'true'
     }
+    this.lookup = options.lookup
     this.startupLogsEnabled = String(startupLogsEnabled) === 'true'
 
     if (this.experimental.runtimeId) {

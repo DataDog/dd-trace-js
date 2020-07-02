@@ -9,9 +9,10 @@ const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer {
-  constructor (url, prioritySampler) {
+  constructor (url, prioritySampler, lookup) {
     this._url = url
     this._prioritySampler = prioritySampler
+    this._lookup = lookup
 
     this._reset()
   }
@@ -44,7 +45,8 @@ class Writer {
         'Content-Type': 'application/msgpack',
         'Datadog-Meta-Tracer-Version': tracerVersion,
         'X-Datadog-Trace-Count': String(count)
-      }
+      },
+      lookup: this._lookup
     }
 
     this._setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
