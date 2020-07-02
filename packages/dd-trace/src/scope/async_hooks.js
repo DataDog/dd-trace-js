@@ -8,6 +8,9 @@ const semver = require('semver')
 // https://github.com/nodejs/node/issues/19859
 const hasKeepAliveBug = !semver.satisfies(process.version, '^8.13 || >=10.14.2')
 
+// fixed in https://github.com/nodejs/node/pull/33801
+const hasThenableBug = !semver.satisfies(process.version, '>=14.5')
+
 let singleton = null
 
 class Scope extends Base {
@@ -18,7 +21,7 @@ class Scope extends Base {
 
     singleton = this
 
-    this._trackAsyncScope = config.trackAsyncScope
+    this._trackAsyncScope = config.trackAsyncScope && hasThenableBug
     this._current = null
     this._spans = new Map()
     this._types = new Map()
@@ -30,8 +33,7 @@ class Scope extends Base {
       init: this._init.bind(this),
       before: this._before.bind(this),
       after: this._after.bind(this),
-      destroy: this._destroy.bind(this),
-      promiseResolve: this._destroy.bind(this)
+      destroy: this._destroy.bind(this)
     })
 
     this._enabled = true
