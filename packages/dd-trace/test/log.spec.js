@@ -8,8 +8,10 @@ describe('log', () => {
   let error
 
   beforeEach(() => {
-    sinon.stub(console, 'log')
+    sinon.stub(console, 'info')
     sinon.stub(console, 'error')
+    sinon.stub(console, 'warn')
+    sinon.stub(console, 'debug')
 
     error = new Error()
 
@@ -24,8 +26,10 @@ describe('log', () => {
 
   afterEach(() => {
     log.reset()
-    console.log.restore()
+    console.info.restore()
     console.error.restore()
+    console.warn.restore()
+    console.debug.restore()
   })
 
   it('should support chaining', () => {
@@ -43,13 +47,13 @@ describe('log', () => {
     it('should log to console by default', () => {
       log.debug('debug')
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
     })
 
     it('should support callbacks that return a message', () => {
       log.debug(() => 'debug')
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
     })
   })
 
@@ -113,7 +117,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.not.have.been.called
+      expect(console.debug).to.not.have.been.called
       expect(console.error).to.not.have.been.called
     })
 
@@ -123,7 +127,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -132,7 +136,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.not.have.been.called
+      expect(console.debug).to.not.have.been.called
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -141,7 +145,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -150,7 +154,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.not.have.been.called
+      expect(console.debug).to.not.have.been.called
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -159,7 +163,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -168,7 +172,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -177,7 +181,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
   })
@@ -197,7 +201,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -206,7 +210,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
   })
@@ -219,7 +223,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
 
@@ -229,7 +233,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.not.have.been.called
+      expect(console.debug).to.not.have.been.called
       expect(console.error).to.not.have.been.called
     })
 
@@ -241,7 +245,7 @@ describe('log', () => {
       log.debug('debug')
       log.error(error)
 
-      expect(console.log).to.have.been.calledWith('debug')
+      expect(console.debug).to.have.been.calledWith('debug')
       expect(console.error).to.have.been.calledWith(error)
     })
   })

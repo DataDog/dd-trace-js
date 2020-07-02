@@ -8,7 +8,8 @@ describe('startup logging', () => {
   let firstStderrCall
   let secondStderrCall
   before(() => {
-    sinon.stub(console, 'error')
+    sinon.stub(console, 'info')
+    sinon.stub(console, 'warn')
     semverVersion = require('semver/package.json').version
     delete require.cache[require.resolve('../../../src/platform/node/startup-log')]
     const {
@@ -46,9 +47,10 @@ describe('startup logging', () => {
     })
     setSamplingRules(['rule1', 'rule2'])
     startupLog({ agentError: { message: 'Error: fake error' } })
-    firstStderrCall = console.error.firstCall /* eslint-disable-line no-console */
-    secondStderrCall = console.error.secondCall /* eslint-disable-line no-console */
-    console.error.restore() /* eslint-disable-line no-console */
+    firstStderrCall = console.info.firstCall /* eslint-disable-line no-console */
+    secondStderrCall = console.warn.firstCall /* eslint-disable-line no-console */
+    console.info.restore() /* eslint-disable-line no-console */
+    console.warn.restore() /* eslint-disable-line no-console */
   })
 
   it('startupLog should be formatted correctly', () => {
