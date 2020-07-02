@@ -78,6 +78,8 @@ class Writer {
         }
       }
 
+      platform.startupLog.startupLog({ agentError: err })
+
       if (err) return log.error(err)
 
       log.debug(`Response from the agent: ${res}`)

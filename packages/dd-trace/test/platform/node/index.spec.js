@@ -381,8 +381,8 @@ describe('Platform', () => {
 
         platform = {
           _config: {
-            hostname: 'localhost',
             dogstatsd: {
+              hostname: 'localhost',
               port: 8125
             },
             tags: {

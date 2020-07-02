@@ -58,6 +58,7 @@ describe('Config', () => {
   it('should initialize from environment variables', () => {
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
     platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
+    platform.env.withArgs('DD_DOGSTATSD_HOSTNAME').returns('dsd-agent')
     platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
@@ -78,6 +79,7 @@ describe('Config', () => {
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('analytics', true)
     expect(config).to.have.property('hostname', 'agent')
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
@@ -104,6 +106,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '7777')
@@ -126,6 +129,7 @@ describe('Config', () => {
       hostname: 'agent',
       port: 6218,
       dogstatsd: {
+        hostname: 'agent-dsd',
         port: 5218
       },
       service: 'service',
@@ -158,6 +162,7 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.property('port', '6218')
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'agent-dsd')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '0.1.0')
@@ -277,6 +282,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '6218')
+    expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('runtimeMetrics', false)
