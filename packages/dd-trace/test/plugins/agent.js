@@ -9,6 +9,7 @@ const express = require('express')
 const path = require('path')
 
 const handlers = new Set()
+let sockets = []
 let agent = null
 let server = null
 let listener = null
@@ -34,6 +35,7 @@ module.exports = {
     return getPort().then(port => {
       return new Promise((resolve, reject) => {
         server = http.createServer(agent)
+        server.on('connection', socket => sockets.push(socket))
 
         listener = server.listen(port, 'localhost', resolve)
 
@@ -127,6 +129,8 @@ module.exports = {
 
     listener.close()
     listener = null
+    sockets.forEach(socket => socket.end())
+    sockets = []
     agent = null
     handlers.clear()
     delete require.cache[require.resolve('../..')]
