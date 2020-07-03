@@ -22,6 +22,8 @@ const createProfile = (periodType) => {
   return profile
 }
 
+const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
+
 describe('exporters/agent', () => {
   let AgentExporter
   let sockets
@@ -104,7 +106,7 @@ describe('exporters/agent', () => {
     })
   })
 
-  describe('using UDS', () => {
+  describeOnUnix('using UDS', () => {
     let listener
 
     beforeEach(done => {
