@@ -37,7 +37,7 @@ class NoopSpan extends Span {
         traceId: parent._traceId,
         spanId,
         parentId: parent._spanId,
-        baggageItems: parent._baggageItems
+        baggageItems: Object.assign({}, parent._baggageItems)
       })
     } else {
       return new NoopSpanContext({
