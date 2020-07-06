@@ -13,6 +13,7 @@
 
 #include <tdigest/TDigest.h>
 
+#define NAPI_VERSION 1
 #include <napi.h>
 #include <uv.h>
 #include <v8.h>
