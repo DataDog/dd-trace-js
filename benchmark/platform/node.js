@@ -1,11 +1,9 @@
 'use strict'
 
-const path = require('path')
 const benchmark = require('../benchmark')
 const platform = require('../../packages/dd-trace/src/platform')
 const node = require('../../packages/dd-trace/src/platform/node')
 const Config = require('../../packages/dd-trace/src/config')
-const nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..'))
 
 platform.use(node)
 
@@ -15,8 +13,6 @@ const spanStub = require('../stubs/span')
 const config = new Config()
 
 platform.configure(config)
-
-nativeMetrics.start()
 
 suite
   .add('now', {
@@ -57,11 +53,6 @@ suite
   .add('metrics#decrement', {
     fn () {
       platform.metrics().boolean('test')
-    }
-  })
-  .add('native metrics', {
-    fn () {
-      nativeMetrics.dump()
     }
   })
 
