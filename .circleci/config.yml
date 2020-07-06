@@ -45,6 +45,7 @@ node-bench-base: &node-bench-base
     - *restore-yarn-cache
     - *yarn-install
     - *save-yarn-cache
+    - *yarn-rebuild
     - run:
         name: Benchmark Tracer
         command: yarn bench

@@ -2,21 +2,13 @@
   "targets": [{
     "target_name": "metrics",
     "sources": [
-      "packages/dd-trace/src/native/metrics/Collector.cpp",
-      "packages/dd-trace/src/native/metrics/EventLoop.cpp",
-      "packages/dd-trace/src/native/metrics/GarbageCollection.cpp",
-      "packages/dd-trace/src/native/metrics/Heap.cpp",
-      "packages/dd-trace/src/native/metrics/Histogram.cpp",
-      "packages/dd-trace/src/native/metrics/Object.cpp",
-      "packages/dd-trace/src/native/metrics/Process.cpp",
-      "packages/dd-trace/src/native/metrics/SpanTracker.cpp",
-      "packages/dd-trace/src/native/metrics/utils.cpp",
-      "packages/dd-trace/src/native/metrics/main.cpp"
+      "packages/dd-trace/src/native/metrics/main.cc"
     ],
     "include_dirs": [
       "packages/dd-trace/src/native",
-      "<!(node -e \"require('nan')\")"
+      "<!@(node -p \"require('node-addon-api').include\")",
     ],
+    'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ],
     "xcode_settings": {
       "MACOSX_DEPLOYMENT_TARGET": "10.9",
       "OTHER_CFLAGS": [
@@ -41,7 +33,13 @@
         "cflags": [
           "/WX"
         ]
-      }]
+      }],
+      ['OS=="mac"', {
+          'cflags+': ['-fvisibility=hidden'],
+          'xcode_settings': {
+            'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES', # -fvisibility=hidden
+          }
+      }],
     ]
   }]
 }

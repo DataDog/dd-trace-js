@@ -256,7 +256,7 @@ function captureCommonMetrics () {
 }
 
 function captureNativeMetrics () {
-  const stats = nativeMetrics.stats()
+  const stats = nativeMetrics.dump()
   const spaces = stats.heap.spaces
   const elapsedTime = process.hrtime(time)
 

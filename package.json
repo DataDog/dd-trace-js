@@ -69,7 +69,7 @@
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
     "multer": "^1.4.2",
-    "nan": "^2.12.1",
+    "node-addon-api": "^3.0.0",
     "node-gyp-build": "^3.8.0",
     "opentracing": ">=0.12.1",
     "parent-module": "^0.1.0",
