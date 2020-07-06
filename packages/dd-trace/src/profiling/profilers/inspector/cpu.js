@@ -14,10 +14,6 @@ class InspectorCpuProfiler {
   start ({ mapper }) {
     this._mapper = mapper
 
-    if (process._startProfilerIdleNotifier) {
-      process._startProfilerIdleNotifier()
-    }
-
     session.connect()
     session.post('Profiler.enable')
     session.post('Profiler.setSamplingInterval', {

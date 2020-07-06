@@ -79,4 +79,27 @@ describe('mapper', () => {
     expect(source).to.have.property('columnNumber', 17)
     expect(source).to.have.property('functionName', 'test')
   })
+
+  it('should map system functions with the correct name', async () => {
+    const url = ''
+
+    await mapper.getSource({
+      url,
+      lineNumber: -1,
+      columnNumber: -1,
+      functionName: 'invalid'
+    })
+
+    const source = await mapper.getSource({
+      url,
+      lineNumber: -1,
+      columnNumber: -1,
+      functionName: '(program)'
+    })
+
+    expect(source).to.have.property('url', url)
+    expect(source).to.have.property('lineNumber', -1)
+    expect(source).to.have.property('columnNumber', -1)
+    expect(source).to.have.property('functionName', '(program)')
+  })
 })
