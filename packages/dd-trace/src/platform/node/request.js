@@ -2,11 +2,14 @@
 
 const http = require('http')
 const https = require('https')
+const agents = require('./agents')
 const containerInfo = require('container-info').sync() || {}
 
 const containerId = containerInfo.containerId
 
 function request (options, callback) {
+  const platform = this
+
   options = Object.assign({
     headers: {},
     data: [],
@@ -14,8 +17,10 @@ function request (options, callback) {
   }, options)
 
   const data = [].concat(options.data)
-  const client = options.protocol === 'https:' ? https : http
-  const agent = new client.Agent({ keepAlive: true })
+  const isSecure = options.protocol === 'https:'
+  const { httpAgent, httpsAgent } = agents(platform._config)
+  const client = isSecure ? https : http
+  const agent = isSecure ? httpsAgent : httpAgent
 
   options.agent = agent
   options.headers['Content-Length'] = byteLength(data)

@@ -1,6 +1,5 @@
 'use strict'
 
-const axios = require('axios')
 const FormData = require('form-data')
 const { URL } = require('url')
 const { Encoder } = require('../encoders/pprof')
@@ -10,12 +9,18 @@ class AgentExporter {
   constructor ({ url, hostname, port } = {}) {
     url = new URL(url || `http://${hostname || 'localhost'}:${port || 8126}`)
 
-    this._client = axios.create({
-      baseURL: `${url}profiling/v1/`,
+    const options = {
       timeout: 10 * 1000,
       validateStatus: code => code < 400
-    })
+    }
 
+    if (url.protocol === 'unix:') {
+      options.socketPath = url.pathname
+    } else {
+      options.baseURL = url.href
+    }
+
+    this._client = platform.client(options)
     this._encoder = new Encoder()
   }
 
@@ -53,7 +58,7 @@ class AgentExporter {
 
     const headers = form.getHeaders()
 
-    return this._client.post('input', form, { headers })
+    return this._client.post('/profiling/v1/input', form, { headers })
   }
 }
 

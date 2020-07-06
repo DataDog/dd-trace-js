@@ -190,10 +190,11 @@ describe('Platform', () => {
         getContainerInfo = {
           sync: sinon.stub().returns({ containerId: 'abcd' })
         }
+        platform = require('../../../src/platform/node')
         request = proxyquire('../src/platform/node/request', {
           'container-info': getContainerInfo,
           '../../log': log
-        })
+        }).bind(platform)
       })
 
       afterEach(() => {
