@@ -14,8 +14,8 @@ class SourceMapper {
   }
 
   async getSource (callFrame) {
-    const { url, lineNumber, columnNumber } = callFrame
-    const key = `${url}:${lineNumber}:${columnNumber}`
+    const { url, lineNumber, columnNumber, functionName } = callFrame
+    const key = `${url}:${functionName}:${lineNumber}:${columnNumber}`
 
     if (!this._sources[key]) {
       this._sources[key] = await this._getMapping(callFrame)
