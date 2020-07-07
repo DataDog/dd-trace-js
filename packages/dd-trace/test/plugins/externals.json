@@ -5,6 +5,12 @@
       "versions": [">=2.13.0"]
     }
   ],
+  "fastify": [
+    {
+      "name": "middie",
+      "versions": ["5.1.0"]
+    }
+  ],
   "generic-pool": [
     {
       "name": "generic-pool",
