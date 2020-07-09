@@ -2,6 +2,7 @@
 
 const axios = require('axios')
 const getPort = require('get-port')
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
@@ -34,6 +35,10 @@ describe('Plugin', () => {
         beforeEach(() => {
           fastify = require(`../../../versions/fastify@${version}`).get()
           app = fastify()
+
+          if (semver.intersects(version, '>=3')) {
+            return app.register(require('../../../versions/middie').get())
+          }
         })
 
         it('should do automatic instrumentation on the app routes', done => {

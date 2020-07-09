@@ -3,6 +3,7 @@
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
+const os = require('os')
 const proxyquire = require('../proxyquire')
 const semver = require('semver')
 const platform = require('../../src/platform')
@@ -109,8 +110,8 @@ function withVersions (plugin, modules, range, cb) {
           before(() => {
             nodePath = process.env.NODE_PATH
             process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
-              .filter(x => x)
-              .join(';')
+              .filter(x => x && x !== 'undefined')
+              .join(os.platform() === 'win32' ? ';' : ':')
 
             require('module').Module._initPaths()
           })

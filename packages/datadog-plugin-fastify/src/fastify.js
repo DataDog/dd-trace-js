@@ -102,11 +102,11 @@ function unwrapFastify (fastify) {
 }
 
 function getReq (request) {
-  return request && (request.req || request)
+  return request && (request.raw || request.req || request)
 }
 
 function getRes (reply) {
-  return reply && (reply.res || reply)
+  return reply && (reply.raw || reply.res || reply)
 }
 
 module.exports = [
