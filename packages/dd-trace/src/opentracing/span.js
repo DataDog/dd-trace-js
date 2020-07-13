@@ -72,11 +72,11 @@ class DatadogSpan extends Span {
         traceId: spanId,
         spanId
       })
-      spanContext._trace.startTime = Date.now()
-      spanContext._trace.ticks = platform.now()
     }
 
     spanContext._trace.started.push(this)
+    spanContext._trace.startTime = spanContext._trace.startTime || Date.now()
+    spanContext._trace.ticks = spanContext._trace.ticks || platform.now()
 
     return spanContext
   }

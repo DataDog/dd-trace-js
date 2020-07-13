@@ -1,6 +1,8 @@
 'use strict'
 
 const constants = require('../../src/constants')
+const Config = require('../../src/config')
+const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
@@ -100,6 +102,27 @@ describe('Span', () => {
     span = new Span(tracer, processor, sampler, prioritySampler, {
       operationName: 'operation',
       parent: parent.context()
+    })
+    span.finish()
+
+    expect(Math.round(span._startTime)).to.equal(1500000000200)
+    expect(Math.round(span._duration)).to.equal(400)
+  })
+
+  it('should generate new timing when the parent was extracted', () => {
+    const propagator = new TextMapPropagator(new Config())
+    const parent = propagator.extract({
+      'x-datadog-trace-id': '1234',
+      'x-datadog-parent-id': '5678'
+    })
+
+    platform.now.onFirstCall().returns(100)
+    platform.now.onSecondCall().returns(300)
+    platform.now.onThirdCall().returns(700)
+
+    span = new Span(tracer, processor, sampler, prioritySampler, {
+      operationName: 'operation',
+      parent
     })
     span.finish()
 
