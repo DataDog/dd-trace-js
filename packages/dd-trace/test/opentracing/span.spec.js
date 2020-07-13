@@ -1,7 +1,6 @@
 'use strict'
 
 const constants = require('../../src/constants')
-const SpanContext = require('../../src/opentracing/span_context')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
