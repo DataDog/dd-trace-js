@@ -113,7 +113,7 @@ describe('Platform', () => {
         })
       })
 
-      it('should return the current time in milliseconds with high resolution', () => {
+      it('should return the ticks since process start in milliseconds with high resolution', () => {
         expect(now()).to.equal(100.1111)
       })
     })
