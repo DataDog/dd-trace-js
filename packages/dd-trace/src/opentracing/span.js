@@ -14,7 +14,6 @@ class DatadogSpan extends Span {
   constructor (tracer, processor, sampler, prioritySampler, fields) {
     super()
 
-    const startTime = fields.startTime || platform.now()
     const operationName = fields.operationName
     const parent = fields.parent || null
     const tags = Object.assign({
@@ -26,12 +25,13 @@ class DatadogSpan extends Span {
     this._sampler = sampler
     this._processor = processor
     this._prioritySampler = prioritySampler
-    this._startTime = startTime
 
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
     this._spanContext._hostname = hostname
+
+    this._startTime = fields.startTime || this._getTime()
 
     this._handle = platform.metrics().track(this)
   }
@@ -72,11 +72,19 @@ class DatadogSpan extends Span {
         traceId: spanId,
         spanId
       })
+      spanContext._trace.startTime = Date.now()
+      spanContext._trace.ticks = platform.now()
     }
 
     spanContext._trace.started.push(this)
 
     return spanContext
+  }
+
+  _getTime () {
+    const { startTime, ticks } = this._spanContext._trace
+
+    return startTime + platform.now() - ticks
   }
 
   _context () {
@@ -108,7 +116,7 @@ class DatadogSpan extends Span {
       return
     }
 
-    finishTime = parseFloat(finishTime) || platform.now()
+    finishTime = parseFloat(finishTime) || this._getTime()
 
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)

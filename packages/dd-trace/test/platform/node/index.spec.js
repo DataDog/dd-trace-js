@@ -107,21 +107,14 @@ describe('Platform', () => {
       let performanceNow
 
       beforeEach(() => {
-        sinon.stub(Date, 'now').returns(1500000000000)
         performanceNow = sinon.stub().returns(100.1111)
         now = proxyquire('../src/platform/node/now', {
           'performance-now': performanceNow
         })
       })
 
-      afterEach(() => {
-        Date.now.restore()
-      })
-
       it('should return the current time in milliseconds with high resolution', () => {
-        performanceNow.returns(600.3333)
-
-        expect(now()).to.equal(1500000000500.2222)
+        expect(now()).to.equal(100.1111)
       })
     })
 

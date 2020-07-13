@@ -77,27 +77,26 @@ function createWrapParse (tracer, config) {
 function createWrapValidate (tracer, config) {
   return function wrapValidate (validate) {
     return function validateWithTrace (schema, document, rules, typeInfo) {
-      const startTime = platform.now()
+      const span = startSpan(tracer, config, 'validate')
 
-      let error
+      analyticsSampler.sample(span, config.analytics)
+
+      // skip for schema stitching nested validation
+      if (document && document.loc) {
+        addDocumentTags(span, document)
+      }
 
       try {
         const errors = validate.apply(this, arguments)
 
-        error = errors && errors[0]
+        setError(span, errors && errors[0])
 
         return errors
       } catch (e) {
-        throw error = e
+        setError(span, e)
+        throw e
       } finally {
-        // skip schema stitching nested validation
-        if (error || document.loc) {
-          const span = startSpan(tracer, config, 'validate', { startTime })
-          addDocumentTags(span, document)
-          analyticsSampler.sample(span, config.analytics)
-          setError(span, error)
-          finish(span)
-        }
+        finish(span)
       }
     }
   }
