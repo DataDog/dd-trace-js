@@ -1,6 +1,8 @@
 'use strict'
 
 const constants = require('../../src/constants')
+const Config = require('../../src/config')
+const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
@@ -17,8 +19,11 @@ describe('Span', () => {
   let tagger
 
   beforeEach(() => {
+    sinon.stub(Date, 'now').returns(1500000000000)
+
     handle = { finish: sinon.spy() }
     platform = {
+      now: sinon.stub().returns(0),
       metrics: sinon.stub().returns({
         track: sinon.stub().returns(handle)
       })
@@ -53,6 +58,10 @@ describe('Span', () => {
     })
   })
 
+  afterEach(() => {
+    Date.now.restore()
+  })
+
   it('should have a default context', () => {
     span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
 
@@ -64,6 +73,61 @@ describe('Span', () => {
     span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
 
     expect(span.context()._trace.started).to.deep.equal([span])
+  })
+
+  it('should calculate its start time and duration relative to the trace start', () => {
+    platform.now.onFirstCall().returns(100)
+    platform.now.onSecondCall().returns(300)
+    platform.now.onThirdCall().returns(700)
+
+    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+    span.finish()
+
+    expect(Math.round(span._startTime)).to.equal(1500000000200)
+    expect(Math.round(span._duration)).to.equal(400)
+  })
+
+  it('should use the parent span to find the trace start', () => {
+    platform.now.onFirstCall().returns(100)
+    platform.now.onSecondCall().returns(100)
+
+    const parent = new Span(tracer, processor, sampler, prioritySampler, {
+      operationName: 'parent'
+    })
+
+    platform.now.resetHistory()
+    platform.now.onFirstCall().returns(300)
+    platform.now.onSecondCall().returns(700)
+
+    span = new Span(tracer, processor, sampler, prioritySampler, {
+      operationName: 'operation',
+      parent: parent.context()
+    })
+    span.finish()
+
+    expect(Math.round(span._startTime)).to.equal(1500000000200)
+    expect(Math.round(span._duration)).to.equal(400)
+  })
+
+  it('should generate new timing when the parent was extracted', () => {
+    const propagator = new TextMapPropagator(new Config())
+    const parent = propagator.extract({
+      'x-datadog-trace-id': '1234',
+      'x-datadog-parent-id': '5678'
+    })
+
+    platform.now.onFirstCall().returns(100)
+    platform.now.onSecondCall().returns(300)
+    platform.now.onThirdCall().returns(700)
+
+    span = new Span(tracer, processor, sampler, prioritySampler, {
+      operationName: 'operation',
+      parent
+    })
+    span.finish()
+
+    expect(Math.round(span._startTime)).to.equal(1500000000200)
+    expect(Math.round(span._duration)).to.equal(400)
   })
 
   it('should use a parent context', () => {
