@@ -1428,7 +1428,7 @@ describe('Plugin', () => {
             .use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
+              expect(spans).to.have.length(3)
 
               expect(spans[0]).to.have.property('name', 'graphql.execute')
               expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
@@ -1436,6 +1436,9 @@ describe('Plugin', () => {
 
               expect(spans[1]).to.have.property('name', 'graphql.resolve')
               expect(spans[1]).to.have.property('resource', 'hello:String')
+
+              expect(spans[2]).to.have.property('name', 'graphql.validate')
+              expect(spans[2].meta).to.not.have.property('graphql.source')
             })
             .then(done)
             .catch(done)
