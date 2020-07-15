@@ -27,10 +27,10 @@ describe('mapper', () => {
     const filename = path.join(root, 'dist', `inline.js`)
     const url = pathToFileURL(filename).href
 
-    const source = await mapper.getSource({ url, lineNumber: 11, columnNumber: 17 })
+    const source = await mapper.getSource({ url, lineNumber: 10, columnNumber: 51 })
 
     expect(source).to.have.property('url', src)
-    expect(source).to.have.property('lineNumber', 2)
+    expect(source).to.have.property('lineNumber', 1)
     expect(source).to.have.property('columnNumber', 2)
     expect(source).to.have.property('functionName')
   })
@@ -39,10 +39,10 @@ describe('mapper', () => {
     const filename = path.join(root, 'dist', `url.js`)
     const url = pathToFileURL(filename).href
 
-    const source = await mapper.getSource({ url, lineNumber: 11, columnNumber: 17 })
+    const source = await mapper.getSource({ url, lineNumber: 10, columnNumber: 51 })
 
     expect(source).to.have.property('url', src)
-    expect(source).to.have.property('lineNumber', 2)
+    expect(source).to.have.property('lineNumber', 1)
     expect(source).to.have.property('columnNumber', 2)
     expect(source).to.have.property('functionName')
   })
@@ -53,14 +53,14 @@ describe('mapper', () => {
 
     const source = await mapper.getSource({
       url,
-      lineNumber: 11,
-      columnNumber: 17,
+      lineNumber: 10,
+      columnNumber: 51,
       functionName: 'test'
     })
 
     expect(source).to.have.property('url', url)
-    expect(source).to.have.property('lineNumber', 11)
-    expect(source).to.have.property('columnNumber', 17)
+    expect(source).to.have.property('lineNumber', 10)
+    expect(source).to.have.property('columnNumber', 51)
     expect(source).to.have.property('functionName', 'test')
   })
 
@@ -69,15 +69,26 @@ describe('mapper', () => {
 
     const source = await mapper.getSource({
       url,
-      lineNumber: 11,
-      columnNumber: 17,
+      lineNumber: 10,
+      columnNumber: 51,
       functionName: 'test'
     })
 
     expect(source).to.have.property('url', url)
-    expect(source).to.have.property('lineNumber', 11)
-    expect(source).to.have.property('columnNumber', 17)
+    expect(source).to.have.property('lineNumber', 10)
+    expect(source).to.have.property('columnNumber', 51)
     expect(source).to.have.property('functionName', 'test')
+  })
+
+  it('should fallback for invalid frames', async () => {
+    const filename = path.join(root, 'dist', `inline.js`)
+    const url = pathToFileURL(filename).href
+
+    const source = await mapper.getSource({ url, lineNumber: -1, columnNumber: -1 })
+
+    expect(source).to.have.property('url', url)
+    expect(source).to.have.property('lineNumber', -1)
+    expect(source).to.have.property('columnNumber', -1)
   })
 
   it('should map system functions with the correct name', async () => {
