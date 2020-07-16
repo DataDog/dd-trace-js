@@ -74,7 +74,7 @@ class Profile {
       line: [
         new perftools.profiles.Line({
           functionId,
-          line: Math.max(lineNumber, 0)
+          line: lineNumber + 1 // Runtime.CallFrame is 0-based
         })
       ]
     })

@@ -44,12 +44,20 @@ class SourceMapper {
 
   async _getMapping (callFrame) {
     const { url, functionName, lineNumber, columnNumber } = callFrame
+
+    // Runtime.CallFrame is 0-based for both line and column numbers.
+    // When the line or column number is not known the value is -1.
+    // https://chromedevtools.github.io/devtools-protocol/v8/Runtime/#type-CallFrame
+    if (lineNumber < 0 || columnNumber < 0) return callFrame
+
     const consumer = await this._getConsumer(url)
 
     if (!consumer) return callFrame
 
+    // SourceMapConsumer is 1-based for lines and 0-based for columns
+    // https://github.com/mozilla/source-map/blob/0.7.3/lib/source-map-consumer.js#L464-L487
     const map = consumer.originalPositionFor({
-      line: lineNumber,
+      line: lineNumber + 1,
       column: columnNumber
     })
 
@@ -57,8 +65,8 @@ class SourceMapper {
 
     return {
       url: pathToFileURL(map.source).href,
-      lineNumber: map.line,
-      columnNumber: map.column || -1,
+      lineNumber: map.line - 1, // reset to 0-based from 1-based
+      columnNumber: map.column !== null ? map.column : -1,
       functionName: map.name || functionName
     }
   }
