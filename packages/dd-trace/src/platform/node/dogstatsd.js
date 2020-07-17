@@ -37,9 +37,9 @@ class Client {
     this._queue = []
 
     lookup(this._host, (err, address, family) => {
-      if (err === null) {
-        queue.forEach(buffer => this._send(address, family, buffer))
-      }
+      if (err) return log.error(err)
+
+      queue.forEach(buffer => this._send(address, family, buffer))
     })
   }
 
