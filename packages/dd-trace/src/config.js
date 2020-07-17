@@ -88,7 +88,7 @@ class Config {
     this.analytics = String(analytics) === 'true'
     this.tags = tags
     this.dogstatsd = {
-      hostname: String(coalesce(dogstatsd.hostname, platform.env(`DD_DOGSTATSD_HOSTNAME`), this.hostname)),
+      hostname: coalesce(dogstatsd.hostname, platform.env(`DD_DOGSTATSD_HOSTNAME`), this.hostname),
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
     this.runtimeMetrics = String(runtimeMetrics) === 'true'
