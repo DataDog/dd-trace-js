@@ -71,9 +71,9 @@ class Config {
       rateLimit: coalesce(sampler.rateLimit, platform.env('DD_TRACE_RATE_LIMIT'))
     })
 
-    this.enabled = String(enabled) === 'true'
-    this.debug = String(debug) === 'true'
-    this.logInjection = String(logInjection) === 'true'
+    this.enabled = isTrue(enabled)
+    this.debug = isTrue(debug)
+    this.logInjection = isTrue(logInjection)
     this.env = env
     this.url = url && new URL(url)
     this.site = site
@@ -85,13 +85,13 @@ class Config {
     this.plugins = !!plugins
     this.service = service
     this.version = version
-    this.analytics = String(analytics) === 'true'
+    this.analytics = isTrue(analytics)
     this.tags = tags
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, platform.env(`DD_DOGSTATSD_HOSTNAME`), this.hostname),
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
-    this.runtimeMetrics = String(runtimeMetrics) === 'true'
+    this.runtimeMetrics = isTrue(runtimeMetrics)
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
@@ -100,8 +100,8 @@ class Config {
       peers: (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
       sampler
     }
-    this.reportHostname = String(reportHostname) === 'true'
-    this.scope = platform.env('DD_CONTEXT_PROPAGATION') === 'false' ? scopes.NOOP : scope
+    this.reportHostname = isTrue(reportHostname)
+    this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION')) ? scopes.NOOP : scope
     this.clientToken = clientToken
     this.logLevel = coalesce(
       options.logLevel,
@@ -109,10 +109,10 @@ class Config {
       'debug'
     )
     this.profiling = {
-      enabled: String(profilingEnabled) === 'true'
+      enabled: isTrue(profilingEnabled)
     }
     this.lookup = options.lookup
-    this.startupLogsEnabled = String(startupLogsEnabled) === 'true'
+    this.startupLogsEnabled = isTrue(startupLogsEnabled)
 
     if (this.experimental.runtimeId) {
       tagger.add(tags, {
@@ -120,6 +120,16 @@ class Config {
       })
     }
   }
+}
+
+function isTrue (str) {
+  str = String(str).toLowerCase()
+  return str === 'true' || str === '1'
+}
+
+function isFalse (str) {
+  str = String(str).toLowerCase()
+  return str === 'false' || str === '0'
 }
 
 module.exports = Config
