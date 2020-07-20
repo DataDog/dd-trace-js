@@ -93,6 +93,20 @@ describe('Config', () => {
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
   })
 
+  it('should read case-insensitive booleans from environment variables', () => {
+    platform.env.withArgs('DD_TRACE_ENABLED').returns('False')
+    platform.env.withArgs('DD_TRACE_DEBUG').returns('TRUE')
+    platform.env.withArgs('DD_TRACE_ANALYTICS').returns('1')
+    platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('0')
+
+    const config = new Config()
+
+    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('analytics', true)
+    expect(config).to.have.property('runtimeMetrics', false)
+  })
+
   it('should initialize from environment variables with url taking precedence', () => {
     platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:7777')
     platform.env.withArgs('DD_SITE').returns('datadoghq.eu')
