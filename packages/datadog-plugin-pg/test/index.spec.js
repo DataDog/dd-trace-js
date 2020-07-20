@@ -133,6 +133,39 @@ describe('Plugin', () => {
         })
       })
 
+      withVersions(plugin, 'pg-cursor', cursorVersion => {
+        let Cursor
+
+        beforeEach(() => {
+          Cursor = require(`../../../versions/pg-cursor@${cursorVersion}`).get()
+        })
+
+        it('should do automatic instrumentation when using a cursor', done => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('service', 'test-postgres')
+            expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+            expect(traces[0][0]).to.have.property('type', 'sql')
+            expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+            expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
+            expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+
+            done()
+          })
+
+          const text = 'SELECT $1::text as message'
+          const values = ['Hello world!']
+          const cursor = client.query(new Cursor(text, values))
+          cursor.read(100, (err, result) => {
+            if (err) throw err
+
+            client.end((err) => {
+              if (err) throw err
+            })
+          })
+        })
+      })
+
       describe('with configuration', () => {
         before(() => {
           return agent.load('pg', { service: 'custom' })
