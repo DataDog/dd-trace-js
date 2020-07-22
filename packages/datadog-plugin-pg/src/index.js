@@ -46,21 +46,23 @@ function createWrapQuery (tracer, config) {
         })
       }
 
-      pgQuery.callback = scope.bind((err, res) => {
-        if (err) {
-          span.addTags({
-            'error.type': err.name,
-            'error.msg': err.message,
-            'error.stack': err.stack
-          })
-        }
-
+      const finish = (error) => {
+        span.setTag('error', error)
         span.finish()
+      }
 
-        if (originalCallback) {
+      if (originalCallback) {
+        pgQuery.callback = scope.bind((err, res) => {
+          finish(err)
           originalCallback(err, res)
-        }
-      }, childOf)
+        }, childOf)
+      } else if (pgQuery.once) {
+        pgQuery
+          .once('error', finish)
+          .once('end', () => finish())
+      } else {
+        pgQuery.then(() => finish(), finish)
+      }
 
       return retval
     }
