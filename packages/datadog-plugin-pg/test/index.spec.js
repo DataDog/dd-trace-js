@@ -112,6 +112,32 @@ describe('Plugin', () => {
             })
           })
 
+          it('should handle errors', done => {
+            let error
+
+            agent.use(traces => {
+              expect(traces[0][0].meta).to.have.property('error.type', error.name)
+              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+
+              done()
+            })
+
+            const errorCallback = (err) => {
+              error = err
+
+              client.end((err) => {
+                if (err) throw err
+              })
+            }
+            const query = client.query('INVALID')
+            if (query.on) {
+              query.on('error', errorCallback)
+            } else {
+              query.catch(errorCallback)
+            }
+          })
+
           it('should run the callback in the parent context', done => {
             if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
