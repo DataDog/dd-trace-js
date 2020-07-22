@@ -6,6 +6,7 @@ const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
 const id = require('./id')
+const { isTrue, isFalse } = require('./util')
 
 const runtimeId = `${id().toString()}${id().toString()}`
 
@@ -13,85 +14,112 @@ class Config {
   constructor (options) {
     options = options || {}
 
-    const enabled = coalesce(options.enabled, platform.env('DD_TRACE_ENABLED'), true)
-    const profilingEnabled = coalesce(options.profiling, platform.env('DD_PROFILING_ENABLED'), false)
-    const debug = coalesce(options.debug, platform.env('DD_TRACE_DEBUG'), false)
-    const logInjection = coalesce(options.logInjection, platform.env('DD_LOGS_INJECTION'), false)
-    const url = coalesce(options.url, platform.env('DD_TRACE_AGENT_URL'), platform.env('DD_TRACE_URL'), null)
-    const site = coalesce(options.site, platform.env('DD_SITE'), 'datadoghq.com')
-    const hostname = coalesce(
-      options.hostname,
-      platform.env('DD_AGENT_HOST'),
-      platform.env('DD_TRACE_AGENT_HOSTNAME')
-    )
-    const port = coalesce(options.port, platform.env('DD_TRACE_AGENT_PORT'), 8126)
-    const sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
-    const flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
-    const plugins = coalesce(options.plugins, true)
-    const dogstatsd = options.dogstatsd || {}
-    const runtimeMetrics = coalesce(options.runtimeMetrics, platform.env('DD_RUNTIME_METRICS_ENABLED'), false)
-    const analytics = coalesce(
+    this.tags = {}
+
+    tagger.add(this.tags, platform.env('DD_TAGS'))
+    tagger.add(this.tags, platform.env('DD_TRACE_TAGS'))
+    tagger.add(this.tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
+    tagger.add(this.tags, options.tags)
+
+    const DD_TRACE_ANALYTICS_ENABLED = coalesce(
       options.analytics,
       platform.env('DD_TRACE_ANALYTICS_ENABLED'),
-      platform.env('DD_TRACE_ANALYTICS')
+      platform.env('DD_TRACE_ANALYTICS'),
+      false
     )
-    const reportHostname = coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false)
-    const scope = coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
-    const clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
-    const startupLogsEnabled = coalesce(platform.env('DD_TRACE_STARTUP_LOGS'), true)
-    const tags = {}
-
-    tagger.add(tags, platform.env('DD_TAGS'))
-    tagger.add(tags, platform.env('DD_TRACE_TAGS'))
-    tagger.add(tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
-    tagger.add(tags, options.tags)
-
-    const service = options.service ||
+    const DD_PROFILING_ENABLED = coalesce(
+      options.profiling,
+      platform.env('DD_PROFILING_ENABLED'),
+      false
+    )
+    const DD_LOGS_INJECTION = coalesce(
+      options.logInjection,
+      platform.env('DD_LOGS_INJECTION'),
+      false
+    )
+    const DD_RUNTIME_METRICS_ENABLED = coalesce(
+      options.runtimeMetrics,
+      platform.env('DD_RUNTIME_METRICS_ENABLED'),
+      false
+    )
+    const DD_AGENT_HOST = coalesce(
+      options.hostname,
+      platform.env('DD_AGENT_HOST'),
+      platform.env('DD_TRACE_AGENT_HOSTNAME'),
+      '127.0.0.1'
+    )
+    const DD_TRACE_AGENT_PORT = coalesce(
+      options.port,
+      platform.env('DD_TRACE_AGENT_PORT'),
+      '8126'
+    )
+    const DD_TRACE_AGENT_URL = coalesce(
+      options.url,
+      platform.env('DD_TRACE_AGENT_URL'),
+      platform.env('DD_TRACE_URL'),
+      null
+    )
+    const DD_SERVICE = options.service ||
       platform.env('DD_SERVICE') ||
       platform.env('DD_SERVICE_NAME') ||
-      tags.service ||
+      this.tags.service ||
       platform.service() ||
       'node'
-
-    const version = coalesce(
+    const DD_ENV = coalesce(
+      options.env,
+      platform.env('DD_ENV'),
+      this.tags.env
+    )
+    const DD_VERSION = coalesce(
       options.version,
       platform.env('DD_VERSION'),
-      tags.version,
+      this.tags.version,
       platform.appVersion()
     )
-
-    const env = coalesce(options.env, platform.env('DD_ENV'), tags.env)
-
-    tagger.add(tags, { service, env, version })
+    const DD_TRACE_STARTUP_LOGS = coalesce(
+      options.startupLogsEnabled,
+      platform.env('DD_TRACE_STARTUP_LOGS'),
+      true
+    )
+    const DD_TRACE_ENABLED = coalesce(
+      options.enabled,
+      platform.env('DD_TRACE_ENABLED'),
+      true
+    )
+    const DD_TRACE_DEBUG = coalesce(
+      options.debug,
+      platform.env('DD_TRACE_DEBUG'),
+      false
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
+    const dogstatsd = coalesce(options.dogstatsd, {})
 
     Object.assign(sampler, {
       sampleRate: coalesce(sampler.sampleRate, platform.env('DD_TRACE_SAMPLE_RATE')),
       rateLimit: coalesce(sampler.rateLimit, platform.env('DD_TRACE_RATE_LIMIT'))
     })
 
-    this.enabled = isTrue(enabled)
-    this.debug = isTrue(debug)
-    this.logInjection = isTrue(logInjection)
-    this.env = env
-    this.url = url && new URL(url)
-    this.site = site
-    this.hostname = hostname || (this.url && this.url.hostname)
-    this.port = String(port || (this.url && this.url.port))
-    this.flushInterval = flushInterval
-    this.sampleRate = sampleRate
+    this.enabled = isTrue(DD_TRACE_ENABLED)
+    this.debug = isTrue(DD_TRACE_DEBUG)
+    this.logInjection = isTrue(DD_LOGS_INJECTION)
+    this.env = DD_ENV
+    this.url = DD_TRACE_AGENT_URL && new URL(DD_TRACE_AGENT_URL)
+    this.site = coalesce(options.site, platform.env('DD_SITE'), 'datadoghq.com')
+    this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
+    this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
+    this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     this.logger = options.logger
-    this.plugins = !!plugins
-    this.service = service
-    this.version = version
-    this.analytics = isTrue(analytics)
-    this.tags = tags
+    this.plugins = !!coalesce(options.plugins, true)
+    this.service = DD_SERVICE
+    this.version = DD_VERSION
+    this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, platform.env(`DD_DOGSTATSD_HOSTNAME`), this.hostname),
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
-    this.runtimeMetrics = isTrue(runtimeMetrics)
+    this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
       b3: !(!options.experimental || !options.experimental.b3),
@@ -100,36 +128,30 @@ class Config {
       peers: (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
       sampler
     }
-    this.reportHostname = isTrue(reportHostname)
-    this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION')) ? scopes.NOOP : scope
-    this.clientToken = clientToken
+    this.reportHostname = isTrue(coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false))
+    this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION'))
+      ? scopes.NOOP
+      : coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
+    this.clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
     this.logLevel = coalesce(
       options.logLevel,
       platform.env('DD_TRACE_LOG_LEVEL'),
       'debug'
     )
     this.profiling = {
-      enabled: isTrue(profilingEnabled)
+      enabled: isTrue(DD_PROFILING_ENABLED)
     }
     this.lookup = options.lookup
-    this.startupLogsEnabled = isTrue(startupLogsEnabled)
+    this.startupLogsEnabled = isTrue(DD_TRACE_STARTUP_LOGS)
+
+    tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
 
     if (this.experimental.runtimeId) {
-      tagger.add(tags, {
+      tagger.add(this.tags, {
         'runtime-id': runtimeId
       })
     }
   }
-}
-
-function isTrue (str) {
-  str = String(str).toLowerCase()
-  return str === 'true' || str === '1'
-}
-
-function isFalse (str) {
-  str = String(str).toLowerCase()
-  return str === 'false' || str === '0'
 }
 
 module.exports = Config
