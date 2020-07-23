@@ -12,7 +12,7 @@ const testScope = require('./test')
 wrapIt()
 
 // https://github.com/nodejs/node/commit/52d8afc07e005343390ebc8c6d9e1eec77acd16e#diff-0bb01a51b135a5f68d93540808bac801
-if (semver.gte(process.version, '13.14.0')) {
+if (semver.satisfies(process.version, '^12.17.0 || >=13.14.0')) {
   describe('Scope (AsyncLocalStorage)', test)
 } else {
   describe.skip('Scope (AsyncLocalStorage)', test)
