@@ -1,9 +1,6 @@
 'use strict'
 
-const inspector = require('inspector')
 const { Profile } = require('../../profile')
-
-const session = new inspector.Session()
 
 class InspectorCpuProfiler {
   constructor (options = {}) {
@@ -12,20 +9,24 @@ class InspectorCpuProfiler {
   }
 
   start ({ mapper }) {
+    const { Session } = require('inspector')
+
     this._mapper = mapper
 
-    session.connect()
-    session.post('Profiler.enable')
-    session.post('Profiler.setSamplingInterval', {
+    this._session = new Session()
+    this._session.connect()
+    this._session.post('Profiler.enable')
+    this._session.post('Profiler.setSamplingInterval', {
       interval: this._samplingInterval
     })
-    session.post('Profiler.start')
+    this._session.post('Profiler.start')
   }
 
   stop () {
-    session.post('Profiler.stop')
-    session.post('Profiler.disable')
-    session.disconnect()
+    this._session.post('Profiler.stop')
+    this._session.post('Profiler.disable')
+    this._session.disconnect()
+    this._session = null
 
     this._mapper = null
   }
@@ -33,12 +34,12 @@ class InspectorCpuProfiler {
   profile () {
     let profile
 
-    session.post('Profiler.stop', (err, params) => {
+    this._session.post('Profiler.stop', (err, params) => {
       if (err) throw err
       profile = params.profile
     })
 
-    session.post('Profiler.start')
+    this._session.post('Profiler.start')
 
     return this._serialize(profile)
   }
