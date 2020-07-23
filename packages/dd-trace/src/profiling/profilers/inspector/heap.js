@@ -1,9 +1,6 @@
 'use strict'
 
-const inspector = require('inspector')
 const { Profile } = require('../../profile')
-
-const session = new inspector.Session()
 
 class InspectorHeapProfiler {
   constructor (options = {}) {
@@ -12,19 +9,23 @@ class InspectorHeapProfiler {
   }
 
   start ({ mapper }) {
+    const { Session } = require('inspector')
+
     this._mapper = mapper
 
-    session.connect()
-    session.post('HeapProfiler.enable')
-    session.post('HeapProfiler.startSampling', {
+    this._session = new Session()
+    this._session.connect()
+    this._session.post('HeapProfiler.enable')
+    this._session.post('HeapProfiler.startSampling', {
       samplingInterval: this._samplingInterval
     })
   }
 
   stop () {
-    session.post('HeapProfiler.stopSampling')
-    session.post('HeapProfiler.disable')
-    session.disconnect()
+    this._session.post('HeapProfiler.stopSampling')
+    this._session.post('HeapProfiler.disable')
+    this._session.disconnect()
+    this._session = null
 
     this._mapper = null
   }
@@ -32,7 +33,7 @@ class InspectorHeapProfiler {
   profile () {
     let profile
 
-    session.post('HeapProfiler.getSamplingProfile', (err, params) => {
+    this._session.post('HeapProfiler.getSamplingProfile', (err, params) => {
       if (err) throw err
       profile = params.profile
     })
