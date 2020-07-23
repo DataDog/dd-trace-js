@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const proxyquire = require('proxyquire')
 
 if (!semver.satisfies(process.version, '>=10.12')) {
   describe = describe.skip // eslint-disable-line no-global-assign
@@ -12,38 +13,56 @@ describe('profilers/inspector/heap', () => {
   let profiler
   let mapper
 
-  beforeEach(() => {
-    InspectorHeapProfiler = require('../../../../src/profiling/profilers/inspector/heap').InspectorHeapProfiler
+  describe('with the inspector module enabled', () => {
+    beforeEach(() => {
+      InspectorHeapProfiler = require('../../../../src/profiling/profilers/inspector/heap').InspectorHeapProfiler
 
-    mapper = { getSource: callFrame => Promise.resolve(callFrame) }
-    profiler = new InspectorHeapProfiler()
+      mapper = { getSource: callFrame => Promise.resolve(callFrame) }
+      profiler = new InspectorHeapProfiler()
+    })
+
+    afterEach(() => {
+      profiler.stop()
+    })
+
+    it('should serialize profiles in the correct format', done => {
+      profiler.start({ mapper })
+
+      const obj = {}
+
+      // heap profiler doesn't start synchronously
+      setImmediate(async () => {
+        // force at least the minimum sampling interval
+        for (let i = 0; i < 1024 * 1024; i++) {
+          obj[`${i}`] = i * 2
+        }
+
+        try {
+          const profile = await profiler.profile()
+
+          expect(profile).to.be.a.profile
+
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
+    })
   })
 
-  afterEach(() => {
-    profiler.stop()
-  })
+  describe('with the inspector module disabled', () => {
+    it('should throw when started', async () => {
+      expect(() => {
+        InspectorHeapProfiler = proxyquire('../../../../src/profiling/profilers/inspector/heap', {
+          inspector: null
+        }).InspectorHeapProfiler
 
-  it('should serialize profiles in the correct format', done => {
-    profiler.start({ mapper })
+        profiler = new InspectorHeapProfiler()
+      }).to.not.throw()
 
-    const obj = {}
-
-    // heap profiler doesn't start synchronously
-    setImmediate(async () => {
-      // force at least the minimum sampling interval
-      for (let i = 0; i < 1024 * 1024; i++) {
-        obj[`${i}`] = i * 2
-      }
-
-      try {
-        const profile = await profiler.profile()
-
-        expect(profile).to.be.a.profile
-
-        done()
-      } catch (e) {
-        done(e)
-      }
+      expect(() => {
+        profiler.start({ mapper })
+      }).to.throw()
     })
   })
 })
