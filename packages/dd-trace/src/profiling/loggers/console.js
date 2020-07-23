@@ -6,6 +6,7 @@
 const mapping = {
   error: 3,
   warn: 4,
+  info: 6,
   debug: 7
 }
 
@@ -16,6 +17,10 @@ class ConsoleLogger {
 
   debug (message) {
     this._log('debug', message)
+  }
+
+  info (message) {
+    this._log('info', message)
   }
 
   warn (message) {

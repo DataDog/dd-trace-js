@@ -12,7 +12,8 @@ module.exports = config => cached || (cached = {
     const exporter = new AgentExporter({ url, hostname, port })
     const logger = {
       debug: (message) => log.debug(message),
-      warn: (message) => log.debug(message),
+      info: (message) => log.info(message),
+      warn: (message) => log.warn(message),
       error: (message) => log.error(message)
     }
 
