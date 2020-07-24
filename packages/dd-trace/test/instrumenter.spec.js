@@ -407,6 +407,73 @@ describe('Instrumenter', () => {
     })
   })
 
+  describe('with plugins configured via DD_TRACE_<INTEGRATION>', () => {
+    beforeEach(() => {
+      Instrumenter = proxyquire('../src/instrumenter', {
+        'shimmer': shimmer,
+        './platform': {
+          plugins: {
+            'mysql-mock': integrations.mysql
+          }
+        },
+        '../../datadog-plugin-mysql-mock/src': integrations.mysql
+      })
+    })
+
+    afterEach(() => {
+      delete process.env.DD_TRACE_MYSQL_MOCK_ENABLED
+      delete process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED
+      delete process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE
+    })
+
+    it('should use _ENABLED', () => {
+      instrumenter = new Instrumenter(tracer)
+      process.env.DD_TRACE_MYSQL_MOCK_ENABLED = false
+      instrumenter.enable()
+      const plugins = [...instrumenter._plugins.values()]
+      expect(plugins[0].name).to.equal('mysql-mock')
+      expect(plugins[0].config.enabled).to.equal(false)
+    })
+
+    it('should use _ANALYTICS_ENABLED', () => {
+      instrumenter = new Instrumenter(tracer)
+      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED = false
+      instrumenter.enable()
+      const plugins = [...instrumenter._plugins.values()]
+      expect(plugins[0].name).to.equal('mysql-mock')
+      expect(plugins[0].config.analytics).to.equal(false)
+    })
+
+    it('should use _ANALYTICS_SAMPLE_RATE when _ANALYTICS_ENABLED is true', () => {
+      instrumenter = new Instrumenter(tracer)
+      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED = true
+      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE = '0.25'
+      instrumenter.enable()
+      const plugins = [...instrumenter._plugins.values()]
+      expect(plugins[0].name).to.equal('mysql-mock')
+      expect(plugins[0].config.analytics).to.equal(0.25)
+    })
+
+    it('should not use _ANALYTICS_SAMPLE_RATE when _ANALYTICS_ENABLED is false', () => {
+      instrumenter = new Instrumenter(tracer)
+      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED = false
+      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE = '0.25'
+      instrumenter.enable()
+      const plugins = [...instrumenter._plugins.values()]
+      expect(plugins[0].name).to.equal('mysql-mock')
+      expect(plugins[0].config.analytics).to.equal(false)
+    })
+
+    it('should use _ANALYTICS_SAMPLE_RATE', () => {
+      instrumenter = new Instrumenter(tracer)
+      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE = '0.25'
+      instrumenter.enable()
+      const plugins = [...instrumenter._plugins.values()]
+      expect(plugins[0].name).to.equal('mysql-mock')
+      expect(plugins[0].config.analytics).to.equal(0.25)
+    })
+  })
+
   describe('with plugins disabled via DD_TRACE_DISABLED_PLUGINS environment variable', () => {
     beforeEach(() => {
       process.env.DD_TRACE_DISABLED_PLUGINS = 'http,mysql-mock'

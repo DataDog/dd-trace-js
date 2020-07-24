@@ -22,7 +22,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
-    expect(config).to.have.nested.property('dogstatsd.hostname', null)
+    expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('sampleRate', 1)

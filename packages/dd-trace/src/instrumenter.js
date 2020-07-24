@@ -3,6 +3,7 @@
 const shimmer = require('shimmer')
 const log = require('./log')
 const platform = require('./platform')
+const { isTrue, isFalse } = require('./util')
 
 shimmer({ logger: () => {} })
 
@@ -12,6 +13,34 @@ const disabldPlugins = platform.env('DD_TRACE_DISABLED_PLUGINS')
 
 const collectDisabledPlugins = () => {
   return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
+}
+
+function cleanEnv (name) {
+  return platform.env(`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_'))
+}
+
+function getConfig (name, config = {}) {
+  if (!name) {
+    return config
+  }
+
+  const enabled = cleanEnv(`${name}_ENABLED`)
+  if (enabled !== undefined) {
+    config.enabled = isTrue(enabled)
+  }
+
+  const analyticsEnabled = cleanEnv(`${name}_ANALYTICS_ENABLED`)
+  const analyticsSampleRate = Math.min(Math.max(cleanEnv(`${name}_ANALYTICS_SAMPLE_RATE`), 0), 1)
+
+  if (isFalse(analyticsEnabled)) {
+    config.analytics = false
+  } else if (!Number.isNaN(analyticsSampleRate)) {
+    config.analytics = analyticsSampleRate
+  } else if (isTrue(analyticsEnabled)) {
+    config.analytics = true
+  }
+
+  return config
 }
 
 class Instrumenter {
@@ -30,7 +59,7 @@ class Instrumenter {
       config = { enabled: config }
     }
 
-    config = config || {}
+    config = getConfig(name, config)
 
     try {
       this._set(plugins[name.toLowerCase()], { name, config })
@@ -52,7 +81,7 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          this._set(plugins[name], { name, config: {} })
+          this._set(plugins[name], { name, config: getConfig(name) })
         })
     }
 
