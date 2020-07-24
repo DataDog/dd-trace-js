@@ -38,7 +38,8 @@ function patch (http, methodName, tracer, config) {
       }
 
       const options = args.options
-      const protocol = options.protocol || 'http:'
+      const agent = options.agent || http.globalAgent
+      const protocol = options.protocol || agent.protocol || 'http:'
       const hostname = options.hostname || options.host || 'localhost'
       const host = options.port ? `${hostname}:${options.port}` : hostname
       const path = options.path ? options.path.split(/[?#]/)[0] : '/'
