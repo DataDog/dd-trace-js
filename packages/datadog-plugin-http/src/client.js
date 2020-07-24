@@ -38,7 +38,7 @@ function patch (http, methodName, tracer, config) {
       }
 
       const options = args.options
-      const agent = options.agent || http.globalAgent
+      const agent = options.agent || options._defaultAgent || http.globalAgent
       const protocol = options.protocol || agent.protocol || 'http:'
       const hostname = options.hostname || options.host || 'localhost'
       const host = options.port ? `${hostname}:${options.port}` : hostname
