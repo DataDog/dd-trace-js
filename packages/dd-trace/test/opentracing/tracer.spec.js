@@ -80,7 +80,8 @@ describe('Tracer', () => {
 
     log = {
       use: sinon.spy(),
-      toggle: sinon.spy()
+      toggle: sinon.spy(),
+      error: sinon.spy()
     }
 
     platform = {
@@ -360,7 +361,8 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.inject()).not.to.throw()
+      expect(() => tracer.inject({})).not.to.throw()
+      expect(log.error).to.have.been.calledOnce
     })
 
     it('should generate the sampling priority', () => {

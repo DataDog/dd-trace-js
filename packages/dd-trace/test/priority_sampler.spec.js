@@ -285,6 +285,12 @@ describe('PrioritySampler', () => {
       expect(context._tags).to.have.property('_dd.rule_psr', 0.5)
       expect(context._tags).to.have.property('_dd.limit_psr', 1)
     })
+
+    it('should ignore empty span', () => {
+      prioritySampler.sample()
+
+      expect(context._sampling).to.not.have.property('priority')
+    })
   })
 
   describe('update', () => {
