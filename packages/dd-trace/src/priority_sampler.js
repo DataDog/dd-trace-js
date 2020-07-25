@@ -42,6 +42,8 @@ class PrioritySampler {
   }
 
   sample (span) {
+    if (!span) return
+
     const context = this._getContext(span)
 
     if (context._sampling.priority !== undefined) return

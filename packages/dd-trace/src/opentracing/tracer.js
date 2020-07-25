@@ -81,10 +81,6 @@ class DatadogTracer extends Tracer {
   }
 
   _inject (spanContext, format, carrier) {
-    if (!spanContext) {
-      return this
-    }
-
     try {
       this._prioritySampler.sample(spanContext)
       this._propagators[format].inject(spanContext, carrier)
