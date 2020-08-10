@@ -1,5 +1,6 @@
 'use strict'
 
+const msgpack = require('msgpack-lite')
 const platform = require('../../platform')
 const log = require('../../log')
 const encode = require('../../encode')
@@ -29,9 +30,14 @@ class Writer {
 
   flush () {
     if (this._count > 0) {
-      const data = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
+      const traceData = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
+      const data = makePayload(
+        this._strings.slice(0, this._stringsBufLen),
+        Reflect.ownKeys(this._stringMap).length,
+        traceData[0]
+      )
 
-      this._request(data, this._count)
+      this._request([data], this._count)
 
       this._reset()
     }
@@ -39,7 +45,7 @@ class Writer {
 
   _request (data, count) {
     const options = {
-      path: '/v0.4/traces',
+      path: '/v0.5/traces',
       method: 'PUT',
       headers: {
         'Content-Type': 'application/msgpack',
@@ -124,7 +130,20 @@ class Writer {
     this._buffer = Buffer.allocUnsafe(MAX_SIZE)
     this._offset = 5 // we'll use these first bytes to hold an array prefix
     this._count = 0
+
+    this._strings = Buffer.allocUnsafe(MAX_SIZE)
+    this._stringMap = {}
+    this._stringsBufLen = 3 // 0xdc and then uint16
+    this._strings[0] = 0xdc
+
   }
 }
 
 module.exports = Writer
+
+const arraySizeTwo = Buffer.from([0b10010010])
+
+function makePayload(strings, stringsLen, traceData) {
+  strings.writeUInt16BE(stringsLen, 1)
+  return Buffer.concat([arraySizeTwo, strings, traceData])
+}
