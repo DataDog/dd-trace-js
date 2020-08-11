@@ -15,53 +15,6 @@ let buffer
 let writer
 let traceOffset
 
-const fields = getFields()
-
-// const {
-//   headerBuffer,
-//   traceIdOffset,
-//   spanIdOffset,
-//   startOffset,
-//   durationOffset,
-//   errorOffset
-// } = (() => {
-//   buffer = Buffer.alloc(1024)
-//   let offset = 0
-// 
-//   offset = copy(offset, fields.trace_id)
-//   offset = copy(offset, tokens.uint64)
-//   const traceIdOffset = offset
-//   offset += 8 // the uint64 will live here
-// 
-//   offset = copy(offset, fields.span_id)
-//   offset = copy(offset, tokens.uint64)
-//   const spanIdOffset = offset
-//   offset += 8 // the uint64 will live here
-// 
-//   offset = copy(offset, fields.start)
-//   offset = copy(offset, tokens.int64)
-//   const startOffset = offset
-//   offset += 8 // the int64 will live here
-// 
-//   offset = copy(offset, fields.duration)
-//   offset = copy(offset, tokens.int64)
-//   const durationOffset = offset
-//   offset += 8 // the int64 will live here
-// 
-//   offset = copy(offset, fields.error)
-//   const errorOffset = offset
-//   offset = copy(offset, tokens.int[0])
-// 
-//   return {
-//     headerBuffer: buffer.slice(0, offset),
-//     traceIdOffset,
-//     spanIdOffset,
-//     startOffset,
-//     durationOffset,
-//     errorOffset
-//   }
-// })()
-
 function encode (initBuffer, offset, trace, initWriter) {
   traceOffset = offset
   buffer = initBuffer
@@ -120,15 +73,6 @@ function checkOffset (offset, length) {
     offset = copy(offset, currentBuffer.slice(traceOffset, currentOffset))
   }
   return offset
-}
-
-function copyHeader (offset, span) {
-  writeId(headerBuffer, traceIdOffset, span.trace_id)
-  writeId(headerBuffer, spanIdOffset, span.span_id)
-  util.writeInt64(headerBuffer, span.start, startOffset)
-  util.writeInt64(headerBuffer, span.duration, durationOffset)
-  headerBuffer.set(tokens.int[span.error], errorOffset)
-  return copy(offset, headerBuffer)
 }
 
 function writeUint32 (buffer, offset, val) {
@@ -195,26 +139,6 @@ function writePrefix (offset, length, tokens, startByte) {
 
 function writeArrayPrefix (offset, array) {
   return writePrefix(offset, array.length, tokens.array, 0xdc)
-}
-
-function getFields () {
-  return [
-    'trace_id',
-    'span_id',
-    'parent_id',
-    'service',
-    'resource',
-    'name',
-    'type',
-    'error',
-    'meta',
-    'metrics',
-    'start',
-    'duration'
-  ].reduce((prev, next) => {
-    prev[next] = Buffer.concat([tokens.str[next.length], Buffer.from(next)])
-    return prev
-  }, {})
 }
 
 module.exports = encode
