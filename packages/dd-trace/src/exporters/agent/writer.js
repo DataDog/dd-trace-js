@@ -31,6 +31,13 @@ class Writer {
     fakeWriter._setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
     fakeWriter._setHeader(options.headers, 'Datadog-Meta-Lang-Version', platform.version())
     fakeWriter._setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', platform.engine())
+    if (fakeWriter._url.protocol === 'unix:') {
+      options.socketPath = fakeWriter._url.pathname
+    } else {
+      options.protocol = fakeWriter._url.protocol
+      options.hostname = fakeWriter._url.hostname
+      options.port = fakeWriter._url.port
+    }
 
     const payload = { data: [msgpack.encode([[], []])] }
     platform.request(Object.assign(payload, options), (err) => {
