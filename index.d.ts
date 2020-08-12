@@ -193,9 +193,9 @@ export declare interface TracerOptions {
 
   /**
    * Whether to enable startup logs.
-   * @default false
+   * @default true
    */
-  startupLogsEnabled?: true,
+  startupLogsEnabled?: boolean,
 
   /**
    * Enable Trace Analytics.
