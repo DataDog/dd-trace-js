@@ -192,6 +192,12 @@ export declare interface TracerOptions {
   logInjection?: boolean,
 
   /**
+   * Whether to enable startup logs.
+   * @default false
+   */
+  startupLogsEnabled?: true,
+
+  /**
    * Enable Trace Analytics.
    * @default false
    */
