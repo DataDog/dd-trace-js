@@ -6,13 +6,14 @@ const msgpack = require('msgpack-lite')
 
 const Writer05 = require('./writer-0.5')
 const Writer04 = require('./writer-0.4')
+const BaseWriter = require('./base-writer')
 
 class Writer {
   constructor (url, prioritySampler, lookup) {
     this._appends = []
     this._needsFlush = false
 
-    const fakeWriter = Object.create(Writer05.prototype)
+    const fakeWriter = Object.create(BaseWriter.prototype)
     fakeWriter._url = url
     fakeWriter._prioritySampler = prioritySampler
     fakeWriter._lookup = lookup

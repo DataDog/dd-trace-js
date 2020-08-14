@@ -90,10 +90,14 @@ function describeWriter (version) {
 
     Writer = proxyquire('../src/exporters/agent/writer-' + version, {
       '../../platform': platform,
-      '../../log': log,
       '../../format': format,
       '../../encode': encode,
-      '../../../lib/version': 'tracerVersion'
+      '../../encode/index-0.5': encode,
+      './base-writer': proxyquire('../src/exporters/agent/base-writer', {
+        '../../platform': platform,
+        '../../../lib/version': 'tracerVersion',
+        '../../log': log
+      })
     })
     writer = new Writer(url, prioritySampler)
   })
@@ -111,7 +115,7 @@ function describeWriter (version) {
     it('should append a trace', () => {
       writer.append([span])
 
-      const expectedTraceLen = version === 0.5 ? 79 : 12
+      const expectedTraceLen = 12
       expect(writer._offset).to.equal(expectedTraceLen)
     })
   })
@@ -140,7 +144,7 @@ function describeWriter (version) {
       writer.append([span])
       writer.flush()
       const expectedData = version === 0.5 ? Buffer.concat([
-        Buffer.from([0x92, 0xdc, 0x00, 0x01, 0xa0]),
+        Buffer.from([0x92, 0xdc, 0x00, 0x00]),
         Buffer.from('prefixed')
       ]) : Buffer.from('prefixed')
 
