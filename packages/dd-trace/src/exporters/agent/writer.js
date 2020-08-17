@@ -8,15 +8,12 @@ const Writer05 = require('./writer-0.5')
 const Writer04 = require('./writer-0.4')
 const BaseWriter = require('./base-writer')
 
+const { _setHeader: setHeader } = BaseWriter.prototype
+
 class Writer {
   constructor (url, prioritySampler, lookup) {
     this._appends = []
     this._needsFlush = false
-
-    const fakeWriter = Object.create(BaseWriter.prototype)
-    fakeWriter._url = url
-    fakeWriter._prioritySampler = prioritySampler
-    fakeWriter._lookup = lookup
 
     const options = {
       path: '/v0.5/traces',
@@ -26,18 +23,19 @@ class Writer {
         'Datadog-Meta-Tracer-Version': tracerVersion,
         'X-Datadog-Trace-Count': '0'
       },
-      lookup: fakeWriter._lookup
+      lookup
     }
 
-    fakeWriter._setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
-    fakeWriter._setHeader(options.headers, 'Datadog-Meta-Lang-Version', platform.version())
-    fakeWriter._setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', platform.engine())
-    if (fakeWriter._url.protocol === 'unix:') {
-      options.socketPath = fakeWriter._url.pathname
+    setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
+    setHeader(options.headers, 'Datadog-Meta-Lang-Version', platform.version())
+    setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', platform.engine())
+
+    if (url.protocol === 'unix:') {
+      options.socketPath = url.pathname
     } else {
-      options.protocol = fakeWriter._url.protocol
-      options.hostname = fakeWriter._url.hostname
-      options.port = fakeWriter._url.port
+      options.protocol = url.protocol
+      options.hostname = url.hostname
+      options.port = url.port
     }
 
     const payload = { data: [msgpack.encode([[], []])] }
