@@ -640,6 +640,36 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it.only('should use the correct fallback protocol', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request({
+                hostname: 'localhost',
+                port,
+                path: '/user?foo=bar'
+              }, res => {
+                res.on('data', () => {})
+              })
+
+              req.end()
+            })
+          })
+        })
       })
 
       describe('with service configuration', () => {
