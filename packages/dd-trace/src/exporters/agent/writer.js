@@ -51,22 +51,23 @@ class Writer {
       if (this._needsFlush) {
         this._writer.flush()
       }
-      const writer = this._writer
-      this.append = function (spans) {
-        writer.append(spans)
-      }
-      this.flush = function () {
-        writer.flush()
-      }
     })
   }
 
   append (spans) {
-    this._appends.push(spans)
+    if (this._writer) {
+      this._writer.append(spans)
+    } else {
+      this._appends.push(spans)
+    }
   }
 
   flush () {
-    this._needsFlush = true
+    if (this._writer) {
+      this._writer.flush()
+    } else {
+      this._needsFlush = true
+    }
   }
 }
 
