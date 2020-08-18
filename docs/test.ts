@@ -58,8 +58,8 @@ tracer.init({
   },
   hostname: 'agent',
   logger: {
-    error (message: string) {},
-    debug (message: string | Error) {}
+    error(message: string) { },
+    debug(message: string | Error) { }
   },
   plugins: false,
   port: 7777,
@@ -68,7 +68,7 @@ tracer.init({
     port: 8888
   },
   flushInterval: 1000,
-  lookup: () => {},
+  lookup: () => { },
   sampleRate: 0.1,
   service: 'test',
   tags: {
@@ -92,7 +92,7 @@ const httpOptions = {
 const httpServerOptions = {
   ...httpOptions,
   hooks: {
-    request: (span, req, res) => {}
+    request: (span, req, res) => { }
   }
 };
 
@@ -100,7 +100,7 @@ const httpClientOptions = {
   ...httpOptions,
   splitByDomain: true,
   hooks: {
-    request: (span, req, res) => {}
+    request: (span, req, res) => { }
   }
 };
 
@@ -120,21 +120,27 @@ const graphqlOptions = {
   collapse: false,
   signature: false,
   hooks: {
-    execute: (span, args, res) => {},
+    execute: (span, args, res) => { },
   }
 };
 
 const elasticsearchOptions = {
   service: 'test',
   hooks: {
-    query: (span, params) => {},
+    query: (span, params) => { },
   },
 };
 
 const awsSdkOptions = {
   service: 'test',
   hooks: {
-    request: (span, response) => {},
+    request: (span, response) => { },
+  }
+};
+
+const xmlhttprequestOptions = {
+  hooks: {
+    request: (span, xhr) => { },
   }
 };
 
@@ -208,6 +214,7 @@ tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
+tracer.use('xmlhttprequest', xmlhttprequestOptions);
 tracer.use('rhea');
 tracer.use('router');
 tracer.use('tedious');
@@ -230,18 +237,18 @@ span = tracer.startSpan('test', {
   }
 });
 
-tracer.trace('test', () => {})
-tracer.trace('test', { tags: { foo: 'bar' }}, () => {})
-tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
-tracer.trace('test', { analytics: true }, () => {})
-tracer.trace('test', { analytics: 0.5 }, () => {})
-tracer.trace('test', (span: Span) => {})
-tracer.trace('test', (span: Span, fn: () => void) => {})
-tracer.trace('test', (span: Span, fn: (err: Error) => string) => {})
+tracer.trace('test', () => { })
+tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
+tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => { })
+tracer.trace('test', { analytics: true }, () => { })
+tracer.trace('test', { analytics: 0.5 }, () => { })
+tracer.trace('test', (span: Span) => { })
+tracer.trace('test', (span: Span, fn: () => void) => { })
+tracer.trace('test', (span: Span, fn: (err: Error) => string) => { })
 
 promise = tracer.trace('test', () => Promise.resolve())
 
-tracer.wrap('test', () => {})
+tracer.wrap('test', () => { })
 tracer.wrap('test', (foo: string) => 'test')
 
 promise = tracer.wrap('test', () => Promise.resolve())()
@@ -259,10 +266,10 @@ const scope = tracer.scope()
 span = scope.active();
 
 const activateStringType: string = scope.activate(span, () => 'test');
-const activateVoidType: void = scope.activate(span, () => {});
+const activateVoidType: void = scope.activate(span, () => { });
 
 const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bind((arg1: string, arg2: number): string => 'test');
-const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
+const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => { });
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
 
 Promise.resolve();
@@ -271,18 +278,18 @@ scope.bind(promise);
 scope.bind(promise, span);
 
 const simpleEmitter = {
-  emit (eventName: string, arg1: boolean, arg2: number): void {}
+  emit(eventName: string, arg1: boolean, arg2: number): void { }
 };
 
 scope.bind(simpleEmitter);
 scope.bind(simpleEmitter, span);
 
 const emitter = {
-  emit (eventName: string, arg1: boolean, arg2: number): void {},
-  on (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  off (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  addListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  removeListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {}
+  emit(eventName: string, arg1: boolean, arg2: number): void { },
+  on(eventName: string, listener: (arg1: boolean, arg2: number) => void) { },
+  off(eventName: string, listener: (arg1: boolean, arg2: number) => void) { },
+  addListener(eventName: string, listener: (arg1: boolean, arg2: number) => void) { },
+  removeListener(eventName: string, listener: (arg1: boolean, arg2: number) => void) { }
 };
 
 scope.bind(emitter);
