@@ -48,18 +48,23 @@ function createWrapSend (tracer, config) {
 
       this.addEventListener('error', e => span.setTag('error', e))
       this.addEventListener('load', () => span.setTag('http.status', this.status))
-      this.addEventListener('loadend', () => span.finish())
+      this.addEventListener('loadend', () => finish(this, span, config))
 
       try {
         return tracer.scope().bind(send, span).apply(this, arguments)
       } catch (e) {
         span.setTag('error', e)
-        span.finish()
+        finish(this, span, config)
 
         throw e
       }
     }
   }
+}
+
+function finish (xhr, span, config) {
+  config.hooks.request(span, xhr)
+  span.finish()
 }
 
 function inject (xhr, tracer, span) {

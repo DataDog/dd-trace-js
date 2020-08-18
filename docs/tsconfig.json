@@ -1,11 +1,9 @@
 {
   "compilerOptions": {
-    "lib": ["es2017"],
+    "lib": ["es2017", "DOM"],
     "moduleResolution": "node",
     "module": "commonjs",
     "baseUrl": "."
   },
-  "files": [
-    "../index.d.ts"
-  ]
+  "files": ["../index.d.ts"]
 }

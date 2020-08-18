@@ -306,7 +306,7 @@ export declare interface TracerOptions {
      * List of origins to whitelist for distributed tracing. This is used to determine whether to propagate context from the browser for CORS.
      * @default []
      */
-    distributedTracingOriginWhitelist?: (string|RegExp)[]
+    distributedTracingOriginWhitelist?: (string | RegExp)[]
 
     /**
      * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
@@ -484,6 +484,7 @@ interface Plugins {
   "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
+  "xmlhttprequest": plugins.xmlhttprequest;
 }
 
 /** @hidden */
@@ -511,7 +512,7 @@ declare namespace plugins {
   }
 
   /** @hidden */
-  interface Instrumentation extends Integration, Analyzable {}
+  interface Instrumentation extends Integration, Analyzable { }
 
   /** @hidden */
   interface Http extends Instrumentation {
@@ -650,13 +651,13 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
    */
-  interface amqp10 extends Instrumentation {}
+  interface amqp10 extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [amqplib](https://github.com/squaremo/amqp.node) module.
    */
-  interface amqplib extends Instrumentation {}
+  interface amqplib extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
@@ -678,7 +679,7 @@ declare namespace plugins {
    * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
    * module to bind the promise callback the the caller context.
    */
-  interface bluebird extends Integration {}
+  interface bluebird extends Integration { }
 
   /**
    * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -686,31 +687,31 @@ declare namespace plugins {
    * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
    * on the tracer.
    */
-  interface bunyan extends Integration {}
+  interface bunyan extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
    */
-  interface cassandra_driver extends Instrumentation {}
+  interface cassandra_driver extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [connect](https://github.com/senchalabs/connect) module.
    */
-  interface connect extends HttpServer {}
+  interface connect extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [couchbase](https://www.npmjs.com/package/couchbase) module.
    */
-  interface couchbase extends Instrumentation {}
+  interface couchbase extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [dns](https://nodejs.org/api/dns.html) module.
    */
-  interface dns extends Instrumentation {}
+  interface dns extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
@@ -732,31 +733,31 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [express](http://expressjs.com/) module.
    */
-  interface express extends HttpServer {}
+  interface express extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [fastify](https://www.fastify.io/) module.
    */
-  interface fastify extends HttpServer {}
+  interface fastify extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [fs](https://nodejs.org/api/fs.html) module.
    */
-  interface fs extends Instrumentation {}
+  interface fs extends Instrumentation { }
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
    * module to bind the callbacks the the caller context.
    */
-  interface generic_pool extends Integration {}
+  interface generic_pool extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
    */
-  interface google_cloud_pubsub extends Integration {}
+  interface google_cloud_pubsub extends Integration { }
 
   /** @hidden */
   interface ExecutionArgs {
@@ -858,7 +859,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [hapi](https://hapijs.com/) module.
    */
-  interface hapi extends HttpServer {}
+  interface hapi extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
@@ -939,67 +940,67 @@ declare namespace plugins {
    * This plugin patches the [knex](https://knexjs.org/)
    * module to bind the promise callback the the caller context.
    */
-  interface knex extends Integration {}
+  interface knex extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [koa](https://koajs.com/) module.
    */
-  interface koa extends HttpServer {}
+  interface koa extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [limitd-client](https://github.com/limitd/node-client) module.
    */
-  interface limitd_client extends Integration {}
+  interface limitd_client extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [memcached](https://github.com/3rd-Eden/memcached) module.
    */
-  interface memcached extends Instrumentation {}
+  interface memcached extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [microgateway-core](https://github.com/apigee/microgateway-core) module.
    */
-  interface microgateway_core extends HttpServer {}
+  interface microgateway_core extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
-  interface mongodb_core extends Instrumentation {}
+  interface mongodb_core extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [mysql](https://github.com/mysqljs/mysql) module.
    */
-  interface mysql extends Instrumentation {}
+  interface mysql extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [mysql2](https://github.com/brianmario/mysql2) module.
    */
-  interface mysql2 extends Instrumentation {}
+  interface mysql2 extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [net](https://nodejs.org/api/net.html) module.
    */
-  interface net extends Instrumentation {}
+  interface net extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
-  interface paperplane extends HttpServer {}
+  interface paperplane extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [pg](https://node-postgres.com/) module.
    */
-  interface pg extends Instrumentation {}
+  interface pg extends Instrumentation { }
 
   /**
    * This plugin patches the [pino](http://getpino.io)
@@ -1007,25 +1008,25 @@ declare namespace plugins {
    * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
    * on the tracer.
    */
-  interface pino extends Integration {}
+  interface pino extends Integration { }
 
   /**
    * This plugin patches the [promise-js](https://github.com/kevincennis/promise)
    * module to bind the promise callback the the caller context.
    */
-  interface promise_js extends Integration {}
+  interface promise_js extends Integration { }
 
   /**
    * This plugin patches the [promise](https://github.com/then/promise)
    * module to bind the promise callback the the caller context.
    */
-  interface promise extends Integration {}
+  interface promise extends Integration { }
 
   /**
    * This plugin patches the [q](https://github.com/kriskowal/q)
    * module to bind the promise callback the the caller context.
    */
-  interface q extends Integration {}
+  interface q extends Integration { }
 
   /**
    * This plugin automatically instruments the
@@ -1052,31 +1053,31 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [restify](http://restify.com/) module.
    */
-  interface restify extends HttpServer {}
+  interface restify extends HttpServer { }
 
   /**
    * This plugin automatically instruments the
    * [rhea](https://github.com/amqp/rhea) module.
    */
-  interface rhea extends Instrumentation {}
+  interface rhea extends Instrumentation { }
 
   /**
    * This plugin automatically instruments the
    * [router](https://github.com/pillarjs/router) module.
    */
-  interface router extends Integration {}
+  interface router extends Integration { }
 
   /**
    * This plugin automatically instruments the
    * [tedious](https://github.com/tediousjs/tedious/) module.
    */
-  interface tedious extends Instrumentation {}
+  interface tedious extends Instrumentation { }
 
   /**
    * This plugin patches the [when](https://github.com/cujojs/when)
    * module to bind the promise callback the the caller context.
    */
-  interface when extends Integration {}
+  interface when extends Integration { }
 
   /**
    * This plugin patches the [winston](https://github.com/winstonjs/winston)
@@ -1084,7 +1085,25 @@ declare namespace plugins {
    * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
    * on the tracer.
    */
-  interface winston extends Integration {}
+  interface winston extends Integration { }
+
+  /**
+   * This plugin instruments the browser
+   * [xmlhttprequest](https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest) module.
+   */
+  interface xmlhttprequest extends Integration {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just before the request span finishes.
+       */
+      request?: (span?: opentracing.Span, xhr?: XMLHttpRequest & {
+        _datadog_method: string; _datadog_url: Partial<URL>;
+      }) => any;
+    };
+  }
 }
 
 /**
