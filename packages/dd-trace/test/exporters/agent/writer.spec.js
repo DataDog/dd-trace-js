@@ -66,6 +66,16 @@ function describeWriter (version) {
       }
     }
 
+    if (version === 0.4) {
+      const origRequest = platform.request
+      platform.request = (...args) => {
+        process.nextTick(() => {
+          platform.request = origRequest
+          args[args.length - 1](new Error())
+        })
+      }
+    }
+
     format = sinon.stub().withArgs(span).returns('formatted')
 
     encodedLength = 12
@@ -88,16 +98,13 @@ function describeWriter (version) {
       error: sinon.spy()
     }
 
-    Writer = proxyquire('../src/exporters/agent/writer-' + version, {
-      '../../platform': platform,
+    Writer = proxyquire('../src/exporters/agent/writer', {
       '../../format': format,
       '../../encode/0.4': encode,
       '../../encode/0.5': encode,
-      './base-writer': proxyquire('../src/exporters/agent/base-writer', {
-        '../../platform': platform,
-        '../../../lib/version': 'tracerVersion',
-        '../../log': log
-      })
+      '../../platform': platform,
+      '../../../lib/version': 'tracerVersion',
+      '../../log': log
     })
     writer = new Writer(url, prioritySampler)
   })
@@ -124,7 +131,12 @@ function describeWriter (version) {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(platform.request).to.not.have.been.called
+      // this division is due to how we split up request above in the mock
+      if (version === 0.5) {
+        expect(platform.request).to.have.been.calledOnce
+      } else {
+        expect(platform.request).to.not.have.been.called
+      }
     })
 
     it('should empty the internal queue', () => {
@@ -215,9 +227,9 @@ describe('Writer', () => {
 
   describe('endpoint version fallback', () => {
     let Writer
-    let Writer04
-    let Writer05
     let platform
+    let encode05
+    let encode04
     beforeEach(() => {
       platform = {
         name: sinon.stub(),
@@ -227,32 +239,26 @@ describe('Writer', () => {
           prefix: sinon.stub().returns([Buffer.alloc(0)])
         }
       }
-      class BaseWriter {
-        constructor (url, prioritySampler, lookup) {
-          this._url = url
-          this._prioritySampler = prioritySampler
-          this._lookup = lookup
-        }
-      }
-      Writer04 = class Writer04 extends BaseWriter {}
-      Writer04.prototype.append = sinon.stub()
-      Writer04.prototype.flush = sinon.stub()
-      Writer05 = class Writer05 extends BaseWriter {}
-      Writer05.prototype.append = sinon.stub()
-      Writer05.prototype.flush = sinon.stub()
+
+      encode04 = sinon.stub().returns(40)
+      encode05 = sinon.stub().returns(50)
+
       Writer = proxyquire('../src/exporters/agent/writer', {
         '../../platform': platform,
-        '../../../lib/version': 'tracerVersion',
-        './writer-0.4': Writer04,
-        './writer-0.5': Writer05
+        '../../encode/0.4': encode04,
+        '../../encode/0.5': encode05,
+        '../../../lib/version': 'tracerVersion'
       })
     })
 
     ;[
-      ['works when 0.5 is available', null, () => Writer05],
-      ['works when 0.5 is not available', new Error(), () => Writer04]
-    ].forEach(([testCase, error, writerClass]) => {
+      ['works when 0.5 is available', null, () => encode05],
+      ['works when 0.5 is not available', new Error(), () => encode04]
+    ].forEach(([testCase, error, encode]) => {
       it(testCase, (done) => {
+        encode = encode()
+        const is05 = encode === encode05
+
         const url = {
           protocol: 'https',
           hostname: 'example.com',
@@ -279,20 +285,35 @@ describe('Writer', () => {
               },
               lookup: lookup
             })
+            platform.request = (payload, cb) => {
+              expect(payload).to.deep.equal({
+                protocol: url.protocol,
+                hostname: url.hostname,
+                port: url.port,
+                data: [ is05 ? Buffer.from([0x92, 220, 0, 0]) : Buffer.from([]) ],
+                path: `/v0.${is05 ? 5 : 4}/traces`,
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/msgpack',
+                  'Datadog-Meta-Tracer-Version': 'tracerVersion',
+                  'X-Datadog-Trace-Count': '2'
+                },
+                lookup: lookup
+              })
+
+              cb(null, {})
+
+              done()
+            }
             cb(error)
-            expect(writer._writer).to.be.instanceof(writerClass())
-            expect(writer._writer.append).to.have.been.calledTwice
-            expect(writer._writer.append).to.have.been.calledWith('spans1')
-            expect(writer._writer.append).to.have.been.calledWith('spans2')
-            expect(writer._writer.flush).to.have.been.calledOnce
-            writer._writer.append = sinon.stub()
-            writer._writer.flush = sinon.stub()
-            writer.append('spans3')
-            writer.flush()
-            expect(writer._writer.append).to.have.been.calledOnce
-            expect(writer._writer.append).to.have.been.calledWith('spans3')
-            expect(writer._writer.flush).to.have.been.calledOnce
-            done()
+
+            expect(encode).to.have.been.calledTwice
+            expect(encode.firstCall.args[1]).to.equal(5)
+            expect(encode.firstCall.args[2]).to.equal('spans1')
+            expect(encode.firstCall.args[3]).to.equal(writer)
+            expect(encode.secondCall.args[1]).to.equal(encode === encode05 ? 50 : 40)
+            expect(encode.secondCall.args[2]).to.equal('spans2')
+            expect(encode.secondCall.args[3]).to.equal(writer)
           })
         }
 
