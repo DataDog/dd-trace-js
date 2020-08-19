@@ -2,14 +2,14 @@
 
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const id = require('../src/id')
+const id = require('../../src/id')
 const { Int64BE } = require('int64-buffer') // TODO: remove dependency
 
 describe('encode', () => {
   let encode
 
   beforeEach(() => {
-    encode = require('../src/encode')
+    encode = require('../../src/encode/0.4')
   })
 
   it('should encode to msgpack', () => {

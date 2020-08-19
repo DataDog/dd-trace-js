@@ -1,6 +1,6 @@
 'use strict'
 
-const encode = require('../../encode')
+const encode = require('../../encode/0.4')
 const BaseWriter = require('./base-writer')
 
 class Writer extends BaseWriter {

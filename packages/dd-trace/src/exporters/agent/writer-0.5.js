@@ -1,6 +1,6 @@
 'use strict'
 
-const encode = require('../../encode/index-0.5')
+const encode = require('../../encode/0.5')
 const BaseWriter = require('./base-writer')
 
 const arraySizeTwo = Buffer.from([0b10010010])

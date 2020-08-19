@@ -91,8 +91,8 @@ function describeWriter (version) {
     Writer = proxyquire('../src/exporters/agent/writer-' + version, {
       '../../platform': platform,
       '../../format': format,
-      '../../encode': encode,
-      '../../encode/index-0.5': encode,
+      '../../encode/0.4': encode,
+      '../../encode/0.5': encode,
       './base-writer': proxyquire('../src/exporters/agent/base-writer', {
         '../../platform': platform,
         '../../../lib/version': 'tracerVersion',
