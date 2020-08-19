@@ -15,6 +15,7 @@ describe('encode 0.5', () => {
     writer = {}
     writer._strings = Buffer.allocUnsafe(1024 * 1024)
     writer._stringMap = {}
+    writer._stringMapLen = 0
     writer._stringsBufLen = 3
     writer._strings[0] = 0xdc
   })

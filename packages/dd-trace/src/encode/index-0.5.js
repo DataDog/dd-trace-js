@@ -42,7 +42,7 @@ function getTokenForString (text) {
     return state.writer._stringMap[text]
   }
 
-  const id = Reflect.ownKeys(state.writer._stringMap).length
+  const id = state.writer._stringMapLen++
   state.writer._stringMap[text] = id
   const stringBuf = cachedString(text)
   state.writer._strings.set(stringBuf, state.writer._stringsBufLen)

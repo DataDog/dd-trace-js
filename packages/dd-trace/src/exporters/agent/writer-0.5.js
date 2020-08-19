@@ -11,6 +11,7 @@ class Writer extends BaseWriter {
 
     this._strings = Buffer.allocUnsafe(BaseWriter.MAX_SIZE)
     this._stringMap = {}
+    this._stringMapLen = 0
     this._stringsBufLen = 3 // 0xdc and then uint16
     this._strings[0] = 0xdc
   }
