@@ -33,7 +33,7 @@ describe('encode', () => {
     }]
 
     let buffer = Buffer.alloc(1024)
-    const offset = encode(buffer, 0, data)
+    const offset = encode(buffer, 0, data, {})
     buffer = buffer.slice(0, offset)
 
     const decoded = msgpack.decode(buffer, { codec })
@@ -73,7 +73,7 @@ describe('encode', () => {
     }]
 
     let buffer = Buffer.alloc(1024)
-    const offset = encode(buffer, 0, data)
+    const offset = encode(buffer, 0, data, {})
     buffer = buffer.slice(0, offset)
 
     const decoded = msgpack.decode(buffer, { codec })
