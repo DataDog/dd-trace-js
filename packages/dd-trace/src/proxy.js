@@ -9,6 +9,7 @@ const platform = require('./platform')
 const log = require('./log')
 const { setStartupLogInstrumenter } = platform.startupLog
 const analyticsSampler = require('./analytics_sampler')
+const { injectRumData } = require('./plugins/util/injection')
 
 const noop = new NoopTracer()
 
@@ -122,6 +123,10 @@ class Tracer extends BaseTracer {
 
   bindEmitter () {
     this._deprecate('bindEmitter')
+  }
+
+  injectRumData () {
+    return injectRumData(this)
   }
 }
 

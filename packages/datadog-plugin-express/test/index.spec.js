@@ -1222,6 +1222,25 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('does auto injection', done => {
+          const app = express()
+          let comment
+          app.get('/', (req, res) => {
+            res.set('Content-Type', 'text/html')
+            res.end('words')
+            comment = res._ddHTMLComment
+          })
+          getPort().then(port => {
+            app.listen(port, 'localhost', () => {
+              axios.get(`http://localhost:${port}/`, {})
+                .then((r) => {
+                  expect(r.data).to.equal(`${comment}words`)
+                })
+                .catch(done)
+            })
+          })
+        })
       })
     })
   })
