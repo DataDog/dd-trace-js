@@ -9,7 +9,7 @@ const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 const ARRAY_OF_TWO_EMPTY_ARRAYS = Buffer.from([0x92, 0x90, 0x90])
 const ARRAY_OF_TWO_THINGS = Buffer.from([0x92])
 
-class BaseWriter {
+class Writer {
   constructor (url, prioritySampler, lookup) {
     this._url = url
     this._prioritySampler = prioritySampler
@@ -178,4 +178,4 @@ function makeRequest (version, data, count, url, lookup, cb) {
   platform.request(Object.assign({ data }, options), cb)
 }
 
-module.exports = BaseWriter
+module.exports = Writer
