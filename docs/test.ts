@@ -287,3 +287,7 @@ const emitter = {
 
 scope.bind(emitter);
 scope.bind(emitter, span);
+
+tracer.wrap('x', () => {
+  const rumData: string = tracer.injectRumData();
+})
