@@ -3,12 +3,11 @@
 const platform = require('../../platform')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
-const msgpack = require('msgpack-lite')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
-
-const arraySizeTwo = Buffer.from([0b10010010])
+const ARRAY_OF_TWO_EMPTY_ARRAYS = Buffer.from([0x92, 0x90, 0x90])
+const ARRAY_OF_TWO_THINGS = Buffer.from([0x92])
 
 class BaseWriter {
   constructor (url, prioritySampler, lookup) {
@@ -18,7 +17,7 @@ class BaseWriter {
     this._appends = []
     this._needsFlush = false
 
-    makeRequest('v0.5', [msgpack.encode([[], []])], '0', url, lookup, err => {
+    makeRequest('v0.5', [ARRAY_OF_TWO_EMPTY_ARRAYS], '0', url, lookup, err => {
       if (err) {
         this._protocolVersion = 'v0.4'
         this._encodeForVersion = require('../../encode/0.4')
@@ -141,7 +140,7 @@ function makePayload (writer, traceData) {
   const strings = writer._strings.slice(0, writer._stringsBufLen)
   const stringsLen = Reflect.ownKeys(writer._stringMap).length
   strings.writeUInt16BE(stringsLen, 1)
-  return [Buffer.concat([arraySizeTwo, strings, traceData[0]])]
+  return [Buffer.concat([ARRAY_OF_TWO_THINGS, strings, traceData[0]])]
 }
 
 function setHeader (headers, key, value) {
