@@ -339,12 +339,14 @@ export declare interface TracerOptions {
 
   /**
    * Custom logger to be used by the tracer (if debug = true),
-   * should support debug() and error() methods
+   * should support error(), warn(), info(), and debug() methods
    * see https://datadog.github.io/dd-trace-js/#custom-logging
    */
   logger?: {
-    debug: (message: string) => void;
     error: (err: Error | string) => void;
+    warn: (message: string) => void;
+    info: (message: string) => void;
+    debug: (message: string) => void;
   };
 
   /**
