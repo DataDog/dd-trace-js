@@ -20,7 +20,7 @@ function describeWriter (version) {
   let tracer
   let scope
 
-  beforeEach(() => {
+  beforeEach((done) => {
     scope = {
       _wipe: sinon.stub()
     }
@@ -60,19 +60,9 @@ function describeWriter (version) {
       name: sinon.stub(),
       version: sinon.stub(),
       engine: sinon.stub(),
-      request: sinon.stub().yields(null, response),
+      request: sinon.stub().yields(null, response, version === 0.5 ? 200 : 404),
       msgpack: {
         prefix: sinon.stub().returns([Buffer.alloc(0)])
-      }
-    }
-
-    if (version === 0.4) {
-      const origRequest = platform.request
-      platform.request = (...args) => {
-        process.nextTick(() => {
-          platform.request = origRequest
-          args[args.length - 1](new Error())
-        })
       }
     }
 
@@ -107,6 +97,8 @@ function describeWriter (version) {
       '../../log': log
     })
     writer = new Writer(url, prioritySampler)
+
+    process.nextTick(done)
   })
 
   describe('length', () => {
@@ -129,14 +121,12 @@ function describeWriter (version) {
 
   describe('flush', () => {
     it('should skip flushing if empty', () => {
+      // once for the protocol version check
+      expect(platform.request).to.have.been.calledOnce
       writer.flush()
 
-      // this division is due to how we split up request above in the mock
-      if (version === 0.5) {
-        expect(platform.request).to.have.been.calledOnce
-      } else {
-        expect(platform.request).to.not.have.been.called
-      }
+      // no more times
+      expect(platform.request).to.have.been.calledOnce
     })
 
     it('should empty the internal queue', () => {
@@ -305,7 +295,7 @@ describe('Writer', () => {
 
               done()
             }
-            cb(error)
+            cb(null, {}, is05 ? 200 : 404)
 
             expect(encode).to.have.been.calledTwice
             expect(encode.firstCall.args[1]).to.equal(5)

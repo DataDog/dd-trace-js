@@ -33,7 +33,7 @@ describe('dd-trace', () => {
     delete require.cache[require.resolve('../')]
   })
 
-  it('should record and send a trace to the agent', done => {
+  it('should record and send a trace to the agent', (done) => {
     const span = tracer.startSpan('hello', {
       tags: {
         'resource.name': '/hello/:name'

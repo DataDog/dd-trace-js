@@ -17,24 +17,7 @@ class Writer {
     this._appends = []
     this._needsFlush = false
 
-    makeRequest('v0.5', [ARRAY_OF_TWO_EMPTY_ARRAYS], '0', url, lookup, err => {
-      if (err) {
-        this._protocolVersion = 'v0.4'
-        this._encodeForVersion = require('../../encode/0.4')
-      } else {
-        this._protocolVersion = 'v0.5'
-        this._encodeForVersion = require('../../encode/0.5')
-      }
-
-      this._reset()
-
-      for (const spans of this._appends) {
-        this.append(spans)
-      }
-      if (this._needsFlush) {
-        this.flush()
-      }
-    })
+    getProtocolVersion(this)
   }
 
   get length () {
@@ -42,6 +25,7 @@ class Writer {
   }
 
   append (spans) {
+    this._hasAppended = true
     if (this._protocolVersion) {
       log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
@@ -51,10 +35,10 @@ class Writer {
     }
   }
 
-  _request (data, count) {
+  _sendPayload (data, count) {
     platform.metrics().increment(`${METRIC_PREFIX}.requests`, true)
 
-    makeRequest(this._protocolVersion, data, count, this._url, this._lookup, (err, res, status) => {
+    makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
       if (status) {
         platform.metrics().increment(`${METRIC_PREFIX}.responses`, true)
         platform.metrics().increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -126,7 +110,7 @@ class Writer {
           data = makePayload(this, traceData)
         }
 
-        this._request(data, this._count)
+        this._sendPayload(data, this._count)
 
         this._reset()
       }
@@ -149,7 +133,41 @@ function setHeader (headers, key, value) {
   }
 }
 
-function makeRequest (version, data, count, url, lookup, cb) {
+function getProtocolVersion (writer) {
+  function cb (err, res, status) {
+    if (status !== 404 && status !== 200) {
+      setTimeout(() => getProtocolVersion(writer), 2000)
+      return
+    }
+    if (status === 404) {
+      writer._protocolVersion = 'v0.4'
+      writer._encodeForVersion = require('../../encode/0.4')
+    } else {
+      writer._protocolVersion = 'v0.5'
+      writer._encodeForVersion = require('../../encode/0.5')
+    }
+
+    writer._reset()
+
+    for (const spans of writer._appends) {
+      writer.append(spans)
+    }
+    if (writer._needsFlush) {
+      writer.flush()
+    }
+  }
+
+  makeRequest(
+    'v0.5',
+    [ARRAY_OF_TWO_EMPTY_ARRAYS],
+    '0',
+    writer._url,
+    writer._lookup,
+    !!writer._appends.length,
+    cb)
+}
+
+function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
   const options = {
     path: `/${version}/traces`,
     method: 'PUT',
@@ -175,7 +193,13 @@ function makeRequest (version, data, count, url, lookup, cb) {
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  platform.request(Object.assign({ data }, options), cb)
+  platform.request(Object.assign({ data }, options), (err, res, status) => {
+    if (needsStartupLog) {
+      // Note that logging will only happen once, regardless of how many times this is called.
+      platform.startupLog.startupLog({ agentError: err })
+    }
+    cb(err, res, status)
+  })
 }
 
 module.exports = Writer
