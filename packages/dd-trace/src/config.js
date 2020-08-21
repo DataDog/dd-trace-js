@@ -32,6 +32,11 @@ class Config {
       platform.env('DD_PROFILING_ENABLED'),
       false
     )
+    const DD_PROFILING_EXPORTERS = coalesce(
+      platform.env('DD_PROFILING_EXPORTERS'),
+      'agent'
+    )
+    const DD_PROFILING_SOURCE_MAP = platform.env('DD_PROFILING_SOURCE_MAP')
     const DD_LOGS_INJECTION = coalesce(
       options.logInjection,
       platform.env('DD_LOGS_INJECTION'),
@@ -139,7 +144,9 @@ class Config {
       'debug'
     )
     this.profiling = {
-      enabled: isTrue(DD_PROFILING_ENABLED)
+      enabled: isTrue(DD_PROFILING_ENABLED),
+      sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
+      exporters: DD_PROFILING_EXPORTERS
     }
     this.lookup = options.lookup
     this.startupLogsEnabled = isTrue(DD_TRACE_STARTUP_LOGS)
