@@ -58,8 +58,10 @@ tracer.init({
   },
   hostname: 'agent',
   logger: {
-    error (message: string) {},
-    debug (message: string | Error) {}
+    error (message: string | Error) {},
+    warn (message: string) {},
+    info (message: string) {},
+    debug (message: string) {}
   },
   plugins: false,
   port: 7777,
