@@ -454,8 +454,10 @@ const logger = bunyan.createLogger({
 
 const tracer = require('dd-trace').init({
   logger: {
+    error: err => logger.error(err),
+    warn: message => logger.warn(message),
+    info: message => logger.info(message),
     debug: message => logger.trace(message),
-    error: err => logger.error(err)
   },
   debug: true
 })
