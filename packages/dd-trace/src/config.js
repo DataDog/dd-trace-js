@@ -27,9 +27,10 @@ class Config {
       platform.env('DD_TRACE_ANALYTICS'),
       false
     )
+    // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
-      options.profiling,
-      platform.env('DD_PROFILING_ENABLED'),
+      // options.profiling,
+      // platform.env('DD_PROFILING_ENABLED'),
       false
     )
     const DD_PROFILING_EXPORTERS = coalesce(
