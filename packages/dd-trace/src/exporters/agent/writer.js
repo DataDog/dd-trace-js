@@ -7,7 +7,6 @@ const tracerVersion = require('../../../lib/version')
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 const ARRAY_OF_TWO_EMPTY_ARRAYS = Buffer.from([0x92, 0x90, 0x90])
-const ARRAY_OF_TWO_THINGS = Buffer.from([0x92])
 
 class Writer {
   constructor (url, prioritySampler, lookup) {
@@ -71,7 +70,7 @@ class Writer {
   _encode (trace) {
     const offset = this._offset
     try {
-      this._offset = this._encodeForVersion(this._buffer, this._offset, trace, this)
+      this._offset = this._encoderForVersion.encode(this._buffer, this._offset, trace, this)
       this._count++
     } catch (e) {
       if (e instanceof RangeError) {
@@ -92,13 +91,7 @@ class Writer {
     this._offset = 5 // we'll use these first bytes to hold an array prefix
     this._count = 0
 
-    if (this._protocolVersion === 'v0.5') {
-      this._strings = Buffer.allocUnsafe(MAX_SIZE)
-      this._stringMap = {}
-      this._stringMapLen = 0
-      this._stringsBufLen = 3 // 0xdc and then uint16
-      this._strings[0] = 0xdc
-    }
+    this._encoderForVersion.init()
   }
 
   flush () {
@@ -107,7 +100,7 @@ class Writer {
         const traceData = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
         let data = traceData
         if (this._protocolVersion === 'v0.5') {
-          data = makePayload(this, traceData)
+          data = this._encoderForVersion.makePayload(traceData)
         }
 
         this._sendPayload(data, this._count)
@@ -118,13 +111,6 @@ class Writer {
       this._needsFlush = true
     }
   }
-}
-
-function makePayload (writer, traceData) {
-  const strings = writer._strings.slice(0, writer._stringsBufLen)
-  const stringsLen = Reflect.ownKeys(writer._stringMap).length
-  strings.writeUInt16BE(stringsLen, 1)
-  return [Buffer.concat([ARRAY_OF_TWO_THINGS, strings, traceData[0]])]
 }
 
 function setHeader (headers, key, value) {
@@ -141,10 +127,10 @@ function getProtocolVersion (writer) {
     }
     if (status === 404) {
       writer._protocolVersion = 'v0.4'
-      writer._encodeForVersion = require('../../encode/0.4')
+      writer._encoderForVersion = require('../../encode/0.4')
     } else {
       writer._protocolVersion = 'v0.5'
-      writer._encodeForVersion = require('../../encode/0.5')
+      writer._encoderForVersion = require('../../encode/0.5')
     }
 
     writer._reset()

@@ -5,7 +5,14 @@ const tokens = require('./tokens')
 const cachedString = require('./cache')(1024)
 const EncoderState = require('./encoder-state')
 
+const ARRAY_OF_TWO_THINGS = Buffer.from([0x92])
+
 let state
+
+let strings
+let stringMap
+let stringMapLen
+let stringsBufLen
 
 function encode (initBuffer, offset, trace, initWriter) {
   state = new EncoderState(initBuffer, offset, trace, initWriter)
@@ -38,15 +45,15 @@ function encode (initBuffer, offset, trace, initWriter) {
 }
 
 function getTokenForString (text) {
-  if (text in state.writer._stringMap) {
-    return state.writer._stringMap[text]
+  if (text in stringMap) {
+    return stringMap[text]
   }
 
-  const id = state.writer._stringMapLen++
-  state.writer._stringMap[text] = id
+  const id = stringMapLen++
+  stringMap[text] = id
   const stringBuf = cachedString(text)
-  state.writer._strings.set(stringBuf, state.writer._stringsBufLen)
-  state.writer._stringsBufLen += stringBuf.length
+  strings.set(stringBuf, stringsBufLen)
+  stringsBufLen += stringBuf.length
   return id
 }
 
@@ -67,11 +74,26 @@ function write (offset, val) {
   if (typeof val === 'string') {
     return writeUint32(offset, getTokenForString(val))
   } else { // val is number
-    offset = state.checkOffset(offset, 9)
+    offset = state.checkOffset(offset, 9, stringsBufLen)
     state.buffer.writeUInt8(0xcb, offset)
     state.buffer.writeDoubleBE(val, offset + 1)
     return offset + 9
   }
 }
 
-module.exports = encode
+function makePayload (traceData) {
+  const stringsBuf = strings.slice(0, stringsBufLen)
+  const stringsLen = Reflect.ownKeys(stringMap).length
+  stringsBuf.writeUInt16BE(stringsLen, 1)
+  return [Buffer.concat([ARRAY_OF_TWO_THINGS, stringsBuf, traceData[0]])]
+}
+
+function init () {
+  strings = Buffer.allocUnsafe(EncoderState.MAX_SIZE)
+  stringMap = {}
+  stringMapLen = 0
+  stringsBufLen = 3 // 0xdc and then uint16
+  strings[0] = 0xdc
+}
+
+module.exports = { encode, makePayload, init }

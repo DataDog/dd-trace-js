@@ -9,7 +9,7 @@ describe('encode', () => {
   let encode
 
   beforeEach(() => {
-    encode = require('../../src/encode/0.4')
+    encode = require('../../src/encode/0.4').encode
   })
 
   it('should encode to msgpack', () => {

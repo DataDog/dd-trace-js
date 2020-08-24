@@ -141,4 +141,8 @@ function getFields () {
   }, {})
 }
 
-module.exports = encode
+module.exports = {
+  encode,
+  makePayload: data => data,
+  init: () => {}
+}

@@ -1,23 +1,22 @@
 'use strict'
 
 const msgpack = require('msgpack-lite')
+const platform = require('../../src/platform')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
 const { Int64BE } = require('int64-buffer') // TODO: remove dependency
 
 describe('encode 0.5', () => {
   let encode
+  let makePayload
   let writer
 
   beforeEach(() => {
-    encode = require('../../src/encode/0.5')
-
-    writer = {}
-    writer._strings = Buffer.allocUnsafe(1024 * 1024)
-    writer._stringMap = {}
-    writer._stringMapLen = 0
-    writer._stringsBufLen = 3
-    writer._strings[0] = 0xdc
+    platform.use(require('../../src/platform/node'))
+    const encoder = require('../../src/encode/0.5')
+    encode = encoder.encode
+    makePayload = encoder.makePayload
+    encoder.init()
   })
 
   it('should encode to msgpack', () => {
@@ -41,28 +40,32 @@ describe('encode 0.5', () => {
     }]
 
     let buffer = Buffer.alloc(1024)
-    const offset = encode(buffer, 0, data, writer)
+    const offset = encode(buffer, 5, data, writer)
     buffer = buffer.slice(0, offset)
+    const traceData = platform.msgpack.prefix(buffer, 1)
+    const [payload] = makePayload(traceData)
 
-    const decoded = msgpack.decode(buffer, { codec })
-    const stringMap = Reflect.ownKeys(writer._stringMap)
+    const decoded = msgpack.decode(payload, { codec })
 
-    expect(decoded).to.be.instanceof(Array)
-    expect(decoded[0]).to.be.instanceof(Array)
-    expect(stringMap[decoded[0][0]]).to.equal(data[0].service)
-    expect(stringMap[decoded[0][1]]).to.equal(data[0].name)
-    expect(stringMap[decoded[0][2]]).to.equal(data[0].resource)
-    expect(decoded[0][3].toString(16)).to.equal(data[0].trace_id.toString())
-    expect(decoded[0][4].toString(16)).to.equal(data[0].span_id.toString())
-    expect(decoded[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(decoded[0][6]).to.be.instanceof(Int64BE)
-    expect(decoded[0][6].toString()).to.equal(data[0].start.toString())
-    expect(decoded[0][7]).to.be.instanceof(Int64BE)
-    expect(decoded[0][7].toString()).to.equal(data[0].duration.toString())
-    expect(decoded[0][8]).to.equal(0)
-    expect(decoded[0][9]).to.deep.equal({ [writer._stringMap.bar]: writer._stringMap.baz })
-    expect(decoded[0][10]).to.deep.equal({ [writer._stringMap.example]: 1 })
-    expect(stringMap[decoded[0][11]]).to.equal(data[0].type)
+    const stringMap = decoded[0]
+    const trace = decoded[1][0]
+
+    expect(trace).to.be.instanceof(Array)
+    expect(trace[0]).to.be.instanceof(Array)
+    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
+    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
+    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
+    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
+    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
+    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
+    expect(trace[0][6]).to.be.instanceof(Int64BE)
+    expect(trace[0][6].toString()).to.equal(data[0].start.toString())
+    expect(trace[0][7]).to.be.instanceof(Int64BE)
+    expect(trace[0][7].toString()).to.equal(data[0].duration.toString())
+    expect(trace[0][8]).to.equal(0)
+    expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
+    expect(stringMap[trace[0][11]]).to.equal(data[0].type)
   })
 
   it('should truncate long IDs', () => {

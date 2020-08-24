@@ -13,9 +13,9 @@ class EncoderState {
     this.writer = writer
   }
 
-  checkOffset (offset, length) {
+  checkOffset (offset, length, stringsBufLen) {
     const currentOffset = offset
-    if (offset + length + (this.writer._stringsBufLen || 0) > MAX_SIZE) {
+    if (offset + length + stringsBufLen > MAX_SIZE) {
       if (this.offset === 5) {
         throw new RangeError('Trace is too big for payload.')
       }
@@ -64,5 +64,7 @@ class EncoderState {
     return offset
   }
 }
+
+EncoderState.MAX_SIZE = MAX_SIZE
 
 module.exports = EncoderState

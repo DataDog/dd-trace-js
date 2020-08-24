@@ -69,9 +69,13 @@ function describeWriter (version) {
     format = sinon.stub().withArgs(span).returns('formatted')
 
     encodedLength = 12
-    encode = function (buf) {
-      buf[0] = 101
-      return encodedLength
+    encode = {
+      encode: function (buf) {
+        buf[0] = 101
+        return encodedLength
+      },
+      makePayload: x => x,
+      init: () => {}
     }
 
     url = {
@@ -145,10 +149,7 @@ function describeWriter (version) {
       writer.append([span])
       writer.append([span])
       writer.flush()
-      const expectedData = version === 0.5 ? Buffer.concat([
-        Buffer.from([0x92, 0xdc, 0x00, 0x00]),
-        Buffer.from('prefixed')
-      ]) : Buffer.from('prefixed')
+      const expectedData = Buffer.from('prefixed')
 
       expect(platform.request).to.have.been.calledWithMatch({
         protocol: url.protocol,
@@ -230,8 +231,16 @@ describe('Writer', () => {
         }
       }
 
-      encode04 = sinon.stub().returns(40)
-      encode05 = sinon.stub().returns(50)
+      encode04 = {
+        encode: sinon.stub().returns(40),
+        makePayload: x => x,
+        init: () => {}
+      }
+      encode05 = {
+        encode: sinon.stub().returns(50),
+        makePayload: x => x,
+        init: () => {}
+      }
 
       Writer = proxyquire('../src/exporters/agent/writer', {
         '../../platform': platform,
@@ -244,10 +253,11 @@ describe('Writer', () => {
     ;[
       ['works when 0.5 is available', null, () => encode05],
       ['works when 0.5 is not available', new Error(), () => encode04]
-    ].forEach(([testCase, error, encode]) => {
+    ].forEach(([testCase, error, encoder]) => {
       it(testCase, (done) => {
-        encode = encode()
-        const is05 = encode === encode05
+        encoder = encoder()
+        const is05 = encoder === encode05
+        const encode = encoder.encode
 
         const url = {
           protocol: 'https',
@@ -280,7 +290,7 @@ describe('Writer', () => {
                 protocol: url.protocol,
                 hostname: url.hostname,
                 port: url.port,
-                data: [ is05 ? Buffer.from([0x92, 220, 0, 0]) : Buffer.from([]) ],
+                data: [ Buffer.from([]) ],
                 path: `/v0.${is05 ? 5 : 4}/traces`,
                 method: 'PUT',
                 headers: {
@@ -301,7 +311,7 @@ describe('Writer', () => {
             expect(encode.firstCall.args[1]).to.equal(5)
             expect(encode.firstCall.args[2]).to.equal('spans1')
             expect(encode.firstCall.args[3]).to.equal(writer)
-            expect(encode.secondCall.args[1]).to.equal(encode === encode05 ? 50 : 40)
+            expect(encode.secondCall.args[1]).to.equal(encoder === encode05 ? 50 : 40)
             expect(encode.secondCall.args[2]).to.equal('spans2')
             expect(encode.secondCall.args[3]).to.equal(writer)
           })
