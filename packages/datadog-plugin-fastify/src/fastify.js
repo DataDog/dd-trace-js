@@ -9,11 +9,7 @@ function createWrapFastify (tracer, config) {
   return function wrapFastify (fastify) {
     if (typeof fastify !== 'function') return fastify
 
-    const fastifyWithTrace = function fastifyWithTrace () {
-      return fastify._datadog_wrapper.apply(this, arguments)
-    }
-
-    fastify._datadog_wrapper = function () {
+    return function fastifyWithTrace () {
       const app = fastify.apply(this, arguments)
 
       if (!app) return app
@@ -31,8 +27,6 @@ function createWrapFastify (tracer, config) {
 
       return app
     }
-
-    return fastifyWithTrace
   }
 }
 
@@ -97,10 +91,6 @@ function wrapHandler (handler) {
   }
 }
 
-function unwrapFastify (fastify) {
-  fastify._datadog_wrapper = fastify
-}
-
 function getReq (request) {
   return request && (request.raw || request.req || request)
 }
@@ -115,10 +105,10 @@ module.exports = [
     versions: ['>=1'],
     patch (fastify, tracer, config) {
       // `fastify` is a function so we return a wrapper that will replace its export.
-      return createWrapFastify(tracer, config)(fastify)
+      return this.wrapExport(fastify, createWrapFastify(tracer, config)(fastify))
     },
     unpatch (fastify) {
-      unwrapFastify(fastify)
+      this.unwrapExport(fastify)
     }
   }
 ]
