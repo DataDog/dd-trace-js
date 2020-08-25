@@ -16,7 +16,7 @@ const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
 const format = require('../packages/dd-trace/src/format')
-const encode = require('../packages/dd-trace/src/encode')
+const { encode } = require('../packages/dd-trace/src/encode/0.4') // TODO also v0.5
 const config = new Config({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
