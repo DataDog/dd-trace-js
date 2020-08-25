@@ -16,7 +16,7 @@ class Writer {
     this._appends = []
     this._needsFlush = false
 
-    getProtocolVersion(this)
+    setImmediate(() => getProtocolVersion(this))
   }
 
   get length () {
@@ -122,7 +122,7 @@ function setHeader (headers, key, value) {
 function getProtocolVersion (writer) {
   function cb (err, res, status) {
     if (status !== 404 && status !== 200) {
-      setTimeout(() => getProtocolVersion(writer), 2000)
+      setTimeout(() => getProtocolVersion(writer), 500)
       return
     }
     if (status === 404) {

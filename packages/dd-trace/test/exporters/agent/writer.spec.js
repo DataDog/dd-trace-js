@@ -202,9 +202,10 @@ function describeWriter (version) {
       it('should make a request to the socket', () => {
         writer.append([span])
         writer.flush()
-
-        expect(platform.request).to.have.been.calledWithMatch({
-          socketPath: url.pathname
+        setImmediate(() => {
+          expect(platform.request).to.have.been.calledWithMatch({
+            socketPath: url.pathname
+          })
         })
       })
     })

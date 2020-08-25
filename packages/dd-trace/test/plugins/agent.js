@@ -27,6 +27,10 @@ module.exports = {
       next()
     })
 
+    agent.put('/v0.5/traces', (req, res) => {
+      res.status(404).end()
+    })
+
     agent.put('/v0.4/traces', (req, res) => {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       handlers.forEach(handler => handler(req.body))
