@@ -2,6 +2,7 @@
 
 const platform = require('../../platform')
 const log = require('../../log')
+const config = require('../../config')
 const tracerVersion = require('../../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
@@ -16,7 +17,7 @@ class Writer {
     this._appends = []
     this._needsFlush = false
 
-    setImmediate(() => getProtocolVersion(this))
+    getProtocolVersion(this)
   }
 
   get length () {
@@ -120,6 +121,17 @@ function setHeader (headers, key, value) {
 }
 
 function getProtocolVersion (writer) {
+  if (config.protocolVersion) {
+    if (config.protocolVersion.match(/^v?0\.4/)) {
+      writer._protocolVersion = 'v0.4'
+      writer._encoderForVersion = require('../../encode/0.4')
+    } else {
+      writer._protocolVersion = 'v0.5'
+      writer._encoderForVersion = require('../../encode/0.5')
+    }
+    return
+  }
+
   function cb (err, res, status) {
     if (status !== 404 && status !== 200) {
       setTimeout(() => getProtocolVersion(writer), 500)
@@ -143,14 +155,14 @@ function getProtocolVersion (writer) {
     }
   }
 
-  makeRequest(
+  setImmediate(() => makeRequest(
     'v0.5',
     [ARRAY_OF_TWO_EMPTY_ARRAYS],
     '0',
     writer._url,
     writer._lookup,
     !!writer._appends.length,
-    cb)
+    cb))
 }
 
 function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
