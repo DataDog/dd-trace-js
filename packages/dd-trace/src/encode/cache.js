@@ -4,7 +4,7 @@ const LRUCache = require('mnemonist/lru-cache')
 const tokens = require('./tokens')
 const util = require('./util')
 
-function cache (max) {
+function cachedString (max) {
   const cache = new LRUCache(max)
 
   return value => {
@@ -38,4 +38,6 @@ function prefix (length) {
   return buffer
 }
 
-module.exports = cache
+cachedString.prefix = prefix
+
+module.exports = cachedString
