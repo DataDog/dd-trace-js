@@ -129,6 +129,7 @@ function getProtocolVersion (writer) {
       writer._protocolVersion = 'v0.5'
       writer._encoderForVersion = require('../../encode/0.5')
     }
+    writer._reset()
     return
   }
 

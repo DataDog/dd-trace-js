@@ -8,6 +8,7 @@ const node = require('../packages/dd-trace/src/platform/node')
 platform.use(node)
 
 const Config = require('../packages/dd-trace/src/config')
+Config.protocolVersion = 'v0.4'
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
@@ -95,7 +96,7 @@ suite
   })
   .add('encode', {
     fn () {
-      encode(buffer, 0, [span])
+      encode(buffer, 0, [span], {})
     }
   })
   .add('id', {
