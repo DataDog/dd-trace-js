@@ -1,5 +1,7 @@
 'use strict'
 
+process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = 'v0.4'
+
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 const platform = require('../packages/dd-trace/src/platform')
@@ -8,7 +10,6 @@ const node = require('../packages/dd-trace/src/platform/node')
 platform.use(node)
 
 const Config = require('../packages/dd-trace/src/config')
-Config.protocolVersion = 'v0.4'
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')

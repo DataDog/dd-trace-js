@@ -2,7 +2,7 @@
 
 const platform = require('../../platform')
 const log = require('../../log')
-const config = require('../../config')
+const Config = require('../../config')
 const tracerVersion = require('../../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
@@ -16,6 +16,8 @@ class Writer {
     this._lookup = lookup
     this._appends = []
     this._needsFlush = false
+
+    this._config = new Config({})
 
     getProtocolVersion(this)
   }
@@ -121,6 +123,7 @@ function setHeader (headers, key, value) {
 }
 
 function getProtocolVersion (writer) {
+  const config = writer._config
   if (config.protocolVersion) {
     if (config.protocolVersion.match(/^v?0\.4/)) {
       writer._protocolVersion = 'v0.4'
