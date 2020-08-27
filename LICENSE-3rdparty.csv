@@ -14,7 +14,6 @@ require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
-require,mnemonist,MIT,Copyright 2016 Guillaume Plique (Yomguithereal)
 require,multer,MIT,Copyright 2014 Hage Yaapa
 require,nan,MIT,Copyright 2018 NAN contributors
 require,node-gyp-build,MIT,Copyright 2017 Mathias Buus
