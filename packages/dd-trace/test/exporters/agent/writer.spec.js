@@ -251,6 +251,35 @@ describe('Writer', () => {
       })
     })
 
+    it('drops traces when there is an error before protocol version is set, then retries', (done) => {
+      let writer
+
+      const url = {
+        protocol: 'https',
+        hostname: 'example.com',
+        port: 12345
+      }
+      const prioritySampler = {}
+      const lookup = {}
+
+      platform.request = (payload, cb) => {
+        expect(writer._appends).to.deep.equal(['spans1', 'spans2'])
+        expect(writer._needsFlush).to.equal(true)
+        platform.request = (payload, cb) => {
+          cb(null, null, 200) // avoid calling again
+          done()
+        }
+        cb()
+        expect(writer._appends.length).to.equal(0)
+        expect(writer._needsFlush).to.equal(false)
+      }
+
+      writer = new Writer(url, prioritySampler, lookup)
+      writer.append('spans1')
+      writer.append('spans2')
+      writer.flush()
+    })
+
     ;[
       ['works when 0.5 is available', null, () => encode05],
       ['works when 0.5 is not available', new Error(), () => encode04]

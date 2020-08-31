@@ -134,16 +134,18 @@ function getProtocolVersion (writer) {
   }
 
   function cb (err, res, status) {
-    if (status !== 404 && status !== 200) {
-      setTimeout(() => getProtocolVersion(writer), 500)
-      return
-    }
     if (status === 404) {
       writer._protocolVersion = 'v0.4'
       writer._encoderForVersion = require('../../encode/0.4')
-    } else {
+    } else if (status === 200) {
       writer._protocolVersion = 'v0.5'
       writer._encoderForVersion = require('../../encode/0.5')
+    } else {
+      // Drop any traces already appended, so that we're not endlessly storing traces we can't send.
+      writer._appends.length = 0
+      writer._needsFlush = false
+      setTimeout(() => getProtocolVersion(writer), 500)
+      return
     }
 
     writer._reset()
@@ -154,6 +156,10 @@ function getProtocolVersion (writer) {
     if (writer._needsFlush) {
       writer.flush()
     }
+
+    // Clear everything so it's not being stored in memory forever.
+    writer._appends.length = 0
+    writer._needsFlush = false
   }
 
   setImmediate(() => makeRequest(
@@ -195,7 +201,9 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
   platform.request(Object.assign({ data }, options), (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
-      platform.startupLog.startupLog({ agentError: err })
+      platform.startupLog.startupLog({
+        agentError: status !== 404 && status !== 200 ? err : undefined
+      })
     }
     cb(err, res, status)
   })
