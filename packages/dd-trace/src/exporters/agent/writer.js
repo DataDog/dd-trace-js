@@ -101,10 +101,7 @@ class Writer {
     if (this._protocolVersion) {
       if (this._count > 0) {
         const traceData = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
-        let data = traceData
-        if (this._protocolVersion === 'v0.5') {
-          data = this._encoderForVersion.makePayload(traceData)
-        }
+        const data = this._encoderForVersion.makePayload(traceData)
 
         this._sendPayload(data, this._count)
 
