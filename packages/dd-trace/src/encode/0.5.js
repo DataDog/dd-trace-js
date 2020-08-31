@@ -2,7 +2,6 @@
 
 const util = require('./util')
 const tokens = require('./tokens')
-const { prefix: stringPrefix } = require('./cache')
 const EncoderState = require('./encoder-state')
 
 const ARRAY_OF_TWO_THINGS = Buffer.from([0x92])
@@ -51,8 +50,10 @@ function getTokenForString (text) {
 
   const id = stringMapLen++
   stringMap[text] = id
-  let stringBuf = Buffer.from(text || '', 'utf8')
-  stringBuf = Buffer.concat([stringPrefix(stringBuf.length), stringBuf])
+  const stringBuf = Buffer.from(text || '', 'utf8')
+  const prefix = tokens.str[stringBuf.length]
+  strings.set(prefix, stringsBufLen)
+  stringsBufLen += prefix.length
   strings.set(stringBuf, stringsBufLen)
   stringsBufLen += stringBuf.length
   return id
