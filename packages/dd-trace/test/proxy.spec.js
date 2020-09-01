@@ -358,28 +358,5 @@ describe('TracerProxy', () => {
         expect(returnValue).to.equal('scopeManager')
       })
     })
-
-    describe('injectRumData', () => {
-      beforeEach(() => {
-        const now = Date.now()
-        sinon.stub(Date, 'now').returns(now)
-      })
-
-      afterEach(() => {
-        Date.now.restore()
-      })
-
-      it('should return correct string', () => {
-        tracer.trace('injectRumData', () => {
-          const data = tracer.injectRumData()
-          const time = Date.now()
-          const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
-          const [, traceId, traceTime] = re.exec(data)
-          const span = tracer.scope().active().context()
-          expect(traceId).to.equal(span._traceId.toString())
-          expect(traceTime).to.equal(time.toString())
-        })
-      })
-    })
   })
 })

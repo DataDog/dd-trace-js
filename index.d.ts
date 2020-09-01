@@ -94,13 +94,6 @@ export declare interface Tracer extends opentracing.Tracer {
   wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
   wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
   wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
-
-  /**
-   * Create and return a string that can be included in the <head> of a
-   * document to enable RUM tracing to include it. The resulting string
-   * should not be cached.
-   */
-  injectRumData(): string;
 }
 
 export declare interface TraceOptions extends Analyzable {

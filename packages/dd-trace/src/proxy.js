@@ -123,15 +123,6 @@ class Tracer extends BaseTracer {
   bindEmitter () {
     this._deprecate('bindEmitter')
   }
-
-  injectRumData () {
-    const span = this.scope().active().context()
-    const traceId = span._traceId
-    const traceTime = Date.now()
-    return `\
-<meta name="dd-trace-id" content="${traceId}" />\
-<meta name="dd-trace-time" content="${traceTime}" />`
-  }
 }
 
 module.exports = Tracer
