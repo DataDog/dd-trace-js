@@ -146,10 +146,14 @@ function cachedString (str) {
     return stringCache[str]
   }
 
-  let buf = Buffer.from(str, 'utf-8')
-  buf = Buffer.concat([tokens.str[buf.length], buf])
-  stringCache[str] = buf
-  return buf
+  const buf = Buffer.from(str, 'utf-8')
+  const token = tokens.getStringPrefix(buf.length)
+  const prefixed = Buffer.allocUnsafe(buf.length + token.length)
+  prefixed.set(token)
+  prefixed.set(buf, token.length)
+  stringCache[str] = prefixed
+
+  return prefixed
 }
 
 module.exports = {

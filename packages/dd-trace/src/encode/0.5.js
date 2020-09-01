@@ -51,7 +51,7 @@ function getTokenForString (text) {
   const id = stringMapLen++
   stringMap[text] = id
   const stringBuf = Buffer.from(text || '', 'utf8')
-  const prefix = tokens.str[stringBuf.length]
+  const prefix = tokens.getStringPrefix(stringBuf.length)
   strings.set(prefix, stringsBufLen)
   stringsBufLen += prefix.length
   strings.set(stringBuf, stringsBufLen)

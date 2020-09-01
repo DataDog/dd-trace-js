@@ -70,6 +70,19 @@ function getMapPrefixes () {
   return values
 }
 
+function getStringPrefix (length) {
+  if (length <= 0xffff) {
+    return module.exports.str[length]
+  }
+
+  const buffer = Buffer.allocUnsafe(5)
+
+  util.writeUInt8(buffer, 0xdb, 0)
+  util.writeUInt32(buffer, length, 1)
+
+  return buffer
+}
+
 module.exports = {
   str: getStrPrefixes(),
   int: getIntPrefixes(),
@@ -80,5 +93,6 @@ module.exports = {
   uint32: Buffer.alloc(1, 0xce),
   int32: Buffer.alloc(1, 0xd2),
   uint64: Buffer.alloc(1, 0xcf),
-  int64: Buffer.alloc(1, 0xd3)
+  int64: Buffer.alloc(1, 0xd3),
+  getStringPrefix
 }
