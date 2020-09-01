@@ -28,6 +28,15 @@ function writeUInt32 (buffer, value, offset) {
   return 4
 }
 
+function writeId (buffer, id, offset) {
+  id = id.toBuffer()
+  if (id.length > 8) {
+    id = id.subarray(id.length - 8, id.length)
+  }
+  buffer.set(id, offset)
+  return 8
+}
+
 function writeInt64 (buffer, value, offset) {
   new Int64BE(buffer, offset, value) // eslint-disable-line no-new
   return 8
@@ -69,5 +78,6 @@ module.exports = {
   writeUInt16,
   writeUInt32,
   writeInt64,
+  writeId,
   write
 }

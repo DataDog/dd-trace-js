@@ -1,5 +1,7 @@
 'use strict'
 
+const { Int64BE } = require('int64-buffer') // TODO remove dependency
+
 const { AssertionError } = require('assert')
 
 function expectSomeSpan (agent, expected, timeout) {
@@ -34,7 +36,11 @@ function deepInclude (expected, actual, path = []) {
   for (const propName in expected) {
     path.push(propName.includes('.') ? `['${propName}']` : propName)
     if (isObject(expected[propName]) && isObject(actual[propName])) {
-      deepInclude(expected[propName], actual[propName], path)
+      if (expected[propName] instanceof Int64BE) {
+        deepInclude(expected[propName].toString(), actual[propName].toString(), path)
+      } else {
+        deepInclude(expected[propName], actual[propName], path)
+      }
     } else if (actual[propName] !== expected[propName]) {
       const pathStr = path.join('.').replace(/\.\[/g, '[')
       throw new AssertionError({

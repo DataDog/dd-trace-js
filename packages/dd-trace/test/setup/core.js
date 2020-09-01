@@ -112,6 +112,7 @@ function withVersions (plugin, modules, range, cb) {
             process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
               .filter(x => x && x !== 'undefined')
               .join(os.platform() === 'win32' ? ';' : ':')
+            process.env.DD_TRACE_AGENT_PROTOCOL_VERISON = 'v0.4'
 
             require('module').Module._initPaths()
           })

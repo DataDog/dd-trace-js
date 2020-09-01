@@ -2,6 +2,8 @@
 
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
+const { Int64BE } = require('int64-buffer') // TODO remove dependency
 
 wrapIt()
 
@@ -34,9 +36,11 @@ describe('Plugin', () => {
           parent = tracer.startSpan('parent')
           parent.finish()
 
-          return getPort().then(_port => {
-            port = _port
-          })
+          return getPort()
+        }).then(_port => {
+          port = _port
+
+          return new Promise(resolve => setImmediate(resolve))
         })
     })
 
@@ -55,21 +59,16 @@ describe('Plugin', () => {
     })
 
     it('should instrument connect with a path', done => {
-      agent
-        .use(traces => {
-          expect(traces[0][0]).to.deep.include({
-            name: 'ipc.connect',
-            service: 'test-ipc',
-            resource: '/tmp/dd-trace.sock'
-          })
-          expect(traces[0][0].meta).to.deep.include({
-            'span.kind': 'client',
-            'ipc.path': '/tmp/dd-trace.sock'
-          })
-          expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
-        })
-        .then(done)
-        .catch(done)
+      expectSomeSpan(agent, {
+        name: 'ipc.connect',
+        service: 'test-ipc',
+        resource: '/tmp/dd-trace.sock',
+        meta: {
+          'span.kind': 'client',
+          'ipc.path': '/tmp/dd-trace.sock'
+        },
+        parent_id: new Int64BE(parent.context()._spanId._buffer)
+      }).then(done).catch(done)
 
       tracer.scope().activate(parent, () => {
         net.connect('/tmp/dd-trace.sock')
@@ -78,87 +77,72 @@ describe('Plugin', () => {
 
     it('should instrument connect with a port', done => {
       const socket = new net.Socket()
-
-      agent
-        .use(traces => {
-          expect(traces[0][0]).to.deep.include({
-            name: 'tcp.connect',
-            service: 'test-tcp',
-            resource: `localhost:${port}`
-          })
-          expect(traces[0][0].meta).to.deep.include({
-            'span.kind': 'client',
-            'tcp.family': 'IPv4',
-            'tcp.remote.host': 'localhost',
-            'tcp.local.address': '127.0.0.1',
-            'out.host': 'localhost'
-          })
-          expect(traces[0][0].metrics).to.deep.include({
-            'out.port': port,
-            'tcp.remote.port': port,
-            'tcp.local.port': socket.localPort
-          })
-          expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
-        })
-        .then(done)
-        .catch(done)
-
       tracer.scope().activate(parent, () => {
         socket.connect(port, 'localhost')
+        socket.on('connect', () => {
+          expectSomeSpan(agent, {
+            name: 'tcp.connect',
+            service: 'test-tcp',
+            resource: `localhost:${port}`,
+            meta: {
+              'span.kind': 'client',
+              'tcp.family': 'IPv4',
+              'tcp.remote.host': 'localhost',
+              'tcp.local.address': '127.0.0.1',
+              'out.host': 'localhost'
+            },
+            metrics: {
+              'out.port': port,
+              'tcp.remote.port': port,
+              'tcp.local.port': socket.localPort
+            },
+            parent_id: new Int64BE(parent.context()._spanId._buffer)
+          }, 2000).then(done).catch(done)
+        })
       })
     })
 
     it('should instrument connect with TCP options', done => {
       const socket = new net.Socket()
-
-      agent
-        .use(traces => {
-          expect(traces[0][0]).to.deep.include({
-            name: 'tcp.connect',
-            service: 'test-tcp',
-            resource: `localhost:${port}`
-          })
-          expect(traces[0][0].meta).to.deep.include({
-            'span.kind': 'client',
-            'tcp.family': 'IPv4',
-            'tcp.remote.host': 'localhost',
-            'tcp.local.address': '127.0.0.1',
-            'out.host': 'localhost'
-          })
-          expect(traces[0][0].metrics).to.deep.include({
-            'out.port': port,
-            'tcp.remote.port': port,
-            'tcp.local.port': socket.localPort
-          })
-          expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
-        })
-        .then(done)
-        .catch(done)
-
       tracer.scope().activate(parent, () => {
         socket.connect({
           port,
           host: 'localhost'
         })
+        socket.on('connect', () => {
+          expectSomeSpan(agent, {
+            name: 'tcp.connect',
+            service: 'test-tcp',
+            resource: `localhost:${port}`,
+            meta: {
+              'span.kind': 'client',
+              'tcp.family': 'IPv4',
+              'tcp.remote.host': 'localhost',
+              'tcp.local.address': '127.0.0.1',
+              'out.host': 'localhost'
+            },
+            metrics: {
+              'out.port': port,
+              'tcp.remote.port': port,
+              'tcp.local.port': socket.localPort
+            },
+            parent_id: new Int64BE(parent.context()._spanId._buffer)
+          }).then(done).catch(done)
+        })
       })
     })
 
     it('should instrument connect with IPC options', done => {
-      agent
-        .use(traces => {
-          expect(traces[0][0]).to.deep.include({
-            name: 'ipc.connect',
-            service: 'test-ipc',
-            resource: '/tmp/dd-trace.sock'
-          })
-          expect(traces[0][0].meta).to.deep.include({
-            'span.kind': 'client',
-            'ipc.path': '/tmp/dd-trace.sock'
-          })
-          expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
-        })
-        .then(done)
-        .catch(done)
+      expectSomeSpan(agent, {
+        name: 'ipc.connect',
+        service: 'test-ipc',
+        resource: '/tmp/dd-trace.sock',
+        meta: {
+          'span.kind': 'client',
+          'ipc.path': '/tmp/dd-trace.sock'
+        },
+        parent_id: new Int64BE(parent.context()._spanId._buffer)
+      }).then(done).catch(done)
 
       tracer.scope().activate(parent, () => {
         net.connect({

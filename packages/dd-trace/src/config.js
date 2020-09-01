@@ -97,6 +97,10 @@ class Config {
       platform.env('DD_TRACE_DEBUG'),
       false
     )
+    const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
+      platform.env('DD_TRACE_AGENT_PROTOCOL_VERSION'),
+      null
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
@@ -151,6 +155,7 @@ class Config {
     }
     this.lookup = options.lookup
     this.startupLogsEnabled = isTrue(DD_TRACE_STARTUP_LOGS)
+    this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
 
     tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
 

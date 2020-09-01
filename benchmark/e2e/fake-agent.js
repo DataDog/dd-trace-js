@@ -17,6 +17,7 @@ async function streamLen (strm) {
     for await (const buf of strm) {
       len += buf.length
     }
+
     return len
   } catch (e) {
     return 0
