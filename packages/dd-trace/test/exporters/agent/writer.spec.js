@@ -252,8 +252,6 @@ describe('Writer', () => {
     })
 
     it('drops traces when there is an error before protocol version is set, then retries', (done) => {
-      let writer
-
       const url = {
         protocol: 'https',
         hostname: 'example.com',
@@ -274,7 +272,7 @@ describe('Writer', () => {
         expect(writer._needsFlush).to.equal(false)
       }
 
-      writer = new Writer(url, prioritySampler, lookup)
+      const writer = new Writer(url, prioritySampler, lookup)
       writer.append('spans1')
       writer.append('spans2')
       writer.flush()
