@@ -124,7 +124,7 @@ class Tracer extends BaseTracer {
     this._deprecate('bindEmitter')
   }
 
-  injectRumData () {
+  getRumData () {
     const span = this.scope().active().context()
     const traceId = span._traceId
     const traceTime = Date.now()

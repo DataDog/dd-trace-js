@@ -100,7 +100,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * document to enable RUM tracing to include it. The resulting string
    * should not be cached.
    */
-  injectRumData(): string;
+  getRumData(): string;
 }
 
 export declare interface TraceOptions extends Analyzable {

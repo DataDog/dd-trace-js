@@ -359,7 +359,7 @@ describe('TracerProxy', () => {
       })
     })
 
-    describe('injectRumData', () => {
+    describe('getRumData', () => {
       beforeEach(() => {
         const now = Date.now()
         sinon.stub(Date, 'now').returns(now)
@@ -370,8 +370,8 @@ describe('TracerProxy', () => {
       })
 
       it('should return correct string', () => {
-        tracer.trace('injectRumData', () => {
-          const data = tracer.injectRumData()
+        tracer.trace('getRumData', () => {
+          const data = tracer.getRumData()
           const time = Date.now()
           const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
           const [, traceId, traceTime] = re.exec(data)
