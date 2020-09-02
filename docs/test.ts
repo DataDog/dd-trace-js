@@ -36,7 +36,7 @@ tracer.init({
   debug: true,
   enabled: true,
   logInjection: true,
-  startupLogsEnabled: false,
+  startupLogs: false,
   analytics: true,
   env: 'test',
   version: '1.0.0',

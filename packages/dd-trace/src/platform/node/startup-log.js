@@ -56,7 +56,7 @@ function startupLog ({ agentError } = {}) {
 
   alreadyRan = true
 
-  if (!config.startupLogsEnabled) {
+  if (!config.startupLogs) {
     return
   }
 
