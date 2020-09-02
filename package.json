@@ -66,7 +66,6 @@
     "lodash.sortby": "^4.7.0",
     "lodash.uniq": "^4.5.0",
     "methods": "^1.1.2",
-    "mnemonist": "^0.32.0",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
     "multer": "^1.4.2",

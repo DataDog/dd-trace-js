@@ -2,10 +2,10 @@
 
 const util = require('./util')
 const tokens = require('./tokens')
-const cachedString = require('./cache')(1024)
 const EncoderState = require('./encoder-state')
 
 let state
+let stringCache
 
 const fields = getFields()
 
@@ -141,8 +141,25 @@ function getFields () {
   }, {})
 }
 
+function cachedString (str) {
+  if (stringCache[str]) {
+    return stringCache[str]
+  }
+
+  const strLen = Buffer.byteLength(str, 'utf-8')
+  const token = tokens.getStringPrefix(strLen)
+  const prefixed = Buffer.allocUnsafe(strLen + token.length)
+  prefixed.set(token)
+  prefixed.write(str, token.length, 'utf-8')
+  stringCache[str] = prefixed
+
+  return prefixed
+}
+
 module.exports = {
   encode,
   makePayload: data => data,
-  init: () => {}
+  init: () => {
+    stringCache = Object.create(null)
+  }
 }
