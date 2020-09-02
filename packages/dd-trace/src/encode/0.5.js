@@ -43,19 +43,19 @@ function encode (initBuffer, offset, trace, initWriter) {
   return offset
 }
 
-function getTokenForString (text) {
+function getTokenForString (text = '') {
   if (text in stringMap) {
     return stringMap[text]
   }
 
   const id = stringMapLen++
   stringMap[text] = id
-  const stringBuf = Buffer.from(text || '', 'utf8')
-  const prefix = tokens.getStringPrefix(stringBuf.length)
+  const stringLen = Buffer.byteLength(text, 'utf-8')
+  const prefix = tokens.getStringPrefix(stringLen)
   strings.set(prefix, stringsBufLen)
   stringsBufLen += prefix.length
-  strings.set(stringBuf, stringsBufLen)
-  stringsBufLen += stringBuf.length
+  strings.write(text, stringsBufLen, 'utf-8')
+  stringsBufLen += stringLen
   return id
 }
 

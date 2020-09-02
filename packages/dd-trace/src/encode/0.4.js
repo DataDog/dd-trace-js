@@ -146,11 +146,11 @@ function cachedString (str) {
     return stringCache[str]
   }
 
-  const buf = Buffer.from(str, 'utf-8')
-  const token = tokens.getStringPrefix(buf.length)
-  const prefixed = Buffer.allocUnsafe(buf.length + token.length)
+  const strLen = Buffer.byteLength(str, 'utf-8')
+  const token = tokens.getStringPrefix(strLen)
+  const prefixed = Buffer.allocUnsafe(strLen + token.length)
   prefixed.set(token)
-  prefixed.set(buf, token.length)
+  prefixed.write(str, token.length, 'utf-8')
   stringCache[str] = prefixed
 
   return prefixed
