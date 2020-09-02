@@ -27,11 +27,17 @@ class Config {
       platform.env('DD_TRACE_ANALYTICS'),
       false
     )
+    // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
-      options.profiling,
-      platform.env('DD_PROFILING_ENABLED'),
+      // options.profiling,
+      // platform.env('DD_PROFILING_ENABLED'),
       false
     )
+    const DD_PROFILING_EXPORTERS = coalesce(
+      platform.env('DD_PROFILING_EXPORTERS'),
+      'agent'
+    )
+    const DD_PROFILING_SOURCE_MAP = platform.env('DD_PROFILING_SOURCE_MAP')
     const DD_LOGS_INJECTION = coalesce(
       options.logInjection,
       platform.env('DD_LOGS_INJECTION'),
@@ -91,6 +97,10 @@ class Config {
       platform.env('DD_TRACE_DEBUG'),
       false
     )
+    const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
+      platform.env('DD_TRACE_AGENT_PROTOCOL_VERSION'),
+      null
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
@@ -139,10 +149,13 @@ class Config {
       'debug'
     )
     this.profiling = {
-      enabled: isTrue(DD_PROFILING_ENABLED)
+      enabled: isTrue(DD_PROFILING_ENABLED),
+      sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
+      exporters: DD_PROFILING_EXPORTERS
     }
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
+    this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
 
     tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
 

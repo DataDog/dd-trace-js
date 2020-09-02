@@ -14,4 +14,5 @@
 !binding.gyp
 !index.d.ts
 !index.js
+!init.js
 !package.json

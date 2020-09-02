@@ -1,18 +1,18 @@
 'use strict'
 
 const log = require('../../log')
-const { profiler, AgentExporter } = require('../../profiling')
+const { profiler, AgentExporter, FileExporter } = require('../../profiling')
 
 let cached
 
 module.exports = config => cached || (cached = {
   start: () => {
-    const { service, version, env, url, hostname, port } = config
-    const { enabled } = config.profiling
-    const exporter = new AgentExporter({ url, hostname, port })
+    const { service, version, env } = config
+    const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
-      warn: (message) => log.debug(message),
+      info: (message) => log.info(message),
+      warn: (message) => log.warn(message),
       error: (message) => log.error(message)
     }
 
@@ -22,7 +22,8 @@ module.exports = config => cached || (cached = {
       version,
       env,
       logger,
-      exporters: [exporter]
+      sourceMap,
+      exporters: getExporters(exporters, config)
     })
   },
 
@@ -30,3 +31,20 @@ module.exports = config => cached || (cached = {
     profiler.stop()
   }
 })
+
+function getExporters (names, { url, hostname, port }) {
+  const exporters = []
+
+  for (const name of names.split(',')) {
+    switch (name) {
+      case 'agent':
+        exporters.push(new AgentExporter({ url, hostname, port }))
+        break
+      case 'file':
+        exporters.push(new FileExporter())
+        break
+    }
+  }
+
+  return exporters
+}

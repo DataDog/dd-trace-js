@@ -1,5 +1,7 @@
 'use strict'
 
+process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = 'v0.4'
+
 const execSync = require('child_process').execSync
 const exec = cmd => execSync(cmd, { stdio: [0, 1, 2] })
 

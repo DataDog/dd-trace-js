@@ -9,11 +9,11 @@ class Profiler extends EventEmitter {
   start (options) {
     if (this._enabled) return
 
-    this._config = new Config(options)
+    const config = this._config = new Config(options)
 
-    if (!this._config.enabled) return
+    if (!config.enabled) return
 
-    this._logger = this._config.logger
+    this._logger = config.logger
 
     if (!semver.satisfies(process.version, '>=10.12')) {
       this._logger.error('Profiling could not be started because it requires Node >=10.12')
@@ -23,9 +23,9 @@ class Profiler extends EventEmitter {
     this._enabled = true
 
     try {
-      const mapper = new SourceMapper()
+      const mapper = config.sourceMap ? new SourceMapper() : null
 
-      for (const profiler of this._config.profilers) {
+      for (const profiler of config.profilers) {
         profiler.start({ mapper }) // TODO: move this outside of profilers
       }
     } catch (e) {
@@ -33,7 +33,7 @@ class Profiler extends EventEmitter {
       this.stop()
     }
 
-    this._capture(this._config.flushInterval)
+    this._capture(config.flushInterval)
 
     return this
   }

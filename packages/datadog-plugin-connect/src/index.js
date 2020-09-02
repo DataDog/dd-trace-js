@@ -6,11 +6,7 @@ function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
     if (typeof connect !== 'function') return connect
 
-    const connectWithTrace = function connectWithTrace () {
-      return connect._datadog_wrapper.apply(this, arguments)
-    }
-
-    connect._datadog_wrapper = function () {
+    return function connectWithTrace () {
       const app = connect()
 
       if (!app) return app
@@ -20,8 +16,6 @@ function createWrapConnect (tracer, config) {
 
       return app
     }
-
-    return connectWithTrace
   }
 }
 
@@ -58,10 +52,6 @@ function createWrapHandle (tracer, config) {
       })
     }
   }
-}
-
-function unwrapConnect (connect) {
-  connect._datadog_wrapper = connect
 }
 
 function wrapLayerHandle (layer) {
@@ -112,10 +102,10 @@ module.exports = [
     versions: ['>=3'],
     patch (connect, tracer, config) {
       // `connect` is a function so we return a wrapper that will replace its export.
-      return createWrapConnect(tracer, config)(connect)
+      return this.wrapExport(connect, createWrapConnect(tracer, config)(connect))
     },
     unpatch (connect) {
-      unwrapConnect(connect)
+      this.unwrapExport(connect)
     }
   },
   {

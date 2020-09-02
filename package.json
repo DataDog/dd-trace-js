@@ -1,12 +1,12 @@
 {
   "name": "dd-trace",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "browser": "browser.js",
   "typings": "index.d.ts",
   "scripts": {
-    "install": "node scripts/should_rebuild && node-gyp-build || exit 0",
+    "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
     "rebuild": "node-gyp rebuild",
     "prebuild": "node scripts/prebuild.js",
     "prebuilds": "node scripts/prebuilds.js",

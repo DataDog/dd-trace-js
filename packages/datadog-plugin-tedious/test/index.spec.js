@@ -36,7 +36,8 @@ describe('Plugin', () => {
         config = {
           server: 'localhost',
           options: {
-            database: 'master'
+            database: 'master',
+            trustServerCertificate: true
           }
         }
         if (semver.intersects(version, '>=4.0.0')) {

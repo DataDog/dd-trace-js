@@ -428,7 +428,6 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | flushInterval  | -                              | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | lookup         | -                              | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | runtimeMetrics | `DD_RUNTIME_METRICS_ENABLED`   | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
-| profiling      | `DD_PROFILING_ENABLED`         | `false`        | Whether to enable profiling. |
 | reportHostname | `DD_TRACE_REPORT_HOSTNAME`     | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
 | experimental   | -                              | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins        | -                              | `true`         | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
@@ -454,8 +453,10 @@ const logger = bunyan.createLogger({
 
 const tracer = require('dd-trace').init({
   logger: {
+    error: err => logger.error(err),
+    warn: message => logger.warn(message),
+    info: message => logger.info(message),
     debug: message => logger.trace(message),
-    error: err => logger.error(err)
   },
   debug: true
 })
