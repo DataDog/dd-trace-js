@@ -11,13 +11,12 @@ function createWrapRequest (tracer, config) {
     return function requestWithTrace (cb) {
       if (!this.service) return send.apply(this, arguments)
 
-      const serviceName = this.service.serviceIdentifier
+      const serviceIdentifier = this.service.serviceIdentifier
+      const serviceName = getServiceName(serviceIdentifier, tracer, config)
       const childOf = tracer.scope().active()
       const tags = {
         [Tags.SPAN_KIND]: 'client',
-        'service.name': config.service
-          ? `${config.service}-aws-${serviceName}`
-          : `${tracer._service}-aws-${serviceName}`,
+        'service.name': serviceName,
         'aws.operation': this.operation,
         'aws.region': this.service.config && this.service.config.region,
         'aws.service': this.service.api && this.service.api.className,
@@ -32,20 +31,20 @@ function createWrapRequest (tracer, config) {
       this.on('complete', response => {
         if (!span) return
 
-        awsHelpers.addResponseTags(span, response, serviceName, config, tracer)
+        awsHelpers.addResponseTags(span, response, serviceIdentifier, config, tracer)
         awsHelpers.finish(span, response.error)
       })
 
       analyticsSampler.sample(span, config.analytics)
 
-      awsHelpers.requestInject(span, this, serviceName, tracer)
+      awsHelpers.requestInject(span, this, serviceIdentifier, tracer)
 
       const request = this
 
       return tracer.scope().activate(span, () => {
         let boundCb
         if (typeof cb === 'function') {
-          boundCb = awsHelpers.wrapCb(cb, serviceName, tags, request, tracer, childOf)
+          boundCb = awsHelpers.wrapCb(cb, serviceIdentifier, tags, request, tracer, childOf)
         } else {
           boundCb = cb
         }
@@ -71,6 +70,7 @@ function normalizeConfig (config) {
   const hooks = getHooks(config)
 
   return Object.assign({}, config, {
+    splitByAwsService: config.splitByAwsService !== false,
     hooks
   })
 }
@@ -80,6 +80,14 @@ function getHooks (config) {
   const request = (config.hooks && config.hooks.request) || noop
 
   return { request }
+}
+
+function getServiceName (serviceIdentifier, tracer, config) {
+  const service = config.service || tracer._service
+
+  return config.splitByAwsService
+    ? `${service}-aws-${serviceIdentifier}`
+    : service
 }
 
 // <2.1.35 has breaking changes for instrumentation
