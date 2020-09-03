@@ -668,6 +668,12 @@ declare namespace plugins {
    */
   interface aws_sdk extends Instrumentation {
     /**
+     * Whether to add a suffix to the service name so that each AWS service has its own service name.
+     * @default true
+     */
+    splitByAwsService?: boolean;
+
+    /**
      * Hooks to run before spans are finished.
      */
     hooks?: {
