@@ -135,6 +135,7 @@ const elasticsearchOptions = {
 
 const awsSdkOptions = {
   service: 'test',
+  splitByAwsService: false,
   hooks: {
     request: (span, response) => {},
   }
