@@ -359,7 +359,7 @@ describe('TracerProxy', () => {
       })
     })
 
-    describe('injectRumData', () => {
+    describe('getRumData', () => {
       beforeEach(() => {
         const now = Date.now()
         sinon.stub(Date, 'now').returns(now)
@@ -369,9 +369,16 @@ describe('TracerProxy', () => {
         Date.now.restore()
       })
 
+      it('should be disabled by default', () => {
+        tracer.trace('getRumData', () => {
+          expect(tracer.getRumData()).to.equal('')
+        })
+      })
+
       it('should return correct string', () => {
-        tracer.trace('injectRumData', () => {
-          const data = tracer.injectRumData()
+        config.experimental.enableGetRumData = true
+        tracer.trace('getRumData', () => {
+          const data = tracer.getRumData()
           const time = Date.now()
           const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
           const [, traceId, traceTime] = re.exec(data)

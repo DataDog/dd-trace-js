@@ -136,6 +136,7 @@ class Config {
       runtimeId: !(!options.experimental || !options.experimental.runtimeId),
       exporter: options.experimental && options.experimental.exporter,
       peers: (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
+      enableGetRumData: (options.experimental && !!options.experimental.enableGetRumData),
       sampler
     }
     this.reportHostname = isTrue(coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false))
