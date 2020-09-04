@@ -110,7 +110,7 @@ async function withFakeAgent (fn) {
   subProcess.kill()
 }
 
-async function testBoth (url, duration, prof, testAsyncHooks) {
+async function testBoth ({ url, duration, prof, testAsyncHooks }) {
   // TODO We should have ways of invoking the individual tests in isolation
   cd(path.join(__dirname, 'acmeair-nodejs'))
   const results = {}
@@ -179,17 +179,33 @@ function logResult (results, type, testAsyncHooks) {
   }
 }
 
+function getOpts () {
+  const argv = process.argv.slice(2)
+  const opts = {
+    duration: 10,
+    url: 'http://localhost:9080/rest/api/config/countCustomers'
+  }
+  for (const arg of argv) {
+    if (arg === '--prof') {
+      opts.prof = true
+    } else if (arg === '--async_hooks') {
+      opts.testAsyncHooks = true
+    } else if (arg.startsWith('--duration=')) {
+      opts.duration = Number(arg.substr(11))
+    } else {
+      opts.url = arg
+    }
+  }
+  return opts
+}
+
 async function main () {
-  const duration = parseInt(process.env.DD_BENCH_DURATION || '10')
-  const prof = !!process.env.DD_BENCH_PROF
-  const testAsyncHooks = !!process.env.DD_BENCH_TEST_ASYNC_HOOKS
-  const url = process.argv[2] || 'http://localhost:9080/rest/api/config/countCustomers'
   await ensureAppIsInstalled()
   console.log('# checking that mongo is alive')
   await mongoService()
   console.log('# it is alive')
   await checkDb()
-  await testBoth(url, duration, prof, testAsyncHooks)
+  await testBoth(getOpts())
 }
 
 main().catch(e => {
