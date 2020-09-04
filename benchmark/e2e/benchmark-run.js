@@ -110,7 +110,7 @@ async function withFakeAgent (fn) {
   subProcess.kill()
 }
 
-async function testBoth (url, duration, prof) {
+async function testBoth (url, duration, prof, testAsyncHooks) {
   // TODO We should have ways of invoking the individual tests in isolation
   cd(path.join(__dirname, 'acmeair-nodejs'))
   const results = {}
@@ -122,14 +122,16 @@ async function testBoth (url, duration, prof) {
   console.log('# Running without the tracer (control) ...')
   results.withoutTracer = await testOneScenario(url, duration, prof)
 
-  console.log('# Running with async_hooks ...')
-  results.withAsyncHooks = await testOneScenario(url, duration, prof, { DD_BENCH_ASYNC_HOOKS: 1 })
+  if (testAsyncHooks) {
+    console.log('# Running with async_hooks ...')
+    results.withAsyncHooks = await testOneScenario(url, duration, prof, { DD_BENCH_ASYNC_HOOKS: 1 })
+  }
 
   console.log(`>>>>>> RESULTS FOR ${url} RUNNING FOR ${duration} SECONDS`)
 
-  logResult(results, 'requests')
-  logResult(results, 'latency')
-  logResult(results, 'throughput')
+  logResult(results, 'requests', testAsyncHooks)
+  logResult(results, 'latency', testAsyncHooks)
+  logResult(results, 'throughput', testAsyncHooks)
 
   console.log('\n\nSUMMARY:')
   console.log(
@@ -153,29 +155,41 @@ function pad (str, num) {
   return Array(num - String(str).length).fill(' ').join('') + str
 }
 
-function logResult (results, type) {
+function logResult (results, type, testAsyncHooks) {
   console.log(`\n${type.toUpperCase()}:`)
-  console.log(`                  without tracer        with async_hooks             with tracer`)
-  for (const name in results.withoutTracer[type]) {
-    console.log(
-      pad(name, 7),
-      `\t${pad(results.withoutTracer[type][name], 16)}`,
-      `\t${pad(results.withAsyncHooks[type][name], 16)}`,
-      `\t${pad(results.withTracer[type][name], 16)}`
-    )
+  if (testAsyncHooks) {
+    console.log(`                  without tracer        with async_hooks             with tracer`)
+    for (const name in results.withoutTracer[type]) {
+      console.log(
+        pad(name, 7),
+        `\t${pad(results.withoutTracer[type][name], 16)}`,
+        `\t${pad(results.withAsyncHooks[type][name], 16)}`,
+        `\t${pad(results.withTracer[type][name], 16)}`
+      )
+    }
+  } else {
+    console.log(`                  without tracer             with tracer`)
+    for (const name in results.withoutTracer[type]) {
+      console.log(
+        pad(name, 7),
+        `\t${pad(results.withoutTracer[type][name], 16)}`,
+        `\t${pad(results.withTracer[type][name], 16)}`
+      )
+    }
   }
 }
 
 async function main () {
   const duration = parseInt(process.env.DD_BENCH_DURATION || '10')
   const prof = !!process.env.DD_BENCH_PROF
+  const testAsyncHooks = !!process.env.DD_BENCH_TEST_ASYNC_HOOKS
   const url = process.argv[2] || 'http://localhost:9080/rest/api/config/countCustomers'
   await ensureAppIsInstalled()
   console.log('# checking that mongo is alive')
   await mongoService()
   console.log('# it is alive')
   await checkDb()
-  await testBoth(url, duration, prof)
+  await testBoth(url, duration, prof, testAsyncHooks)
 }
 
 main().catch(e => {
