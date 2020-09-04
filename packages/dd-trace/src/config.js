@@ -83,7 +83,7 @@ class Config {
       platform.appVersion()
     )
     const DD_TRACE_STARTUP_LOGS = coalesce(
-      options.startupLogsEnabled,
+      options.startupLogs,
       platform.env('DD_TRACE_STARTUP_LOGS'),
       true
     )
@@ -154,7 +154,7 @@ class Config {
       exporters: DD_PROFILING_EXPORTERS
     }
     this.lookup = options.lookup
-    this.startupLogsEnabled = isTrue(DD_TRACE_STARTUP_LOGS)
+    this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
 
     tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
