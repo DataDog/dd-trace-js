@@ -8,6 +8,7 @@ function createWrapHandle (tracer, config) {
 
   return function wrapHandle (handle) {
     return function handleWithTrace (req, res) {
+      web.setHost(req, req.hostname)
       web.instrument(tracer, config, req, res, 'express.request')
 
       return handle.apply(this, arguments)

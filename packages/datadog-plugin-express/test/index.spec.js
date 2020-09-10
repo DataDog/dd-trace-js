@@ -68,6 +68,42 @@ describe('Plugin', () => {
           })
         })
 
+        it('should use the correct host from express', done => {
+          const app = express()
+          app.set('trust proxy')
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET /user')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.url', `http://example.com:${port}/user`)
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, null, {
+                  headers: {
+                    X_FORWARDED_HOST: 'example.com'
+                  }
+                })
+                .catch(done)
+            })
+          })
+        })
+
         it('should do automatic instrumentation on routers', done => {
           const app = express()
           const router = express.Router()

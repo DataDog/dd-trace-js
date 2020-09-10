@@ -47,6 +47,13 @@ const web = {
     })
   },
 
+  // Set the correct hostname for the current request
+  setHost(req, host) {
+    this.patch(req)
+
+    req._datadog.host = host
+  },
+
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
     this.patch(req)
@@ -412,7 +419,8 @@ function extractURL (req) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
   } else {
     const protocol = req.connection.encrypted ? 'https' : 'http'
-    return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
+    const host = req._datadog.host || headers['host']
+    return `${protocol}://${host}${req.originalUrl || req.url}`
   }
 }
 
