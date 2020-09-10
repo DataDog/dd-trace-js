@@ -110,9 +110,9 @@ async function withFakeAgent (fn) {
   subProcess.kill()
 }
 
-async function testBoth ({ url, duration, prof, testAsyncHooks }) {
+async function testBoth ({ url, duration, prof, testAsyncHooks, appDir }) {
   // TODO We should have ways of invoking the individual tests in isolation
-  cd(path.join(__dirname, 'acmeair-nodejs'))
+  cd(path.join(__dirname, appDir))
   const results = {}
   await withFakeAgent(async () => {
     console.log(' # Running with the tracer ...')
@@ -183,7 +183,8 @@ function getOpts () {
   const argv = process.argv.slice(2)
   const opts = {
     duration: 10,
-    url: 'http://localhost:9080/rest/api/config/countCustomers'
+    url: 'http://localhost:9080/rest/api/config/countCustomers',
+    appDir: 'acmeair-nodejs'
   }
   for (const arg of argv) {
     if (arg === '--prof') {
@@ -192,6 +193,8 @@ function getOpts () {
       opts.testAsyncHooks = true
     } else if (arg.startsWith('--duration=')) {
       opts.duration = Number(arg.substr(11))
+    } else if (arg.startsWith('--appdir=')) {
+      opts.appDir = arg.substr(9)
     } else {
       opts.url = arg
     }
