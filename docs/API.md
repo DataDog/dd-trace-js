@@ -472,8 +472,10 @@ For example:
 const tracer = require('dd-trace').init()
 
 tracer.use('express', {
-  request: (span, req res) => {
-    span.setTag('customer.id', req.query.id)
+  hooks: {
+    request: (span, req res) => {
+      span.setTag('customer.id', req.query.id)
+    }
   }
 })
 ```
