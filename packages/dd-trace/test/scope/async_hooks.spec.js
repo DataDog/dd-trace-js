@@ -7,7 +7,7 @@ const Span = require('opentracing').Span
 const platform = require('../../src/platform')
 const testScope = require('./test')
 
-wrapIt()
+wrapIt('async_hooks')
 
 describe('Scope (async_hooks)', () => {
   let scope
