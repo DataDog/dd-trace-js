@@ -16,7 +16,7 @@
     "postpublish": "node scripts/postpublish.js",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",
-    "bench:e2e": "cd benchmark/e2e && node benchmark-run.js",
+    "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
     "lint": "node scripts/check_licenses.js && eslint .",
