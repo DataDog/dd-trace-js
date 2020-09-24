@@ -12,6 +12,8 @@ const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 
+const ID_ZERO = id('0')
+
 const map = {
   'service.name': 'service',
   'span.type': 'type',
@@ -31,12 +33,14 @@ function format (span) {
 function formatSpan (span) {
   const spanContext = span.context()
 
+  const serializedName = serialize(spanContext._name)
+
   return {
     trace_id: spanContext._traceId,
     span_id: spanContext._spanId,
-    parent_id: spanContext._parentId || id('0'),
-    name: serialize(spanContext._name),
-    resource: serialize(spanContext._name),
+    parent_id: spanContext._parentId || ID_ZERO,
+    name: serializedName,
+    resource: serializedName,
     error: 0,
     meta: {},
     metrics: {},
@@ -167,6 +171,9 @@ function addObjectTag (meta, metrics, key, value, seen) {
 }
 
 function serialize (obj) {
+  if (typeof obj === 'string') {
+    return obj
+  }
   try {
     return obj && typeof obj.toString !== 'function' ? JSON.stringify(obj) : String(obj)
   } catch (e) {
