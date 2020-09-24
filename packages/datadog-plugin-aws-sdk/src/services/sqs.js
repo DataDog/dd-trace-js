@@ -44,6 +44,8 @@ class Sqs {
       }
       if (!request.params.MessageAttributes) {
         request.params.MessageAttributes = {}
+      } else if (Object.keys(request.params.MessageAttributes).length >=10) { // SQS quota
+        return
       }
       const ddInfo = {}
       tracer.inject(span, 'text_map', ddInfo)
