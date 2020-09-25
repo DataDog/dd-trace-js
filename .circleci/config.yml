@@ -49,6 +49,19 @@ node-bench-base: &node-bench-base
         name: Benchmark Tracer
         command: yarn bench
 
+node-bench-e2e-base: &node-bench-e2e-base
+  resource_class: medium
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - run:
+        name: E2E Benchmark
+        command: yarn bench:e2e
+
 node-bench-profiler-base: &node-bench-profiler-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -202,6 +215,15 @@ jobs:
     <<: *node-bench-profiler-base
     docker:
       - image: node
+
+  node-bench-e2e-latest:
+    <<: *node-bench-e2e-base
+    docker:
+      - image: node
+        environment:
+          - SERVICES=mongo
+          - PLUGINS=mongodb-core
+      - image: circleci/mongo
 
   # Core tests
 
@@ -943,6 +965,7 @@ workflows:
       - node-core-windows
       - node-bench-latest
       - node-bench-profiler-latest
+      - node-bench-e2e-latest
       - node-amqplib
       - node-amqp10
       # - node-aws-sdk
@@ -1119,6 +1142,7 @@ workflows:
       - node-core-windows
       - node-bench-latest
       - node-bench-profiler-latest
+      - node-bench-e2e-latest
       - node-amqplib
       - node-amqp10
       # - node-aws-sdk
