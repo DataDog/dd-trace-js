@@ -25,17 +25,19 @@ describe('exporters/file', () => {
     }).FileExporter
   })
 
-  it('should export to a file per profile type', async () => {
+  it('should export to a file per profile type', done => {
     const exporter = new FileExporter()
     const profiles = {
       test: 'profile'
     }
 
-    encoder.encode.withArgs('profile').resolves('buffer')
+    encoder.encode.withArgs('profile').yields(null, 'buffer')
 
-    await exporter.export({ profiles })
+    exporter.export({ profiles }, () => {
+      sinon.assert.calledOnce(fs.writeFile)
+      sinon.assert.calledWith(fs.writeFile, 'test.pb.gz', 'buffer')
 
-    sinon.assert.calledOnce(fs.writeFile)
-    sinon.assert.calledWith(fs.writeFile, 'test.pb.gz', 'buffer')
+      done()
+    })
   })
 })

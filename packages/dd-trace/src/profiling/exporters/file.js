@@ -1,27 +1,27 @@
 'use strict'
 
-const fs = require('fs')
-const util = require('util')
+const { writeFile } = require('fs')
 const { Encoder } = require('../encoders/pprof')
-
-const writeFile = util.promisify(fs.writeFile)
+const { parallel } = require('../util')
 
 class FileExporter {
   constructor () {
     this._encoder = new Encoder()
   }
 
-  async export ({ profiles }) {
+  export ({ profiles }, callback) {
     const types = Object.keys(profiles)
-    const promises = types.map(type => this._write(type, profiles[type]))
+    const tasks = types.map(type => cb => this._write(type, profiles[type], cb))
 
-    return Promise.all(promises)
+    parallel(tasks, callback)
   }
 
-  async _write (type, profile) {
-    const buffer = await this._encoder.encode(profile)
+  _write (type, profile, callback) {
+    this._encoder.encode(profile, (err, buffer) => {
+      if (err) return callback(err)
 
-    return writeFile(`${type}.pb.gz`, buffer)
+      writeFile(`${type}.pb.gz`, buffer, callback)
+    })
   }
 }
 

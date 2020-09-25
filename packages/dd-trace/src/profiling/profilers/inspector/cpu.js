@@ -31,20 +31,17 @@ class InspectorCpuProfiler {
     this._mapper = null
   }
 
-  profile () {
-    let profile
-
+  profile (callback) {
     this._session.post('Profiler.stop', (err, params) => {
-      if (err) throw err
-      profile = params.profile
+      if (err) return callback(err)
+
+      this._session.post('Profiler.start')
+
+      this._serialize(params.profile, callback)
     })
-
-    this._session.post('Profiler.start')
-
-    return this._serialize(profile)
   }
 
-  async _serialize ({ startTime, endTime, nodes, samples, timeDeltas }) {
+  _serialize ({ startTime, endTime, nodes, samples, timeDeltas }, callback) {
     const sampleType = [['sample', 'count'], ['wall', 'microseconds']]
     const periodType = ['wall', 'microseconds']
     const period = this._samplingInterval
@@ -57,7 +54,7 @@ class InspectorCpuProfiler {
       if (node.callFrame.functionName === '(root)') continue
 
       const { id, children, callFrame } = node
-      const { functionName, url, lineNumber } = this._mapper ? await this._mapper.getSource(callFrame) : callFrame
+      const { functionName, url, lineNumber } = callFrame // TODO: support source maps
       const functionId = profile.addFunction(functionName, url).id
       const locationId = profile.addLocation(functionId, id, lineNumber).id
 
@@ -72,7 +69,7 @@ class InspectorCpuProfiler {
       profile.addSample(samples[i], [1, timeDeltas[i]])
     }
 
-    return profile.export()
+    callback(null, profile.export())
   }
 }
 

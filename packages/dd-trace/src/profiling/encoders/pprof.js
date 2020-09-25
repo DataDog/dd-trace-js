@@ -1,14 +1,16 @@
 'use strict'
 
-const util = require('util')
-const zlib = require('zlib')
-const gzip = util.promisify(zlib.gzip)
+const { gzip } = require('zlib')
 const { perftools } = require('../../../../../protobuf/profile')
 const { Profile } = perftools.profiles
 
 class Encoder {
-  async encode (profile) {
-    return gzip(Profile.encode(profile).finish())
+  encode (profile, callback) {
+    try {
+      gzip(Profile.encode(profile).finish(), callback)
+    } catch (e) {
+      callback(e)
+    }
   }
 }
 

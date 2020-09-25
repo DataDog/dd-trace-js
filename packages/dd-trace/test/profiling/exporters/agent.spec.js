@@ -101,8 +101,7 @@ describe('exporters/agent', () => {
         res.send()
       })
 
-      exporter.export({ profiles, start, end, tags })
-        .catch(done)
+      exporter.export({ profiles, start, end, tags }, e => e && done(e))
     })
   })
 
@@ -170,8 +169,7 @@ describe('exporters/agent', () => {
         res.send()
       })
 
-      exporter.export({ profiles, start, end, tags })
-        .catch(done)
+      exporter.export({ profiles, start, end, tags }, e => e && done(e))
     })
   })
 })

@@ -11,7 +11,6 @@ const startupLog = require('./startup-log')
 const exporter = require('./exporter')
 const Loader = require('./loader')
 const Scope = require('../../scope/zone')
-const client = require('./client')
 
 const platform = {
   _config: {},
@@ -38,8 +37,7 @@ const platform = {
   profiler: () => ({
     start: () => {},
     stop: () => {}
-  }),
-  client
+  })
 }
 
 module.exports = platform

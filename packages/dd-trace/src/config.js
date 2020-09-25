@@ -31,6 +31,7 @@ class Config {
     const DD_PROFILING_ENABLED = coalesce(
       // options.profiling,
       // platform.env('DD_PROFILING_ENABLED'),
+      platform.env('DD_EXPERIMENTAL_PROFILING_ENABLED'),
       false
     )
     const DD_PROFILING_EXPORTERS = coalesce(
