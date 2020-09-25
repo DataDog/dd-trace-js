@@ -82,6 +82,7 @@ function getHooks (config) {
   return { request }
 }
 
+// TODO: test splitByAwsService when the test suite is fixed
 function getServiceName (serviceIdentifier, tracer, config) {
   const service = config.service || tracer._service
 
