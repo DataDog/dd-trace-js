@@ -155,22 +155,34 @@ describe('util', () => {
       sinon.assert.calledWith(callback, null, ['a', 'b', 'c'])
     })
 
-    it('should fail on the first error and wait for all tasks to complete', () => {
+    it('should fail on the first error without waiting for all tasks to complete', () => {
       const error = new Error('boom')
 
       util.parallel(tasks, callback)
 
       sinon.assert.notCalled(callback)
 
-      tasks[1].yield(error)
-
-      sinon.assert.notCalled(callback)
-
       tasks[0].yield(null, 'a')
-      tasks[2].yield(null, 'c')
+      tasks[1].yield(error)
 
       sinon.assert.called(callback)
       sinon.assert.calledWith(callback, error)
+
+      tasks[2].yield(null, 'c')
+
+      sinon.assert.calledOnce(callback)
+    })
+
+    it('should ignore further errors when failing', () => {
+      const error = new Error('boom')
+
+      util.parallel(tasks, callback)
+
+      tasks[0].yield(error)
+      tasks[1].yield(error)
+      tasks[2].yield(error)
+
+      sinon.assert.calledOnce(callback)
     })
   })
 })

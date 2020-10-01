@@ -35,20 +35,22 @@ function parallel (tasks, callback) {
   const results = new Array(tasks.length)
 
   let counter = 0
-  let error = null
+  let failing = false
 
   for (let i = 0; i < tasks.length; i++) {
     const taskIndex = i
 
     tasks[taskIndex]((err, result) => {
-      if (err && !error) {
-        error = err
+      if (failing) return
+      if (err) {
+        failing = true
+        return callback(err)
       }
 
       results[taskIndex] = result
 
       if (++counter === tasks.length) {
-        error ? callback(error) : callback(null, results)
+        callback(null, results)
       }
     })
   }
