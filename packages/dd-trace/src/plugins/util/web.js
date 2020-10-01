@@ -154,15 +154,13 @@ const web = {
       return
     }
 
-    Object.defineProperty(req, '_datadog', {
-      value: {
-        span: null,
-        paths: [],
-        middleware: [],
-        beforeEnd: [],
-        config: {}
-      }
-    })
+    req._datadog = {
+      span: null,
+      paths: [],
+      middleware: [],
+      beforeEnd: [],
+      config: {}
+    }
   },
 
   // Return the request root span.
@@ -380,8 +378,7 @@ function addResourceTag (req) {
 
   if (tags['resource.name']) return
 
-  const resource = [req.method]
-    .concat(tags[HTTP_ROUTE])
+  const resource = [req.method, tags[HTTP_ROUTE]]
     .filter(val => val)
     .join(' ')
 
