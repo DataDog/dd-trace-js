@@ -4,6 +4,7 @@ const semver = require('semver')
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { SourceMapper } = require('./mapper')
+const { eachSeries } = require('./util')
 
 class Profiler extends EventEmitter {
   start (options) {
@@ -59,31 +60,39 @@ class Profiler extends EventEmitter {
     this._timer.unref()
   }
 
-  async _collect (start) {
-    try {
-      const end = new Date()
-      const profiles = {}
+  _collect (start) {
+    const end = new Date()
+    const profiles = {}
 
-      for (const profiler of this._config.profilers) {
-        profiles[profiler.type] = await profiler.profile()
+    eachSeries(this._config.profilers, (profiler, callback) => {
+      profiler.profile((err, profile) => {
+        if (err) return callback(err)
+
+        profiles[profiler.type] = profile
+
+        callback(err, profile)
+      })
+    }, err => {
+      if (err) {
+        this._logger.error(err)
+        this.stop()
+      } else {
+        this._capture(this._config.flushInterval)
+        this._submit(profiles, start, end)
       }
-
-      this._capture(this._config.flushInterval)
-      this._submit(profiles, start, end)
-    } catch (e) {
-      this._logger.error(e)
-      this.stop()
-    }
+    })
   }
 
   _submit (profiles, start, end) {
     const { tags } = this._config
 
-    this._config.exporters
-      .map(exporter => {
-        return exporter.export({ profiles, start, end, tags })
-          .catch((e) => this._logger.error(e))
+    for (const exporter of this._config.exporters) {
+      exporter.export({ profiles, start, end, tags }, err => {
+        if (err) {
+          this._logger.error(err)
+        }
       })
+    }
   }
 }
 

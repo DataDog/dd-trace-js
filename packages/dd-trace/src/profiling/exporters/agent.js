@@ -4,27 +4,15 @@ const FormData = require('form-data')
 const { URL } = require('url')
 const { Encoder } = require('../encoders/pprof')
 const platform = require('../../platform')
+const { eachOfSeries } = require('../util')
 
 class AgentExporter {
   constructor ({ url, hostname, port } = {}) {
-    url = new URL(url || `http://${hostname || 'localhost'}:${port || 8126}`)
-
-    const options = {
-      timeout: 10 * 1000,
-      validateStatus: code => code < 400
-    }
-
-    if (url.protocol === 'unix:') {
-      options.socketPath = url.pathname
-    } else {
-      options.baseURL = url.href
-    }
-
-    this._client = platform.client(options)
+    this._url = new URL(url || `http://${hostname || 'localhost'}:${port || 8126}`)
     this._encoder = new Encoder()
   }
 
-  async export ({ profiles, start, end, tags }) {
+  export ({ profiles, start, end, tags }, callback) {
     const form = new FormData()
     const types = Object.keys(profiles)
     const runtime = platform.name()
@@ -43,22 +31,47 @@ class AgentExporter {
       form.append('tags[]', `${key}:${tags[key]}`)
     }
 
-    for (let i = 0; i < types.length; i++) {
-      const type = types[i]
+    eachOfSeries(types, (type, index, callback) => {
       const profile = profiles[type]
-      const buffer = await this._encoder.encode(profile)
 
-      form.append(`types[${i}]`, type)
-      form.append(`data[${i}]`, buffer, {
-        filename: `${type}.pb.gz`,
-        contentType: 'application/octet-stream',
-        knownLength: buffer.length
+      this._encoder.encode(profile, (err, buffer) => {
+        if (err) return callback(err)
+
+        form.append(`types[${index}]`, type)
+        form.append(`data[${index}]`, buffer, {
+          filename: `${type}.pb.gz`,
+          contentType: 'application/octet-stream',
+          knownLength: buffer.length
+        })
+
+        callback(null, buffer)
       })
-    }
+    }, err => {
+      if (err) return callback(err)
 
-    const headers = form.getHeaders()
+      const options = {
+        method: 'POST',
+        path: '/profiling/v1/input',
+        timeout: 10 * 1000
+      }
 
-    return this._client.post('/profiling/v1/input', form, { headers })
+      if (this._url.protocol === 'unix:') {
+        options.socketPath = this._url.pathname
+      } else {
+        options.protocol = this._url.protocol
+        options.hostname = this._url.hostname
+        options.port = this._url.port
+      }
+
+      form.submit(options, (err, res) => {
+        if (err) return callback(err)
+        if (res.statusCode >= 400) {
+          return callback(new Error(`Error from the agent: ${res.statusCode}`))
+        }
+
+        callback()
+      })
+    })
   }
 }
 

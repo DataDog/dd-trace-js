@@ -30,18 +30,15 @@ class InspectorHeapProfiler {
     this._mapper = null
   }
 
-  profile () {
-    let profile
-
+  profile (callback) {
     this._session.post('HeapProfiler.getSamplingProfile', (err, params) => {
-      if (err) throw err
-      profile = params.profile
-    })
+      if (err) return callback(err)
 
-    return this._serialize(profile)
+      this._serialize(params.profile, callback)
+    })
   }
 
-  async _serialize ({ head, samples }) {
+  _serialize ({ head, samples }, callback) {
     const sampleType = [['space', 'bytes']]
     const periodType = ['space', 'bytes']
     const period = this._samplingInterval
@@ -52,7 +49,7 @@ class InspectorHeapProfiler {
 
     while ((node = nodes.shift())) {
       const { id, selfSize, callFrame, children } = node
-      const { functionName, url, lineNumber } = this._mapper ? await this._mapper.getSource(callFrame) : callFrame
+      const { functionName, url, lineNumber } = callFrame // TODO: support source maps
       const functionId = profile.addFunction(functionName, url).id
       const locationId = profile.addLocation(functionId, id, lineNumber).id
 
@@ -68,7 +65,7 @@ class InspectorHeapProfiler {
       }
     }
 
-    return profile.export()
+    callback(null, profile.export())
   }
 }
 

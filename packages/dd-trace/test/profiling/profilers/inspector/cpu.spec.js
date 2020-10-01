@@ -20,17 +20,24 @@ describe('profilers/inspector/cpu', () => {
       profiler.stop()
     })
 
-    it('should serialize profiles in the correct format', async () => {
+    it('should serialize profiles in the correct format', done => {
       profiler.start({ mapper })
 
-      const profile = await profiler.profile()
+      profiler.profile((err, profile) => {
+        try {
+          expect(err).to.be.null
+          expect(profile).to.be.a.profile
 
-      expect(profile).to.be.a.profile
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
     })
   })
 
   describe('with the inspector module disabled', () => {
-    it('should throw when started', async () => {
+    it('should throw when started', () => {
       expect(() => {
         InspectorCpuProfiler = proxyquire('../../../../src/profiling/profilers/inspector/cpu', {
           inspector: null

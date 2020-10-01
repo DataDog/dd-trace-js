@@ -15,10 +15,8 @@ describe('profiler', () => {
   let profiler
   let cpuProfiler
   let cpuProfile
-  let cpuPromise
   let heapProfiler
   let heapProfile
-  let heapPromise
   let clock
   let exporter
   let exporters
@@ -29,28 +27,26 @@ describe('profiler', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     exporter = {
-      export: sinon.stub().resolves()
+      export: sinon.stub().yields()
     }
     consoleLogger = {
       error: sinon.spy()
     }
 
     cpuProfile = {}
-    cpuPromise = Promise.resolve(cpuProfile)
     cpuProfiler = {
       type: 'cpu',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().resolves(cpuPromise)
+      profile: sinon.stub().yields(null, cpuProfile)
     }
 
     heapProfile = {}
-    heapPromise = Promise.resolve(heapProfile)
     heapProfiler = {
       type: 'heap',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().returns(heapPromise)
+      profile: sinon.stub().yields(null, heapProfile)
     }
 
     logger = consoleLogger
@@ -101,7 +97,7 @@ describe('profiler', () => {
   })
 
   it('should stop when capturing failed', () => {
-    cpuProfiler.profile.throws()
+    cpuProfiler.profile.yields(new Error('boom'))
 
     profiler.start({ profilers, exporters, logger })
 
@@ -117,9 +113,6 @@ describe('profiler', () => {
 
     clock.tick(INTERVAL)
 
-    await cpuPromise
-    await heapPromise
-
     sinon.assert.calledOnce(exporter.export)
   })
 
@@ -127,9 +120,6 @@ describe('profiler', () => {
     profiler.start({ profilers, exporters, tags: { foo: 'foo' } })
 
     clock.tick(INTERVAL)
-
-    await cpuPromise
-    await heapPromise
 
     const { profiles, start, end, tags } = exporter.export.args[0][0]
 
@@ -149,15 +139,11 @@ describe('profiler', () => {
   })
 
   it('should log exporter errors', async () => {
-    exporter.export.rejects()
+    exporter.export.yields(new Error('boom'))
 
     profiler.start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
-
-    await cpuPromise
-    await heapPromise
-    await Promise.resolve() // wait for internal promise
 
     sinon.assert.calledOnce(consoleLogger.error)
   })

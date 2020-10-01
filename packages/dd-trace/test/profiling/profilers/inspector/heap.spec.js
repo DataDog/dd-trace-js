@@ -37,15 +37,16 @@ describe('profilers/inspector/heap', () => {
           obj[`${i}`] = i * 2
         }
 
-        try {
-          const profile = await profiler.profile()
+        profiler.profile((err, profile) => {
+          try {
+            expect(err).to.be.null
+            expect(profile).to.be.a.profile
 
-          expect(profile).to.be.a.profile
-
-          done()
-        } catch (e) {
-          done(e)
-        }
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
       })
     })
   })

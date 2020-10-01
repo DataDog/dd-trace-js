@@ -16,7 +16,6 @@ const exporter = require('./exporter')
 const profiler = require('./profiler')
 const pkg = require('./pkg')
 const startupLog = require('./startup-log')
-const client = require('./client')
 
 const emitter = new EventEmitter()
 
@@ -50,8 +49,7 @@ const platform = {
   exporter,
   profiler () {
     return profiler(this._config)
-  },
-  client
+  }
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))
