@@ -13,13 +13,13 @@ function eachSeries (collection, iteratee, callback) {
 }
 
 function eachOfSeries (collection, iteratee, callback = () => {}) {
-  const results = []
+  const results = new Array(collection.length)
   const next = index => {
     if (collection[index]) {
       iteratee(collection[index], index, (err, result) => {
         if (err) return callback(err)
 
-        results.push(result)
+        results[index] = result
 
         next(index + 1)
       })
