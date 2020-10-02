@@ -30,7 +30,7 @@ class Tracer extends BaseTracer {
         const config = new Config(options)
 
         log.use(config.logger)
-        log.toggle(config.debug, config.logLevel)
+        log.toggle(config.debug, config.logLevel, this)
 
         platform.configure(config)
         platform.profiler().start()

@@ -1,5 +1,7 @@
 'use strict'
 
+const NoopSpan = require('./noop/span')
+
 const _default = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
@@ -42,6 +44,14 @@ function processMsg (msg) {
   return typeof msg === 'function' ? msg() : msg
 }
 
+function withNoop (fn) {
+  if (!log._tracer) {
+    fn()
+  } else {
+    log._tracer.scope().activate(log._noopSpan(), fn)
+  }
+}
+
 const log = {
   _isLogLevelEnabled (level) {
     return _logLevels[level] >= this._logLevel
@@ -55,18 +65,28 @@ const log = {
     return this
   },
 
-  toggle (enabled, logLevel) {
+  toggle (enabled, logLevel, tracer) {
     this._enabled = enabled
     this._logLevel = _checkLogLevel(logLevel)
+    this._tracer = tracer
 
     return this
+  },
+
+  _noopSpan () {
+    if (!this.__noopSpan) {
+      this.__noopSpan = new NoopSpan(this._tracer)
+    }
+    return this.__noopSpan
   },
 
   reset () {
     this._logger = _default
     this._enabled = false
+    delete this._tracer
+    delete this.__noopSpan
     this._deprecate = memoize((code, message) => {
-      this._logger.error(message)
+      withNoop(() => this._logger.error(message))
       return this
     })
     this._logLevel = _checkLogLevel()
@@ -76,7 +96,7 @@ const log = {
 
   debug (message) {
     if (this._enabled && this._isLogLevelEnabled('debug')) {
-      this._logger.debug(processMsg(message))
+      withNoop(() => this._logger.debug(processMsg(message)))
     }
 
     return this
@@ -85,7 +105,7 @@ const log = {
   info (message) {
     if (!this._logger.info) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('info')) {
-      this._logger.info(processMsg(message))
+      withNoop(() => this._logger.info(processMsg(message)))
     }
 
     return this
@@ -94,7 +114,7 @@ const log = {
   warn (message) {
     if (!this._logger.warn) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('warn')) {
-      this._logger.warn(processMsg(message))
+      withNoop(() => this._logger.warn(processMsg(message)))
     }
 
     return this
@@ -116,7 +136,7 @@ const log = {
         err = new Error(err)
       }
 
-      this._logger.error(err)
+      withNoop(() => this._logger.error(err))
     }
 
     return this

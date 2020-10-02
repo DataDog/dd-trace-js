@@ -264,4 +264,31 @@ describe('log', () => {
       expect(console.error).to.have.been.calledOnce
     })
   })
+
+  describe('tracing', () => {
+    it('should be disabled inside logging', (done) => {
+      let onceDone = () => {
+        onceDone = () => {}
+        done()
+      }
+      const tracer = require('../../dd-trace').init({
+        debug: true,
+        plugins: false,
+        service: 'test',
+        logger: {
+          debug: () => {
+            expect(!!tracer.scope().active().context()._noop).to.equal(true)
+            onceDone()
+          },
+          info: () => {},
+          warn: () => {},
+          error: () => {}
+        }
+      })
+      tracer.trace('testing.testing', () => {
+        expect(!!tracer.scope().active().context()._noop).to.equal(false)
+        log.debug()
+      })
+    })
+  })
 })
