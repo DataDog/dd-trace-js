@@ -15,7 +15,7 @@ class SpanProcessor {
       this._prioritySampler.sample(spanContext)
 
       if (spanContext._traceFlags.sampled === false) {
-        log.debug(() => `Dropping trace due to user configured filtering: ${trace}`)
+        log.debug(() => `Dropping trace due to user configured filtering: ${trace.started}`)
         this._erase(trace)
         return
       }
