@@ -35,6 +35,7 @@ class DatadogTracer extends Tracer {
     this._tags = config.tags
     this._logInjection = config.logInjection
     this._analytics = config.analytics
+    this._debug = config.debug
     this._prioritySampler = new PrioritySampler(config.env, config.experimental.sampler)
     this._exporter = new Exporter(config, this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
@@ -71,7 +72,7 @@ class DatadogTracer extends Tracer {
       tags,
       startTime: fields.startTime,
       hostname: this._hostname
-    })
+    }, this._debug)
 
     span.addTags(this._tags)
     span.addTags(fields.tags)

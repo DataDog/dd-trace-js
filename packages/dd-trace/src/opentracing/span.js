@@ -11,7 +11,7 @@ const tagger = require('../tagger')
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 class DatadogSpan extends Span {
-  constructor (tracer, processor, sampler, prioritySampler, fields) {
+  constructor (tracer, processor, sampler, prioritySampler, fields, debug) {
     super()
 
     const operationName = fields.operationName
@@ -22,6 +22,7 @@ class DatadogSpan extends Span {
     const hostname = fields.hostname
 
     this._parentTracer = tracer
+    this._debug = debug
     this._sampler = sampler
     this._processor = processor
     this._prioritySampler = prioritySampler
@@ -33,7 +34,9 @@ class DatadogSpan extends Span {
 
     this._startTime = fields.startTime || this._getTime()
 
-    this._handle = platform.metrics().track(this)
+    if (debug) {
+      this._handle = platform.metrics().track(this)
+    }
   }
 
   toString () {
@@ -121,7 +124,11 @@ class DatadogSpan extends Span {
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
-    this._handle.finish()
+
+    if (this._debug) {
+      this._handle.finish()
+    }
+
     this._processor.process(this)
   }
 }

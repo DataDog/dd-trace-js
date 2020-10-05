@@ -21,7 +21,9 @@ class Scope extends Base {
 
     singleton = this
 
+    console.log(config)
     this._trackAsyncScope = config.trackAsyncScope && hasThenableBug
+    this._debug = config.debug
     this._current = null
     this._spans = new Map()
     this._types = new Map()
@@ -111,9 +113,11 @@ class Scope extends Base {
       this._weaks.set(resource, asyncId)
     }
 
-    const metrics = platform.metrics()
-    metrics.increment('runtime.node.async.resources')
-    metrics.increment('runtime.node.async.resources.by.type', `resource_type:${type}`)
+    if (this._debug) {
+      const metrics = platform.metrics()
+      metrics.increment('runtime.node.async.resources')
+      metrics.increment('runtime.node.async.resources.by.type', `resource_type:${type}`)
+    }
 
     if (this._trackAsyncScope && type === 'PROMISE') {
       this._initPromise()
@@ -132,7 +136,7 @@ class Scope extends Base {
   _destroy (asyncId) {
     const type = this._types.get(asyncId)
 
-    if (type) {
+    if (type && this._debug) {
       const metrics = platform.metrics()
       metrics.decrement('runtime.node.async.resources')
       metrics.decrement('runtime.node.async.resources.by.type', `resource_type:${type}`)

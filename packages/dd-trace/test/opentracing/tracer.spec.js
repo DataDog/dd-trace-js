@@ -74,7 +74,7 @@ describe('Tracer', () => {
       sampleRate: 0.5,
       logger: 'logger',
       tags: {},
-      debug: false,
+      debug: true,
       experimental: {}
     }
 
@@ -133,7 +133,7 @@ describe('Tracer', () => {
         },
         startTime: fields.startTime,
         hostname: undefined
-      })
+      }, true)
 
       expect(span.addTags).to.have.been.calledWith({
         'foo': 'bar'
