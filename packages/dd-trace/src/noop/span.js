@@ -8,16 +8,8 @@ class NoopSpan extends Span {
   constructor (tracer, parent) {
     super()
 
-    // Avoid circular dependency
-    Object.defineProperties(this, {
-      _noopTracer: {
-        value: tracer
-      },
-
-      _noopContext: {
-        value: this._createContext(parent)
-      }
-    })
+    this._noopTracer = tracer
+    this._noopContext = this._createContext(parent)
   }
 
   _context () {
