@@ -21,7 +21,6 @@ class Scope extends Base {
 
     singleton = this
 
-    console.log(config)
     this._trackAsyncScope = config.trackAsyncScope && hasThenableBug
     this._debug = config.debug
     this._current = null
