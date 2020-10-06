@@ -5,7 +5,7 @@
   "scripts": {
     "build": "typedoc",
     "pretest": "tsc test",
-    "test": "DD_TRACE_AGENT_PROTOCOL_VERSION=v0.4 node test"
+    "test": "node test"
   },
   "license": "BSD-3-Clause",
   "private": true,

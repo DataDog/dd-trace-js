@@ -99,8 +99,9 @@ class Config {
       false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
+      options.protocolVersion,
       platform.env('DD_TRACE_AGENT_PROTOCOL_VERSION'),
-      null
+      '0.4'
     )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
