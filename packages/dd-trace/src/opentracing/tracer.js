@@ -53,8 +53,7 @@ class DatadogTracer extends Tracer {
   }
 
   _startSpan (name, fields) {
-    const references = getReferences(fields.references)
-    const reference = getParent(references)
+    const reference = getParent(fields.references)
     const type = reference && reference.type()
     const parent = reference && reference.referencedContext()
 
@@ -103,32 +102,24 @@ class DatadogTracer extends Tracer {
   }
 }
 
-function getReferences (references) {
-  if (!references) return []
-
-  return references.filter(ref => {
-    if (!(ref instanceof Reference)) {
-      log.error(() => `Expected ${ref} to be an instance of opentracing.Reference`)
-      return false
-    }
-
-    const spanContext = ref.referencedContext()
-
-    if (ref.type() !== REFERENCE_NOOP && spanContext && !(spanContext instanceof SpanContext)) {
-      log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
-      return false
-    }
-
-    return true
-  })
-}
-
-function getParent (references) {
+function getParent (references = []) {
   let parent = null
 
   for (let i = 0; i < references.length; i++) {
     const ref = references[i]
+
+    if (!(ref instanceof Reference)) {
+      log.error(() => `Expected ${ref} to be an instance of opentracing.Reference`)
+      continue
+    }
+
+    const spanContext = ref.referencedContext()
     const type = ref.type()
+
+    if (type !== REFERENCE_NOOP && spanContext && !(spanContext instanceof SpanContext)) {
+      log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
+      continue
+    }
 
     if (type === REFERENCE_CHILD_OF || type === REFERENCE_NOOP) {
       parent = ref
