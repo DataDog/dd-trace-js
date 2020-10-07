@@ -260,6 +260,7 @@ describe('Plugin', () => {
               expect(spans[1]).to.have.property('name', 'graphql.resolve')
               expect(spans[1]).to.have.property('resource', 'hello:String')
               expect(spans[1]).to.have.property('type', 'graphql')
+              expect(spans[1].duration.toNumber()).to.be.gt(0)
               expect(spans[1].meta).to.have.property('graphql.field.name', 'hello')
               expect(spans[1].meta).to.have.property('graphql.field.path', 'hello')
               expect(spans[1].meta).to.have.property('graphql.field.type', 'String')

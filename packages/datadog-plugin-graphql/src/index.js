@@ -343,7 +343,7 @@ function finishResolvers (contextValue) {
 }
 
 function updateField (field, error) {
-  field.finishTime = platform.now()
+  field.finishTime = field.span.context()._trace.startTime + platform.now()
   field.error = field.error || error
 }
 
