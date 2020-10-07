@@ -154,8 +154,8 @@ describe('Span', () => {
     expect(span.context()._tags).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
-  it('should keep track of its memory lifecycle', () => {
-    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+  it('should keep track of its memory lifecycle in debug mode', () => {
+    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' }, true)
 
     expect(platform.metrics().track).to.have.been.calledWith(span)
 
