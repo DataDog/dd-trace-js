@@ -524,7 +524,7 @@ declare namespace plugins {
     /**
      * The service name to be used for this plugin.
      */
-    service?: string;
+    service?: string | any;
 
     /** Whether to enable the plugin.
      * @default true
@@ -1027,7 +1027,12 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [pg](https://node-postgres.com/) module.
    */
-  interface pg extends Instrumentation {}
+  interface pg extends Instrumentation {
+    /**
+     * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
+     */
+    service?: string | ((params: any) => string);
+  }
 
   /**
    * This plugin patches the [pino](http://getpino.io)
