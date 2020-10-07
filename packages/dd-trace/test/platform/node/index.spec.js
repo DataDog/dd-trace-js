@@ -1,12 +1,14 @@
 'use strict'
 
-const nock = require('nock')
+const nock = require('../../../test/setup/netmock')
 const os = require('os')
 const semver = require('semver')
 const { execSync } = require('child_process')
 
 const AgentExporter = require('../../../src/exporters/agent')
 const LogExporter = require('../../../src/exporters/log')
+
+const TIMEOUT_ERROR_MSG = nock.isNetMock ? 'Request Timeout Error' : 'socket hang up'
 
 wrapIt()
 
@@ -195,8 +197,8 @@ describe('Platform', () => {
         nock.enableNetConnect()
       })
 
-      it('should send an http request with a buffer', () => {
-        nock('http://test:123', {
+      it('should send an http request with a buffer', (done) => {
+        nock('http://example.com:123', {
           reqheaders: {
             'content-type': 'application/octet-stream',
             'content-length': '13'
@@ -207,7 +209,7 @@ describe('Platform', () => {
 
         return request({
           protocol: 'http:',
-          hostname: 'test',
+          hostname: 'example.com',
           port: 123,
           path: '/path',
           method: 'PUT',
@@ -217,11 +219,12 @@ describe('Platform', () => {
           data: Buffer.from(JSON.stringify({ foo: 'bar' }))
         }, (err, res) => {
           expect(res).to.equal('OK')
+          done(err)
         })
       })
 
-      it('should send an http request with a buffer array', () => {
-        nock('http://test:123', {
+      it('should send an http request with a buffer array', (done) => {
+        nock('http://example.com:123', {
           reqheaders: {
             'content-type': 'application/octet-stream',
             'content-length': '8'
@@ -232,7 +235,7 @@ describe('Platform', () => {
 
         return request({
           protocol: 'http:',
-          hostname: 'test',
+          hostname: 'example.com',
           port: 123,
           path: '/path',
           method: 'PUT',
@@ -242,6 +245,7 @@ describe('Platform', () => {
           data: [Buffer.from('fizz', 'utf-8'), Buffer.from('buzz', 'utf-8')]
         }, (err, res) => {
           expect(res).to.equal('OK')
+          done(err)
         })
       })
 
@@ -260,23 +264,25 @@ describe('Platform', () => {
         })
       })
 
-      it('should timeout after 2 seconds by default', done => {
+      it('should timeout after 2 seconds by default', function (done) {
+        this.timeout(2500)
         nock('http://localhost:80')
           .put('/path')
           .socketDelay(2001)
-          .reply(200)
+          .reply(200, 'soup')
 
         request({
           path: '/path',
           method: 'PUT'
-        }, err => {
+        }, (err, res) => {
           expect(err).to.be.instanceof(Error)
-          expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
+          expect(err.message).to.equal(`Network error trying to reach the agent: ${TIMEOUT_ERROR_MSG}`)
           done()
         })
       })
 
-      it('should have a configurable timeout', done => {
+      it('should have a configurable timeout', function (done) {
+        this.timeout(2500)
         nock('http://localhost:80')
           .put('/path')
           .socketDelay(2001)
@@ -288,26 +294,28 @@ describe('Platform', () => {
           timeout: 2000
         }, err => {
           expect(err).to.be.instanceof(Error)
-          expect(err.message).to.equal('Network error trying to reach the agent: socket hang up')
+          expect(err.message).to.equal(`Network error trying to reach the agent: ${TIMEOUT_ERROR_MSG}`)
           done()
         })
       })
 
-      it('should inject the container ID', () => {
-        nock('http://test:123', {
+      it('should inject the container ID', (done) => {
+        nock('http://example.com:123', {
           reqheaders: {
             'datadog-container-id': 'abcd'
           }
         })
-          .get('/')
+          .put('/')
           .reply(200, 'OK')
 
         return request({
-          hostname: 'test',
+          hostname: 'example.com',
           port: 123,
+          method: 'PUT',
           path: '/'
         }, (err, res) => {
           expect(res).to.equal('OK')
+          done(err)
         })
       })
     })

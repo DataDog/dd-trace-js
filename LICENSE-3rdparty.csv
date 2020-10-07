@@ -28,6 +28,7 @@ require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contributors
 require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
+require,undici,MIT,Copyright Matteo Collina and Undici contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
 require,whatwg-fetch,MIT,Copyright 2014-2016 GitHub Inc.
 dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
