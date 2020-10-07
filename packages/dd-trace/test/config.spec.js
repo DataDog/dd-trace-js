@@ -22,6 +22,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
+    expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
@@ -63,6 +64,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
+    platform.env.withArgs('DD_TRACE_AGENT_PROTOCOL_VERSION').returns('0.5')
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
     platform.env.withArgs('DD_SERVICE').returns('service')
     platform.env.withArgs('DD_VERSION').returns('1.0.0')
@@ -78,6 +80,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('analytics', true)
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
@@ -139,6 +142,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: false,
       debug: true,
+      protocolVersion: '0.5',
       analytics: true,
       site: 'datadoghq.eu',
       hostname: 'agent',
@@ -173,6 +177,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', false)
     expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('analytics', true)
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -259,6 +264,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
     platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
     platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
+    platform.env.withArgs('DD_TRACE_AGENT_PROTOCOL_VERSION').returns('0.4')
     platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
     platform.env.withArgs('DD_SERVICE').returns('service')
     platform.env.withArgs('DD_VERSION').returns('0.0.0')
@@ -272,6 +278,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: true,
       debug: false,
+      protocolVersion: '0.5',
       analytics: false,
       protocol: 'https',
       site: 'datadoghq.com',
@@ -293,6 +300,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('enabled', true)
     expect(config).to.have.property('debug', false)
+    expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('analytics', false)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')

@@ -4,7 +4,7 @@ const URL = require('url-parse')
 
 const id = require('../../../src/id')
 
-function describeWriter (version) {
+function describeWriter (protocolVersion) {
   let Writer
   let writer
   let trace
@@ -60,7 +60,7 @@ function describeWriter (version) {
       name: sinon.stub(),
       version: sinon.stub(),
       engine: sinon.stub(),
-      request: sinon.stub().yields(null, response, version === 0.5 ? 200 : 404),
+      request: sinon.stub().yields(null, response, 200),
       msgpack: {
         prefix: sinon.stub().returns([Buffer.alloc(0)])
       }
@@ -100,7 +100,7 @@ function describeWriter (version) {
       '../../../lib/version': 'tracerVersion',
       '../../log': log
     })
-    writer = new Writer(url, prioritySampler)
+    writer = new Writer({ url, prioritySampler, protocolVersion })
 
     process.nextTick(done)
   })
@@ -125,12 +125,9 @@ function describeWriter (version) {
 
   describe('flush', () => {
     it('should skip flushing if empty', () => {
-      // once for the protocol version check
-      expect(platform.request).to.have.been.calledOnce
       writer.flush()
 
-      // no more times
-      expect(platform.request).to.have.been.calledOnce
+      expect(platform.request).to.not.have.been.called
     })
 
     it('should empty the internal queue', () => {
@@ -155,7 +152,7 @@ function describeWriter (version) {
         protocol: url.protocol,
         hostname: url.hostname,
         port: url.port,
-        path: `/v${version}/traces`,
+        path: `/v${protocolVersion}/traces`,
         method: 'PUT',
         headers: {
           'Content-Type': 'application/msgpack',
@@ -196,7 +193,7 @@ function describeWriter (version) {
     context('with the url as a unix socket', () => {
       beforeEach(() => {
         url = new URL('unix:/path/to/somesocket.sock')
-        writer = new Writer(url, 3)
+        writer = new Writer({ url, protocolVersion })
       })
 
       it('should make a request to the socket', () => {
@@ -216,140 +213,4 @@ describe('Writer', () => {
   describe('0.4', () => describeWriter(0.4))
 
   describe('0.5', () => describeWriter(0.5))
-
-  describe('endpoint version fallback', () => {
-    let Writer
-    let platform
-    let encode05
-    let encode04
-    beforeEach(() => {
-      platform = {
-        name: sinon.stub(),
-        version: sinon.stub(),
-        engine: sinon.stub(),
-        msgpack: {
-          prefix: sinon.stub().returns([Buffer.alloc(0)])
-        }
-      }
-
-      encode04 = {
-        encode: sinon.stub().returns(40),
-        makePayload: x => x,
-        init: () => {}
-      }
-      encode05 = {
-        encode: sinon.stub().returns(50),
-        makePayload: x => x,
-        init: () => {}
-      }
-
-      Writer = proxyquire('../src/exporters/agent/writer', {
-        '../../platform': platform,
-        '../../encode/0.4': encode04,
-        '../../encode/0.5': encode05,
-        '../../../lib/version': 'tracerVersion'
-      })
-    })
-
-    it('drops traces when there is an error before protocol version is set, then retries', (done) => {
-      const url = {
-        protocol: 'https',
-        hostname: 'example.com',
-        port: 12345
-      }
-      const prioritySampler = {}
-      const lookup = {}
-
-      platform.request = (payload, cb) => {
-        expect(writer._appends).to.deep.equal(['spans1', 'spans2'])
-        expect(writer._needsFlush).to.equal(true)
-        platform.request = (payload, cb) => {
-          cb(null, null, 200) // avoid calling again
-          done()
-        }
-        cb()
-        expect(writer._appends.length).to.equal(0)
-        expect(writer._needsFlush).to.equal(false)
-      }
-
-      const writer = new Writer(url, prioritySampler, lookup)
-      writer.append('spans1')
-      writer.append('spans2')
-      writer.flush()
-    })
-
-    ;[
-      ['works when 0.5 is available', null, () => encode05],
-      ['works when 0.5 is not available', new Error(), () => encode04]
-    ].forEach(([testCase, error, encoder]) => {
-      it(testCase, (done) => {
-        encoder = encoder()
-        const is05 = encoder === encode05
-        const encode = encoder.encode
-
-        const url = {
-          protocol: 'https',
-          hostname: 'example.com',
-          port: 12345
-        }
-        const prioritySampler = {}
-        const lookup = {}
-
-        let writer // eslint-disable-line prefer-const
-
-        platform.request = (payload, cb) => {
-          process.nextTick(() => {
-            expect(payload).to.deep.equal({
-              protocol: url.protocol,
-              hostname: url.hostname,
-              port: url.port,
-              data: [ Buffer.from([0x92, 0x90, 0x90]) ],
-              path: '/v0.5/traces',
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/msgpack',
-                'Datadog-Meta-Tracer-Version': 'tracerVersion',
-                'X-Datadog-Trace-Count': '0'
-              },
-              lookup: lookup
-            })
-            platform.request = (payload, cb) => {
-              expect(payload).to.deep.equal({
-                protocol: url.protocol,
-                hostname: url.hostname,
-                port: url.port,
-                data: [ Buffer.from([]) ],
-                path: `/v0.${is05 ? 5 : 4}/traces`,
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/msgpack',
-                  'Datadog-Meta-Tracer-Version': 'tracerVersion',
-                  'X-Datadog-Trace-Count': '2'
-                },
-                lookup: lookup
-              })
-
-              cb(null, {})
-
-              done()
-            }
-            cb(null, {}, is05 ? 200 : 404)
-
-            expect(encode).to.have.been.calledTwice
-            expect(encode.firstCall.args[1]).to.equal(5)
-            expect(encode.firstCall.args[2]).to.equal('spans1')
-            expect(encode.firstCall.args[3]).to.equal(writer)
-            expect(encode.secondCall.args[1]).to.equal(encoder === encode05 ? 50 : 40)
-            expect(encode.secondCall.args[2]).to.equal('spans2')
-            expect(encode.secondCall.args[3]).to.equal(writer)
-          })
-        }
-
-        writer = new Writer(url, prioritySampler, lookup)
-        writer.append('spans1')
-        writer.append('spans2')
-        writer.flush()
-      })
-    })
-  })
 })

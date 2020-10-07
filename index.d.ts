@@ -292,6 +292,12 @@ export declare interface TracerOptions {
   lookup?: LookupFunction
 
   /**
+   * Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped.
+   * @default 0.4
+   */
+  protocolVersion?: string
+
+  /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */

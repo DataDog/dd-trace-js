@@ -1,7 +1,5 @@
 'use strict'
 
-process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = 'v0.4'
-
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 const platform = require('../packages/dd-trace/src/platform')

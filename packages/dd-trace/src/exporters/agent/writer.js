@@ -2,24 +2,20 @@
 
 const platform = require('../../platform')
 const log = require('../../log')
-const Config = require('../../config')
 const tracerVersion = require('../../../lib/version')
 
 const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
-const ARRAY_OF_TWO_EMPTY_ARRAYS = Buffer.from([0x92, 0x90, 0x90])
 
 class Writer {
-  constructor (url, prioritySampler, lookup) {
+  constructor ({ url, prioritySampler, lookup, protocolVersion }) {
     this._url = url
     this._prioritySampler = prioritySampler
     this._lookup = lookup
-    this._appends = []
-    this._needsFlush = false
+    this._protocolVersion = protocolVersion
+    this._encoderForVersion = getEncoder(this)
 
-    this._config = new Config({})
-
-    getProtocolVersion(this)
+    this._reset()
   }
 
   get length () {
@@ -27,14 +23,9 @@ class Writer {
   }
 
   append (spans) {
-    this._hasAppended = true
-    if (this._protocolVersion) {
-      log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
+    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
-      this._encode(spans)
-    } else {
-      this._appends.push(spans)
-    }
+    this._encode(spans)
   }
 
   _sendPayload (data, count) {
@@ -98,17 +89,13 @@ class Writer {
   }
 
   flush () {
-    if (this._protocolVersion) {
-      if (this._count > 0) {
-        const traceData = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
-        const data = this._encoderForVersion.makePayload(traceData)
+    if (this._count > 0) {
+      const traceData = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
+      const data = this._encoderForVersion.makePayload(traceData)
 
-        this._sendPayload(data, this._count)
+      this._sendPayload(data, this._count)
 
-        this._reset()
-      }
-    } else {
-      this._needsFlush = true
+      this._reset()
     }
   }
 }
@@ -119,62 +106,17 @@ function setHeader (headers, key, value) {
   }
 }
 
-function getProtocolVersion (writer) {
-  const config = writer._config
-  if (config.protocolVersion) {
-    if (config.protocolVersion.match(/^v?0\.4/)) {
-      writer._protocolVersion = 'v0.4'
-      writer._encoderForVersion = require('../../encode/0.4')
-    } else {
-      writer._protocolVersion = 'v0.5'
-      writer._encoderForVersion = require('../../encode/0.5')
-    }
-    writer._reset()
-    return
+function getEncoder (writer) {
+  if (writer._protocolVersion === '0.5') {
+    return require('../../encode/0.5')
+  } else {
+    return require('../../encode/0.4')
   }
-
-  function cb (err, res, status) {
-    if (status === 404) {
-      writer._protocolVersion = 'v0.4'
-      writer._encoderForVersion = require('../../encode/0.4')
-    } else if (status === 200) {
-      writer._protocolVersion = 'v0.5'
-      writer._encoderForVersion = require('../../encode/0.5')
-    } else {
-      // Drop any traces already appended, so that we're not endlessly storing traces we can't send.
-      writer._appends.length = 0
-      writer._needsFlush = false
-      setTimeout(() => getProtocolVersion(writer), 500)
-      return
-    }
-
-    writer._reset()
-
-    for (const spans of writer._appends) {
-      writer.append(spans)
-    }
-    if (writer._needsFlush) {
-      writer.flush()
-    }
-
-    // Clear everything so it's not being stored in memory forever.
-    writer._appends.length = 0
-    writer._needsFlush = false
-  }
-
-  setImmediate(() => makeRequest(
-    'v0.5',
-    [ARRAY_OF_TWO_EMPTY_ARRAYS],
-    '0',
-    writer._url,
-    writer._lookup,
-    !!writer._appends.length,
-    cb))
 }
 
 function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
   const options = {
-    path: `/${version}/traces`,
+    path: `/v${version}/traces`,
     method: 'PUT',
     headers: {
       'Content-Type': 'application/msgpack',
