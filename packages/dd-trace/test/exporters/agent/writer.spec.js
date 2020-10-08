@@ -2,53 +2,19 @@
 
 const URL = require('url-parse')
 
-const id = require('../../../src/id')
-
 function describeWriter (protocolVersion) {
   let Writer
   let writer
-  let trace
   let span
   let platform
   let response
-  let format
-  let encodedLength
-  let encode
+  let encoder
   let url
   let prioritySampler
   let log
-  let tracer
-  let scope
 
   beforeEach((done) => {
-    scope = {
-      _wipe: sinon.stub()
-    }
-
-    tracer = {
-      scope: sinon.stub().returns(scope)
-    }
-
-    trace = {
-      started: [],
-      finished: []
-    }
-
-    span = {
-      tracer: sinon.stub().returns(tracer),
-      context: sinon.stub().returns({
-        _trace: trace,
-        _sampling: {},
-        _tags: {
-          trace_id: id('1'),
-          span_id: id('2'),
-          parent_id: id('0'),
-          start: 3,
-          duration: 4
-        },
-        _traceFlags: {}
-      })
-    }
+    span = 'formatted'
 
     response = JSON.stringify({
       rate_by_service: {
@@ -66,16 +32,10 @@ function describeWriter (protocolVersion) {
       }
     }
 
-    format = sinon.stub().withArgs(span).returns('formatted')
-
-    encodedLength = 12
-    encode = {
-      encode: function (buf) {
-        buf[0] = 101
-        return encodedLength
-      },
-      makePayload: x => x,
-      init: () => {}
+    encoder = {
+      encode: sinon.stub(),
+      count: sinon.stub().returns(0),
+      makePayload: sinon.stub().returns([])
     }
 
     url = {
@@ -92,10 +52,13 @@ function describeWriter (protocolVersion) {
       error: sinon.spy()
     }
 
+    const AgentEncoder = function () {
+      return encoder
+    }
+
     Writer = proxyquire('../src/exporters/agent/writer', {
-      '../../format': format,
-      '../../encode/0.4': encode,
-      '../../encode/0.5': encode,
+      '../../encode/0.4': { AgentEncoder },
+      '../../encode/0.5': { AgentEncoder },
       '../../platform': platform,
       '../../../lib/version': 'tracerVersion',
       '../../log': log
@@ -105,21 +68,11 @@ function describeWriter (protocolVersion) {
     process.nextTick(done)
   })
 
-  describe('length', () => {
-    it('should return the number of traces', () => {
-      writer.append([span])
-      writer.append([span])
-
-      expect(writer.length).to.equal(2)
-    })
-  })
-
   describe('append', () => {
     it('should append a trace', () => {
       writer.append([span])
 
-      const expectedTraceLen = 12
-      expect(writer._offset).to.equal(expectedTraceLen)
+      expect(encoder.encode).to.have.been.calledWith([span])
     })
   })
 
@@ -127,26 +80,27 @@ function describeWriter (protocolVersion) {
     it('should skip flushing if empty', () => {
       writer.flush()
 
-      expect(platform.request).to.not.have.been.called
+      expect(encoder.makePayload).to.not.have.been.called
     })
 
     it('should empty the internal queue', () => {
-      writer.append([span])
+      encoder.count.returns(1)
+
       writer.flush()
 
-      expect(writer.length).to.equal(0)
+      expect(encoder.makePayload).to.have.been.called
     })
 
     it('should flush its traces to the agent', () => {
-      platform.msgpack.prefix.returns([Buffer.from('prefixed')])
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
 
-      writer.append([span])
-      writer.append([span])
-      writer.flush()
       const expectedData = Buffer.from('prefixed')
+
+      encoder.count.returns(2)
+      encoder.makePayload.returns([expectedData])
+      writer.flush()
 
       expect(platform.request).to.have.been.calledWithMatch({
         protocol: url.protocol,
@@ -172,7 +126,7 @@ function describeWriter (protocolVersion) {
 
       platform.request.yields(error)
 
-      writer.append([span])
+      encoder.count.returns(1)
       writer.flush()
 
       setTimeout(() => {
@@ -182,7 +136,7 @@ function describeWriter (protocolVersion) {
     })
 
     it('should update sampling rates', () => {
-      writer.append([span])
+      encoder.count.returns(1)
       writer.flush()
 
       expect(prioritySampler.update).to.have.been.calledWith({
@@ -197,7 +151,7 @@ function describeWriter (protocolVersion) {
       })
 
       it('should make a request to the socket', () => {
-        writer.append([span])
+        encoder.count.returns(1)
         writer.flush()
         setImmediate(() => {
           expect(platform.request).to.have.been.calledWithMatch({

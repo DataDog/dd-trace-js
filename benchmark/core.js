@@ -12,15 +12,24 @@ const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
 const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
-  './platform': { request: () => Promise.resolve() }
+  './platform': { request: () => Promise.resolve() },
+  '../../encode/0.4': {
+    AgentEncoder: function () {
+      return { encode () {} }
+    }
+  }
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
 const format = require('../packages/dd-trace/src/format')
-const { encode } = require('../packages/dd-trace/src/encode/0.4') // TODO also v0.5
+const { AgentEncoder: Agent04Encoder } = require('../packages/dd-trace/src/encode/0.4')
+const { AgentEncoder: Agent05Encoder } = require('../packages/dd-trace/src/encode/0.5')
 const config = new Config({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
+
+const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
+const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
 
 const suite = benchmark('core')
 
@@ -33,8 +42,6 @@ let sampler
 
 const spanStub = require('./stubs/span')
 const span = format(spanStub)
-
-const buffer = Buffer.alloc(10 * 1024 * 1024)
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -74,7 +81,7 @@ suite
   })
   .add('Writer#append', {
     onStart () {
-      writer = new Writer({ sample: () => {} }, {})
+      writer = new Writer({ sample: () => {} })
     },
     fn () {
       writer.append([span])
@@ -93,9 +100,14 @@ suite
       format(spanStub)
     }
   })
-  .add('encode', {
+  .add('encode (0.4)', {
     fn () {
-      encode(buffer, 0, [span], {})
+      encoder04.encode([span])
+    }
+  })
+  .add('encode (0.5)', {
+    fn () {
+      encoder05.encode([span])
     }
   })
   .add('id', {
