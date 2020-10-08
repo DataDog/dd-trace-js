@@ -9,7 +9,7 @@ const semver = require('semver')
 const hasKeepAliveBug = !semver.satisfies(process.version, '^8.13 || >=10.14.2')
 
 // fixed in https://github.com/nodejs/node/pull/33801
-const hasThenableBug = !semver.satisfies(process.version, '>=14.5')
+const hasThenableBug = !semver.satisfies(process.version, '>=14.5 || ^12.19.0')
 
 let singleton = null
 

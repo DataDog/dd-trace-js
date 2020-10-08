@@ -9,12 +9,20 @@ const semver = require('semver')
 const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
 const AsyncHooksScope = require('../../src/scope/async_hooks')
+const AsyncLocalStorageScope = require('../../src/scope/async_local_storage')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
+
+const defaultScope = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
+  ? 'async_local_storage'
+  : 'async_hooks'
 
 const asyncHooksScope = new AsyncHooksScope({
   trackAsyncScope: true,
   debug: true
+})
+const asyncLocalStorageScope = defaultScope === 'async_hooks' ? null : new AsyncLocalStorageScope({
+  trackAsyncScope: true
 })
 
 chai.use(sinonChai)
@@ -33,7 +41,11 @@ afterEach(() => {
   platform.metrics().stop()
 })
 
-function wrapIt () {
+function wrapIt (whichScope = defaultScope) {
+  const scope = {
+    async_hooks: asyncHooksScope,
+    async_local_storage: asyncLocalStorageScope
+  }[whichScope]
   const it = global.it
   const only = global.it.only
 
@@ -43,11 +55,11 @@ function wrapIt () {
 
       const length = fn.length
 
-      fn = asyncHooksScope.bind(fn, null)
+      fn = scope.bind(fn, null)
 
       if (length > 0) {
         return testFn.call(this, title, function (done) {
-          done = asyncHooksScope.bind(done, null)
+          done = scope.bind(done, null)
 
           return fn.call(this, done)
         })
