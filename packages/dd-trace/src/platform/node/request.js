@@ -2,6 +2,7 @@
 
 const http = require('http')
 const https = require('https')
+const { Readable } = require('stream')
 const agents = require('./agents')
 const semver = require('semver')
 const containerInfo = require('container-info').sync() || {}
@@ -40,8 +41,13 @@ function bufArrify (data) {
   if (!data) return Buffer.alloc(0)
   if (data instanceof Buffer) return data
   if (Array.isArray(data)) {
-    if (data.length === 1) return data[0]
-    return Buffer.concat(data)
+    if (data.length === 1) return bufArrify(data[0])
+    const strm = new Readable()
+    for (const chunk of data) {
+      strm.push(chunk)
+    }
+    strm.push(null)
+    return strm
   }
 }
 
