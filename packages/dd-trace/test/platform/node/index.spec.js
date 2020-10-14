@@ -1,14 +1,12 @@
 'use strict'
 
-const nock = require('../../../test/setup/netmock')
+const getMock = require('../../../test/setup/netmock')
 const os = require('os')
 const semver = require('semver')
 const { execSync } = require('child_process')
 
 const AgentExporter = require('../../../src/exporters/agent')
 const LogExporter = require('../../../src/exporters/log')
-
-const TIMEOUT_ERROR_MSG = nock.isNetMock ? 'Request Timeout Error' : 'socket hang up'
 
 wrapIt()
 
@@ -171,154 +169,165 @@ describe('Platform', () => {
       })
     })
 
-    describe('request', () => {
-      let request
-      let log
-      let getContainerInfo
+    function describeRequest (undici) {
+      const nock = getMock(undici)
+      const TIMEOUT_ERROR_MSG = nock.isNetMock ? 'Request Timeout Error' : 'socket hang up'
 
-      beforeEach(() => {
-        nock.disableNetConnect()
+      describe(`request (via ${undici ? 'undici' : 'http'})`, () => {
+        let request
+        let log
+        let getContainerInfo
 
-        log = {
-          error: sinon.spy()
-        }
-        getContainerInfo = {
-          sync: sinon.stub().returns({ containerId: 'abcd' })
-        }
-        platform = require('../../../src/platform/node')
-        request = proxyquire('../src/platform/node/request', {
-          'container-info': getContainerInfo,
-          '../../log': log
-        }).bind(platform)
-      })
+        beforeEach(() => {
+          nock.disableNetConnect()
 
-      afterEach(() => {
-        nock.cleanAll()
-        nock.enableNetConnect()
-      })
-
-      it('should send an http request with a buffer', (done) => {
-        nock('http://example.com:123', {
-          reqheaders: {
-            'content-type': 'application/octet-stream',
-            'content-length': '13'
+          log = {
+            error: sinon.spy()
           }
-        })
-          .put('/path', { foo: 'bar' })
-          .reply(200, 'OK')
-
-        return request({
-          protocol: 'http:',
-          hostname: 'example.com',
-          port: 123,
-          path: '/path',
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/octet-stream'
-          },
-          data: Buffer.from(JSON.stringify({ foo: 'bar' }))
-        }, (err, res) => {
-          expect(res).to.equal('OK')
-          done(err)
-        })
-      })
-
-      it('should send an http request with a buffer array', (done) => {
-        nock('http://example.com:123', {
-          reqheaders: {
-            'content-type': 'application/octet-stream',
-            'content-length': '8'
+          getContainerInfo = {
+            sync: sinon.stub().returns({ containerId: 'abcd' })
           }
+          platform = require('../../../src/platform/node')
+          const platformIndex = require('../../../src/platform')
+          platformIndex._config.experimental.undici = undici
+          request = proxyquire('../src/platform/node/request', {
+            'container-info': getContainerInfo,
+            '../../log': log
+          }).bind(platform)
         })
-          .put('/path', 'fizzbuzz')
-          .reply(200, 'OK')
 
-        return request({
-          protocol: 'http:',
-          hostname: 'example.com',
-          port: 123,
-          path: '/path',
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/octet-stream'
-          },
-          data: [Buffer.from('fizz', 'utf-8'), Buffer.from('buzz', 'utf-8')]
-        }, (err, res) => {
-          expect(res).to.equal('OK')
-          done(err)
+        afterEach(() => {
+          delete platform._config.experimental
+          nock.cleanAll()
+          nock.enableNetConnect()
+        })
+
+        it('should send an http request with a buffer', (done) => {
+          nock('http://example.com:123', {
+            reqheaders: {
+              'content-type': 'application/octet-stream',
+              'content-length': '13'
+            }
+          })
+            .put('/path', { foo: 'bar' })
+            .reply(200, 'OK')
+
+          return request({
+            protocol: 'http:',
+            hostname: 'example.com',
+            port: 123,
+            path: '/path',
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/octet-stream'
+            },
+            data: Buffer.from(JSON.stringify({ foo: 'bar' }))
+          }, (err, res) => {
+            expect(res).to.equal('OK')
+            done(err)
+          })
+        })
+
+        it('should send an http request with a buffer array', (done) => {
+          nock('http://example.com:123', {
+            reqheaders: {
+              'content-type': 'application/octet-stream',
+              'content-length': '8'
+            }
+          })
+            .put('/path', 'fizzbuzz')
+            .reply(200, 'OK')
+
+          return request({
+            protocol: 'http:',
+            hostname: 'example.com',
+            port: 123,
+            path: '/path',
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/octet-stream'
+            },
+            data: [Buffer.from('fizz', 'utf-8'), Buffer.from('buzz', 'utf-8')]
+          }, (err, res) => {
+            expect(res).to.equal('OK')
+            done(err)
+          })
+        })
+
+        it('should handle an http error', done => {
+          nock('http://localhost:80')
+            .put('/path')
+            .reply(400)
+
+          request({
+            path: '/path',
+            method: 'PUT'
+          }, err => {
+            expect(err).to.be.instanceof(Error)
+            expect(err.message).to.equal('Error from the agent: 400 Bad Request')
+            done()
+          })
+        })
+
+        it('should timeout after 2 seconds by default', function (done) {
+          this.timeout(2500)
+          nock('http://localhost:80')
+            .put('/path')
+            .socketDelay(2001)
+            .reply(200, 'soup')
+
+          request({
+            path: '/path',
+            method: 'PUT'
+          }, (err, res) => {
+            expect(err).to.be.instanceof(Error)
+            expect(err.message).to.equal(`Network error trying to reach the agent: ${TIMEOUT_ERROR_MSG}`)
+            done()
+          })
+        })
+
+        it('should have a configurable timeout', function (done) {
+          this.timeout(2500)
+          nock('http://localhost:80')
+            .put('/path')
+            .socketDelay(2001)
+            .reply(200)
+
+          request({
+            path: '/path',
+            method: 'PUT',
+            timeout: 2000
+          }, err => {
+            expect(err).to.be.instanceof(Error)
+            expect(err.message).to.equal(`Network error trying to reach the agent: ${TIMEOUT_ERROR_MSG}`)
+            done()
+          })
+        })
+
+        it('should inject the container ID', (done) => {
+          nock('http://example.com:123', {
+            reqheaders: {
+              'datadog-container-id': 'abcd'
+            }
+          })
+            .put('/')
+            .reply(200, 'OK')
+
+          return request({
+            hostname: 'example.com',
+            port: 123,
+            method: 'PUT',
+            path: '/'
+          }, (err, res) => {
+            expect(res).to.equal('OK')
+            done(err)
+          })
         })
       })
+    }
 
-      it('should handle an http error', done => {
-        nock('http://localhost:80')
-          .put('/path')
-          .reply(400)
-
-        request({
-          path: '/path',
-          method: 'PUT'
-        }, err => {
-          expect(err).to.be.instanceof(Error)
-          expect(err.message).to.equal('Error from the agent: 400 Bad Request')
-          done()
-        })
-      })
-
-      it('should timeout after 2 seconds by default', function (done) {
-        this.timeout(2500)
-        nock('http://localhost:80')
-          .put('/path')
-          .socketDelay(2001)
-          .reply(200, 'soup')
-
-        request({
-          path: '/path',
-          method: 'PUT'
-        }, (err, res) => {
-          expect(err).to.be.instanceof(Error)
-          expect(err.message).to.equal(`Network error trying to reach the agent: ${TIMEOUT_ERROR_MSG}`)
-          done()
-        })
-      })
-
-      it('should have a configurable timeout', function (done) {
-        this.timeout(2500)
-        nock('http://localhost:80')
-          .put('/path')
-          .socketDelay(2001)
-          .reply(200)
-
-        request({
-          path: '/path',
-          method: 'PUT',
-          timeout: 2000
-        }, err => {
-          expect(err).to.be.instanceof(Error)
-          expect(err.message).to.equal(`Network error trying to reach the agent: ${TIMEOUT_ERROR_MSG}`)
-          done()
-        })
-      })
-
-      it('should inject the container ID', (done) => {
-        nock('http://example.com:123', {
-          reqheaders: {
-            'datadog-container-id': 'abcd'
-          }
-        })
-          .put('/')
-          .reply(200, 'OK')
-
-        return request({
-          hostname: 'example.com',
-          port: 123,
-          method: 'PUT',
-          path: '/'
-        }, (err, res) => {
-          expect(res).to.equal('OK')
-          done(err)
-        })
-      })
-    })
+    describeRequest(true)
+    describeRequest(false)
 
     describe('msgpack', () => {
       let msgpack

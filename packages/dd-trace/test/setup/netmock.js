@@ -99,8 +99,7 @@ mock.enableNetConnect = () => {}
 mock.isNetMock = true
 
 const supportsUndici = semver.satisfies(process.versions.node, '^10.16.0 || ^12.3.0 || ^14.0.0')
-if (supportsUndici) {
-  module.exports = mock
-} else {
-  module.exports = nock
+
+module.exports = function getMock (useUndici) {
+  return supportsUndici && useUndici ? mock : nock
 }
