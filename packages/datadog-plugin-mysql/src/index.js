@@ -56,7 +56,8 @@ function createWrapGetConnection (tracer, config) {
 }
 
 function wrapCallback (tracer, span, parent, done) {
-  return tracer.scope().bind((err, res) => {
+  return tracer.scope().bind((...args) => {
+    const err = args[0]
     if (err) {
       span.addTags({
         'error.type': err.name,
@@ -67,7 +68,7 @@ function wrapCallback (tracer, span, parent, done) {
 
     span.finish()
 
-    done(err, res)
+    done(...args)
   }, parent)
 }
 
