@@ -94,7 +94,7 @@
     "body-parser": "^1.18.2",
     "chai": "^4.2.0",
     "checksum": "^0.1.1",
-    "codecov": "^3.5.0",
+    "codecov": "3.5.0",
     "dotenv": "^8.2.0",
     "eslint": "^4.15.0",
     "eslint-config-standard": "^11.0.0-beta.0",
