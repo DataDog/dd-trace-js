@@ -196,6 +196,48 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with a service name callback', () => {
+        before(() => {
+          return agent.load('pg', { service: params => `${params.host}-${params.database}` })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+
+          client.connect(err => done(err))
+        })
+
+        it('should be configured with the correct service', done => {
+          agent.use(traces => {
+            try {
+              expect(traces[0][0]).to.have.property('service', 'localhost-postgres')
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) throw err
+
+            client.end((err) => {
+              if (err) throw err
+            })
+          })
+        })
+      })
     })
   })
 })

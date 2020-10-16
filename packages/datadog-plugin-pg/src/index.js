@@ -10,11 +10,13 @@ function createWrapQuery (tracer, config) {
     return function queryWithTrace () {
       const scope = tracer.scope()
       const childOf = scope.active()
+      const params = this.connectionParameters
+      const service = getServiceName(tracer, config, params)
       const span = tracer.startSpan(OPERATION_NAME, {
         childOf,
         tags: {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          'service.name': config.service || `${tracer._service}-postgres`,
+          'service.name': service,
           'span.type': 'sql',
           'db.type': 'postgres'
         }
@@ -33,7 +35,6 @@ function createWrapQuery (tracer, config) {
 
       const originalCallback = pgQuery.callback
       const statement = pgQuery.text
-      const params = this.connectionParameters
 
       span.setTag('resource.name', statement)
 
@@ -66,6 +67,16 @@ function createWrapQuery (tracer, config) {
 
       return retval
     }
+  }
+}
+
+function getServiceName (tracer, config, params) {
+  if (typeof config.service === 'function') {
+    return config.service(params)
+  } else if (config.service) {
+    return config.service
+  } else {
+    return `${tracer._service}-postgres`
   }
 }
 
