@@ -285,6 +285,36 @@ describe('Tracer', () => {
     })
   })
 
+  describe('getRumData', () => {
+    beforeEach(() => {
+      const now = Date.now()
+      sinon.stub(Date, 'now').returns(now)
+    })
+
+    afterEach(() => {
+      Date.now.restore()
+    })
+
+    it('should be disabled by default', () => {
+      tracer.trace('getRumData', {}, () => {
+        expect(tracer.getRumData()).to.equal('')
+      })
+    })
+
+    it('should return correct string', () => {
+      tracer._enableGetRumData = true
+      tracer.trace('getRumData', {}, () => {
+        const data = tracer.getRumData()
+        const time = Date.now()
+        const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
+        const [, traceId, traceTime] = re.exec(data)
+        const span = tracer.scope().active().context()
+        expect(traceId).to.equal(span._traceId.toString())
+        expect(traceTime).to.equal(time.toString())
+      })
+    })
+  })
+
   describe('wrap', () => {
     it('should return a new function that automatically calls tracer.trace()', () => {
       const it = {}

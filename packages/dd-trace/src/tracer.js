@@ -106,6 +106,18 @@ class DatadogTracer extends Tracer {
   currentSpan () {
     return this.scope().active()
   }
+
+  getRumData () {
+    if (!this._enableGetRumData) {
+      return ''
+    }
+    const span = this.scope().active().context()
+    const traceId = span._traceId
+    const traceTime = Date.now()
+    return `\
+<meta name="dd-trace-id" content="${traceId}" />\
+<meta name="dd-trace-time" content="${traceTime}" />`
+  }
 }
 
 function addError (span, error) {
