@@ -59,6 +59,12 @@
       "versions": ["4.0.0"]
     }
   ],
+  "mongoose": [
+    {
+      "name": "mongodb-core",
+      "versions": ["3.2.7"]
+    }
+  ],
   "pg": [
     {
       "name": "pg-native",
