@@ -34,7 +34,7 @@ class AgentEncoder {
     prefix[0] = 0xdd
     prefix.writeUInt32BE(this._traces.length, 1)
 
-    const buffer = [prefix].concat(this._traces)
+    const buffer = [prefix, ...this._traces]
 
     this._reset()
 
