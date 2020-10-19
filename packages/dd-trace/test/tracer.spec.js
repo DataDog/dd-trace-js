@@ -309,7 +309,7 @@ describe('Tracer', () => {
         const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
         const [, traceId, traceTime] = re.exec(data)
         const span = tracer.scope().active().context()
-        expect(traceId).to.equal(span._traceId.toString())
+        expect(traceId).to.equal(span.toTraceId())
         expect(traceTime).to.equal(time.toString())
       })
     })

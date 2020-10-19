@@ -112,7 +112,7 @@ class DatadogTracer extends Tracer {
       return ''
     }
     const span = this.scope().active().context()
-    const traceId = span._traceId
+    const traceId = span.toTraceId()
     const traceTime = Date.now()
     return `\
 <meta name="dd-trace-id" content="${traceId}" />\
