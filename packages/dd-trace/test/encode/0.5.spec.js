@@ -1,33 +1,25 @@
 'use strict'
 
 const msgpack = require('msgpack-lite')
-const platform = require('../../src/platform')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
-const { Int64BE } = require('int64-buffer') // TODO: remove dependency
 
 describe('encode 0.5', () => {
-  let encode
-  let makePayload
+  let encoder
   let writer
+  let data
 
   beforeEach(() => {
-    platform.use(require('../../src/platform/node'))
-    const encoder = require('../../src/encode/0.5')
-    encode = encoder.encode
-    makePayload = encoder.makePayload
-    encoder.init()
-  })
-
-  it('should encode to msgpack', () => {
-    const data = [{
+    const { AgentEncoder } = require('../../src/encode/0.5')
+    writer = { flush: sinon.spy() }
+    encoder = new AgentEncoder(writer)
+    data = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
       parent_id: id('1234abcd1234abcd'),
       name: 'test',
       resource: 'test-r',
       service: 'test-s',
-      type: 'foo',
       error: 0,
       meta: {
         bar: 'baz'
@@ -38,15 +30,13 @@ describe('encode 0.5', () => {
       start: 123,
       duration: 456
     }]
+  })
 
-    let buffer = Buffer.alloc(1024)
-    const offset = encode(buffer, 5, data, writer)
-    buffer = buffer.slice(0, offset)
-    const traceData = platform.msgpack.prefix(buffer, 1)
-    const [payload] = makePayload(traceData)
+  it('should encode to msgpack', () => {
+    encoder.encode(data)
 
-    const decoded = msgpack.decode(payload, { codec })
-
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { codec })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
 
@@ -58,43 +48,59 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6]).to.be.instanceof(Int64BE)
-    expect(trace[0][6].toString()).to.equal(data[0].start.toString())
-    expect(trace[0][7]).to.be.instanceof(Int64BE)
-    expect(trace[0][7].toString()).to.equal(data[0].duration.toString())
+    expect(trace[0][6]).to.equal(data[0].start)
+    expect(trace[0][7]).to.equal(data[0].duration)
     expect(trace[0][8]).to.equal(0)
     expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
-    expect(stringMap[trace[0][11]]).to.equal(data[0].type)
+    expect(stringMap[trace[0][11]]).to.equal('') // unset
   })
 
   it('should truncate long IDs', () => {
-    const data = [{
-      trace_id: id('ffffffffffffffff1234abcd1234abcd'),
-      span_id: id('ffffffffffffffff1234abcd1234abcd'),
-      parent_id: id('ffffffffffffffff1234abcd1234abcd'),
-      name: 'test',
-      resource: 'test-r',
-      service: 'test-s',
-      type: 'foo',
-      error: 0,
-      meta: {
-        bar: 'baz'
-      },
-      metrics: {
-        example: 1
-      },
-      start: 123,
-      duration: 456
-    }]
+    data[0].trace_id = id('ffffffffffffffff1234abcd1234abcd')
+    data[0].span_id = id('ffffffffffffffff1234abcd1234abcd')
+    data[0].arent_id = id('ffffffffffffffff1234abcd1234abcd')
 
-    let buffer = Buffer.alloc(1024)
-    const offset = encode(buffer, 0, data, writer)
-    buffer = buffer.slice(0, offset)
+    encoder.encode(data)
 
+    const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer, { codec })
-    expect(decoded[0][3].toString(16)).to.equal('1234abcd1234abcd')
-    expect(decoded[0][4].toString(16)).to.equal('1234abcd1234abcd')
-    expect(decoded[0][5].toString(16)).to.equal('1234abcd1234abcd')
+    const trace = decoded[1][0]
+
+    expect(trace[0][3].toString(16)).to.equal('1234abcd1234abcd')
+    expect(trace[0][4].toString(16)).to.equal('1234abcd1234abcd')
+    expect(trace[0][5].toString(16)).to.equal('1234abcd1234abcd')
+  })
+
+  it('should report its count', () => {
+    expect(encoder.count()).to.equal(0)
+
+    encoder.encode(data)
+
+    expect(encoder.count()).to.equal(1)
+
+    encoder.encode(data)
+
+    expect(encoder.count()).to.equal(2)
+  })
+
+  it('should flush when the payload size limit is reached', () => {
+    data[0].meta.foo = new Array(8 * 1024 * 1024).join('a')
+
+    encoder.encode(data)
+
+    expect(writer.flush).to.have.been.called
+  })
+
+  it('should reset after making a payload', () => {
+    encoder.encode(data)
+    encoder.makePayload()
+
+    const payload = encoder.makePayload()
+
+    expect(encoder.count()).to.equal(0)
+    expect(payload).to.have.length(12)
+    expect(payload[5]).to.equal(1)
+    expect(payload[11]).to.equal(0)
   })
 })

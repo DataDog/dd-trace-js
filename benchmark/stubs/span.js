@@ -24,8 +24,9 @@ const span = {
       finished: [span, span]
     },
     _tags: {
-      resource: '/resource',
-      type: 'web',
+      'resource.name': '/resource',
+      'service.name': 'benchmark',
+      'span.type': 'web',
       error: true,
       [SAMPLE_RATE_METRIC_KEY]: 1
     },

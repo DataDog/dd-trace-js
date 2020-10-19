@@ -19,6 +19,7 @@ const pad = byte => `${byte < 16 ? '0' : ''}${byte.toString(16)}`
 // Internal representation of a trace or span ID.
 class Identifier {
   constructor (value, radix) {
+    this._isUint64BE = true // msgpack-lite compatibility
     this._buffer = typeof radix === 'number'
       ? fromString(value, radix)
       : createBuffer(value)
@@ -32,6 +33,11 @@ class Identifier {
 
   toBuffer () {
     return this._buffer
+  }
+
+  // msgpack-lite compatibility
+  toArray () {
+    return this._buffer.subarray(-8)
   }
 
   toJSON () {

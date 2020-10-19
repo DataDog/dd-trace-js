@@ -4,22 +4,17 @@ const platform = require('../../platform')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
 
-const MAX_SIZE = 8 * 1024 * 1024 // 8MB
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer {
   constructor ({ url, prioritySampler, lookup, protocolVersion }) {
+    const AgentEncoder = getEncoder(protocolVersion)
+
     this._url = url
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoderForVersion = getEncoder(this)
-
-    this._reset()
-  }
-
-  get length () {
-    return this._count
+    this._encoderForVersion = new AgentEncoder(this)
   }
 
   append (spans) {
@@ -62,40 +57,16 @@ class Writer {
   }
 
   _encode (trace) {
-    const offset = this._offset
-    try {
-      this._offset = this._encoderForVersion.encode(this._buffer, this._offset, trace, this)
-      this._count++
-    } catch (e) {
-      if (e instanceof RangeError) {
-        log.error(e.message)
-      } else {
-        throw e
-      }
-    }
-
-    log.debug(() => [
-      'Added encoded trace to buffer:',
-      this._buffer.slice(offset, this._offset).toString('hex').match(/../g).join(' ')
-    ].join(' '))
-  }
-
-  _reset () {
-    this._buffer = Buffer.allocUnsafe(MAX_SIZE)
-    this._offset = 5 // we'll use these first bytes to hold an array prefix
-    this._count = 0
-
-    this._encoderForVersion.init()
+    this._encoderForVersion.encode(trace)
   }
 
   flush () {
-    if (this._count > 0) {
-      const traceData = platform.msgpack.prefix(this._buffer.slice(0, this._offset), this._count)
-      const data = this._encoderForVersion.makePayload(traceData)
+    const count = this._encoderForVersion.count()
 
-      this._sendPayload(data, this._count)
+    if (count > 0) {
+      const payload = this._encoderForVersion.makePayload()
 
-      this._reset()
+      this._sendPayload(payload, count)
     }
   }
 }
@@ -106,11 +77,11 @@ function setHeader (headers, key, value) {
   }
 }
 
-function getEncoder (writer) {
-  if (writer._protocolVersion === '0.5') {
-    return require('../../encode/0.5')
+function getEncoder (protocolVersion) {
+  if (protocolVersion === '0.5') {
+    return require('../../encode/0.5').AgentEncoder
   } else {
-    return require('../../encode/0.4')
+    return require('../../encode/0.4').AgentEncoder
   }
 }
 
