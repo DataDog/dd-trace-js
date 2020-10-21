@@ -125,15 +125,7 @@ class Tracer extends BaseTracer {
   }
 
   getRumData () {
-    if (!this._tracer._config.experimental.enableGetRumData) {
-      return ''
-    }
-    const span = this.scope().active().context()
-    const traceId = span._traceId
-    const traceTime = Date.now()
-    return `\
-<meta name="dd-trace-id" content="${traceId}" />\
-<meta name="dd-trace-time" content="${traceTime}" />`
+    return this._tracer.getRumData.apply(this._tracer, arguments)
   }
 }
 
