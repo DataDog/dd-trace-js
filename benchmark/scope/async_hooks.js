@@ -1,6 +1,8 @@
 'use strict'
 
 const { AsyncResource } = require('async_hooks')
+const EventEmitter = require('events')
+const { ServerResponse } = require('http')
 
 const proxyquire = require('proxyquire')
 const platform = require('../../packages/dd-trace/src/platform')
@@ -16,6 +18,9 @@ const spanStub = require('../stubs/span')
 const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
   '../platform': platform
 })
+
+// This is also done in the `http` plugin.
+Scope._wrapEmitter(ServerResponse.prototype)
 
 const scope = new Scope({
   experimental: {}
@@ -132,27 +137,34 @@ suite
       promise.then(() => {})
     }
   })
-  .add('Scope#bind (emitter)', {
+  .add('Scope#bind (wrap emitter instance)', {
     fn () {
-      const emitter = {
-        addListener: () => {},
-        on: () => {},
-        emit: () => {},
-        removeListener: () => {}
-      }
+      emitter = Object.create(EventEmitter.prototype)
 
       scope.bind(emitter, {})
     }
   })
-  .add('Scope#bind (emitter.on/off)', {
+  .add('Scope#bind (wrap emitter instance .on/off)', {
     onStart () {
-      emitter = scope.bind({
-        addListener: () => {},
-        on: () => {},
-        emit: () => {},
-        removeListener: () => {},
-        off: () => {}
-      }, {})
+      emitter = scope.bind(Object.create(EventEmitter.prototype), {})
+    },
+    fn () {
+      const listener = () => {}
+
+      emitter.on('test', listener)
+      emitter.off('test', listener)
+    }
+  })
+  .add('Scope#bind (wrap emitter prototype)', {
+    fn () {
+      emitter = Object.create(ServerResponse.prototype)
+
+      scope.bind(emitter, {})
+    }
+  })
+  .add('Scope#bind (wrap emitter prototype .on/off)', {
+    onStart () {
+      emitter = scope.bind(Object.create(ServerResponse.prototype), {})
     },
     fn () {
       const listener = () => {}

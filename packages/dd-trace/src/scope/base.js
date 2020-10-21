@@ -68,30 +68,32 @@ class Scope {
 
   _bindEmitter (emitter, span) {
     if (!this._isEmitter(emitter)) return emitter
+    if (!emitter.__is_dd_emitter) {
+      Scope._wrapEmitter(emitter)
+    }
+    emitter.__dd_span = span
+    emitter.__dd_scope = this
+    return emitter
+  }
 
-    wrapMethod(emitter, 'addListener', wrapAddListener, this, span)
-    wrapMethod(emitter, 'prependListener', wrapAddListener, this, span)
-    wrapMethod(emitter, 'on', wrapAddListener, this, span)
-    wrapMethod(emitter, 'once', wrapAddListener, this, span)
-    wrapMethod(emitter, 'prependOnceListener', wrapAddListener, this, span)
-
+  // Occasionally we want to wrap a prototype rather than emitter instances,
+  // so we're exposing this as a static method. This gives us a faster
+  // path for binding instances of known EventEmitter subclasses.
+  static _wrapEmitter (emitter) {
+    wrapMethod(emitter, 'addListener', wrapAddListener)
+    wrapMethod(emitter, 'prependListener', wrapAddListener)
+    wrapMethod(emitter, 'on', wrapAddListener)
+    wrapMethod(emitter, 'once', wrapAddListener)
     wrapMethod(emitter, 'removeListener', wrapRemoveListener)
     wrapMethod(emitter, 'off', wrapRemoveListener)
-
     wrapMethod(emitter, 'removeAllListeners', wrapRemoveAllListeners)
-
-    return emitter
+    emitter.__is_dd_emitter = true
   }
 
   _unbindEmitter (emitter) {
     if (!this._isEmitter(emitter)) return emitter
-
-    unwrapMethod(emitter, 'addListener')
-    unwrapMethod(emitter, 'prependListener')
-    unwrapMethod(emitter, 'on')
-    unwrapMethod(emitter, 'once')
-    unwrapMethod(emitter, 'prependOnceListener')
-
+    delete emitter.__dd_scope
+    delete emitter.__dd_span
     return emitter
   }
 
@@ -140,11 +142,13 @@ function wrapThen (then, scope, span) {
   }
 }
 
-function wrapAddListener (addListener, scope, span) {
+function wrapAddListener (addListener) {
   return function addListenerWithTrace (eventName, listener) {
-    if (!listener || listener._datadog_unbound || listener.listener) {
+    if (!this.__dd_scope || !listener || listener._datadog_unbound || listener.listener) {
       return addListener.apply(this, arguments)
     }
+    const scope = this.__dd_scope
+    const span = this.__dd_span
 
     const bound = scope.bind(listener, scope._spanOrActive(span))
 
@@ -168,6 +172,10 @@ function wrapAddListener (addListener, scope, span) {
 
 function wrapRemoveListener (removeListener) {
   return function removeListenerWithTrace (eventName, listener) {
+    if (!this.__dd_scope) {
+      return removeListener.apply(this, arguments)
+    }
+
     const listeners = this._datadog_events && this._datadog_events[eventName]
 
     if (!listener || !listeners || !listeners.has(listener)) {
@@ -186,7 +194,7 @@ function wrapRemoveListener (removeListener) {
 
 function wrapRemoveAllListeners (removeAllListeners) {
   return function removeAllListenersWithTrace (eventName) {
-    if (this._datadog_events) {
+    if (this.__dd_scope && this._datadog_events) {
       if (eventName) {
         delete this._datadog_events[eventName]
       } else {
@@ -205,12 +213,6 @@ function wrapMethod (target, name, wrapper, ...args) {
 
   target[name] = wrapper(target[name], ...args)
   target[name]._datadog_unbound = original
-}
-
-function unwrapMethod (target, name) {
-  if (!target[name] || !target[name]._datadog_unbound) return
-
-  target[name] = target[name]._datadog_unbound
 }
 
 module.exports = Scope
