@@ -10,7 +10,6 @@ describe('Instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
-  // let shimmer
 
   beforeEach(() => {
     tracer = {
@@ -52,12 +51,7 @@ describe('Instrumenter', () => {
       }
     }
 
-    // shimmer = sinon.spy()
-    // shimmer.massWrap = sinon.stub().callsFake(())
-    // shimmer.massUnwrap = sinon.spy()
-
     Instrumenter = proxyquire('../src/instrumenter', {
-      // 'shimmer': shimmer,
       './platform': {
         plugins: {
           'http': integrations.http,
