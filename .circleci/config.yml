@@ -687,6 +687,8 @@ jobs:
 
   linux-x64-14:
     <<: *prebuild-linux-base
+    docker:
+      - image: node:12.0.0
     environment:
       - ARCH=x64
       - NODE_VERSIONS=14 - 15
@@ -768,6 +770,8 @@ jobs:
 
   linux-ia32-14:
     <<: *prebuild-linux-ia32-base
+    docker:
+      - image: node:12.0.0
     environment:
       - ARCH=ia32
       - NODE_VERSIONS=14 - 15
