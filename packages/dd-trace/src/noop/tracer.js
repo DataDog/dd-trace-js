@@ -42,6 +42,10 @@ class NoopTracer extends Tracer {
     return null
   }
 
+  getRumData () {
+    return ''
+  }
+
   _startSpan (name, options) {
     return this._span
   }
