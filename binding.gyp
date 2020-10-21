@@ -33,9 +33,7 @@
           "-Wall",
           "-Werror"
         ],
-        "cflags_cc": [
-          "-Wno-cast-function-type"
-        ]
+        "cflags_cc": []
       }],
       ["OS == 'win'", {
         "cflags": [
