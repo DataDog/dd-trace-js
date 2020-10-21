@@ -298,6 +298,21 @@ export declare interface TracerOptions {
   protocolVersion?: string
 
   /**
+   * Configuration of the ingestion between the agent and the backend.
+   */
+  ingestion?: {
+    /**
+     * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
+     */
+    sampleRate?: number
+
+    /**
+     * Controls the ingestion rate limit between the agent and the backend.
+     */
+    rateLimit?: number
+  };
+
+  /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */

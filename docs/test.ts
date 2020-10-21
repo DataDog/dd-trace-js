@@ -43,6 +43,10 @@ tracer.init({
   url: 'http://localhost',
   runtimeMetrics: true,
   trackAsyncScope: false,
+  ingestion: {
+    sampleRate: 0.5,
+    rateLimit: 500
+  },
   experimental: {
     b3: true,
     runtimeId: true,
