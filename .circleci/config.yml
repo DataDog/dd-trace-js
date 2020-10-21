@@ -1067,8 +1067,6 @@ workflows:
           requires:
             - linux-x64-8
       # Linux ia32
-      - linux-ia32-13:
-          <<: *prebuild-job
       - linux-ia32-12:
           <<: *prebuild-job
       - linux-ia32-10:
