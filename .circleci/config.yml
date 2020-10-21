@@ -685,13 +685,19 @@ jobs:
 
   # Prebuilds (linux x64)
 
-  linux-x64-14:
+  linux-x64-15:
     <<: *prebuild-linux-base
     docker:
       - image: node:12.0.0
     environment:
       - ARCH=x64
-      - NODE_VERSIONS=14 - 15
+      - NODE_VERSIONS=15
+
+  linux-x64-14:
+    <<: *prebuild-linux-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=14
 
   linux-x64-12:
     <<: *prebuild-linux-base
@@ -768,13 +774,19 @@ jobs:
 
   # Prebuilds (linux ia32)
 
-  linux-ia32-14:
+  linux-ia32-15:
     <<: *prebuild-linux-ia32-base
     docker:
       - image: node:12.0.0
     environment:
       - ARCH=ia32
-      - NODE_VERSIONS=14 - 15
+      - NODE_VERSIONS=15
+
+  linux-ia32-14:
+    <<: *prebuild-linux-ia32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=14
 
   linux-ia32-12:
     <<: *prebuild-linux-ia32-base
@@ -1048,6 +1060,8 @@ workflows:
   prebuild:
     jobs:
       # Linux x64
+      - linux-x64-15:
+          <<: *prebuild-job
       - linux-x64-14:
           <<: *prebuild-job
       - linux-x64-12:
@@ -1058,7 +1072,7 @@ workflows:
           <<: *prebuild-job
       - linux-x64-15-test:
           requires:
-            - linux-x64-14
+            - linux-x64-15
       - linux-x64-14-test:
           requires:
             - linux-x64-14
@@ -1072,6 +1086,8 @@ workflows:
           requires:
             - linux-x64-8
       # Linux ia32
+      - linux-ia32-15:
+          <<: *prebuild-job
       - linux-ia32-14:
           <<: *prebuild-job
       - linux-ia32-12:
@@ -1082,7 +1098,7 @@ workflows:
           <<: *prebuild-job
       - linux-ia32-15-test:
           requires:
-            - linux-ia32-14
+            - linux-ia32-15
       - linux-ia32-14-test:
           requires:
             - linux-ia32-14
@@ -1140,6 +1156,7 @@ workflows:
       # Artifacts
       - prebuilds:
           requires:
+            - linux-x64-15-test
             - linux-x64-14-test
             - linux-x64-12-test
             - linux-x64-10-test
