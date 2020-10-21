@@ -115,7 +115,15 @@ class Instrumenter {
       })
     })
 
-    shimmer.massWrap.call(this, nodules, names, wrapper)
+    shimmer.massWrap.call(this, nodules, names, function (original, name) {
+      const wrapped = wrapper(original, name)
+
+      for (const sym of Object.getOwnPropertySymbols(original)) {
+        wrapped[sym] = original[sym]
+      }
+
+      return wrapped
+    })
   }
 
   unwrap (nodules, names, wrapper) {
