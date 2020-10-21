@@ -323,6 +323,20 @@ describe('Instrumenter', () => {
         expect(obj.method).to.have.property(sym, 'bar')
       })
 
+      it('should not override existing symbols on the shim', () => {
+        const sym = Symbol('foo')
+        const obj = { method: () => {} }
+        const shim = () => {}
+        const wrapper = () => shim
+
+        shim[sym] = 'invalid'
+        obj.method[sym] = 'bar'
+
+        instrumenter.wrap(obj, 'method', wrapper)
+
+        expect(obj.method).to.have.property(sym, 'invalid')
+      })
+
       it('should throw if the method does not exist', () => {
         const obj = {}
         const wrapper = () => {}

@@ -117,9 +117,13 @@ class Instrumenter {
 
     shimmer.massWrap.call(this, nodules, names, function (original, name) {
       const wrapped = wrapper(original, name)
+      const props = Object.getOwnPropertyDescriptors(original)
+      const keys = Reflect.ownKeys(props)
 
-      for (const sym of Object.getOwnPropertySymbols(original)) {
-        wrapped[sym] = original[sym]
+      for (const key of keys) {
+        if (typeof key !== 'symbol' || wrapped.hasOwnProperty(key)) continue
+
+        Object.defineProperty(wrapped, key, props[key])
       }
 
       return wrapped
