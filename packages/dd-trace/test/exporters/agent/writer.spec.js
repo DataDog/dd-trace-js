@@ -76,6 +76,22 @@ function describeWriter (protocolVersion) {
     })
   })
 
+  describe('setUrl', () => {
+    it('should set the URL used in the flush', () => {
+      const url = new URL('http://example.com:1234')
+      writer.setUrl(url)
+      writer.append([span])
+      encoder.count.returns(2)
+      encoder.makePayload.returns([Buffer.alloc(0)])
+      writer.flush()
+      expect(platform.request).to.have.been.calledWithMatch({
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port
+      })
+    })
+  })
+
   describe('flush', () => {
     it('should skip flushing if empty', () => {
       writer.flush()
