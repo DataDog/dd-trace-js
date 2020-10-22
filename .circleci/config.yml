@@ -183,6 +183,7 @@ prebuild-job: &prebuild-job
         - master
         - /v\d+\.\d+/
         - /.*native.*/
+        - /^node-\d+/
 
 jobs:
   # Linting
@@ -246,6 +247,11 @@ jobs:
     <<: *node-core-base
     docker:
       - image: node:14
+
+  node-core-15:
+    <<: *node-core-base
+    docker:
+      - image: node:15
 
   node-core-latest:
     <<: *node-core-base
@@ -421,6 +427,13 @@ jobs:
     <<: *node-plugin-base
     docker:
       - image: node:14
+        environment:
+          - PLUGINS=fs
+
+  node-fs-15:
+    <<: *node-plugin-base
+    docker:
+      - image: node:15
         environment:
           - PLUGINS=fs
 
@@ -681,11 +694,19 @@ jobs:
 
   # Prebuilds (linux x64)
 
+  linux-x64-15:
+    <<: *prebuild-linux-base
+    docker:
+      - image: node:12.0.0
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=15
+
   linux-x64-14:
     <<: *prebuild-linux-base
     environment:
       - ARCH=x64
-      - NODE_VERSIONS=14 - 15
+      - NODE_VERSIONS=14
 
   linux-x64-12:
     <<: *prebuild-linux-base
@@ -708,6 +729,11 @@ jobs:
       - NODE_VERSIONS=8 - 9
 
   ## Tests
+
+  linux-x64-15-test:
+    <<: *test-prebuild-linux-base
+    docker:
+      - image: node:15
 
   linux-x64-14-test:
     <<: *test-prebuild-linux-base
@@ -970,6 +996,7 @@ workflows:
       - node-core-10
       - node-core-12
       - node-core-14
+      - node-core-15
       - node-core-latest
       - node-core-windows
       - node-bench-latest
@@ -991,6 +1018,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-fs-14
+      - node-fs-15
       - node-fs-latest
       - node-generic-pool
       - node-google-cloud-pubsub
@@ -1023,6 +1051,8 @@ workflows:
   prebuild:
     jobs:
       # Linux x64
+      - linux-x64-15:
+          <<: *prebuild-job
       - linux-x64-14:
           <<: *prebuild-job
       - linux-x64-12:
@@ -1031,6 +1061,9 @@ workflows:
           <<: *prebuild-job
       - linux-x64-8:
           <<: *prebuild-job
+      - linux-x64-15-test:
+          requires:
+            - linux-x64-15
       - linux-x64-14-test:
           requires:
             - linux-x64-14
@@ -1107,6 +1140,7 @@ workflows:
       # Artifacts
       - prebuilds:
           requires:
+            - linux-x64-15-test
             - linux-x64-14-test
             - linux-x64-12-test
             - linux-x64-10-test
@@ -1148,6 +1182,7 @@ workflows:
       - node-core-10
       - node-core-12
       - node-core-14
+      - node-core-15
       - node-core-latest
       - node-core-windows
       - node-bench-latest
@@ -1169,6 +1204,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-fs-14
+      - node-fs-15
       - node-fs-latest
       - node-generic-pool
       - node-google-cloud-pubsub

@@ -21,7 +21,8 @@ const targets = [
   { version: '11.0.0', abi: '67' },
   { version: '12.0.0', abi: '72' },
   { version: '13.0.0', abi: '79' },
-  { version: '14.0.0', abi: '83' }
+  { version: '14.0.0', abi: '83' },
+  { version: '15.0.0', abi: '88' }
 ].filter(target => semver.satisfies(target.version, NODE_VERSIONS))
 
 prebuildify()
