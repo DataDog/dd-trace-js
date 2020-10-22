@@ -219,8 +219,10 @@ export declare interface TracerOptions {
   /**
    * The url of the trace agent that the tracer will submit to.
    * Takes priority over hostname and port, if set.
+   *
+   * If set to a promise, the promise must resolve within one second.
    */
-  url?: string;
+  url?: string | Promise<string>;
 
   /**
    * The address of the trace agent that the tracer will submit to.

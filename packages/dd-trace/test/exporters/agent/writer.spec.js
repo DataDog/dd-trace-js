@@ -160,6 +160,23 @@ function describeWriter (protocolVersion) {
         })
       })
     })
+
+    context('with a promise url', () => {
+      beforeEach(() => {
+        url = Promise.resolve('http://localhost:8126')
+        writer = new Writer({ url, protocolVersion })
+      })
+      it('should make a request to resolved url', async () => {
+        encoder.count.returns(1)
+        writer.flush()
+        url = new URL(await url)
+        expect(platform.request).to.have.been.calledWithMatch({
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port
+        })
+      })
+    })
   })
 }
 

@@ -15,6 +15,19 @@ class Writer {
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._encoderForVersion = new AgentEncoder(this)
+
+    if (url.then) {
+      // While we resolve this in makeRequest, re-assigning allows us to skip a
+      // `promise.then()` after it has been resolved.
+      this._url = Promise.race(url, new Promise((resolve, reject) => {
+        setTimeout(() => {
+          reject(new Error('Agent URL promise timed out (1000ms)'))
+        }, 1000) // Give user code 1 second to find retrieve a URL
+      }))
+      url.then(resolvedUrl => {
+        this._url = new URL(resolvedUrl)
+      })
+    }
   }
 
   append (spans) {
@@ -86,6 +99,18 @@ function getEncoder (protocolVersion) {
 }
 
 function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
+  if (url.then) {
+    url.then(resolvedUrl => {
+      makeRequest(version, data, count, new URL(resolvedUrl), lookup, needsStartupLog, cb)
+    }, err => {
+      if (needsStartupLog) {
+        // Note that logging will only happen once, regardless of how many times this is called.
+        platform.startupLog.startupLog({ agentError: err })
+        cb(err)
+      }
+    })
+    return
+  }
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
