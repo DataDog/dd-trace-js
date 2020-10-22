@@ -559,6 +559,15 @@ jobs:
           - PLUGINS=mongodb-core
       - image: circleci/mongo
 
+  node-mongoose:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=mongo
+          - PLUGINS=mongoose
+      - image: circleci/mongo
+
   node-net:
     <<: *node-plugin-base
     docker:
@@ -996,6 +1005,7 @@ workflows:
       - node-memcached
       - node-microgateway-core
       - node-mongodb-core
+      - node-mongoose
       - node-mysql
       - node-net
       - node-paperplane
@@ -1173,6 +1183,7 @@ workflows:
       - node-memcached
       - node-microgateway-core
       - node-mongodb-core
+      - node-mongoose
       - node-mysql
       - node-net
       - node-paperplane

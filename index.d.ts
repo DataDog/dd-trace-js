@@ -505,6 +505,7 @@ interface Plugins {
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
   "mongodb-core": plugins.mongodb_core;
+  "mongoose": plugins.mongoose;
   "mysql": plugins.mysql;
   "mysql2": plugins.mysql2;
   "net": plugins.net;
@@ -1013,6 +1014,12 @@ declare namespace plugins {
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
   interface mongodb_core extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [mongoose](https://mongoosejs.com/) module.
+   */
+  interface mongoose extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
