@@ -120,6 +120,7 @@ class Instrumenter {
       const props = Object.getOwnPropertyDescriptors(original)
       const keys = Reflect.ownKeys(props)
 
+      // https://github.com/othiym23/shimmer/issues/19
       for (const key of keys) {
         if (typeof key !== 'symbol' || wrapped.hasOwnProperty(key)) continue
 
