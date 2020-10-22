@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { promisify } = require('util')
 
 wrapIt()
 
@@ -134,6 +135,15 @@ describe('Plugin', () => {
 
           done()
         })
+      })
+    })
+
+    it('should work with promisify', () => {
+      const lookup = promisify(dns.lookup)
+
+      return lookup('localhost', 4).then(({ address, family }) => {
+        expect(address).to.equal('127.0.0.1')
+        expect(family).to.equal(4)
       })
     })
 

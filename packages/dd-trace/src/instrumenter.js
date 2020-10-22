@@ -115,7 +115,20 @@ class Instrumenter {
       })
     })
 
-    shimmer.massWrap.call(this, nodules, names, wrapper)
+    shimmer.massWrap.call(this, nodules, names, function (original, name) {
+      const wrapped = wrapper(original, name)
+      const props = Object.getOwnPropertyDescriptors(original)
+      const keys = Reflect.ownKeys(props)
+
+      // https://github.com/othiym23/shimmer/issues/19
+      for (const key of keys) {
+        if (typeof key !== 'symbol' || wrapped.hasOwnProperty(key)) continue
+
+        Object.defineProperty(wrapped, key, props[key])
+      }
+
+      return wrapped
+    })
   }
 
   unwrap (nodules, names, wrapper) {

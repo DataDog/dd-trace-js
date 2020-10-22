@@ -2,13 +2,14 @@
 
 const proxyquire = require('proxyquire')
 const path = require('path')
+const shimmer = require('shimmer')
+const { expect } = require('chai')
 
 describe('Instrumenter', () => {
   let Instrumenter
   let instrumenter
   let integrations
   let tracer
-  let shimmer
 
   beforeEach(() => {
     tracer = {
@@ -50,12 +51,7 @@ describe('Instrumenter', () => {
       }
     }
 
-    shimmer = sinon.spy()
-    shimmer.massWrap = sinon.spy()
-    shimmer.massUnwrap = sinon.spy()
-
     Instrumenter = proxyquire('../src/instrumenter', {
-      'shimmer': shimmer,
       './platform': {
         plugins: {
           'http': integrations.http,
@@ -299,12 +295,40 @@ describe('Instrumenter', () => {
 
     describe('wrap', () => {
       it('should wrap the method on the object', () => {
-        const obj = { method: () => {} }
-        const wrapper = () => {}
+        const method = () => {}
+        const obj = { method }
+        const wrapper = sinon.stub().returns(() => 'test')
 
         instrumenter.wrap(obj, 'method', wrapper)
 
-        expect(shimmer.massWrap).to.have.been.calledWith([obj], ['method'], wrapper)
+        expect(wrapper).to.have.been.calledWith(method, 'method')
+        expect(obj.method()).to.equal('test')
+      })
+
+      it('should preserve symbols on the method', () => {
+        const sym = Symbol('foo')
+        const obj = { method: () => {} }
+        const wrapper = () => () => {}
+
+        obj.method[sym] = 'bar'
+
+        instrumenter.wrap(obj, 'method', wrapper)
+
+        expect(obj.method).to.have.property(sym, 'bar')
+      })
+
+      it('should not override existing symbols on the shim', () => {
+        const sym = Symbol('foo')
+        const obj = { method: () => {} }
+        const shim = () => {}
+        const wrapper = () => shim
+
+        shim[sym] = 'invalid'
+        obj.method[sym] = 'bar'
+
+        instrumenter.wrap(obj, 'method', wrapper)
+
+        expect(obj.method).to.have.property(sym, 'invalid')
       })
 
       it('should throw if the method does not exist', () => {
@@ -317,11 +341,13 @@ describe('Instrumenter', () => {
 
     describe('unwrap', () => {
       it('should wrap the method on the object', () => {
-        const obj = { method: () => {} }
+        const obj = { method: () => 'foo' }
+        const wrapper = () => () => 'bar'
 
+        instrumenter.wrap(obj, 'method', wrapper)
         instrumenter.unwrap(obj, 'method')
 
-        expect(shimmer.massUnwrap).to.have.been.calledWith([obj], ['method'])
+        expect(obj.method()).to.equal('foo')
       })
     })
 
