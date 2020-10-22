@@ -65,7 +65,25 @@ describe('RateLimiter', () => {
   })
 
   it('should average its effective rate with the previous rate', () => {
-    rateLimiter = new RateLimiter(1)
+    rateLimiter = new RateLimiter(2)
+
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+
+    clock.tick(1000)
+
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+
+    expect(rateLimiter.effectiveRate()).to.equal(0.5)
+  })
+
+  it('should properly reset the counters at each interval', () => {
+    rateLimiter = new RateLimiter(2)
 
     rateLimiter.isAllowed()
     rateLimiter.isAllowed()
@@ -73,8 +91,39 @@ describe('RateLimiter', () => {
     clock.tick(1000)
 
     rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(0.75)
+    clock.tick(1000)
+
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+
+    expect(rateLimiter.effectiveRate()).to.equal(1)
+  })
+
+  it('should use 2 intervals to calculate the effective rate', () => {
+    rateLimiter = new RateLimiter(2)
+
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+
+    clock.tick(1000)
+
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+
+    clock.tick(1000)
+
+    rateLimiter.isAllowed()
+    rateLimiter.isAllowed()
+
+    expect(rateLimiter.effectiveRate()).to.equal(1)
   })
 
   it('should always have an effective rate of 0 when limit is 0', () => {
