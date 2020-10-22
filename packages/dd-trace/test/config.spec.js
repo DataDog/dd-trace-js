@@ -318,6 +318,25 @@ describe('Config', () => {
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
   })
 
+  it('should give priority to non-experimental options', () => {
+    const config = new Config({
+      ingestion: {
+        sampleRate: 0.5,
+        rateLimit: 500
+      },
+      experimental: {
+        sampler: {
+          sampleRate: 0.1,
+          rateLimit: 100
+        }
+      }
+    })
+
+    expect(config).to.have.deep.nested.property('experimental.sampler', {
+      sampleRate: 0.5, rateLimit: 500
+    })
+  })
+
   it('should give priority to the options especially url', () => {
     platform.env.withArgs('DD_TRACE_AGENT_URL').returns('http://agent2:6218')
     platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')

@@ -105,11 +105,12 @@ class Config {
     )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
+    const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
 
     Object.assign(sampler, {
-      sampleRate: coalesce(sampler.sampleRate, platform.env('DD_TRACE_SAMPLE_RATE')),
-      rateLimit: coalesce(sampler.rateLimit, platform.env('DD_TRACE_RATE_LIMIT'))
+      sampleRate: coalesce(ingestion.sampleRate, sampler.sampleRate, platform.env('DD_TRACE_SAMPLE_RATE')),
+      rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, platform.env('DD_TRACE_RATE_LIMIT'))
     })
 
     this.enabled = isTrue(DD_TRACE_ENABLED)
