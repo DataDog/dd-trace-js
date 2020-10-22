@@ -250,7 +250,6 @@ function finishMiddleware (req, res) {
 }
 
 function wrapEnd (req) {
-  const scope = req._datadog.tracer.scope()
   const res = req._datadog.res
   const end = res.end
 
@@ -270,15 +269,27 @@ function wrapEnd (req) {
     return returnValue
   }
 
-  Object.defineProperty(res, 'end', {
-    configurable: true,
-    get () {
-      return this._datadog_end
-    },
-    set (value) {
-      this._datadog_end = scope.bind(value, req._datadog.span)
-    }
-  })
+  res._datadog_req = req
+
+  if (!res._datadog_instrumented) {
+    const target = Reflect.getPrototypeOf(res)
+    Object.defineProperty(target, 'end', {
+      configurable: true,
+      get () {
+        return this._datadog_end || end
+      },
+      set (value) {
+        const req = this._datadog_req
+        if (req && req._datadog) {
+          const scope = req._datadog.tracer.scope()
+          this._datadog_end = scope.bind(value, req._datadog.span)
+        } else {
+          this._datadog_end = value
+        }
+      }
+    })
+    target._datadog_instrumented = true
+  }
 }
 
 function wrapWriteHead (req) {
