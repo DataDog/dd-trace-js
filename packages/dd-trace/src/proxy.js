@@ -89,6 +89,11 @@ class Tracer extends BaseTracer {
     return this._tracer.wrap(name, options, fn)
   }
 
+  setUrl () {
+    this._tracer.setUrl.apply(this._tracer, arguments)
+    return this
+  }
+
   startSpan () {
     return this._tracer.startSpan.apply(this._tracer, arguments)
   }

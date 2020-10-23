@@ -59,4 +59,11 @@ describe('dd-trace', () => {
 
     window.fetch && expect(fetch).to.have.been.called
   })
+
+  context('setUrl', () => {
+    it('should set the URL on the exporter', () => {
+      tracer.setUrl('http://example.com')
+      expect(tracer._tracer._exporter._url).to.equal('http://example.com')
+    })
+  })
 })

@@ -56,6 +56,10 @@ class Writer {
     })
   }
 
+  setUrl (url) {
+    this._url = url
+  }
+
   _encode (trace) {
     this._encoderForVersion.encode(trace)
   }

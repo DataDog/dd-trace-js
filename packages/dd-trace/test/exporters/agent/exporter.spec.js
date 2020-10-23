@@ -1,5 +1,7 @@
 'use strict'
 
+const URL = require('url-parse')
+
 describe('Exporter', () => {
   let url
   let flushInterval
@@ -22,7 +24,8 @@ describe('Exporter', () => {
     }
     writer = {
       append: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
+      setUrl: sinon.spy()
     }
     prioritySampler = {}
     Scheduler = sinon.stub().returns(scheduler)
@@ -70,6 +73,18 @@ describe('Exporter', () => {
     it('should flush right away when interval is set to 0', () => {
       exporter.export([span])
       expect(writer.flush).to.have.been.called
+    })
+  })
+
+  describe('setUrl', () => {
+    beforeEach(() => {
+      exporter = new Exporter({ url })
+    })
+    it('should set the URL on self and writer', () => {
+      exporter.setUrl('http://example2.com')
+      const url = new URL('http://example2.com')
+      expect(exporter._url).to.deep.equal(url)
+      expect(writer.setUrl).to.have.been.calledWith(url)
     })
   })
 })

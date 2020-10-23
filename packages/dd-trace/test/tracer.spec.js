@@ -32,6 +32,14 @@ describe('Tracer', () => {
     })
 
     tracer = new Tracer(config)
+    tracer._exporter.setUrl = sinon.stub()
+  })
+
+  describe('setUrl', () => {
+    it('should pass the setUrl call to the exporter', () => {
+      tracer.setUrl('http://example.com')
+      expect(tracer._exporter.setUrl).to.have.been.calledWith('http://example.com')
+    })
   })
 
   describe('trace', () => {
