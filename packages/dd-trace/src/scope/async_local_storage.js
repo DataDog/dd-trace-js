@@ -22,9 +22,6 @@ class Scope extends Base {
   }
 
   _activate (span, callback) {
-    if (span === null) {
-      return this._storage.exit(callback)
-    }
     return this._storage.run(span, callback)
   }
 }
