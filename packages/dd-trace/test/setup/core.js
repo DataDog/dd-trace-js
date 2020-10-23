@@ -10,6 +10,7 @@ const platform = require('../../src/platform')
 const node = require('../../src/platform/node')
 const AsyncHooksScope = require('../../src/scope/async_hooks')
 const AsyncLocalStorageScope = require('../../src/scope/async_local_storage')
+const AsyncResourceScope = require('../../src/scope/async_resource')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
@@ -24,6 +25,7 @@ const asyncHooksScope = new AsyncHooksScope({
 const asyncLocalStorageScope = defaultScope === 'async_hooks' ? null : new AsyncLocalStorageScope({
   trackAsyncScope: true
 })
+const asyncResourceScope = defaultScope === 'async_hooks' ? null : new AsyncResourceScope()
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
@@ -44,7 +46,8 @@ afterEach(() => {
 function wrapIt (whichScope = defaultScope) {
   const scope = {
     async_hooks: asyncHooksScope,
-    async_local_storage: asyncLocalStorageScope
+    async_local_storage: asyncLocalStorageScope,
+    async_resource: asyncResourceScope
   }[whichScope]
   const it = global.it
   const only = global.it.only
