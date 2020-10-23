@@ -11,8 +11,8 @@ const testScope = require('./test')
 
 wrapIt('async_resource')
 
-// https://github.com/nodejs/node/commit/52d8afc07e005343390ebc8c6d9e1eec77acd16e#diff-0bb01a51b135a5f68d93540808bac801
-if (semver.satisfies(process.version, '^12.17.0 || >=13.14.0')) {
+// https:// nodejs.org/api/async_hooks.html#async_hooks_async_hooks_executionasyncresource
+if (semver.satisfies(process.version, '^12.17.0 || >=13.9.0')) {
   describe('Scope (executionAsyncResource)', test)
 } else {
   describe.skip('Scope (executionAsyncResource)', test)
