@@ -44,11 +44,12 @@ afterEach(() => {
 })
 
 function wrapIt (whichScope = defaultScope) {
-  const scope = {
+  const scopes = {
     async_hooks: asyncHooksScope,
     async_local_storage: asyncLocalStorageScope,
     async_resource: asyncResourceScope
-  }[whichScope]
+  }
+  const scope = scopes[whichScope] || scopes.async_hooks
   const it = global.it
   const only = global.it.only
 
