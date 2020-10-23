@@ -1,6 +1,7 @@
 'use strict'
 
 const web = require('../../dd-trace/src/plugins/util/web')
+const Scope = require('../../dd-trace/src/scope/base')
 
 function createWrapEmit (tracer, config) {
   config = web.normalizeConfig(config)
@@ -25,6 +26,9 @@ function plugin (name) {
       if (config.server === false) return
 
       this.wrap(http.Server.prototype, 'emit', createWrapEmit(tracer, config))
+      if (http.ServerResponse) { // not present on https
+        Scope._wrapEmitter(http.ServerResponse.prototype)
+      }
     },
     unpatch (http) {
       this.unwrap(http.Server.prototype, 'emit')
