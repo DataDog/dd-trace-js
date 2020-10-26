@@ -105,7 +105,7 @@ function _encode(bytes, defers, value) {
     case 'number':
       // TODO: encode to float 32?
 
-      if (Math.floor(value) !== value || !isFinite(value)) { // float 64
+      if (!Number.isInteger(value)) { // float 64
         bytes.push(0xcb);
         defers.push({ float: value, length: 8, offset: bytes.length });
         return 9;
