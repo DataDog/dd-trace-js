@@ -1,7 +1,6 @@
 'use strict'
 
 const pick = require('lodash.pick')
-const platform = require('../../dd-trace/src/platform')
 const log = require('../../dd-trace/src/log')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
@@ -343,7 +342,7 @@ function finishResolvers (contextValue) {
 }
 
 function updateField (field, error) {
-  field.finishTime = field.span.context()._trace.startTime + platform.now()
+  field.finishTime = field.span._getTime()
   field.error = field.error || error
 }
 
