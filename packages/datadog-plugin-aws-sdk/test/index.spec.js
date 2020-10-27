@@ -195,7 +195,7 @@ describe.only('Plugin', () => {
         })
       })
 
-      describe('Lambda', () => {
+      describe.skip('Lambda', () => {
         const lambdaInvokeParams = fixtures.lambda.invoke
         const operation = 'invoke'
         const serviceName = 'lambda'
