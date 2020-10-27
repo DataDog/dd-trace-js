@@ -6,6 +6,7 @@ const services = {
   cloudwatchlogs: getService('cloudwatchlogs'),
   dynamodb: getService('dynamodb'),
   kinesis: getService('kinesis'),
+  lambda: getService('lambda'),
   s3: getService('s3'),
   redshift: getService('redshift'),
   sns: getService('sns'),
