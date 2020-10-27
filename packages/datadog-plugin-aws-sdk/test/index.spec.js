@@ -221,7 +221,7 @@ describe.only('Plugin', () => {
 
           describe('instrumentation', () => {
             helpers.baseSpecs(semver, version, agent, getService, operation,
-              serviceName, klass, sqsGetParams, key, metadata)
+              serviceName, klass, lambdaInvokeParams, key, metadata)
           })
 
           it('propagation should work', (done) => {
@@ -240,7 +240,7 @@ describe.only('Plugin', () => {
               if (err) {
                 return done(err)
               }
-              
+
               agent.use(traces => {
                 expect(parentId).to.be.a('string')
                 expect(traces[0][0].parent_id.toString()).to.equal(parentId)
@@ -256,39 +256,26 @@ describe.only('Plugin', () => {
             epLambda = new AWS.Endpoint('http://localhost:4566')
             AWS.config.update({ region: 'REGION' })
 
-            sqs = new AWS.SQS({ endpoint: epLambda })
-            sqs.createQueue(sqsCreateParams, (err, res) => {
-              if (err) return done(err)
-              if (res.QueueUrl) {
-                sqsGetParams.QueueUrl = res.QueueUrl
-              }
-
-              agent.load('aws-sdk', {
-                hooks: {
-                  request: (span, response) => {
-                    span.addTags({
-                      'aws.specialValue': 'foo',
-                      ['aws.params' + key]: response.request.params[key]
-                    })
-                  }
+            lambda = new AWS.Lambda({ endpoint: epLambda })
+            agent.load('aws-sdk', {
+              hooks: {
+                request: (span, response) => {
+                  span.addTags({
+                    'aws.specialValue': 'foo',
+                    ['aws.params' + key]: response.request.params[key]
+                  })
                 }
-              }).then(done)
-            })
+              }
+            }).then(done)
           })
 
           after(done => {
-            const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4566')
-            sqs = new AWS.SQS({ endpoint: epSqs })
-
-            sqs.deleteQueue(sqsGetParams, () => {
-              closeAndWipeAgent().then(done)
-            })
+            closeAndWipeAgent().then(done)
           })
 
           describe('instrumentation', () => {
             helpers.baseSpecs(semver, version, agent, getService, operation,
-              serviceName, klass, sqsGetParams, key, metadata, true)
+              serviceName, klass, lambdaInvokeParams, key, metadata, true)
           })
         })
       })
