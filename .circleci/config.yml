@@ -1004,7 +1004,7 @@ workflows:
       - node-bench-e2e-latest
       - node-amqplib
       - node-amqp10
-      # - node-aws-sdk
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
