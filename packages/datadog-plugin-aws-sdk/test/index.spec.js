@@ -46,7 +46,7 @@ describe.only('Plugin', () => {
           before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
-            epDynamo = new AWS.Endpoint('http://localhost:4569')
+            epDynamo = new AWS.Endpoint('http://localhost:4566')
             ddb = new AWS.DynamoDB({ endpoint: epDynamo })
 
             ddb.createTable(ddbParams, () => {
@@ -96,7 +96,7 @@ describe.only('Plugin', () => {
           before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
-            epDynamo = new AWS.Endpoint('http://localhost:4569')
+            epDynamo = new AWS.Endpoint('http://localhost:4566')
             ddb = new AWS.DynamoDB({ endpoint: epDynamo })
 
             ddb.createTable(ddbParams, () => {
@@ -150,7 +150,7 @@ describe.only('Plugin', () => {
           before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
-            epKinesis = new AWS.Endpoint('http://localhost:4568')
+            epKinesis = new AWS.Endpoint('http://localhost:4566')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
             agent.load('aws-sdk').then(done)
           })
@@ -169,7 +169,7 @@ describe.only('Plugin', () => {
           before((done) => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
             AWS.config.update({ region: 'REGION' })
-            epKinesis = new AWS.Endpoint('http://localhost:4568')
+            epKinesis = new AWS.Endpoint('http://localhost:4566')
             kinesis = new AWS.Kinesis({ endpoint: epKinesis })
 
             agent.load('aws-sdk', {
@@ -294,7 +294,7 @@ describe.only('Plugin', () => {
         describe('without configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epS3 = new AWS.Endpoint('http://localhost:4572')
+            epS3 = new AWS.Endpoint('http://localhost:4566')
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
 
             s3.createBucket({ Bucket: s3Params.Bucket }, () => {
@@ -304,7 +304,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epS3 = new AWS.Endpoint('http://localhost:4572')
+            epS3 = new AWS.Endpoint('http://localhost:4566')
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
             s3.deleteBucket(s3Params, () => {
               closeAndWipeAgent().then(done)
@@ -329,7 +329,7 @@ describe.only('Plugin', () => {
         describe('with configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epS3 = new AWS.Endpoint('http://localhost:4572')
+            epS3 = new AWS.Endpoint('http://localhost:4566')
             s3 = new AWS.S3({ endpoint: epS3, s3ForcePathStyle: true })
 
             s3.createBucket({ Bucket: s3Params.Bucket }, () => {
@@ -348,7 +348,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epS3 = new AWS.Endpoint('http://localhost:4572')
+            epS3 = new AWS.Endpoint('http://localhost:4566')
             s3 = new AWS.S3({ apiVersion: '2016-03-01', endpoint: epS3, s3ForcePathStyle: true })
             s3.deleteBucket(s3Params, () => {
               closeAndWipeAgent().then(done)
@@ -377,7 +377,7 @@ describe.only('Plugin', () => {
         describe('without configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4576')
+            epSqs = new AWS.Endpoint('http://localhost:4566')
             AWS.config.update({ region: 'REGION' })
 
             sqs = new AWS.SQS({ endpoint: epSqs })
@@ -393,7 +393,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4576')
+            epSqs = new AWS.Endpoint('http://localhost:4566')
             sqs = new AWS.SQS({ endpoint: epSqs })
 
             sqs.deleteQueue(sqsGetParams, () => {
@@ -442,7 +442,7 @@ describe.only('Plugin', () => {
         describe('with configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4576')
+            epSqs = new AWS.Endpoint('http://localhost:4566')
             AWS.config.update({ region: 'REGION' })
 
             sqs = new AWS.SQS({ endpoint: epSqs })
@@ -467,7 +467,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSqs = new AWS.Endpoint('http://localhost:4576')
+            epSqs = new AWS.Endpoint('http://localhost:4566')
             sqs = new AWS.SQS({ endpoint: epSqs })
 
             sqs.deleteQueue(sqsGetParams, () => {
@@ -498,7 +498,7 @@ describe.only('Plugin', () => {
         describe('without configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSns = new AWS.Endpoint('http://localhost:4575')
+            epSns = new AWS.Endpoint('http://localhost:4566')
 
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
@@ -516,7 +516,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSns = new AWS.Endpoint('http://localhost:4575')
+            epSns = new AWS.Endpoint('http://localhost:4566')
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
             sns = new AWS.SNS({ endpoint: epSns })
@@ -561,7 +561,7 @@ describe.only('Plugin', () => {
         describe('with configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSns = new AWS.Endpoint('http://localhost:4575')
+            epSns = new AWS.Endpoint('http://localhost:4566')
 
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
@@ -588,7 +588,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epSns = new AWS.Endpoint('http://localhost:4575')
+            epSns = new AWS.Endpoint('http://localhost:4566')
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
             sns = new AWS.SNS({ endpoint: epSns })
@@ -626,7 +626,7 @@ describe.only('Plugin', () => {
         describe('without configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            epCwLogs = new AWS.Endpoint('http://localhost:4566')
 
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
@@ -641,7 +641,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            epCwLogs = new AWS.Endpoint('http://localhost:4566')
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
@@ -661,7 +661,7 @@ describe.only('Plugin', () => {
         describe('with configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            epCwLogs = new AWS.Endpoint('http://localhost:4566')
 
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
@@ -685,7 +685,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epCwLogs = new AWS.Endpoint('http://localhost:4586')
+            epCwLogs = new AWS.Endpoint('http://localhost:4566')
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
             cwLogs = new AWS.CloudWatchLogs({ endpoint: epCwLogs })
@@ -718,7 +718,7 @@ describe.only('Plugin', () => {
         describe('without configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRedshift = new AWS.Endpoint('http://localhost:4577')
+            epRedshift = new AWS.Endpoint('http://localhost:4566')
 
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
@@ -733,7 +733,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRedshift = new AWS.Endpoint('http://localhost:4577')
+            epRedshift = new AWS.Endpoint('http://localhost:4566')
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
             redshift = new AWS.Redshift({ endpoint: epRedshift })
@@ -753,7 +753,7 @@ describe.only('Plugin', () => {
         describe('with configuration', () => {
           before(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRedshift = new AWS.Endpoint('http://localhost:4577')
+            epRedshift = new AWS.Endpoint('http://localhost:4566')
 
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
@@ -777,7 +777,7 @@ describe.only('Plugin', () => {
 
           after(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRedshift = new AWS.Endpoint('http://localhost:4577')
+            epRedshift = new AWS.Endpoint('http://localhost:4566')
             // region has to be a real region
             AWS.config.update({ region: 'us-east-1' })
             redshift = new AWS.Redshift({ endpoint: epRedshift })
@@ -808,7 +808,7 @@ describe.only('Plugin', () => {
         describe('without configuration', () => {
           beforeEach(done => {
             const AWS = require(`../../../versions/aws-sdk@${version}`).get()
-            epRoute53 = new AWS.Endpoint('http://localhost:4580')
+            epRoute53 = new AWS.Endpoint('http://localhost:4566')
             AWS.config.update({ region: 'us-east-1' })
             route53 = new AWS.Route53({ endpoint: epRoute53 })
             agent.load(['aws-sdk', 'http']).then(done)
