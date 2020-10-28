@@ -8,8 +8,14 @@ function createWrapConnect (tracer, config) {
     return function connectWithTrace () {
       const scope = tracer.scope()
       const options = getOptions(arguments)
+      const lastIndex = arguments.length - 1
+      const callback = arguments[lastIndex]
 
       if (!options) return connect.apply(this, arguments)
+
+      if (typeof callback === 'function') {
+        arguments[lastIndex] = scope.bind(callback)
+      }
 
       const span = options.path
         ? wrapIpc(tracer, config, this, options)
