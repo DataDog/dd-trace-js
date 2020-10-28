@@ -219,5 +219,17 @@ describe('Plugin', () => {
       socket.connect({ port })
       socket.destroy()
     })
+
+    it('should run the connection callback in the correct scope', done => {
+      const socket = new net.Socket()
+
+      tracer.scope().activate(parent, () => {
+        socket.connect({ port }, () => {
+          expect(tracer.scope().active()).to.equal(parent)
+          socket.destroy()
+          done()
+        })
+      })
+    })
   })
 })
