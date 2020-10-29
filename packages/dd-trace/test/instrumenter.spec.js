@@ -48,6 +48,28 @@ describe('Instrumenter', () => {
         name: 'other',
         versions: ['1.x'],
         patch: sinon.stub().returns('replacement')
+      },
+      prepatchable: {
+        name: 'prepatchable',
+        versions: ['4.x'],
+        prepatch: (thing) => {
+          return {
+            object: thing,
+            methods: ['foo']
+          }
+        },
+        patch (exports) {
+          this.wrap(exports, 'foo', (foo) => {
+            function wrappedFoo () {
+              foo()
+              return 'bar'
+            }
+            return wrappedFoo
+          })
+        },
+        unpatch (exports) {
+          this.unwrap(exports, 'foo')
+        }
       }
     }
 
@@ -57,13 +79,15 @@ describe('Instrumenter', () => {
           'http': integrations.http,
           'express-mock': integrations.express,
           'mysql-mock': integrations.mysql,
-          'other': integrations.other
+          'other': integrations.other,
+          'prepatchable': integrations.prepatchable
         }
       },
       '../../datadog-plugin-http/src': integrations.http,
       '../../datadog-plugin-express-mock/src': integrations.express,
       '../../datadog-plugin-mysql-mock/src': integrations.mysql,
-      '../../datadog-plugin-other/src': integrations.other
+      '../../datadog-plugin-other/src': integrations.other,
+      '../../datadog-plugin-prepatchable/src': integrations.prepatchable
     })
 
     instrumenter = new Instrumenter(tracer)
@@ -79,6 +103,30 @@ describe('Instrumenter', () => {
       .forEach(name => {
         delete require.cache[name]
       })
+  })
+
+  describe('preload', () => {
+    it('should pre-patch the prepatchable module', () => {
+      const { foo } = require('prepatchable')
+
+      expect(foo()).to.equal('foo')
+
+      instrumenter.enable()
+
+      expect(foo()).to.equal('bar')
+    })
+
+    it('should allow prepatchables to be unpatched', () => {
+      const { foo } = require('prepatchable')
+
+      instrumenter.enable()
+
+      expect(foo()).to.equal('bar')
+
+      instrumenter.disable()
+
+      expect(foo()).to.equal('foo')
+    })
   })
 
   describe('with integrations enabled', () => {

@@ -156,6 +156,10 @@ function cachedPathToRegExp (pattern) {
 module.exports = {
   name: 'router',
   versions: ['>=1'],
+  prepatch: (Router) => ({
+    object: Router.prototype,
+    methods: ['handle', 'use', 'route']
+  }),
   patch (Router, tracer, config) {
     this.wrap(Router.prototype, 'handle', createWrapHandle(tracer, config))
     this.wrap(Router.prototype, 'use', wrapRouterMethod)
