@@ -6,34 +6,74 @@ const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
+function createWrapLoadPackageDefinition (tracer, config) {
+  return function wrapLoadPackageDefinition (loadPackageDefinition) {
+    return function loadPackageDefinitionWithTrace (packageDef) {
+      const result = loadPackageDefinition.apply(this, arguments)
+
+      if (!result) return result
+
+      wrapPackageDefinition(tracer, config, result)
+
+      return result
+    }
+  }
+}
+
 function createWrapMakeClientConstructor (tracer, config) {
   config = config.client || config
 
   return function wrapMakeClientConstructor (makeClientConstructor) {
     return function makeClientConstructorWithTrace (methods) {
       const ServiceClient = makeClientConstructor.apply(this, arguments)
-      const proto = ServiceClient.prototype
 
-      if (typeof methods !== 'object') return ServiceClient
-
-      Object.keys(methods)
-        .forEach(name => {
-          const originalName = methods[name] && methods[name].originalName
-
-          proto[name] = wrapMethod(tracer, config, proto[name], methods[name])
-
-          if (originalName) {
-            proto[originalName] = wrapMethod(tracer, config, proto[originalName], methods[name])
-          }
-        })
+      wrapClientConstructor(tracer, config, ServiceClient, methods)
 
       return ServiceClient
     }
   }
 }
 
-function wrapMethod (tracer, config, method, definition) {
-  if (typeof method !== 'function' || method._datadog_patched || !definition) {
+function wrapPackageDefinition (tracer, config, def) {
+  for (const name in def) {
+    if (def[name].format) continue
+    if (def[name].service) {
+      wrapClientConstructor(tracer, config, def[name], def[name].service)
+    } else {
+      wrapPackageDefinition(tracer, config, def[name])
+    }
+  }
+}
+
+function wrapClientConstructor (tracer, config, ServiceClient, methods) {
+  const proto = ServiceClient.prototype
+
+  if (typeof methods !== 'object' || 'format' in methods) {
+    return ServiceClient
+  }
+
+  Object.keys(methods)
+    .forEach(name => {
+      if (!methods[name]) return
+
+      const originalName = methods[name].originalName
+      const path = methods[name].path
+      const methodKind = getMethodKind(methods[name])
+
+      if (methods[name]) {
+        proto[name] = wrapMethod(tracer, config, proto[name], path, methodKind)
+      }
+
+      if (originalName) {
+        proto[originalName] = wrapMethod(tracer, config, proto[originalName], path, methodKind)
+      }
+    })
+
+  return ServiceClient
+}
+
+function wrapMethod (tracer, config, method, path, methodKind) {
+  if (typeof method !== 'function' || method._datadog_patched) {
     return method
   }
 
@@ -45,14 +85,14 @@ function wrapMethod (tracer, config, method, definition) {
     const metadata = args[1]
     const callback = args[length - 1]
     const scope = tracer.scope()
-    const span = startSpan(tracer, config, definition)
+    const span = startSpan(tracer, config, path, methodKind)
 
     if (metadata) {
       addMetadataTags(span, metadata, filter, 'request')
       inject(tracer, span, metadata)
     }
 
-    if (!definition.responseStream) {
+    if (methodKind === kinds.unary || methodKind === kinds.client_stream) {
       if (typeof callback === 'function') {
         args[length - 1] = wrapCallback(span, callback)
       } else {
@@ -114,9 +154,7 @@ function wrapStream (span, call, filter) {
   }
 }
 
-function startSpan (tracer, config, definition) {
-  const path = definition.path
-  const methodKind = getMethodKind(definition)
+function startSpan (tracer, config, path, methodKind) {
   const scope = tracer.scope()
   const childOf = scope.active()
   const span = tracer.startSpan('grpc.request', {
@@ -202,6 +240,33 @@ module.exports = [
     },
     unpatch (client) {
       this.unwrap(client, 'makeClientConstructor')
+    }
+  },
+  {
+    name: '@grpc/grpc-js',
+    versions: ['>=1.0.3'],
+    patch (grpc, tracer, config) {
+      if (config.client === false) return
+
+      grpc.Client.prototype._datadog = { grpc }
+    },
+    unpatch (grpc) {
+      delete grpc.Client._datadog
+    }
+  },
+  {
+    name: '@grpc/grpc-js',
+    versions: ['>=1.0.3'],
+    file: 'build/src/make-client.js',
+    patch (client, tracer, config) {
+      if (config.client === false) return
+
+      this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config))
+      this.wrap(client, 'loadPackageDefinition', createWrapLoadPackageDefinition(tracer, config))
+    },
+    unpatch (client) {
+      this.unwrap(client, 'makeClientConstructor')
+      this.unwrap(client, 'loadPackageDefinition')
     }
   }
 ]

@@ -25,7 +25,7 @@ function createWrapHandler (tracer, config, handler) {
 
     return function funcWithTrace (call, callback) {
       if (!isValid(this, arguments)) return func.apply(this, arguments)
-
+      // console.log(call.call)
       const metadata = call.metadata
       const type = this.type
       const isStream = type !== 'unary'
@@ -77,8 +77,12 @@ function createWrapRegister (tracer, config) {
   }
 }
 
-function wrapStream (span, call) {
+function wrapStream (span, call, tracer) {
   const emit = call.emit
+
+  if (call.call && call.call.sendStatus) {
+    call.call.sendStatus = wrapSendStatus(call.call.sendStatus, span)
+  }
 
   call.emit = function (eventName, ...args) {
     switch (eventName) {
@@ -95,7 +99,9 @@ function wrapStream (span, call) {
       // Finish the span of the response only if it was successful.
       // Otherwise it'll be finished in the `error` listener.
       case 'finish':
-        span.setTag('grpc.status.code', call.status && call.status.code)
+        if (call.status) {
+          span.setTag('grpc.status.code', call.status.code)
+        }
 
         if (!call.status || call.status.code === 0) {
           span.finish()
@@ -134,6 +140,14 @@ function wrapCallback (span, callback, filter, childOf) {
   }
 }
 
+function wrapSendStatus (sendStatus, span) {
+  return function sendStatusWithTrace (status) {
+    span.setTag('grpc.status.code', status.code)
+
+    return sendStatus.apply(this, arguments)
+  }
+}
+
 function extract (tracer, metadata) {
   if (!metadata || typeof metadata.getMap !== 'function') return null
 
@@ -149,6 +163,18 @@ module.exports = [
     name: 'grpc',
     versions: ['>=1.13'],
     file: 'src/server.js',
+    patch (server, tracer, config) {
+      if (config.server === false) return
+      this.wrap(server.Server.prototype, 'register', createWrapRegister(tracer, config))
+    },
+    unpatch (server) {
+      this.unwrap(server.Server.prototype, 'register')
+    }
+  },
+  {
+    name: '@grpc/grpc-js',
+    versions: ['>=1'],
+    file: 'build/src/server.js',
     patch (server, tracer, config) {
       if (config.server === false) return
 
