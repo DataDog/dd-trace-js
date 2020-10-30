@@ -1,16 +1,16 @@
-version: '2'
+version: "2"
 services:
   couchbase:
     image: rishabhdev/couchbase-server-sandbox:latest
     ports:
-      - '127.0.0.1:8091-8095:8091-8095'
-      - '127.0.0.1:11210:11210'
+      - "127.0.0.1:8091-8095:8091-8095"
+      - "127.0.0.1:11210:11210"
   postgres:
     image: postgres:9.5-alpine
     environment:
       - POSTGRES_PASSWORD=postgres
     ports:
-      - '127.0.0.1:5432:5432'
+      - "127.0.0.1:5432:5432"
   mssql:
     image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
     environment:
@@ -76,19 +76,38 @@ services:
     ports:
       - "127.0.0.1:8085:8085"
   localstack:
-      image: localstack/localstack
-      ports:
-        - "127.0.0.1:4569:4569"
-        - "127.0.0.1:4568:4568"
-        - "127.0.0.1:4572:4572"
-        - "127.0.0.1:4576:4576"
-        - "127.0.0.1:4575:4575"
-        - "127.0.0.1:4580:4580"
-        - "127.0.0.1:4586:4586"
-        - "127.0.0.1:4577:4577"
-      environment:
-        - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,redshift:4577,route53:4580,logs:4586
-        - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-        - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-        - FORCE_NONINTERACTIVE=true
-        - START_WEB=0
+    image: localstack/localstack
+    ports:
+      - "127.0.0.1:4569:4569"
+      - "127.0.0.1:4568:4568"
+      - "127.0.0.1:4572:4572"
+      - "127.0.0.1:4576:4576"
+      - "127.0.0.1:4575:4575"
+      - "127.0.0.1:4580:4580"
+      - "127.0.0.1:4586:4586"
+      - "127.0.0.1:4577:4577"
+    environment:
+      - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,redshift:4577,route53:4580,logs:4586
+      - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - FORCE_NONINTERACTIVE=true
+      - START_WEB=0
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    ports:
+      - "2181:2181"
+  kafka:
+    image: wurstmeister/kafka:2.11-1.1.1
+    ports:
+      - "9092:9092"
+    links:
+      - zookeeper
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: ${HOST_IP}
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_CREATE_TOPICS: "topic-test:1:1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+

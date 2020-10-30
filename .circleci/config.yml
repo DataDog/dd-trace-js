@@ -460,6 +460,14 @@ jobs:
           - PLUGINS=google-cloud-pubsub
       - image: knarz/pubsub-emulator
 
+  node-kafkajs:
+    <<: *node-plugin-base
+    docker:
+      - image: node:latest
+        environment:
+          - SERVICES=kafka
+          - PLUGINS=kafkajs
+
   node-graphql:
     <<: *node-plugin-base
     docker:
@@ -1048,6 +1056,7 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - node-kafkajs
   prebuild:
     jobs:
       # Linux x64
@@ -1234,3 +1243,4 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - node-kafkajs 
