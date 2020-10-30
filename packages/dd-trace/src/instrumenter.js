@@ -112,22 +112,22 @@ class Instrumenter {
           value: true,
           configurable: true
         })
+
+        shimmer.wrap.call(this, nodule, name, function (original, name) {
+          const wrapped = wrapper(original, name)
+          const props = Object.getOwnPropertyDescriptors(original)
+          const keys = Reflect.ownKeys(props)
+
+          // https://github.com/othiym23/shimmer/issues/19
+          for (const key of keys) {
+            if (typeof key !== 'symbol' || wrapped.hasOwnProperty(key)) continue
+
+            Object.defineProperty(wrapped, key, props[key])
+          }
+
+          return wrapped
+        })
       })
-    })
-
-    shimmer.massWrap.call(this, nodules, names, function (original, name) {
-      const wrapped = wrapper(original, name)
-      const props = Object.getOwnPropertyDescriptors(original)
-      const keys = Reflect.ownKeys(props)
-
-      // https://github.com/othiym23/shimmer/issues/19
-      for (const key of keys) {
-        if (typeof key !== 'symbol' || wrapped.hasOwnProperty(key)) continue
-
-        Object.defineProperty(wrapped, key, props[key])
-      }
-
-      return wrapped
     })
   }
 
@@ -135,10 +135,9 @@ class Instrumenter {
     nodules = [].concat(nodules)
     names = [].concat(names)
 
-    shimmer.massUnwrap.call(this, nodules, names, wrapper)
-
     nodules.forEach(nodule => {
       names.forEach(name => {
+        shimmer.unwrap.call(this, nodule, name, wrapper)
         nodule[name] && delete nodule[name]._datadog_patched
       })
     })
