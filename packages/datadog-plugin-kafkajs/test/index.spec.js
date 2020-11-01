@@ -53,8 +53,6 @@ describe('Plugin', () => {
 
             return expectSomeSpan(agent, withDefaults(expectedTags), { timeoutMs: TIMEOUT })
           })
-
-          it('should be instrumented w/ error', async () => {})
         })
       })
     })
