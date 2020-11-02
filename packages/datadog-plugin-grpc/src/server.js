@@ -25,7 +25,7 @@ function createWrapHandler (tracer, config, handler) {
 
     return function funcWithTrace (call, callback) {
       if (!isValid(this, arguments)) return func.apply(this, arguments)
-      // console.log(call.call)
+
       const metadata = call.metadata
       const type = this.type
       const isStream = type !== 'unary'
