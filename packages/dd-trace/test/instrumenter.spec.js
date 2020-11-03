@@ -127,6 +127,21 @@ describe('Instrumenter', () => {
 
       expect(foo()).to.equal('foo')
     })
+
+    it('should not disable plugin when prepatch throws', () => {
+      instrumenter.disable()
+
+      integrations.prepatchable.prepatch = () => {
+        throw new Error('bad')
+      }
+
+      instrumenter = new Instrumenter(tracer)
+      instrumenter.enable()
+
+      const { foo } = require('prepatchable')
+
+      expect(foo()).to.equal('bar')
+    })
   })
 
   describe('with integrations enabled', () => {

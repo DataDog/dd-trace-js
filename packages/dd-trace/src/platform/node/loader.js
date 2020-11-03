@@ -113,8 +113,12 @@ class Loader {
             })
         } catch (e) {
           log.error(e)
-          this._instrumenter.unload(plugin)
-          log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
+          if (isPreload) {
+            log.debug(`Error while trying to prepatch ${meta.name}. Will rely on regular patching instead.`)
+          } else {
+            this._instrumenter.unload(plugin)
+            log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
+          }
         }
       })
 
