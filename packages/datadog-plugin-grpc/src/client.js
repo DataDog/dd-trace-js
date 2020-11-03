@@ -7,6 +7,8 @@ const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
 function createWrapLoadPackageDefinition (tracer, config) {
+  config = config.client || config
+
   return function wrapLoadPackageDefinition (loadPackageDefinition) {
     return function loadPackageDefinitionWithTrace (packageDef) {
       const result = loadPackageDefinition.apply(this, arguments)

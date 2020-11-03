@@ -142,7 +142,7 @@ describe('Plugin', () => {
             })
         })
 
-        it.only('should handle `client_stream` calls', async () => {
+        it('should handle `client_stream` calls', async () => {
           const client = await buildClient({
             getClientStream: (_, callback) => {
               setTimeout(callback, 40)
