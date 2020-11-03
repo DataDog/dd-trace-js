@@ -50,9 +50,7 @@ function wrapPackageDefinition (tracer, config, def) {
 function wrapClientConstructor (tracer, config, ServiceClient, methods) {
   const proto = ServiceClient.prototype
 
-  if (typeof methods !== 'object' || 'format' in methods) {
-    return ServiceClient
-  }
+  if (typeof methods !== 'object' || 'format' in methods) return
 
   Object.keys(methods)
     .forEach(name => {
@@ -70,8 +68,6 @@ function wrapClientConstructor (tracer, config, ServiceClient, methods) {
         proto[originalName] = wrapMethod(tracer, config, proto[originalName], path, methodKind)
       }
     })
-
-  return ServiceClient
 }
 
 function wrapMethod (tracer, config, method, path, methodKind) {
