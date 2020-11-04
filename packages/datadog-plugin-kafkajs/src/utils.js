@@ -1,4 +1,3 @@
-
 function createProducerRequestTimeoutTags ({
   broker,
   clientId,
@@ -21,14 +20,6 @@ function createProducerRequestTimeoutTags ({
   }
 }
 
-function createProducerRequestQueueSizeTags ({ broker, clientId, queueSize }) {
-  return {
-    'kafka.broker': broker,
-    'kafka.clientId': clientId,
-    'kafka.queueSize': queueSize
-  }
-}
-// eslint-disable-next-line max-len
 function createProducerRequestTags ({
   broker,
   clientId,
@@ -68,13 +59,79 @@ function addCommonProducerTags (serviceName, resourceName, tagCreatorFn) {
   }
 }
 
+function addCommonConsumerTags (serviceName, resourceName, tagCreatorFn) {
+  const restOfTags = tagCreatorFn ? tagCreatorFn() : {}
+
+  return {
+    'service.name': serviceName,
+    'resource.name': resourceName,
+    'span.kind': 'consumer',
+    'span.type': 'queue',
+    component: 'kafkajs',
+    ...restOfTags
+  }
+}
+function createConsumerStartBatchProcessTags ({
+  batchSize,
+  firstOffset,
+  highWatermark,
+  lastOffset,
+  offsetLag,
+  offsetLagLow,
+  partition,
+  topic
+}) {
+  return {
+    'kafka.batch.highWatermark': highWatermark,
+    'kafka.batch.size': batchSize,
+    'kafka.batch.firstOffset': firstOffset,
+    'kafka.batch.lastOffset': lastOffset,
+    'kafka.batch.offsetLag': offsetLag,
+    'kafka.batch.offsetLagLow': offsetLagLow,
+    'kafka.partition': partition,
+    'kafka.topic': topic
+  }
+}
+
+function createConsumerEndBatchProcessTags ({
+  batchSize,
+  firstOffset,
+  highWatermark,
+  lastOffset,
+  offsetLag,
+  offsetLagLow,
+  partition,
+  topic,
+  duration
+}) {
+  return {
+    ...createConsumerStartBatchProcessTags({
+      batchSize,
+      firstOffset,
+      highWatermark,
+      lastOffset,
+      offsetLag,
+      offsetLagLow,
+      partition,
+      topic
+    }),
+    'kafka.duration': duration
+  }
+}
+
+const consumer = {
+  addCommonConsumerTags,
+  createConsumerStartBatchProcessTags,
+  createConsumerEndBatchProcessTags
+}
+
 const producer = {
   createProducerRequestTimeoutTags,
-  createProducerRequestQueueSizeTags,
   createProducerRequestTags,
   addCommonProducerTags
 }
 
 module.exports = {
-  producer
+  producer,
+  consumer
 }
