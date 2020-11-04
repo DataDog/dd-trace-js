@@ -559,7 +559,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should fallback to the the verb if a path pattern could not be found', done => {
+        it('should fallback to the the verb + req.url if a path pattern could not be found', done => {
           const app = express()
 
           app.use((req, res, next) => res.status(200).send())
@@ -569,7 +569,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0]).to.have.property('resource', 'GET /app')
               })
               .then(done)
               .catch(done)

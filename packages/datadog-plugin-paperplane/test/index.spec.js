@@ -257,7 +257,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('resource', 'GET')
+                expect(spans[0]).to.have.property('resource', 'GET /app')
               })
               .then(done)
               .catch(done)

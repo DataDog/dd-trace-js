@@ -389,7 +389,7 @@ function addResourceTag (req) {
 
   if (tags['resource.name']) return
 
-  const resource = [req.method, tags[HTTP_ROUTE]]
+  const resource = [req.method, tags[HTTP_ROUTE] || req.url]
     .filter(val => val)
     .join(' ')
 
