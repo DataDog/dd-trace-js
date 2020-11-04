@@ -50,7 +50,7 @@ function getPrepatchWrappedFunction (fn) {
       // eslint-disable-next-line new-cap
       return new fnToCall(...arguments)
     } else {
-      return fnToCall.call(this, arguments)
+      return fnToCall.apply(this, arguments)
     }
   }
 
@@ -159,7 +159,9 @@ class Instrumenter {
 
     nodules.forEach(nodule => {
       names.forEach(name => {
-        nodule[name] && delete nodule[name]._datadog_wrapped
+        if (nodule[name]) {
+          nodule[name]._datadog_wrapped = null
+        }
         shimmer.unwrap.call(this, nodule, name, wrapper)
         nodule[name] && delete nodule[name]._datadog_patched
       })
