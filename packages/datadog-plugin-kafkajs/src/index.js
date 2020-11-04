@@ -1,10 +1,5 @@
 'use strict'
 const {
-  producer: {
-    addCommonProducerTags,
-    createProducerRequestTags,
-    createProducerRequestTimeoutTags
-  },
   consumer: {
     createConsumerStartBatchProcessTags,
     addCommonConsumerTags,
@@ -18,34 +13,21 @@ function createWrapProducer (tracer, config) {
       const serviceName = config.service || `${tracer._service}-kafka`
       const createdProducer = createProducer.apply(this, arguments)
 
-      const { REQUEST, REQUEST_TIMEOUT } = createdProducer.events
+      createdProducer.send = (...args) => {
+        const { topic, messages } = args[0]
 
-      // I don't think I can get the topic we are producing to from KafkaJS Instrumentation events
-      createdProducer.on(REQUEST, ({ type, payload }) => {
-        const childOf = tracer.scope().active()
+        const tags = {
+          'service.name': serviceName,
+          'resource.name': `produce to ${topic}`,
+          'span.kind': 'producer',
+          'span.type': 'queue',
+          component: 'kafka',
+          'kafka.topic': topic,
+          'kafka.batch.size': messages.length
+        }
 
-        tracer.trace(type, {
-          tags: addCommonProducerTags(
-            serviceName,
-            'Producer Request to [TOPIC]',
-            createProducerRequestTags(payload)
-          ),
-          childOf
-        })
-      })
-
-      createdProducer.on(REQUEST_TIMEOUT, ({ type, payload }) => {
-        const childOf = tracer.scope().active()
-
-        tracer.trace(type, {
-          tags: addCommonProducerTags(
-            serviceName,
-            'Producer Request Queue Size',
-            createProducerRequestTimeoutTags(payload)
-          ),
-          childOf
-        })
-      })
+        return tracer.trace('kafka.producer.send', { tags }, () => createdProducer.send(...args))
+      }
 
       return createdProducer
     }
