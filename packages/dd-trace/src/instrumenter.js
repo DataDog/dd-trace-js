@@ -55,6 +55,7 @@ function getPrepatchWrappedFunction (fn) {
   }
 
   // This will be an _actually_ wrapped function once this goes through Instrumenter#wrap
+  // TODO should this be non-enumerable, like _datadog_patched?
   prepatchWrapped._datadog_wrapped = fn
   return prepatchWrapped
 }
@@ -119,12 +120,20 @@ class Instrumenter {
     nodules = [].concat(nodules)
     names = [].concat(names)
 
-    nodules.forEach(nodule => {
-      names.forEach(name => {
+    // Before wrapping/patching anything, we want to make sure that everything
+    // we intend to wrap actually exists, and if not, bail without having wrapped anything.
+    for (const nodule of nodules) {
+      for (const name of names) {
         if (typeof nodule[name] !== 'function') {
           throw new Error(`Expected object ${nodule} to contain method ${name}.`)
         }
+      }
+    }
 
+    // At this point, we know everything we want to wrap exists, so we can loop
+    // again and do the needful wrapping.
+    for (const nodule of nodules) {
+      for (const name of names) {
         Object.defineProperty(nodule[name], '_datadog_patched', {
           value: true,
           configurable: true
@@ -149,8 +158,8 @@ class Instrumenter {
 
           return wrapped
         })
-      })
-    })
+      }
+    }
   }
 
   unwrap (nodules, names, wrapper) {
