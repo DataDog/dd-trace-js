@@ -21,25 +21,31 @@ function createWrapProducer (tracer, config) {
       const { REQUEST, REQUEST_TIMEOUT } = createdProducer.events
 
       // I don't think I can get the topic we are producing to from KafkaJS Instrumentation events
-      createdProducer.on(REQUEST, ({ type, payload }) =>
+      createdProducer.on(REQUEST, ({ type, payload }) => {
+        const childOf = tracer.scope().active()
+
         tracer.trace(type, {
           tags: addCommonProducerTags(
             serviceName,
             'Producer Request to [TOPIC]',
             createProducerRequestTags(payload)
-          )
+          ),
+          childOf
         })
-      )
+      })
 
-      createdProducer.on(REQUEST_TIMEOUT, ({ type, payload }) =>
+      createdProducer.on(REQUEST_TIMEOUT, ({ type, payload }) => {
+        const childOf = tracer.scope().active()
+
         tracer.trace(type, {
           tags: addCommonProducerTags(
             serviceName,
             'Producer Request Queue Size',
             createProducerRequestTimeoutTags(payload)
-          )
+          ),
+          childOf
         })
-      )
+      })
 
       return createdProducer
     }
@@ -54,25 +60,31 @@ function createWrapConsumer (tracer, config) {
 
       const { START_BATCH_PROCESS, END_BATCH_PROCESS } = createdConsumer.events
 
-      createdConsumer.on(START_BATCH_PROCESS, ({ type, payload }) =>
+      createdConsumer.on(START_BATCH_PROCESS, ({ type, payload }) => {
+        const childOf = tracer.scope().active()
+
         tracer.trace(type, {
           tags: addCommonConsumerTags(
             serviceName,
             'Consumer start batch process',
             createConsumerStartBatchProcessTags(payload)
-          )
+          ),
+          childOf
         })
-      )
+      })
 
-      createdConsumer.on(END_BATCH_PROCESS, ({ type, payload }) =>
+      createdConsumer.on(END_BATCH_PROCESS, ({ type, payload }) => {
+        const childOf = tracer.scope().active()
+
         tracer.trace(type, {
           tags: addCommonConsumerTags(
             serviceName,
             'Consumer end batch process',
             createConsumerEndBatchProcessTags(payload)
-          )
+          ),
+          childOf
         })
-      )
+      })
 
       return createdConsumer
     }
