@@ -88,7 +88,6 @@ module.exports = [
         'consumer',
         createWrapConsumer(tracer, config)
       )
-      this.wrap(Kafka.prototype, 'admin', createWrapProducer(tracer, config))
     },
     unpatch ({ Kafka }) {
       this.unwrap(Kafka.prototype, 'producer')
