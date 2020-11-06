@@ -57,9 +57,9 @@ function createWrapSubscriptionEmit (tracer, config) {
   }
 }
 
-function createWrapLeaseAdd (tracer, config) {
-  return function wrapAdd (add) {
-    return function addWithTrace (message) {
+function createWrapLeaseDispense (tracer, config) {
+  return function wrapDispense (dispense) {
+    return function dispenseWithTrace (message) {
       const subscription = message._subscriber._subscription
       const topic = subscription.metadata && subscription.metadata.topic
       const tags = {
@@ -76,7 +76,7 @@ function createWrapLeaseAdd (tracer, config) {
 
       message._datadog_span = span
 
-      return add.apply(this, arguments)
+      return dispense.apply(this, arguments)
     }
   }
 }
@@ -136,12 +136,12 @@ module.exports = [
     versions: ['>=1.2'],
     file: 'build/src/lease-manager.js',
     patch ({ LeaseManager }, tracer, config) {
-      this.wrap(LeaseManager.prototype, 'add', createWrapLeaseAdd(tracer, config))
+      this.wrap(LeaseManager.prototype, '_dispense', createWrapLeaseDispense(tracer, config))
       this.wrap(LeaseManager.prototype, 'remove', createWrapLeaseRemove(tracer, config))
       this.wrap(LeaseManager.prototype, 'clear', createWrapLeaseClear(tracer, config))
     },
     unpatch ({ LeaseManager }) {
-      this.unwrap(LeaseManager.prototype, 'add')
+      this.unwrap(LeaseManager.prototype, '_dispense')
       this.unwrap(LeaseManager.prototype, 'remove')
       this.unwrap(LeaseManager.prototype, 'clear')
     }
