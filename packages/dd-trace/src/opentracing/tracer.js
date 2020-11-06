@@ -27,7 +27,7 @@ const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 class DatadogTracer extends Tracer {
   constructor () {
     super()
-    const config = Config.config
+    const { config } = Config
 
     const Exporter = platform.exporter(config.experimental.exporter)
 
@@ -36,7 +36,7 @@ class DatadogTracer extends Tracer {
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler()
 
-    function configure () {
+    Config.retroOn('update', config => {
       this._service = config.service
       this._version = config.version
       this._env = config.env
@@ -56,11 +56,7 @@ class DatadogTracer extends Tracer {
       if (config.reportHostname) {
         this._hostname = platform.hostname()
       }
-    }
-
-    configure.call(this)
-
-    Config.config.on('update', configure.bind(this))
+    })
   }
 
   get _url () {

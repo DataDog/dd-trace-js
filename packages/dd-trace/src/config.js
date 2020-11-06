@@ -55,8 +55,26 @@ class Config extends EventEmitter {
 
     this.pluginConfigs[name] = Object.assign(this.pluginConfigs[name] || {}, config)
 
-    this.emit(`update.plugin.${name}`) // TODO this is not needed while the instrumenter managers plugin state
-    this.emit('update.plugins')
+    this.retroEmit(`update.plugin.${name}`) // TODO this is not needed while the instrumenter managers plugin state
+    this.retroEmit('update.plugins')
+  }
+
+  retroOn (name, handler) {
+    if (this._hasEmitted[name]) {
+      handler()
+    }
+    this.on(name, handler)
+  }
+
+  static retroOn (name, handler) {
+    this.config.retroOn(name, () => handler(this.config))
+  }
+
+  retroEmit (name) {
+    if (!this._hasEmitted[name]) {
+      this._hasEmitted[name] = true
+    }
+    return this.emit(name)
   }
 
   configure (options) {
@@ -171,6 +189,9 @@ class Config extends EventEmitter {
     this.site = coalesce(options.site, platform.env('DD_SITE'), 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
+    if (!this.url) {
+      this.url = new URL(`http://${this.hostname}:${this.port}`)
+    }
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
     this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     this.logger = options.logger
@@ -224,7 +245,7 @@ class Config extends EventEmitter {
       this.hasInitialized = true
     }
 
-    this.emit('update')
+    this.retroEmit('update')
   }
 }
 

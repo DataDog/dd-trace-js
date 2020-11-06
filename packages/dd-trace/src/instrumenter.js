@@ -25,9 +25,8 @@ class Instrumenter {
     this._instrumented = new Map()
     this._disabledPlugins = collectDisabledPlugins()
 
-    Config.config.on('update.plugins', () => {
+    Config.retroOn('update.plugins', ({ pluginConfigs: configs }) => {
       // TODO in the future, plugins will listen to the state, instead of the instrumenter
-      const configs = Config.config.pluginConfigs
       Object.keys(configs).forEach(name => {
         try {
           this._set(plugins[name.toLowerCase()], {

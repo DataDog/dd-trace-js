@@ -4,11 +4,9 @@ const Config = require('./config')
 
 class Sampler {
   constructor () {
-    function configure () {
-      this._rate = Config.config.sampleRate
-    }
-    configure.call(this)
-    Config.config.on('update', configure.bind(this))
+    Config.retroOn('update', config => {
+      this._rate = config.sampleRate
+    })
   }
 
   rate () {
