@@ -1,5 +1,6 @@
 'use strict'
 
+const EventEmitter = require('events')
 const URL = require('url-parse')
 const platform = require('./platform')
 const coalesce = require('koalas')
@@ -10,15 +11,64 @@ const { isTrue, isFalse } = require('./util')
 
 const runtimeId = `${id().toString()}${id().toString()}`
 
-class Config {
+function pluginEnv (name) {
+  return platform.env(`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_'))
+}
+
+class Config extends EventEmitter {
   constructor (options) {
+    super()
+    this.configure(options)
+  }
+
+  static initialize (options) {
+    this.config = new Config(options)
+    return this.config
+  }
+
+  configurePlugin (name, config = {}) {
+    this.pluginConfigs = this.pluginConfigs || {}
+
+    if (!name) {
+      return
+    }
+
+    if (typeof config === 'boolean') {
+      config = { enabled: config }
+    }
+
+    const enabled = pluginEnv(name)
+    if (enabled !== undefined) {
+      config.enabled = isTrue(enabled)
+    }
+
+    const analyticsEnabled = pluginEnv(`${name}_ANALYTICS_ENABLED`)
+    const analyticsSampleRate = Math.min(Math.max(pluginEnv(`${name}_ANALYTICS_SAMPLE_RATE`), 0), 1)
+
+    if (isFalse(analyticsEnabled)) {
+      config.analytics = false
+    } else if (!Number.isNaN(analyticsSampleRate)) {
+      config.analytics = analyticsSampleRate
+    } else if (isTrue(analyticsEnabled)) {
+      config.analytics = true
+    }
+
+    this.pluginConfigs[name] = Object.assign(this.pluginConfigs[name] || {}, config)
+
+    this.emit(`update.plugin.${name}`) // TODO this is not needed while the instrumenter managers plugin state
+    this.emit('update.plugins')
+  }
+
+  configure (options) {
     options = options || {}
 
-    this.tags = {}
+    this.tags = this.tags || {}
 
-    tagger.add(this.tags, platform.env('DD_TAGS'))
-    tagger.add(this.tags, platform.env('DD_TRACE_TAGS'))
-    tagger.add(this.tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
+    if (!this.hasInitialized) {
+      tagger.add(this.tags, platform.env('DD_TAGS'))
+      tagger.add(this.tags, platform.env('DD_TRACE_TAGS'))
+      tagger.add(this.tags, platform.env('DD_TRACE_GLOBAL_TAGS'))
+    }
     tagger.add(this.tags, options.tags)
 
     const DD_TRACE_ANALYTICS_ENABLED = coalesce(
@@ -169,6 +219,12 @@ class Config {
         'runtime-id': runtimeId
       })
     }
+
+    if (!this.hasInitialized) {
+      this.hasInitialized = true
+    }
+
+    this.emit('update')
   }
 }
 

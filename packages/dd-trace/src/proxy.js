@@ -27,12 +27,11 @@ class Tracer extends BaseTracer {
   init (options) {
     if (this._tracer === noop) {
       try {
-        const config = new Config(options)
+        const config = Config.initialize(options)
 
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
-        platform.configure(config)
         platform.profiler().start()
 
         if (config.enabled) {
@@ -46,8 +45,8 @@ class Tracer extends BaseTracer {
             analyticsSampler.enable()
           }
 
-          this._tracer = new DatadogTracer(config)
-          this._instrumenter.enable(config)
+          this._tracer = new DatadogTracer()
+          this._instrumenter.enable()
           setStartupLogInstrumenter(this._instrumenter)
         }
       } catch (e) {

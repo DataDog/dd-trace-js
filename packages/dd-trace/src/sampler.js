@@ -1,8 +1,14 @@
 'use strict'
 
+const Config = require('./config')
+
 class Sampler {
-  constructor (rate) {
-    this._rate = rate
+  constructor () {
+    function configure () {
+      this._rate = Config.config.sampleRate
+    }
+    configure.call(this)
+    Config.config.on('update', configure.bind(this))
   }
 
   rate () {
