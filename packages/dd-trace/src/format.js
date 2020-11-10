@@ -51,6 +51,7 @@ function extractTags (trace, span) {
   const tags = context._tags
   const hostname = context._hostname
   const priority = context._sampling.priority
+  const internalErrors = span.tracer()._internalErrors
 
   for (const tag in tags) {
     switch (tag) {
@@ -70,7 +71,7 @@ function extractTags (trace, span) {
         addTag({}, trace.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
       case 'error':
-        if (tags[tag] && tags['span.kind'] !== 'internal') {
+        if (tags[tag] && (tags['span.kind'] !== 'internal' || internalErrors)) {
           trace.error = 1
         }
         break
@@ -78,7 +79,7 @@ function extractTags (trace, span) {
       case 'error.msg':
       case 'error.stack':
         // HACK: remove when implemented in the backend
-        if (tags['span.kind'] !== 'internal') {
+        if (tags['span.kind'] !== 'internal' || internalErrors) {
           trace.error = 1
         }
       default: // eslint-disable-line no-fallthrough
