@@ -140,7 +140,8 @@ class Config {
       exporter: options.experimental && options.experimental.exporter,
       peers: (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
       enableGetRumData: (options.experimental && !!options.experimental.enableGetRumData),
-      sampler
+      sampler,
+      internalErrors: options.experimental && options.experimental.internalErrors
     }
     this.reportHostname = isTrue(coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false))
     this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION'))
