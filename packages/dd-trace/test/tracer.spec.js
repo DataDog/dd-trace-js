@@ -1,7 +1,6 @@
 'use strict'
 
 const Span = require('opentracing').Span
-const Config = require('../src/config')
 const tags = require('../../../ext/tags')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -14,12 +13,13 @@ wrapIt()
 describe('Tracer', () => {
   let Tracer
   let tracer
-  let config
   let instrumenter
   let Instrumenter
+  let config
 
   beforeEach(() => {
-    config = new Config({ service: 'service' })
+    config = proxyquire('../src/config', {})
+    config.configure({ service: 'service' })
 
     instrumenter = {
       use: sinon.spy(),

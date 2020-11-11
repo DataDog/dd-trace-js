@@ -13,7 +13,7 @@ describe('Config', () => {
 
     Config = proxyquire('../src/config', {
       './platform': platform
-    })
+    }).constructor
   })
 
   it('should initialize with the correct defaults', () => {

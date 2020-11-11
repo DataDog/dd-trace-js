@@ -4,7 +4,7 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const ext = require('../../../ext')
 const { setSamplingRules } = require('./platform').startupLog
-const Config = require('./config')
+const config = require('./config')
 
 const {
   SAMPLING_RULE_DECISION,
@@ -24,7 +24,7 @@ const DEFAULT_KEY = 'service:,env:'
 
 class PrioritySampler {
   constructor () {
-    Config.retroOn('update', ({ env, experimental: { sampler } }) => {
+    config.retroOn('update', ({ env, experimental: { sampler } }) => {
       this._env = env
       this._rules = this._normalizeRules(sampler.rules || [], sampler.sampleRate)
       this._limiter = new RateLimiter(sampler.rateLimit || 100)

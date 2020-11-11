@@ -3,10 +3,14 @@
 describe('Sampler', () => {
   let Sampler
   let sampler
+  let config
 
   beforeEach(() => {
+    config = proxyquire('../src/config', {})
     sinon.stub(Math, 'random')
-    Sampler = require('../src/sampler')
+    Sampler = proxyquire('../src/sampler', {
+      './config': config
+    })
   })
 
   afterEach(() => {
@@ -15,7 +19,9 @@ describe('Sampler', () => {
 
   describe('rate', () => {
     it('should return the sample rate', () => {
-      sampler = new Sampler(0.5)
+      config.configure({ sampleRate: 0.5 })
+
+      sampler = new Sampler()
 
       expect(sampler.rate()).to.equal(0.5)
     })
@@ -23,7 +29,9 @@ describe('Sampler', () => {
 
   describe('isSampled', () => {
     it('should always sample when rate is 1', () => {
-      sampler = new Sampler(1)
+      config.configure({ sampleRate: 1 })
+
+      sampler = new Sampler()
 
       Math.random.returns(0.9999999999999999)
 
@@ -31,7 +39,9 @@ describe('Sampler', () => {
     })
 
     it('should never sample when rate is 0', () => {
-      sampler = new Sampler(0)
+      config.configure({ sampleRate: 0 })
+
+      sampler = new Sampler()
 
       Math.random.returns(0)
 
@@ -39,7 +49,9 @@ describe('Sampler', () => {
     })
 
     it('should sample according to the rate', () => {
-      sampler = new Sampler(0.1234)
+      config.configure({ sampleRate: 0.1234 })
+
+      sampler = new Sampler()
 
       Math.random.returns(0.1233999999999999)
 

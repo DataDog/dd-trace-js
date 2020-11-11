@@ -3,7 +3,7 @@
 const shimmer = require('shimmer')
 const log = require('./log')
 const platform = require('./platform')
-const Config = require('./config')
+const config = require('./config')
 
 shimmer({ logger: () => {} })
 
@@ -25,7 +25,7 @@ class Instrumenter {
     this._instrumented = new Map()
     this._disabledPlugins = collectDisabledPlugins()
 
-    Config.retroOn('update.plugins', ({ pluginConfigs: configs }) => {
+    config.retroOn('update.plugins', ({ pluginConfigs: configs }) => {
       // TODO in the future, plugins will listen to the state, instead of the instrumenter
       Object.keys(configs).forEach(name => {
         try {
@@ -44,14 +44,12 @@ class Instrumenter {
     })
   }
 
-  use (name, config) {
+  use (name, pluginConfig) {
     // TODO can we remove this?
-    Config.config.configurePlugin(name, config)
+    config.configurePlugin(name, pluginConfig)
   }
 
   enable () {
-    const config = Config.config
-
     this._enabled = true
 
     if (config.plugins !== false) {

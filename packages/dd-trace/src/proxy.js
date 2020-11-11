@@ -3,7 +3,7 @@
 const BaseTracer = require('opentracing').Tracer
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
-const Config = require('./config')
+const config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
 const log = require('./log')
@@ -27,7 +27,7 @@ class Tracer extends BaseTracer {
   init (options) {
     if (this._tracer === noop) {
       try {
-        const config = Config.initialize(options)
+        config.configure(options)
 
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)

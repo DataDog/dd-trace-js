@@ -1,7 +1,7 @@
 'use strict'
 
 const constants = require('../../src/constants')
-const Config = require('../../src/config')
+const config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
@@ -110,7 +110,7 @@ describe('Span', () => {
   })
 
   it('should generate new timing when the parent was extracted', () => {
-    const propagator = new TextMapPropagator(new Config())
+    const propagator = new TextMapPropagator(config)
     const parent = propagator.extract({
       'x-datadog-trace-id': '1234',
       'x-datadog-parent-id': '5678'

@@ -3,7 +3,7 @@
 const platform = require('../../platform')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
-const Config = require('../../config')
+const config = require('../../config')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
@@ -11,7 +11,7 @@ class Writer {
   constructor (prioritySampler) {
     this._prioritySampler = prioritySampler
 
-    Config.retroOn('update', ({ url, lookup, protocolVersion }) => {
+    config.retroOn('update', ({ url, lookup, protocolVersion }) => {
       this._url = url
       this._lookUp = lookup
       if (this._protocolVerison !== protocolVersion) {

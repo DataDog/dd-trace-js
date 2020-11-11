@@ -16,13 +16,14 @@ const profiler = require('./profiler')
 const pkg = require('./pkg')
 const startupLog = require('./startup-log')
 const semver = require('semver')
+const config = require('../../config')
 
 const emitter = new EventEmitter()
 
 const hasSupportedAsyncLocalStorage = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
 
 const platform = {
-  _config: {},
+  _config: config,
   name: () => 'nodejs',
   version: () => process.version,
   engine: () => process.jsEngine || 'v8',

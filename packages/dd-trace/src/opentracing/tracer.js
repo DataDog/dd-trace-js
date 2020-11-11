@@ -14,7 +14,7 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const NoopSpan = require('../noop/span')
 const formats = require('../../../../ext/formats')
-const Config = require('../config')
+const config = require('../config')
 
 const log = require('../log')
 const constants = require('../constants')
@@ -27,7 +27,6 @@ const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 class DatadogTracer extends Tracer {
   constructor () {
     super()
-    const { config } = Config
 
     const Exporter = platform.exporter(config.experimental.exporter)
 
@@ -36,7 +35,7 @@ class DatadogTracer extends Tracer {
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._sampler = new Sampler()
 
-    Config.retroOn('update', config => {
+    config.retroOn('update', () => {
       this._service = config.service
       this._version = config.version
       this._env = config.env

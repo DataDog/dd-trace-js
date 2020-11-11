@@ -59,7 +59,8 @@ describe('TracerProxy', () => {
       enabled: true,
       experimental: {},
       logger: 'logger',
-      debug: true
+      debug: true,
+      configure: sinon.spy()
     }
     Config = sinon.stub().returns(config)
 
@@ -80,7 +81,7 @@ describe('TracerProxy', () => {
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
-      './config': Config,
+      './config': config,
       './platform': platform,
       './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,
@@ -110,8 +111,7 @@ describe('TracerProxy', () => {
 
         proxy.init(options)
 
-        expect(Config).to.have.been.calledWith(options)
-        expect(DatadogTracer).to.have.been.calledWith(config)
+        expect(config.configure).to.have.been.calledWith(options)
       })
 
       it('should not initialize twice', () => {

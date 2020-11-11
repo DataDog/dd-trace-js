@@ -18,12 +18,8 @@ function pluginEnv (name) {
 class Config extends EventEmitter {
   constructor (options) {
     super()
+    this._hasEmitted = {}
     this.configure(options)
-  }
-
-  static initialize (options) {
-    this.config = new Config(options)
-    return this.config
   }
 
   configurePlugin (name, config = {}) {
@@ -37,7 +33,7 @@ class Config extends EventEmitter {
       config = { enabled: config }
     }
 
-    const enabled = pluginEnv(name)
+    const enabled = pluginEnv(`${name}_ENABLED`)
     if (enabled !== undefined) {
       config.enabled = isTrue(enabled)
     }
@@ -61,20 +57,16 @@ class Config extends EventEmitter {
 
   retroOn (name, handler) {
     if (this._hasEmitted[name]) {
-      handler()
+      handler(this)
     }
     this.on(name, handler)
-  }
-
-  static retroOn (name, handler) {
-    this.config.retroOn(name, () => handler(this.config))
   }
 
   retroEmit (name) {
     if (!this._hasEmitted[name]) {
       this._hasEmitted[name] = true
     }
-    return this.emit(name)
+    return this.emit(name, this)
   }
 
   configure (options) {
@@ -91,6 +83,7 @@ class Config extends EventEmitter {
 
     const DD_TRACE_ANALYTICS_ENABLED = coalesce(
       options.analytics,
+      this.analytics,
       platform.env('DD_TRACE_ANALYTICS_ENABLED'),
       platform.env('DD_TRACE_ANALYTICS'),
       false
@@ -99,37 +92,47 @@ class Config extends EventEmitter {
     const DD_PROFILING_ENABLED = coalesce(
       // options.profiling,
       // platform.env('DD_PROFILING_ENABLED'),
+      this.profiling && this.profiling.enabled,
       platform.env('DD_EXPERIMENTAL_PROFILING_ENABLED'),
       false
     )
     const DD_PROFILING_EXPORTERS = coalesce(
+      this.profiling && this.profiling.exporters,
       platform.env('DD_PROFILING_EXPORTERS'),
       'agent'
     )
-    const DD_PROFILING_SOURCE_MAP = platform.env('DD_PROFILING_SOURCE_MAP')
+    const DD_PROFILING_SOURCE_MAP = coalesce(
+      this.profiling && this.profiling.sourceMap,
+      platform.env('DD_PROFILING_SOURCE_MAP')
+    )
     const DD_LOGS_INJECTION = coalesce(
       options.logInjection,
+      this.logInjection,
       platform.env('DD_LOGS_INJECTION'),
       false
     )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
       options.runtimeMetrics,
+      this.runtimeMetrics,
       platform.env('DD_RUNTIME_METRICS_ENABLED'),
       false
     )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
+      this.hostname,
       platform.env('DD_AGENT_HOST'),
       platform.env('DD_TRACE_AGENT_HOSTNAME'),
       '127.0.0.1'
     )
     const DD_TRACE_AGENT_PORT = coalesce(
       options.port,
+      this.port,
       platform.env('DD_TRACE_AGENT_PORT'),
       '8126'
     )
     const DD_TRACE_AGENT_URL = coalesce(
       options.url,
+      this.url,
       platform.env('DD_TRACE_AGENT_URL'),
       platform.env('DD_TRACE_URL'),
       null
@@ -153,26 +156,32 @@ class Config extends EventEmitter {
     )
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,
+      this.startupLogs,
       platform.env('DD_TRACE_STARTUP_LOGS'),
       true
     )
     const DD_TRACE_ENABLED = coalesce(
       options.enabled,
+      this.enabled,
       platform.env('DD_TRACE_ENABLED'),
       true
     )
     const DD_TRACE_DEBUG = coalesce(
       options.debug,
+      this.debug,
       platform.env('DD_TRACE_DEBUG'),
       false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
+      this.protocolVersion,
       platform.env('DD_TRACE_AGENT_PROTOCOL_VERSION'),
       '0.4'
     )
 
-    const sampler = (options.experimental && options.experimental.sampler) || {}
+    const sampler = (options.experimental && options.experimental.sampler) ||
+      (this.experimental && this.experimental.sampler) ||
+      {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
 
@@ -186,16 +195,16 @@ class Config extends EventEmitter {
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_TRACE_AGENT_URL && new URL(DD_TRACE_AGENT_URL)
-    this.site = coalesce(options.site, platform.env('DD_SITE'), 'datadoghq.com')
+    this.site = coalesce(options.site, this.site, platform.env('DD_SITE'), 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
-    if (!this.url) {
+    if (!this.url || (!platform.env('DD_TRACE_AGENT_URL') && !options.url)) {
       this.url = new URL(`http://${this.hostname}:${this.port}`)
     }
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
-    this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), this.flushInterval, 2000)
+    this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), this.sampleRate, 1)
     this.logger = options.logger
-    this.plugins = !!coalesce(options.plugins, true)
+    this.plugins = !!coalesce(options.plugins, this.plugins, true)
     this.service = DD_SERVICE
     this.version = DD_VERSION
     this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
@@ -214,13 +223,19 @@ class Config extends EventEmitter {
       sampler,
       internalErrors: options.experimental && options.experimental.internalErrors
     }
-    this.reportHostname = isTrue(coalesce(options.reportHostname, platform.env('DD_TRACE_REPORT_HOSTNAME'), false))
+    this.reportHostname = isTrue(coalesce(
+      options.reportHostname,
+      this.reportHostname,
+      platform.env('DD_TRACE_REPORT_HOSTNAME'),
+      false)
+    )
     this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION'))
       ? scopes.NOOP
-      : coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
+      : coalesce(options.scope, this.scope, platform.env('DD_TRACE_SCOPE'))
     this.clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
     this.logLevel = coalesce(
       options.logLevel,
+      this.logLevel,
       platform.env('DD_TRACE_LOG_LEVEL'),
       'debug'
     )
@@ -249,4 +264,4 @@ class Config extends EventEmitter {
   }
 }
 
-module.exports = Config
+module.exports = new Config()
