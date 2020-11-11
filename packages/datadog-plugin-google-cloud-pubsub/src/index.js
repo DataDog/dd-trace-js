@@ -51,6 +51,7 @@ function createWrapSubscriptionEmit (tracer, config) {
           return emit.apply(this, arguments)
         } catch (e) {
           span.setTag('error', e)
+          throw e
         }
       })
     }

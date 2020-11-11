@@ -192,11 +192,17 @@ describe('Plugin', () => {
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
             const emit = sub.emit
-            sub.emit = function emitWrapped () {
+            sub.emit = function emitWrapped (name) {
+              let err
+
               try {
                 return emit.apply(this, arguments)
               } catch (e) {
-                // this is just to prevent mocha from crashing
+                err = e
+              } finally {
+                if (name === 'message') {
+                  expect(err).to.equal(error)
+                }
               }
             }
             sub.on('message', msg => {
