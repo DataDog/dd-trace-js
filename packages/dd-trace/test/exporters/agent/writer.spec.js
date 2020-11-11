@@ -107,11 +107,11 @@ function describeWriter (protocolVersion) {
       expect(encoder.makePayload).to.have.been.called
     })
 
-    it('should return a thenable when empty', (done) => {
-      writer.flush().then(done)
+    it('should call callback when empty', (done) => {
+      writer.flush(done)
     })
 
-    it('should flush its traces to the agent, and return a thenable', (done) => {
+    it('should flush its traces to the agent, and call callback', (done) => {
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
@@ -120,7 +120,7 @@ function describeWriter (protocolVersion) {
 
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
-      writer.flush().then(() => {
+      writer.flush(() => {
         expect(platform.request).to.have.been.calledWithMatch({
           protocol: url.protocol,
           hostname: url.hostname,
@@ -158,7 +158,7 @@ function describeWriter (protocolVersion) {
 
     it('should update sampling rates', (done) => {
       encoder.count.returns(1)
-      writer.flush().then(() => {
+      writer.flush(() => {
         expect(prioritySampler.update).to.have.been.calledWith({
           'service:hello,env:test': 1
         })

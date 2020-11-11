@@ -23,17 +23,8 @@ class Writer {
     this._encode(spans)
   }
 
-  _sendPayload (data, count) {
+  _sendPayload (data, count, done) {
     platform.metrics().increment(`${METRIC_PREFIX}.requests`, true)
-
-    let done = () => {}
-    const thenable = {
-      then (fulfilled) {
-        // We're not ever going to reject, because users of the thenable are
-        // only concerned about completion, rather than success.
-        done = fulfilled
-      }
-    }
 
     makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
       if (status) {
@@ -68,8 +59,6 @@ class Writer {
       }
       done()
     })
-
-    return thenable
   }
 
   setUrl (url) {
@@ -80,19 +69,15 @@ class Writer {
     this._encoderForVersion.encode(trace)
   }
 
-  flush () {
+  flush (done = () => {}) {
     const count = this._encoderForVersion.count()
 
     if (count > 0) {
       const payload = this._encoderForVersion.makePayload()
 
-      return this._sendPayload(payload, count)
+      this._sendPayload(payload, count, done)
     } else {
-      return {
-        then (fn) {
-          fn()
-        }
-      }
+      done()
     }
   }
 }
