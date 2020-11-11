@@ -26,6 +26,15 @@ class Writer {
   _sendPayload (data, count) {
     platform.metrics().increment(`${METRIC_PREFIX}.requests`, true)
 
+    let done = () => {}
+    const thenable = {
+      then (fulfilled) {
+        // We're not ever going to reject, because users of the thenable are
+        // only concerned about completion, rather than success.
+        done = fulfilled
+      }
+    }
+
     makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
       if (status) {
         platform.metrics().increment(`${METRIC_PREFIX}.responses`, true)
@@ -41,7 +50,11 @@ class Writer {
 
       platform.startupLog.startupLog({ agentError: err })
 
-      if (err) return log.error(err)
+      if (err) {
+        log.error(err)
+        done()
+        return
+      }
 
       log.debug(`Response from the agent: ${res}`)
 
@@ -53,7 +66,10 @@ class Writer {
         platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
         platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
+      done()
     })
+
+    return thenable
   }
 
   setUrl (url) {
@@ -70,7 +86,13 @@ class Writer {
     if (count > 0) {
       const payload = this._encoderForVersion.makePayload()
 
-      this._sendPayload(payload, count)
+      return this._sendPayload(payload, count)
+    } else {
+      return {
+        then (fn) {
+          fn()
+        }
+      }
     }
   }
 }
