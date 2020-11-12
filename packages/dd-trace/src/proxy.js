@@ -57,6 +57,10 @@ class Tracer extends BaseTracer {
     return this
   }
 
+  configure (options) {
+    config.configure(options)
+  }
+
   use () {
     this._instrumenter.use.apply(this._instrumenter, arguments)
     return this

@@ -100,6 +100,14 @@ describe('TracerProxy', () => {
     })
   })
 
+  describe('configure', () => {
+    it('should call the underlying configure', () => {
+      const options = {}
+      proxy.configure(options)
+      expect(config.configure).to.have.been.calledWith(options)
+    })
+  })
+
   describe('uninitialized', () => {
     describe('init', () => {
       it('should return itself', () => {
