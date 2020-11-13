@@ -24,8 +24,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
-      scopeManager: sinon.stub().returns('scopeManager'),
-      setUrl: sinon.stub()
+      scopeManager: sinon.stub().returns('scopeManager')
     }
 
     noop = {
@@ -36,8 +35,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
-      scopeManager: sinon.stub().returns('scopeManager'),
-      setUrl: sinon.stub()
+      scopeManager: sinon.stub().returns('scopeManager')
     }
 
     log = {
@@ -272,15 +270,6 @@ describe('TracerProxy', () => {
         expect(returnValue).to.equal('scopeManager')
       })
     })
-
-    describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.setUrl('http://example.com')
-
-        expect(noop.setUrl).to.have.been.calledWith('http://example.com')
-        expect(returnValue).to.equal(proxy)
-      })
-    })
   })
 
   describe('initialized', () => {
@@ -382,7 +371,7 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
+        expect(config.configure).to.have.been.calledWith({ url: 'http://example.com' })
         expect(returnValue).to.equal(proxy)
       })
     })

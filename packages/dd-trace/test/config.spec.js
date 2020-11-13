@@ -410,4 +410,50 @@ describe('Config', () => {
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
   })
+
+  context('configure', () => {
+    it('should appropriately set new values', () => {
+      const config = new Config()
+
+      config.configure({
+        enabled: true,
+        debug: false,
+        protocolVersion: '0.5',
+        analytics: false,
+        site: 'datadoghq.com',
+        hostname: 'server',
+        port: 7777,
+        dogstatsd: {
+          port: 8888
+        },
+        runtimeMetrics: false,
+        reportHostname: false,
+        service: 'test',
+        version: '1.0.0',
+        env: 'development',
+        clientToken: '789',
+        tags: {
+          foo: 'foo'
+        }
+      })
+
+      expect(config).to.have.property('enabled', true)
+      expect(config).to.have.property('debug', false)
+      expect(config).to.have.property('protocolVersion', '0.5')
+      expect(config).to.have.property('analytics', false)
+      expect(config).to.have.nested.property('url.hostname', 'server')
+      expect(config).to.have.nested.property('url.port', '7777')
+      expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
+      expect(config).to.have.nested.property('dogstatsd.port', '8888')
+      expect(config).to.have.property('site', 'datadoghq.com')
+      expect(config).to.have.property('runtimeMetrics', false)
+      expect(config).to.have.property('reportHostname', false)
+      expect(config).to.have.property('service', 'test')
+      expect(config).to.have.property('version', '1.0.0')
+      expect(config).to.have.property('env', 'development')
+      expect(config).to.have.property('clientToken', '789')
+      expect(config.tags).to.include({ foo: 'foo' })
+      expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
+    })
+  })
 })

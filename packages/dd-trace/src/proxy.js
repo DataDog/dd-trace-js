@@ -59,6 +59,7 @@ class Tracer extends BaseTracer {
 
   configure (options) {
     config.configure(options)
+    return this
   }
 
   use () {
@@ -92,8 +93,10 @@ class Tracer extends BaseTracer {
     return this._tracer.wrap(name, options, fn)
   }
 
-  setUrl () {
-    this._tracer.setUrl.apply(this._tracer, arguments)
+  setUrl (url) {
+    this.configure({
+      url
+    })
     return this
   }
 

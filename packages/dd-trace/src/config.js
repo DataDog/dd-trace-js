@@ -199,7 +199,7 @@ class Config extends EventEmitter {
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     if (!this.url || (!platform.env('DD_TRACE_AGENT_URL') && !options.url)) {
-      this.url = new URL(`http://${this.hostname}:${this.port}`)
+      this.url = new URL(`${this.url ? this.url.protocol : 'http:'}//${this.hostname}:${this.port}`)
     }
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), this.flushInterval, 2000)
     this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), this.sampleRate, 1)
