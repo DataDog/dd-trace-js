@@ -21,7 +21,7 @@ function createWrapProducer (tracer, config) {
         }
 
         return tracer.wrap('kafka.producer.send', { tags }, () =>
-          send(...args)
+          send.apply(this, ...args)
         )
       }
 
