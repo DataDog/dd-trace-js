@@ -508,6 +508,7 @@ interface Plugins {
   "ioredis": plugins.ioredis;
   "knex": plugins.knex;
   "koa": plugins.koa;
+  "kafkajs": plugins.kafkajs
   "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
@@ -997,6 +998,12 @@ declare namespace plugins {
    * [koa](https://koajs.com/) module.
    */
   interface koa extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the 
+   * [kafkajs](https://kafka.js.org/) module.
+   */
+  interface kafkajs extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
