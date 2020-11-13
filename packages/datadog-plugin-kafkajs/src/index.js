@@ -1,17 +1,11 @@
 'use strict'
-const {
-  consumer: {
-    createConsumerStartBatchProcessTags,
-    addCommonConsumerTags,
-    createConsumerEndBatchProcessTags
-  }
-} = require('./utils')
-
 function createWrapProducer (tracer, config) {
   return function wrapProducer (createProducer) {
     return function producerWithTrace () {
       const serviceName = config.service || `${tracer._service}-kafka`
       const createdProducer = createProducer.apply(this, arguments)
+
+      const send = createdProducer.send
 
       createdProducer.send = (...args) => {
         const { topic, messages } = args[0]
@@ -26,7 +20,9 @@ function createWrapProducer (tracer, config) {
           'kafka.batch.size': messages.length
         }
 
-        return tracer.trace('kafka.producer.send', { tags }, () => createdProducer.send(...args))
+        return tracer.wrap('kafka.producer.send', { tags }, () =>
+          send(...args)
+        )
       }
 
       return createdProducer
@@ -35,40 +31,20 @@ function createWrapProducer (tracer, config) {
 }
 
 function createWrapConsumer (tracer, config) {
-  return function wrapConsumer (createConsumer) {
-    return function consumerWithTrace () {
-      const serviceName = config.service || `${tracer._service}-kafka`
-      const createdConsumer = createConsumer.apply(this, arguments)
+  return function wrapProcessEachMessage (Consumer) {
+    return function processEachMessageWithTrace () {
+      const consumer = Consumer.apply(this, arguments)
+      const run = consumer.run
 
-      const { START_BATCH_PROCESS, END_BATCH_PROCESS } = createdConsumer.events
-
-      createdConsumer.on(START_BATCH_PROCESS, ({ type, payload }) => {
-        const childOf = tracer.scope().active()
-
-        tracer.trace(type, {
-          tags: addCommonConsumerTags(
-            serviceName,
-            'Consumer start batch process',
-            createConsumerStartBatchProcessTags(payload)
-          ),
-          childOf
+      consumer.run = async function ({ eachMessage, ...args }) {
+        // return the promise
+        return run({
+          eachMessage: tracer.wrap('kafka', {}, eachMessage),
+          args
         })
-      })
+      }
 
-      createdConsumer.on(END_BATCH_PROCESS, ({ type, payload }) => {
-        const childOf = tracer.scope().active()
-
-        tracer.trace(type, {
-          tags: addCommonConsumerTags(
-            serviceName,
-            'Consumer end batch process',
-            createConsumerEndBatchProcessTags(payload)
-          ),
-          childOf
-        })
-      })
-
-      return createdConsumer
+      return consumer
     }
   }
 }
