@@ -3,9 +3,6 @@
   "version": "0.28.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
-  "files": [
-    "testEnvironment.js"
-  ],
   "browser": "browser.js",
   "typings": "index.d.ts",
   "scripts": {
@@ -64,7 +61,6 @@
     "core-js": "^3.6.0",
     "form-data": "^3.0.0",
     "hdr-histogram-js": "^1.1.4",
-    "jest-environment-jsdom": "^26.6.2",
     "koalas": "^1.0.2",
     "limiter": "^1.1.4",
     "lodash.kebabcase": "^4.1.1",
@@ -133,7 +129,6 @@
     "tar": "^4.4.8",
     "wait-on": "^5.0.0",
     "webpack": "^4.40.2",
-    "webpack-cli": "^3.3.9",
-    "webpack-node-externals": "^2.5.2"
+    "webpack-cli": "^3.3.9"
   }
 }

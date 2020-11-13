@@ -1,5 +1,4 @@
 'use strict'
-const nodeExternals = require('webpack-node-externals')
 
 const base = {
   devtool: 'source-map',
@@ -33,16 +32,5 @@ module.exports = [
     output: {
       filename: '[name].js'
     }
-  },
-  {
-    devtool: 'source-map',
-    mode: 'development',
-    entry: './packages/datadog-plugin-jest/src/index.js',
-    output: {
-      filename: 'testEnvironment.js',
-      path: __dirname
-    },
-    target: 'node',
-    externals: [nodeExternals()]
   }
 ]
