@@ -1,8 +1,7 @@
-const { promisify } = require('util')
 const { exec } = require('child_process')
+const { promisify } = require('util')
 
-const asyncExec = promisify(exec)
-const sanitizeStdout = (stdout) => stdout.replace(/(\r\n|\n|\r)/gm, '')
+const promiseExec = promisify(exec)
 
 const GIT_COMMIT_SHA = 'git.commit_sha'
 const GIT_BRANCH = 'git.branch'
@@ -40,11 +39,12 @@ function getCIMetadata () {
 }
 
 async function getGitInformation () {
+  const sanitizeStdout = (stdout) => stdout.replace(/(\r\n|\n|\r)/gm, '')
   try {
     const [{ stdout: readRepository }, { stdout: readBranch }, { stdout: readCommit }] = await Promise.all([
-      asyncExec('git ls-remote --get-url'),
-      asyncExec('git branch --show-current'),
-      asyncExec('git rev-parse HEAD')
+      promiseExec('git ls-remote --get-url'),
+      promiseExec('git branch --show-current'),
+      promiseExec('git rev-parse HEAD')
     ])
     return {
       repository: sanitizeStdout(readRepository),
@@ -58,6 +58,30 @@ async function getGitInformation () {
       commit: ''
     }
   }
+}
+
+function finishStartedSpans () {
+  global.tracer
+    .scope()
+    .active()
+    ._spanContext._trace.started.forEach((span) => {
+      span.finish()
+    })
+}
+
+function setTestStatus (status) {
+  global.tracer.scope().active().setTag(TEST_STATUS, status)
+}
+
+function addTestMetadata ({ testName, testSuite }) {
+  global.tracer
+    .scope()
+    .active()
+    .addTags({
+      [TEST_TYPE]: 'test',
+      [TEST_NAME]: testName,
+      [TEST_SUITE]: testSuite
+    })
 }
 
 module.exports = function (BaseEnvironment) {
@@ -108,7 +132,7 @@ module.exports = function (BaseEnvironment) {
               [TEST_TYPE]: 'test',
               [TEST_NAME]: event.test.name,
               [TEST_SUITE]: this.testSuite,
-              [TEST_STATUS]: 'skip',
+              [TEST_STATUS]: 'skip'
             })
           }
         )
@@ -120,29 +144,17 @@ module.exports = function (BaseEnvironment) {
             'jest.test',
             { type: 'test', resource: `${event.test.parent.name}.${event.test.name}` },
             () => {
-              global.tracer
-                .scope()
-                .active()
-                .addTags({
-                  [TEST_TYPE]: 'test',
-                  [TEST_NAME]: event.test.name,
-                  [TEST_SUITE]: this.testSuite
-                })
+              addTestMetadata({ testName: event.test.name, testSuite: this.testSuite })
               return new Promise((resolve, reject) => {
                 originalSpecFunction((err) => {
                   if (err) {
-                    global.tracer.scope().active().setTag(TEST_STATUS, 'fail')
+                    setTestStatus('fail')
                     reject(err)
                   } else {
-                    global.tracer.scope().active().setTag(TEST_STATUS, 'pass')
+                    setTestStatus('pass')
                     resolve()
                   }
-                  global.tracer
-                    .scope()
-                    .active()
-                    ._spanContext._trace.started.forEach((span) => {
-                      span.finish()
-                    })
+                  finishStartedSpans()
                 })
               })
             }
@@ -153,52 +165,28 @@ module.exports = function (BaseEnvironment) {
             { type: 'test', resource: `${event.test.parent.name}.${event.test.name}` },
             () => {
               let result
-              global.tracer
-                .scope()
-                .active()
-                .addTags({
-                  [TEST_TYPE]: 'test',
-                  [TEST_NAME]: event.test.name,
-                  [TEST_SUITE]: this.testSuite
-                })
+              addTestMetadata({ testName: event.test.name, testSuite: this.testSuite })
               try {
                 result = originalSpecFunction()
               } catch (error) {
-                global.tracer.scope().active().setTag(TEST_STATUS, 'fail')
-                global.tracer
-                  .scope()
-                  .active()
-                  ._spanContext._trace.started.forEach((span) => {
-                    span.finish()
-                  })
+                setTestStatus('fail')
+                finishStartedSpans()
                 throw error
               }
 
               if (result && result.then) {
                 return result
                   .then(() => {
-                    global.tracer.scope().active().setTag(TEST_STATUS, 'pass')
+                    setTestStatus('pass')
                   })
                   .catch((err) => {
-                    global.tracer.scope().active().setTag(TEST_STATUS, 'fail')
+                    setTestStatus('fail')
                     throw err
                   })
-                  .finally(() => {
-                    global.tracer
-                      .scope()
-                      .active()
-                      ._spanContext._trace.started.forEach((span) => {
-                        span.finish()
-                      })
-                  })
+                  .finally(finishStartedSpans)
               }
-              global.tracer.scope().active().setTag(TEST_STATUS, 'pass')
-              global.tracer
-                .scope()
-                .active()
-                ._spanContext._trace.started.forEach((span) => {
-                  span.finish()
-                })
+              setTestStatus('pass')
+              finishStartedSpans()
               return result
             }
           )
