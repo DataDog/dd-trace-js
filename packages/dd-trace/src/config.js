@@ -22,6 +22,15 @@ class Config extends EventEmitter {
     this.configure(options)
   }
 
+  reset () {
+    for (const prop of Reflect.ownKeys(this)) {
+      delete this[prop]
+    }
+    EventEmitter.call(this)
+    this._hasEmitted = {}
+    this.configure()
+  }
+
   configurePlugin (name, config = {}) {
     this.pluginConfigs = this.pluginConfigs || {}
 
