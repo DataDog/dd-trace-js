@@ -275,6 +275,14 @@ describe('TracerProxy', () => {
       proxy.init()
     })
 
+    describe('init', () => {
+      it('should call configure', () => {
+        proxy.init('foobar')
+
+        expect(config.configure).to.have.been.calledWith('foobar')
+      })
+    })
+
     describe('use', () => {
       it('should call the underlying Instrumenter', () => {
         const returnValue = proxy.use('a', 'b', 'c')

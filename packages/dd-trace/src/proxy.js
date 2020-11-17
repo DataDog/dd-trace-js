@@ -25,10 +25,9 @@ class Tracer extends BaseTracer {
   }
 
   init (options) {
+    this.configure(options)
     if (this._tracer === noop) {
       try {
-        config.configure(options)
-
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
