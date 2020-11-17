@@ -9,7 +9,6 @@ describe('TracerProxy', () => {
   let noop
   let Instrumenter
   let instrumenter
-  let Config
   let config
   let platform
   let analyticsSampler
@@ -60,7 +59,6 @@ describe('TracerProxy', () => {
       debug: true,
       configure: sinon.spy()
     }
-    Config = sinon.stub().returns(config)
 
     platform = {
       load: sinon.spy(),
