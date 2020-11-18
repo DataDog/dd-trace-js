@@ -73,17 +73,6 @@ function setTestStatus (status) {
   global.tracer.scope().active().setTag(TEST_STATUS, status)
 }
 
-function addTestMetadata ({ testName, testSuite }) {
-  global.tracer
-    .scope()
-    .active()
-    .addTags({
-      [TEST_TYPE]: 'test',
-      [TEST_NAME]: testName,
-      [TEST_SUITE]: testSuite
-    })
-}
-
 module.exports = function (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -105,7 +94,7 @@ module.exports = function (BaseEnvironment) {
           tags: {
             ...ciMetadata,
             [GIT_COMMIT_SHA]: commit,
-            [GIT_BRANCH]: branch,
+            [GIT_BRANCH]: process.env.TESTING_BRANCH,
             [GIT_REPOSITORY_URL]: repository,
             [BUILD_SOURCE_ROOT]: this.rootDir,
             [TEST_FRAMEWORK]: 'jest'
@@ -124,69 +113,66 @@ module.exports = function (BaseEnvironment) {
 
     async handleTestEvent (event) {
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        global.tracer.trace(
+        global.tracer.startSpan(
           'jest.test',
-          { type: 'test', resource: `${event.test.parent.name}.${event.test.name}` },
-          (span) => {
-            span.addTags({
+          {
+            tags: {
+              type: 'test',
+              resource: `${event.test.parent.name}.${event.test.name}`,
               [TEST_TYPE]: 'test',
               [TEST_NAME]: event.test.name,
               [TEST_SUITE]: this.testSuite,
               [TEST_STATUS]: 'skip'
-            })
+            }
           }
-        )
+        ).finish()
       }
       if (event.name === 'test_start') {
         const originalSpecFunction = event.test.fn
         if (originalSpecFunction.length) {
           event.test.fn = global.tracer.wrap(
             'jest.test',
-            { type: 'test', resource: `${event.test.parent.name}.${event.test.name}` },
+            { type: 'test',
+              resource: `${event.test.parent.name}.${event.test.name}`,
+              tags: {
+                [TEST_TYPE]: 'test',
+                [TEST_NAME]: event.test.name,
+                [TEST_SUITE]: this.testSuite
+              } },
             () => {
-              addTestMetadata({ testName: event.test.name, testSuite: this.testSuite })
-              return new Promise((resolve, reject) => {
-                originalSpecFunction((err) => {
-                  if (err) {
-                    setTestStatus('fail')
-                    reject(err)
-                  } else {
-                    setTestStatus('pass')
-                    resolve()
-                  }
-                  finishStartedSpans()
+              const promisifiedSpecFunction = promisify(originalSpecFunction)
+              return promisifiedSpecFunction()
+                .then(() => {
+                  setTestStatus('pass')
                 })
-              })
+                .catch((err) => {
+                  setTestStatus('fail')
+                  throw err
+                })
+                .finally(finishStartedSpans)
             }
           )
         } else {
           event.test.fn = global.tracer.wrap(
             'jest.test',
-            { type: 'test', resource: `${event.test.parent.name}.${event.test.name}` },
-            () => {
+            { type: 'test',
+              resource: `${event.test.parent.name}.${event.test.name}`,
+              tags: {
+                [TEST_TYPE]: 'test',
+                [TEST_NAME]: event.test.name,
+                [TEST_SUITE]: this.testSuite
+              } },
+            async () => {
               let result
-              addTestMetadata({ testName: event.test.name, testSuite: this.testSuite })
               try {
-                result = originalSpecFunction()
+                result = await originalSpecFunction()
+                setTestStatus('pass')
               } catch (error) {
                 setTestStatus('fail')
-                finishStartedSpans()
                 throw error
+              } finally {
+                finishStartedSpans()
               }
-
-              if (result && result.then) {
-                return result
-                  .then(() => {
-                    setTestStatus('pass')
-                  })
-                  .catch((err) => {
-                    setTestStatus('fail')
-                    throw err
-                  })
-                  .finally(finishStartedSpans)
-              }
-              setTestStatus('pass')
-              finishStartedSpans()
               return result
             }
           )
