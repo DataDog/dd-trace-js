@@ -73,7 +73,7 @@ function setTestStatus (status) {
   global.tracer.scope().active().setTag(TEST_STATUS, status)
 }
 
-module.exports = function (BaseEnvironment) {
+function getEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
@@ -180,4 +180,10 @@ module.exports = function (BaseEnvironment) {
       }
     }
   }
+}
+
+module.exports = {
+  name: 'jest',
+  versions: ['26.6.3'],
+  getEnvironment
 }

@@ -1,1 +1,3 @@
-module.exports = require('../src')(require('../../../versions/node_modules/jest-environment-node'))
+const getEnvironment = require('../src').getEnvironment
+
+module.exports = getEnvironment(require('../../../versions/node_modules/jest-environment-node'))
