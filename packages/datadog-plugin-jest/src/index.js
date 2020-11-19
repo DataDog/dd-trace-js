@@ -184,6 +184,6 @@ function getEnvironment (BaseEnvironment) {
 
 module.exports = {
   name: 'jest',
-  versions: ['26.6.3'],
+  versions: ['>=26'],
   getEnvironment
 }
