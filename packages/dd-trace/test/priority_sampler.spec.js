@@ -152,10 +152,8 @@ describe('PrioritySampler', () => {
     it('should support a global sample rate', () => {
       config.configure({
         env: 'test',
-        experimental: {
-          sampler: {
-            sampleRate: 0.5
-          }
+        ingestion: {
+          sampleRate: 0.5
         }
       })
       prioritySampler = new PrioritySampler()

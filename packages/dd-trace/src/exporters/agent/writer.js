@@ -13,7 +13,7 @@ class Writer {
 
     config.retroOn('update', ({ url, lookup, protocolVersion }) => {
       this._url = url
-      this._lookUp = lookup
+      this._lookup = lookup
       if (this._protocolVerison !== protocolVersion) {
         this._protocolVersion = protocolVersion
         const AgentEncoder = getEncoder(protocolVersion)
