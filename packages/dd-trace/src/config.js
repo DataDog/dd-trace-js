@@ -78,6 +78,16 @@ class Config extends EventEmitter {
     return this.emit(name, this)
   }
 
+  _getExperimental (options, prop) {
+    if (options.experimental && prop in options.experimental) {
+      return options.experimental[prop]
+    }
+
+    if (this.experimental && prop in this.experimental) {
+      return this.experimental[prop]
+    }
+  }
+
   configure (options) {
     options = options || {}
 
@@ -188,9 +198,7 @@ class Config extends EventEmitter {
       '0.4'
     )
 
-    const sampler = (options.experimental && options.experimental.sampler) ||
-      (this.experimental && this.experimental.sampler) ||
-      {}
+    const sampler = this._getExperimental(options, 'sampler') || {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
 
@@ -224,13 +232,13 @@ class Config extends EventEmitter {
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
-      b3: !(!options.experimental || !options.experimental.b3),
-      runtimeId: !(!options.experimental || !options.experimental.runtimeId),
-      exporter: options.experimental && options.experimental.exporter,
-      peers: (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
-      enableGetRumData: (options.experimental && !!options.experimental.enableGetRumData),
+      b3: !!this._getExperimental(options, 'b3'),
+      runtimeId: !!this._getExperimental(options, 'runtimeId'),
+      exporter: this._getExperimental(options, 'exporter'),
+      peers: this._getExperimental(options, 'distributedTracingOriginWhitelist') || [],
+      enableGetRumData: !!this._getExperimental(options, 'getRumData'),
       sampler,
-      internalErrors: options.experimental && options.experimental.internalErrors
+      internalErrors: this._getExperimental(options, 'internalErrors')
     }
     this.reportHostname = isTrue(coalesce(
       options.reportHostname,
