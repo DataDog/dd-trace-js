@@ -44,5 +44,7 @@ module.exports = {
   'router': require('../../../datadog-plugin-router/src'),
   'tedious': require('../../../datadog-plugin-tedious/src'),
   'when': require('../../../datadog-plugin-when/src'),
-  'winston': require('../../../datadog-plugin-winston/src')
+  'winston': require('../../../datadog-plugin-winston/src'),
+  'jest': require('../../../datadog-plugin-jest/src'),
+  'jest-circus': require('../../../datadog-plugin-jest/src')
 }

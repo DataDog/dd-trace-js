@@ -70,5 +70,17 @@
       "name": "pg-native",
       "versions": ["3.0.0"]
     }
+  ],
+  "jest": [
+    {
+      "name": "jest",
+      "versions": ["26.6.3"]
+    }
+  ],
+  "jest-circus": [
+    {
+      "name": "jest-circus",
+      "versions": ["26.6.3"]
+    }
   ]
 }
