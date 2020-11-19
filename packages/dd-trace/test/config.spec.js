@@ -455,5 +455,21 @@ describe('Config', () => {
       expect(config.tags).to.include({ foo: 'foo' })
       expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     })
+
+    it('should fire the update event twice once configured', (done) => {
+      platform.env.withArgs('DD_SERVICE').returns('test')
+      const services = []
+      const config = new Config()
+      config.retroOn('update', config2 => {
+        expect(config2).to.equal(config)
+        services.push(config.service)
+        if (services.length === 2) {
+          expect(services[0]).to.equal('test')
+          expect(services[1]).to.equal('test2')
+          done()
+        }
+      })
+      config.configure({ service: 'test2' })
+    })
   })
 })
