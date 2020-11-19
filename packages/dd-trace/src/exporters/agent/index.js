@@ -10,10 +10,11 @@ class AgentExporter {
     this._writer = new Writer(prioritySampler)
 
     config.retroOn('update', ({ flushInterval, url }) => {
-      // TODO shouldn't the schedule handle config on its own?
       if (flushInterval > 0) {
-        this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
-        this._scheduler.start()
+        if (!this._scheduler) {
+          this._scheduler = new Scheduler(() => this._writer.flush())
+          this._scheduler.start()
+        }
       } else {
         if (this._scheduler) {
           this._scheduler.stop()

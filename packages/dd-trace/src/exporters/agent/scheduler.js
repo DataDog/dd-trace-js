@@ -1,17 +1,22 @@
 'use strict'
 
+const config = require('../../config')
 const platform = require('../../platform')
 
 class Scheduler {
-  constructor (callback, interval) {
+  constructor (callback) {
     this._timer = null
     this._callback = callback
-    this._interval = interval
   }
 
   start () {
-    this._timer = setInterval(this._callback, this._interval)
-    this._timer.unref && this._timer.unref()
+    config.retroOn('update', ({ flushInterval }) => {
+      if (this._timer) {
+        clearInterval(this._timer)
+      }
+      this._timer = setInterval(this._callback, flushInterval)
+      this._timer.unref && this._timer.unref()
+    })
 
     platform.on('exit', this._callback)
   }
