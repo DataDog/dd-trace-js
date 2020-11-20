@@ -200,7 +200,7 @@ class Config extends EventEmitter {
 
     const sampler = this._getExperimental(options, 'sampler') || {}
     const ingestion = options.ingestion || {}
-    const dogstatsd = coalesce(options.dogstatsd, {})
+    const dogstatsd = coalesce(options.dogstatsd, this.dogstatsd, {})
 
     Object.assign(sampler, {
       sampleRate: coalesce(ingestion.sampleRate, sampler.sampleRate, platform.env('DD_TRACE_SAMPLE_RATE')),
@@ -225,12 +225,13 @@ class Config extends EventEmitter {
     this.service = DD_SERVICE
     this.version = DD_VERSION
     this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
+    this.dogstatsd = this.dogstatsd || {}
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, platform.env(`DD_DOGSTATSD_HOSTNAME`), this.hostname),
       port: String(coalesce(dogstatsd.port, platform.env('DD_DOGSTATSD_PORT'), 8125))
     }
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
-    this.trackAsyncScope = options.trackAsyncScope !== false
+    this.trackAsyncScope = coalesce(options.trackAsyncScope, this.trackAsyncScope) !== false
     this.experimental = {
       b3: !!this._getExperimental(options, 'b3'),
       runtimeId: !!this._getExperimental(options, 'runtimeId'),
@@ -249,7 +250,7 @@ class Config extends EventEmitter {
     this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION'))
       ? scopes.NOOP
       : coalesce(options.scope, this.scope, platform.env('DD_TRACE_SCOPE'))
-    this.clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
+    this.clientToken = coalesce(options.clientToken, this.clientToken, platform.env('DD_CLIENT_TOKEN'))
     this.logLevel = coalesce(
       options.logLevel,
       this.logLevel,
@@ -261,7 +262,7 @@ class Config extends EventEmitter {
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
-    this.lookup = options.lookup
+    this.lookup = coalesce(options.lookup, this.lookup)
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
 
