@@ -18,6 +18,9 @@ const CI_PIPELINE_NUMBER = 'ci.pipeline.number'
 const CI_WORKSPACE_PATH = 'ci.workspace_path'
 const CI_PROVIDER_NAME = 'ci.provider.name'
 
+const SPAN_TYPE = 'span.type'
+const RESOURCE_NAME = 'resource.name'
+
 function getCIMetadata () {
   const { env } = process
   if (env.GITHUB_ACTIONS) {
@@ -38,25 +41,19 @@ function getCIMetadata () {
   return {}
 }
 
-async function getGitInformation () {
-  const sanitizeStdout = (stdout) => stdout.replace(/(\r\n|\n|\r)/gm, '')
+const sanitizedRun = async cmd => {
   try {
-    const [{ stdout: readRepository }, { stdout: readBranch }, { stdout: readCommit }] = await Promise.all([
-      promiseExec('git ls-remote --get-url'),
-      promiseExec('git branch --show-current'),
-      promiseExec('git rev-parse HEAD')
-    ])
-    return {
-      repository: sanitizeStdout(readRepository),
-      branch: sanitizeStdout(readBranch),
-      commit: sanitizeStdout(readCommit)
-    }
+    return (await promiseExec(cmd)).stdout.replace(/(\r\n|\n|\r)/gm, '')
   } catch (e) {
-    return {
-      repository: '',
-      branch: '',
-      commit: ''
-    }
+    return ''
+  }
+}
+
+async function getGitInformation () {
+  return {
+    repository: await sanitizedRun('git ls-remote --get-url'),
+    branch: await sanitizedRun('git branch --show-current'),
+    commit: await sanitizedRun('git rev-parse HEAD')
   }
 }
 
@@ -64,7 +61,7 @@ function finishStartedSpans () {
   global.tracer
     .scope()
     .active()
-    ._spanContext._trace.started.forEach((span) => {
+    .context()._trace.started.forEach((span) => {
       span.finish()
     })
 }
@@ -117,8 +114,10 @@ function getEnvironment (BaseEnvironment) {
           'jest.test',
           {
             tags: {
-              type: 'test',
-              resource: `${event.test.parent.name}.${event.test.name}`,
+              // Since we are using `startSpan` we can't use `type` and `resource` options
+              // so we have to manually set the tags.
+              [SPAN_TYPE]: 'test',
+              [RESOURCE_NAME]: `${event.test.parent.name}.${event.test.name}`,
               [TEST_TYPE]: 'test',
               [TEST_NAME]: event.test.name,
               [TEST_SUITE]: this.testSuite,
@@ -128,55 +127,33 @@ function getEnvironment (BaseEnvironment) {
         ).finish()
       }
       if (event.name === 'test_start') {
-        const originalSpecFunction = event.test.fn
-        if (originalSpecFunction.length) {
-          event.test.fn = global.tracer.wrap(
-            'jest.test',
-            { type: 'test',
-              resource: `${event.test.parent.name}.${event.test.name}`,
-              tags: {
-                [TEST_TYPE]: 'test',
-                [TEST_NAME]: event.test.name,
-                [TEST_SUITE]: this.testSuite
-              } },
-            () => {
-              const promisifiedSpecFunction = promisify(originalSpecFunction)
-              return promisifiedSpecFunction()
-                .then(() => {
-                  setTestStatus('pass')
-                })
-                .catch((err) => {
-                  setTestStatus('fail')
-                  throw err
-                })
-                .finally(finishStartedSpans)
-            }
-          )
-        } else {
-          event.test.fn = global.tracer.wrap(
-            'jest.test',
-            { type: 'test',
-              resource: `${event.test.parent.name}.${event.test.name}`,
-              tags: {
-                [TEST_TYPE]: 'test',
-                [TEST_NAME]: event.test.name,
-                [TEST_SUITE]: this.testSuite
-              } },
-            async () => {
-              let result
-              try {
-                result = await originalSpecFunction()
-                setTestStatus('pass')
-              } catch (error) {
-                setTestStatus('fail')
-                throw error
-              } finally {
-                finishStartedSpans()
-              }
-              return result
-            }
-          )
+        let specFunction = event.test.fn
+        if (specFunction.length) {
+          specFunction = promisify(specFunction)
         }
+        event.test.fn = global.tracer.wrap(
+          'jest.test',
+          { type: 'test',
+            resource: `${event.test.parent.name}.${event.test.name}`,
+            tags: {
+              [TEST_TYPE]: 'test',
+              [TEST_NAME]: event.test.name,
+              [TEST_SUITE]: this.testSuite
+            } },
+          async () => {
+            let result
+            try {
+              result = await specFunction()
+              setTestStatus('pass')
+            } catch (error) {
+              setTestStatus('fail')
+              throw error
+            } finally {
+              finishStartedSpans()
+            }
+            return result
+          }
+        )
       }
     }
   }
@@ -184,6 +161,7 @@ function getEnvironment (BaseEnvironment) {
 
 module.exports = {
   name: 'jest',
+  // ** Important: This needs to be the same as the versions for datadog-plugin-jest-circus
   versions: ['>=26'],
   getEnvironment
 }

@@ -1,4 +1,5 @@
 module.exports = {
   name: 'jest-circus',
-  versions: ['>=26'] // !! same version as jest
+  // ** Important: This needs to be the same as the versions for datadog-plugin-jest
+  versions: ['>=26']
 }
