@@ -8,16 +8,15 @@ const path = require('path')
 describe('Plugin', () => {
   let jest
   withVersions(plugin, 'jest', version => {
-    before(() => {
-      return agent.load('jest')
-    })
-
-    after(() => {
+    afterEach(() => {
+      // Needed for each version to test to have its own tracer,
+      // otherwise agent.use(tracer, ...) is not invoked correctly.
+      delete global.tracer
       return agent.close()
     })
-
     beforeEach(() => {
       jest = require(`../../../versions/jest@${version}`).get()
+      return agent.load('jest')
     })
 
     const testRunnerPath = resolve.sync('jest-circus/runner', {

@@ -162,6 +162,6 @@ function getEnvironment (BaseEnvironment) {
 module.exports = {
   name: 'jest',
   // ** Important: This needs to be the same as the versions for datadog-plugin-jest-circus
-  versions: ['>=26'],
+  versions: ['>=24.8.0'],
   getEnvironment
 }

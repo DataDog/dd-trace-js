@@ -74,13 +74,13 @@
   "jest": [
     {
       "name": "jest",
-      "versions": [">=26"]
+      "versions": [">=24.8.0"]
     }
   ],
   "jest-circus": [
     {
       "name": "jest-circus",
-      "versions": [">=26"]
+      "versions": [">=24.8.0"]
     }
   ]
 }
