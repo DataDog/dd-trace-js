@@ -10,6 +10,7 @@ function createWrapOn () {
       const wrapper = function (req) {
         web.patch(req)
         web.enterRoute(req, path)
+        req._datadog._dd_path_added_by_find_my_way = true
 
         return handler.apply(this, arguments)
       }

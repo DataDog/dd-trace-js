@@ -11,7 +11,7 @@ function createWrapSetupRequest (tracer, config) {
     return function setupRequestWithTrace (req, res) {
       return web.instrument(tracer, config, req, res, 'restify.request', () => {
         web.beforeEnd(req, () => {
-          if (req.route) {
+          if (req.route && !req._datadog._dd_path_added_by_find_my_way) {
             web.enterRoute(req, req.route.path)
           }
         })
