@@ -1,6 +1,6 @@
 'use strict'
 
-const notepack = require('./notepack')
+const Chunk = require('./chunk')
 const log = require('../log')
 
 const ARRAY_OF_TWO = 0x92
@@ -16,33 +16,35 @@ const bigEndian = uInt8Float64Array[7] === 0
 
 class AgentEncoder {
   constructor (writer) {
+    this._traceBytes = new Chunk()
+    this._stringBytes = new Chunk()
     this._writer = writer
     this._reset()
   }
 
   count () {
-    return this._traces.length
+    return this._traceCount
   }
 
   encode (trace) {
-    const bytes = []
+    const bytes = this._traceBytes
+
+    this._traceCount++
 
     this._encode(bytes, trace)
-    this._traces.push(bytes)
-    this._traceSize += bytes.length
 
     log.debug(() => `Adding encoded trace to buffer: ${bytes.map(b => b.toString(16)).join(' ')}`)
 
     // we can go over the soft limit since the agent has a 50MB hard limit
-    if (this._traceSize + this._stringSize > SOFT_LIMIT) {
+    if (this._traceBytes.length > SOFT_LIMIT || this._stringBytes.length > SOFT_LIMIT) {
       this._writer.flush()
     }
   }
 
   makePayload () {
     const prefixSize = 1
-    const stringSize = this._stringSize + 5
-    const traceSize = this._traceSize + 5
+    const stringSize = this._stringBytes.length + 5
+    const traceSize = this._traceBytes.length + 5
     const buffer = Buffer.allocUnsafe(prefixSize + stringSize + traceSize)
 
     let offset = 0
@@ -78,11 +80,12 @@ class AgentEncoder {
   }
 
   _reset () {
-    this._traces = []
-    this._traceSize = 0
-    this._stringDefers = [{ value: '', length: 0, prefix: [0xa0] }]
+    this._traceCount = 0
+    this._traceBytes.length = 0
+    this._stringCount = 1
+    this._stringBytes.length = 0
+    this._stringBytes.push(0xa0)
     this._stringMap = { '': 0 }
-    this._stringSize = 1
   }
 
   _encodeArrayPrefix (bytes, value) {
@@ -109,7 +112,24 @@ class AgentEncoder {
   }
 
   _encodeInteger (bytes, value) {
-    notepack._encode(bytes, [], value)
+    if (value < 0x80) { // positive fixnum
+      bytes.push(value)
+    } else if (value < 0x100) { // uint 8
+      bytes.push(0xcc, value)
+    } else if (value < 0x10000) { // uint 16
+      bytes.push(0xcd, value >> 8, value)
+    } else if (value < 0x100000000) { // uint 32
+      bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
+    } else {
+      this._encodeBigInt(bytes, value)
+    }
+  }
+
+  _encodeBigInt (bytes, value) {
+    const hi = (value / Math.pow(2, 32)) >> 0
+    const lo = value >>> 0
+
+    bytes.push(0xcf, hi >> 24, hi >> 16, hi >> 8, hi, lo >> 24, lo >> 16, lo >> 8, lo)
   }
 
   _encodeMap (bytes, value) {
@@ -159,14 +179,8 @@ class AgentEncoder {
 
   _encodeString (bytes, value = '') {
     if (!(value in this._stringMap)) {
-      const prefix = []
-      const defers = []
-      const size = notepack._encode(prefix, defers, value)
-      const length = defers[0].length
-
-      this._stringSize += size
-      this._stringMap[value] = this._stringDefers.length
-      this._stringDefers.push({ value, length, prefix })
+      this._stringMap[value] = this._stringCount++
+      this._stringBytes.write(value)
     }
 
     this._encodeInteger(bytes, this._stringMap[value])
@@ -195,38 +209,16 @@ class AgentEncoder {
     return offset + 4
   }
 
-  _writeString (buffer, offset, defer) {
-    for (let i = 0, l = defer.prefix.length; i < l; i++) {
-      buffer[offset++] = defer.prefix[i]
-    }
-
-    if (defer.length > notepack.MICRO_OPT_LEN) {
-      buffer.write(defer.value, offset, defer.length, 'utf8')
-    } else {
-      notepack.utf8Write(buffer, offset, defer.value)
-    }
-
-    return offset + defer.length
-  }
-
   _writeStrings (buffer, offset) {
-    offset = this._writeArrayPrefix(buffer, offset, this._stringDefers.length)
-
-    for (const defer of this._stringDefers) {
-      offset = this._writeString(buffer, offset, defer)
-    }
+    offset = this._writeArrayPrefix(buffer, offset, this._stringCount)
+    offset += this._stringBytes.buffer.copy(buffer, offset, 0, this._stringBytes.length)
 
     return offset
   }
 
   _writeTraces (buffer, offset) {
-    offset = this._writeArrayPrefix(buffer, offset, this._traces.length)
-
-    for (const trace of this._traces) {
-      for (const byte of trace) {
-        buffer[offset++] = byte
-      }
-    }
+    offset = this._writeArrayPrefix(buffer, offset, this._traceCount)
+    offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
 
     return offset
   }
