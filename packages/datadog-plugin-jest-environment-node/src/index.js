@@ -73,7 +73,7 @@ function wrapEnvironment (BaseEnvironment) {
   }
 }
 
-function createTeardown (tracer) {
+function createWrapTeardown (tracer) {
   return function (teardown) {
     return async function () {
       await new Promise((resolve) => {
@@ -86,7 +86,6 @@ function createTeardown (tracer) {
 
 function createHandleTestEvent (tracer, extraMetadata) {
   return async function (event) {
-    // hack that we always include these even if sampleRate is 0
     if (event.name === 'test_skip' || event.name === 'test_todo') {
       const childOf = tracer.extract('text_map', {
         'x-datadog-trace-id': id().toString(10),
@@ -98,8 +97,6 @@ function createHandleTestEvent (tracer, extraMetadata) {
         {
           childOf,
           tags: {
-            // Since we are using `startSpan` we can't use `type` and `resource` options
-            // so we have to manually set the tags.
             [SPAN_TYPE]: 'test',
             [RESOURCE_NAME]: `${event.test.parent.name}.${event.test.name}`,
             [TEST_TYPE]: 'test',
@@ -172,7 +169,7 @@ module.exports = {
       ...gitMetadata,
       ...envMetadata
     }
-    this.wrap(NodeEnvironment.prototype, 'teardown', createTeardown(tracer))
+    this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
     NodeEnvironment.prototype.handleTestEvent = createHandleTestEvent(tracer, extraMetadata)
     return wrapEnvironment(NodeEnvironment)
   },
