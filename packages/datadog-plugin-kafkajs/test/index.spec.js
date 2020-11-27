@@ -39,6 +39,7 @@ describe('Plugin', () => {
             const producer = kafka.producer()
             try {
               const expectedSpanPromise = expectSpanWithDefaults({
+                name: 'kafka.producer.send',
                 service: 'test-kafka',
                 meta: {
                   'span.kind': 'producer',
@@ -47,7 +48,6 @@ describe('Plugin', () => {
                 metrics: {
                   'kafka.batch.size': messages.length
                 },
-                name: 'kafka.producer.send',
                 resource: `produce to ${topic}`,
                 error: 0
               })
@@ -84,7 +84,7 @@ describe('Plugin', () => {
 function expectSpanWithDefaults (expected) {
   const { service } = expected.meta
   expected = withDefaults({
-    name: 'kafka.producer.send',
+    name: expected.name,
     service,
     meta: expected.meta
   }, expected)
