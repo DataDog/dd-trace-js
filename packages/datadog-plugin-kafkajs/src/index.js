@@ -10,16 +10,21 @@ function createWrapProducer (tracer, config) {
 
       const tags = {
         'service.name': serviceName,
-        // 'resource.name': `produce to ${topic}`,
         'span.kind': 'producer',
         'span.type': 'queue',
         component: 'kafka'
-        // 'kafka.topic': topic,
-        // 'kafka.batch.size': messages.length
       }
 
-
       createdProducer.send = tracer.wrap('kafka.producer.send', { tags }, function (...args) {
+        const { topic, messages } = args[0]
+        const currentSpan = tracer.scope().active()
+
+        currentSpan.addTags({
+          'resource.name': `produce to ${topic}`,
+          'kafka.topic': topic,
+          'kafka.batch.size': messages.length
+        }
+        )
         return send.apply(this, args)
       })
 
