@@ -3,7 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const plugin = require('../src')
-const id = require('../../dd-trace/src/id')
 
 wrapIt()
 
@@ -25,10 +24,8 @@ describe('Plugin', () => {
     })
     withVersions(plugin, 'kafkajs', (version) => {
       let kafka
-      // let tracer
       describe('without configuration', () => {
-        beforeEach(() => {
-          // tracer = require('../../dd-trace')
+        beforeEach(async () => {
           agent.load('kafkajs')
           const {
             Kafka
@@ -40,21 +37,46 @@ describe('Plugin', () => {
         })
         describe('producer', () => {
           it('should be instrumented', async () => {
-            const expectedTags = {
-              'service.name': 'kafkajsTest',
-              'resource.name': 'Producer Connected',
+            const topic = 'topic-test'
+            const expected = {
               'span.kind': 'producer',
               'span.type': 'queue',
               component: 'kafkajs'
             }
 
             const producer = kafka.producer()
-            await producer.connect()
+            try {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                service: 'test-kafka',
+                meta: { 'span.kind': 'producer',
+                  'component': 'kafka' }
+              })
 
-            return expectSomeSpan(agent, withDefaults(expectedTags), { timeoutMs: TIMEOUT })
+              await producer.connect()
+              await producer.send({
+                topic,
+                messages: [{ key: 'key1', value: 'test' }]
+              })
+              // agent.use(traces => console.log(traces))
+
+              return expectedSpanPromise
+            } catch (error) {
+              // console.log(error)
+            }
           })
         })
       })
     })
   })
 })
+
+function expectSpanWithDefaults (expected) {
+  const { service } = expected.meta
+  expected = withDefaults({
+    name: 'kafka.producer.send',
+    // resource: prefixedResource,
+    service,
+    meta: expected.meta
+  }, expected)
+  return expectSomeSpan(agent, expected, { timeoutMs: TIMEOUT })
+}
