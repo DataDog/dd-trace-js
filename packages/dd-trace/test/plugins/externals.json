@@ -71,15 +71,9 @@
       "versions": ["3.0.0"]
     }
   ],
-  "jest": [
+  "jest-environment-node": [
     {
-      "name": "jest",
-      "versions": [">=24.8.0"]
-    }
-  ],
-  "jest-circus": [
-    {
-      "name": "jest-circus",
+      "name": "jest-environment-node",
       "versions": [">=24.8.0"]
     }
   ]
