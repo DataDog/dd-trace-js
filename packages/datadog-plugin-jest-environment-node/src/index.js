@@ -1,3 +1,6 @@
+const id = require('../../dd-trace/src/id')
+const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
+
 const { execSync } = require('child_process')
 const { promisify } = require('util')
 
@@ -55,14 +58,20 @@ function getGitMetadata () {
   }
 }
 
-function wrapEnvironment (tracer, BaseEnvironment) {
+function getEnvMetadata () {
+  return {
+    [BUILD_SOURCE_ROOT]: sanitizedRun('pwd')
+  }
+}
+
+function wrapEnvironment (tracer, extraMetadata, BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
       this.testSuite = context.testPath.replace(`${config.rootDir}/`, '')
       this.tracer = tracer
-      this.tracer._tags[BUILD_SOURCE_ROOT] = config.rootDir
     }
+
     async teardown () {
       await new Promise((resolve) => {
         this.tracer._exporter._writer.flush(resolve)
@@ -70,11 +79,19 @@ function wrapEnvironment (tracer, BaseEnvironment) {
       return super.teardown()
     }
 
-    async handleTestEvent (event) {
+    async handleTestEvent (event, ...args) {
+      // hack that we always include these even if sampleRate is 0
       if (event.name === 'test_skip' || event.name === 'test_todo') {
+        const childOf = this.tracer.extract('text_map', {
+          'x-datadog-trace-id': id().toString(10),
+          'x-datadog-parent-id': '0000000000000000',
+          'x-datadog-sampled': 1
+        })
+
         this.tracer.startSpan(
           'jest.test',
           {
+            childOf,
             tags: {
               // Since we are using `startSpan` we can't use `type` and `resource` options
               // so we have to manually set the tags.
@@ -83,12 +100,19 @@ function wrapEnvironment (tracer, BaseEnvironment) {
               [TEST_TYPE]: 'test',
               [TEST_NAME]: event.test.name,
               [TEST_SUITE]: this.testSuite,
-              [TEST_STATUS]: 'skip'
+              [TEST_STATUS]: 'skip',
+              [SAMPLING_RULE_DECISION]: 1,
+              ...extraMetadata
             }
           }
         ).finish()
       }
       if (event.name === 'test_start') {
+        const childOf = this.tracer.extract('text_map', {
+          'x-datadog-trace-id': id().toString(10),
+          'x-datadog-parent-id': '0000000000000000',
+          'x-datadog-sampled': 1
+        })
         let specFunction = event.test.fn
         if (specFunction.length) {
           specFunction = promisify(specFunction)
@@ -96,11 +120,14 @@ function wrapEnvironment (tracer, BaseEnvironment) {
         event.test.fn = this.tracer.wrap(
           'jest.test',
           { type: 'test',
+            childOf,
             resource: `${event.test.parent.name}.${event.test.name}`,
             tags: {
               [TEST_TYPE]: 'test',
               [TEST_NAME]: event.test.name,
-              [TEST_SUITE]: this.testSuite
+              [TEST_SUITE]: this.testSuite,
+              [SAMPLING_RULE_DECISION]: 1,
+              ...extraMetadata
             } },
           async () => {
             let result
@@ -126,19 +153,25 @@ function wrapEnvironment (tracer, BaseEnvironment) {
   }
 }
 
+// maybe rename this?
 module.exports = {
   name: 'jest-environment-node',
   // ** Important: This needs to be the same as the versions for datadog-plugin-jest-circus
   versions: ['>=24.8.0'],
   patch: function (NodeEnvironment, tracer) {
+    // eventually these will come from the tracer (generally available), but for the moment
+    // we can keep them here
     const ciMetadata = getCIMetadata()
     const gitMetadata = getGitMetadata()
-    tracer._tags = {
-      ...tracer._tags,
+    const envMetadata = getEnvMetadata()
+
+    const extraMetadata = {
       [TEST_FRAMEWORK]: 'jest',
       ...ciMetadata,
-      ...gitMetadata
+      ...gitMetadata,
+      ...envMetadata
     }
-    return wrapEnvironment(tracer, NodeEnvironment)
+
+    return wrapEnvironment(tracer, extraMetadata, NodeEnvironment)
   }
 }
