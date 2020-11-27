@@ -38,18 +38,15 @@ describe('Plugin', () => {
         describe('producer', () => {
           it('should be instrumented', async () => {
             const topic = 'topic-test'
-            const expected = {
-              'span.kind': 'producer',
-              'span.type': 'queue',
-              component: 'kafkajs'
-            }
 
             const producer = kafka.producer()
             try {
               const expectedSpanPromise = expectSpanWithDefaults({
                 service: 'test-kafka',
-                meta: { 'span.kind': 'producer',
-                  'component': 'kafka' }
+                meta: {
+                  'span.kind': 'producer',
+                  'component': 'kafka'
+                }
               })
 
               await producer.connect()
@@ -74,7 +71,6 @@ function expectSpanWithDefaults (expected) {
   const { service } = expected.meta
   expected = withDefaults({
     name: 'kafka.producer.send',
-    // resource: prefixedResource,
     service,
     meta: expected.meta
   }, expected)
