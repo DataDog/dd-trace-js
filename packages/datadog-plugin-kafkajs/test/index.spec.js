@@ -12,20 +12,16 @@ const TIMEOUT = 5000
 describe('Plugin', () => {
   describe('kafkajs', function () {
     this.timeout(TIMEOUT)
-    before(() => {
-      process.env.KAFKA_EMULATOR_HOST = 'localhost:8085'
-    })
-    after(() => {
-      delete process.env.KAFKA_EMULATOR_HOST
-    })
     afterEach(() => {
       agent.close()
       agent.wipe()
     })
     withVersions(plugin, 'kafkajs', (version) => {
       let kafka
+      let tracer
       describe('without configuration', () => {
         beforeEach(async () => {
+          tracer = require('../../dd-trace')
           agent.load('kafkajs')
           const {
             Kafka
@@ -36,9 +32,10 @@ describe('Plugin', () => {
           })
         })
         describe('producer', () => {
-          it('should be instrumented', async () => {
-            const topic = 'topic-test'
+          const topic = 'topic-test'
+          const messages = [{ key: 'key1', value: 'test2' }, { key: 'key2', value: 'test2' }]
 
+          it('should be instrumented', async () => {
             const producer = kafka.producer()
             try {
               const expectedSpanPromise = expectSpanWithDefaults({
@@ -46,20 +43,37 @@ describe('Plugin', () => {
                 meta: {
                   'span.kind': 'producer',
                   'component': 'kafka'
-                }
+                },
+                metrics: {
+                  'kafka.batch.size': messages.length
+                },
+                name: 'kafka.producer.send',
+                resource: `produce to ${topic}`,
+                error: 0
               })
 
               await producer.connect()
               await producer.send({
                 topic,
-                messages: [{ key: 'key1', value: 'test' }]
+                messages
               })
-              // agent.use(traces => console.log(traces))
+              // agent.use(traces => console.log(traces[0]))
 
               return expectedSpanPromise
             } catch (error) {
               // console.log(error)
             }
+          })
+          it('should propagate context', async () => {
+            const producer = kafka.producer()
+            const firstSpan = tracer.scope().active()
+            await producer.connect()
+            await producer.send({
+              topic,
+              messages: [{ key: 'key1', value: 'test' }]
+            })
+
+            return expect(tracer.scope().active()).to.equal(firstSpan)
           })
         })
       })
