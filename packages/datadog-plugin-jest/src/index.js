@@ -1,7 +1,5 @@
-const { exec } = require('child_process')
+const { execSync } = require('child_process')
 const { promisify } = require('util')
-
-const promiseExec = promisify(exec)
 
 const GIT_COMMIT_SHA = 'git.commit_sha'
 const GIT_BRANCH = 'git.branch'
@@ -41,76 +39,40 @@ function getCIMetadata () {
   return {}
 }
 
-const sanitizedRun = async cmd => {
+const sanitizedRun = cmd => {
   try {
-    return (await promiseExec(cmd)).stdout.replace(/(\r\n|\n|\r)/gm, '')
+    return execSync(cmd).toString().replace(/(\r\n|\n|\r)/gm, '')
   } catch (e) {
     return ''
   }
 }
 
-async function getGitInformation () {
+function getGitMetadata () {
   return {
-    repository: await sanitizedRun('git ls-remote --get-url'),
-    branch: await sanitizedRun('git branch --show-current'),
-    commit: await sanitizedRun('git rev-parse HEAD')
+    [GIT_REPOSITORY_URL]: sanitizedRun('git ls-remote --get-url'),
+    [GIT_BRANCH]: process.env.TESTING_BRANCH, //sanitizedRun('git branch --show-current'),
+    [GIT_COMMIT_SHA]: sanitizedRun('git rev-parse HEAD')
   }
 }
 
-function finishStartedSpans () {
-  global.tracer
-    .scope()
-    .active()
-    .context()._trace.started.forEach((span) => {
-      span.finish()
-    })
-}
-
-function setTestStatus (status) {
-  global.tracer.scope().active().setTag(TEST_STATUS, status)
-}
-
-function getEnvironment (BaseEnvironment) {
+function wrapEnvironment (tracer, BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
       this.testSuite = context.testPath.replace(`${config.rootDir}/`, '')
-      this.rootDir = config.rootDir
-    }
-    async setup () {
-      if (!global.tracer) {
-        const ciMetadata = getCIMetadata()
-        const { repository, branch, commit } = await getGitInformation()
-        global.tracer = require('../../dd-trace').init({
-          sampleRate: 1,
-          flushInterval: 1,
-          startupLogs: false,
-          ingestion: {
-            sampleRate: 1
-          },
-          tags: {
-            ...ciMetadata,
-            [GIT_COMMIT_SHA]: commit,
-            [GIT_BRANCH]: branch,
-            [GIT_REPOSITORY_URL]: repository,
-            [BUILD_SOURCE_ROOT]: this.rootDir,
-            [TEST_FRAMEWORK]: 'jest'
-          }
-        })
-      }
-
-      return super.setup()
+      this.tracer = tracer
+      this.tracer._tags[BUILD_SOURCE_ROOT] = config.rootDir
     }
     async teardown () {
       await new Promise((resolve) => {
-        global.tracer._tracer._exporter._writer.flush(resolve)
+        this.tracer._exporter._writer.flush(resolve)
       })
       return super.teardown()
     }
 
     async handleTestEvent (event) {
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        global.tracer.startSpan(
+        this.tracer.startSpan(
           'jest.test',
           {
             tags: {
@@ -131,7 +93,7 @@ function getEnvironment (BaseEnvironment) {
         if (specFunction.length) {
           specFunction = promisify(specFunction)
         }
-        event.test.fn = global.tracer.wrap(
+        event.test.fn = this.tracer.wrap(
           'jest.test',
           { type: 'test',
             resource: `${event.test.parent.name}.${event.test.name}`,
@@ -144,12 +106,17 @@ function getEnvironment (BaseEnvironment) {
             let result
             try {
               result = await specFunction()
-              setTestStatus('pass')
+              this.tracer.scope().active().setTag(TEST_STATUS, 'pass')
             } catch (error) {
-              setTestStatus('fail')
+              this.tracer.scope().active().setTag(TEST_STATUS, 'fail')
               throw error
             } finally {
-              finishStartedSpans()
+              this.tracer
+                .scope()
+                .active()
+                .context()._trace.started.forEach((span) => {
+                  span.finish()
+                })
             }
             return result
           }
@@ -160,8 +127,18 @@ function getEnvironment (BaseEnvironment) {
 }
 
 module.exports = {
-  name: 'jest',
+  name: 'jest-environment-node',
   // ** Important: This needs to be the same as the versions for datadog-plugin-jest-circus
   versions: ['>=24.8.0'],
-  getEnvironment
+  patch: function (NodeEnvironment, tracer) {
+    const ciMetadata = getCIMetadata()
+    const gitMetadata = getGitMetadata()
+    tracer._tags = {
+      ...tracer._tags,
+      [TEST_FRAMEWORK]: 'jest',
+      ...ciMetadata,
+      ...gitMetadata
+    }
+    return wrapEnvironment(tracer, NodeEnvironment)
+  }
 }
