@@ -50,7 +50,7 @@ const sanitizedRun = cmd => {
 function getGitMetadata () {
   return {
     [GIT_REPOSITORY_URL]: sanitizedRun('git ls-remote --get-url'),
-    [GIT_BRANCH]: process.env.TESTING_BRANCH, //sanitizedRun('git branch --show-current'),
+    [GIT_BRANCH]: sanitizedRun('git branch --show-current'),
     [GIT_COMMIT_SHA]: sanitizedRun('git rev-parse HEAD')
   }
 }
