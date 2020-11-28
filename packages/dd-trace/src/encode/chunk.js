@@ -1,7 +1,9 @@
 'use strict'
 
+const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
+
 class Chunk {
-  constructor (minSize = 1024 * 1024) {
+  constructor (minSize = DEFAULT_MIN_SIZE) {
     this.buffer = Buffer.allocUnsafe(minSize)
     this.length = 0
     this._minSize = minSize
