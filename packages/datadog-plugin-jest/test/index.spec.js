@@ -11,12 +11,12 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
-      agent.load('jest-environment-node').then(() => {
+      agent.load('jest').then(() => {
         DatadogJestEnvironment = require(`../../../versions/jest-environment-node@${version}`).get()
       })
     })
 
-    describe('jest-environment-node', () => {
+    describe('jest', () => {
       const TEST_NAME = 'test_name'
       const TEST_SUITE = 'test-file.js'
       const BUILD_SOURCE_ROOT = '/source-root'

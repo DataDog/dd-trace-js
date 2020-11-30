@@ -64,6 +64,20 @@ function getEnvMetadata () {
   }
 }
 
+function getTestMetadata () {
+  // TODO: eventually these will come from the tracer (generally available)
+  const ciMetadata = getCIMetadata()
+  const gitMetadata = getGitMetadata()
+  const envMetadata = getEnvMetadata()
+
+  return {
+    [TEST_FRAMEWORK]: 'jest',
+    ...ciMetadata,
+    ...gitMetadata,
+    ...envMetadata
+  }
+}
+
 function wrapEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -74,17 +88,17 @@ function wrapEnvironment (BaseEnvironment) {
 }
 
 function createWrapTeardown (tracer) {
-  return function (teardown) {
-    return async function () {
+  return function wrapTeardown (teardown) {
+    return async function teardownWithTrace () {
       await new Promise((resolve) => {
         tracer._exporter._writer.flush(resolve)
       })
-      return teardown.call(this)
+      return teardown.apply(this, arguments)
     }
   }
 }
 
-function createHandleTestEvent (tracer, extraMetadata) {
+function createHandleTestEvent (tracer, testMetadata) {
   return async function (event) {
     if (event.name === 'test_skip' || event.name === 'test_todo') {
       const childOf = tracer.extract('text_map', {
@@ -104,7 +118,7 @@ function createHandleTestEvent (tracer, extraMetadata) {
             [TEST_SUITE]: this.testSuite,
             [TEST_STATUS]: 'skip',
             [SAMPLING_RULE_DECISION]: 1,
-            ...extraMetadata
+            ...testMetadata
           }
         }
       ).finish()
@@ -129,7 +143,7 @@ function createHandleTestEvent (tracer, extraMetadata) {
             [TEST_NAME]: event.test.name,
             [TEST_SUITE]: this.testSuite,
             [SAMPLING_RULE_DECISION]: 1,
-            ...extraMetadata
+            ...testMetadata
           } },
         async () => {
           let result
@@ -154,27 +168,35 @@ function createHandleTestEvent (tracer, extraMetadata) {
   }
 }
 
-module.exports = {
-  name: 'jest-environment-node',
-  versions: ['>=24.8.0'],
-  patch: function (NodeEnvironment, tracer) {
-    // TODO: eventually these will come from the tracer (generally available)
-    const ciMetadata = getCIMetadata()
-    const gitMetadata = getGitMetadata()
-    const envMetadata = getEnvMetadata()
+module.exports = [
+  {
+    name: 'jest-environment-node',
+    versions: ['>=24.8.0'],
+    patch: function (NodeEnvironment, tracer) {
+      const testMetadata = getTestMetadata()
 
-    const extraMetadata = {
-      [TEST_FRAMEWORK]: 'jest',
-      ...ciMetadata,
-      ...gitMetadata,
-      ...envMetadata
+      this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      NodeEnvironment.prototype.handleTestEvent = createHandleTestEvent(tracer, testMetadata)
+      return wrapEnvironment(NodeEnvironment)
+    },
+    unpatch: function (NodeEnvironment) {
+      this.unwrap(NodeEnvironment.prototype, 'teardown')
+      delete NodeEnvironment.prototype.handleTestEvent
     }
-    this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
-    NodeEnvironment.prototype.handleTestEvent = createHandleTestEvent(tracer, extraMetadata)
-    return wrapEnvironment(NodeEnvironment)
   },
-  unpatch: function (NodeEnvironment) {
-    this.unwrap(NodeEnvironment.prototype, 'teardown')
-    delete NodeEnvironment.prototype.handleTestEvent
+  {
+    name: 'jest-environment-jsdom',
+    versions: ['>=24.8.0'],
+    patch: function (JsdomEnvironment, tracer) {
+      const testMetadata = getTestMetadata()
+
+      this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      JsdomEnvironment.prototype.handleTestEvent = createHandleTestEvent(tracer, testMetadata)
+      return wrapEnvironment(JsdomEnvironment)
+    },
+    unpatch: function (JsdomEnvironment) {
+      this.unwrap(JsdomEnvironment.prototype, 'teardown')
+      delete JsdomEnvironment.prototype.handleTestEvent
+    }
   }
-}
+]

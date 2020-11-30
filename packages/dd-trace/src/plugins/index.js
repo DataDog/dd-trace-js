@@ -45,5 +45,5 @@ module.exports = {
   'tedious': require('../../../datadog-plugin-tedious/src'),
   'when': require('../../../datadog-plugin-when/src'),
   'winston': require('../../../datadog-plugin-winston/src'),
-  'jest-environment-node': require('../../../datadog-plugin-jest-environment-node/src')
+  'jest': require('../../../datadog-plugin-jest/src')
 }
