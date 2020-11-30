@@ -59,7 +59,8 @@ tracer.init({
         { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
         { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
       ]
-    }
+    },
+    internalErrors: true
   },
   hostname: 'agent',
   logger: {

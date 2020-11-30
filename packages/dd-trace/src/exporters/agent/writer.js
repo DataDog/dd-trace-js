@@ -23,7 +23,7 @@ class Writer {
     this._encode(spans)
   }
 
-  _sendPayload (data, count) {
+  _sendPayload (data, count, done) {
     platform.metrics().increment(`${METRIC_PREFIX}.requests`, true)
 
     makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
@@ -41,7 +41,11 @@ class Writer {
 
       platform.startupLog.startupLog({ agentError: err })
 
-      if (err) return log.error(err)
+      if (err) {
+        log.error(err)
+        done()
+        return
+      }
 
       log.debug(`Response from the agent: ${res}`)
 
@@ -53,6 +57,7 @@ class Writer {
         platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
         platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
+      done()
     })
   }
 
@@ -64,13 +69,15 @@ class Writer {
     this._encoderForVersion.encode(trace)
   }
 
-  flush () {
+  flush (done = () => {}) {
     const count = this._encoderForVersion.count()
 
     if (count > 0) {
       const payload = this._encoderForVersion.makePayload()
 
-      this._sendPayload(payload, count)
+      this._sendPayload(payload, count, done)
+    } else {
+      done()
     }
   }
 }

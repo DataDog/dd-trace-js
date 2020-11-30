@@ -37,6 +37,9 @@ class Identifier {
 
   // msgpack-lite compatibility
   toArray () {
+    if (this._buffer.length === 8) {
+      return this._buffer
+    }
     return this._buffer.subarray(-8)
   }
 

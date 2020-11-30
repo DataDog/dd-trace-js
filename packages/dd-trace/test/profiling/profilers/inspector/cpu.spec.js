@@ -34,6 +34,31 @@ describe('profilers/inspector/cpu', () => {
         }
       })
     })
+
+    it('should skip redundant samples', done => {
+      profiler.start({ mapper })
+
+      setTimeout(() => {
+        profiler.profile((err, profile) => {
+          try {
+            const stringTable = profile.stringTable
+            const programFunction = profile.function
+              .find(fn => stringTable[fn.name] === '(program)')
+            const programLocations = profile.location
+              .filter(location => location.line[0].functionId === programFunction.id)
+            const programLocationIds = new Set(programLocations.map(loc => loc.id))
+            const programSamples = profile.sample
+              .filter(sample => programLocationIds.has(sample.locationId[0]))
+
+            expect(programSamples).to.be.empty
+
+            done()
+          } catch (e) {
+            done(e)
+          }
+        })
+      }, 100)
+    })
   })
 
   describe('with the inspector module disabled', () => {

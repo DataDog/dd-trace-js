@@ -641,7 +641,7 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should use the correct fallback protocol', done => {
+        it('should use the correct fallback protocol', done => {
           const app = express()
 
           app.get('/user', (req, res) => {

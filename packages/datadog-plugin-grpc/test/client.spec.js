@@ -5,6 +5,8 @@ const getPort = require('get-port')
 const plugin = require('../src/client')
 const Readable = require('stream').Readable
 const kinds = require('../src/kinds')
+const loader = require('../../../versions/@grpc/proto-loader').get()
+const pkgs = ['grpc', '@grpc/grpc-js']
 
 wrapIt()
 
@@ -13,7 +15,6 @@ describe('Plugin', () => {
   let port
   let server
   let tracer
-  let loader
 
   function buildClient (service, ClientService) {
     service = Object.assign({
@@ -23,20 +24,31 @@ describe('Plugin', () => {
       getUnary: () => {}
     }, service)
 
-    loader = require('../../../versions/@grpc/proto-loader').get()
-
     const definition = loader.loadSync(`${__dirname}/test.proto`)
     const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
     server = new grpc.Server()
 
-    server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
-    server.addService(TestService.service, service)
-    server.start()
+    return new Promise((resolve, reject) => {
+      ClientService = ClientService || TestService
 
-    ClientService = ClientService || TestService
+      if (server.bindAsync) {
+        server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+          if (err) return reject(err)
 
-    return new ClientService(`localhost:${port}`, grpc.credentials.createInsecure())
+          server.addService(TestService.service, service)
+          server.start()
+
+          resolve(new ClientService(`localhost:${port}`, grpc.credentials.createInsecure()))
+        })
+      } else {
+        server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
+        server.addService(TestService.service, service)
+        server.start()
+
+        resolve(new ClientService(`localhost:${port}`, grpc.credentials.createInsecure()))
+      }
+    })
   }
 
   describe('grpc/client', () => {
@@ -50,13 +62,13 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions(plugin, 'grpc', version => {
+    withVersions(plugin, pkgs, (version, pkg) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { server: false })
             .then(() => {
               tracer = require('../../dd-trace')
-              grpc = require(`../../../versions/grpc@${version}`).get()
+              grpc = require(`../../../versions/${pkg}@${version}`).get()
             })
         })
 
@@ -64,12 +76,14 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should handle `unary` calls', done => {
-          const client = buildClient({
+        it('should handle `unary` calls', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
 
-          agent
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
@@ -91,20 +105,20 @@ describe('Plugin', () => {
                 'grpc.status.code': 0
               })
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
         })
 
-        it('should handle `server_stream` calls', done => {
-          const client = buildClient({
+        it('should handle `server_stream` calls', async () => {
+          const client = await buildClient({
             getServerStream: stream => {
               stream.end()
             }
           })
 
-          agent
+          const call = client.getServerStream({ first: 'foobar' })
+
+          call.on('data', () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
@@ -126,22 +140,18 @@ describe('Plugin', () => {
                 'grpc.status.code': 0
               })
             })
-            .then(done)
-            .catch(done)
-
-          const call = client.getServerStream({ first: 'foobar' })
-
-          call.on('data', () => {})
         })
 
-        it('should handle `client_stream` calls', done => {
-          const client = buildClient({
+        it('should handle `client_stream` calls', async () => {
+          const client = await buildClient({
             getClientStream: (_, callback) => {
-              callback()
+              setTimeout(callback, 40)
             }
           })
 
-          agent
+          client.getClientStream(() => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
@@ -163,18 +173,18 @@ describe('Plugin', () => {
                 'grpc.status.code': 0
               })
             })
-            .then(done)
-            .catch(done)
-
-          client.getClientStream(() => {})
         })
 
-        it('should handle `bidi` calls', done => {
-          const client = buildClient({
+        it('should handle `bidi` calls', async () => {
+          const client = await buildClient({
             getBidi: stream => stream.end()
           })
 
-          agent
+          const call = client.getBidi(new Readable())
+
+          call.on('data', () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
@@ -188,72 +198,62 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
-            .then(done)
-            .catch(done)
-
-          const call = client.getBidi(new Readable())
-
-          call.on('data', () => {})
         })
 
-        it('should handle cancelled `unary` calls', done => {
+        it('should handle cancelled `unary` calls', async () => {
           let call = null
-          const client = buildClient({
+          const client = await buildClient({
             getUnary: () => call.cancel()
           })
 
-          agent
+          call = client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
-            .then(done)
-            .catch(done)
-
-          call = client.getUnary({ first: 'foobar' }, () => {})
         })
 
-        it('should handle cancelled `stream` calls', done => {
+        it('should handle cancelled `stream` calls', async () => {
           let call = null
-          const client = buildClient({
+          const client = await buildClient({
             getServerStream: () => call.cancel()
           })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
-            })
-            .then(done)
-            .catch(done)
 
           call = client.getServerStream({ first: 'foobar' })
           call.on('data', () => {})
           call.on('error', () => {})
-        })
 
-        it('should handle cancelled `bidi` calls', done => {
-          let call = null
-          const client = buildClient({
-            getBidi: () => call.cancel()
-          })
-
-          agent
+          return agent
             .use(traces => {
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
-            .then(done)
-            .catch(done)
+        })
+
+        it('should handle cancelled `bidi` calls', async () => {
+          let call = null
+          const client = await buildClient({
+            getBidi: () => call.cancel()
+          })
 
           call = client.getBidi(new Readable(), () => {})
           call.on('data', () => {})
           call.on('error', () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
+            })
         })
 
-        it('should handle errors', done => {
-          const client = buildClient({
+        it('should handle errors', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => callback(new Error('foobar'))
           })
 
-          agent
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.include({
@@ -270,24 +270,21 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('error.stack')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
         })
 
-        it('should handle protocol errors', done => {
+        it('should handle protocol errors', async () => {
           const definition = loader.loadSync(`${__dirname}/invalid.proto`)
           const test = grpc.loadPackageDefinition(definition).test
-          const client = buildClient({
+          const client = await buildClient({
             getUnary: (_, callback) => callback(null)
           }, test.TestService)
 
-          agent
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.include({
-                'error.msg': '13 INTERNAL: Failed to parse server response',
                 'error.type': 'Error',
                 'grpc.method.name': 'getUnary',
                 'grpc.method.service': 'TestService',
@@ -298,20 +295,19 @@ describe('Plugin', () => {
                 'component': 'grpc'
               })
               expect(traces[0][0].meta).to.have.property('error.stack')
+              expect(traces[0][0].meta['error.msg']).to.match(/^13 INTERNAL:.+$/)
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 13)
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
         })
 
-        it('should handle a missing callback', done => {
-          const client = buildClient({
+        it('should handle a missing callback', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
 
-          agent
+          client.getUnary({ first: 'foobar' })
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
@@ -333,14 +329,10 @@ describe('Plugin', () => {
                 'grpc.status.code': 0
               })
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' })
         })
 
         it('should inject its parent span in the metadata', done => {
-          const client = buildClient({
+          buildClient({
             getUnary: (call, callback) => {
               const metadata = call.metadata.getMap()
 
@@ -356,46 +348,48 @@ describe('Plugin', () => {
                 done(e)
               }
             }
-          })
+          }).then(client => {
+            const metadata = new grpc.Metadata()
 
-          const metadata = new grpc.Metadata()
+            metadata.set('foo', 'bar')
 
-          metadata.set('foo', 'bar')
-
-          client.getUnary({ first: 'foobar' }, metadata, () => {})
+            client.getUnary({ first: 'foobar' }, metadata, () => {})
+          }, done)
         })
 
         it('should propagate the parent scope to the callback', done => {
           const span = {}
-          const client = buildClient({
-            getUnary: (call, callback) => callback()
-          })
 
-          tracer.scope().activate(span, () => {
-            client.getUnary({ first: 'foobar' }, (err, response) => {
-              expect(tracer.scope().active()).to.equal(span)
-              done(err)
+          buildClient({
+            getUnary: (call, callback) => callback()
+          }).then(client => {
+            tracer.scope().activate(span, () => {
+              client.getUnary({ first: 'foobar' }, (err, response) => {
+                expect(tracer.scope().active()).to.equal(span)
+                done(err)
+              })
             })
-          })
+          }, done)
         })
 
         it('should propagate the parent scope to event listeners', done => {
           const span = {}
-          const client = buildClient({
+
+          buildClient({
             getServerStream: stream => {
               stream.write('test')
               stream.end()
             }
-          })
+          }).then(client => {
+            const call = client.getServerStream({ first: 'foobar' })
 
-          const call = client.getServerStream({ first: 'foobar' })
-
-          tracer.scope().activate(span, () => {
-            call.on('data', () => {
-              expect(tracer.scope().active()).to.equal(span)
-              done()
+            tracer.scope().activate(span, () => {
+              call.on('data', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
             })
-          })
+          }, done)
         })
       })
 
@@ -410,7 +404,7 @@ describe('Plugin', () => {
 
           return agent.load('grpc', config)
             .then(() => {
-              grpc = require(`../../../versions/grpc@${version}`).get()
+              grpc = require(`../../../versions/${pkg}@${version}`).get()
             })
         })
 
@@ -418,21 +412,19 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should be configured with the correct values', done => {
-          const client = buildClient({
+        it('should be configured with the correct values', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
 
-          agent
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
                 service: 'custom'
               })
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
         })
       })
 
@@ -447,7 +439,7 @@ describe('Plugin', () => {
 
           return agent.load('grpc', config)
             .then(() => {
-              grpc = require(`../../../versions/grpc@${version}`).get()
+              grpc = require(`../../../versions/${pkg}@${version}`).get()
             })
         })
 
@@ -455,27 +447,25 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should handle request metadata', done => {
-          const client = buildClient({
+        it('should handle request metadata', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('grpc.request.metadata.foo', 'bar')
-            })
-            .then(done)
-            .catch(done)
 
           const metadata = new grpc.Metadata()
 
           metadata.set('foo', 'bar')
 
           client.getUnary({ first: 'foobar' }, metadata, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('grpc.request.metadata.foo', 'bar')
+            })
         })
 
-        it('should handle response metadata', done => {
-          const client = buildClient({
+        it('should handle response metadata', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => {
               const metadata = new grpc.Metadata()
 
@@ -485,14 +475,12 @@ describe('Plugin', () => {
             }
           })
 
-          agent
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('grpc.response.metadata.foo', 'bar')
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
         })
       })
 
@@ -507,7 +495,7 @@ describe('Plugin', () => {
 
           return agent.load('grpc', config)
             .then(() => {
-              grpc = require(`../../../versions/grpc@${version}`).get()
+              grpc = require(`../../../versions/${pkg}@${version}`).get()
             })
         })
 
@@ -515,12 +503,19 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should handle request metadata', done => {
-          const client = buildClient({
+        it('should handle request metadata', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
 
-          agent
+          const metadata = new grpc.Metadata()
+
+          metadata.set('foo', 'bar')
+          metadata.set('biz', 'baz')
+
+          client.getUnary({ first: 'foobar' }, metadata, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0].meta).to.deep.include({
                 'grpc.method.name': 'getUnary',
@@ -531,19 +526,10 @@ describe('Plugin', () => {
                 'span.kind': 'client'
               })
             })
-            .then(done)
-            .catch(done)
-
-          const metadata = new grpc.Metadata()
-
-          metadata.set('foo', 'bar')
-          metadata.set('biz', 'baz')
-
-          client.getUnary({ first: 'foobar' }, metadata, () => {})
         })
 
-        it('should handle response metadata', done => {
-          const client = buildClient({
+        it('should handle response metadata', async () => {
+          const client = await buildClient({
             getUnary: (_, callback) => {
               const metadata = new grpc.Metadata()
 
@@ -554,7 +540,9 @@ describe('Plugin', () => {
             }
           })
 
-          agent
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
             .use(traces => {
               expect(traces[0][0].meta).to.deep.include({
                 'grpc.method.name': 'getUnary',
@@ -569,10 +557,6 @@ describe('Plugin', () => {
                 'grpc.status.code': 0
               })
             })
-            .then(done)
-            .catch(done)
-
-          client.getUnary({ first: 'foobar' }, () => {})
         })
       })
     })

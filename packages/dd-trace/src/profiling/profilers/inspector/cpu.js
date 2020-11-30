@@ -46,6 +46,7 @@ class InspectorCpuProfiler {
     const periodType = ['wall', 'microseconds']
     const period = this._samplingInterval
     const profile = new Profile(sampleType, periodType, period)
+    const skippedLocationIds = new Set()
 
     profile.addDuration((endTime - startTime) * 1000)
 
@@ -58,6 +59,11 @@ class InspectorCpuProfiler {
       const functionId = profile.addFunction(functionName, url).id
       const locationId = profile.addLocation(functionId, id, lineNumber).id
 
+      // skip redundant samples that are handled by pprof and/or the backend
+      if (functionName === '(program)' || functionName === '(idle)') {
+        skippedLocationIds.add(locationId)
+      }
+
       if (children) {
         for (const childId of children) {
           profile.addLink(locationId, childId)
@@ -66,6 +72,8 @@ class InspectorCpuProfiler {
     }
 
     for (let i = 0; i < samples.length; i++) {
+      if (skippedLocationIds.has(samples[i])) continue
+
       profile.addSample(samples[i], [1, timeDeltas[i]])
     }
 
