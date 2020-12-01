@@ -121,11 +121,11 @@ class AgentEncoder {
     } else if (value < 0x100000000) { // uint 32
       bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
     } else {
-      this._encodeBigInt(bytes, value)
+      this._encodeLong(bytes, value)
     }
   }
 
-  _encodeBigInt (bytes, value) {
+  _encodeLong (bytes, value) {
     const hi = (value / Math.pow(2, 32)) >> 0
     const lo = value >>> 0
 
