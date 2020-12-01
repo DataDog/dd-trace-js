@@ -1055,6 +1055,7 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - node-jest
   prebuild:
     jobs:
       # Linux x64
@@ -1241,3 +1242,4 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - node-jest
