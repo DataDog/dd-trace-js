@@ -672,6 +672,13 @@ jobs:
         environment:
           - PLUGINS=winston
 
+  node-jest:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=jest
+
   typescript:
     docker:
       - image: node:8

@@ -535,6 +535,7 @@ interface Plugins {
   "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
+  "jest": plugins.jest;
 }
 
 /** @hidden */
@@ -1153,6 +1154,12 @@ declare namespace plugins {
    * on the tracer.
    */
   interface winston extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [jest](https://github.com/facebook/jest) module.
+   */
+  interface jest extends Integration {}
 }
 
 /**
