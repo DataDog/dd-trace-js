@@ -1,5 +1,7 @@
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
+const { SAMPLING_PRIORITY } = require('../../../ext/tags')
+const { AUTO_KEEP } = require('../../../ext/priority')
 
 const { execSync } = require('child_process')
 const { promisify } = require('util')
@@ -99,7 +101,7 @@ function createWrapTeardown (tracer) {
 }
 
 function createHandleTestEvent (tracer, testMetadata) {
-  return async function (event) {
+  return async function handleTestEventWithTrace (event) {
     if (event.name === 'test_skip' || event.name === 'test_todo') {
       const childOf = tracer.extract('text_map', {
         'x-datadog-trace-id': id().toString(10),
@@ -118,6 +120,7 @@ function createHandleTestEvent (tracer, testMetadata) {
             [TEST_SUITE]: this.testSuite,
             [TEST_STATUS]: 'skip',
             [SAMPLING_RULE_DECISION]: 1,
+            [SAMPLING_PRIORITY]: AUTO_KEEP,
             ...testMetadata
           }
         }
@@ -143,6 +146,7 @@ function createHandleTestEvent (tracer, testMetadata) {
             [TEST_NAME]: event.test.name,
             [TEST_SUITE]: this.testSuite,
             [SAMPLING_RULE_DECISION]: 1,
+            [SAMPLING_PRIORITY]: AUTO_KEEP,
             ...testMetadata
           } },
         async () => {
