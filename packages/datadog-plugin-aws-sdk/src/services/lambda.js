@@ -29,16 +29,16 @@ class Lambda {
           const _datadog = {}
           tracer.inject(span, 'text_map', _datadog)
           if (!request.params.ClientContext) {
-            const context = { Custom: { _datadog } }
+            const context = { custom: { _datadog } }
             request.params.ClientContext = Buffer.from(JSON.stringify(context)).toString('base64')
           } else {
             const existingContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
             const existingContext = JSON.parse(existingContextJson)
 
-            if (existingContext.Custom) {
-              existingContext.Custom._datadog = _datadog
+            if (existingContext.custom) {
+              existingContext.custom._datadog = _datadog
             } else {
-              existingContext.Custom = { _datadog }
+              existingContext.custom = { _datadog }
             }
 
             const newContextBase64 = Buffer.from(JSON.stringify(existingContext)).toString('base64')

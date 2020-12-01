@@ -14,7 +14,7 @@ const closeAndWipeAgent = async () => {
   await agent.close()
 }
 
-describe.only('Plugin', () => {
+describe('Plugin', () => {
   describe('aws-sdk', function () {
     before(() => {
       process.env['AWS_SECRET_ACCESS_KEY'] = '0000000000/00000000000000000000000000000'
