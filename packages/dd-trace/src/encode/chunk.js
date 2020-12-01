@@ -2,6 +2,11 @@
 
 const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
 
+/**
+ * Represents a chunk of a Msgpack payload. Exposes a subset of Array and Buffer
+ * interfaces so that it can be used seamlessly by any encoder code that expects
+ * either.
+ */
 class Chunk {
   constructor (minSize = DEFAULT_MIN_SIZE) {
     this.buffer = Buffer.allocUnsafe(minSize)
