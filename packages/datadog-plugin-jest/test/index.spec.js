@@ -88,10 +88,47 @@ describe('Plugin', () => {
             name: TEST_NAME
           }
         }
-        // jest calls this with `event.name: 'test_start'` before the test starts
         datadogJestEnv.handleTestEvent(failingTestEvent)
-        // we call the test function, just like jest does
         failingTestEvent.test.fn()
+      })
+      // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
+      it.skip('should allow the customer to use their own environment', (done) => {
+        class CustomerCustomEnv extends DatadogJestEnvironment {
+          async handleTestEvent (event) {
+            // do custom stuff
+            return new Promise(resolve => {
+              setTimeout(resolve, 100)
+            })
+          }
+        }
+        const customerTestEnv = new CustomerCustomEnv({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              'test.name': TEST_NAME,
+              'test.status': 'fail',
+              'test.suite': TEST_SUITE,
+              'test.type': 'test'
+            })
+            expect(traces[0][0].type).to.equal('test')
+            expect(traces[0][0].name).to.equal('jest.test')
+            expect(traces[0][0].resource).to.equal(`${ROOT_TEST_SUITE}.${TEST_NAME}`)
+          }).then(done).catch(done)
+        const testEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+            },
+            parent: {
+              name: ROOT_TEST_SUITE
+            },
+            name: TEST_NAME
+          }
+        }
+        customerTestEnv.handleTestEvent(testEvent)
+        testEvent.test.fn()
       })
     })
   })
