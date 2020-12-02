@@ -6,7 +6,9 @@ const { AUTO_KEEP } = require('../../../ext/priority')
 const { execSync } = require('child_process')
 const { promisify } = require('util')
 
-const GIT_COMMIT_SHA = 'git.commit_sha'
+const GIT_COMMIT_SHA = 'git.commit.sha'
+// TODO: remove this once CI App's UI and backend are ready
+const DEPRECATED_GIT_COMMIT_SHA = 'git.commit_sha'
 const GIT_BRANCH = 'git.branch'
 const GIT_REPOSITORY_URL = 'git.repository_url'
 const BUILD_SOURCE_ROOT = 'build.source_root'
@@ -38,7 +40,8 @@ function getCIMetadata () {
       [CI_PIPELINE_NUMBER]: GITHUB_RUN_NUMBER,
       [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
       [GIT_BRANCH]: GITHUB_REF,
-      [GIT_COMMIT_SHA]: GITHUB_SHA
+      [GIT_COMMIT_SHA]: GITHUB_SHA,
+      [DEPRECATED_GIT_COMMIT_SHA]: GITHUB_SHA
     }
   }
   return {}
@@ -53,10 +56,12 @@ const sanitizedRun = cmd => {
 }
 
 function getGitMetadata () {
+  const commitSha = sanitizedRun('git rev-parse HEAD')
   return {
     [GIT_REPOSITORY_URL]: sanitizedRun('git ls-remote --get-url'),
     [GIT_BRANCH]: sanitizedRun('git branch --show-current'),
-    [GIT_COMMIT_SHA]: sanitizedRun('git rev-parse HEAD')
+    [GIT_COMMIT_SHA]: commitSha,
+    [DEPRECATED_GIT_COMMIT_SHA]: commitSha
   }
 }
 
@@ -102,73 +107,69 @@ function createWrapTeardown (tracer) {
 
 function createHandleTestEvent (tracer, testMetadata) {
   return async function handleTestEventWithTrace (event) {
+    if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
+      return
+    }
+    const childOf = tracer.extract('text_map', {
+      'x-datadog-trace-id': id().toString(10),
+      'x-datadog-parent-id': '0000000000000000',
+      'x-datadog-sampled': 1
+    })
+    const commonSpanTags = {
+      [TEST_TYPE]: 'test',
+      [TEST_NAME]: event.test.name,
+      [TEST_SUITE]: this.testSuite,
+      [SAMPLING_RULE_DECISION]: 1,
+      [SAMPLING_PRIORITY]: AUTO_KEEP,
+      ...testMetadata
+    }
+    const resource = `${event.test.parent.name}.${event.test.name}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
-      const childOf = tracer.extract('text_map', {
-        'x-datadog-trace-id': id().toString(10),
-        'x-datadog-parent-id': '0000000000000000',
-        'x-datadog-sampled': 1
-      })
       tracer.startSpan(
         'jest.test',
         {
           childOf,
           tags: {
+            ...commonSpanTags,
             [SPAN_TYPE]: 'test',
-            [RESOURCE_NAME]: `${event.test.parent.name}.${event.test.name}`,
-            [TEST_TYPE]: 'test',
-            [TEST_NAME]: event.test.name,
-            [TEST_SUITE]: this.testSuite,
-            [TEST_STATUS]: 'skip',
-            [SAMPLING_RULE_DECISION]: 1,
-            [SAMPLING_PRIORITY]: AUTO_KEEP,
-            ...testMetadata
+            [RESOURCE_NAME]: resource,
+            [TEST_STATUS]: 'skip'
           }
         }
       ).finish()
+      return
     }
-    if (event.name === 'test_start') {
-      const childOf = tracer.extract('text_map', {
-        'x-datadog-trace-id': id().toString(10),
-        'x-datadog-parent-id': '0000000000000000',
-        'x-datadog-sampled': 1
-      })
-      let specFunction = event.test.fn
-      if (specFunction.length) {
-        specFunction = promisify(specFunction)
-      }
-      event.test.fn = tracer.wrap(
-        'jest.test',
-        { type: 'test',
-          childOf,
-          resource: `${event.test.parent.name}.${event.test.name}`,
-          tags: {
-            [TEST_TYPE]: 'test',
-            [TEST_NAME]: event.test.name,
-            [TEST_SUITE]: this.testSuite,
-            [SAMPLING_RULE_DECISION]: 1,
-            [SAMPLING_PRIORITY]: AUTO_KEEP,
-            ...testMetadata
-          } },
-        async () => {
-          let result
-          try {
-            result = await specFunction()
-            tracer.scope().active().setTag(TEST_STATUS, 'pass')
-          } catch (error) {
-            tracer.scope().active().setTag(TEST_STATUS, 'fail')
-            throw error
-          } finally {
-            tracer
-              .scope()
-              .active()
-              .context()._trace.started.forEach((span) => {
-                span.finish()
-              })
-          }
-          return result
+    // event.name === test_start at this point
+    let specFunction = event.test.fn
+    if (specFunction.length) {
+      specFunction = promisify(specFunction)
+    }
+    event.test.fn = tracer.wrap(
+      'jest.test',
+      { type: 'test',
+        childOf,
+        resource,
+        tags: commonSpanTags
+      },
+      async () => {
+        let result
+        try {
+          result = await specFunction()
+          tracer.scope().active().setTag(TEST_STATUS, 'pass')
+        } catch (error) {
+          tracer.scope().active().setTag(TEST_STATUS, 'fail')
+          throw error
+        } finally {
+          tracer
+            .scope()
+            .active()
+            .context()._trace.started.forEach((span) => {
+              span.finish()
+            })
         }
-      )
-    }
+        return result
+      }
+    )
   }
 }
 
