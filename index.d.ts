@@ -512,6 +512,7 @@ interface Plugins {
   "http": plugins.http;
   "http2": plugins.http2;
   "ioredis": plugins.ioredis;
+  "jest": plugins.jest;
   "knex": plugins.knex;
   "koa": plugins.koa;
   "limitd-client": plugins.limitd_client;
@@ -535,7 +536,6 @@ interface Plugins {
   "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
-  "jest": plugins.jest;
 }
 
 /** @hidden */
@@ -994,6 +994,12 @@ declare namespace plugins {
   }
 
   /**
+   * This plugin automatically instruments the
+   * [jest](https://github.com/facebook/jest) module.
+   */
+  interface jest extends Integration {}
+
+  /**
    * This plugin patches the [knex](https://knexjs.org/)
    * module to bind the promise callback the the caller context.
    */
@@ -1154,12 +1160,6 @@ declare namespace plugins {
    * on the tracer.
    */
   interface winston extends Integration {}
-
-  /**
-   * This plugin automatically instruments the
-   * [jest](https://github.com/facebook/jest) module.
-   */
-  interface jest extends Integration {}
 }
 
 /**

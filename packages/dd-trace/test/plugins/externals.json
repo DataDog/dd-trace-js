@@ -33,6 +33,16 @@
       "versions": ["0.5.0"]
     }
   ],
+  "jest": [
+    {
+      "name": "jest-environment-jsdom",
+      "versions": [">=24.8.0"]
+    },
+    {
+      "name": "jest-environment-node",
+      "versions": [">=24.8.0"]
+    }
+  ],
   "knex": [
     {
       "name": "sqlite3",
@@ -69,16 +79,6 @@
     {
       "name": "pg-native",
       "versions": ["3.0.0"]
-    }
-  ],
-  "jest": [
-    {
-      "name": "jest-environment-node",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-environment-jsdom",
-      "versions": [">=24.8.0"]
     }
   ]
 }

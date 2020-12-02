@@ -196,6 +196,7 @@ tracer.use('http2', {
 });
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
+tracer.use('jest');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
@@ -224,7 +225,6 @@ tracer.use('router');
 tracer.use('tedious');
 tracer.use('when');
 tracer.use('winston');
-tracer.use('jest');
 
 tracer.use('express', false)
 tracer.use('express', { enabled: false })

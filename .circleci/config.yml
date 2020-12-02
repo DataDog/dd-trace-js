@@ -495,6 +495,13 @@ jobs:
         environment:
           - PLUGINS=http2
 
+  node-jest:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=jest
+
   node-knex:
     <<: *node-plugin-base
     docker:
@@ -671,13 +678,6 @@ jobs:
       - image: node:8
         environment:
           - PLUGINS=winston
-
-  node-jest:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - PLUGINS=jest
 
   typescript:
     docker:
@@ -1034,6 +1034,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-jest
       - node-knex
       - node-koa
       # - node-limitd-client
@@ -1055,7 +1056,6 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
-      - node-jest
   prebuild:
     jobs:
       # Linux x64
@@ -1221,6 +1221,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-jest
       - node-knex
       - node-koa
       # - node-limitd-client
@@ -1242,4 +1243,3 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
-      - node-jest

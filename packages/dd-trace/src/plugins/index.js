@@ -22,6 +22,7 @@ module.exports = {
   'http': require('../../../datadog-plugin-http/src'),
   'http2': require('../../../datadog-plugin-http2/src'),
   'ioredis': require('../../../datadog-plugin-ioredis/src'),
+  'jest': require('../../../datadog-plugin-jest/src'),
   'knex': require('../../../datadog-plugin-knex/src'),
   'koa': require('../../../datadog-plugin-koa/src'),
   'limitd-client': require('../../../datadog-plugin-limitd-client/src'),
@@ -44,6 +45,5 @@ module.exports = {
   'router': require('../../../datadog-plugin-router/src'),
   'tedious': require('../../../datadog-plugin-tedious/src'),
   'when': require('../../../datadog-plugin-when/src'),
-  'winston': require('../../../datadog-plugin-winston/src'),
-  'jest': require('../../../datadog-plugin-jest/src')
+  'winston': require('../../../datadog-plugin-winston/src')
 }
