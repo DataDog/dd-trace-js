@@ -181,12 +181,13 @@ module.exports = [
       const testMetadata = getTestMetadata()
 
       this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      this._dd_original = NodeEnvironment.prototype.handleTestEvent
       NodeEnvironment.prototype.handleTestEvent = createHandleTestEvent(tracer, testMetadata)
       return wrapEnvironment(NodeEnvironment)
     },
     unpatch: function (NodeEnvironment) {
       this.unwrap(NodeEnvironment.prototype, 'teardown')
-      delete NodeEnvironment.prototype.handleTestEvent
+      NodeEnvironment.prototype.handleTestEvent = this._dd_original
     }
   },
   {
@@ -196,12 +197,14 @@ module.exports = [
       const testMetadata = getTestMetadata()
 
       this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+
+      this._dd_original = JsdomEnvironment.prototype.handleTestEvent
       JsdomEnvironment.prototype.handleTestEvent = createHandleTestEvent(tracer, testMetadata)
       return wrapEnvironment(JsdomEnvironment)
     },
     unpatch: function (JsdomEnvironment) {
       this.unwrap(JsdomEnvironment.prototype, 'teardown')
-      delete JsdomEnvironment.prototype.handleTestEvent
+      JsdomEnvironment.prototype.handleTestEvent = this._dd_original
     }
   }
 ]
