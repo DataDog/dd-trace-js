@@ -5,12 +5,15 @@ function createWrapExecute (tracer, config) {
             return tracer.trace('exec.query', {
                 tags: {
                     'span.kind': 'client', 
+                    // should args get added here too?
                     'sql.query': dbQuery}}, 
                     (span) => {
                 // const service = 
-                // const connectStringObj = new URL('http://' + config.connectString);
+                const connectStringObj = new URL('http://' + config.connectString);
                 // span.setTag('db', {'instance':connectStringObj.pathname.substring(1), 
                 // 'hostname':connectStringObj.hostname, 'user':config.user, port:connectStringObj.port});
+
+                
                 return execute.call(this, dbQuery, ...args)
             })
         }
