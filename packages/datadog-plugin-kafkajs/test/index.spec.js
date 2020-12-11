@@ -7,7 +7,7 @@ const plugin = require('../src')
 
 wrapIt()
 
-const TIMEOUT = 10000
+const TIMEOUT = 30000
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
