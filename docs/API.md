@@ -53,6 +53,7 @@ tracer.use('pg', {
 <h5 id="ioredis"></h5>
 <h5 id="ioredis-tags"></h5>
 <h5 id="ioredis-config"></h5>
+<h5 id="kafkajs"></h5>
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
@@ -111,6 +112,7 @@ tracer.use('pg', {
 * [http2](./interfaces/plugins.http2.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
 * [knex](./interfaces/plugins.knex.html)
+* [kafkajs](./interfaces/plugins.kafkajs.html)
 * [koa](./interfaces/plugins.koa.html)
 * [limitd-client](./interfaces/plugins.limitd_client.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
