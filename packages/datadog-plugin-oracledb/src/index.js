@@ -43,7 +43,7 @@ function getServiceName (tracer, config, connAttrs) {
 
 module.exports = {
   name: 'oracledb',
-  versions: ['*'],
+  versions: ['5'],
   patch (oracledb, tracer, config) {
     this.wrap(oracledb.Connection.prototype, 'execute', createWrapExecute(tracer, config))
     this.wrap(oracledb, 'getConnection', createWrapGetConnection(tracer, config))

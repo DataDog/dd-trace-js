@@ -35,6 +35,7 @@ module.exports = {
   'mysql': require('../../../datadog-plugin-mysql/src'),
   'mysql2': require('../../../datadog-plugin-mysql2/src'),
   'net': require('../../../datadog-plugin-net/src'),
+  'oracledb': require('../../../datadog-plugin-oracledb/src'),
   'paperplane': require('../../../datadog-plugin-paperplane/src'),
   'pg': require('../../../datadog-plugin-pg/src'),
   'pino': require('../../../datadog-plugin-pino/src'),
