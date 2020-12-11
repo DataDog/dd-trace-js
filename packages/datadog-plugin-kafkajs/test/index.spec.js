@@ -1,12 +1,13 @@
 'use strict'
 
+const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const plugin = require('../src')
 
 wrapIt()
 
-const TIMEOUT = 5000
+const TIMEOUT = 10000
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -16,7 +17,7 @@ describe('Plugin', () => {
       agent.wipe()
     })
     withVersions(plugin, 'kafkajs', (version) => {
-      const topic = 'topic-test'
+      const testTopic = 'topic-test'
       let kafka
       let tracer
       describe('without configuration', () => {
@@ -47,15 +48,18 @@ describe('Plugin', () => {
                 metrics: {
                   'kafka.batch.size': messages.length
                 },
-                resource: topic,
-                error: 0
+                resource: testTopic,
+                error: 0,
+                type: 'queue'
+
               })
 
               await producer.connect()
               await producer.send({
-                topic,
+                topic: testTopic,
                 messages
               })
+              // Useful to debug trace
               // agent.use(traces => console.log(traces[0]))
 
               return expectedSpanPromise
@@ -68,7 +72,7 @@ describe('Plugin', () => {
             const firstSpan = tracer.scope().active()
             await producer.connect()
             await producer.send({
-              topic,
+              topic: testTopic,
               messages: [{ key: 'key1', value: 'test' }]
             })
 
@@ -76,7 +80,48 @@ describe('Plugin', () => {
           })
         })
         describe('consumer', () => {
+          it('should be instrumented', async () => {
+            // We are changing the groupId in every test so the consumed offset is always reset
+            const consumer = kafka.consumer({ groupId: `test-group-${version}-instrument` })
+            try {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: 'kafka.consume',
+                service: 'test-kafka',
+                meta: {
+                  'span.kind': 'consumer',
+                  'component': 'kafka'
+                },
+                resource: testTopic,
+                error: 0,
+                type: 'queue'
+              })
 
+              await consumer.connect()
+              await consumer.subscribe({ topic: testTopic, fromBeginning: true })
+              await consumer.run({
+                eachMessage: async ({ topic, partition, message }) => {
+                  expect(topic).to.equal(testTopic)
+                }
+              })
+
+              return expectedSpanPromise
+            } catch (error) {
+              // console.log(error)
+            }
+          })
+          it('should propagate context', async () => {
+            const consumer = kafka.consumer({ groupId: `test-group-${version}-propagate` })
+            const firstSpan = tracer.scope().active()
+            await consumer.connect()
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
+            await consumer.run({
+              eachMessage: async ({ topic, partition, message }) => {
+                expect(topic).to.equal(testTopic)
+              }
+            })
+
+            return expect(tracer.scope().active()).to.equal(firstSpan)
+          })
         })
       })
     })
