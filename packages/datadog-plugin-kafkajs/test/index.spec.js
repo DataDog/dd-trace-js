@@ -6,7 +6,6 @@ const plugin = require('../src')
 
 wrapIt()
 
-// The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 5000
 
 describe('Plugin', () => {
@@ -17,6 +16,7 @@ describe('Plugin', () => {
       agent.wipe()
     })
     withVersions(plugin, 'kafkajs', (version) => {
+      const topic = 'topic-test'
       let kafka
       let tracer
       describe('without configuration', () => {
@@ -28,18 +28,17 @@ describe('Plugin', () => {
           } = require(`../../../versions/kafkajs@${version}`).get()
           kafka = new Kafka({
             clientId: 'kafkajs-test',
-            brokers: [`${process.env.HOST_IP}:9092`]
+            brokers: [`localhost:9092`]
           })
         })
         describe('producer', () => {
-          const topic = 'topic-test'
           const messages = [{ key: 'key1', value: 'test2' }, { key: 'key2', value: 'test2' }]
 
           it('should be instrumented', async () => {
             const producer = kafka.producer()
             try {
               const expectedSpanPromise = expectSpanWithDefaults({
-                name: 'kafka.producer.send',
+                name: 'kafka.produce',
                 service: 'test-kafka',
                 meta: {
                   'span.kind': 'producer',
@@ -48,7 +47,7 @@ describe('Plugin', () => {
                 metrics: {
                   'kafka.batch.size': messages.length
                 },
-                resource: `produce to ${topic}`,
+                resource: topic,
                 error: 0
               })
 
@@ -75,6 +74,9 @@ describe('Plugin', () => {
 
             return expect(tracer.scope().active()).to.equal(firstSpan)
           })
+        })
+        describe('consumer', () => {
+
         })
       })
     })
