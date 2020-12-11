@@ -4,9 +4,9 @@ function createWrapProducer (tracer, config) {
   return function wrapProducer (createProducer) {
     return function producerWithTrace () {
       const serviceName = config.service || `${tracer._service}-kafka`
-      const createdProducer = createProducer.apply(this, arguments)
+      const producer = createProducer.apply(this, arguments)
 
-      const send = createdProducer.send
+      const send = producer.send
 
       const tags = {
         'service.name': serviceName,
@@ -15,12 +15,12 @@ function createWrapProducer (tracer, config) {
         component: 'kafka'
       }
 
-      createdProducer.send = tracer.wrap('kafka.producer.send', { tags }, function (...args) {
+      producer.send = tracer.wrap('kafka.produce', { tags }, function (...args) {
         const { topic, messages } = args[0]
         const currentSpan = tracer.scope().active()
 
         currentSpan.addTags({
-          'resource.name': `produce to ${topic}`,
+          'resource.name': topic,
           'kafka.topic': topic,
           'kafka.batch.size': messages.length
         }
@@ -28,7 +28,7 @@ function createWrapProducer (tracer, config) {
         return send.apply(this, args)
       })
 
-      return createdProducer
+      return producer
     }
   }
 }
@@ -36,13 +36,32 @@ function createWrapProducer (tracer, config) {
 function createWrapConsumer (tracer, config) {
   return function wrapProcessEachMessage (Consumer) {
     return function processEachMessageWithTrace () {
+      const serviceName = config.service || `${tracer._service}-kafka`
       const consumer = Consumer.apply(this, arguments)
       const run = consumer.run
 
+      const tags = {
+        'service.name': serviceName,
+        'span.kind': 'consumer',
+        'span.type': 'queue',
+        component: 'kafka'
+      }
+
       consumer.run = async function ({ eachMessage, ...args }) {
-        // return the promise
         return run({
-          eachMessage: tracer.wrap('kafkajs.consumer', {}, eachMessage),
+          eachMessage: tracer.wrap('kafka.consume', { tags }, function (...eachMessageArgs) {
+            const { topic, partition, message } = eachMessageArgs[0]
+            const currentSpan = tracer.scope().active()
+
+            currentSpan.addTags({
+              'resource.name': topic,
+              'kafka.topic': topic,
+              'kafka.partition': partition,
+              'kafka.message.offset': message.offset
+            })
+
+            return eachMessage.apply(this, eachMessageArgs)
+          }),
           args
         })
       }
