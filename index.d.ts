@@ -506,9 +506,9 @@ interface Plugins {
   "http": plugins.http;
   "http2": plugins.http2;
   "ioredis": plugins.ioredis;
+  "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
-  "kafkajs": plugins.kafkajs
   "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;

@@ -1035,6 +1035,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-kafkajs
       - node-knex
       - node-koa
       # - node-limitd-client
@@ -1056,7 +1057,6 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
-      - node-kafkajs
   prebuild:
     jobs:
       # Linux x64
@@ -1222,6 +1222,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-kafkajs 
       - node-knex
       - node-koa
       # - node-limitd-client
@@ -1243,4 +1244,3 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
-      - node-kafkajs 

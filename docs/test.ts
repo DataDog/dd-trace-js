@@ -195,8 +195,8 @@ tracer.use('http2', {
 });
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
-tracer.use('knex');
 tracer.use('kafkajs');
+tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('limitd-client');
