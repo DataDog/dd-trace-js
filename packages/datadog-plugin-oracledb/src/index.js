@@ -23,10 +23,22 @@ function createWrapExecute (tracer, config) {
 
 function createWrapGetConnection (tracer, config) {
   return function wrapGetConnection (getConnection) {
-    return async function getConnectionWithTrace (connAttrs) {
-      const conn = await getConnection.call(this, connAttrs)
-      conn._dd_connAttrs = connAttrs
-      return conn
+    return function getConnectionWithTrace (connAttrs, callback) {
+      if (callback) {
+        getConnection.call(this, connAttrs, (err, connection) => {
+          if (connection){
+            connection._dd_connAttrs = connAttrs
+          }
+          callback(err, connection)
+        })
+      }
+      else {
+        console.log(arguments)
+        getConnection.call(this, connAttrs).then( (connection) => {
+          connection._dd_connAttrs = connAttrs
+          return connection
+        })
+      }
     }
   }
 }
