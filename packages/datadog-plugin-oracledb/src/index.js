@@ -12,6 +12,7 @@ function createWrapExecute (tracer, config) {
           'db.hostname': connectStringObj.hostname,
           'db.user': config.user,
           'db.port': connectStringObj.port,
+          'resource.name': dbQuery,
           'service.name': service
         }
       }, (span) => {
@@ -33,8 +34,7 @@ function createWrapGetConnection (tracer, config) {
         })
       }
       else {
-        console.log(arguments)
-        getConnection.call(this, connAttrs).then( (connection) => {
+        return getConnection.call(this, connAttrs).then( (connection) => {
           connection._dd_connAttrs = connAttrs
           return connection
         })
