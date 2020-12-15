@@ -43,6 +43,48 @@ function createWrapGetConnection (tracer, config) {
   }
 }
 
+function createWrapCreatePool (tracer, config) {
+  return function wrapCreatePool (createPool) {
+    return function createPoolWithTrace (poolAttrs, callback) {
+      if (callback) {
+        createPool.call(this, poolAttrs, (err, pool) => {
+          if (pool){
+            pool._dd_poolAttrs = poolAttrs
+          }
+          callback(err, pool)
+        })
+      }
+      else {
+        return createPool.call(this, poolAttrs).then( (pool) => {
+          pool._dd_poolAttrs = poolAttrs
+          return pool
+        })
+      }
+    }
+  }
+}
+
+function createWrapPoolGetConnection (tracer, config) {
+  return function wrapPoolGetConnection (getConnection) {
+    return function poolGetConnectionWithTrace () {
+      if (callback) {
+        getConnection.call(this, poolAttrs, (err, connection) => {
+          if (connection){
+            connection._dd_connAttrs = this._dd_poolAttrs
+          }
+          callback(err, connection)
+        })
+      }
+      else {
+        return getConnection.call(this, poolAttrs).then( (connection) => {
+          connection._dd_connAttrs = this._dd_poolAttrs
+          return connection
+        })
+      }
+    }
+  }
+}
+
 function getServiceName (tracer, config, connAttrs) {
   if (typeof config.service === 'function') {
     return config.service(connAttrs)
@@ -59,9 +101,13 @@ module.exports = {
   patch (oracledb, tracer, config) {
     this.wrap(oracledb.Connection.prototype, 'execute', createWrapExecute(tracer, config))
     this.wrap(oracledb, 'getConnection', createWrapGetConnection(tracer, config))
+    this.wrap(oracledb, 'createPool', createWrapCreatePool(tracer, config))
+    this.wrap(oracledb.Pool.prototype, 'getConnection', createWrapPoolGetConnection(tracer, config))
   },
   unpatch (oracledb) {
     this.unwrap(oracledb.Connection.prototype, 'execute')
     this.unwrap(oracledb, 'getConnection')
+    this.unwrap(oracledb, 'createPool')
+    this.unwrap(oracledb.Pool.prototype, 'getConnection')
   }
 }

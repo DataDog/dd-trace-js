@@ -1,3 +1,4 @@
+const { exit } = require('process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
@@ -75,6 +76,7 @@ describe('Plugin', () => {
             oracledb.getConnection(config, (err, _connection) => {
               if (err) {
                 done(err)
+                return
               }
               connection = _connection
               done()
