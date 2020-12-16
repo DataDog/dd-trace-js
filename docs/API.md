@@ -438,6 +438,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | clientToken     | `DD_CLIENT_TOKEN`                 | -              | Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`. |
 | logLevel        | `DD_TRACE_LOG_LEVEL`              | `debug`        | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
 | startupLogs     | `DD_TRACE_STARTUP_LOGS`           | `true`         | Enable tracer startup configuration and diagnostic log. |
+| serviceMapping     | `DD_SERVICE_MAPPING`           | `-`         | (Example: fs:my-fs-service-name, pg:my-postgres-service-name-db) Dynamically rename services via configuration. Useful for making databases have distinct names across different services. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 

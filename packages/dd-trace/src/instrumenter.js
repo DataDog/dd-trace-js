@@ -81,7 +81,8 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          this._set(plugins[name], { name, config: getConfig(name) })
+          const options = config.serviceMapping[name] ? { service: config.serviceMapping[name] } : {}
+          this._set(plugins[name], { name, config: getConfig(name, options) })
         })
     }
 

@@ -6,7 +6,7 @@ const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
 const id = require('./id')
-const { isTrue, isFalse } = require('./util')
+const { isTrue, isFalse, toKeyValuePairs } = require('./util')
 
 const runtimeId = `${id().toString()}${id().toString()}`
 
@@ -103,6 +103,10 @@ class Config {
       platform.env('DD_TRACE_AGENT_PROTOCOL_VERSION'),
       '0.4'
     )
+
+    this.serviceMapping = {}
+    Object.assign(this.serviceMapping, toKeyValuePairs(platform.env('DD_SERVICE_MAPPING')))
+    Object.assign(this.serviceMapping, options.serviceMapping || {})
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}

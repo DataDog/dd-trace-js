@@ -1,6 +1,6 @@
 'use strict'
 
-const { isTrue, isFalse } = require('../src/util')
+const { isTrue, isFalse, toKeyValuePairs } = require('../src/util')
 
 const TRUES = [
   1,
@@ -38,5 +38,16 @@ describe('util', () => {
       expect(isFalse(v)).to.equal(false)
       expect(isFalse(String(v))).to.equal(false)
     })
+  })
+
+  it('toKeyValuePairs works', () => {
+    expect(toKeyValuePairs(undefined)).to.deep.equal({})
+    expect(toKeyValuePairs(null)).to.deep.equal({})
+    expect(toKeyValuePairs('')).to.deep.equal({})
+    expect(toKeyValuePairs('string')).to.deep.equal({})
+    expect(toKeyValuePairs('string1,string2')).to.deep.equal({})
+    expect(toKeyValuePairs('key:value')).to.deep.equal({ key: 'value' })
+    expect(toKeyValuePairs('key1:value1,key2:value2')).to.deep.equal({ key1: 'value1', key2: 'value2' })
+    expect(toKeyValuePairs('string1,key2:value2,string3')).to.deep.equal({ key2: 'value2' })
   })
 })

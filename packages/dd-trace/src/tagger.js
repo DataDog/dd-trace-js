@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('./log')
+const { toKeyValuePairs } = require('./util')
 
 function add (carrier, keyValuePairs) {
   if (!carrier || !keyValuePairs) return
@@ -8,18 +9,7 @@ function add (carrier, keyValuePairs) {
   if (typeof keyValuePairs === 'string') {
     return add(
       carrier,
-      keyValuePairs
-        .split(',')
-        .filter(tag => tag.indexOf(':') !== -1)
-        .reduce((prev, next) => {
-          const tag = next.split(':')
-          const key = tag[0]
-          const value = tag.slice(1).join(':')
-
-          prev[key] = value
-
-          return prev
-        }, {})
+      toKeyValuePairs(keyValuePairs)
     )
   }
 
