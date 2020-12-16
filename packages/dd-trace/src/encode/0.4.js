@@ -29,7 +29,7 @@ class AgentEncoder {
   }
 
   makePayload () {
-    const prefix = Buffer.alloc(5)
+    const prefix = Buffer.allocUnsafe(5)
 
     prefix[0] = 0xdd
     prefix.writeUInt32BE(this._traces.length, 1)

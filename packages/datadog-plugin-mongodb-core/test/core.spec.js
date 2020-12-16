@@ -1,9 +1,29 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
 wrapIt()
+
+const withTopologies = fn => {
+  withVersions(plugin, ['mongodb-core', 'mongodb'], (version, moduleName) => {
+    describe('using the server topology', () => {
+      fn(() => {
+        const { CoreServer, Server } = require(`../../../versions/${moduleName}@${version}`).get()
+
+        return CoreServer || Server
+      })
+    })
+
+    // TODO: use semver.subset when we can update semver
+    if (moduleName === 'mongodb-core' && !semver.intersects(version, '<3.2')) {
+      describe('using the unified topology', () => {
+        fn(() => require(`../../../versions/${moduleName}@${version}`).get().Topology)
+      })
+    }
+  })
+}
 
 describe('Plugin', () => {
   let server
@@ -11,15 +31,9 @@ describe('Plugin', () => {
   let tracer
   let collection
 
-  describe('mongodb-core', () => {
-    withVersions(plugin, ['mongodb', 'mongodb-core'], (version, moduleName) => {
-      const getServer = () => {
-        return moduleName === 'mongodb'
-          ? require(`../../../versions/${moduleName}@${version}`).get().CoreServer
-          : require(`../../../versions/${moduleName}@${version}`).get().Server
-      }
-
-      const next = (cursor, cb) => {
+  describe('mongodb-core (core)', () => {
+    withTopologies(getServer => {
+      const next = (cursor, cb = () => {}) => {
         return cursor._next
           ? cursor._next(cb)
           : cursor.next(cb)
@@ -219,55 +233,34 @@ describe('Plugin', () => {
 
         describe('cursor', () => {
           it('should do automatic instrumentation', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-
-                expect(span).to.have.property('name', 'mongodb.query')
-                expect(span).to.have.property('service', 'test-mongodb')
-                expect(span).to.have.property('type', 'mongodb')
-                expect(span.meta).to.have.property('db.name', `test.${collection}`)
-                expect(span.meta).to.have.property('out.host', 'localhost')
-                expect(span.metrics).to.have.property('out.port', 27017)
-              })
-              .then(done)
-              .catch(done)
-
-            const cursor = server.cursor(`test.${collection}`, {
-              insert: `test.${collection}`,
-              documents: [{ a: 1 }]
-            }, {})
-
-            next(cursor)
-          })
-
-          it('should have the correct index', done => {
             let cursor
 
-            agent.use(() => {
+            Promise.all([
+              agent
+                .use(traces => {
+                  expect(traces[0][0].resource).to.equal(`find test.${collection} {}`)
+                }),
+              agent
+                .use(traces => {
+                  expect(traces[0][0].resource).to.equal(`getMore test.${collection}`)
+                }),
+              agent
+                .use(traces => {
+                  expect(traces[0][0].resource).to.equal(`killCursors test.${collection}`)
+                })
+            ])
+              .then(() => done())
+              .catch(done)
+
+            server.insert(`test.${collection}`, [{ a: 1 }, { a: 2 }, { a: 3 }], {}, () => {
               cursor = server.cursor(`test.${collection}`, {
                 find: `test.${collection}`,
-                query: {}
+                query: {},
+                batchSize: 1
               }, { batchSize: 1 })
 
-              next(cursor)
+              next(cursor, () => next(cursor, () => cursor.kill(() => {})))
             })
-
-            agent
-              .use(traces => {
-                expect(traces[0][0].metrics).to.have.property('mongodb.cursor.index', 0)
-              })
-              .then(() => next(cursor))
-              .catch(done)
-
-            agent
-              .use(traces => {
-                expect(traces[0][0].metrics).to.have.property('mongodb.cursor.index', 1)
-              })
-              .then(done)
-              .catch(done)
-
-            server.insert(`test.${collection}`, [{ a: 1 }, { a: 2 }], {}, () => {})
           })
 
           it('should sanitize the query as the resource', done => {

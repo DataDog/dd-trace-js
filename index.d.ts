@@ -371,6 +371,12 @@ export declare interface TracerOptions {
      * @default false
      */
     enableGetRumData?: boolean
+
+    /**
+     * Whether to set the error flag when an error occurs in an internal span.
+     * @default false
+     */
+    internalErrors?: boolean
   };
 
   /**
@@ -506,6 +512,7 @@ interface Plugins {
   "http": plugins.http;
   "http2": plugins.http2;
   "ioredis": plugins.ioredis;
+  "jest": plugins.jest;
   "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
@@ -986,6 +993,12 @@ declare namespace plugins {
      */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
   }
+
+  /**
+   * This plugin automatically instruments the
+   * [jest](https://github.com/facebook/jest) module.
+   */
+  interface jest extends Integration {}
 
   /**
    * This plugin patches the [knex](https://knexjs.org/)

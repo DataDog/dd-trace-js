@@ -59,7 +59,8 @@ tracer.init({
         { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
         { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
       ]
-    }
+    },
+    internalErrors: true
   },
   hostname: 'agent',
   logger: {
@@ -195,6 +196,7 @@ tracer.use('http2', {
 });
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
+tracer.use('jest');
 tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');

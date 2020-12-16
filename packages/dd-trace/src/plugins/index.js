@@ -22,6 +22,7 @@ module.exports = {
   'http': require('../../../datadog-plugin-http/src'),
   'http2': require('../../../datadog-plugin-http2/src'),
   'ioredis': require('../../../datadog-plugin-ioredis/src'),
+  'jest': require('../../../datadog-plugin-jest/src'),
   'knex': require('../../../datadog-plugin-knex/src'),
   'koa': require('../../../datadog-plugin-koa/src'),
   'kafkajs': require('../../../datadog-plugin-kafkajs/src'),

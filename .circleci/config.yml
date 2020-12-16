@@ -32,7 +32,7 @@ node-core-base: &node-core-base
     - &yarn-test-core
       run:
         name: Unit tests
-        command: yarn test:core
+        command: yarn test:core:ci
     - store_artifacts:
         path: ./coverage/lcov-report
 
@@ -97,7 +97,7 @@ node-plugin-base: &node-plugin-base
           - ./yarn.lock
     - run:
         name: Unit tests
-        command: yarn test:plugins
+        command: yarn test:plugins:ci
     - store_artifacts:
         path: ./coverage/lcov-report
 
@@ -502,6 +502,13 @@ jobs:
       - image: node:10
         environment:
           - PLUGINS=http2
+
+  node-jest:
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=jest
 
   node-knex:
     <<: *node-plugin-base
@@ -1035,6 +1042,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-jest
       - node-kafkajs
       - node-knex
       - node-koa
@@ -1222,6 +1230,7 @@ workflows:
       - node-hapi
       - node-http
       - node-http2
+      - node-jest
       - node-kafkajs 
       - node-knex
       - node-koa

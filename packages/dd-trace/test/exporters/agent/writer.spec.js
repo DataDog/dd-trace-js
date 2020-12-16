@@ -26,7 +26,7 @@ function describeWriter (protocolVersion) {
       name: sinon.stub(),
       version: sinon.stub(),
       engine: sinon.stub(),
-      request: sinon.stub().yields(null, response, 200),
+      request: sinon.stub().yieldsAsync(null, response, 200),
       msgpack: {
         prefix: sinon.stub().returns([Buffer.alloc(0)])
       }
@@ -107,7 +107,11 @@ function describeWriter (protocolVersion) {
       expect(encoder.makePayload).to.have.been.called
     })
 
-    it('should flush its traces to the agent', () => {
+    it('should call callback when empty', (done) => {
+      writer.flush(done)
+    })
+
+    it('should flush its traces to the agent, and call callback', (done) => {
       platform.name.returns('lang')
       platform.version.returns('version')
       platform.engine.returns('interpreter')
@@ -116,24 +120,25 @@ function describeWriter (protocolVersion) {
 
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
-      writer.flush()
-
-      expect(platform.request).to.have.been.calledWithMatch({
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port,
-        path: `/v${protocolVersion}/traces`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/msgpack',
-          'Datadog-Meta-Lang': 'lang',
-          'Datadog-Meta-Lang-Version': 'version',
-          'Datadog-Meta-Lang-Interpreter': 'interpreter',
-          'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          'X-Datadog-Trace-Count': '2'
-        },
-        data: [expectedData],
-        lookup: undefined
+      writer.flush(() => {
+        expect(platform.request).to.have.been.calledWithMatch({
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port,
+          path: `/v${protocolVersion}/traces`,
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/msgpack',
+            'Datadog-Meta-Lang': 'lang',
+            'Datadog-Meta-Lang-Version': 'version',
+            'Datadog-Meta-Lang-Interpreter': 'interpreter',
+            'Datadog-Meta-Tracer-Version': 'tracerVersion',
+            'X-Datadog-Trace-Count': '2'
+          },
+          data: [expectedData],
+          lookup: undefined
+        })
+        done()
       })
     })
 
@@ -151,12 +156,13 @@ function describeWriter (protocolVersion) {
       })
     })
 
-    it('should update sampling rates', () => {
+    it('should update sampling rates', (done) => {
       encoder.count.returns(1)
-      writer.flush()
-
-      expect(prioritySampler.update).to.have.been.calledWith({
-        'service:hello,env:test': 1
+      writer.flush(() => {
+        expect(prioritySampler.update).to.have.been.calledWith({
+          'service:hello,env:test': 1
+        })
+        done()
       })
     })
 

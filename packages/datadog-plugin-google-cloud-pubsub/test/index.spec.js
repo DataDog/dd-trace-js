@@ -8,7 +8,7 @@ const id = require('../../dd-trace/src/id')
 wrapIt()
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
-const TIMEOUT = 5000
+const TIMEOUT = 30000
 
 describe('Plugin', () => {
   let tracer
@@ -140,11 +140,16 @@ describe('Plugin', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: 'pubsub.receive',
-              meta: { 'span.kind': 'consumer' }
+              meta: {
+                'span.kind': 'consumer'
+              },
+              metrics: {
+                'pubsub.ack': 1
+              }
             })
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
-            sub.on('message', () => {})
+            sub.on('message', msg => msg.ack())
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
@@ -157,11 +162,12 @@ describe('Plugin', () => {
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
             const rxPromise = new Promise((resolve, reject) => {
-              sub.on('message', () => {
+              sub.on('message', msg => {
                 const receiverSpanContext = tracer.scope().active()._spanContext
                 try {
                   expect(receiverSpanContext._parentId).to.be.an('object')
                   resolve()
+                  msg.ack()
                 } catch (e) {
                   reject(e)
                 }
@@ -186,15 +192,25 @@ describe('Plugin', () => {
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
             const emit = sub.emit
-            sub.emit = function emitWrapped () {
+            sub.emit = function emitWrapped (name) {
+              let err
+
               try {
                 return emit.apply(this, arguments)
               } catch (e) {
-                // this is just to prevent mocha from crashing
+                err = e
+              } finally {
+                if (name === 'message') {
+                  expect(err).to.equal(error)
+                }
               }
             }
-            sub.on('message', () => {
-              throw error
+            sub.on('message', msg => {
+              try {
+                throw error
+              } finally {
+                msg.ack()
+              }
             })
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
