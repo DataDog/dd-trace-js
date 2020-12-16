@@ -27,14 +27,13 @@ function createWrapGetConnection (tracer, config) {
     return function getConnectionWithTrace (connAttrs, callback) {
       if (callback) {
         getConnection.call(this, connAttrs, (err, connection) => {
-          if (connection){
+          if (connection) {
             connection._dd_connAttrs = connAttrs
           }
           callback(err, connection)
         })
-      }
-      else {
-        return getConnection.call(this, connAttrs).then( (connection) => {
+      } else {
+        return getConnection.call(this, connAttrs).then((connection) => {
           connection._dd_connAttrs = connAttrs
           return connection
         })
@@ -48,14 +47,13 @@ function createWrapCreatePool (tracer, config) {
     return function createPoolWithTrace (poolAttrs, callback) {
       if (callback) {
         createPool.call(this, poolAttrs, (err, pool) => {
-          if (pool){
+          if (pool) {
             pool._dd_poolAttrs = poolAttrs
           }
           callback(err, pool)
         })
-      }
-      else {
-        return createPool.call(this, poolAttrs).then( (pool) => {
+      } else {
+        return createPool.call(this, poolAttrs).then((pool) => {
           pool._dd_poolAttrs = poolAttrs
           return pool
         })
@@ -67,16 +65,20 @@ function createWrapCreatePool (tracer, config) {
 function createWrapPoolGetConnection (tracer, config) {
   return function wrapPoolGetConnection (getConnection) {
     return function poolGetConnectionWithTrace () {
+      let callback
+      if (typeof arguments[arguments.length - 1] === 'function') {
+        callback = arguments[arguments.length - 1]
+      }
       if (callback) {
-        getConnection.call(this, poolAttrs, (err, connection) => {
-          if (connection){
+        arguments[arguments.length - 1] = (err, connection) => {
+          if (connection) {
             connection._dd_connAttrs = this._dd_poolAttrs
           }
           callback(err, connection)
-        })
-      }
-      else {
-        return getConnection.call(this, poolAttrs).then( (connection) => {
+        }
+        getConnection.apply(this, arguments)
+      } else {
+        return getConnection.apply(this, arguments).then((connection) => {
           connection._dd_connAttrs = this._dd_poolAttrs
           return connection
         })
