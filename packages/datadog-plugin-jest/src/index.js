@@ -1,87 +1,32 @@
+const { promisify } = require('util')
+
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
-const { execSync } = require('child_process')
-const { promisify } = require('util')
-
-const GIT_COMMIT_SHA = 'git.commit.sha'
-// TODO: remove this once CI App's UI and backend are ready
-const DEPRECATED_GIT_COMMIT_SHA = 'git.commit_sha'
-const GIT_BRANCH = 'git.branch'
-const GIT_REPOSITORY_URL = 'git.repository_url'
-const BUILD_SOURCE_ROOT = 'build.source_root'
-const TEST_FRAMEWORK = 'test.framework'
-const TEST_TYPE = 'test.type'
-const TEST_NAME = 'test.name'
-const TEST_SUITE = 'test.suite'
-const TEST_STATUS = 'test.status'
-const CI_PIPELINE_URL = 'ci.pipeline.url'
-const CI_PIPELINE_ID = 'ci.pipeline.id'
-const CI_PIPELINE_NUMBER = 'ci.pipeline.number'
-const CI_WORKSPACE_PATH = 'ci.workspace_path'
-const CI_PROVIDER_NAME = 'ci.provider.name'
+const { getGitMetadata } = require('../../dd-trace/src/plugins/util/git')
+const { getCIMetadata } = require('../../dd-trace/src/plugins/util/ci')
+const {
+  TEST_FRAMEWORK,
+  TEST_TYPE,
+  TEST_NAME,
+  TEST_SUITE,
+  TEST_STATUS
+} = require('../../dd-trace/src/plugins/util/test')
 
 const SPAN_TYPE = 'span.type'
 const RESOURCE_NAME = 'resource.name'
-
-function getCIMetadata () {
-  const { env } = process
-  if (env.GITHUB_ACTIONS) {
-    const { GITHUB_REF, GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_NUMBER, GITHUB_WORKSPACE } = env
-
-    const pipelineURL = `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
-
-    return {
-      [CI_PIPELINE_URL]: pipelineURL,
-      [CI_PIPELINE_ID]: GITHUB_RUN_ID,
-      [CI_PROVIDER_NAME]: 'github',
-      [CI_PIPELINE_NUMBER]: GITHUB_RUN_NUMBER,
-      [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
-      [GIT_BRANCH]: GITHUB_REF,
-      [GIT_COMMIT_SHA]: GITHUB_SHA,
-      [DEPRECATED_GIT_COMMIT_SHA]: GITHUB_SHA
-    }
-  }
-  return {}
-}
-
-const sanitizedRun = cmd => {
-  try {
-    return execSync(cmd).toString().replace(/(\r\n|\n|\r)/gm, '')
-  } catch (e) {
-    return ''
-  }
-}
-
-function getGitMetadata () {
-  const commitSha = sanitizedRun('git rev-parse HEAD')
-  return {
-    [GIT_REPOSITORY_URL]: sanitizedRun('git ls-remote --get-url'),
-    [GIT_BRANCH]: sanitizedRun('git branch --show-current'),
-    [GIT_COMMIT_SHA]: commitSha,
-    [DEPRECATED_GIT_COMMIT_SHA]: commitSha
-  }
-}
-
-function getEnvMetadata () {
-  return {
-    [BUILD_SOURCE_ROOT]: sanitizedRun('pwd')
-  }
-}
 
 function getTestMetadata () {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
   const gitMetadata = getGitMetadata()
-  const envMetadata = getEnvMetadata()
 
   return {
     [TEST_FRAMEWORK]: 'jest',
     ...ciMetadata,
-    ...gitMetadata,
-    ...envMetadata
+    ...gitMetadata
   }
 }
 
