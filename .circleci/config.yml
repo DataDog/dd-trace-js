@@ -791,7 +791,7 @@ jobs:
   node-oracledb:
     <<: *node-plugin-base
     docker:
-      - image: bengl/node-10-with-oracle-client
+      - image: node:14
         environment:
           - SERVICES=oracledb
           - PLUGINS=oracledb
@@ -925,7 +925,7 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
-  
+
   # Node upstream tests
 
   node-upstream-node:
