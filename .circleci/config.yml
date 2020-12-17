@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   win: circleci/windows@1.0.0
+  wait-for: cobli/wait-for@0.0.2
 
 node-core-base: &node-core-base
   resource_class: small
@@ -479,6 +480,10 @@ jobs:
           - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
           - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
           - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    steps: 
+      - wait-for/kafka
+
+      
 
   node-graphql:
     <<: *node-plugin-base
