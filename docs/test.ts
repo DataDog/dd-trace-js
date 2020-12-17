@@ -203,6 +203,7 @@ tracer.use('koa', httpServerOptions);
 tracer.use('limitd-client');
 tracer.use('memcached');
 tracer.use('microgateway-core', httpServerOptions);
+tracer.use('mocha');
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');

@@ -1031,6 +1031,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [mocha](https://mochajs.org/) module.
+   */
+  interface mocha extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
   interface mongodb_core extends Instrumentation {}
