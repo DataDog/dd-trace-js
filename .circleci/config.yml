@@ -469,7 +469,7 @@ jobs:
           - SERVICES=kafka
           - PLUGINS=kafkajs
       - image: johnnypark/kafka-zookeeper
-        command: -p 2181:2181 -p 9092:9092
+        # command: -p 2181:2181 -p 9092:9092
         environment:
           - ADVERTISED_HOST=localhost
           - NUM_PARTITIONS=1
