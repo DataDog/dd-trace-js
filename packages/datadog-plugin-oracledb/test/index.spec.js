@@ -7,7 +7,7 @@ wrapIt()
 const config = {
   user: 'test',
   password: 'Oracle18',
-  connectString: 'oracledb:1521/xe'
+  connectString: 'localhost:1521/xe'
 }
 
 const dbQuery = 'select current_timestamp from dual'
