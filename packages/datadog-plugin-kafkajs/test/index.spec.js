@@ -7,7 +7,8 @@ const plugin = require('../src')
 
 wrapIt()
 
-const TIMEOUT = 20000
+// Kafka takes its time
+const TIMEOUT = 7000
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
