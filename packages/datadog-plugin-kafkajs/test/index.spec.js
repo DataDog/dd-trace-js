@@ -63,6 +63,37 @@ describe('Plugin', () => {
 
             return expect(tracer.scope().active()).to.equal(firstSpan)
           })
+
+          it('should be instrumented w/ error', async () => {
+            const producer = kafka.producer()
+            const errorMessage = 'Invalid topic'
+            const errorType = 'KafkaJSNonRetriableError'
+            const resourceName = 'kafka.produce'
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: resourceName,
+              service: 'test-kafka',
+              meta: {
+                'span.kind': 'producer',
+                'component': 'kafka',
+                'error.type': errorType,
+                'error.msg': errorMessage
+              },
+              resource: resourceName,
+              error: 1,
+              type: 'queue'
+            })
+            try {
+              await producer.connect()
+              await producer.send({
+                testTopic,
+                messages: 'Oh no!'
+              })
+            } catch (error) {
+              await producer.disconnect()
+              return expectedSpanPromise
+            }
+          })
         })
         describe('consumer', () => {
           let consumer
