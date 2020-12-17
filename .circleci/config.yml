@@ -462,6 +462,7 @@ jobs:
 
   node-kafkajs:
     <<: *node-plugin-base
+    resource_class: large
     docker:
       - image: node:latest
         environment:
