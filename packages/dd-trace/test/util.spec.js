@@ -49,5 +49,8 @@ describe('util', () => {
     expect(toKeyValuePairs('key:value')).to.deep.equal({ key: 'value' })
     expect(toKeyValuePairs('key1:value1,key2:value2')).to.deep.equal({ key1: 'value1', key2: 'value2' })
     expect(toKeyValuePairs('string1,key2:value2,string3')).to.deep.equal({ key2: 'value2' })
+    expect(toKeyValuePairs('  key1 :  value1, key2 :  value2 ')).to.deep.equal({ key1: 'value1', key2: 'value2' })
+    expect(toKeyValuePairs('key1:value1,key2:value2,')).to.deep.equal({ key1: 'value1', key2: 'value2' })
+    expect(toKeyValuePairs('key1:value1,key2:value2,key1:value3')).to.deep.equal({ key1: 'value3', key2: 'value2' })
   })
 })

@@ -75,6 +75,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
     platform.env.withArgs('DD_TRACE_SAMPLE_RATE').returns('0.5')
     platform.env.withArgs('DD_TRACE_RATE_LIMIT').returns('-1')
+    platform.env.withArgs('DD_SERVICE_MAPPING').returns('quux:quuz,corge:grault')
 
     const config = new Config()
 
@@ -94,6 +95,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
+    expect(config.serviceMapping).to.include({ quux: 'quuz', corge: 'grault' })
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -274,6 +276,7 @@ describe('Config', () => {
     platform.env.withArgs('DD_API_KEY').returns('123')
     platform.env.withArgs('DD_APP_KEY').returns('456')
     platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
+    platform.env.withArgs('DD_SERVICE_MAPPING').returns('quux:quuz,corge:grault')
 
     const config = new Config({
       enabled: true,
@@ -295,6 +298,10 @@ describe('Config', () => {
       clientToken: '789',
       tags: {
         foo: 'foo'
+      },
+      serviceMapping: {
+        quux: 'thud',
+        garply: 'waldo'
       }
     })
 
@@ -316,6 +323,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientToken', '789')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
+    expect(config.serviceMapping).to.include({ quux: 'thud', corge: 'grault', garply: 'waldo' })
   })
 
   it('should give priority to non-experimental options', () => {

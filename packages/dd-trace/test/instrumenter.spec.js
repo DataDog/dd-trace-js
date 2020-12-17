@@ -4,6 +4,7 @@ const proxyquire = require('proxyquire')
 const path = require('path')
 const shimmer = require('shimmer')
 const { expect } = require('chai')
+const Config = require('../src/config')
 
 describe('Instrumenter', () => {
   let Instrumenter
@@ -12,6 +13,7 @@ describe('Instrumenter', () => {
   let tracer
 
   beforeEach(() => {
+    process.env.DD_SERVICE_MAPPING = 'http:custom,extra:value'
     tracer = {
       _tracer: 'tracer'
     }
@@ -70,6 +72,7 @@ describe('Instrumenter', () => {
   })
 
   afterEach(() => {
+    delete process.env.DD_SERVICE_MAPPING
     const basedir = path.resolve(path.join(__dirname, 'node_modules'))
 
     instrumenter.disable()
@@ -83,7 +86,7 @@ describe('Instrumenter', () => {
 
   describe('with integrations enabled', () => {
     beforeEach(() => {
-      instrumenter.enable()
+      instrumenter.enable(new Config())
     })
 
     describe('use', () => {
@@ -91,16 +94,28 @@ describe('Instrumenter', () => {
         const config = { foo: 'bar' }
 
         instrumenter.use('express-mock', config)
-        instrumenter.enable()
 
         const express = require('express-mock')
 
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', config)
       })
 
+      it('should pick service name from serviceMapping', () => {
+        const config = { foo: 'bar' }
+        instrumenter.use('http', config)
+        const http = require('http')
+        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', { foo: 'bar', service: 'custom' })
+      })
+
+      it('should allow overwriting service name', () => {
+        const config = { foo: 'bar', service: 'custom2' }
+        instrumenter.use('http', config)
+        const http = require('http')
+        expect(integrations.http.patch).to.have.been.calledWith(http, 'tracer', { foo: 'bar', service: 'custom2' })
+      })
+
       it('should default to an empty plugin configuration', () => {
         instrumenter.use('express-mock')
-        instrumenter.enable()
 
         const express = require('express-mock')
 
@@ -110,7 +125,6 @@ describe('Instrumenter', () => {
       it('should reapply the require hook when called multiple times', () => {
         instrumenter.use('mysql-mock')
         instrumenter.use('express-mock')
-        instrumenter.enable()
 
         require('express-mock')
 
@@ -259,6 +273,14 @@ describe('Instrumenter', () => {
         const other = require('other')
 
         expect(other).to.equal('replacement')
+      })
+
+      it('should set the plugin config from DD_SERVICE_MAPPING', () => {
+        const plugins = [...instrumenter._plugins.values()]
+        expect(plugins[0].name).to.equal('http')
+        expect(plugins[0].config.service).to.equal('custom')
+        expect(plugins[1].name).to.equal('express-mock')
+        expect(plugins[1].config.service).to.equal(undefined)
       })
     })
 

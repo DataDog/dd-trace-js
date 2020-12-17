@@ -81,7 +81,9 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          const options = config.serviceMapping[name] ? { service: config.serviceMapping[name] } : {}
+          const options = config.serviceMapping && config.serviceMapping[name]
+            ? { service: config.serviceMapping[name] }
+            : {}
           this._set(plugins[name], { name, config: getConfig(name, options) })
         })
     }
@@ -239,7 +241,9 @@ class Instrumenter {
     if (this._disabledPlugins.has(meta.name)) {
       log.debug(`Plugin "${meta.name}" was disabled via configuration option.`)
     } else {
-      this._plugins.set(plugin, meta)
+      const { config: oldConfig } = this._plugins.get(plugin) || {}
+      const { config: newConfig } = meta
+      this._plugins.set(plugin, { ...meta, config: { ...oldConfig, ...newConfig } })
       this.load(plugin, meta)
     }
   }
