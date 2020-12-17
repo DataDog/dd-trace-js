@@ -65,9 +65,19 @@ describe('Plugin', () => {
           })
         })
         describe('consumer', () => {
+          let consumer
+          beforeEach(async () => {
+            consumer = kafka.consumer({ groupId: `test-group-${version}-${Math.random()}` })
+            await consumer.connect()
+            await consumer.subscribe({ topic: testTopic })
+            await sendMessages(kafka, testTopic, messages)
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
           it('should be instrumented', async () => {
             // We are changing the groupId in every test so the consumed offset is always reset
-            const consumer = kafka.consumer({ groupId: `test-group-${version}-instrument` })
 
             const expectedSpanPromise = expectSpanWithDefaults({
               name: 'kafka.consume',
@@ -81,29 +91,26 @@ describe('Plugin', () => {
               type: 'queue'
             })
 
-            await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {
 
               }
             })
             await sendMessages(kafka, testTopic, messages)
-            await consumer.disconnect()
+
+            // Sometimes there is a race condition where the Span that is active when the test returns
+            // is the one after producing the messages, we are using this sleep function to minimize that from happening
+            await sleep(200)
             return expectedSpanPromise
           })
           it('should propagate context', async () => {
             const consumer = kafka.consumer({ groupId: `test-group-${version}-propagate` })
             const firstSpan = tracer.scope().active()
 
-            await consumer.connect()
-            await consumer.subscribe({ topic: testTopic })
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {}
             })
-            await sendMessages(kafka, testTopic, messages)
 
-            await consumer.disconnect()
             return expect(tracer.scope().active()).to.equal(firstSpan)
           })
 
@@ -124,18 +131,12 @@ describe('Plugin', () => {
 
             })
 
-            const consumer = kafka.consumer({ groupId: `test-group-${version}-instrument-error` })
-            await consumer.connect()
-
             await consumer.subscribe({ topic: testTopic, fromBeginning: true })
             await consumer.run({
               eachMessage: async ({ topic, partition, message }) => {
                 throw fakeError
               }
             })
-            await sendMessages(kafka, testTopic, messages)
-
-            await consumer.disconnect()
 
             return expectedSpanPromise
           })
@@ -163,4 +164,8 @@ async function sendMessages (kafka, topic, messages) {
     messages
   })
   await producer.disconnect()
+}
+
+function sleep (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
