@@ -468,10 +468,11 @@ jobs:
         environment:
           - SERVICES=kafka
           - PLUGINS=kafkajs
-    steps:
-      - run:
-        command: docker-compose up kafka
-
+      - image: johnnypark/kafka-zookeeper
+        command: -p 2181:2181 -p 9092:9092
+        environment:
+          - ADVERTISED_HOST=localhost
+          - NUM_PARTITIONS=1
       
 
   node-graphql:
