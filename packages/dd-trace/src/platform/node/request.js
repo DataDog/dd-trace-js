@@ -3,9 +3,9 @@
 const http = require('http')
 const https = require('https')
 const agents = require('./agents')
-const containerInfo = require('container-info').sync() || {}
+const docker = require('./docker')
 
-const containerId = containerInfo.containerId
+const containerId = docker.id()
 
 function request (options, callback) {
   const platform = this
