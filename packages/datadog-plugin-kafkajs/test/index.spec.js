@@ -132,7 +132,7 @@ describe('Plugin', () => {
 
             // Sometimes there is a race condition where the Span that is active when the test returns
             // is the one after producing the messages, we are using this sleep function to minimize that from happening
-            await sleep(200)
+            await sleep(500)
             return expectedSpanPromise
           })
           it('should propagate context', async () => {

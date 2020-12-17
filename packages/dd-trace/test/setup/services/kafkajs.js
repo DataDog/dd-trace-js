@@ -19,12 +19,16 @@ function waitForKafka () {
         const { CONNECT } = admin.events
 
         admin.on(CONNECT, async e => {
-          await admin.disconnect()
-          resolve()
+          try {
+            await admin.disconnect()
+            resolve()
+          } catch (error) {
+            return reject(error)
+          }
         })
       } catch (error) {
         if (operation.retry(error)) return
-        if (error) return reject(error)
+        return reject(error)
       }
     })
   })
