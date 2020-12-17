@@ -2,7 +2,6 @@ version: 2.1
 
 orbs:
   win: circleci/windows@1.0.0
-  wait-for: cobli/wait-for@0.0.2
 
 node-core-base: &node-core-base
   resource_class: small
@@ -472,7 +471,6 @@ jobs:
     steps:
       - run:
         command: docker-compose up kafka
-      - wait-for/kafka
 
       
 
