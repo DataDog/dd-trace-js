@@ -791,7 +791,7 @@ jobs:
   node-oracledb:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: bengl/node-10-with-oracle-client
         environment:
           - SERVICES=oracledb
           - PLUGINS=oracledb
