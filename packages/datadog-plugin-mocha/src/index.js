@@ -37,26 +37,7 @@ function createWrapRunTest (tracer, testMetadata) {
         'x-datadog-parent-id': '0000000000000000',
         'x-datadog-sampled': 1
       })
-      const { pending: isSkipped, file: testSuite, title: testName } = this.test
-      if (isSkipped) {
-        tracer
-          .startSpan('mocha.test', {
-            childOf,
-            tags: {
-              [SPAN_TYPE]: 'test',
-              [RESOURCE_NAME]: test.fullTitle(),
-              [TEST_TYPE]: 'test',
-              [TEST_NAME]: testName,
-              [TEST_SUITE]: testSuite,
-              [TEST_STATUS]: 'skip',
-              [SAMPLING_RULE_DECISION]: 1,
-              [SAMPLING_PRIORITY]: AUTO_KEEP,
-              ...testMetadata
-            }
-          })
-          .finish()
-        return
-      }
+      const { file: testSuite, title: testName } = this.test
       let specFunction = this.test.fn
 
       if (specFunction.length) {
@@ -106,16 +87,53 @@ function createWrapRunTest (tracer, testMetadata) {
   }
 }
 
+// Necessary to get the skipped tests, that do not go through runTest
+function createWrapRunTests (tracer, testMetadata) {
+  return function wrapRunTests (runTests) {
+    return function runTestsWithTrace () {
+      runTests.apply(this, arguments)
+      this.suite.tests.forEach(test => {
+        const { pending: isSkipped, file: testSuite, title: testName } = test
+        if (isSkipped) {
+          const childOf = tracer.extract('text_map', {
+            'x-datadog-trace-id': id().toString(10),
+            'x-datadog-parent-id': '0000000000000000',
+            'x-datadog-sampled': 1
+          })
+          tracer
+            .startSpan('mocha.test', {
+              childOf,
+              tags: {
+                [SPAN_TYPE]: 'test',
+                [RESOURCE_NAME]: test.fullTitle(),
+                [TEST_TYPE]: 'test',
+                [TEST_NAME]: testName,
+                [TEST_SUITE]: testSuite,
+                [TEST_STATUS]: 'skip',
+                [SAMPLING_RULE_DECISION]: 1,
+                [SAMPLING_PRIORITY]: AUTO_KEEP,
+                ...testMetadata
+              }
+            })
+            .finish()
+        }
+      })
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'mocha',
-    versions: ['8.2.1'],
+    versions: ['>=5.2.0'],
     file: 'lib/runner.js',
     patch (Runner, tracer) {
       const testMetadata = getTestMetadata()
+      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, testMetadata))
       this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, testMetadata))
     },
     unpatch (Runner) {
+      this.unwrap(Runner.prototype, 'runTests')
       this.unwrap(Runner.prototype, 'runTest')
     }
   }
