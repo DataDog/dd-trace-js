@@ -548,7 +548,7 @@ jobs:
   node-mocha:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node
         environment:
           - PLUGINS=mocha
 
