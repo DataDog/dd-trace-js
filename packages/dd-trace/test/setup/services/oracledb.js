@@ -13,7 +13,7 @@ function waitForOracledb () {
       }).then((connection) => {
         resolve(connection)
       }, (err) => {
-        reject(err)
+        if (!operation.retry(err)) reject(err)
       })
     })
   }).then((connection) => {
