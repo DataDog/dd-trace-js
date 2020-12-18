@@ -35,6 +35,7 @@ function createWrapHandler (tracer, config, handler) {
         childOf,
         tags: {
           [Tags.SPAN_KIND]: 'server',
+          'span.type': 'web',
           'resource.name': handler,
           'service.name': config.service || `${tracer._service}`,
           'component': 'grpc'

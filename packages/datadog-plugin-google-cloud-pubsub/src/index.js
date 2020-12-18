@@ -69,7 +69,8 @@ function createWrapLeaseDispense (tracer, config) {
         'service.name': config.service || tracer._service,
         'gcloud.project_id': subscription.pubsub.projectId,
         'pubsub.topic': topic,
-        'span.kind': 'consumer'
+        'span.kind': 'consumer',
+        'span.type': 'worker'
       }
 
       const childOf = tracer.extract('text_map', message.attributes)

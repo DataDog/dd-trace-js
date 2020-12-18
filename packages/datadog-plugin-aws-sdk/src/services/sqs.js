@@ -8,10 +8,16 @@ class Sqs {
 
     if (!params || (!params.QueueName && !params.QueueUrl)) return tags
 
-    return Object.assign(tags, {
+    Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl
     })
+
+    if (operation === 'receiveMessage') {
+      tags['span.type'] = 'worker'
+    }
+
+    return tags
   }
 
   responseExtract (params, operation, response, tracer) {

@@ -159,6 +159,7 @@ function startSpan (tracer, config, path, methodKind) {
     childOf,
     tags: {
       [Tags.SPAN_KIND]: 'client',
+      'span.type': 'http',
       'resource.name': path,
       'service.name': config.service || `${tracer._service}-grpc-client`,
       'component': 'grpc'

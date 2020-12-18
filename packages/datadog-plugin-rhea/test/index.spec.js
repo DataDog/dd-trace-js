@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
@@ -55,6 +56,7 @@ describe('Plugin', () => {
                   error: 0,
                   service: 'test-amqp-producer'
                 })
+                expect(span).to.not.have.property('type')
                 expect(span.meta).to.include({
                   'span.kind': 'producer',
                   'amqp.link.target.address': 'amq.topic',
@@ -87,7 +89,8 @@ describe('Plugin', () => {
                   name: 'amqp.receive',
                   resource: 'amq.topic',
                   error: 0,
-                  service: 'test'
+                  service: 'test',
+                  type: 'worker'
                 })
                 expect(span.meta).to.include({
                   'span.kind': 'consumer',
@@ -523,7 +526,8 @@ function expectReceiving (agent, deliveryState, topic) {
       name: 'amqp.receive',
       resource: topic,
       error: 0,
-      service: 'test'
+      service: 'test',
+      type: 'worker'
     })
     const expectedMeta = {
       'span.kind': 'consumer',
@@ -548,6 +552,7 @@ function expectSending (agent, deliveryState, topic) {
       error: 0,
       service: 'test-amqp-producer'
     })
+    expect(span).to.not.have.property('type')
     const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
