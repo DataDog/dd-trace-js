@@ -94,29 +94,30 @@ function createWrapRunTests (tracer, testMetadata) {
       runTests.apply(this, arguments)
       this.suite.tests.forEach(test => {
         const { pending: isSkipped, file: testSuite, title: testName } = test
-        if (isSkipped) {
-          const childOf = tracer.extract('text_map', {
-            'x-datadog-trace-id': id().toString(10),
-            'x-datadog-parent-id': '0000000000000000',
-            'x-datadog-sampled': 1
-          })
-          tracer
-            .startSpan('mocha.test', {
-              childOf,
-              tags: {
-                [SPAN_TYPE]: 'test',
-                [RESOURCE_NAME]: test.fullTitle(),
-                [TEST_TYPE]: 'test',
-                [TEST_NAME]: testName,
-                [TEST_SUITE]: testSuite,
-                [TEST_STATUS]: 'skip',
-                [SAMPLING_RULE_DECISION]: 1,
-                [SAMPLING_PRIORITY]: AUTO_KEEP,
-                ...testMetadata
-              }
-            })
-            .finish()
+        if (!isSkipped) {
+          return
         }
+        const childOf = tracer.extract('text_map', {
+          'x-datadog-trace-id': id().toString(10),
+          'x-datadog-parent-id': '0000000000000000',
+          'x-datadog-sampled': 1
+        })
+        tracer
+          .startSpan('mocha.test', {
+            childOf,
+            tags: {
+              [SPAN_TYPE]: 'test',
+              [RESOURCE_NAME]: test.fullTitle(),
+              [TEST_TYPE]: 'test',
+              [TEST_NAME]: testName,
+              [TEST_SUITE]: testSuite,
+              [TEST_STATUS]: 'skip',
+              [SAMPLING_RULE_DECISION]: 1,
+              [SAMPLING_PRIORITY]: AUTO_KEEP,
+              ...testMetadata
+            }
+          })
+          .finish()
       })
     }
   }
