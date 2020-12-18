@@ -518,6 +518,7 @@ interface Plugins {
   "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
+  "mocha": plugins.mocha;
   "mongodb-core": plugins.mongodb_core;
   "mongoose": plugins.mongoose;
   "mysql": plugins.mysql;
