@@ -92,13 +92,13 @@ services:
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
-
+  zookeeper:
+    image: wurstmeister/zookeeper
   kafka:
-    image: johnnypark/kafka-zookeeper
+    image: wurstmeister/kafka
     ports:
-      - 9092:9092
-      - 2181:2181
+      - "127.0.0.1:9092:9092"
     environment:
-      ADVERTISED_HOST: localhost
-      NUM_PARTITIONS: 1
-
+      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+      KAFKA_CREATE_TOPICS: "test-topic:1:1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181

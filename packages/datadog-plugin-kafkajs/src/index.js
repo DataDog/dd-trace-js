@@ -11,20 +11,24 @@ function createWrapProducer (tracer, config) {
       const tags = {
         'service.name': serviceName,
         'span.kind': 'producer',
-        'span.type': 'queue',
-        component: 'kafka'
+        'component': 'kafkajs'
       }
 
       producer.send = tracer.wrap('kafka.produce', { tags }, function (...args) {
-        const { topic, messages } = args[0]
+        const { topic, messages = [] } = args[0]
         const currentSpan = tracer.scope().active()
 
         currentSpan.addTags({
           'resource.name': topic,
           'kafka.topic': topic,
           'kafka.batch.size': messages.length
+        })
+
+        for (const message of messages) {
+          message.headers = message.headers || {}
+          tracer.inject(currentSpan, 'text_map', message.headers)
         }
-        )
+
         return send.apply(this, args)
       })
 
@@ -34,35 +38,41 @@ function createWrapProducer (tracer, config) {
 }
 
 function createWrapConsumer (tracer, config) {
-  return function wrapProcessEachMessage (Consumer) {
-    return function processEachMessageWithTrace () {
+  return function wrapConsumer (createConsumer) {
+    return function consumerWithTrace () {
       const serviceName = config.service || `${tracer._service}-kafka`
-      const consumer = Consumer.apply(this, arguments)
+      const consumer = createConsumer.apply(this, arguments)
       const run = consumer.run
 
       const tags = {
         'service.name': serviceName,
         'span.kind': 'consumer',
-        'span.type': 'queue',
-        component: 'kafka'
+        'span.type': 'worker',
+        'component': 'kafkajs'
       }
 
-      consumer.run = async function ({ eachMessage, ...args }) {
+      consumer.run = function ({ eachMessage, ...runArgs }) {
+        if (typeof eachMessage !== 'function') return { eachMessage, ...runArgs }
+
         return run({
-          eachMessage: tracer.wrap('kafka.consume', { tags }, function (...eachMessageArgs) {
+          eachMessage: function (...eachMessageArgs) {
             const { topic, partition, message } = eachMessageArgs[0]
-            const currentSpan = tracer.scope().active()
+            const childOf = tracer.extract('text_map', message.headers)
 
-            currentSpan.addTags({
-              'resource.name': topic,
-              'kafka.topic': topic,
-              'kafka.partition': partition,
-              'kafka.message.offset': message.offset
+            return tracer.trace('kafka.consume', { childOf, tags }, () => {
+              const currentSpan = tracer.scope().active()
+
+              currentSpan.addTags({
+                'resource.name': topic,
+                'kafka.topic': topic,
+                'kafka.partition': partition,
+                'kafka.message.offset': message.offset
+              })
+
+              return eachMessage.apply(this, eachMessageArgs)
             })
-
-            return eachMessage.apply(this, eachMessageArgs)
-          }),
-          args
+          },
+          ...runArgs
         })
       }
 
