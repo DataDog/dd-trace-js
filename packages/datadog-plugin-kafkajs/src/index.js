@@ -57,7 +57,7 @@ function createWrapConsumer (tracer, config) {
         return run({
           eachMessage: function (...eachMessageArgs) {
             const { topic, partition, message } = eachMessageArgs[0]
-            const childOf = tracer.extract('text_map', message.headers)
+            const childOf = extract(tracer, message.headers)
 
             return tracer.trace('kafka.consume', { childOf, tags }, () => {
               const currentSpan = tracer.scope().active()
@@ -81,10 +81,22 @@ function createWrapConsumer (tracer, config) {
   }
 }
 
+function extract (tracer, bufferMap) {
+  if (!bufferMap) return null
+
+  const textMap = {}
+
+  for (const key of Object.keys(bufferMap)) {
+    textMap[key] = bufferMap[key].toString()
+  }
+
+  return tracer.extract('text_map', textMap)
+}
+
 module.exports = [
   {
     name: 'kafkajs',
-    versions: ['>=1.2'],
+    versions: ['>=1.4'],
     patch ({ Kafka }, tracer, config) {
       this.wrap(
         Kafka.prototype,
