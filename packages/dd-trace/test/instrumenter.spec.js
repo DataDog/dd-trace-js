@@ -10,6 +10,7 @@ describe('Instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
+  let config
 
   before(() => {
     process.env.DD_TRACE_DISABLED_PLUGINS = 'mocha'
@@ -59,6 +60,9 @@ describe('Instrumenter', () => {
       }
     }
 
+    config = proxyquire('../src/config', {})
+    config.configure({})
+
     Instrumenter = proxyquire('../src/instrumenter', {
       './plugins': {
         'http': integrations.http,
@@ -66,6 +70,7 @@ describe('Instrumenter', () => {
         'mysql-mock': integrations.mysql,
         'other': integrations.other
       },
+      './config': config,
       '../../datadog-plugin-http/src': integrations.http,
       '../../datadog-plugin-express-mock/src': integrations.express,
       '../../datadog-plugin-mysql-mock/src': integrations.mysql,
@@ -446,6 +451,7 @@ describe('Instrumenter', () => {
         './plugins': {
           'mysql-mock': integrations.mysql
         },
+        './config': config,
         '../../datadog-plugin-mysql-mock/src': integrations.mysql
       })
     })
@@ -457,8 +463,8 @@ describe('Instrumenter', () => {
     })
 
     it('should use _ENABLED', () => {
-      instrumenter = new Instrumenter(tracer)
       process.env.DD_TRACE_MYSQL_MOCK_ENABLED = false
+      instrumenter = new Instrumenter(tracer)
       instrumenter.enable()
       const plugins = [...instrumenter._plugins.values()]
       expect(plugins[0].name).to.equal('mysql-mock')
@@ -516,6 +522,7 @@ describe('Instrumenter', () => {
           'mysql-mock': integrations.mysql,
           'other': integrations.other
         },
+        './config': config,
         '../../datadog-plugin-http/src': integrations.http,
         '../../datadog-plugin-express-mock/src': integrations.express,
         '../../datadog-plugin-mysql-mock/src': integrations.mysql,

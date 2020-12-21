@@ -5,6 +5,7 @@ const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
 const getScope = require('./scope')
 const { setStartupLogConfig } = require('./startup-log')
+const config = require('./config')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -13,7 +14,7 @@ const ANALYTICS = tags.ANALYTICS
 const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
-  constructor (config) {
+  constructor () {
     super(config)
 
     const Scope = getScope(config.scope)
@@ -96,10 +97,6 @@ class DatadogTracer extends Tracer {
         return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
       }
     }
-  }
-
-  setUrl (url) {
-    this._exporter.setUrl(url)
   }
 
   scopeManager () {

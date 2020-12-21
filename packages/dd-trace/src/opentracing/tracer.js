@@ -15,6 +15,7 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const NoopSpan = require('../noop/span')
 const formats = require('../../../../ext/formats')
+const config = require('../config')
 
 const log = require('../log')
 const constants = require('../constants')
@@ -26,34 +27,40 @@ const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 
 class DatadogTracer extends Tracer {
-  constructor (config) {
+  constructor () {
     super()
 
     const Exporter = getExporter(config.experimental.exporter)
 
-    this._service = config.service
-    this._version = config.version
-    this._env = config.env
-    this._tags = config.tags
-    this._logInjection = config.logInjection
-    this._analytics = config.analytics
-    this._debug = config.debug
-    this._internalErrors = config.experimental.internalErrors
-    this._prioritySampler = new PrioritySampler(config.env, config.experimental.sampler)
-    this._exporter = new Exporter(config, this._prioritySampler)
+    this._prioritySampler = new PrioritySampler()
+    this._exporter = new Exporter(this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
-    this._url = this._exporter._url
-    this._sampler = new Sampler(config.sampleRate)
-    this._enableGetRumData = config.experimental.enableGetRumData
-    this._propagators = {
-      [formats.TEXT_MAP]: new TextMapPropagator(config),
-      [formats.HTTP_HEADERS]: new HttpPropagator(config),
-      [formats.BINARY]: new BinaryPropagator(config),
-      [formats.LOG]: new LogPropagator(config)
-    }
-    if (config.reportHostname) {
-      this._hostname = os.hostname()
-    }
+    this._sampler = new Sampler()
+
+    config.retroOn('update', () => {
+      this._service = config.service
+      this._version = config.version
+      this._env = config.env
+      this._tags = config.tags
+      this._logInjection = config.logInjection
+      this._analytics = config.analytics
+      this._debug = config.debug
+      this._internalErrors = config.experimental.internalErrors
+      this._enableGetRumData = config.experimental.enableGetRumData
+      this._propagators = {
+        [formats.TEXT_MAP]: new TextMapPropagator(config),
+        [formats.HTTP_HEADERS]: new HttpPropagator(config),
+        [formats.BINARY]: new BinaryPropagator(config),
+        [formats.LOG]: new LogPropagator(config)
+      }
+      if (config.reportHostname) {
+        this._hostname = os.hostname()
+      }
+    })
+  }
+
+  get _url () {
+    return this._exporter._url
   }
 
   startSpan (name, fields) {

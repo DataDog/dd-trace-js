@@ -12,6 +12,7 @@ function describeWriter (protocolVersion) {
   let url
   let prioritySampler
   let log
+  let config
 
   beforeEach((done) => {
     span = 'formatted'
@@ -30,11 +31,11 @@ function describeWriter (protocolVersion) {
       makePayload: sinon.stub().returns([])
     }
 
-    url = {
+    url = new URL({
       protocol: 'http:',
       hostname: 'localhost',
       port: 8126
-    }
+    })
 
     prioritySampler = {
       update: sinon.spy()
@@ -48,14 +49,19 @@ function describeWriter (protocolVersion) {
       return encoder
     }
 
+    config = proxyquire('../src/config', {})
+
     Writer = proxyquire('../src/exporters/agent/writer', {
       './request': request,
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
       '../../../lib/version': 'tracerVersion',
-      '../../log': log
+      '../../log': log,
+      '../../config': config
     })
-    writer = new Writer({ url, prioritySampler, protocolVersion })
+
+    config.configure({ url, protocolVersion })
+    writer = new Writer(prioritySampler)
 
     process.nextTick(done)
   })
@@ -68,10 +74,10 @@ function describeWriter (protocolVersion) {
     })
   })
 
-  describe('setUrl', () => {
+  describe('set url', () => {
     it('should set the URL used in the flush', () => {
       const url = new URL('http://example.com:1234')
-      writer.setUrl(url)
+      config.configure({ url })
       writer.append([span])
       encoder.count.returns(2)
       encoder.makePayload.returns([Buffer.alloc(0)])
@@ -157,7 +163,7 @@ function describeWriter (protocolVersion) {
     context('with the url as a unix socket', () => {
       beforeEach(() => {
         url = new URL('unix:/path/to/somesocket.sock')
-        writer = new Writer({ url, protocolVersion })
+        config.configure({ url })
       })
 
       it('should make a request to the socket', () => {

@@ -5,13 +5,20 @@ describe('Scheduler', () => {
   let clock
   let once
   let removeListener
+  let config
 
   beforeEach(() => {
-    Scheduler = require('../../../src/exporters/agent/scheduler')
+    config = proxyquire('../../../src/config', {})
+
+    Scheduler = proxyquire('../../../src/exporters/agent/scheduler', {
+      '../../config': config
+    })
 
     clock = sinon.useFakeTimers()
     once = process.once
     removeListener = process.removeListener
+
+    config.configure({ flushInterval: 5000 })
   })
 
   afterEach(() => {
@@ -23,7 +30,7 @@ describe('Scheduler', () => {
   describe('start', () => {
     it('should call the callback at the specified interval', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+      const scheduler = new Scheduler(spy)
 
       scheduler.start()
       clock.tick(5000)
@@ -39,7 +46,7 @@ describe('Scheduler', () => {
       process.once = sinon.spy()
 
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+      const scheduler = new Scheduler(spy)
 
       scheduler.start()
       process.once.withArgs('beforeExit').yield()
@@ -51,7 +58,7 @@ describe('Scheduler', () => {
   describe('stop', () => {
     it('should stop calling the callback at the specified interval', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+      const scheduler = new Scheduler(spy)
 
       scheduler.start()
       scheduler.stop()
@@ -65,7 +72,7 @@ describe('Scheduler', () => {
       process.removeListener = sinon.spy()
 
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+      const scheduler = new Scheduler(spy)
 
       scheduler.start()
       scheduler.stop()
@@ -77,7 +84,7 @@ describe('Scheduler', () => {
   describe('reset', () => {
     it('should reset the internal clock', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+      const scheduler = new Scheduler(spy)
 
       scheduler.start()
       clock.tick(4000)
