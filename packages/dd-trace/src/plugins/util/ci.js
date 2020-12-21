@@ -24,7 +24,17 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
     const url = new URL(repositoryUrl)
     return `${url.protocol}//${url.hostname}${url.pathname}`
   } catch (e) {
-    return repositoryUrl
+    try {
+      // support for node <=8
+      const url = require('url')
+      const parsedUrl = url.parse(repositoryUrl)
+      if (!parsedUrl.hostname || !parsedUrl.pathname || !parsedUrl.protocol) {
+        return repositoryUrl
+      }
+      return `${parsedUrl.protocol}//${parsedUrl.hostname}${parsedUrl.pathname}`
+    } catch (e) {
+      return repositoryUrl
+    }
   }
 }
 
