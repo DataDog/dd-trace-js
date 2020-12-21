@@ -21,17 +21,17 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
     return repositoryUrl
   }
   try {
-    const url = new URL(repositoryUrl)
-    return `${url.protocol}//${url.hostname}${url.pathname}`
+    const { protocol, hostname, pathname } = new URL(repositoryUrl)
+    return `${protocol}//${hostname}${pathname}`
   } catch (e) {
     try {
       // support for node <=8
       const url = require('url')
-      const parsedUrl = url.parse(repositoryUrl)
-      if (!parsedUrl.hostname || !parsedUrl.pathname || !parsedUrl.protocol) {
+      const { hostname, pathname, protocol } = url.parse(repositoryUrl)
+      if (!hostname || !pathname || !protocol) {
         return repositoryUrl
       }
-      return `${parsedUrl.protocol}//${parsedUrl.hostname}${parsedUrl.pathname}`
+      return `${protocol}//${hostname}${pathname}`
     } catch (e) {
       return repositoryUrl
     }
@@ -71,21 +71,6 @@ module.exports = {
         GIT_URL: JENKINS_GIT_REPOSITORY_URL
       } = env
 
-      const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags')
-      const finalRefKey = isTag ? GIT_TAG : GIT_BRANCH
-      const ref = normalizeRef(JENKINS_GIT_BRANCH)
-
-      let finalPipelineName = ''
-      if (JOB_NAME) {
-        const splittedPipelineName = JOB_NAME.split('/')
-        // There are parameters
-        if (splittedPipelineName.length > 1 && splittedPipelineName[1].includes('=')) {
-          finalPipelineName = splittedPipelineName[0]
-        } else {
-          finalPipelineName = JOB_NAME.replace(`/${ref}`, '')
-        }
-      }
-
       const tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
         [CI_PIPELINE_NUMBER]: BUILD_NUMBER,
@@ -93,13 +78,27 @@ module.exports = {
         [CI_PROVIDER_NAME]: 'jenkins',
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [DEPRECATED_GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
-        [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(JENKINS_GIT_REPOSITORY_URL),
-        [finalRefKey]: ref
+        [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(JENKINS_GIT_REPOSITORY_URL)
       }
+
+      const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags')
+      const finalRefKey = isTag ? GIT_TAG : GIT_BRANCH
+      const ref = normalizeRef(JENKINS_GIT_BRANCH)
+
+      tags[finalRefKey] = ref
+
       if (WORKSPACE) {
         tags[CI_WORKSPACE_PATH] = resolveTilde(WORKSPACE)
       }
-      if (finalPipelineName) {
+      let finalPipelineName = ''
+      if (JOB_NAME) {
+        // Job names can contain parameters, e.g. jobName/KEY1=VALUE1,KEY2=VALUE2/branchName
+        const jobNameAndParams = JOB_NAME.split('/')
+        if (jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')) {
+          finalPipelineName = jobNameAndParams[0]
+        } else {
+          finalPipelineName = JOB_NAME.replace(`/${ref}`, '')
+        }
         tags[CI_PIPELINE_NAME] = finalPipelineName
       }
 
