@@ -6,6 +6,7 @@ const githubEnv = require('./ci-env/github.json')
 
 describe('ci tags', () => {
   it('returns an empty object if the CI is not supported', () => {
+    process.env = {}
     expect(getCIMetadata()).to.eql({})
   })
   describe('jenkins', () => {
