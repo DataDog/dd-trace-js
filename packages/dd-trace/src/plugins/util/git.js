@@ -5,6 +5,7 @@ const GIT_COMMIT_SHA = 'git.commit.sha'
 const DEPRECATED_GIT_COMMIT_SHA = 'git.commit_sha'
 const GIT_BRANCH = 'git.branch'
 const GIT_REPOSITORY_URL = 'git.repository_url'
+const GIT_TAG = 'git.tag'
 
 function getGitMetadata () {
   const commitSha = sanitizedExec('git rev-parse HEAD')
@@ -16,4 +17,4 @@ function getGitMetadata () {
   }
 }
 
-module.exports = { getGitMetadata, GIT_COMMIT_SHA, GIT_BRANCH, GIT_REPOSITORY_URL }
+module.exports = { getGitMetadata, GIT_COMMIT_SHA, GIT_BRANCH, GIT_REPOSITORY_URL, DEPRECATED_GIT_COMMIT_SHA, GIT_TAG }
