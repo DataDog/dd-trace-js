@@ -3,7 +3,7 @@
 const BaseTracer = require('opentracing').Tracer
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
-const Config = require('./config')
+const config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
 const log = require('./log')
@@ -25,14 +25,12 @@ class Tracer extends BaseTracer {
   }
 
   init (options) {
+    this.configure(options)
     if (this._tracer === noop) {
       try {
-        const config = new Config(options)
-
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
-        platform.configure(config)
         platform.profiler().start()
 
         if (config.enabled) {
@@ -46,8 +44,8 @@ class Tracer extends BaseTracer {
             analyticsSampler.enable()
           }
 
-          this._tracer = new DatadogTracer(config)
-          this._instrumenter.enable(config)
+          this._tracer = new DatadogTracer()
+          this._instrumenter.enable()
           setStartupLogInstrumenter(this._instrumenter)
         }
       } catch (e) {
@@ -55,6 +53,11 @@ class Tracer extends BaseTracer {
       }
     }
 
+    return this
+  }
+
+  configure (options) {
+    config.configure(options)
     return this
   }
 
@@ -89,8 +92,10 @@ class Tracer extends BaseTracer {
     return this._tracer.wrap(name, options, fn)
   }
 
-  setUrl () {
-    this._tracer.setUrl.apply(this._tracer, arguments)
+  setUrl (url) {
+    this.configure({
+      url
+    })
     return this
   }
 

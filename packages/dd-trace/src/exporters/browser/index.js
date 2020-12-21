@@ -37,10 +37,6 @@ class BrowserExporter {
     this._queue.push(json)
   }
 
-  setUrl (url) {
-    this._url = url
-  }
-
   _flush () {
     if (this._queue.length === 0) return
 

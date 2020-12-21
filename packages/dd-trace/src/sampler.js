@@ -1,8 +1,12 @@
 'use strict'
 
+const config = require('./config')
+
 class Sampler {
-  constructor (rate) {
-    this._rate = rate
+  constructor () {
+    config.retroOn('update', () => {
+      this._rate = config.sampleRate
+    })
   }
 
   rate () {
