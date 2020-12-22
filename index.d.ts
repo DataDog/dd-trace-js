@@ -3,9 +3,7 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
-type Format = opentracing.FORMAT_BINARY | opentracing.FORMAT_HTTP_HEADERS | opentracing.FORMAT_TEXT_MAP;
-
-export { SpanOptions };
+type Format = "binary" | "text_map" | "http_headers";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
