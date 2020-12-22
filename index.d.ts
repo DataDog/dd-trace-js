@@ -3,6 +3,8 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
+type Format = opentracing.FORMAT_BINARY | opentracing.FORMAT_HTTP_HEADERS | opentracing.FORMAT_TEXT_MAP;
+
 export { SpanOptions };
 
 /**
@@ -11,6 +13,8 @@ export { SpanOptions };
 export declare interface Tracer extends opentracing.Tracer {
   /**
    * Starts and returns a new Span representing a logical unit of work.
+   *
+   * *NOTE:* This method is for advanced usage. You probably want to use `tracer.trace()` instead.
    * @param {string} name The name of the operation.
    * @param {SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
@@ -24,24 +28,24 @@ export declare interface Tracer extends opentracing.Tracer {
    *         carrier object. As a convenience, a Span instance may be passed
    *         in instead (in which case its .context() is used for the
    *         inject()).
-   * @param  {string} format The format of the carrier.
+   * @param  {Format} format The format of the carrier.
    * @param  {any} carrier The carrier object.
    */
-  inject(spanContext: SpanContext | Span, format: string, carrier: any): void;
+  inject(spanContext: SpanContext | Span, format: Format, carrier: any): void;
 
   /**
    * Returns a SpanContext instance extracted from `carrier` in the given
-   * `format`.
-   * @param  {string} format The format of the carrier.
+   * `format`. This may be passed as the `childOf` option in `SpanOptions`.
+   * @param  {Format} format The format of the carrier.
    * @param  {any} carrier The carrier object.
    * @return {SpanContext}
    *         The extracted SpanContext, or null if no such SpanContext could
    *         be found in `carrier`
    */
-  extract(format: string, carrier: any): SpanContext | null;
+  extract(format: Format, carrier: any): SpanContext | null;
 
   /**
-   * Initializes the tracer. This should be called before importing other libraries.
+   * Initializes the tracer. This MUST be called before importing other libraries.
    */
   init(options?: TracerOptions): this;
 
@@ -53,7 +57,7 @@ export declare interface Tracer extends opentracing.Tracer {
   setUrl(url: string): this;
 
   /**
-   * Enable and optionally configure a plugin.
+   * Enable and optionally configure a plugin. Note that all plugins are enabled by default.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
