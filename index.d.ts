@@ -130,7 +130,13 @@ export declare interface TraceOptions extends Analyzable {
   /**
    * The type of request.
    */
-  type?: string
+  type?: string,
+
+  /**
+   * If false, require a parent in order to trace.
+   * @default true
+   */
+  orphanable?: boolean
 }
 
 /**
@@ -430,11 +436,6 @@ export declare interface TracerOptions {
    */
   logLevel?: 'error' | 'debug'
 
-  /**
-   * If false, require a parent in order to trace.
-   * @default true
-   */
-  orphanable?: boolean
 }
 
 /** @hidden */
