@@ -6,6 +6,7 @@
     "baseUrl": "."
   },
   "files": [
-    "../index.d.ts"
+    "../index.d.ts",
+    "../node_modules/opentracing/lib/tracer.d.ts",
   ]
 }
