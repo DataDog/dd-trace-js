@@ -1314,7 +1314,7 @@ describe('Plugin', () => {
               testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.close()
+                  dir.close(cb)
                 } catch (e) {
                   cb(e)
                 }
