@@ -1314,9 +1314,9 @@ describe('Plugin', () => {
               testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.close(cb)
+                  dir.close(cb) // Node 15 passes error to callback
                 } catch (e) {
-                  cb(e)
+                  cb(e) // Node <=14 throws
                 }
               }, [], agent))
 
