@@ -1314,9 +1314,10 @@ describe('Plugin', () => {
               testHandleErrors(fs, 'dir.close', async (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  await dir.close() // Node >=15.4 returns and rejects a promise
+                  // await for Node >=15.4 that returns and rejects a promise instead of throwing
+                  await dir.close()
                 } catch (e) {
-                  cb(e) // Node <=15.3 throws
+                  cb(e)
                 }
               }, [], agent))
 
