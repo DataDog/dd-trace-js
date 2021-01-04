@@ -1311,10 +1311,11 @@ describe('Plugin', () => {
             })
 
             it('should handle errors', () =>
-              testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
+              testHandleErrors(fs, 'dir.close', async (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.close()
+                  // await for Node >=15.4 that returns and rejects a promise instead of throwing
+                  await dir.close()
                 } catch (e) {
                   cb(e)
                 }
