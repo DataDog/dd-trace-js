@@ -1311,12 +1311,12 @@ describe('Plugin', () => {
             })
 
             it('should handle errors', () =>
-              testHandleErrors(fs, 'dir.close', (_1, _2, _3, cb) => {
+              testHandleErrors(fs, 'dir.close', async (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.close(cb) // Node >=15 passes error to callback
+                  await dir.close() // Node >=15.4 returns and rejects a promise
                 } catch (e) {
-                  cb(e) // Node <=14 throws
+                  cb(e) // Node <=15.3 throws
                 }
               }, [], agent))
 
