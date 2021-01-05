@@ -13,7 +13,7 @@ describe('Plugin', () => {
     })
     beforeEach(() => {
       tracer = require('../../dd-trace')
-      agent.load('jest').then(() => {
+      return agent.load('jest').then(() => {
         DatadogJestEnvironment = require(`../../../versions/jest-environment-node@${version}`).get()
       })
     })
