@@ -10,10 +10,14 @@ const codec = msgpack.createCodec({ int64: true })
 describe('dd-trace', () => {
   let tracer
   let agent
+  let config
   let listener
 
   beforeEach(() => {
-    tracer = require('../')
+    config = proxyquire('../src/config', {})
+    tracer = proxyquire('../', {
+      './config': config
+    })
 
     return getPort().then(port => {
       agent = express()

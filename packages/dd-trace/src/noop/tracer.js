@@ -46,9 +46,6 @@ class NoopTracer extends Tracer {
     return ''
   }
 
-  setUrl () {
-  }
-
   _startSpan (name, options) {
     return this._span
   }

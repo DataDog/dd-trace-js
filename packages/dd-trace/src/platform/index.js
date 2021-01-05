@@ -4,8 +4,13 @@ module.exports = {
   use (impl) {
     Object.assign(this, impl)
   },
-
-  configure (config) {
-    this._config = config
+  env () {
+    // need this stub for early config
+  },
+  service () {
+    // need this stub for early config
+  },
+  appVersion () {
+    // need this stub for early config
   }
 }

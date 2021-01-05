@@ -55,7 +55,7 @@
   },
   "dependencies": {
     "@types/node": "^10.12.18",
-    "axios": "^0.19.2",
+    "axios": "^0.21.1",
     "container-info": "^1.0.1",
     "core-js": "^3.6.0",
     "form-data": "^3.0.0",

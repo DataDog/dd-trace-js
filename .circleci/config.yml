@@ -320,9 +320,9 @@ jobs:
         environment:
           - SERVICES=aws-sdk
           - PLUGINS=aws-sdk
-      - image: localstack/localstack
+      - image: localstack/localstack:0.11.2
         environment:
-          - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,redshift:4577,route53:4580,logs:4586
+          - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
           - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - FORCE_NONINTERACTIVE=true
@@ -1025,7 +1025,7 @@ workflows:
       - node-bench-e2e-latest
       - node-amqplib
       - node-amqp10
-      # - node-aws-sdk
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
@@ -1213,7 +1213,7 @@ workflows:
       - node-bench-e2e-latest
       - node-amqplib
       - node-amqp10
-      # - node-aws-sdk
+      - node-aws-sdk
       - node-bluebird
       - node-bunyan
       - node-cassandra
