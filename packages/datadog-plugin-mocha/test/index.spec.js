@@ -32,10 +32,40 @@ const TESTS = [
     status: 'skip'
   },
   {
-    fileName: 'mocha-test-async.js',
-    testName: 'can do async tests',
-    root: 'mocha-test-async',
+    fileName: 'mocha-test-done-pass.js',
+    testName: 'can do passed tests with done',
+    root: 'mocha-test-done-pass',
     status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-done-fail.js',
+    testName: 'can do failed tests with done',
+    root: 'mocha-test-done-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-promise-pass.js',
+    testName: 'can do passed promise tests',
+    root: 'mocha-test-promise-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-promise-fail.js',
+    testName: 'can do failed promise tests',
+    root: 'mocha-test-promise-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-async-pass.js',
+    testName: 'can do passed async tests',
+    root: 'mocha-test-async-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-async-fail.js',
+    testName: 'can do failed async tests',
+    root: 'mocha-test-async-fail',
+    status: 'fail'
   }
 ]
 
