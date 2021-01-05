@@ -20,8 +20,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -45,8 +44,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -70,8 +68,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -95,8 +92,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -120,8 +116,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -147,8 +142,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -174,8 +168,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -201,8 +194,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -226,8 +218,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -251,8 +242,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -276,8 +266,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -301,8 +290,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -326,8 +314,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -352,8 +339,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -378,8 +364,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ],
   [
@@ -404,8 +389,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
       "git.repository_url": "https://github.com/ghactions-repo.git",
-      "git.commit.sha": "ghactions-commit",
-      "git.commit_sha": "ghactions-commit"
+      "git.commit.sha": "ghactions-commit"
     }
   ]
 ]

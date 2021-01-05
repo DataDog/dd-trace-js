@@ -21,8 +21,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -47,8 +46,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -73,8 +71,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -99,8 +96,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -125,8 +121,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -151,8 +146,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -177,8 +171,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -205,8 +198,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -233,8 +225,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -261,8 +252,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -287,8 +277,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -313,8 +302,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -340,8 +328,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -367,8 +354,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -393,8 +379,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -419,8 +404,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -445,8 +429,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -471,8 +454,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -497,8 +479,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -523,8 +504,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ],
   [
@@ -549,8 +529,7 @@
       "ci.pipeline.number": "circleci-pipeline-number",
       "ci.pipeline.url": "circleci-build-url",
       "ci.job.url": "circleci-build-url",
-      "git.commit.sha": "circleci-git-commit",
-      "git.commit_sha": "circleci-git-commit"
+      "git.commit.sha": "circleci-git-commit"
     }
   ]
 ]

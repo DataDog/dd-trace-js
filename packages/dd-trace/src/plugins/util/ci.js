@@ -1,4 +1,6 @@
-const { GIT_BRANCH, GIT_COMMIT_SHA, DEPRECATED_GIT_COMMIT_SHA, GIT_TAG } = require('./git')
+const Url = require('url-parse')
+
+const { GIT_BRANCH, GIT_COMMIT_SHA, GIT_TAG } = require('./git')
 
 const CI_PIPELINE_ID = 'ci.pipeline.id'
 const CI_PIPELINE_NAME = 'ci.pipeline.name'
@@ -8,6 +10,12 @@ const CI_PROVIDER_NAME = 'ci.provider.name'
 const CI_WORKSPACE_PATH = 'ci.workspace_path'
 const GIT_REPOSITORY_URL = 'git.repository_url'
 const CI_JOB_URL = 'ci.job.url'
+
+function addTag (value, tagKey, normalize, targetTags) {
+  if (value) {
+    targetTags[tagKey] = normalize(value)
+  }
+}
 
 function normalizeRef (ref) {
   if (!ref) {
@@ -20,22 +28,11 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   if (repositoryUrl.startsWith('git@')) {
     return repositoryUrl
   }
-  try {
-    const { protocol, hostname, pathname } = new URL(repositoryUrl)
-    return `${protocol}//${hostname}${pathname}`
-  } catch (e) {
-    try {
-      // support for node <=8
-      const url = require('url')
-      const { hostname, pathname, protocol } = url.parse(repositoryUrl)
-      if (!hostname || !pathname || !protocol) {
-        return repositoryUrl
-      }
-      return `${protocol}//${hostname}${pathname}`
-    } catch (e) {
-      return repositoryUrl
-    }
+  const { protocol, hostname, pathname } = new Url(repositoryUrl)
+  if (!protocol || !hostname) {
+    return repositoryUrl
   }
+  return `${protocol}//${hostname}${pathname}`
 }
 
 function resolveTilde (filePath) {
@@ -77,7 +74,6 @@ module.exports = {
         [CI_PIPELINE_URL]: BUILD_URL,
         [CI_PROVIDER_NAME]: 'jenkins',
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
-        [DEPRECATED_GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(JENKINS_GIT_REPOSITORY_URL)
       }
 
@@ -87,9 +83,8 @@ module.exports = {
 
       tags[finalRefKey] = ref
 
-      if (WORKSPACE) {
-        tags[CI_WORKSPACE_PATH] = resolveTilde(WORKSPACE)
-      }
+      addTag(WORKSPACE, CI_WORKSPACE_PATH, resolveTilde, tags)
+
       let finalPipelineName = ''
       if (JOB_NAME) {
         // Job names can contain parameters, e.g. jobName/KEY1=VALUE1,KEY2=VALUE2/branchName
@@ -125,23 +120,14 @@ module.exports = {
         [CI_PIPELINE_NUMBER]: CI_PIPELINE_IID,
         [CI_PROVIDER_NAME]: 'gitlab',
         [GIT_COMMIT_SHA]: CI_COMMIT_SHA,
-        [DEPRECATED_GIT_COMMIT_SHA]: CI_COMMIT_SHA,
         [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(CI_REPOSITORY_URL),
         [CI_JOB_URL]: GITLAB_CI_JOB_URL
       }
 
-      if (CI_COMMIT_TAG) {
-        tags[GIT_TAG] = normalizeRef(CI_COMMIT_TAG)
-      }
-      if (CI_COMMIT_BRANCH) {
-        tags[GIT_BRANCH] = normalizeRef(CI_COMMIT_BRANCH)
-      }
-      if (CI_PROJECT_DIR) {
-        tags[CI_WORKSPACE_PATH] = resolveTilde(CI_PROJECT_DIR)
-      }
-      if (GITLAB_PIPELINE_URL) {
-        tags[CI_PIPELINE_URL] = `${(GITLAB_PIPELINE_URL).replace('/-/pipelines/', '/pipelines/')}`
-      }
+      addTag(CI_COMMIT_TAG, GIT_TAG, normalizeRef, tags)
+      addTag(CI_COMMIT_BRANCH, GIT_BRANCH, normalizeRef, tags)
+      addTag(CI_PROJECT_DIR, CI_WORKSPACE_PATH, resolveTilde, tags)
+      addTag(GITLAB_PIPELINE_URL, CI_PIPELINE_URL, (value) => value.replace('/-/pipelines/', '/pipelines/'), tags)
 
       return tags
     }
@@ -166,21 +152,12 @@ module.exports = {
         [CI_PIPELINE_URL]: CIRCLE_BUILD_URL,
         [CI_PROVIDER_NAME]: 'circleci',
         [GIT_COMMIT_SHA]: CIRCLE_SHA1,
-        [DEPRECATED_GIT_COMMIT_SHA]: CIRCLE_SHA1,
         [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(CIRCLE_REPOSITORY_URL)
       }
 
-      if (CIRCLE_TAG) {
-        tags[GIT_TAG] = normalizeRef(CIRCLE_TAG)
-      } else if (CIRCLE_BRANCH) {
-        tags[GIT_BRANCH] = normalizeRef(CIRCLE_BRANCH)
-      }
-      if (CIRCLE_WORKING_DIRECTORY) {
-        tags[CI_WORKSPACE_PATH] = resolveTilde(CIRCLE_WORKING_DIRECTORY)
-      }
-      if (CIRCLE_BUILD_URL) {
-        tags[CI_JOB_URL] = CIRCLE_BUILD_URL
-      }
+      addTag(CIRCLE_TAG || CIRCLE_BRANCH, CIRCLE_TAG ? GIT_TAG : GIT_BRANCH, normalizeRef, tags)
+      addTag(CIRCLE_WORKING_DIRECTORY, CI_WORKSPACE_PATH, resolveTilde, tags)
+      addTag(CIRCLE_BUILD_URL, CI_JOB_URL, value => value, tags)
 
       return tags
     }
@@ -207,7 +184,6 @@ module.exports = {
         [CI_PIPELINE_URL]: pipelineURL,
         [CI_PROVIDER_NAME]: 'github',
         [GIT_COMMIT_SHA]: GITHUB_SHA,
-        [DEPRECATED_GIT_COMMIT_SHA]: GITHUB_SHA,
         [GIT_REPOSITORY_URL]: repositoryURL,
         [CI_JOB_URL]: pipelineURL
       }
@@ -217,9 +193,7 @@ module.exports = {
 
       tags[finalRefKey] = normalizeRef(finalRef)
 
-      if (GITHUB_WORKSPACE) {
-        tags[CI_WORKSPACE_PATH] = resolveTilde(GITHUB_WORKSPACE)
-      }
+      addTag(GITHUB_WORKSPACE, CI_WORKSPACE_PATH, resolveTilde, tags)
 
       return tags
     }

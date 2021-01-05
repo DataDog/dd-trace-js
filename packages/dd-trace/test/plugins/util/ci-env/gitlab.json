@@ -20,8 +20,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -45,8 +44,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -72,8 +70,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -99,8 +96,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -126,8 +122,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -155,8 +150,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -184,8 +178,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -213,8 +206,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -240,8 +232,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -265,8 +256,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -290,8 +280,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -317,8 +306,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -344,8 +332,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -371,8 +358,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -398,8 +384,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -425,8 +410,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -452,8 +436,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -479,8 +462,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -506,8 +488,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -533,8 +514,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ],
   [
@@ -560,8 +540,7 @@
       "ci.pipeline.name": "gitlab-pipeline-name",
       "ci.pipeline.number": "gitlab-pipeline-number",
       "ci.job.url": "gitlab-job-url",
-      "git.commit.sha": "gitlab-git-commit",
-      "git.commit_sha": "gitlab-git-commit"
+      "git.commit.sha": "gitlab-git-commit"
     }
   ]
 ]

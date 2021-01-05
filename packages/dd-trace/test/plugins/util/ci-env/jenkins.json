@@ -19,8 +19,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -43,8 +42,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -69,8 +67,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -95,8 +92,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -121,8 +117,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -149,8 +144,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -177,8 +171,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -205,8 +198,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -231,8 +223,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -257,8 +248,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -283,8 +273,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -309,8 +298,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -335,8 +323,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -361,8 +348,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -385,8 +371,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -409,8 +394,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -435,8 +419,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -461,8 +444,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -487,8 +469,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -513,8 +494,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ],
   [
@@ -539,8 +519,7 @@
       "ci.pipeline.id": "jenkins-pipeline-id",
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "jenkins-pipeline-url",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.commit_sha": "jenkins-git-commit"
+      "git.commit.sha": "jenkins-git-commit"
     }
   ]
 ]
