@@ -76,19 +76,19 @@ services:
     ports:
       - "127.0.0.1:8085:8085"
   localstack:
-      image: localstack/localstack
-      ports:
-        - "127.0.0.1:4569:4569"
-        - "127.0.0.1:4568:4568"
-        - "127.0.0.1:4572:4572"
-        - "127.0.0.1:4576:4576"
-        - "127.0.0.1:4575:4575"
-        - "127.0.0.1:4580:4580"
-        - "127.0.0.1:4586:4586"
-        - "127.0.0.1:4577:4577"
-      environment:
-        - LOCALSTACK_SERVICES=dynamodb:4569,kinesis:4568,s3:4572,sqs:4576,sns:4575,redshift:4577,route53:4580,logs:4586
-        - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-        - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-        - FORCE_NONINTERACTIVE=true
-        - START_WEB=0
+    image: localstack/localstack:0.11.2
+    ports:
+      - "127.0.0.1:4569:4569" # DynamoDB
+      - "127.0.0.1:4568:4568" # Kinesis
+      - "127.0.0.1:4572:4572" # S3
+      - "127.0.0.1:4576:4576" # SQS
+      - "127.0.0.1:4575:4575" # SNS
+      - "127.0.0.1:4580:4580" # Route53
+      - "127.0.0.1:4586:4586" # CloudWatch Logs
+      - "127.0.0.1:4577:4577" # Redshift
+    environment:
+      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
+      - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - FORCE_NONINTERACTIVE=true
+      - START_WEB=0
