@@ -21,7 +21,7 @@ function createWrapProducer (tracer, config) {
         currentSpan.addTags({
           'resource.name': topic,
           'kafka.topic': topic,
-          'kafka.batch.size': messages.length
+          'kafka.batch_size': messages.length
         })
 
         for (const message of messages) {

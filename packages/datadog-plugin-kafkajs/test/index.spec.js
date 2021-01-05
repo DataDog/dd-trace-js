@@ -39,7 +39,7 @@ describe('Plugin', () => {
                 'component': 'kafkajs'
               },
               metrics: {
-                'kafka.batch.size': messages.length
+                'kafka.batch_size': messages.length
               },
               resource: testTopic,
               error: 0
