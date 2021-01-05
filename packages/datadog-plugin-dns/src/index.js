@@ -1,7 +1,14 @@
 'use strict'
 
+const opentracing = require("opentracing");
+const constants = require("../../dd-trace/src/constants")
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
+
+const Reference = opentracing.Reference
+
+const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
+const REFERENCE_NOOP = constants.REFERENCE_NOOP
 
 const rrtypes = {
   resolveAny: 'ANY',
@@ -25,7 +32,7 @@ function createWrapLookup (tracer, config) {
       const span = startSpan(tracer, config, 'dns.lookup', {
         'resource.name': hostname,
         'dns.hostname': hostname
-      })
+      }, isIP(hostname))
 
       wrapArgs(span, arguments, (e, address) => {
         span.setTag('dns.address', address)
@@ -99,10 +106,13 @@ function createWrapReverse (tracer, config) {
   }
 }
 
-function startSpan (tracer, config, operation, tags) {
+function startSpan (tracer, config, operation, tags, noop) {
   const childOf = tracer.scope().active()
+  const type = noop ? REFERENCE_NOOP : REFERENCE_CHILD_OF
   const span = tracer.startSpan(operation, {
-    childOf,
+    references: [
+      new Reference(type, childOf)
+    ],
     tags: Object.assign({
       'span.kind': 'client',
       'service.name': config.service || `${tracer._service}-dns`
@@ -137,7 +147,7 @@ function wrapResolver (tracer, config, rrtype, args) {
     'resource.name': `${rrtype} ${hostname}`,
     'dns.hostname': hostname,
     'dns.rrtype': rrtype
-  })
+  }, isIP(hostname))
 
   wrapArgs(span, args)
 
@@ -158,6 +168,36 @@ function unpatchResolveShorthands (shim, prototype) {
     .forEach(method => {
       shim.unwrap(prototype, method)
     })
+}
+
+// IPv4 Segment
+const v4Seg = '(?:[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
+const v4Str = `(${v4Seg}[.]){3}${v4Seg}`
+const IPv4Reg = new RegExp(`^${v4Str}$`)
+
+// IPv6 Segment
+const v6Seg = '(?:[0-9a-fA-F]{1,4})';
+const IPv6Reg = new RegExp('^(' +
+  `(?:${v6Seg}:){7}(?:${v6Seg}|:)|` +
+  `(?:${v6Seg}:){6}(?:${v4Str}|:${v6Seg}|:)|` +
+  `(?:${v6Seg}:){5}(?::${v4Str}|(:${v6Seg}){1,2}|:)|` +
+  `(?:${v6Seg}:){4}(?:(:${v6Seg}){0,1}:${v4Str}|(:${v6Seg}){1,3}|:)|` +
+  `(?:${v6Seg}:){3}(?:(:${v6Seg}){0,2}:${v4Str}|(:${v6Seg}){1,4}|:)|` +
+  `(?:${v6Seg}:){2}(?:(:${v6Seg}){0,3}:${v4Str}|(:${v6Seg}){1,5}|:)|` +
+  `(?:${v6Seg}:){1}(?:(:${v6Seg}){0,4}:${v4Str}|(:${v6Seg}){1,6}|:)|` +
+  `(?::((?::${v6Seg}){0,5}:${v4Str}|(?::${v6Seg}){1,7}|:))` +
+')(%[0-9a-zA-Z-.:]{1,})?$')
+
+function isIPv4(s) {
+  return IPv4Reg.test(s)
+}
+
+function isIPv6(s) {
+  return IPv6Reg.test(s)
+}
+
+function isIP(s) {
+  return isIPv4(s) || isIPv6(s)
 }
 
 module.exports = [
