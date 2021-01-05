@@ -27,10 +27,7 @@ ddb['create'] = {
     ReadCapacityUnits: 1,
     WriteCapacityUnits: 1
   },
-  TableName: 'CUSTOMER_LIST',
-  StreamSpecification: {
-    StreamEnabled: false
-  }
+  TableName: 'CUSTOMER_LIST'
 }
 
 ddb['put'] = {
