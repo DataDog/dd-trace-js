@@ -512,6 +512,7 @@ interface Plugins {
   "http": plugins.http;
   "http2": plugins.http2;
   "ioredis": plugins.ioredis;
+  "jest": plugins.jest;
   "knex": plugins.knex;
   "koa": plugins.koa;
   "limitd-client": plugins.limitd_client;
@@ -991,6 +992,12 @@ declare namespace plugins {
      */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
   }
+
+  /**
+   * This plugin automatically instruments the
+   * [jest](https://github.com/facebook/jest) module.
+   */
+  interface jest extends Integration {}
 
   /**
    * This plugin patches the [knex](https://knexjs.org/)

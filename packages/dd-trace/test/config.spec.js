@@ -13,7 +13,7 @@ describe('Config', () => {
 
     Config = proxyquire('../src/config', {
       './platform': platform
-    })
+    }).constructor
   })
 
   it('should initialize with the correct defaults', () => {
@@ -409,5 +409,67 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
+  })
+
+  context('configure', () => {
+    it('should appropriately set new values', () => {
+      const config = new Config()
+
+      config.configure({
+        enabled: true,
+        debug: false,
+        protocolVersion: '0.5',
+        analytics: false,
+        site: 'datadoghq.com',
+        hostname: 'server',
+        port: 7777,
+        dogstatsd: {
+          port: 8888
+        },
+        runtimeMetrics: false,
+        reportHostname: false,
+        service: 'test',
+        version: '1.0.0',
+        env: 'development',
+        clientToken: '789',
+        tags: {
+          foo: 'foo'
+        }
+      })
+
+      expect(config).to.have.property('enabled', true)
+      expect(config).to.have.property('debug', false)
+      expect(config).to.have.property('protocolVersion', '0.5')
+      expect(config).to.have.property('analytics', false)
+      expect(config).to.have.nested.property('url.hostname', 'server')
+      expect(config).to.have.nested.property('url.port', '7777')
+      expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
+      expect(config).to.have.nested.property('dogstatsd.port', '8888')
+      expect(config).to.have.property('site', 'datadoghq.com')
+      expect(config).to.have.property('runtimeMetrics', false)
+      expect(config).to.have.property('reportHostname', false)
+      expect(config).to.have.property('service', 'test')
+      expect(config).to.have.property('version', '1.0.0')
+      expect(config).to.have.property('env', 'development')
+      expect(config).to.have.property('clientToken', '789')
+      expect(config.tags).to.include({ foo: 'foo' })
+      expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
+    })
+
+    it('should fire the update event twice once configured', (done) => {
+      platform.env.withArgs('DD_SERVICE').returns('test')
+      const services = []
+      const config = new Config()
+      config.retroOn('update', config2 => {
+        expect(config2).to.equal(config)
+        services.push(config.service)
+        if (services.length === 2) {
+          expect(services[0]).to.equal('test')
+          expect(services[1]).to.equal('test2')
+          done()
+        }
+      })
+      config.configure({ service: 'test2' })
+    })
   })
 })

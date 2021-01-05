@@ -18,8 +18,14 @@ describe('PrioritySampler', () => {
   let sampler
   let context
   let span
+  let config
 
   beforeEach(() => {
+    config = proxyquire('../src/config', {})
+    config.configure({
+      env: 'test'
+    })
+
     context = {
       _tags: {},
       _sampling: {}
@@ -48,10 +54,11 @@ describe('PrioritySampler', () => {
     Sampler.withArgs(0.5).returns(sampler)
 
     PrioritySampler = proxyquire('../src/priority_sampler', {
-      './sampler': Sampler
+      './sampler': Sampler,
+      './config': config
     })
 
-    prioritySampler = new PrioritySampler('test')
+    prioritySampler = new PrioritySampler()
   })
 
   describe('validate', () => {
@@ -143,7 +150,13 @@ describe('PrioritySampler', () => {
     })
 
     it('should support a global sample rate', () => {
-      prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
+      config.configure({
+        env: 'test',
+        ingestion: {
+          sampleRate: 0.5
+        }
+      })
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -158,12 +171,19 @@ describe('PrioritySampler', () => {
     it('should support a sample rate from a rule on service as string', () => {
       context._tags['service.name'] = 'test'
 
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, service: 'foo' },
-          { sampleRate: 1, service: 'test' }
-        ]
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            rules: [
+              { sampleRate: 0, service: 'foo' },
+              { sampleRate: 1, service: 'test' }
+            ]
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -172,12 +192,19 @@ describe('PrioritySampler', () => {
     it('should support a sample rate from a rule on service as string as regex', () => {
       context._tags['service.name'] = 'test'
 
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, service: /fo/ },
-          { sampleRate: 1, service: /tes/ }
-        ]
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            rules: [
+              { sampleRate: 0, service: /fo/ },
+              { sampleRate: 1, service: /tes/ }
+            ]
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -187,12 +214,19 @@ describe('PrioritySampler', () => {
       context._name = 'foo'
       context._tags['service.name'] = 'test'
 
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, name: 'bar' },
-          { sampleRate: 1, name: 'foo' }
-        ]
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            rules: [
+              { sampleRate: 0, name: 'bar' },
+              { sampleRate: 1, name: 'foo' }
+            ]
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -202,12 +236,19 @@ describe('PrioritySampler', () => {
       context._name = 'foo'
       context._tags['service.name'] = 'test'
 
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, name: /ba/ },
-          { sampleRate: 1, name: /fo/ }
-        ]
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            rules: [
+              { sampleRate: 0, name: /ba/ },
+              { sampleRate: 1, name: /fo/ }
+            ]
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -216,22 +257,34 @@ describe('PrioritySampler', () => {
     it('should fallback to the global sample rate', () => {
       context._name = 'foo'
 
-      prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rules: [
-          { sampleRate: 0, name: 'bar' }
-        ]
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            rules: [
+              { sampleRate: 0, name: 'bar' }
+            ]
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
     })
 
     it('should support a rate limit', () => {
-      prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rateLimit: 1
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            sampleRate: 1,
+            rateLimit: 1
+          }
+        }
       })
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -244,10 +297,17 @@ describe('PrioritySampler', () => {
     })
 
     it('should support disabling the rate limit', () => {
-      prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rateLimit: -1
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            sampleRate: 1,
+            rateLimit: -1
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -266,9 +326,16 @@ describe('PrioritySampler', () => {
     })
 
     it('should add metrics for rule sample rate', () => {
-      prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            sampleRate: 0
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(span)
 
       expect(context._tags).to.have.property('_dd.rule_psr', 0)
@@ -276,10 +343,17 @@ describe('PrioritySampler', () => {
     })
 
     it('should add metrics for rate limiter sample rate', () => {
-      prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.5,
-        rateLimit: 1
+      config.configure({
+        env: 'test',
+        experimental: {
+          sampler: {
+            sampleRate: 0.5,
+            rateLimit: 1
+          }
+        }
       })
+
+      prioritySampler = new PrioritySampler()
       prioritySampler.sample(span)
 
       expect(context._tags).to.have.property('_dd.rule_psr', 0.5)
