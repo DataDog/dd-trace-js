@@ -80,7 +80,6 @@ node-bench-profiler-base: &node-bench-profiler-base
         command: yarn bench:profiler
 
 node-plugin-base: &node-plugin-base
-  <<: *machine_executor
   docker:
     - image: node:8
   working_directory: ~/dd-trace-js
@@ -340,7 +339,7 @@ jobs:
           - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - FORCE_NONINTERACTIVE=true
           - START_WEB=0
-          - LAMBDA_EXECUTOR=docker
+          - LAMBDA_EXECUTOR=local
           - DOCKER_HOST=unix:///var/run/docker.sock
 
   node-bluebird:
