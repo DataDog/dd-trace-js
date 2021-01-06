@@ -156,6 +156,9 @@ node-aws-sdk-base: &node-aws-sdk-base
     - run:
         name: Unit tests
         command: PLUGINS=aws-sdk yarn test:plugins:ci
+    - run:
+        name: logs
+        command: docker-compose logs localstack serverless_localstack
     - store_artifacts:
         path: ./coverage/lcov-report
 
