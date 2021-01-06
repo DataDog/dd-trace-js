@@ -144,7 +144,7 @@ node-aws-sdk-base: &node-aws-sdk-base
     #       - ./yarn.lock
     - run:
         name: Set up localstack
-        command: docker-compose up localstack serverless_localstack -d
+        command: docker-compose up -d localstack serverless_localstack
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
