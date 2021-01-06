@@ -86,8 +86,12 @@ services:
       - "127.0.0.1:4580:4580" # Route53
       - "127.0.0.1:4586:4586" # CloudWatch Logs
       - "127.0.0.1:4577:4577" # Redshift
-      - "127.0.0.1:4574:4574" # Lambda
-
+    environment:
+      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
+      - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - FORCE_NONINTERACTIVE=true
+      - START_WEB=0
   serverless_localstack:
     image: localstack/localstack:0.12.4
     ports:
@@ -98,7 +102,6 @@ services:
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
-      - DEBUG=true
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:

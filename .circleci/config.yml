@@ -327,6 +327,17 @@ jobs:
           - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - FORCE_NONINTERACTIVE=true
           - START_WEB=0
+      - image: localstack/localstack:0.12.4
+        environment:
+          - LOCALSTACK_SERVICES=serverless
+          - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          - FORCE_NONINTERACTIVE=true
+          - START_WEB=0
+          - LAMBDA_EXECUTOR=docker
+          - DOCKER_HOST=unix:///var/run/docker.sock
+        volumes:
+          - "/var/run/docker.sock:/var/run/docker.sock"
 
   node-bluebird:
     <<: *node-plugin-base
