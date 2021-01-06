@@ -66,6 +66,7 @@ function startReceiveSpan (tracer, config, link) {
     tags: {
       'resource.name': ['receive', source].filter(v => v).join(' '),
       'span.kind': 'consumer',
+      'span.type': 'worker',
       'amqp.link.source.address': source,
       'amqp.link.role': 'receiver'
     }
@@ -83,7 +84,6 @@ function addTags (tracer, config, span, link = {}) {
 
   span.addTags({
     'service.name': config.service || `${tracer._service}-amqp`,
-    'span.type': 'worker',
     'amqp.link.name': link.name,
     'amqp.link.handle': link.handle,
     'amqp.connection.host': address.host,

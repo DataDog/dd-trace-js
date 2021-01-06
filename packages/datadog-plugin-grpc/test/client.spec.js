@@ -88,7 +88,8 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getUnary'
+                resource: '/test.TestService/getUnary',
+                type: 'http'
               })
 
               expect(traces[0][0].meta).to.include({
@@ -123,7 +124,8 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getServerStream'
+                resource: '/test.TestService/getServerStream',
+                type: 'http'
               })
 
               expect(traces[0][0].meta).to.include({
@@ -156,7 +158,8 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/getClientStream'
+                resource: '/test.TestService/getClientStream',
+                type: 'http'
               })
 
               expect(traces[0][0].meta).to.include({
@@ -189,7 +192,8 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.request',
                 service: 'test-grpc-client',
-                resource: '/test.TestService/get_Bidi'
+                resource: '/test.TestService/get_Bidi',
+                type: 'http'
               })
               expect(traces[0][0].meta).to.have.property('grpc.method.name', 'get_Bidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')

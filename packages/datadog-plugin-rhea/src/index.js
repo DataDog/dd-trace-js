@@ -64,6 +64,7 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
         const name = getResourceNameFromMessage(msgObj)
         const childOf = getAnnotations(msgObj, tracer)
         return tracer.trace('amqp.receive', {
+          type: 'worker',
           tags: {
             'component': 'rhea',
             'resource.name': name,
