@@ -21,7 +21,7 @@ class Lambda {
         request.params = {}
       }
 
-      const isSyncInvocation = !!request.params.InvocationType ||
+      const isSyncInvocation = !request.params.InvocationType ||
         request.params.InvocationType === 'RequestResponse'
 
       if (isSyncInvocation) {
@@ -40,7 +40,7 @@ class Lambda {
             } else {
               existingContext.custom = { _datadog }
             }
-
+            // console.log('existingContext', existingContext)
             const newContextBase64 = Buffer.from(JSON.stringify(existingContext)).toString('base64')
             request.params.ClientContext = newContextBase64
           }

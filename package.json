@@ -108,6 +108,7 @@
     "glob": "^7.1.6",
     "graphql": "0.13.2",
     "int64-buffer": "^0.1.9",
+    "jszip": "^3.5.0",
     "karma": "^4.3.0",
     "karma-browserstack-launcher": "^1.5.1",
     "karma-chrome-launcher": "^3.1.0",
