@@ -148,14 +148,7 @@ node-aws-sdk-base: &node-aws-sdk-base
         background: true
     - run:
           name: Waiting for localstack to be ready
-          command: |
-            for i in `seq 1 10`;
-            do
-              sleep 1
-              nc -z localhost 4566 && echo Success && exit 0
-              echo -n .
-            done
-            echo Failed waiting for localstack && exit 1
+          command: sleep 20
     - run:
         name: Unit tests
         command: PLUGINS=aws-sdk yarn test:plugins:ci
