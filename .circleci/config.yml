@@ -126,22 +126,22 @@ node-aws-sdk-base: &node-aws-sdk-base
         command: |
           curl -o- -L https://yarnpkg.com/install.sh | bash
           echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> $BASH_ENV
-    - run:
-        name: Set working directory permission
-        command: chmod -R 777 ~/dd-trace-js
-    - *yarn-versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    # - run:
+    #     name: Set working directory permission
+    #     command: chmod -R 777 ~/dd-trace-js
+    # - *yarn-versions
+    # - &restore-yarn-cache
+    #   restore_cache:
+    #     key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
     - run:
         name: Install dependencies
         command: yarn install
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
+    # - &save-yarn-cache
+    #   save_cache:
+    #     key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    #     paths:
+    #       - ./node_modules
+    #       - ./yarn.lock
     - run:
         name: Set up localstack
         command: docker-compose up localstack serverless_localstack -d
