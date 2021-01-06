@@ -106,7 +106,10 @@ services:
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
       - LAMBDA_EXECUTOR=docker
+      - LAMBDA_REMOTE_DOCKER=true
       - DOCKER_HOST=unix:///var/run/docker.sock
       - DEBUG=true
+      - DATA_DIR=./tmp/localstack/data
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./tmp/localstack:/tmp/localstack"
