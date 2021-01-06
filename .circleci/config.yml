@@ -144,7 +144,15 @@ node-aws-sdk-base: &node-aws-sdk-base
     #       - ./yarn.lock
     - run:
         name: Set up localstack
-        command: docker-compose up localstack serverless_localstack
+        command: docker-compose up -d localstack serverless_localstack
+    - run:
+        name: install dockerize
+        command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && sudo tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+        environment:
+          DOCKERIZE_VERSION: v0.3.0
+    - run:
+        name: Wait for localstack
+        command: dockerize -wait tcp://localhost:4566 -timeout 1m
     - run:
         name: Unit tests
         command: PLUGINS=aws-sdk yarn test:plugins:ci
