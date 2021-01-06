@@ -460,6 +460,20 @@ jobs:
           - PLUGINS=google-cloud-pubsub
       - image: knarz/pubsub-emulator
 
+  node-kafkajs:
+    <<: *node-plugin-base
+    docker:
+      - image: node:10
+        environment:
+          - SERVICES=kafka
+          - PLUGINS=kafkajs
+      - image: wurstmeister/zookeeper
+      - image: wurstmeister/kafka
+        environment:
+          KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+          KAFKA_CREATE_TOPICS: "test-topic:1:1"
+          KAFKA_ZOOKEEPER_CONNECT: 127.0.0.1:2181
+
   node-graphql:
     <<: *node-plugin-base
     docker:
@@ -1035,6 +1049,7 @@ workflows:
       - node-http
       - node-http2
       - node-jest
+      - node-kafkajs
       - node-knex
       - node-koa
       # - node-limitd-client
@@ -1222,6 +1237,7 @@ workflows:
       - node-http
       - node-http2
       - node-jest
+      - node-kafkajs
       - node-knex
       - node-koa
       # - node-limitd-client

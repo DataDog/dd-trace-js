@@ -513,6 +513,7 @@ interface Plugins {
   "http2": plugins.http2;
   "ioredis": plugins.ioredis;
   "jest": plugins.jest;
+  "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
   "limitd-client": plugins.limitd_client;
@@ -1010,6 +1011,12 @@ declare namespace plugins {
    * [koa](https://koajs.com/) module.
    */
   interface koa extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the 
+   * [kafkajs](https://kafka.js.org/) module.
+   */
+  interface kafkajs extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the

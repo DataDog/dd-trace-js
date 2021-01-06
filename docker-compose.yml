@@ -1,16 +1,16 @@
-version: '2'
+version: "2"
 services:
   couchbase:
     image: rishabhdev/couchbase-server-sandbox:latest
     ports:
-      - '127.0.0.1:8091-8095:8091-8095'
-      - '127.0.0.1:11210:11210'
+      - "127.0.0.1:8091-8095:8091-8095"
+      - "127.0.0.1:11210:11210"
   postgres:
     image: postgres:9.5-alpine
     environment:
       - POSTGRES_PASSWORD=postgres
     ports:
-      - '127.0.0.1:5432:5432'
+      - "127.0.0.1:5432:5432"
   mssql:
     image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
     environment:
@@ -92,3 +92,13 @@ services:
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
+  zookeeper:
+    image: wurstmeister/zookeeper
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - "127.0.0.1:9092:9092"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+      KAFKA_CREATE_TOPICS: "test-topic:1:1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
