@@ -1,6 +1,5 @@
 'use strict'
 
-const http = require('http')
 const getPort = require('get-port')
 const agent = require('../agent')
 const types = require('../../../../../ext/types')
@@ -34,22 +33,22 @@ describe('plugins/util/web', () => {
   let tags
 
   beforeEach(() => {
-    req = Object.assign(Object.create(http.IncomingMessage.prototype), {
+    req = {
       method: 'GET',
       headers: {
         'host': 'localhost',
         'date': 'now'
       },
       connection: {}
-    })
+    }
     end = sinon.stub()
-    const respProtoWithEnd = Object.assign(Object.create(http.ServerResponse.prototype), { end })
-    res = Object.assign(Object.create(respProtoWithEnd), {
+    res = {
+      end,
       getHeader: sinon.stub(),
       getHeaders: sinon.stub().returns({}),
       setHeader: sinon.spy(),
       writeHead: () => {}
-    })
+    }
     res.getHeader.withArgs('server').returns('test')
     config = { hooks: {} }
 
