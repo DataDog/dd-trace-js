@@ -144,7 +144,8 @@ node-aws-sdk-base: &node-aws-sdk-base
     #       - ./yarn.lock
     - run:
         name: Set up localstack
-        command: docker-compose up -d localstack serverless_localstack
+        command: docker-compose up localstack serverless_localstack
+        background: true
     - run:
         name: install dockerize
         command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && sudo tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
@@ -156,9 +157,6 @@ node-aws-sdk-base: &node-aws-sdk-base
     - run:
         name: Unit tests
         command: PLUGINS=aws-sdk yarn test:plugins:ci
-    - run:
-        name: logs
-        command: docker-compose logs localstack serverless_localstack
     - store_artifacts:
         path: ./coverage/lcov-report
 
