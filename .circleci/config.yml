@@ -109,10 +109,18 @@ node-aws-sdk-base: &node-aws-sdk-base
   machine:
     enabled: true
     docker_layer_caching: true
-    image: node:8
+    image: ubuntu-1604:201903-01
   working_directory: ~/dd-trace-js
   steps:
     - checkout
+    - run:
+      name: Install node 8
+      command: |
+        echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
+        echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+        export NVM_DIR="/opt/circleci/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        nvm install 8 && nvm use 8 && nvm alias default 8
     - *yarn-versions
     - &restore-yarn-cache
       restore_cache:
