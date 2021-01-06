@@ -114,13 +114,13 @@ node-aws-sdk-base: &node-aws-sdk-base
   steps:
     - checkout
     - run:
-      name: Install node 8
-      command: |
-        echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
-        echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
-        export NVM_DIR="/opt/circleci/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-        nvm install 8 && nvm use 8 && nvm alias default 8
+        name: Install node 8
+        command: |
+          echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
+          echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+          export NVM_DIR="/opt/circleci/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 8 && nvm use 8 && nvm alias default 8
     - *yarn-versions
     - &restore-yarn-cache
       restore_cache:
