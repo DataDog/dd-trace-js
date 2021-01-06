@@ -17,7 +17,7 @@ const {
 const SPAN_TYPE = 'span.type'
 const RESOURCE_NAME = 'resource.name'
 
-function getTestMetadata () {
+function getCommonMetadata () {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
   const gitMetadata = getGitMetadata()
@@ -29,17 +29,29 @@ function getTestMetadata () {
   }
 }
 
-function createWrapRunTest (tracer, testMetadata) {
+function getTestSpanMetadata (tracer, test) {
+  const childOf = tracer.extract('text_map', {
+    'x-datadog-trace-id': id().toString(10),
+    'x-datadog-parent-id': '0000000000000000',
+    'x-datadog-sampled': 1
+  })
+  const { file: testSuite, title: testName } = test
+  return {
+    childOf,
+    fullTitle: test.fullTitle(),
+    [TEST_TYPE]: 'test',
+    [TEST_NAME]: testName,
+    [TEST_SUITE]: testSuite,
+    [TEST_STATUS]: 'skip',
+    [SAMPLING_RULE_DECISION]: 1,
+    [SAMPLING_PRIORITY]: AUTO_KEEP
+  }
+}
+
+function createWrapRunTest (tracer, commonMetadata) {
   return function wrapRunTest (runTest) {
     return async function runTestWithTrace () {
-      const childOf = tracer.extract('text_map', {
-        'x-datadog-trace-id': id().toString(10),
-        'x-datadog-parent-id': '0000000000000000',
-        'x-datadog-sampled': 1
-      })
-      const { file: testSuite, title: testName } = this.test
       let specFunction = this.test.fn
-
       if (specFunction.length) {
         specFunction = promisify(specFunction)
         // otherwise you have to explicitly call done()
@@ -47,33 +59,30 @@ function createWrapRunTest (tracer, testMetadata) {
         this.test.sync = true
       }
 
+      const { childOf, fullTitle, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test)
+
       this.test.fn = tracer.wrap(
         'mocha.test',
         {
           type: 'test',
           childOf,
-          resource: this.test.fullTitle(),
+          resource: fullTitle,
           tags: {
-            [TEST_TYPE]: 'test',
-            [TEST_NAME]: testName,
-            [TEST_SUITE]: testSuite,
-            [SAMPLING_RULE_DECISION]: 1,
-            [SAMPLING_PRIORITY]: AUTO_KEEP,
-            ...testMetadata
+            ...testSpanMetadata,
+            ...commonMetadata
           }
         },
         async () => {
+          const activeSpan = tracer.scope().active()
           let result
           try {
             result = await specFunction()
-            tracer.scope().active().setTag(TEST_STATUS, 'pass')
+            activeSpan.setTag(TEST_STATUS, 'pass')
           } catch (error) {
-            tracer.scope().active().setTag(TEST_STATUS, 'fail')
+            activeSpan.setTag(TEST_STATUS, 'fail')
             throw error
           } finally {
-            tracer
-              .scope()
-              .active()
+            activeSpan
               .context()
               ._trace.started.forEach((span) => {
                 span.finish()
@@ -88,33 +97,25 @@ function createWrapRunTest (tracer, testMetadata) {
 }
 
 // Necessary to get the skipped tests, that do not go through runTest
-function createWrapRunTests (tracer, testMetadata) {
+function createWrapRunTests (tracer, commonMetadata) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
       runTests.apply(this, arguments)
       this.suite.tests.forEach(test => {
-        const { pending: isSkipped, file: testSuite, title: testName } = test
+        const { pending: isSkipped } = test
         if (!isSkipped) {
           return
         }
-        const childOf = tracer.extract('text_map', {
-          'x-datadog-trace-id': id().toString(10),
-          'x-datadog-parent-id': '0000000000000000',
-          'x-datadog-sampled': 1
-        })
+        const { childOf, fullTitle, ...testSpanMetadata } = getTestSpanMetadata(tracer, test)
+
         tracer
           .startSpan('mocha.test', {
             childOf,
             tags: {
               [SPAN_TYPE]: 'test',
-              [RESOURCE_NAME]: test.fullTitle(),
-              [TEST_TYPE]: 'test',
-              [TEST_NAME]: testName,
-              [TEST_SUITE]: testSuite,
-              [TEST_STATUS]: 'skip',
-              [SAMPLING_RULE_DECISION]: 1,
-              [SAMPLING_PRIORITY]: AUTO_KEEP,
-              ...testMetadata
+              [RESOURCE_NAME]: fullTitle,
+              ...testSpanMetadata,
+              ...commonMetadata
             }
           })
           .finish()
@@ -129,9 +130,9 @@ module.exports = [
     versions: ['>=5.2.0'],
     file: 'lib/runner.js',
     patch (Runner, tracer) {
-      const testMetadata = getTestMetadata()
-      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, testMetadata))
-      this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, testMetadata))
+      const commonMetadata = getCommonMetadata()
+      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, commonMetadata))
+      this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, commonMetadata))
     },
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
