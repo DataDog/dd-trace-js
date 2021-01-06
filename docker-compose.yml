@@ -107,5 +107,6 @@ services:
       - START_WEB=0
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - DEBUG=true
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
