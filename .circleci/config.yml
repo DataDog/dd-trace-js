@@ -121,6 +121,11 @@ node-aws-sdk-base: &node-aws-sdk-base
           export NVM_DIR="/opt/circleci/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           nvm install 8 && nvm use 8 && nvm alias default 8
+    - run:
+        name: Install yarn
+        command: |
+          curl -o- -L https://yarnpkg.com/install.sh | bash
+          echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> $BASH_ENV
     - *yarn-versions
     - &restore-yarn-cache
       restore_cache:
