@@ -7,42 +7,6 @@ machine_executor: &machine_executor
   machine:
     image: ubuntu-1604:201903-01
 
-node-aws-sdk-base: &node-aws-sdk-base
-  machine:
-    enabled: true
-    docker_layer_caching: true
-    image: ubuntu-1604:201903-01
-  working_directory: ~/dd-trace-js
-  steps:
-    - checkout
-    - run:
-        name: Install node 8
-        command: |
-          echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
-          echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
-          export NVM_DIR="/opt/circleci/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          nvm install 8 && nvm use 8 && nvm alias default 8
-    - checkout
-    - *yarn-versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
-        name: Install dependencies
-        command: yarn install
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
-    - run:
-        name: Unit tests
-        command: yarn test:plugins:ci
-    - store_artifacts:
-        path: ./coverage/lcov-report
-
 node-core-base: &node-core-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -120,6 +84,33 @@ node-plugin-base: &node-plugin-base
     - image: node:8
   working_directory: ~/dd-trace-js
   resource_class: small
+  steps:
+    - checkout
+    - *yarn-versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - run:
+        name: Install dependencies
+        command: yarn install
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
+    - run:
+        name: Unit tests
+        command: yarn test:plugins:ci
+    - store_artifacts:
+        path: ./coverage/lcov-report
+
+node-aws-sdk-base: &node-aws-sdk-base
+  machine:
+    enabled: true
+    docker_layer_caching: true
+    image: node:8
+  working_directory: ~/dd-trace-js
   steps:
     - checkout
     - *yarn-versions
