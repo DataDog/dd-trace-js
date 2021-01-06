@@ -3,6 +3,10 @@ version: 2.1
 orbs:
   win: circleci/windows@1.0.0
 
+machine_executor: &machine_executor
+  machine:
+    image: ubuntu-1604:201903-01
+
 node-core-base: &node-core-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -76,6 +80,7 @@ node-bench-profiler-base: &node-bench-profiler-base
         command: yarn bench:profiler
 
 node-plugin-base: &node-plugin-base
+  <<: *machine_executor
   docker:
     - image: node:8
   working_directory: ~/dd-trace-js
