@@ -519,6 +519,7 @@ interface Plugins {
   "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
+  "mocha": plugins.mocha;
   "mongodb-core": plugins.mongodb_core;
   "mongoose": plugins.mongoose;
   "mysql": plugins.mysql;
@@ -1035,6 +1036,12 @@ declare namespace plugins {
    * [microgateway-core](https://github.com/apigee/microgateway-core) module.
    */
   interface microgateway_core extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [mocha](https://mochajs.org/) module.
+   */
+  interface mocha extends Integration {}
 
   /**
    * This plugin automatically instruments the

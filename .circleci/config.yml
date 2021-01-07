@@ -559,6 +559,13 @@ jobs:
         environment:
           - PLUGINS=microgateway-core
 
+  node-mocha:
+    <<: *node-plugin-base
+    docker:
+      - image: node
+        environment:
+          - PLUGINS=mocha
+
   node-tedious:
     <<: *node-plugin-base
     docker:
@@ -1055,6 +1062,7 @@ workflows:
       # - node-limitd-client
       - node-memcached
       - node-microgateway-core
+      - node-mocha
       - node-mongodb-core
       - node-mongoose
       - node-mysql
@@ -1243,6 +1251,7 @@ workflows:
       # - node-limitd-client
       - node-memcached
       - node-microgateway-core
+      - node-mocha
       - node-mongodb-core
       - node-mongoose
       - node-mysql
