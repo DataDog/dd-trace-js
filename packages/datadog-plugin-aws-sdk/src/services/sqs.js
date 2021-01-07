@@ -3,6 +3,18 @@
 const log = require('../../../dd-trace/src/log')
 
 class Sqs {
+  isEnabled (config, request) {
+    switch (request.operation) {
+      case 'receiveMessage':
+        return config.consumer !== false
+      case 'sendMessage':
+      case 'sendMessageBatch':
+        return config.producer !== false
+      default:
+        return true
+    }
+  }
+
   generateTags (params, operation, response) {
     const tags = {}
 
@@ -14,6 +26,7 @@ class Sqs {
     })
 
     if (operation === 'receiveMessage') {
+      tags['span.type'] = 'worker'
       tags['span.type'] = 'worker'
     }
 

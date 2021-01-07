@@ -16,6 +16,7 @@ describe('Plugin', () => {
     withVersions(plugin, 'aws-sdk', version => {
       let AWS
       let s3
+      let sqs
       let tracer
 
       describe('without configuration', () => {
@@ -167,6 +168,62 @@ describe('Plugin', () => {
           }).then(done, done)
 
           s3.listBuckets(() => {})
+        })
+      })
+
+      describe('with service configuration', () => {
+        before(() => {
+          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+
+          s3 = new AWS.S3({ endpoint: new AWS.Endpoint('http://localhost:4572'), s3ForcePathStyle: true })
+          sqs = new AWS.SQS({ endpoint: new AWS.Endpoint('http://localhost:4576') })
+          tracer = require('../../dd-trace')
+
+          return agent.load('aws-sdk', {
+            s3: false
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('should allow disabling a specific service', (done) => {
+          let total = 0
+
+          agent.use(traces => {
+            const span = sort(traces[0])[0]
+
+            expect(span).to.include({
+              name: 'aws.request',
+              resource: 'listBuckets'
+            })
+
+            total++
+          }).catch(() => {}, { timeoutMs: 100 })
+
+          agent.use(traces => {
+            const span = sort(traces[0])[0]
+
+            expect(span).to.include({
+              name: 'aws.request',
+              resource: 'listQueues'
+            })
+
+            total++
+          }).catch((e) => {}, { timeoutMs: 100 })
+
+          s3.listBuckets(() => {})
+          sqs.listQueues(() => {})
+
+          setTimeout(() => {
+            try {
+              expect(total).to.equal(1)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          }, 250)
         })
       })
     })
