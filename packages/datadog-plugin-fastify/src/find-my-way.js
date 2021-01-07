@@ -10,6 +10,7 @@ function createWrapOn () {
       const wrapper = function (req) {
         web.patch(req)
         web.enterRoute(req, path)
+        req._datadog.routeEntered = true
 
         return handler.apply(this, arguments)
       }
