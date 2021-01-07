@@ -8,11 +8,20 @@ function createWrapSendCommand (tracer, config) {
       if (!command || !command.promise || !config.filter(command.name)) return sendCommand.apply(this, arguments)
 
       const options = this.options || {}
+      const connectionName = this.options.connectionName
       const db = options.db
       const span = tx.instrument(tracer, config, db, command.name, command.args)
 
       tx.setHost(span, options.host, options.port)
       tx.wrap(span, command.promise)
+
+      if (config.splitByInstance && connectionName) {
+        const service = config.service
+          ? `${config.service}-${connectionName}`
+          : connectionName
+
+        span.setTag('service.name', service)
+      }
 
       return tracer.scope().bind(sendCommand, span).apply(this, arguments)
     }

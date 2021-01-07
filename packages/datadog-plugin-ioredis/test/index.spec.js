@@ -15,7 +15,7 @@ describe('Plugin', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Redis = require(`../../../versions/ioredis@${version}`).get()
-        redis = new Redis()
+        redis = new Redis({ connectionName: 'test' })
       })
 
       afterEach(() => {
@@ -84,6 +84,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => agent.load('ioredis', {
           service: 'custom',
+          splitByInstance: true,
           whitelist: ['get']
         }))
         after(() => agent.close())
@@ -91,7 +92,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              expect(traces[0][0]).to.have.property('service', 'custom-test')
             })
             .then(done)
             .catch(done)
