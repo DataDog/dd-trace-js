@@ -5,8 +5,13 @@ const plugin = require('../src')
 const { expect } = require('chai')
 
 describe('Plugin', () => {
-  let DatadogJestEnvironment
   let tracer
+  let DatadogJestEnvironment
+  let datadogJestEnv
+  const TEST_NAME = 'test_name'
+  const TEST_SUITE = 'test-file.js'
+  const BUILD_SOURCE_ROOT = '/source-root'
+
   withVersions(plugin, 'jest-environment-node', version => {
     afterEach(() => {
       return agent.close()
@@ -15,19 +20,20 @@ describe('Plugin', () => {
       tracer = require('../../dd-trace')
       return agent.load('jest').then(() => {
         DatadogJestEnvironment = require(`../../../versions/jest-environment-node@${version}`).get()
+        datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
+        datadogJestEnv.context.expect = {
+          getState: () => {
+            return {
+              currentTestName: TEST_NAME
+            }
+          }
+        }
       })
     })
 
     describe('jest', () => {
-      const TEST_NAME = 'test_name'
-      const TEST_SUITE = 'test-file.js'
-      const BUILD_SOURCE_ROOT = '/source-root'
-      const ROOT_TEST_SUITE = 'root'
-
       it('should create a test span for a passing test', (done) => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
@@ -40,16 +46,13 @@ describe('Plugin', () => {
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
-            expect(traces[0][0].resource).to.equal(`${ROOT_TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
           }).then(done).catch(done)
 
         const passingTestEvent = {
           name: 'test_start',
           test: {
             fn: () => {},
-            parent: {
-              name: ROOT_TEST_SUITE
-            },
             name: TEST_NAME
           }
         }
@@ -61,7 +64,6 @@ describe('Plugin', () => {
       })
 
       it('should create a test span for a failing test', (done) => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         agent
@@ -76,7 +78,7 @@ describe('Plugin', () => {
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
-            expect(traces[0][0].resource).to.equal(`${ROOT_TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
           }).then(done).catch(done)
 
         const failingTestEvent = {
@@ -84,9 +86,6 @@ describe('Plugin', () => {
           test: {
             fn: () => {
               throw Error
-            },
-            parent: {
-              name: ROOT_TEST_SUITE
             },
             name: TEST_NAME
           }
@@ -96,7 +95,6 @@ describe('Plugin', () => {
       })
 
       it('should create a test span for a skipped test', (done) => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         agent
@@ -111,16 +109,13 @@ describe('Plugin', () => {
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
-            expect(traces[0][0].resource).to.equal(`${ROOT_TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
           }).then(done).catch(done)
 
         const skippedTestEvent = {
           name: 'test_skip',
           test: {
             fn: () => {},
-            parent: {
-              name: ROOT_TEST_SUITE
-            },
             name: TEST_NAME
           }
         }
@@ -129,7 +124,6 @@ describe('Plugin', () => {
       })
 
       it('should create a test span for an async test', (done) => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         agent
@@ -144,7 +138,7 @@ describe('Plugin', () => {
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
-            expect(traces[0][0].resource).to.equal(`${ROOT_TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
           }).then(done).catch(done)
 
         const asyncTestEvent = {
@@ -155,9 +149,6 @@ describe('Plugin', () => {
                 setTimeout(resolve, 100)
               })
             },
-            parent: {
-              name: ROOT_TEST_SUITE
-            },
             name: TEST_NAME
           }
         }
@@ -166,7 +157,6 @@ describe('Plugin', () => {
       })
 
       it('should call wrap on test_start event', () => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         tracer._tracer.wrap = sinon.spy(() => {})
 
@@ -178,9 +168,6 @@ describe('Plugin', () => {
                 setTimeout(resolve, 100)
               })
             },
-            parent: {
-              name: ROOT_TEST_SUITE
-            },
             name: TEST_NAME
           }
         }
@@ -189,7 +176,6 @@ describe('Plugin', () => {
       })
 
       it('should not call wrap on events other than test_start or test_skip', () => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         tracer._tracer.wrap = sinon.spy(() => {})
 
@@ -201,7 +187,6 @@ describe('Plugin', () => {
       })
 
       it('should call startSpan and span finish on skipped tests', () => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         const span = { finish: sinon.spy(() => {}) }
         tracer._tracer.startSpan = sinon.spy(() => {
@@ -212,9 +197,6 @@ describe('Plugin', () => {
           name: 'test_skip',
           test: {
             fn: () => {},
-            parent: {
-              name: ROOT_TEST_SUITE
-            },
             name: TEST_NAME
           }
         }
@@ -225,7 +207,6 @@ describe('Plugin', () => {
       })
 
       it('should call flush on teardown', async () => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         tracer._tracer._exporter._writer.flush = sinon.spy((done) => {
           done()
@@ -235,7 +216,6 @@ describe('Plugin', () => {
       })
 
       it('should set testSuite on the constructor', () => {
-        const datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         expect(datadogJestEnv.testSuite).to.equal(TEST_SUITE)
       })
@@ -263,16 +243,12 @@ describe('Plugin', () => {
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
-            expect(traces[0][0].resource).to.equal(`${ROOT_TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
           }).then(done).catch(done)
         const testEvent = {
           name: 'test_start',
           test: {
-            fn: () => {
-            },
-            parent: {
-              name: ROOT_TEST_SUITE
-            },
+            fn: () => {},
             name: TEST_NAME
           }
         }
