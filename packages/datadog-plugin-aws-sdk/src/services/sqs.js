@@ -27,7 +27,6 @@ class Sqs {
 
     if (operation === 'receiveMessage') {
       tags['span.type'] = 'worker'
-      tags['span.type'] = 'worker'
     }
 
     return tags
