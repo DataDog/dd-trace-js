@@ -15,10 +15,20 @@ const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
   constructor () {
-    super(config)
+    super()
+
+    config.on('update', () => {
+      const Scope = getScopeClass(config)
+      if (Scope !== this._scope.constructor) {
+        this._scope.disable()
+        this._scope = new Scope(config)
+      }
+      setStartupLogConfig(config)
+    })
 
     this._scopeManager = getScopeManager(config)
-    this._scope = getScope(config)
+    const Scope = getScopeClass(config)
+    this._scope = new Scope(config)
     setStartupLogConfig(config)
   }
 
@@ -156,7 +166,7 @@ function getScopeManager (config) {
   return new ScopeManager()
 }
 
-function getScope (config) {
+function getScopeClass (config) {
   let Scope
 
   if (config.scope === NOOP) {
@@ -165,7 +175,7 @@ function getScope (config) {
     Scope = platform.getScope(config.scope)
   }
 
-  return new Scope(config)
+  return Scope
 }
 
 module.exports = DatadogTracer

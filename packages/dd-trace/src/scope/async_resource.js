@@ -4,11 +4,10 @@ const { createHook, executionAsyncResource } = require('async_hooks')
 const Base = require('./base')
 
 class Scope extends Base {
-  constructor (config) {
+  constructor () {
     super()
 
     this._ddResourceStore = Symbol('ddResourceStore')
-    this._config = config
     this._stack = []
     this._hook = createHook({
       init: this._init.bind(this)
@@ -17,19 +16,25 @@ class Scope extends Base {
     this.enable()
   }
 
-  enable () {
+  _enable () {
+    if (this.isEnabled()) return
     this._enabled = true
     this._hook.enable()
   }
 
-  disable () {
+  _disable () {
+    if (!this.isEnabled()) return
     this._enabled = false
     this._stack = []
     this._hook.disable()
   }
 
+  _isEnabled () {
+    return this._enabled
+  }
+
   _active () {
-    if (!this._enabled) return null
+    if (!this.isEnabled()) return null
 
     const resource = executionAsyncResource()
 

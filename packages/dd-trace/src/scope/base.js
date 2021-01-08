@@ -19,6 +19,18 @@ class Scope {
     }
   }
 
+  enable () {
+    return this._enable()
+  }
+
+  isEnabled () {
+    return this._isEnabled()
+  }
+
+  disable () {
+    return this._disable()
+  }
+
   bind (target, span) {
     target = this._bindEmitter(target, span)
     target = this._bindPromise(target, span)

@@ -39,6 +39,21 @@ class Scope extends Base {
 
     this._enabled = true
     this._hook.enable()
+    this.enable()
+  }
+
+  _enable () {
+    if (!this.isEnabled()) {
+      this._enabled = true
+      this._hook.enable()
+    }
+  }
+
+  _disable () {
+    if (this.isEnabled()) {
+      this._enabled = false
+      this._hook.disable()
+    }
   }
 
   _active () {
@@ -102,7 +117,7 @@ class Scope extends Base {
   }
 
   _init (asyncId, type, triggerAsyncId, resource) {
-    if (!this._enabled) return
+    if (!this.isEnabled()) return
 
     this._spans.set(asyncId, this._current)
     this._types.set(asyncId, type)
