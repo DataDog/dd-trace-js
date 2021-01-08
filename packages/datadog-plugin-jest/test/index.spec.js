@@ -21,6 +21,7 @@ describe('Plugin', () => {
       return agent.load('jest').then(() => {
         DatadogJestEnvironment = require(`../../../versions/jest-environment-node@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
+        // TODO: avoid mocking expect once we instrument the runner instead of the environment
         datadogJestEnv.context.expect = {
           getState: () => {
             return {
