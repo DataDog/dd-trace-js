@@ -26,38 +26,53 @@ class Tracer extends BaseTracer {
 
   init (options) {
     this.configure(options)
-    if (this._tracer === noop) {
-      try {
-        log.use(config.logger)
-        log.toggle(config.debug, config.logLevel, this)
-
-        platform.profiler().start()
-
-        if (config.enabled) {
-          platform.validate()
-
-          if (config.runtimeMetrics) {
-            platform.metrics().start()
-          }
-
-          if (config.analytics) {
-            analyticsSampler.enable()
-          }
-
-          this._tracer = new DatadogTracer()
-          this._instrumenter.enable()
-          setStartupLogInstrumenter(this._instrumenter)
-        }
-      } catch (e) {
-        log.error(e)
-      }
-    }
 
     return this
   }
 
+  _initialize () {
+    try {
+      log.use(config.logger)
+      log.toggle(config.debug, config.logLevel, this)
+
+      platform.profiler().start()
+
+      if (config.enabled) {
+        platform.validate()
+
+        if (config.runtimeMetrics) {
+          platform.metrics().start()
+        } else {
+          platform.metrics().stop()
+        }
+
+        if (config.analytics) {
+          analyticsSampler.enable()
+        } else {
+          analyticsSampler.disable()
+        }
+
+        if (this._tracer === noop) {
+          this._tracer = new DatadogTracer()
+          this._instrumenter.enable()
+        }
+        setStartupLogInstrumenter(this._instrumenter)
+      } else {
+        platform.metrics().stop()
+        analyticsSampler.disable()
+        this._tracer.disable()
+        this._instrumenter.disable()
+        this._tracer = noop
+        setStartupLogInstrumenter(null)
+      }
+    } catch (e) {
+      log.error(e)
+    }
+  }
+
   configure (options) {
     config.configure(options)
+    this._initialize()
     return this
   }
 

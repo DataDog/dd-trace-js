@@ -52,18 +52,26 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
     Instrumenter = sinon.stub().returns(instrumenter)
 
+    const fnsRan = []
     config = {
       enabled: true,
       experimental: {},
       logger: 'logger',
       debug: true,
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      on (str, fn) {
+        expect(str).to.equal('update')
+        if (fnsRan.includes(fn)) return
+        fnsRan.push(fn)
+        fn()
+      }
     }
 
     platform = {
       load: sinon.spy(),
       metrics: sinon.stub().returns({
-        start: sinon.spy()
+        start: sinon.spy(),
+        stop: sinon.spy()
       }),
       profiler: sinon.stub().returns({
         start: sinon.spy()

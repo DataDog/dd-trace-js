@@ -37,8 +37,6 @@ class Scope extends Base {
       destroy: this._destroy.bind(this)
     })
 
-    this._enabled = true
-    this._hook.enable()
     this.enable()
   }
 
@@ -54,6 +52,10 @@ class Scope extends Base {
       this._enabled = false
       this._hook.disable()
     }
+  }
+
+  _isEnabled () {
+    return this._enabled
   }
 
   _active () {
