@@ -30,6 +30,18 @@ const helpers = {
     span.finish()
   },
 
+  isEnabled (serviceIdentifier, config, request) {
+    if (typeof config === 'boolean') {
+      return config
+    } else if (!config || typeof config !== 'object' || !services[serviceIdentifier]) {
+      return true
+    }
+
+    return services[serviceIdentifier].isEnabled
+      ? services[serviceIdentifier].isEnabled(config, request)
+      : true
+  },
+
   addResponseTags (span, response, serviceName, config) {
     if (!span) return
 

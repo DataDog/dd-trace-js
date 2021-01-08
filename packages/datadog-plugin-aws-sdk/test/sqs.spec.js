@@ -6,6 +6,13 @@ const { setup } = require('./spec_helpers')
 
 wrapIt()
 
+const queueOptions = {
+  QueueName: 'SQS_QUEUE_NAME',
+  Attributes: {
+    'MessageRetentionPeriod': '86400'
+  }
+}
+
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
@@ -13,10 +20,15 @@ describe('Plugin', () => {
     withVersions(plugin, 'aws-sdk', version => {
       let AWS
       let sqs
+      let QueueUrl
       let tracer
 
       describe('without configuration', () => {
-        let QueueUrl
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('aws-sdk')
+        })
 
         before(done => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
@@ -24,25 +36,21 @@ describe('Plugin', () => {
           const endpoint = new AWS.Endpoint('http://localhost:4576')
 
           sqs = new AWS.SQS({ endpoint, region: 'us-east-1' })
-          sqs.createQueue({
-            QueueName: 'SQS_QUEUE_NAME',
-            Attributes: {
-              'MessageRetentionPeriod': '86400'
-            }
-          }, (err, res) => {
+          sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
             QueueUrl = res.QueueUrl
 
-            agent.load('aws-sdk').then(done, done)
+            done()
           })
-          tracer = require('../../dd-trace')
         })
 
         after(done => {
-          sqs.deleteQueue({ QueueUrl }, err => {
-            agent.close().then(() => done(err), done)
-          })
+          sqs.deleteQueue({ QueueUrl }, done)
+        })
+
+        after(() => {
+          return agent.close()
         })
 
         it('should propagate the tracing context from the producer to the consumer', (done) => {
@@ -104,6 +112,86 @@ describe('Plugin', () => {
               done()
             })
           })
+        })
+      })
+
+      describe('with configuration', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('aws-sdk', {
+            sqs: {
+              consumer: false
+            }
+          })
+        })
+
+        before(done => {
+          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+
+          const endpoint = new AWS.Endpoint('http://localhost:4576')
+
+          sqs = new AWS.SQS({ endpoint, region: 'us-east-1' })
+          sqs.createQueue(queueOptions, (err, res) => {
+            if (err) return done(err)
+
+            QueueUrl = res.QueueUrl
+
+            done()
+          })
+        })
+
+        after(done => {
+          sqs.deleteQueue({ QueueUrl }, done)
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('should allow disabling a specific span kind of a service', (done) => {
+          let total = 0
+
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.include({
+              name: 'aws.request',
+              resource: 'sendMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
+            })
+
+            total++
+          }).catch(() => {}, { timeoutMs: 100 })
+
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.include({
+              name: 'aws.request',
+              resource: 'receiveMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
+            })
+
+            total++
+          }).catch((e) => {}, { timeoutMs: 100 })
+
+          sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, () => {})
+
+          sqs.receiveMessage({
+            QueueUrl,
+            MessageAttributeNames: ['.*']
+          }, () => {})
+
+          setTimeout(() => {
+            try {
+              expect(total).to.equal(1)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          }, 250)
         })
       })
     })
