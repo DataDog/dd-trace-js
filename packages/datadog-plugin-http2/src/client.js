@@ -92,10 +92,10 @@ function getStatusValidator (config) {
 }
 
 function getFilter (tracer, config) {
-  const blacklist = tracer._url ? [`${tracer._url.href}/v0.4/traces`] : []
+  const blocklist = tracer._url ? [`${tracer._url.href}/v0.4/traces`] : []
 
   config = Object.assign({}, config, {
-    blacklist: blacklist.concat(config.blacklist || [])
+    blocklist: blocklist.concat(config.blocklist || [])
   })
 
   return urlFilter.getFilter(config)

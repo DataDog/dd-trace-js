@@ -10,13 +10,13 @@ const urlFilter = {
       log.error('Expected `filter` to be a function. Overriding filter property to default.')
     }
 
-    const whitelist = config.whitelist || /.*/
-    const blacklist = config.blacklist || []
+    const allowlist = config.allowlist || config.whitelist || /.*/
+    const blocklist = config.blocklist || config.blacklist || []
 
     return uri => {
-      const whitelisted = applyFilter(whitelist, uri)
-      const blacklisted = applyFilter(blacklist, uri)
-      return whitelisted && !blacklisted
+      const allowed = applyFilter(allowlist, uri)
+      const blocked = applyFilter(blocklist, uri)
+      return allowed && !blocked
     }
 
     function applyFilter (filter, uri) {

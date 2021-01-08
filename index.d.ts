@@ -339,8 +339,16 @@ export declare interface TracerOptions {
     exporter?: 'log' | 'browser' | 'agent'
 
     /**
-     * List of origins to whitelist for distributed tracing. This is used to determine whether to propagate context from the browser for CORS.
+     * List of origins to allow for distributed tracing. This is used to determine whether to propagate context from the browser for CORS.
      * @default []
+     */
+    distributedTracingOriginAllowlist?: (string|RegExp)[]
+
+    /**
+     * Deprecated in favor of `distributedTracingOriginAllowlist`.
+     *
+     * @deprecated
+     * @hidden
      */
     distributedTracingOriginWhitelist?: (string|RegExp)[]
 
@@ -574,13 +582,29 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
+    allowlist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `allowlist`.
+     *
+     * @deprecated
+     * @hidden
+     */
     whitelist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * List of URLs that should not be instrumented. Takes precedence over
-     * whitelist if a URL matches an entry in both.
+     * allowlist if a URL matches an entry in both.
      *
      * @default []
+     */
+    blocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `blocklist`.
+     *
+     * @deprecated
+     * @hidden
      */
     blacklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
@@ -984,13 +1008,29 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
+    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `allowlist`.
+     *
+     * @deprecated
+     * @hidden
+     */
     whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
-     * whitelist if a command matches an entry in both.
+     * allowlist if a command matches an entry in both.
      *
      * @default []
+     */
+    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `blocklist`.
+     *
+     * @deprecated
+     * @hidden
      */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
@@ -1134,13 +1174,29 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
+    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `allowlist`.
+     *
+     * deprecated
+     * @hidden
+     */
     whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
-     * whitelist if a command matches an entry in both.
+     * allowlist if a command matches an entry in both.
      *
      * @default []
+     */
+    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `blocklist`.
+     *
+     * @deprecated
+     * @hidden
      */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
   }

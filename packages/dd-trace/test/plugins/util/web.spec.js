@@ -839,9 +839,9 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('whitelistFilter', () => {
+  describe('allowlistFilter', () => {
     beforeEach(() => {
-      config = { whitelist: ['/_okay'] }
+      config = { allowlist: ['/_okay'] }
       config = web.normalizeConfig(config)
     })
 
@@ -856,9 +856,9 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('blacklistFilter', () => {
+  describe('blocklistFilter', () => {
     beforeEach(() => {
-      config = { blacklist: ['/_notokay'] }
+      config = { blocklist: ['/_notokay'] }
       config = web.normalizeConfig(config)
     })
 

@@ -134,7 +134,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('redis', {
             service: 'custom',
-            whitelist: ['get']
+            allowlist: ['get']
           })
         })
 

@@ -85,7 +85,7 @@ describe('Plugin', () => {
         before(() => agent.load('ioredis', {
           service: 'custom',
           splitByInstance: true,
-          whitelist: ['get']
+          allowlist: ['get']
         }))
         after(() => agent.close())
 

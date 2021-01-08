@@ -236,7 +236,8 @@ class Config extends EventEmitter {
       b3: !!this._getExperimental(options, 'b3'),
       runtimeId: !!this._getExperimental(options, 'runtimeId'),
       exporter: this._getExperimental(options, 'exporter'),
-      peers: this._getExperimental(options, 'distributedTracingOriginWhitelist') || [],
+      peers: this._getExperimental(options, 'distributedTracingOriginAllowlist') ||
+        this._getExperimental(options, 'distributedTracingOriginWhitelist') || [],
       enableGetRumData: !!this._getExperimental(options, 'getRumData'),
       sampler,
       internalErrors: this._getExperimental(options, 'internalErrors')
