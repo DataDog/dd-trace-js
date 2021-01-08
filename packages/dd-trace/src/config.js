@@ -221,7 +221,7 @@ class Config extends EventEmitter {
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), this.flushInterval, 2000)
     this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), this.sampleRate, 1)
     this.logger = options.logger
-    this.plugins = !!coalesce(options.plugins, this.plugins, true)
+    this.plugins = !!coalesce(options.plugins, this.plugins, this.enabled)
     this.service = DD_SERVICE
     this.version = DD_VERSION
     this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
@@ -248,7 +248,7 @@ class Config extends EventEmitter {
       platform.env('DD_TRACE_REPORT_HOSTNAME'),
       false)
     )
-    this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION'))
+    this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION')) || !this.enabled
       ? scopes.NOOP
       : coalesce(options.scope, this.scope, platform.env('DD_TRACE_SCOPE'))
     this.clientToken = coalesce(options.clientToken, this.clientToken, platform.env('DD_CLIENT_TOKEN'))
