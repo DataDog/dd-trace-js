@@ -756,6 +756,15 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, response?: anyObject) => any;
     };
+
+    /**
+     * Configuration for individual services to enable/disable them. Message
+     * queue services can also configure the producer and consumer individually
+     * by passing an object with a `producer` and `consumer` properties. The
+     * list of valid service keys is in the service-specific section of
+     * https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Config.html
+     */
+    [key: string]: boolean | Object;
   }
 
   /**

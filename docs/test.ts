@@ -144,6 +144,11 @@ const awsSdkOptions = {
   splitByAwsService: false,
   hooks: {
     request: (span, response) => {},
+  },
+  s3: false,
+  sqs: {
+    consumer: true,
+    producer: false
   }
 };
 
