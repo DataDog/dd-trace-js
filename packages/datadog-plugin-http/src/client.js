@@ -284,10 +284,10 @@ function getStatusValidator (config) {
 }
 
 function getFilter (tracer, config) {
-  const blacklist = tracer._url ? [getAgentFilter(tracer._url)] : []
+  const blocklist = tracer._url ? [getAgentFilter(tracer._url)] : []
 
   config = Object.assign({}, config, {
-    blacklist: blacklist.concat(config.blacklist || [])
+    blocklist: blocklist.concat(config.blocklist || [])
   })
 
   return urlFilter.getFilter(config)

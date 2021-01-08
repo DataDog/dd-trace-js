@@ -839,9 +839,43 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('allowlistFilter', () => {
+    beforeEach(() => {
+      config = { allowlist: ['/_okay'] }
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
+
   describe('whitelistFilter', () => {
     beforeEach(() => {
       config = { whitelist: ['/_okay'] }
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('blocklistFilter', () => {
+    beforeEach(() => {
+      config = { blocklist: ['/_notokay'] }
       config = web.normalizeConfig(config)
     })
 
