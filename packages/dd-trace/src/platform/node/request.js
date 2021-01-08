@@ -1,62 +1,42 @@
 'use strict'
 
-const http = require('http')
-const https = require('https')
-const agents = require('./agents')
+const semver = require('semver')
 const containerInfo = require('container-info').sync() || {}
+const platform = require('../../platform')
 
 const containerId = containerInfo.containerId
+const undiciWorks = semver.satisfies(process.versions.node, '^10.16.0 || ^12.3.0 || ^14.0.0')
 
-function request (options, callback) {
-  const platform = this
+let requestImpl
 
-  options = Object.assign({
-    headers: {},
-    data: [],
-    timeout: 2000
-  }, options)
-
-  const data = [].concat(options.data)
-  const isSecure = options.protocol === 'https:'
-  const { httpAgent, httpsAgent } = agents(platform._config)
-  const client = isSecure ? https : http
-  const agent = isSecure ? httpsAgent : httpAgent
-
-  options.agent = agent
-  options.headers['Content-Length'] = byteLength(data)
-
+function request (options = {}, callback) {
+  if (!options.headers) {
+    options.headers = {}
+  }
+  if (!options.protocol) {
+    options.protocol = 'http:'
+  }
+  if (!options.hostname) {
+    options.hostname = 'localhost'
+  }
+  if (!options.port) {
+    options.port = options.protocol === 'https:' ? 443 : 80
+  }
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
   }
-
-  const req = client.request(options, res => {
-    let data = ''
-
-    res.setTimeout(options.timeout)
-
-    res.on('data', chunk => { data += chunk })
-    res.on('end', () => {
-      if (res.statusCode >= 200 && res.statusCode <= 299) {
-        callback(null, data, res.statusCode)
-      } else {
-        const error = new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
-        error.status = res.statusCode
-
-        callback(error, null, res.statusCode)
-      }
-    })
-  })
-
-  req.setTimeout(options.timeout, req.abort)
-  req.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
-
-  data.forEach(buffer => req.write(buffer))
-
-  req.end()
+  if (!requestImpl) setRequestImpl()
+  return requestImpl.call(this, options, callback)
 }
 
-function byteLength (data) {
-  return data.length > 0 ? data.reduce((prev, next) => prev + next.length, 0) : 0
+function setRequestImpl () {
+  if (
+    undiciWorks && platform._config.experimental.undici
+  ) {
+    requestImpl = require('./request/undici')
+  } else {
+    requestImpl = require('./request/http')
+  }
 }
 
 module.exports = request

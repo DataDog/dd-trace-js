@@ -85,6 +85,9 @@
     "url-parse": "^1.4.3",
     "whatwg-fetch": "^3.0.0"
   },
+  "optionalDependencies": {
+    "undici": "^2.0.5"
+  },
   "devDependencies": {
     "@babel/core": "^7.6.4",
     "@babel/preset-env": "^7.6.3",
