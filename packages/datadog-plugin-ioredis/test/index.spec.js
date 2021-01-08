@@ -112,6 +112,25 @@ describe('Plugin', () => {
           redis.get('foo').catch(done)
         })
       })
+
+      describe('with legacy configuration', () => {
+        before(() => agent.load('ioredis', {
+          whitelist: ['get']
+        }))
+        after(() => agent.close())
+
+        it('should be able to filter commands', done => {
+          agent.use(() => {}) // wait for initial command
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'get')
+            })
+            .then(done)
+            .catch(done)
+
+          redis.get('foo').catch(done)
+        })
+      })
     })
   })
 })
