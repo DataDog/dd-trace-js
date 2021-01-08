@@ -196,6 +196,7 @@ tracer.use('http2', {
 });
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
+tracer.use('ioredis', { splitByInstance: true });
 tracer.use('jest');
 tracer.use('kafkajs');
 tracer.use('knex');

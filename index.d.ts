@@ -993,6 +993,14 @@ declare namespace plugins {
      * @default []
      */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Whether to use a different service name for each Redis instance based
+     * on the configured connection name of the client.
+     *
+     * @default false
+     */
+    splitByInstance?: boolean;
   }
 
   /**
@@ -1014,7 +1022,7 @@ declare namespace plugins {
   interface koa extends HttpServer {}
 
   /**
-   * This plugin automatically instruments the 
+   * This plugin automatically instruments the
    * [kafkajs](https://kafka.js.org/) module.
    */
   interface kafkajs extends Instrumentation {}
