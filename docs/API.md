@@ -13,7 +13,7 @@ APM provides out-of-the-box instrumentation for many popular frameworks and libr
 Built-in plugins can be configured individually:
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 
 // enable and configure postgresql integration
 tracer.use('pg', {
@@ -249,7 +249,7 @@ provided function. Any asynchronous context created from whithin that function
 will also have the same scope.
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 const scope = tracer.scope()
 const log = console.log
 
@@ -303,7 +303,7 @@ already bound by default and don't need to be explicitly bound.
 <h6>Function binding</h6>
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 const scope = tracer.scope()
 const log = console.log
 
@@ -328,7 +328,7 @@ scope.activate(outerSpan, () => {
 <h6>Promise binding</h6>
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 const scope = tracer.scope()
 const log = console.log
 
@@ -359,7 +359,7 @@ wrapped by a function.
 <h6>Event emitter binding</h6>
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 const scope = tracer.scope()
 const log = console.log
 const EventEmitter = require('events').EventEmitter
@@ -395,7 +395,7 @@ See the [API documentation](./interfaces/scope.html) for more details.
 This library is OpenTracing compliant. Use the [OpenTracing API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 const opentracing = require('opentracing')
 
 opentracing.initGlobalTracer(tracer)
@@ -456,7 +456,7 @@ const logger = bunyan.createLogger({
   level: 'trace'
 })
 
-const tracer = require('dd-trace').init({
+const tracer = require('dd-trace').configure({
   logger: {
     error: err => logger.error(err),
     warn: message => logger.warn(message),
@@ -474,7 +474,7 @@ In some cases, it's necessary to update the metadata of a span created by one of
 For example:
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require('dd-trace')
 
 tracer.use('express', {
   hooks: {

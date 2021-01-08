@@ -31,8 +31,8 @@ let traceId: string;
 let spanId: string;
 let promise: Promise<void>;
 
-ddTrace.init();
-tracer.init({
+ddTrace.configure();
+tracer.configure({
   debug: true,
   enabled: true,
   logInjection: true,

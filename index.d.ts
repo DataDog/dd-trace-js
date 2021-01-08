@@ -41,9 +41,14 @@ export declare interface Tracer extends opentracing.Tracer {
   extract(format: string, carrier: any): SpanContext | null;
 
   /**
-   * Initializes the tracer. This should be called before importing other libraries.
+   * @deprecated Use configure instead.
    */
   init(options?: TracerOptions): this;
+
+  /**
+   * Configures the tracer.
+   */
+  configure(options?: TracerOptions): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
