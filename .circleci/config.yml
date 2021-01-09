@@ -386,6 +386,10 @@ jobs:
           - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - FORCE_NONINTERACTIVE=true
+          - LAMBDA_EXECUTOR=docker
+          - LAMBDA_REMOTE_DOCKER=true
+          - DOCKER_HOST=unix:///var/run/docker.sock
+          - DEBUG=true
           - START_WEB=0
 
   node-bluebird:
