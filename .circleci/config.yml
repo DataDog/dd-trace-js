@@ -3,10 +3,6 @@ version: 2.1
 orbs:
   win: circleci/windows@1.0.0
 
-machine_executor: &machine_executor
-  machine:
-    image: ubuntu-1604:201903-01
-
 node-core-base: &node-core-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -90,6 +86,9 @@ node-plugin-base: &node-plugin-base
     - &restore-yarn-cache
       restore_cache:
         key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - setup_remote_docker:
+        version: 19.03.13
+        docker_layer_caching: true
     - run:
         name: Install dependencies
         command: yarn install
@@ -368,7 +367,11 @@ jobs:
           - QPIDD_ADMIN_PASSWORD=admin
 
   node-aws-sdk:
-    <<: *node-aws-sdk-base
+    <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=aws-sdk
 
   node-bluebird:
     <<: *node-plugin-base
