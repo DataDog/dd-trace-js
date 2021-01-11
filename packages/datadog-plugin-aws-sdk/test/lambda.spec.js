@@ -71,6 +71,10 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
+          lambda.listFunctions((err, res) => {
+            console.log('listfunctions res', err, res)
+          })
+
           lambda.invoke({
             FunctionName: 'LAMBDA_FUNCTION_NAME',
             Payload: '{}',
