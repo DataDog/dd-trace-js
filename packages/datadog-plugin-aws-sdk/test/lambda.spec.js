@@ -7,6 +7,8 @@ const { setup } = require('./spec_helpers')
 
 const zip = new JSZip()
 
+const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('base64')
+
 wrapIt()
 
 describe('Plugin', () => {
@@ -54,7 +56,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should propagate the tracing context with existing ClientContext', (done) => {
+        it('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
           agent.use(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
@@ -72,7 +74,29 @@ describe('Plugin', () => {
           const lambdaReq = lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: 'eyJjdXN0b20iOnsieC1jb3JyZWxhdGlvbi10ZXN0LWN1aWQiOiJja2N4NGttNXUwMDAwMGNzM2NpbzdvODJsIn19'
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+          }, e => e && done(e))
+        })
+
+        it('should propagate the tracing context with existing ClientContext and no `custom` key', (done) => {
+          agent.use(traces => {
+            const span = traces[0][0]
+            const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
+            const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
+            const spanContext = tracer.extract('text_map', injectedTraceData)
+
+            expect(span.resource.startsWith('invoke')).to.equal(true)
+
+            const parentId = span.span_id.toString()
+            const traceId = span.trace_id.toString()
+            expect(spanContext.toTraceId()).to.equal(traceId)
+            expect(spanContext.toSpanId()).to.equal(parentId)
+          }).then(done, done)
+
+          const lambdaReq = lambda.invoke({
+            FunctionName: 'ironmaiden',
+            Payload: '{}',
+            ClientContext: createClientContext({ megadeth: 'tornado of souls' })
           }, e => e && done(e))
         })
 
