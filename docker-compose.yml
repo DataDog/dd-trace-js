@@ -92,6 +92,21 @@ services:
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
+      - EDGE_PORT=4565
+  serverless_localstack:
+    image: localstack/localstack:0.12.4
+    ports:
+      - "127.0.0.1:4566:4566" # Edge
+    environment:
+      - LOCALSTACK_SERVICES=serverless
+      - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - FORCE_NONINTERACTIVE=true
+      - START_WEB=0
+      - LAMBDA_EXECUTOR=local
+      - DEBUG=true
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
   zookeeper:
     image: wurstmeister/zookeeper
   kafka:
