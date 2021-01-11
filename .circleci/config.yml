@@ -113,6 +113,10 @@ node-aws-sdk-base: &node-aws-sdk-base
   steps:
     - checkout
     - run:
+        name: Set up localstack
+        command: docker-compose up localstack serverless_localstack
+        background: true
+    - run:
         name: Install node 8
         command: |
           echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
@@ -141,10 +145,6 @@ node-aws-sdk-base: &node-aws-sdk-base
     #     paths:
     #       - ./node_modules
     #       - ./yarn.lock
-    - run:
-        name: Set up localstack
-        command: docker-compose up localstack serverless_localstack
-        background: true
     - run:
           name: Waiting for localstack to be ready
           command: sleep 20

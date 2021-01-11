@@ -92,11 +92,9 @@ services:
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
+      - EDGE_PORT=4565
   serverless_localstack:
     image: localstack/localstack:0.12.4
-    network_mode: bridge
-    container_name: serverless_localstack
-    hostname: serverless_localstack
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:
