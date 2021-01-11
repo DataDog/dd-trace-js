@@ -55,11 +55,10 @@ describe('Plugin', () => {
         })
 
         it('should propagate the tracing context with existing ClientContext', (done) => {
-          let lambdaReq
-
           agent.use(traces => {
             const span = traces[0][0]
-            const injectedTraceData = JSON.parse(Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')).custom._datadog
+            const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
+            const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
@@ -70,19 +69,18 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          lambdaReq = lambda.invoke({
+          const lambdaReq = lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: 'eyJjdXN0b20iOnsieC1jb3JyZWxhdGlvbi10ZXN0LWN1aWQiOiJja2N4NGttNXUwMDAwMGNzM2NpbzdvODJsIn19', 
+            ClientContext: 'eyJjdXN0b20iOnsieC1jb3JyZWxhdGlvbi10ZXN0LWN1aWQiOiJja2N4NGttNXUwMDAwMGNzM2NpbzdvODJsIn19'
           }, e => e && done(e))
         })
 
         it('should propagate the tracing context without an existing ClientContext', (done) => {
-          let lambdaReq
-
           agent.use(traces => {
             const span = traces[0][0]
-            const injectedTraceData = JSON.parse(Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')).custom._datadog
+            const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
+            const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
@@ -93,7 +91,7 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          lambdaReq = lambda.invoke({
+          const lambdaReq = lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}'
           }, e => e && done(e))

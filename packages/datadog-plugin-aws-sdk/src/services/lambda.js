@@ -40,13 +40,11 @@ class Lambda {
             } else {
               existingContext.custom = { _datadog }
             }
-            // console.log('existingContext', existingContext)
             const newContextBase64 = Buffer.from(JSON.stringify(existingContext)).toString('base64')
             request.params.ClientContext = newContextBase64
           }
         } catch (err) {
           log.error(err)
-          return undefined
         }
       }
     }

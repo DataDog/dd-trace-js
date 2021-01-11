@@ -104,54 +104,6 @@ node-plugin-base: &node-plugin-base
     - store_artifacts:
         path: ./coverage/lcov-report
 
-node-aws-sdk-base: &node-aws-sdk-base
-  machine:
-    image: ubuntu-1604:201903-01
-  working_directory: ~/dd-trace-js
-  steps:
-    - checkout
-    - run:
-        name: Set up localstack
-        command: docker-compose up localstack serverless_localstack
-        background: true
-    - run:
-        name: Install node 8
-        command: |
-          echo 'export NVM_DIR="/opt/circleci/.nvm"' >> $BASH_ENV
-          echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
-          export NVM_DIR="/opt/circleci/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          nvm install 8 && nvm use 8 && nvm alias default 8
-    - run:
-        name: Install yarn
-        command: |
-          curl -o- -L https://yarnpkg.com/install.sh | bash
-          echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> $BASH_ENV
-    # - run:
-    #     name: Set working directory permission
-    #     command: chmod -R 777 ~/dd-trace-js
-    # - *yarn-versions
-    # - &restore-yarn-cache
-    #   restore_cache:
-    #     key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
-        name: Install dependencies
-        command: yarn install
-    # - &save-yarn-cache
-    #   save_cache:
-    #     key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    #     paths:
-    #       - ./node_modules
-    #       - ./yarn.lock
-    - run:
-          name: Waiting for localstack to be ready
-          command: sleep 30
-    - run:
-        name: Unit tests
-        command: PLUGINS=aws-sdk yarn test:plugins:ci
-    - store_artifacts:
-        path: ./coverage/lcov-report
-
 prebuild-linux-base: &prebuild-linux-base
   docker:
     - image: node:10.0.0
@@ -386,8 +338,6 @@ jobs:
           - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
           - FORCE_NONINTERACTIVE=true
           - LAMBDA_EXECUTOR=local
-          # - DOCKER_HOST=unix:///var/run/docker.sock
-          - DEBUG=true
           - START_WEB=0
 
   node-bluebird:
