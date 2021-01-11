@@ -3,7 +3,8 @@
     "lib": ["es2017"],
     "moduleResolution": "node",
     "module": "commonjs",
-    "baseUrl": "."
+    "baseUrl": ".",
+    "strict": true
   },
   "files": [
     "../index.d.ts"
