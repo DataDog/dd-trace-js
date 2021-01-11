@@ -367,31 +367,31 @@ jobs:
           - QPIDD_ADMIN_PASSWORD=admin
 
   node-aws-sdk:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - PLUGINS=aws-sdk
-          - SERVICES=aws-sdk
-      - image: localstack/localstack:0.11.2
-        environment:
-          - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
-          - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          - FORCE_NONINTERACTIVE=true
-          - START_WEB=0
-          - EDGE_PORT=4565
-      - image: localstack/localstack:0.12.4
-        environment:
-          - LOCALSTACK_SERVICES=serverless
-          - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          - FORCE_NONINTERACTIVE=true
-          - LAMBDA_EXECUTOR=docker
-          - LAMBDA_REMOTE_DOCKER=true
-          - DOCKER_HOST=unix:///var/run/docker.sock
-          - DEBUG=true
-          - START_WEB=0
+    <<: *node-aws-sdk-base
+    # docker:
+    #   - image: node:8
+    #     environment:
+    #       - PLUGINS=aws-sdk
+    #       - SERVICES=aws-sdk
+    #   - image: localstack/localstack:0.11.2
+    #     environment:
+    #       - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
+    #       - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+    #       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+    #       - FORCE_NONINTERACTIVE=true
+    #       - START_WEB=0
+    #       - EDGE_PORT=4565
+    #   - image: localstack/localstack:0.12.4
+    #     environment:
+    #       - LOCALSTACK_SERVICES=serverless
+    #       - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+    #       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+    #       - FORCE_NONINTERACTIVE=true
+    #       - LAMBDA_EXECUTOR=docker
+    #       - LAMBDA_REMOTE_DOCKER=true
+    #       - DOCKER_HOST=unix:///var/run/docker.sock
+    #       - DEBUG=true
+    #       - START_WEB=0
 
   node-bluebird:
     <<: *node-plugin-base
