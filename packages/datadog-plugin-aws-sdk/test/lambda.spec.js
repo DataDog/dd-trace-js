@@ -10,7 +10,7 @@ const zip = new JSZip()
 wrapIt()
 
 describe('Plugin', () => {
-  describe('aws-sdk (lambda)', function () {
+  describe.only('aws-sdk (lambda)', function () {
     setup()
 
     withVersions(plugin, 'aws-sdk', version => {
@@ -22,11 +22,9 @@ describe('Plugin', () => {
         let ZipFile
 
         before(async () => {
-          const lambdaFunctionCode = `exports.handle = async (event, context) => {
-            return context.clientContext;
-          }`
+          const lambdaFunctionCode = 'def handle(event, context):\n  return event\n'
 
-          zip.file('handler.js', lambdaFunctionCode.toString())
+          zip.file('handler.py', lambdaFunctionCode.toString())
           ZipFile = await zip.generateAsync({ type: 'nodebuffer' })
         })
 
@@ -37,31 +35,32 @@ describe('Plugin', () => {
           lambda = new AWS.Lambda({ endpoint: lambdaEndpoint, region: 'us-east-1' })
 
           lambda.createFunction({
-            FunctionName: 'LAMBDA_FUNCTION_NAME',
+            FunctionName: 'ironmaiden',
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'nodejs8.10'
+            Runtime: 'python3.7'
           }, (err, res) => {
             if (err) return done(err)
-            console.log('in before', err, res)
+
             agent.load('aws-sdk').then(done, done)
           })
           tracer = require('../../dd-trace')
         })
 
         after(done => {
-          lambda.deleteFunction({ FunctionName: 'LAMBDA_FUNCTION_NAME' }, err => {
-            console.log('in after', err)
+          lambda.deleteFunction({ FunctionName: 'ironmaiden' }, err => {
             agent.close().then(() => done(err), done)
           })
         })
 
         it('should propagate the tracing context with existing ClientContext', (done) => {
-          let spanContext
+          let lambdaReq
 
           agent.use(traces => {
             const span = traces[0][0]
+            const injectedTraceData = JSON.parse(Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')).custom._datadog
+            const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
 
@@ -71,27 +70,20 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          lambda.listFunctions((err, res) => {
-            console.log('listfunctions res', err, res)
-          })
-
-          lambda.invoke({
-            FunctionName: 'LAMBDA_FUNCTION_NAME',
+          lambdaReq = lambda.invoke({
+            FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: 'eyJjdXN0b20iOnsieC1jb3JyZWxhdGlvbi10ZXN0LWN1aWQiOiJja2N4NGttNXUwMDAwMGNzM2NpbzdvODJsIn19'
-          }, (err, res) => {
-            if (err) return done(err)
-
-            const injectedTraceData = JSON.parse(JSON.parse(res.Payload)).custom._datadog
-            spanContext = tracer.extract('text_map', injectedTraceData)
-          })
+            ClientContext: 'eyJjdXN0b20iOnsieC1jb3JyZWxhdGlvbi10ZXN0LWN1aWQiOiJja2N4NGttNXUwMDAwMGNzM2NpbzdvODJsIn19', 
+          }, e => e && done(e))
         })
 
         it('should propagate the tracing context without an existing ClientContext', (done) => {
-          let spanContext
+          let lambdaReq
 
           agent.use(traces => {
             const span = traces[0][0]
+            const injectedTraceData = JSON.parse(Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')).custom._datadog
+            const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
 
@@ -101,15 +93,10 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          lambda.invoke({
-            FunctionName: 'LAMBDA_FUNCTION_NAME',
+          lambdaReq = lambda.invoke({
+            FunctionName: 'ironmaiden',
             Payload: '{}'
-          }, (err, res) => {
-            if (err) return done(err)
-
-            const injectedTraceData = JSON.parse(JSON.parse(res.Payload)).custom._datadog
-            spanContext = tracer.extract('text_map', injectedTraceData)
-          })
+          }, e => e && done(e))
         })
       })
     })

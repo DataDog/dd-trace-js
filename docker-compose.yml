@@ -95,7 +95,6 @@ services:
       - EDGE_PORT=4565
   serverless_localstack:
     image: localstack/localstack:0.12.4
-    network_mode: bridge
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:
@@ -104,11 +103,9 @@ services:
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
-      - LAMBDA_EXECUTOR=docker
-      - LAMBDA_REMOTE_DOCKER=false
-      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LAMBDA_EXECUTOR=local
+      # - DOCKER_HOST=unix:///var/run/docker.sock
       - DEBUG=true
-      - DATA_DIR=./tmp/localstack/data
+      # - DATA_DIR=./tmp/localstack/data
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./tmp/localstack:/tmp/localstack"
