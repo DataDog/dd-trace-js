@@ -44,7 +44,7 @@ describe('Plugin', () => {
             Runtime: 'nodejs8.10'
           }, (err, res) => {
             if (err) return done(err)
-
+            console.log('in before', err, res)
             agent.load('aws-sdk').then(done, done)
           })
           tracer = require('../../dd-trace')
@@ -52,6 +52,7 @@ describe('Plugin', () => {
 
         after(done => {
           lambda.deleteFunction({ FunctionName: 'LAMBDA_FUNCTION_NAME' }, err => {
+            console.log('in after', err)
             agent.close().then(() => done(err), done)
           })
         })
