@@ -764,7 +764,7 @@ declare namespace plugins {
      * list of valid service keys is in the service-specific section of
      * https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Config.html
      */
-    [key: string]: boolean | Object;
+    [key: string]: boolean | Object | undefined;
   }
 
   /**
