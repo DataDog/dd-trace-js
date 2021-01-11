@@ -18,6 +18,7 @@ function pluginEnv (name) {
 class Config extends EventEmitter {
   constructor (options) {
     super()
+    this.setMaxListeners(1024)
     this._hasEmitted = {}
     this.configure(options)
   }
