@@ -339,8 +339,16 @@ export declare interface TracerOptions {
     exporter?: 'log' | 'browser' | 'agent'
 
     /**
-     * List of origins to whitelist for distributed tracing. This is used to determine whether to propagate context from the browser for CORS.
+     * List of origins to allow for distributed tracing. This is used to determine whether to propagate context from the browser for CORS.
      * @default []
+     */
+    distributedTracingOriginAllowlist?: (string|RegExp)[]
+
+    /**
+     * Deprecated in favor of `distributedTracingOriginAllowlist`.
+     *
+     * @deprecated
+     * @hidden
      */
     distributedTracingOriginWhitelist?: (string|RegExp)[]
 
@@ -513,11 +521,13 @@ interface Plugins {
   "http2": plugins.http2;
   "ioredis": plugins.ioredis;
   "jest": plugins.jest;
+  "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
   "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
+  "mocha": plugins.mocha;
   "mongodb-core": plugins.mongodb_core;
   "mongoose": plugins.mongoose;
   "mysql": plugins.mysql;
@@ -572,13 +582,29 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
+    allowlist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `allowlist`.
+     *
+     * @deprecated
+     * @hidden
+     */
     whitelist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * List of URLs that should not be instrumented. Takes precedence over
-     * whitelist if a URL matches an entry in both.
+     * allowlist if a URL matches an entry in both.
      *
      * @default []
+     */
+    blocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `blocklist`.
+     *
+     * @deprecated
+     * @hidden
      */
     blacklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
@@ -730,6 +756,15 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, response?: anyObject) => any;
     };
+
+    /**
+     * Configuration for individual services to enable/disable them. Message
+     * queue services can also configure the producer and consumer individually
+     * by passing an object with a `producer` and `consumer` properties. The
+     * list of valid service keys is in the service-specific section of
+     * https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Config.html
+     */
+    [key: string]: boolean | Object | undefined;
   }
 
   /**
@@ -982,15 +1017,39 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
+    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `allowlist`.
+     *
+     * @deprecated
+     * @hidden
+     */
     whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
-     * whitelist if a command matches an entry in both.
+     * allowlist if a command matches an entry in both.
      *
      * @default []
      */
+    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `blocklist`.
+     *
+     * @deprecated
+     * @hidden
+     */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Whether to use a different service name for each Redis instance based
+     * on the configured connection name of the client.
+     *
+     * @default false
+     */
+    splitByInstance?: boolean;
   }
 
   /**
@@ -1013,6 +1072,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [kafkajs](https://kafka.js.org/) module.
+   */
+  interface kafkajs extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
    * [limitd-client](https://github.com/limitd/node-client) module.
    */
   interface limitd_client extends Integration {}
@@ -1028,6 +1093,12 @@ declare namespace plugins {
    * [microgateway-core](https://github.com/apigee/microgateway-core) module.
    */
   interface microgateway_core extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [mocha](https://mochajs.org/) module.
+   */
+  interface mocha extends Integration {}
 
   /**
    * This plugin automatically instruments the
@@ -1112,13 +1183,29 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
+    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `allowlist`.
+     *
+     * deprecated
+     * @hidden
+     */
     whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
-     * whitelist if a command matches an entry in both.
+     * allowlist if a command matches an entry in both.
      *
      * @default []
+     */
+    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+    /**
+     * Deprecated in favor of `blocklist`.
+     *
+     * @deprecated
+     * @hidden
      */
     blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
   }

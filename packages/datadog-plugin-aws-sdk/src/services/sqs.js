@@ -3,15 +3,33 @@
 const log = require('../../../dd-trace/src/log')
 
 class Sqs {
+  isEnabled (config, request) {
+    switch (request.operation) {
+      case 'receiveMessage':
+        return config.consumer !== false
+      case 'sendMessage':
+      case 'sendMessageBatch':
+        return config.producer !== false
+      default:
+        return true
+    }
+  }
+
   generateTags (params, operation, response) {
     const tags = {}
 
     if (!params || (!params.QueueName && !params.QueueUrl)) return tags
 
-    return Object.assign(tags, {
+    Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl
     })
+
+    if (operation === 'receiveMessage') {
+      tags['span.type'] = 'worker'
+    }
+
+    return tags
   }
 
   responseExtract (params, operation, response, tracer) {

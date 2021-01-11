@@ -63,6 +63,12 @@
       "versions": ["6.1.0"]
     }
   ],
+  "mocha": [
+    {
+      "name": "mocha",
+      "versions": [">=5.2.0"]
+    }
+  ],
   "mongodb-core": [
     {
       "name": "bson",

@@ -1,6 +1,5 @@
 'use strict'
 
-const http = require('http')
 const getPort = require('get-port')
 const agent = require('../agent')
 const types = require('../../../../../ext/types')
@@ -34,22 +33,22 @@ describe('plugins/util/web', () => {
   let tags
 
   beforeEach(() => {
-    req = Object.assign(Object.create(http.IncomingMessage.prototype), {
+    req = {
       method: 'GET',
       headers: {
         'host': 'localhost',
         'date': 'now'
       },
       connection: {}
-    })
+    }
     end = sinon.stub()
-    const respProtoWithEnd = Object.assign(Object.create(http.ServerResponse.prototype), { end })
-    res = Object.assign(Object.create(respProtoWithEnd), {
+    res = {
+      end,
       getHeader: sinon.stub(),
       getHeaders: sinon.stub().returns({}),
       setHeader: sinon.spy(),
       writeHead: () => {}
-    })
+    }
     res.getHeader.withArgs('server').returns('test')
     config = { hooks: {} }
 
@@ -840,9 +839,43 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('allowlistFilter', () => {
+    beforeEach(() => {
+      config = { allowlist: ['/_okay'] }
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
+
   describe('whitelistFilter', () => {
     beforeEach(() => {
       config = { whitelist: ['/_okay'] }
+      config = web.normalizeConfig(config)
+    })
+
+    it('should not filter the url', () => {
+      const filtered = config.filter('/_okay')
+      expect(filtered).to.equal(true)
+    })
+
+    it('should filter the url', () => {
+      const filtered = config.filter('/_notokay')
+      expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('blocklistFilter', () => {
+    beforeEach(() => {
+      config = { blocklist: ['/_notokay'] }
       config = web.normalizeConfig(config)
     })
 

@@ -104,8 +104,7 @@ function addTags (channel, tracer, config, span, method, fields) {
 
   span.addTags({
     'service.name': config.service || `${tracer._service}-amqp`,
-    'resource.name': getResourceName(method, fields),
-    'span.type': 'worker'
+    'resource.name': getResourceName(method, fields)
   })
 
   if (channel && channel.connection && channel.connection.stream) {
@@ -122,7 +121,10 @@ function addTags (channel, tracer, config, span, method, fields) {
     case 'basic.consume':
     case 'basic.get':
     case 'basic.deliver':
-      span.setTag('span.kind', 'consumer')
+      span.addTags({
+        'span.kind': 'consumer',
+        'span.type': 'worker'
+      })
       break
   }
 

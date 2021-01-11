@@ -15,7 +15,7 @@ describe('Plugin', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Redis = require(`../../../versions/ioredis@${version}`).get()
-        redis = new Redis()
+        redis = new Redis({ connectionName: 'test' })
       })
 
       afterEach(() => {
@@ -84,20 +84,40 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => agent.load('ioredis', {
           service: 'custom',
-          whitelist: ['get']
+          splitByInstance: true,
+          allowlist: ['get']
         }))
         after(() => agent.close())
 
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              expect(traces[0][0]).to.have.property('service', 'custom-test')
             })
             .then(done)
             .catch(done)
 
           redis.get('foo').catch(done)
         })
+
+        it('should be able to filter commands', done => {
+          agent.use(() => {}) // wait for initial command
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'get')
+            })
+            .then(done)
+            .catch(done)
+
+          redis.get('foo').catch(done)
+        })
+      })
+
+      describe('with legacy configuration', () => {
+        before(() => agent.load('ioredis', {
+          whitelist: ['get']
+        }))
+        after(() => agent.close())
 
         it('should be able to filter commands', done => {
           agent.use(() => {}) // wait for initial command

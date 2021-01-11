@@ -10,7 +10,7 @@ function getGitMetadata () {
   const commitSha = sanitizedExec('git rev-parse HEAD')
   return {
     [GIT_REPOSITORY_URL]: sanitizedExec('git ls-remote --get-url'),
-    [GIT_BRANCH]: sanitizedExec('git branch --show-current'),
+    [GIT_BRANCH]: sanitizedExec('git rev-parse --abbrev-ref HEAD'),
     [GIT_COMMIT_SHA]: commitSha,
     [DEPRECATED_GIT_COMMIT_SHA]: commitSha
   }

@@ -140,6 +140,7 @@ describe('Plugin', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: 'pubsub.receive',
+              type: 'worker',
               meta: {
                 'span.kind': 'consumer'
               },

@@ -1,3 +1,7 @@
 'use strict'
 
-require('.').init()
+const tracer = require('.')
+
+tracer.init()
+
+module.exports = tracer

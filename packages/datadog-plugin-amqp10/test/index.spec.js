@@ -71,7 +71,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('name', 'amqp.send')
                 expect(span).to.have.property('service', 'test-amqp')
                 expect(span).to.have.property('resource', 'send amq.topic')
-                expect(span).to.have.property('type', 'worker')
+                expect(span).to.not.have.property('type')
                 expect(span.meta).to.have.property('span.kind', 'producer')
                 expect(span.meta).to.have.property('out.host', 'localhost')
                 expect(span.meta).to.have.property('amqp.connection.host', 'localhost')

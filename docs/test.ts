@@ -51,7 +51,7 @@ tracer.init({
     b3: true,
     runtimeId: true,
     exporter: 'log',
-    distributedTracingOriginWhitelist: ['foo', /bar/],
+    distributedTracingOriginAllowlist: ['foo', /bar/],
     sampler: {
       sampleRate: 1,
       rateLimit: 1000,
@@ -90,8 +90,8 @@ tracer.init({
 
 const httpOptions = {
   service: 'test',
-  whitelist: ['url', /url/, url => true],
-  blacklist: ['url', /url/, url => true],
+  allowlist: ['url', /url/, url => true],
+  blocklist: ['url', /url/, url => true],
   validateStatus: code => code < 400,
   headers: ['host'],
   middleware: true
@@ -144,13 +144,18 @@ const awsSdkOptions = {
   splitByAwsService: false,
   hooks: {
     request: (span, response) => {},
+  },
+  s3: false,
+  sqs: {
+    consumer: true,
+    producer: false
   }
 };
 
 const redisOptions = {
   service: 'test',
-  whitelist: ['info', /auth/i, command => true],
-  blacklist: ['info', /auth/i, command => true],
+  allowlist: ['info', /auth/i, command => true],
+  blocklist: ['info', /auth/i, command => true],
 };
 
 tracer.use('amqp10');
@@ -196,13 +201,16 @@ tracer.use('http2', {
 });
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
+tracer.use('ioredis', { splitByInstance: true });
 tracer.use('jest');
+tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('limitd-client');
 tracer.use('memcached');
 tracer.use('microgateway-core', httpServerOptions);
+tracer.use('mocha');
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
