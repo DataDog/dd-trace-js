@@ -10,7 +10,7 @@ const zip = new JSZip()
 wrapIt()
 
 describe('Plugin', () => {
-  describe.only('aws-sdk (lambda)', function () {
+  describe('aws-sdk (lambda)', function () {
     setup()
 
     withVersions(plugin, 'aws-sdk', version => {
