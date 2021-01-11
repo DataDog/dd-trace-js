@@ -95,6 +95,7 @@ services:
       - EDGE_PORT=4565
   serverless_localstack:
     image: localstack/localstack:0.12.4
+    network_mode: bridge
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:
