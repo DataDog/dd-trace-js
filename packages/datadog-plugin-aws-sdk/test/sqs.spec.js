@@ -82,7 +82,7 @@ describe('Plugin', () => {
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['All']
+              MessageAttributeNames: ['.*']
             }, (err) => {
               if (err) return done(err)
             })
@@ -100,7 +100,7 @@ describe('Plugin', () => {
 
             sqs.receiveMessage({
               QueueUrl,
-              MessageAttributeNames: ['All']
+              MessageAttributeNames: ['.*']
             }, (err) => {
               if (err) return done(err)
 
