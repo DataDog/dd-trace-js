@@ -1,0 +1,532 @@
+[
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI": "sample2",
+      "BUILD_SOURCEBRANCH": "master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample2",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "BUILD_SOURCESDIRECTORY": "/foo/bar~",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar~",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "BUILD_SOURCESDIRECTORY": "/foo/~/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/~/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "BUILD_SOURCESDIRECTORY": "~/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/not-my-home/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "BUILD_SOURCESDIRECTORY": "~foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "~foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "BUILD_SOURCESDIRECTORY": "~",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/not-my-home",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "refs/heads/master",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "master",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "refs/heads/feature/one",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "feature/one",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/tags/0.1.0",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.tag": "0.1.0",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "refs/heads/tags/0.1.0",
+      "BUILD_SOURCEVERSION": "commit",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.tag": "0.1.0",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commit",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "origin/master",
+      "SYSTEM_PULLREQUEST_SOURCEBRANCH": "origin/pr",
+      "BUILD_SOURCEVERSION": "commit",
+      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "commitPR",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "pr",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commitPR",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "refs/heads/master",
+      "SYSTEM_PULLREQUEST_SOURCEBRANCH": "refs/heads/pr",
+      "BUILD_SOURCEVERSION": "commit",
+      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "commitPR",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "pr",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commitPR",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ],
+  [
+    {
+      "BUILD_SOURCESDIRECTORY": "/foo/bar",
+      "BUILD_REPOSITORY_URI": "sample",
+      "BUILD_SOURCEBRANCH": "refs/heads/feature/one",
+      "SYSTEM_PULLREQUEST_SOURCEBRANCH": "refs/heads/pr",
+      "BUILD_SOURCEVERSION": "commit",
+      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "commitPR",
+      "TF_BUILD": "True",
+      "BUILD_DEFINITIONNAME": "azure-pipelines-name",
+      "SYSTEM_TEAMFOUNDATIONSERVERURI": "azure-pipelines-server-uri/",
+      "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
+      "BUILD_BUILDID": "azure-pipelines-build-id",
+      "SYSTEM_JOBID": "azure-pipelines-job-id",
+      "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id"
+    },
+    {
+      "ci.job.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id&view=logs&j=azure-pipelines-job-id&t=azure-pipelines-task-id",
+      "git.branch": "pr",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.sha": "commitPR",
+      "git.repository_url": "sample",
+      "ci.provider.name": "azurepipelines",
+      "ci.pipeline.id": "azure-pipelines-build-id",
+      "ci.pipeline.name": "azure-pipelines-name",
+      "ci.pipeline.number": "azure-pipelines-build-id",
+      "ci.pipeline.url": "azure-pipelines-server-uri/azure-pipelines-project-id/_build/results?buildId=azure-pipelines-build-id"
+    }
+  ]
+]
