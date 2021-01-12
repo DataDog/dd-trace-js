@@ -14,12 +14,10 @@ describe('Config', () => {
     Config = proxyquire('../src/config', {
       './platform': platform
     }).constructor
-    sinon.stub(Config.prototype, 'setMaxListeners')
   })
 
   it('should initialize with the correct defaults', () => {
     const config = new Config()
-    expect(Config.prototype.setMaxListeners).to.have.been.calledWith(1024)
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('enabled', true)
