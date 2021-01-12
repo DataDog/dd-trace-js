@@ -7,7 +7,6 @@ const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
-const config = require('../../src/config')
 
 const handlers = new Set()
 let sockets = []
@@ -139,7 +138,6 @@ module.exports = {
     agent = null
     handlers.clear()
     delete require.cache[require.resolve('../..')]
-    config.reset()
 
     return new Promise((resolve, reject) => {
       server.on('close', () => {

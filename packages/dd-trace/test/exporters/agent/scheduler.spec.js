@@ -7,20 +7,15 @@ describe('Scheduler', () => {
   let Scheduler
   let clock
   let platform
-  let config
 
   beforeEach(() => {
     platform = new EventEmitter()
-    config = proxyquire('../../../src/config', {})
 
     Scheduler = proxyquire('../../../src/exporters/agent/scheduler', {
-      '../../platform': platform,
-      '../../config': config
+      '../../platform': platform
     })
 
     clock = sinon.useFakeTimers()
-
-    config.configure({ flushInterval: 5000 })
   })
 
   afterEach(() => {
@@ -30,7 +25,7 @@ describe('Scheduler', () => {
   describe('start', () => {
     it('should call the callback at the specified interval', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy)
+      const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
       clock.tick(5000)
@@ -44,7 +39,7 @@ describe('Scheduler', () => {
 
     it('should call the callback when the process exits gracefully', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy)
+      const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
       platform.emit('exit')
@@ -56,7 +51,7 @@ describe('Scheduler', () => {
   describe('stop', () => {
     it('should stop calling the callback at the specified interval', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy)
+      const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
       scheduler.stop()
@@ -67,7 +62,7 @@ describe('Scheduler', () => {
 
     it('should stop calling the callback when the process exits gracefully', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy)
+      const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
       scheduler.stop()
@@ -80,7 +75,7 @@ describe('Scheduler', () => {
   describe('reset', () => {
     it('should reset the internal clock', () => {
       const spy = sinon.spy()
-      const scheduler = new Scheduler(spy)
+      const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
       clock.tick(4000)

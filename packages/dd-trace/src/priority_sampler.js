@@ -4,7 +4,6 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const ext = require('../../../ext')
 const { setSamplingRules } = require('./platform').startupLog
-const config = require('./config')
 
 const {
   SAMPLING_RULE_DECISION,
@@ -23,16 +22,14 @@ const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
 class PrioritySampler {
-  constructor () {
-    config.retroOn('update', ({ env, experimental: { sampler } }) => {
-      this._env = env
-      this._rules = this._normalizeRules(sampler.rules || [], sampler.sampleRate)
-      this._limiter = new RateLimiter(sampler.rateLimit || 100)
+  constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
+    this._env = env
+    this._rules = this._normalizeRules(rules, sampleRate)
+    this._limiter = new RateLimiter(rateLimit)
 
-      setSamplingRules(this._rules)
+    setSamplingRules(this._rules)
 
-      this.update({})
-    })
+    this.update({})
   }
 
   isSampled (span) {

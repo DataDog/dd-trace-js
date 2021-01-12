@@ -3,7 +3,7 @@
 const shimmer = require('shimmer')
 const log = require('./log')
 const platform = require('./platform')
-const config = require('./config')
+const { isTrue, isFalse } = require('./util')
 
 shimmer({ logger: () => {} })
 
@@ -15,6 +15,34 @@ const collectDisabledPlugins = () => {
   return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
 }
 
+function cleanEnv (name) {
+  return platform.env(`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_'))
+}
+
+function getConfig (name, config = {}) {
+  if (!name) {
+    return config
+  }
+
+  const enabled = cleanEnv(`${name}_ENABLED`)
+  if (enabled !== undefined) {
+    config.enabled = isTrue(enabled)
+  }
+
+  const analyticsEnabled = cleanEnv(`${name}_ANALYTICS_ENABLED`)
+  const analyticsSampleRate = Math.min(Math.max(cleanEnv(`${name}_ANALYTICS_SAMPLE_RATE`), 0), 1)
+
+  if (isFalse(analyticsEnabled)) {
+    config.analytics = false
+  } else if (!Number.isNaN(analyticsSampleRate)) {
+    config.analytics = analyticsSampleRate
+  } else if (isTrue(analyticsEnabled)) {
+    config.analytics = true
+  }
+
+  return config
+}
+
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
@@ -24,41 +52,40 @@ class Instrumenter {
     this._plugins = new Map()
     this._instrumented = new Map()
     this._disabledPlugins = collectDisabledPlugins()
-
-    config.retroOn('update.plugins', ({ pluginConfigs: configs }) => {
-      // TODO in the future, plugins will listen to the state, instead of the instrumenter
-      Object.keys(configs).forEach(name => {
-        try {
-          this._set(plugins[name.toLowerCase()], {
-            name,
-            config: configs[name]
-          })
-        } catch (e) {
-          log.debug(`Could not find a plugin named "${name}".`)
-        }
-      })
-
-      if (this._enabled) {
-        this._loader.reload(this._plugins)
-      }
-    })
   }
 
-  use (name, pluginConfig) {
-    // TODO can we remove this?
-    config.configurePlugin(name, pluginConfig)
+  use (name, config) {
+    if (typeof config === 'boolean') {
+      config = { enabled: config }
+    }
+
+    config = getConfig(name, config)
+
+    try {
+      this._set(plugins[name.toLowerCase()], { name, config })
+    } catch (e) {
+      log.debug(`Could not find a plugin named "${name}".`)
+    }
+
+    if (this._enabled) {
+      this._loader.reload(this._plugins)
+    }
   }
 
-  enable () {
+  enable (config) {
+    config = config || {}
+
     this._enabled = true
 
     if (config.plugins !== false) {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          config.configurePlugin(name)
+          this._set(plugins[name], { name, config: getConfig(name) })
         })
     }
+
+    this._loader.reload(this._plugins)
   }
 
   disable () {
