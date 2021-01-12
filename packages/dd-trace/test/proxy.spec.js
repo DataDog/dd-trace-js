@@ -9,6 +9,7 @@ describe('TracerProxy', () => {
   let noop
   let Instrumenter
   let instrumenter
+  let Config
   let config
   let platform
   let analyticsSampler
@@ -23,7 +24,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
-      scopeManager: sinon.stub().returns('scopeManager')
+      scopeManager: sinon.stub().returns('scopeManager'),
+      setUrl: sinon.stub()
     }
 
     noop = {
@@ -34,7 +36,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
-      scopeManager: sinon.stub().returns('scopeManager')
+      scopeManager: sinon.stub().returns('scopeManager'),
+      setUrl: sinon.stub()
     }
 
     log = {
@@ -56,9 +59,9 @@ describe('TracerProxy', () => {
       enabled: true,
       experimental: {},
       logger: 'logger',
-      debug: true,
-      configure: sinon.spy()
+      debug: true
     }
+    Config = sinon.stub().returns(config)
 
     platform = {
       load: sinon.spy(),
@@ -77,7 +80,7 @@ describe('TracerProxy', () => {
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
-      './config': config,
+      './config': Config,
       './platform': platform,
       './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,
@@ -96,14 +99,6 @@ describe('TracerProxy', () => {
     })
   })
 
-  describe('configure', () => {
-    it('should call the underlying configure', () => {
-      const options = {}
-      proxy.configure(options)
-      expect(config.configure).to.have.been.calledWith(options)
-    })
-  })
-
   describe('uninitialized', () => {
     describe('init', () => {
       it('should return itself', () => {
@@ -115,7 +110,8 @@ describe('TracerProxy', () => {
 
         proxy.init(options)
 
-        expect(config.configure).to.have.been.calledWith(options)
+        expect(Config).to.have.been.calledWith(options)
+        expect(DatadogTracer).to.have.been.calledWith(config)
       })
 
       it('should not initialize twice', () => {
@@ -268,19 +264,20 @@ describe('TracerProxy', () => {
         expect(returnValue).to.equal('scopeManager')
       })
     })
+
+    describe('setUrl', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.setUrl('http://example.com')
+
+        expect(noop.setUrl).to.have.been.calledWith('http://example.com')
+        expect(returnValue).to.equal(proxy)
+      })
+    })
   })
 
   describe('initialized', () => {
     beforeEach(() => {
       proxy.init()
-    })
-
-    describe('init', () => {
-      it('should call configure', () => {
-        proxy.init('foobar')
-
-        expect(config.configure).to.have.been.calledWith('foobar')
-      })
     })
 
     describe('use', () => {
@@ -377,7 +374,7 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        expect(config.configure).to.have.been.calledWith({ url: 'http://example.com' })
+        expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
       })
     })
