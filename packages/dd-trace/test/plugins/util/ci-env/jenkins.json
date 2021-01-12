@@ -1,0 +1,525 @@
+[
+  [
+    {
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar~",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar~",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/~/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/~/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "WORKSPACE": "~/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/not-my-home/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "WORKSPACE": "~foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "~foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "WORKSPACE": "~",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/not-my-home",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName/master",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "refs/heads/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName/another",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "refs/heads/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName/another",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName/feature/one",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "refs/heads/feature/one",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "feature/one",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName/KEY1=VALUE1,KEY2=VALUE2",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "refs/heads/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName/KEY1=VALUE1,KEY2=VALUE2/master",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "refs/heads/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "origin/tags/0.1.0",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.tag": "0.1.0",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "GIT_URL": "sample",
+      "GIT_BRANCH": "refs/heads/tags/0.1.0",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "sample",
+      "git.tag": "0.1.0",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "http://hostname.com/repo.git",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "http://hostname.com/repo.git",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "http://user@hostname.com/repo.git",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "http://hostname.com/repo.git",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "http://user%E2%82%AC@hostname.com/repo.git",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "http://hostname.com/repo.git",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "http://user:pwd@hostname.com/repo.git",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "http://hostname.com/repo.git",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ],
+  [
+    {
+      "WORKSPACE": "/foo/bar",
+      "JOB_NAME": "jobName",
+      "GIT_URL": "git@hostname.com:org/repo.git",
+      "GIT_BRANCH": "origin/master",
+      "JENKINS_URL": "jenkins",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "JOB_URL": "jenkins-job-url",
+      "GIT_COMMIT": "jenkins-git-commit"
+    },
+    {
+      "ci.pipeline.name": "jobName",
+      "ci.workspace_path": "/foo/bar",
+      "git.repository_url": "git@hostname.com:org/repo.git",
+      "git.branch": "master",
+      "ci.provider.name": "jenkins",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "git.commit.sha": "jenkins-git-commit"
+    }
+  ]
+]

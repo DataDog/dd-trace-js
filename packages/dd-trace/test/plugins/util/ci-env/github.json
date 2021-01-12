@@ -1,0 +1,395 @@
+[
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "foo/bar",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar~",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar~",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/~/bar",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/~/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "GITHUB_WORKSPACE": "~/foo/bar",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/not-my-home/foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "GITHUB_WORKSPACE": "~foo/bar",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "~foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "HOME": "/not-my-home",
+      "USERPROFILE": "/not-my-home",
+      "GITHUB_WORKSPACE": "~",
+      "GITHUB_REF": "master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/not-my-home",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "origin/master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "refs/heads/master",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "master",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "refs/heads/feature/one",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "feature/one",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "origin/tags/0.1.0",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.tag": "0.1.0",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "refs/heads/tags/0.1.0",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.tag": "0.1.0",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "origin/master",
+      "GITHUB_HEAD_REF": "origin/other",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "other",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "refs/heads/master",
+      "GITHUB_HEAD_REF": "refs/heads/other",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "other",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ],
+  [
+    {
+      "GITHUB_WORKSPACE": "/foo/bar",
+      "GITHUB_REF": "refs/heads/feature/one",
+      "GITHUB_HEAD_REF": "refs/heads/feature/other",
+      "GITHUB_ACTION": "run",
+      "GITHUB_RUN_ID": "ghactions-pipeline-id",
+      "GITHUB_WORKFLOW": "ghactions-pipeline-name",
+      "GITHUB_RUN_NUMBER": "ghactions-pipeline-number",
+      "GITHUB_REPOSITORY": "ghactions-repo",
+      "GITHUB_SHA": "ghactions-commit"
+    },
+    {
+      "ci.workspace_path": "/foo/bar",
+      "git.branch": "feature/other",
+      "ci.provider.name": "github",
+      "ci.pipeline.id": "ghactions-pipeline-id",
+      "ci.pipeline.name": "ghactions-pipeline-name",
+      "ci.pipeline.number": "ghactions-pipeline-number",
+      "ci.pipeline.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "ci.job.url": "https://github.com/ghactions-repo/commit/ghactions-commit/checks",
+      "git.repository_url": "https://github.com/ghactions-repo.git",
+      "git.commit.sha": "ghactions-commit"
+    }
+  ]
+]
