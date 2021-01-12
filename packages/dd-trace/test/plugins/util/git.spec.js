@@ -22,13 +22,13 @@ describe('git', () => {
     const ciMetadata = { commitSHA: 'ciSHA', branch: 'ciBranch' }
     const metadata = getGitMetadata(ciMetadata)
 
-    expect(metadata).to.eql(
+    expect(metadata).to.include(
       {
         [GIT_COMMIT_SHA]: 'ciSHA',
-        [GIT_BRANCH]: 'ciBranch',
-        [GIT_REPOSITORY_URL]: 'git@github.com:DataDog/dd-trace-js.git'
+        [GIT_BRANCH]: 'ciBranch'
       }
     )
+    expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
     expect(childProcess.execSync).to.have.been.calledWith('git ls-remote --get-url', { stdio: 'pipe' })
   })
 })
