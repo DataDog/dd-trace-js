@@ -4,8 +4,9 @@ module.exports = {
   use (impl) {
     Object.assign(this, impl)
   },
-  env () {
+  env (name) {
     // need this stub for early config
+    return typeof window !== 'undefined' ? window[name] : process.env[name]
   },
   service () {
     // need this stub for early config
