@@ -67,8 +67,7 @@ describe('Tracer', () => {
       extract: sinon.stub()
     }
 
-    config = proxyquire('../src/config', {})
-    config.configure({
+    config = {
       service: 'service',
       url: 'http://test:7777',
       flushInterval: 2000,
@@ -77,7 +76,7 @@ describe('Tracer', () => {
       tags: {},
       debug: true,
       experimental: {}
-    })
+    }
 
     log = {
       use: sinon.spy(),
@@ -100,23 +99,22 @@ describe('Tracer', () => {
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
       '../log': log,
-      '../platform': platform,
-      '../config': config
+      '../platform': platform
     })
   })
 
   it('should support recording', () => {
-    tracer = new Tracer()
+    tracer = new Tracer(config)
 
     expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(prioritySampler)
+    expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
   })
 
   it('should support sampling', () => {
-    tracer = new Tracer()
+    tracer = new Tracer(config)
 
-    expect(Sampler).to.have.been.called
+    expect(Sampler).to.have.been.calledWith(config.sampleRate)
   })
 
   describe('startSpan', () => {
@@ -124,7 +122,7 @@ describe('Tracer', () => {
       fields.tags = { foo: 'bar' }
       fields.startTime = 1234567890000000000
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWith(tracer, processor, sampler, prioritySampler, {
@@ -151,7 +149,7 @@ describe('Tracer', () => {
         new Reference(opentracing.REFERENCE_CHILD_OF, parent)
       ]
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
@@ -167,7 +165,7 @@ describe('Tracer', () => {
         new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent)
       ]
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
@@ -179,10 +177,8 @@ describe('Tracer', () => {
     it('should start a span with the system hostname if reportHostname is enabled', () => {
       fields.tags = { foo: 'bar' }
       fields.startTime = 1234567890000000000
-      config.configure({
-        reportHostname: true
-      })
-      tracer = new Tracer()
+      config.reportHostname = true
+      tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWith(tracer, processor, sampler, prioritySampler, {
@@ -206,7 +202,7 @@ describe('Tracer', () => {
         new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext())
       ]
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
@@ -222,7 +218,7 @@ describe('Tracer', () => {
         new Reference('test', parent)
       ]
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
@@ -234,7 +230,7 @@ describe('Tracer', () => {
     it('should ignore references that are not references', () => {
       fields.references = [{}]
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
@@ -248,7 +244,7 @@ describe('Tracer', () => {
         new Reference(opentracing.REFERENCE_CHILD_OF, {})
       ]
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
@@ -258,19 +254,17 @@ describe('Tracer', () => {
     })
 
     it('should merge default tracer tags with span tags', () => {
-      config.configure({
-        tags: {
-          'foo': 'tracer',
-          'bar': 'tracer'
-        }
-      })
+      config.tags = {
+        'foo': 'tracer',
+        'bar': 'tracer'
+      }
 
       fields.tags = {
         'bar': 'span',
         'baz': 'span'
       }
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(span.addTags).to.have.been.calledWith(config.tags)
@@ -280,7 +274,7 @@ describe('Tracer', () => {
     it('should return a noop span when not sampled', () => {
       sampler.isSampled.returns(false)
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       span = tracer.startSpan('name', fields)
 
       expect(span.context()).to.have.property('_noop', span)
@@ -288,7 +282,7 @@ describe('Tracer', () => {
     })
 
     it('should return a noop when the parent is not sampled', () => {
-      tracer = new Tracer()
+      tracer = new Tracer(config)
 
       const parent = new SpanContext({ traceFlags: { sampled: false } })
 
@@ -303,7 +297,7 @@ describe('Tracer', () => {
     })
 
     it('should return the same instance when the parent is a noop', () => {
-      tracer = new Tracer()
+      tracer = new Tracer(config)
 
       sampler.isSampled.returns(false)
       const parent = tracer.startSpan('parent', fields)
@@ -327,7 +321,7 @@ describe('Tracer', () => {
 
       sampler.isSampled.returns(false)
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
       expect(Span).to.have.been.called
@@ -338,7 +332,7 @@ describe('Tracer', () => {
     it('should support text map format', () => {
       TextMapPropagator.returns(propagator)
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(TextMapPropagator).to.have.been.calledWith(config)
@@ -348,7 +342,7 @@ describe('Tracer', () => {
     it('should support http headers format', () => {
       HttpPropagator.returns(propagator)
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_HTTP_HEADERS, carrier)
 
       expect(HttpPropagator).to.have.been.calledWith(config)
@@ -358,14 +352,14 @@ describe('Tracer', () => {
     it('should support binary format', () => {
       BinaryPropagator.returns(propagator)
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_BINARY, carrier)
 
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
 
     it('should handle errors', () => {
-      tracer = new Tracer()
+      tracer = new Tracer(config)
 
       expect(() => tracer.inject({})).not.to.throw()
       expect(log.error).to.have.been.calledOnce
@@ -374,7 +368,7 @@ describe('Tracer', () => {
     it('should generate the sampling priority', () => {
       TextMapPropagator.returns(propagator)
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
@@ -386,7 +380,7 @@ describe('Tracer', () => {
       TextMapPropagator.returns(propagator)
       propagator.extract.withArgs(carrier).returns('spanContext')
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       const spanContext = tracer.extract(opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(spanContext).to.equal('spanContext')
@@ -396,7 +390,7 @@ describe('Tracer', () => {
       HttpPropagator.returns(propagator)
       propagator.extract.withArgs(carrier).returns('spanContext')
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       const spanContext = tracer.extract(opentracing.FORMAT_HTTP_HEADERS, carrier)
 
       expect(spanContext).to.equal('spanContext')
@@ -406,14 +400,14 @@ describe('Tracer', () => {
       BinaryPropagator.returns(propagator)
       propagator.extract.withArgs(carrier).returns('spanContext')
 
-      tracer = new Tracer()
+      tracer = new Tracer(config)
       const spanContext = tracer.extract(opentracing.FORMAT_BINARY, carrier)
 
       expect(spanContext).to.equal('spanContext')
     })
 
     it('should handle errors', () => {
-      tracer = new Tracer()
+      tracer = new Tracer(config)
 
       expect(() => tracer.extract()).not.to.throw()
     })

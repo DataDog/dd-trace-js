@@ -1,5 +1,7 @@
 'use strict'
 
+const URL = require('url-parse')
+
 describe('Exporter', () => {
   let url
   let flushInterval
@@ -11,7 +13,6 @@ describe('Exporter', () => {
   let writer
   let prioritySampler
   let span
-  let config
 
   beforeEach(() => {
     url = 'www.example.com'
@@ -29,25 +30,21 @@ describe('Exporter', () => {
     prioritySampler = {}
     Scheduler = sinon.stub().returns(scheduler)
     Writer = sinon.stub().returns(writer)
-    config = proxyquire('../src/config', {})
 
     Exporter = proxyquire('../src/exporters/agent', {
       './scheduler': Scheduler,
-      './writer': Writer,
-      '../../config': config
+      './writer': Writer
     })
   })
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
-      config.configure({ url, flushInterval })
-      exporter = new Exporter(prioritySampler)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
     it('should schedule flushing after the configured interval', () => {
       writer.length = 0
-      config.configure({ url, flushInterval })
-      exporter = new Exporter(prioritySampler)
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
       Scheduler.firstCall.args[0]()
 
       expect(scheduler.start).to.have.been.called
@@ -70,13 +67,24 @@ describe('Exporter', () => {
 
   describe('when interval is set to 0', () => {
     beforeEach(() => {
-      config.configure({ url, flushInterval: 0 })
-      exporter = new Exporter()
+      exporter = new Exporter({ url, flushInterval: 0 })
     })
 
     it('should flush right away when interval is set to 0', () => {
       exporter.export([span])
       expect(writer.flush).to.have.been.called
+    })
+  })
+
+  describe('setUrl', () => {
+    beforeEach(() => {
+      exporter = new Exporter({ url })
+    })
+    it('should set the URL on self and writer', () => {
+      exporter.setUrl('http://example2.com')
+      const url = new URL('http://example2.com')
+      expect(exporter._url).to.deep.equal(url)
+      expect(writer.setUrl).to.have.been.calledWith(url)
     })
   })
 })

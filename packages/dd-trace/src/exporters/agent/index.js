@@ -1,28 +1,29 @@
 'use strict'
 
+const URL = require('url-parse')
+const log = require('../../log')
 const Writer = require('./writer')
 const Scheduler = require('./scheduler')
 
-const config = require('../../config')
-
 class AgentExporter {
-  constructor (prioritySampler) {
-    this._writer = new Writer(prioritySampler)
+  constructor ({ url, hostname, port, flushInterval, lookup, protocolVersion }, prioritySampler) {
+    this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
+    this._writer = new Writer({ url: this._url, prioritySampler, lookup, protocolVersion })
 
-    config.retroOn('update', ({ flushInterval, url }) => {
-      if (flushInterval > 0) {
-        if (!this._scheduler) {
-          this._scheduler = new Scheduler(() => this._writer.flush())
-          this._scheduler.start()
-        }
-      } else {
-        if (this._scheduler) {
-          this._scheduler.stop()
-          delete this._scheduler
-        }
-      }
+    if (flushInterval > 0) {
+      this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
+    }
+    this._scheduler && this._scheduler.start()
+  }
+
+  setUrl (url) {
+    try {
+      url = new URL(url)
       this._url = url
-    })
+      this._writer.setUrl(url)
+    } catch (e) {
+      log.warn(e.stack)
+    }
   }
 
   export (spans) {
