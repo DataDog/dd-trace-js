@@ -11,13 +11,22 @@ const CI_WORKSPACE_PATH = 'ci.workspace_path'
 const GIT_REPOSITORY_URL = 'git.repository_url'
 const CI_JOB_URL = 'ci.job.url'
 
-function addTag (value, tagKey, normalize, targetTags) {
-  if (value) {
-    targetTags[tagKey] = normalize(value)
-    return
+function removeEmptyValues (tags) {
+  return Object.keys(tags).reduce((filteredTags, tag) => {
+    if (!tags[tag]) {
+      return filteredTags
+    }
+    return {
+      ...filteredTags,
+      [tag]: tags[tag]
+    }
+  }, {})
+}
+
+function normalizeTag (targetTags, tagKey, normalize) {
+  if (targetTags[tagKey]) {
+    targetTags[tagKey] = normalize(targetTags[tagKey])
   }
-  // If the value is empty, we want to delete the key altogether
-  delete targetTags[tagKey]
 }
 
 function normalizeRef (ref) {
@@ -79,16 +88,15 @@ module.exports = {
         [CI_PIPELINE_URL]: BUILD_URL,
         [CI_PROVIDER_NAME]: 'jenkins',
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
-        [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(JENKINS_GIT_REPOSITORY_URL)
+        [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL,
+        [CI_WORKSPACE_PATH]: WORKSPACE
       }
 
       const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags')
-      const finalRefKey = isTag ? GIT_TAG : GIT_BRANCH
+      const refKey = isTag ? GIT_TAG : GIT_BRANCH
       const ref = normalizeRef(JENKINS_GIT_BRANCH)
 
-      tags[finalRefKey] = ref
-
-      addTag(WORKSPACE, CI_WORKSPACE_PATH, resolveTilde, tags)
+      tags[refKey] = ref
 
       let finalPipelineName = ''
       if (JOB_NAME) {
@@ -101,8 +109,6 @@ module.exports = {
         }
         tags[CI_PIPELINE_NAME] = finalPipelineName
       }
-
-      // return tags
     }
 
     if (env.GITLAB_CI) {
@@ -125,16 +131,13 @@ module.exports = {
         [CI_PIPELINE_NUMBER]: CI_PIPELINE_IID,
         [CI_PROVIDER_NAME]: 'gitlab',
         [GIT_COMMIT_SHA]: CI_COMMIT_SHA,
-        [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(CI_REPOSITORY_URL),
-        [CI_JOB_URL]: GITLAB_CI_JOB_URL
+        [GIT_REPOSITORY_URL]: CI_REPOSITORY_URL,
+        [CI_JOB_URL]: GITLAB_CI_JOB_URL,
+        [GIT_TAG]: CI_COMMIT_TAG,
+        [GIT_BRANCH]: CI_COMMIT_BRANCH,
+        [CI_WORKSPACE_PATH]: CI_PROJECT_DIR,
+        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL && GITLAB_PIPELINE_URL.replace('/-/pipelines/', '/pipelines/')
       }
-
-      addTag(CI_COMMIT_TAG, GIT_TAG, normalizeRef, tags)
-      addTag(CI_COMMIT_BRANCH, GIT_BRANCH, normalizeRef, tags)
-      addTag(CI_PROJECT_DIR, CI_WORKSPACE_PATH, resolveTilde, tags)
-      addTag(GITLAB_PIPELINE_URL, CI_PIPELINE_URL, (value) => value.replace('/-/pipelines/', '/pipelines/'), tags)
-
-      // return tags
     }
 
     if (env.CIRCLECI) {
@@ -157,14 +160,11 @@ module.exports = {
         [CI_PIPELINE_URL]: CIRCLE_BUILD_URL,
         [CI_PROVIDER_NAME]: 'circleci',
         [GIT_COMMIT_SHA]: CIRCLE_SHA1,
-        [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(CIRCLE_REPOSITORY_URL),
-        [CI_JOB_URL]: CIRCLE_BUILD_URL
+        [GIT_REPOSITORY_URL]: CIRCLE_REPOSITORY_URL,
+        [CI_JOB_URL]: CIRCLE_BUILD_URL,
+        [CI_WORKSPACE_PATH]: CIRCLE_WORKING_DIRECTORY,
+        [CIRCLE_TAG ? GIT_TAG : GIT_BRANCH]: CIRCLE_TAG || CIRCLE_BRANCH
       }
-
-      addTag(CIRCLE_TAG || CIRCLE_BRANCH, CIRCLE_TAG ? GIT_TAG : GIT_BRANCH, normalizeRef, tags)
-      addTag(CIRCLE_WORKING_DIRECTORY, CI_WORKSPACE_PATH, resolveTilde, tags)
-
-      // return tags
     }
 
     if (env.GITHUB_ACTIONS || env.GITHUB_ACTION) {
@@ -182,6 +182,9 @@ module.exports = {
       const repositoryURL = `https://github.com/${GITHUB_REPOSITORY}.git`
       const pipelineURL = `https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
 
+      const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
+      const refKey = ref.includes('tags') ? GIT_TAG : GIT_BRANCH
+
       tags = {
         [CI_PIPELINE_ID]: GITHUB_RUN_ID,
         [CI_PIPELINE_NAME]: GITHUB_WORKFLOW,
@@ -190,17 +193,10 @@ module.exports = {
         [CI_PROVIDER_NAME]: 'github',
         [GIT_COMMIT_SHA]: GITHUB_SHA,
         [GIT_REPOSITORY_URL]: repositoryURL,
-        [CI_JOB_URL]: pipelineURL
+        [CI_JOB_URL]: pipelineURL,
+        [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
+        [refKey]: ref
       }
-
-      const finalRef = GITHUB_HEAD_REF || GITHUB_REF || ''
-      const finalRefKey = finalRef.includes('tags') ? GIT_TAG : GIT_BRANCH
-
-      tags[finalRefKey] = normalizeRef(finalRef)
-
-      addTag(GITHUB_WORKSPACE, CI_WORKSPACE_PATH, resolveTilde, tags)
-
-      // return tags
     }
 
     if (env.APPVEYOR) {
@@ -224,23 +220,20 @@ module.exports = {
         [CI_PIPELINE_ID]: APPVEYOR_BUILD_ID,
         [CI_PIPELINE_NAME]: APPVEYOR_REPO_NAME,
         [CI_PIPELINE_NUMBER]: APPVEYOR_BUILD_NUMBER,
-        [CI_JOB_URL]: pipelineUrl
+        [CI_JOB_URL]: pipelineUrl,
+        [CI_WORKSPACE_PATH]: APPVEYOR_BUILD_FOLDER
       }
 
       if (APPVEYOR_REPO_PROVIDER === 'github') {
-        addTag(APPVEYOR_REPO_NAME, GIT_REPOSITORY_URL, value => `https://github.com/${value}.git`, tags)
-        addTag(APPVEYOR_REPO_COMMIT, GIT_COMMIT_SHA, value => value, tags)
-        addTag(
-          APPVEYOR_REPO_TAG_NAME || APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH,
-          APPVEYOR_REPO_TAG_NAME ? GIT_TAG : GIT_BRANCH,
-          normalizeRef,
-          tags
-        )
+        const refKey = APPVEYOR_REPO_TAG_NAME ? GIT_TAG : GIT_BRANCH
+        const ref = APPVEYOR_REPO_TAG_NAME || APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH
+        tags = {
+          ...tags,
+          [GIT_REPOSITORY_URL]: `https://github.com/${APPVEYOR_REPO_NAME}.git`,
+          [GIT_COMMIT_SHA]: APPVEYOR_REPO_COMMIT,
+          [refKey]: ref
+        }
       }
-
-      addTag(APPVEYOR_BUILD_FOLDER, CI_WORKSPACE_PATH, resolveTilde, tags)
-
-      // return tags
     }
 
     if (env.TF_BUILD) {
@@ -261,6 +254,9 @@ module.exports = {
         BUILD_SOURCEVERSION
       } = env
 
+      const ref = SYSTEM_PULLREQUEST_SOURCEBRANCH || BUILD_SOURCEBRANCH || BUILD_SOURCEBRANCHNAME
+      const refKey = ref.includes('tags') ? GIT_TAG : GIT_BRANCH
+
       tags = {
         [CI_PROVIDER_NAME]: 'azurepipelines',
         [CI_PIPELINE_ID]: BUILD_BUILDID,
@@ -268,7 +264,8 @@ module.exports = {
         [CI_PIPELINE_NUMBER]: BUILD_BUILDID,
         [GIT_COMMIT_SHA]: SYSTEM_PULLREQUEST_SOURCECOMMITID || BUILD_SOURCEVERSION,
         [CI_WORKSPACE_PATH]: BUILD_SOURCESDIRECTORY,
-        [GIT_REPOSITORY_URL]: SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI || BUILD_REPOSITORY_URI
+        [GIT_REPOSITORY_URL]: SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI || BUILD_REPOSITORY_URI,
+        [refKey]: ref
       }
 
       if (SYSTEM_TEAMFOUNDATIONSERVERURI && SYSTEM_TEAMPROJECTID && BUILD_BUILDID) {
@@ -283,12 +280,6 @@ module.exports = {
           [CI_JOB_URL]: jobUrl
         }
       }
-
-      const ref = SYSTEM_PULLREQUEST_SOURCEBRANCH || BUILD_SOURCEBRANCH || BUILD_SOURCEBRANCHNAME
-
-      addTag(ref, ref.includes('tags') ? GIT_TAG : GIT_BRANCH, normalizeRef, tags)
-
-      // return tags
     }
 
     if (env.BITBUCKET_COMMIT) {
@@ -317,9 +308,8 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID.replace(/{|}/gm, '')
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replace(/{|}/gm, '')
       }
-      // return tags
     }
 
     if (env.BITRISE_BUILD_SLUG) {
@@ -337,6 +327,10 @@ module.exports = {
         BITRISE_GIT_TAG
       } = env
 
+      const isTag = !!BITRISE_GIT_TAG
+      const refKey = isTag ? GIT_TAG : GIT_BRANCH
+      const ref = BITRISE_GIT_TAG || BITRISEIO_GIT_BRANCH_DEST || BITRISE_GIT_BRANCH
+
       tags = {
         [CI_PROVIDER_NAME]: 'bitrise',
         [CI_PIPELINE_ID]: BITRISE_BUILD_SLUG,
@@ -345,14 +339,9 @@ module.exports = {
         [CI_PIPELINE_URL]: BITRISE_BUILD_URL,
         [GIT_COMMIT_SHA]: BITRISE_GIT_COMMIT || GIT_CLONE_COMMIT_HASH,
         [GIT_REPOSITORY_URL]: BITRISE_GIT_REPOSITORY_URL,
-        [CI_WORKSPACE_PATH]: BITRISE_SOURCE_DIR
+        [CI_WORKSPACE_PATH]: BITRISE_SOURCE_DIR,
+        [refKey]: ref
       }
-
-      const isTag = !!BITRISE_GIT_TAG
-      const ref = BITRISE_GIT_TAG || BITRISEIO_GIT_BRANCH_DEST || BITRISE_GIT_BRANCH
-      addTag(ref, isTag ? GIT_TAG : GIT_BRANCH, normalizeRef, tags)
-
-      // return tags
     }
 
     if (env.BUILDKITE) {
@@ -369,6 +358,9 @@ module.exports = {
         BUILDKITE_BUILD_CHECKOUT_PATH
       } = env
 
+      const ref = BUILDKITE_TAG || BUILDKITE_BRANCH
+      const refKey = BUILDKITE_TAG ? GIT_TAG : GIT_BRANCH
+
       tags = {
         [CI_PROVIDER_NAME]: 'buildkite',
         [CI_PIPELINE_ID]: BUILDKITE_BUILD_ID,
@@ -378,12 +370,9 @@ module.exports = {
         [CI_JOB_URL]: `${BUILDKITE_BUILD_URL}#${BUILDKITE_JOB_ID}`,
         [GIT_COMMIT_SHA]: BUILDKITE_COMMIT,
         [CI_WORKSPACE_PATH]: BUILDKITE_BUILD_CHECKOUT_PATH,
-        [GIT_REPOSITORY_URL]: BUILDKITE_REPO
+        [GIT_REPOSITORY_URL]: BUILDKITE_REPO,
+        [refKey]: ref
       }
-
-      addTag(BUILDKITE_TAG || BUILDKITE_BRANCH, BUILDKITE_TAG ? GIT_TAG : GIT_BRANCH, normalizeRef, tags)
-
-      // return tags
     }
 
     if (env.TRAVIS) {
@@ -400,6 +389,10 @@ module.exports = {
         TRAVIS_BUILD_DIR
       } = env
 
+      const isTag = !!TRAVIS_TAG
+      const ref = TRAVIS_TAG || TRAVIS_PULL_REQUEST_BRANCH || TRAVIS_BRANCH
+      const refKey = isTag ? GIT_TAG : GIT_BRANCH
+
       tags = {
         [CI_PROVIDER_NAME]: 'travisci',
         [CI_JOB_URL]: TRAVIS_JOB_WEB_URL,
@@ -409,21 +402,16 @@ module.exports = {
         [CI_PIPELINE_URL]: TRAVIS_BUILD_WEB_URL,
         [GIT_COMMIT_SHA]: TRAVIS_COMMIT,
         [GIT_REPOSITORY_URL]: `https://github.com/${TRAVIS_REPO_SLUG}.git`,
-        [CI_WORKSPACE_PATH]: TRAVIS_BUILD_DIR
+        [CI_WORKSPACE_PATH]: TRAVIS_BUILD_DIR,
+        [refKey]: ref
       }
-
-      const isTag = !!TRAVIS_TAG
-      const ref = TRAVIS_TAG || TRAVIS_PULL_REQUEST_BRANCH || TRAVIS_BRANCH
-      addTag(ref, isTag ? GIT_TAG : GIT_BRANCH, normalizeRef, tags)
-
-      // return tags
     }
 
-    addTag(tags[CI_WORKSPACE_PATH], CI_WORKSPACE_PATH, resolveTilde, tags)
-    addTag(tags[GIT_REPOSITORY_URL], GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository, tags)
-    addTag(tags[GIT_BRANCH], GIT_BRANCH, normalizeRef, tags)
-    addTag(tags[GIT_TAG], GIT_TAG, normalizeRef, tags)
+    normalizeTag(tags, CI_WORKSPACE_PATH, resolveTilde)
+    normalizeTag(tags, GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository)
+    normalizeTag(tags, GIT_BRANCH, normalizeRef)
+    normalizeTag(tags, GIT_TAG, normalizeRef)
 
-    return tags
+    return removeEmptyValues(tags)
   }
 }
