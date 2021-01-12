@@ -5,11 +5,17 @@ const GIT_BRANCH = 'git.branch'
 const GIT_REPOSITORY_URL = 'git.repository_url'
 const GIT_TAG = 'git.tag'
 
-function getGitMetadata () {
+// If there is ciMetadata, it takes precedence.
+function getGitMetadata (ciMetadata) {
+  const { commitSHA, branch, repositoryUrl } = ciMetadata
+  // With stdio: 'pipe', errors in this command will not be output to the parent process,
+  // so if `git` is not present in the env, we'll just fallback to the default
+  // and not show a warning to the user.
+  const execOptions = { stdio: 'pipe' }
   return {
-    [GIT_REPOSITORY_URL]: sanitizedExec('git ls-remote --get-url'),
-    [GIT_BRANCH]: sanitizedExec('git rev-parse --abbrev-ref HEAD'),
-    [GIT_COMMIT_SHA]: sanitizedExec('git rev-parse HEAD')
+    [GIT_REPOSITORY_URL]: repositoryUrl || sanitizedExec('git ls-remote --get-url', execOptions),
+    [GIT_BRANCH]: branch || sanitizedExec('git rev-parse --abbrev-ref HEAD', execOptions),
+    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git rev-parse HEAD', execOptions)
   }
 }
 

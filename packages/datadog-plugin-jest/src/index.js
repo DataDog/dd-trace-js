@@ -5,7 +5,12 @@ const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
-const { getGitMetadata } = require('../../dd-trace/src/plugins/util/git')
+const {
+  getGitMetadata,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  GIT_REPOSITORY_URL
+} = require('../../dd-trace/src/plugins/util/git')
 const { getCIMetadata } = require('../../dd-trace/src/plugins/util/ci')
 const {
   TEST_FRAMEWORK,
@@ -21,12 +26,18 @@ const RESOURCE_NAME = 'resource.name'
 function getTestMetadata () {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
-  const gitMetadata = getGitMetadata()
+  const {
+    [GIT_COMMIT_SHA]: commitSHA,
+    [GIT_BRANCH]: branch,
+    [GIT_REPOSITORY_URL]: repositoryUrl
+  } = ciMetadata
+
+  const gitMetadata = getGitMetadata({ commitSHA, branch, repositoryUrl })
 
   return {
     [TEST_FRAMEWORK]: 'jest',
-    ...ciMetadata,
-    ...gitMetadata
+    ...gitMetadata,
+    ...ciMetadata
   }
 }
 
