@@ -155,6 +155,19 @@ describe('format', () => {
       expect(trace.meta['error.stack']).to.equal(error.stack)
     })
 
+    it('should skip error properties without a value', () => {
+      const error = new Error('boom')
+
+      error.name = null
+      error.stack = null
+      spanContext._tags['error'] = error
+      trace = format(span)
+
+      expect(trace.meta['error.msg']).to.equal(error.message)
+      expect(trace.meta).to.not.have.property('error.type')
+      expect(trace.meta).to.not.have.property('error.stack')
+    })
+
     it('should extract the origin', () => {
       spanContext._trace.origin = 'synthetics'
 
