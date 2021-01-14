@@ -100,9 +100,9 @@ function extractError (trace, span) {
   const error = span.context()._tags['error']
 
   if (error instanceof Error) {
-    trace.meta['error.msg'] = error.message
-    trace.meta['error.type'] = error.name
-    trace.meta['error.stack'] = error.stack
+    addTag(trace.meta, trace.metrics, 'error.msg', error.message)
+    addTag(trace.meta, trace.metrics, 'error.type', error.name)
+    addTag(trace.meta, trace.metrics, 'error.stack', error.stack)
   }
 }
 
