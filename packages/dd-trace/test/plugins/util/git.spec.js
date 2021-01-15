@@ -10,7 +10,7 @@ const {
   'sanitizedExec': sanitizedExecStub
 } })
 
-describe('gitt', () => {
+describe('git', () => {
   afterEach(() => {
     sanitizedExecStub.reset()
   })
