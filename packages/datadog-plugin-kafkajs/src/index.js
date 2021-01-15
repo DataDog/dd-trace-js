@@ -52,7 +52,7 @@ function createWrapConsumer (tracer, config) {
       }
 
       consumer.run = function ({ eachMessage, ...runArgs }) {
-        if (typeof eachMessage !== 'function') return /* run( */{ eachMessage, ...runArgs }/* ) */
+        if (typeof eachMessage !== 'function') return run({ eachMessage, ...runArgs })
 
         return run({
           eachMessage: function (...eachMessageArgs) {
