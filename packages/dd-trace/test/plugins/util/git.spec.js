@@ -1,10 +1,11 @@
-const childProcess = require('child_process')
+const proxyquire = require('proxyquire')
 
 const { getGitMetadata, GIT_COMMIT_SHA, GIT_BRANCH, GIT_REPOSITORY_URL } = require('../../../src/plugins/util/git')
 
 describe('git', () => {
+  let childProcess
   beforeEach(() => {
-    sinon.spy(childProcess, 'execSync')
+    childProcess = proxyquire('child_process', { execSync: sinon.spy() })
   })
   afterEach(() => {
     childProcess.execSync.restore()
