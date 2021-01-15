@@ -184,6 +184,27 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
+
+          it('should run constructor even if no eachMessage supplied', (done) => {
+            let eachBatch = async ({ batch }) => {
+              try {
+                expect(batch.length).to.equal(1)
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachBatch = () => {} // avoid being called for each message
+              }
+            }
+
+            consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
+              .catch(done)
+
+            setTimeout(() => {
+              done(new Error('eachBatch not received; did consumer not run?'))
+            }, 10e3)
+          })
         })
       })
     })

@@ -1,3 +1,10 @@
 {
-  "debug.node.autoAttach": "on"
+  "debug.node.autoAttach": "on",
+  "prettier.enable": false,
+  "javascript.format.enable": false,
+  "eslint.alwaysShowStatus": true,
+  "typescript.format.enable": false,
+  "html.format.enable": false,
+  "eslint.format.enable": true,
+  "editor.formatOnSave": true
 }
