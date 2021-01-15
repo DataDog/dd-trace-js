@@ -92,25 +92,28 @@ describe('Plugin', () => {
       TESTS.forEach(test => {
         it(`should create a test span for ${test.fileName}`, (done) => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+          const testFilePath = path.join(__dirname, test.fileName)
+          const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.contain({
                 language: 'javascript',
                 service: 'test',
-                [TEST_NAME]: test.testName,
+                [TEST_NAME]: `${test.root} ${test.testName}`,
                 [TEST_STATUS]: test.status,
                 [TEST_TYPE]: 'test',
-                [TEST_FRAMEWORK]: 'mocha'
+                [TEST_FRAMEWORK]: 'mocha',
+                [TEST_SUITE]: testSuite
               })
               expect(traces[0][0].meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
               expect(traces[0][0].type).to.equal('test')
               expect(traces[0][0].name).to.equal('mocha.test')
-              expect(traces[0][0].resource).to.equal(`${test.root} ${test.testName}`)
+              expect(traces[0][0].resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
             })
           const mocha = new Mocha({
             reporter: function () {} // silent on internal tests
           })
-          mocha.addFile(path.join(__dirname, test.fileName))
+          mocha.addFile(testFilePath)
           mocha.run(() => done())
         })
       })

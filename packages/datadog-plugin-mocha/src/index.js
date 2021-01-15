@@ -29,26 +29,29 @@ function getCommonMetadata () {
   }
 }
 
-function getTestSpanMetadata (tracer, test) {
+function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = tracer.extract('text_map', {
     'x-datadog-trace-id': id().toString(10),
     'x-datadog-parent-id': '0000000000000000',
     'x-datadog-sampled': 1
   })
-  const { file: testSuite, title: testName } = test
+  const { file: testSuite } = test
+  const fullTestName = test.fullTitle()
+  const strippedTestSuite = testSuite ? testSuite.replace(`${sourceRoot}/`, '') : ''
+
   return {
     childOf,
-    fullTitle: test.fullTitle(),
+    resource: `${strippedTestSuite}.${fullTestName}`,
     [TEST_TYPE]: 'test',
-    [TEST_NAME]: testName,
-    [TEST_SUITE]: testSuite,
+    [TEST_NAME]: fullTestName,
+    [TEST_SUITE]: strippedTestSuite,
     [TEST_STATUS]: 'skip',
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP
   }
 }
 
-function createWrapRunTest (tracer, commonMetadata) {
+function createWrapRunTest (tracer, commonMetadata, sourceRoot) {
   return function wrapRunTest (runTest) {
     return async function runTestWithTrace () {
       let specFunction = this.test.fn
@@ -59,14 +62,14 @@ function createWrapRunTest (tracer, commonMetadata) {
         this.test.sync = true
       }
 
-      const { childOf, fullTitle, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test)
+      const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test, sourceRoot)
 
       this.test.fn = tracer.wrap(
         'mocha.test',
         {
           type: 'test',
           childOf,
-          resource: fullTitle,
+          resource,
           tags: {
             ...testSpanMetadata,
             ...commonMetadata
@@ -97,7 +100,7 @@ function createWrapRunTest (tracer, commonMetadata) {
 }
 
 // Necessary to get the skipped tests, that do not go through runTest
-function createWrapRunTests (tracer, commonMetadata) {
+function createWrapRunTests (tracer, commonMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
       runTests.apply(this, arguments)
@@ -106,14 +109,14 @@ function createWrapRunTests (tracer, commonMetadata) {
         if (!isSkipped) {
           return
         }
-        const { childOf, fullTitle, ...testSpanMetadata } = getTestSpanMetadata(tracer, test)
+        const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, test, sourceRoot)
 
         tracer
           .startSpan('mocha.test', {
             childOf,
             tags: {
               [SPAN_TYPE]: 'test',
-              [RESOURCE_NAME]: fullTitle,
+              [RESOURCE_NAME]: resource,
               ...testSpanMetadata,
               ...commonMetadata
             }
@@ -131,8 +134,9 @@ module.exports = [
     file: 'lib/runner.js',
     patch (Runner, tracer) {
       const commonMetadata = getCommonMetadata()
-      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, commonMetadata))
-      this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, commonMetadata))
+      const sourceRoot = process.cwd()
+      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, commonMetadata, sourceRoot))
+      this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, commonMetadata, sourceRoot))
     },
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
