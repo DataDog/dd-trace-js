@@ -188,7 +188,8 @@ describe('Plugin', () => {
           it('should run constructor even if no eachMessage supplied', (done) => {
             let eachBatch = async ({ batch }) => {
               try {
-                expect(batch).to.have.lengthOf(1)
+                expect(batch.isEmpty()).to.be.false
+                expect(batch.messages).to.have.lengthOf(1)
                 done()
               } catch (e) {
                 done(e)
