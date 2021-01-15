@@ -189,7 +189,6 @@ describe('Plugin', () => {
             let eachBatch = async ({ batch }) => {
               try {
                 expect(batch.isEmpty()).to.be.false
-                expect(batch.messages).to.have.lengthOf(1)
                 done()
               } catch (e) {
                 done(e)
