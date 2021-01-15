@@ -10,6 +10,8 @@ const CI_PROVIDER_NAME = 'ci.provider.name'
 const CI_WORKSPACE_PATH = 'ci.workspace_path'
 const GIT_REPOSITORY_URL = 'git.repository_url'
 const CI_JOB_URL = 'ci.job.url'
+const CI_JOB_NAME = 'ci.job.name'
+const CI_STAGE_NAME = 'ci.stage.name'
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -122,7 +124,9 @@ module.exports = {
         CI_COMMIT_TAG,
         CI_COMMIT_SHA,
         CI_REPOSITORY_URL,
-        CI_JOB_URL: GITLAB_CI_JOB_URL
+        CI_JOB_URL: GITLAB_CI_JOB_URL,
+        CI_JOB_STAGE,
+        CI_JOB_NAME: GITLAB_CI_JOB_NAME
       } = env
 
       tags = {
@@ -136,7 +140,9 @@ module.exports = {
         [GIT_TAG]: CI_COMMIT_TAG,
         [GIT_BRANCH]: CI_COMMIT_BRANCH,
         [CI_WORKSPACE_PATH]: CI_PROJECT_DIR,
-        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL && GITLAB_PIPELINE_URL.replace('/-/pipelines/', '/pipelines/')
+        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL && GITLAB_PIPELINE_URL.replace('/-/pipelines/', '/pipelines/'),
+        [CI_STAGE_NAME]: CI_JOB_STAGE,
+        [CI_JOB_NAME]: GITLAB_CI_JOB_NAME
       }
     }
 
