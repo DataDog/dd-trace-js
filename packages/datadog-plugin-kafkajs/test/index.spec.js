@@ -184,6 +184,29 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
+
+          it('should run constructor even if no eachMessage supplied', (done) => {
+            let eachBatch = async ({ batch }) => {
+              try {
+                expect(batch.isEmpty()).to.be.false
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachBatch = () => {} // avoid being called for each message
+              }
+            }
+
+            const runResult = consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+
+            if (!runResult || !runResult.then) {
+              throw new Error('Consumer.run returned invalid result')
+            }
+
+            runResult
+              .then(() => sendMessages(kafka, testTopic, messages))
+              .catch(done)
+          })
         })
       })
     })
