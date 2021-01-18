@@ -2,32 +2,15 @@ const { promisify } = require('util')
 
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY } = require('../../../ext/tags')
+const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
-const { getGitMetadata } = require('../../dd-trace/src/plugins/util/git')
-const { getCIMetadata } = require('../../dd-trace/src/plugins/util/ci')
 const {
-  TEST_FRAMEWORK,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
-  TEST_STATUS
+  TEST_STATUS,
+  getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
-
-const SPAN_TYPE = 'span.type'
-const RESOURCE_NAME = 'resource.name'
-
-function getCommonMetadata () {
-  // TODO: eventually these will come from the tracer (generally available)
-  const ciMetadata = getCIMetadata()
-  const gitMetadata = getGitMetadata()
-
-  return {
-    [TEST_FRAMEWORK]: 'mocha',
-    ...ciMetadata,
-    ...gitMetadata
-  }
-}
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = tracer.extract('text_map', {
@@ -51,7 +34,7 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
   }
 }
 
-function createWrapRunTest (tracer, commonMetadata, sourceRoot) {
+function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTest (runTest) {
     return async function runTestWithTrace () {
       let specFunction = this.test.fn
@@ -72,7 +55,7 @@ function createWrapRunTest (tracer, commonMetadata, sourceRoot) {
           resource,
           tags: {
             ...testSpanMetadata,
-            ...commonMetadata
+            ...testEnvironmentMetadata
           }
         },
         async () => {
@@ -100,7 +83,7 @@ function createWrapRunTest (tracer, commonMetadata, sourceRoot) {
 }
 
 // Necessary to get the skipped tests, that do not go through runTest
-function createWrapRunTests (tracer, commonMetadata, sourceRoot) {
+function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
       runTests.apply(this, arguments)
@@ -118,7 +101,7 @@ function createWrapRunTests (tracer, commonMetadata, sourceRoot) {
               [SPAN_TYPE]: 'test',
               [RESOURCE_NAME]: resource,
               ...testSpanMetadata,
-              ...commonMetadata
+              ...testEnvironmentMetadata
             }
           })
           .finish()
@@ -133,10 +116,10 @@ module.exports = [
     versions: ['>=5.2.0'],
     file: 'lib/runner.js',
     patch (Runner, tracer) {
-      const commonMetadata = getCommonMetadata()
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('mocha')
       const sourceRoot = process.cwd()
-      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, commonMetadata, sourceRoot))
-      this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, commonMetadata, sourceRoot))
+      this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, testEnvironmentMetadata, sourceRoot))
+      this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, testEnvironmentMetadata, sourceRoot))
     },
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
