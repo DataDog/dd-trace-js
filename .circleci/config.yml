@@ -329,6 +329,11 @@ jobs:
     docker:
       - image: node:15
 
+  node-integration-latest:
+    <<: *node-integration-base
+    docker:
+      - image: node:latest
+
   # Plugin tests
 
   node-amqplib:
@@ -1076,6 +1081,12 @@ workflows:
       - node-core-15
       - node-core-latest
       - node-core-windows
+      - node-integration-8
+      - node-integration-10
+      - node-integration-12
+      - node-integration-14
+      - node-integration-15
+      - node-integration-latest
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
@@ -1265,6 +1276,12 @@ workflows:
       - node-core-15
       - node-core-latest
       - node-core-windows
+      - node-integration-8
+      - node-integration-10
+      - node-integration-12
+      - node-integration-14
+      - node-integration-15
+      - node-integration-latest
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
