@@ -2,44 +2,16 @@ const { promisify } = require('util')
 
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY } = require('../../../ext/tags')
+const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
 const {
-  getGitMetadata,
-  GIT_COMMIT_SHA,
-  GIT_BRANCH,
-  GIT_REPOSITORY_URL
-} = require('../../dd-trace/src/plugins/util/git')
-const { getCIMetadata } = require('../../dd-trace/src/plugins/util/ci')
-const {
-  TEST_FRAMEWORK,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
-  TEST_STATUS
+  TEST_STATUS,
+  getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
-
-const SPAN_TYPE = 'span.type'
-const RESOURCE_NAME = 'resource.name'
-
-function getTestMetadata () {
-  // TODO: eventually these will come from the tracer (generally available)
-  const ciMetadata = getCIMetadata()
-  const {
-    [GIT_COMMIT_SHA]: commitSHA,
-    [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: repositoryUrl
-  } = ciMetadata
-
-  const gitMetadata = getGitMetadata({ commitSHA, branch, repositoryUrl })
-
-  return {
-    [TEST_FRAMEWORK]: 'jest',
-    ...gitMetadata,
-    ...ciMetadata
-  }
-}
 
 function wrapEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
@@ -61,7 +33,7 @@ function createWrapTeardown (tracer) {
   }
 }
 
-function createHandleTestEvent (tracer, testMetadata) {
+function createHandleTestEvent (tracer, testEnvironmentMetadata) {
   return async function handleTestEventWithTrace (event) {
     if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
       return
@@ -78,7 +50,7 @@ function createHandleTestEvent (tracer, testMetadata) {
       [TEST_SUITE]: this.testSuite,
       [SAMPLING_RULE_DECISION]: 1,
       [SAMPLING_PRIORITY]: AUTO_KEEP,
-      ...testMetadata
+      ...testEnvironmentMetadata
     }
     const resource = `${this.testSuite}.${currentTestName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -135,11 +107,11 @@ module.exports = [
     name: 'jest-environment-node',
     versions: ['>=24.8.0'],
     patch: function (NodeEnvironment, tracer) {
-      const testMetadata = getTestMetadata()
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
       this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
 
-      const newHandleTestEvent = createHandleTestEvent(tracer, testMetadata)
+      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata)
       newHandleTestEvent._dd_original = NodeEnvironment.prototype.handleTestEvent
       NodeEnvironment.prototype.handleTestEvent = newHandleTestEvent
 
@@ -154,11 +126,11 @@ module.exports = [
     name: 'jest-environment-jsdom',
     versions: ['>=24.8.0'],
     patch: function (JsdomEnvironment, tracer) {
-      const testMetadata = getTestMetadata()
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
       this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
 
-      const newHandleTestEvent = createHandleTestEvent(tracer, testMetadata)
+      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata)
       newHandleTestEvent._dd_original = JsdomEnvironment.prototype.handleTestEvent
       JsdomEnvironment.prototype.handleTestEvent = newHandleTestEvent
 
