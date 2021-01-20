@@ -7,9 +7,10 @@ const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const { fork } = require('child_process')
 const http = require('http')
+const assert = require('assert')
 
 class FakeAgent extends EventEmitter {
-  constructor () {
+  constructor (port = 0) {
     super()
     const agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -20,8 +21,9 @@ class FakeAgent extends EventEmitter {
         payload: msgpack.decode(req.body, { codec })
       })
     })
-    this.server = http.createServer(agent).listen(0, () => {
-      this.emit('listening', this.server.address().port)
+    this.server = http.createServer(agent).listen(port, () => {
+      this.port = this.server.address().port
+      this.emit('listening', this.port)
     })
   }
 
@@ -33,6 +35,23 @@ class FakeAgent extends EventEmitter {
 
   close () {
     this.server.close()
+  }
+
+  gotGoodPayload (options = {}) {
+    const hostHeader = options.hostHeader || `127.0.0.1:${this.port}`
+    return new Promise((resolve, reject) => {
+      this.on('message', ({ headers, payload }) => {
+        try {
+          assert.strictEqual(headers.host, hostHeader)
+          assert.strictEqual(payload.length, 1)
+          assert.strictEqual(payload[0].length, 1)
+          assert.strictEqual(payload[0][0].name, 'http.request')
+          resolve()
+        } catch (e) {
+          reject(e)
+        }
+      })
+    })
   }
 }
 
