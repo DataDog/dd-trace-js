@@ -30,7 +30,9 @@ class FakeAgent extends EventEmitter {
       const timeoutObj = setTimeout(() => {
         reject(new Error('agent timed out starting up'))
       }, 10000)
-      this.server = http.createServer(app).listen(this.port, () => {
+      this.server = http.createServer(app)
+      this.server.on('error', reject)
+      this.server.listen(this.port, () => {
         this.port = this.server.address().port
         clearTimeout(timeoutObj)
         resolve(this)
