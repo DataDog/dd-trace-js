@@ -16,12 +16,12 @@ describe('startup', () => {
 
   context('programmatic', () => {
     beforeEach(async () => {
-      agent = await new FakeAgent().ready()
+      agent = await new FakeAgent().start()
     })
 
     afterEach(() => {
       proc.kill()
-      agent.close()
+      agent.stop()
     })
 
     it('works for options.port', async () => {
@@ -59,12 +59,12 @@ describe('startup', () => {
 
   context('env var', () => {
     beforeEach(async () => {
-      agent = await new FakeAgent().ready()
+      agent = await new FakeAgent().start()
     })
 
     afterEach(() => {
       proc.kill()
-      agent.close()
+      agent.stop()
     })
 
     it('works for DD_TRACE_AGENT_PORT', async () => {
@@ -104,12 +104,12 @@ describe('startup', () => {
     beforeEach(async () => {
       // Note that this test will *always* listen on the default port. If that
       // port is unavailable, the test will fail.
-      agent = await new FakeAgent(8126).ready()
+      agent = await new FakeAgent(8126).start()
     })
 
     afterEach(() => {
       proc.kill()
-      agent.close()
+      agent.stop()
     })
 
     it('works for hostname and port', async () => {

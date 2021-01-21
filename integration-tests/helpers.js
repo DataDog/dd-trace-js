@@ -11,39 +11,35 @@ const http = require('http')
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
+    this.port = port
+  }
+
+  async start () {
     const app = express()
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     app.put('/v0.4/traces', (req, res) => {
       if (req.body.length === 0) return res.status(200).send()
+      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       this.emit('message', {
         headers: req.headers,
         payload: msgpack.decode(req.body, { codec })
       })
     })
-    this.server = http.createServer(app).listen(port, () => {
-      this.port = this.server.address().port
-      this.emit('listening')
-    })
-  }
-
-  close () {
-    this.server.close()
-  }
-
-  ready () {
-    if (this.port) {
-      return Promise.resolve(this)
-    }
 
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('agent timed out starting up'))
       }, 10000)
-      this.on('listening', () => {
+      this.server = http.createServer(app).listen(this.port, () => {
+        this.port = this.server.address().port
         clearTimeout(timeoutObj)
         resolve(this)
       })
     })
+  }
+
+  stop () {
+    this.server.close()
   }
 
   assertMessageReceived (fn, timeout) {
