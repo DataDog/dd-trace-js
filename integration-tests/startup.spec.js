@@ -2,10 +2,13 @@
 
 const {
   FakeAgent,
-  spawnAndGetURL,
-  curl
+  spawnProc,
+  curlAndAssertMessage
 } = require('./helpers')
 const path = require('path')
+const assert = require('assert')
+
+const startupTestFile = path.join(__dirname, 'startup/index.js')
 
 describe('startup', () => {
   let agent
@@ -22,25 +25,31 @@ describe('startup', () => {
     })
 
     it('works for options.port', async () => {
-      proc = await spawnAndGetURL(path.join(__dirname, 'startup/index.js'), {
+      proc = await spawnProc(startupTestFile, {
         env: {
           AGENT_PORT: agent.port
         }
       })
-      const resultPromise = agent.gotGoodPayload()
-      await curl(proc)
-      return resultPromise
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.strictEqual(payload.length, 1)
+        assert.strictEqual(payload[0].length, 1)
+        assert.strictEqual(payload[0][0].name, 'http.request')
+      })
     })
 
     it('works for options.url', async () => {
-      proc = await spawnAndGetURL(path.join(__dirname, 'startup/index.js'), {
+      proc = await spawnProc(startupTestFile, {
         env: {
           AGENT_URL: `http://localhost:${agent.port}`
         }
       })
-      const resultPromise = agent.gotGoodPayload({ hostHeader: `localhost:${agent.port}` })
-      await curl(proc)
-      return resultPromise
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.strictEqual(headers.host, `localhost:${agent.port}`)
+        assert.strictEqual(payload.length, 1)
+        assert.strictEqual(payload[0].length, 1)
+        assert.strictEqual(payload[0][0].name, 'http.request')
+      })
     })
   })
 
@@ -55,25 +64,31 @@ describe('startup', () => {
     })
 
     it('works for DD_TRACE_AGENT_PORT', async () => {
-      proc = await spawnAndGetURL(path.join(__dirname, 'startup/index.js'), {
+      proc = await spawnProc(startupTestFile, {
         env: {
           DD_TRACE_AGENT_PORT: agent.port
         }
       })
-      const resultPromise = agent.gotGoodPayload()
-      await curl(proc)
-      return resultPromise
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.strictEqual(payload.length, 1)
+        assert.strictEqual(payload[0].length, 1)
+        assert.strictEqual(payload[0][0].name, 'http.request')
+      })
     })
 
     it('works for DD_TRACE_AGENT_URL', async () => {
-      proc = await spawnAndGetURL(path.join(__dirname, 'startup/index.js'), {
+      proc = await spawnProc(startupTestFile, {
         env: {
           DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
         }
       })
-      const resultPromise = agent.gotGoodPayload({ hostHeader: `localhost:${agent.port}` })
-      await curl(proc)
-      return resultPromise
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.strictEqual(headers.host, `localhost:${agent.port}`)
+        assert.strictEqual(payload.length, 1)
+        assert.strictEqual(payload[0].length, 1)
+        assert.strictEqual(payload[0][0].name, 'http.request')
+      })
     })
   })
 
@@ -90,10 +105,13 @@ describe('startup', () => {
     })
 
     it('works for hostname and port', async () => {
-      proc = await spawnAndGetURL(path.join(__dirname, 'startup/index.js'))
-      const resultPromise = agent.gotGoodPayload()
-      await curl(proc)
-      return resultPromise
+      proc = await spawnProc(startupTestFile)
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.strictEqual(headers.host, `127.0.0.1:8126`)
+        assert.strictEqual(payload.length, 1)
+        assert.strictEqual(payload[0].length, 1)
+        assert.strictEqual(payload[0][0].name, 'http.request')
+      })
     })
   })
 })

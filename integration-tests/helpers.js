@@ -7,7 +7,6 @@ const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const { fork } = require('child_process')
 const http = require('http')
-const assert = require('assert')
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -37,25 +36,43 @@ class FakeAgent extends EventEmitter {
     this.server.close()
   }
 
-  gotGoodPayload (options = {}) {
-    const hostHeader = options.hostHeader || `127.0.0.1:${this.port}`
-    return new Promise((resolve, reject) => {
-      this.on('message', ({ headers, payload }) => {
-        try {
-          assert.strictEqual(headers.host, hostHeader)
-          assert.strictEqual(payload.length, 1)
-          assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0].name, 'http.request')
-          resolve()
-        } catch (e) {
-          reject(e)
-        }
-      })
+  assertMessageReceived (fn, timeout) {
+    timeout = timeout || 5000
+    let resultResolve
+    let resultReject
+    const errors = []
+
+    const resultPromise = new Promise((resolve, reject) => {
+      resultResolve = () => {
+        clearTimeout(timeout)
+        resolve()
+      }
+      resultReject = (e) => {
+        clearTimeout(timeout)
+        reject(e)
+      }
     })
+
+    setTimeout(() => {
+      resultReject([...errors, new Error('timeout')])
+    }, timeout)
+
+    const messageHandler = msg => {
+      try {
+        fn(msg)
+        resultResolve()
+        this.removeListener('message', messageHandler)
+      } catch (e) {
+        errors.push(e)
+      }
+    }
+    this.on('message', messageHandler)
+
+    return resultPromise
   }
 }
 
-function spawnAndGetURL (filename, options = {}) {
+function spawnProc (filename, options = {}) {
   const proc = fork(filename, options)
   return new Promise((resolve, reject) => {
     proc.on('message', ({ port }) => {
@@ -85,8 +102,15 @@ async function curl (url) {
   })
 }
 
+async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
+  const resultPromise = agent.assertMessageReceived(fn, timeout)
+  await curl(procOrUrl)
+  return resultPromise
+}
+
 module.exports = {
   FakeAgent,
-  spawnAndGetURL,
-  curl
+  spawnProc,
+  curl,
+  curlAndAssertMessage
 }
