@@ -6,7 +6,7 @@ const {
   curlAndAssertMessage
 } = require('./helpers')
 const path = require('path')
-const assert = require('assert')
+const { assert } = require('chai')
 
 const startupTestFile = path.join(__dirname, 'startup/index.js')
 
@@ -31,10 +31,12 @@ describe('startup', () => {
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'http.request')
+        assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
 
@@ -45,10 +47,12 @@ describe('startup', () => {
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `localhost:${agent.port}`)
+        assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
+        assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'http.request')
+        assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
   })
@@ -70,10 +74,12 @@ describe('startup', () => {
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'http.request')
+        assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
 
@@ -84,10 +90,12 @@ describe('startup', () => {
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `localhost:${agent.port}`)
+        assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
+        assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'http.request')
+        assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
   })
@@ -107,10 +115,12 @@ describe('startup', () => {
     it('works for hostname and port', async () => {
       proc = await spawnProc(startupTestFile)
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, '127.0.0.1:8126')
+        assert.propertyVal(headers, 'host', '127.0.0.1:8126')
+        assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'http.request')
+        assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
   })
