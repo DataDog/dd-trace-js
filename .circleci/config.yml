@@ -62,6 +62,19 @@ node-bench-e2e-base: &node-bench-e2e-base
         name: E2E Benchmark
         command: yarn bench:e2e
 
+node-integration-base: &node-integration-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - run:
+        name: Integration Tests
+        command: yarn test:integration
+
 node-bench-profiler-base: &node-bench-profiler-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -288,6 +301,38 @@ jobs:
       - *save-yarn-cache
       - *yarn-rebuild
       - *yarn-test-core
+
+  # Integration tests
+
+  node-integration-8:
+    <<: *node-integration-base
+    docker:
+      - image: node:8
+
+  node-integration-10:
+    <<: *node-integration-base
+    docker:
+      - image: node:10
+
+  node-integration-12:
+    <<: *node-integration-base
+    docker:
+      - image: node:12
+
+  node-integration-14:
+    <<: *node-integration-base
+    docker:
+      - image: node:14
+
+  node-integration-15:
+    <<: *node-integration-base
+    docker:
+      - image: node:15
+
+  node-integration-latest:
+    <<: *node-integration-base
+    docker:
+      - image: node:latest
 
   # Plugin tests
 
@@ -1027,6 +1072,12 @@ workflows:
       - node-core-15
       - node-core-latest
       - node-core-windows
+      - node-integration-8
+      - node-integration-10
+      - node-integration-12
+      - node-integration-14
+      - node-integration-15
+      - node-integration-latest
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
@@ -1216,6 +1267,12 @@ workflows:
       - node-core-15
       - node-core-latest
       - node-core-windows
+      - node-integration-8
+      - node-integration-10
+      - node-integration-12
+      - node-integration-14
+      - node-integration-15
+      - node-integration-latest
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest

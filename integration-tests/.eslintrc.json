@@ -1,0 +1,12 @@
+{
+  "extends": [
+    "../.eslintrc.json"
+  ],
+  "env": {
+    "mocha": true
+  },
+  "rules": {
+    "no-unused-expressions": 0,
+    "handle-callback-err": 0
+  }
+}
