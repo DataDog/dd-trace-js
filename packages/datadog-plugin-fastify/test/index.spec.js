@@ -105,6 +105,40 @@ describe('Plugin', () => {
           })
         })
 
+        if (semver.intersects(version, '>=1.2')) {
+          it('should do automatic instrumentation on route with handler in options', done => {
+            app.get('/user/:id', {
+              handler: (request, reply) => {
+                reply.send()
+              }
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'fastify.request')
+                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('type', 'web')
+                  expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                  expect(spans[0].meta).to.have.property('span.kind', 'server')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                  expect(spans[0].meta).to.have.property('http.method', 'GET')
+                  expect(spans[0].meta).to.have.property('http.status_code', '200')
+                })
+                .then(done)
+                .catch(done)
+
+              app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(done)
+              })
+            })
+          })
+        }
+
         it('should run handlers in the request scope', done => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 

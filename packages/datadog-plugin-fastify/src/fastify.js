@@ -77,13 +77,23 @@ function wrapMethod (method) {
   return function methodWithTrace (url, opts, handler) {
     const lastIndex = arguments.length - 1
 
-    arguments[lastIndex] = wrapHandler(arguments[lastIndex])
+    handler = arguments[lastIndex]
+
+    if (typeof handler === 'function') {
+      arguments[lastIndex] = wrapHandler(handler)
+    } else if (handler) {
+      arguments[lastIndex].handler = wrapHandler(handler.handler)
+    }
 
     return method.apply(this, arguments)
   }
 }
 
 function wrapHandler (handler) {
+  if (!handler || typeof handler !== 'function' || handler.name === 'handlerWithTrace') {
+    return handler
+  }
+
   return function handlerWithTrace (request, reply) {
     const req = getReq(request)
 
