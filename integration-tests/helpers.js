@@ -39,7 +39,10 @@ class FakeAgent extends EventEmitter {
   }
 
   stop () {
-    this.server.close()
+    return new Promise((resolve) => {
+      this.server.on('close', resolve)
+      this.server.close()
+    })
   }
 
   assertMessageReceived (fn, timeout) {

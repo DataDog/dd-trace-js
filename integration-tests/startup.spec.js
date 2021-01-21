@@ -19,9 +19,9 @@ describe('startup', () => {
       agent = await new FakeAgent().start()
     })
 
-    afterEach(() => {
+    afterEach(async () => {
       proc.kill()
-      agent.stop()
+      await agent.stop()
     })
 
     it('works for options.port', async () => {
@@ -62,9 +62,9 @@ describe('startup', () => {
       agent = await new FakeAgent().start()
     })
 
-    afterEach(() => {
+    afterEach(async () => {
       proc.kill()
-      agent.stop()
+      await agent.stop()
     })
 
     it('works for DD_TRACE_AGENT_PORT', async () => {
@@ -107,9 +107,9 @@ describe('startup', () => {
       agent = await new FakeAgent(8126).start()
     })
 
-    afterEach(() => {
+    afterEach(async () => {
       proc.kill()
-      agent.stop()
+      await agent.stop()
     })
 
     it('works for hostname and port', async () => {
