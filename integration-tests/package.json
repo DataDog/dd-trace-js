@@ -1,0 +1,12 @@
+{
+  "name": "integration-tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dd-trace": "file:../dd-trace-0.30.0.tgz"
+  }
+}

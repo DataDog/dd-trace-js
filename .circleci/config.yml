@@ -198,6 +198,32 @@ prebuild-job: &prebuild-job
         - /.*native.*/
         - /^node-\d+/
 
+
+packaged-integration-base: &packaged-integration-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - run:
+        name: Yarn Prebuilds
+        command: yarn prebuilds
+    - run:
+        name: Npm Pack
+        command: npm pack
+    - run:
+        name: Install tarball in integration folder
+        working_directory: ~/dd-trace-js/integration-tests
+        command: npm i ../dd-trace*.tgz
+    - run:
+        name: Integration Tests
+        environment:
+          DD_TRACE_LIBRARY_REQUIRE: dd-trace
+        command: yarn test:integration
+
 jobs:
   # Linting
 
@@ -1034,6 +1060,38 @@ jobs:
       - store_artifacts:
           path: ./prebuilds.tgz.sha1
 
+  # Integration Tests with Built Artifacts
+
+  packaged-integration-8:
+    <<: *packaged-integration-base
+    docker:
+      - image: node:8
+
+  packaged-integration-10:
+    <<: *packaged-integration-base
+    docker:
+      - image: node:10
+
+  packaged-integration-12:
+    <<: *packaged-integration-base
+    docker:
+      - image: node:12
+
+  packaged-integration-14:
+    <<: *packaged-integration-base
+    docker:
+      - image: node:14
+
+  packaged-integration-15:
+    <<: *packaged-integration-base
+    docker:
+      - image: node:15
+
+  packaged-integration-latest:
+    <<: *packaged-integration-base
+    docker:
+      - image: node
+
   # Browser
 
   browser:
@@ -1258,6 +1316,25 @@ workflows:
             - win-ia32-12
             - win-ia32-10
             - win-ia32-8
+      # Packaged Integration Tests
+      - packaged-integration-8:
+          requires:
+            - prebuilds
+      - packaged-integration-10:
+          requires:
+            - prebuilds
+      - packaged-integration-12:
+          requires:
+            - prebuilds
+      - packaged-integration-14:
+          requires:
+            - prebuilds
+      - packaged-integration-15:
+          requires:
+            - prebuilds
+      - packaged-integration-latest:
+          requires:
+            - prebuilds
   nightly:
     triggers:
       - schedule:
