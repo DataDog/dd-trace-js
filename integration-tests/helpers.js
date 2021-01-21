@@ -11,29 +11,39 @@ const http = require('http')
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
-    const agent = express()
-    agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
-    agent.use((req, res) => {
+    const app = express()
+    app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
+    app.put('/v0.4/traces', (req, res) => {
       if (req.body.length === 0) return res.status(200).send()
       this.emit('message', {
         headers: req.headers,
         payload: msgpack.decode(req.body, { codec })
       })
     })
-    this.server = http.createServer(agent).listen(port, () => {
+    this.server = http.createServer(app).listen(port, () => {
       this.port = this.server.address().port
-      this.emit('listening', this.port)
-    })
-  }
-
-  listeningPort () {
-    return new Promise((resolve) => {
-      this.on('listening', resolve)
+      this.emit('listening')
     })
   }
 
   close () {
     this.server.close()
+  }
+
+  ready () {
+    if (this.port) {
+      return Promise.resolve(this)
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeoutObj = setTimeout(() => {
+        reject(new Error('agent timed out starting up'))
+      }, 10000)
+      this.on('listening', () => {
+        clearTimeout(timeoutObj)
+        resolve(this)
+      })
+    })
   }
 
   assertMessageReceived (fn, timeout) {
@@ -42,20 +52,20 @@ class FakeAgent extends EventEmitter {
     let resultReject
     const errors = []
 
+    const timeoutObj = setTimeout(() => {
+      resultReject([...errors, new Error('timeout')])
+    }, timeout)
+
     const resultPromise = new Promise((resolve, reject) => {
       resultResolve = () => {
-        clearTimeout(timeout)
+        clearTimeout(timeoutObj)
         resolve()
       }
       resultReject = (e) => {
-        clearTimeout(timeout)
+        clearTimeout(timeoutObj)
         reject(e)
       }
     })
-
-    setTimeout(() => {
-      resultReject([...errors, new Error('timeout')])
-    }, timeout)
 
     const messageHandler = msg => {
       try {

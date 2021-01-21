@@ -16,7 +16,7 @@ describe('startup', () => {
 
   context('programmatic', () => {
     beforeEach(async () => {
-      agent = new FakeAgent()
+      agent = await new FakeAgent().ready()
     })
 
     afterEach(() => {
@@ -55,7 +55,7 @@ describe('startup', () => {
 
   context('env var', () => {
     beforeEach(async () => {
-      agent = new FakeAgent()
+      agent = await new FakeAgent().ready()
     })
 
     afterEach(() => {
@@ -96,7 +96,7 @@ describe('startup', () => {
     beforeEach(async () => {
       // Note that this test will *always* listen on the default port. If that
       // port is unavailable, the test will fail.
-      agent = new FakeAgent(8126)
+      agent = await new FakeAgent(8126).ready()
     })
 
     afterEach(() => {
@@ -107,7 +107,7 @@ describe('startup', () => {
     it('works for hostname and port', async () => {
       proc = await spawnProc(startupTestFile)
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:8126`)
+        assert.strictEqual(headers.host, '127.0.0.1:8126')
         assert.strictEqual(payload.length, 1)
         assert.strictEqual(payload[0].length, 1)
         assert.strictEqual(payload[0][0].name, 'http.request')
