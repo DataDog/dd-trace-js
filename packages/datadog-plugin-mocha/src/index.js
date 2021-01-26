@@ -59,7 +59,7 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             ...testEnvironmentMetadata
           }
         },
-        async function () {
+        async () => {
           const activeSpan = tracer.scope().active()
           let result
           try {
