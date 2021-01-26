@@ -40,10 +40,11 @@ describe('startup', () => {
       })
     })
 
-    it('works for options.url', async () => {
+    it('works for options.url and options.scope: async_hooks', async () => {
       proc = await spawnProc(startupTestFile, {
         env: {
-          AGENT_URL: `http://localhost:${agent.port}`
+          AGENT_URL: `http://localhost:${agent.port}`,
+          SCOPE: 'async_hooks'
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -83,10 +84,11 @@ describe('startup', () => {
       })
     })
 
-    it('works for DD_TRACE_AGENT_URL', async () => {
+    it('works for DD_TRACE_AGENT_URL and DD_TRACE_SCOPE=async_resource', async () => {
       proc = await spawnProc(startupTestFile, {
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
+          DD_TRACE_SCOPE: 'async_resource'
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
