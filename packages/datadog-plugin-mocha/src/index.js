@@ -38,6 +38,7 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTest (runTest) {
     return async function runTestWithTrace () {
       let specFunction = this.test.fn
+      const context = this.test.ctx
       if (specFunction.length) {
         specFunction = promisify(specFunction)
         // otherwise you have to explicitly call done()
@@ -58,12 +59,16 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             ...testEnvironmentMetadata
           }
         },
-        async () => {
+        async function () {
           const activeSpan = tracer.scope().active()
           let result
           try {
-            result = await specFunction()
-            activeSpan.setTag(TEST_STATUS, 'pass')
+            result = await specFunction.call(context)
+            if (context.test.state === 'failed' && context.test.timedOut) {
+              activeSpan.setTag(TEST_STATUS, 'fail')
+            } else {
+              activeSpan.setTag(TEST_STATUS, 'pass')
+            }
           } catch (error) {
             activeSpan.setTag(TEST_STATUS, 'fail')
             throw error

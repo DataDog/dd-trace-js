@@ -66,6 +66,18 @@ const TESTS = [
     testName: 'can do failed async tests',
     root: 'mocha-test-async-fail',
     status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-timeout-fail.js',
+    testName: 'times out',
+    root: 'mocha-test-timeout-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-timeout-pass.js',
+    testName: 'does not timeout',
+    root: 'mocha-test-timeout-pass',
+    status: 'pass'
   }
 ]
 
@@ -109,12 +121,12 @@ describe('Plugin', () => {
               expect(traces[0][0].type).to.equal('test')
               expect(traces[0][0].name).to.equal('mocha.test')
               expect(traces[0][0].resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
-            })
+            }).then(done, done)
           const mocha = new Mocha({
             reporter: function () {} // silent on internal tests
           })
           mocha.addFile(testFilePath)
-          mocha.run(() => done())
+          mocha.run()
         })
       })
     })
