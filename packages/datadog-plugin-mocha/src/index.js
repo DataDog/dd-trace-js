@@ -64,10 +64,10 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
           let result
           try {
             result = await specFunction.call(context)
-            if (context.test.state === 'failed' && context.test.timedOut) {
-              activeSpan.setTag(TEST_STATUS, 'fail')
-            } else {
+            if (context.test.state !== 'failed' && !context.test.timedOut) {
               activeSpan.setTag(TEST_STATUS, 'pass')
+            } else {
+              activeSpan.setTag(TEST_STATUS, 'fail')
             }
           } catch (error) {
             activeSpan.setTag(TEST_STATUS, 'fail')
