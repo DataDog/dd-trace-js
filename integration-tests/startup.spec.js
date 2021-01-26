@@ -56,6 +56,24 @@ describe('startup', () => {
         assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
+
+    it('uses log exporter correctly', async () => {
+      proc = await spawnProc(startupTestFile, {
+        env: {
+          AWS_LAMBDA_FUNCTION_NAME: 'fake-lambda'
+        },
+        stdio: 'pipe'
+      })
+      return curlAndAssertMessage(agent, proc, ({ headers, payload, log }) => {
+        assert.isUndefined(headers)
+        assert.isUndefined(payload)
+        assert.isArray(log)
+        assert.strictEqual(log.length, 1)
+        assert.isArray(log[0])
+        assert.strictEqual(log[0].length, 1)
+        assert.propertyVal(log[0][0], 'name', 'http.request')
+      })
+    })
   })
 
   context('env var', () => {

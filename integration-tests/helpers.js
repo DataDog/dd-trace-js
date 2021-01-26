@@ -7,6 +7,7 @@ const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const { fork } = require('child_process')
 const http = require('http')
+const rl = require('readline')
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -85,6 +86,17 @@ class FakeAgent extends EventEmitter {
 
 function spawnProc (filename, options = {}) {
   const proc = fork(filename, options)
+  if (proc.stdout) {
+    const readline = rl.createInterface(proc.stdout)
+    readline.on('line', line => {
+      try {
+        const { traces } = JSON.parse(line)
+        if (traces) proc.emit('logMessage', { log: traces })
+      } catch (e) {
+        // not a log message we care about
+      }
+    })
+  }
   return new Promise((resolve, reject) => {
     proc.on('message', ({ port }) => {
       proc.url = `http://localhost:${port}`
@@ -115,6 +127,9 @@ async function curl (url) {
 
 async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
   const resultPromise = agent.assertMessageReceived(fn, timeout)
+  if (typeof procOrUrl === 'object') {
+    procOrUrl.on('logMessage', msg => agent.emit('message', msg))
+  }
   await curl(procOrUrl)
   return resultPromise
 }
