@@ -627,7 +627,6 @@ jobs:
         environment:
           - SERVICES=mssql
           - PLUGINS=tedious
-          - DD_TRACE_DISABLED_PLUGINS=mocha
       - image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
         environment:
           - "ACCEPT_EULA=Y"
