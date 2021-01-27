@@ -57,8 +57,18 @@ class Loader {
 
         pkg = require(`${basedir}/package.json`)
 
-        const mainFile = path.posix.normalize(pkg.main || 'index.js')
-        if (!id.endsWith(`/node_modules/${instrumentation.name}/${mainFile}`)) continue
+        try {
+          const mainFile = path.posix.normalize(pkg.main || 'index.js')
+          const resolvedFile = require.resolve(path.posix.join(basedir, '../', instrumentation.name, mainFile))
+
+          if (!id.endsWith(resolvedFile)) continue
+        } catch (e) {
+          if (e.code === 'MODULE_NOT_FOUND') {
+            continue
+          }
+
+          throw e
+        }
       }
 
       if (!matchVersion(pkg.version, instrumentation.versions)) continue
