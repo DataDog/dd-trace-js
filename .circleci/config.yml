@@ -623,7 +623,7 @@ jobs:
   node-tedious:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - SERVICES=mssql
           - PLUGINS=tedious
