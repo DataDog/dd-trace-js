@@ -14,7 +14,7 @@ if (process.env.SCOPE) {
   options.scope = process.env.SCOPE
 }
 
-require('../..').init(options)
+const tracer = require('../..').init(options)
 
 const http = require('http')
 
@@ -25,6 +25,7 @@ const server = http.createServer((req, res) => {
         await new Promise(resolve => {
           resolve()
         }).then(() => {
+          tracer.scope().active().setTag('foo', 'bar')
           res.end('hello, world\n')
         })
       })()

@@ -38,6 +38,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
 
@@ -55,6 +56,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
 
@@ -74,6 +76,7 @@ describe('startup', () => {
             assert.isArray(traces[0])
             assert.strictEqual(traces[0].length, 1)
             assert.propertyVal(traces[0][0], 'name', 'http.request')
+            assert.propertyVal(traces[0][0].meta, 'foo', 'bar')
             resolve()
           } catch (e) {
             reject(e)
@@ -108,6 +111,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
 
@@ -125,6 +129,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
   })
@@ -150,6 +155,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
   })
