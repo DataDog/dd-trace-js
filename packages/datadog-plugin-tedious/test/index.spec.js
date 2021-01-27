@@ -54,7 +54,7 @@ describe('Plugin', () => {
         }
 
         connection = new tds.Connection(config)
-          .on('connect', done)
+          .connect(done)
       })
 
       afterEach(() => {
