@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   spawnProc,
-  curlAndAssertMessage
+  curlAndAssertMessage,
+  curl
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
@@ -64,15 +65,23 @@ describe('startup', () => {
         },
         stdio: 'pipe'
       })
-      return curlAndAssertMessage(agent, proc, ({ headers, payload, log }) => {
-        assert.isUndefined(headers)
-        assert.isUndefined(payload)
-        assert.isArray(log)
-        assert.strictEqual(log.length, 1)
-        assert.isArray(log[0])
-        assert.strictEqual(log[0].length, 1)
-        assert.propertyVal(log[0][0], 'name', 'http.request')
+      const logPromise = new Promise((resolve, reject) => {
+        proc.once('logLine', line => {
+          try {
+            const { traces } = JSON.parse(line)
+            assert.isArray(traces)
+            assert.strictEqual(traces.length, 1)
+            assert.isArray(traces[0])
+            assert.strictEqual(traces[0].length, 1)
+            assert.propertyVal(traces[0][0], 'name', 'http.request')
+            resolve()
+          } catch (e) {
+            reject(e)
+          }
+        })
       })
+      const curlPromise = curl(proc)
+      return Promise.all([logPromise, curlPromise])
     })
   })
 

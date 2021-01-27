@@ -87,14 +87,8 @@ class FakeAgent extends EventEmitter {
 function spawnProc (filename, options = {}) {
   const proc = fork(filename, options)
   if (proc.stdout) {
-    const readline = rl.createInterface(proc.stdout)
-    readline.on('line', line => {
-      try {
-        const { traces } = JSON.parse(line)
-        if (traces) proc.emit('logMessage', { log: traces })
-      } catch (e) {
-        // not a log message we care about
-      }
+    rl.createInterface(proc.stdout).on('line', line => {
+      proc.emit('logLine', line)
     })
   }
   return new Promise((resolve, reject) => {
@@ -127,9 +121,6 @@ async function curl (url) {
 
 async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
   const resultPromise = agent.assertMessageReceived(fn, timeout)
-  if (typeof procOrUrl === 'object') {
-    procOrUrl.on('logMessage', msg => agent.emit('message', msg))
-  }
   await curl(procOrUrl)
   return resultPromise
 }
