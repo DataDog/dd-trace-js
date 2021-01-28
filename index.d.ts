@@ -108,6 +108,12 @@ export declare interface Tracer extends opentracing.Tracer {
    * should not be cached.
    */
   getRumData(): string;
+
+  /**
+   * Flush all collected spans using the active exporter. Useful in cases
+   * where the application is shutting down.
+   */
+  flush (fn?: (error?: Error) => any): void;
 }
 
 export declare interface TraceOptions extends Analyzable {

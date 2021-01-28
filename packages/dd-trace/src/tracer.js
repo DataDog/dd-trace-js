@@ -125,6 +125,10 @@ class DatadogTracer extends Tracer {
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
   }
+
+  flush (done) {
+    return this._exporter._writer.flush(done)
+  }
 }
 
 function addError (span, error) {

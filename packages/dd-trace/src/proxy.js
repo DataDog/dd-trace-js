@@ -130,6 +130,10 @@ class Tracer extends BaseTracer {
   getRumData () {
     return this._tracer.getRumData.apply(this._tracer, arguments)
   }
+
+  flush () {
+    return this._tracer.flush.apply(this._tracer, arguments)
+  }
 }
 
 module.exports = Tracer
