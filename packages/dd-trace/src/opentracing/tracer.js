@@ -42,7 +42,6 @@ class DatadogTracer extends Tracer {
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
     this._url = this._exporter._url
     this._sampler = new Sampler(config.sampleRate)
-    this._peers = config.experimental.peers
     this._enableGetRumData = config.experimental.enableGetRumData
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),

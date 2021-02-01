@@ -51,7 +51,6 @@ tracer.init({
     b3: true,
     runtimeId: true,
     exporter: 'log',
-    distributedTracingOriginAllowlist: ['foo', /bar/],
     sampler: {
       sampleRate: 1,
       rateLimit: 1000,
@@ -84,7 +83,6 @@ tracer.init({
   },
   reportHostname: true,
   scope: 'noop',
-  clientToken: 'pub123abc',
   logLevel: 'debug'
 });
 

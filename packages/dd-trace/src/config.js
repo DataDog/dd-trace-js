@@ -138,8 +138,6 @@ class Config {
       b3: !(!options.experimental || !options.experimental.b3),
       runtimeId: !(!options.experimental || !options.experimental.runtimeId),
       exporter: options.experimental && options.experimental.exporter,
-      peers: (options.experimental && options.experimental.distributedTracingOriginAllowlist) ||
-        (options.experimental && options.experimental.distributedTracingOriginWhitelist) || [],
       enableGetRumData: (options.experimental && !!options.experimental.enableGetRumData),
       sampler,
       internalErrors: options.experimental && options.experimental.internalErrors
@@ -148,7 +146,6 @@ class Config {
     this.scope = isFalse(platform.env('DD_CONTEXT_PROPAGATION'))
       ? scopes.NOOP
       : coalesce(options.scope, platform.env('DD_TRACE_SCOPE'))
-    this.clientToken = coalesce(options.clientToken, platform.env('DD_CLIENT_TOKEN'))
     this.logLevel = coalesce(
       options.logLevel,
       platform.env('DD_TRACE_LOG_LEVEL'),

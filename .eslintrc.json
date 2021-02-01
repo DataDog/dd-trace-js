@@ -7,8 +7,7 @@
     "standard"
   ],
   "env": {
-    "node" : true,
-    "browser": true
+    "node" : true
   },
   "rules": {
     "max-len": [2, 120, 2],

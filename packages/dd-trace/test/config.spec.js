@@ -34,7 +34,6 @@ describe('Config', () => {
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
-    expect(config).to.have.property('clientToken', undefined)
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.nested.property('experimental.b3', false)
   })
@@ -71,7 +70,6 @@ describe('Config', () => {
     platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
     platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
     platform.env.withArgs('DD_ENV').returns('test')
-    platform.env.withArgs('DD_CLIENT_TOKEN').returns('789')
     platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
     platform.env.withArgs('DD_TRACE_SAMPLE_RATE').returns('0.5')
     platform.env.withArgs('DD_TRACE_RATE_LIMIT').returns('-1')
@@ -90,7 +88,6 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
-    expect(config).to.have.property('clientToken', '789')
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
@@ -163,7 +160,6 @@ describe('Config', () => {
       reportHostname: true,
       plugins: false,
       scope: 'noop',
-      clientToken: '789',
       logLevel: logLevel,
       experimental: {
         b3: true,
@@ -199,7 +195,6 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('scope', 'noop')
-    expect(config).to.have.property('clientToken', '789')
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')
@@ -292,7 +287,6 @@ describe('Config', () => {
       service: 'test',
       version: '1.0.0',
       env: 'development',
-      clientToken: '789',
       tags: {
         foo: 'foo'
       }
@@ -313,7 +307,6 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
-    expect(config).to.have.property('clientToken', '789')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
   })
