@@ -2,10 +2,6 @@
 
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
-const platform = require('../packages/dd-trace/src/platform')
-const node = require('../packages/dd-trace/src/platform/node')
-
-platform.use(node)
 
 const Config = require('../packages/dd-trace/src/config')
 const DatadogTracer = require('../packages/dd-trace/src/tracer')

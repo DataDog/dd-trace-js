@@ -1,6 +1,5 @@
 Component,Origin,License,Copyright
 require,@types/node,MIT,Copyright Authors
-require,core-js,MIT,Copyright 2014-2020 Denis Pushkarev
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
 require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
@@ -27,12 +26,8 @@ require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contr
 require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
 require,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,url-parse,MIT,Copyright 2015 Unshift.io Arnout Kazemier the Contributors
-require,whatwg-fetch,MIT,Copyright 2014-2016 GitHub Inc.
-dev,@babel/core,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
-dev,@babel/preset-env,MIT,Copyright 2014-present Sebastian McKenzie and other contributors
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
-dev,babel-loader,MIT,Copyright 2014-2019 Luís Couto
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
@@ -52,12 +47,6 @@ dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
-dev,karma,MIT,Copyright 2011-2019 Google, Inc.
-dev,karma-browserstack-launcher,MIT,Copyright 2011-2013 Google, Inc.
-dev,karma-chrome-launcher,MIT,Copyright 2011-2013 Google, Inc.
-dev,karma-firefox-launcher,MIT,Copyright 2011-2013 Google, Inc.
-dev,karma-mocha,MIT,Copyright 2011-2013 Google, Inc.
-dev,karma-webpack,MIT,Copyright JS Foundation and other contributors
 dev,mkdirp,MIT,Copyright 2010 James Halliday
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
@@ -70,7 +59,5 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
 dev,wait-on,MIT,Copyright 2015 Jeff Barczewski
-dev,webpack,MIT,Copyright JS Foundation and other contributors
-dev,webpack-cli,MIT,Copyright JS Foundation and other contributors
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
 file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns

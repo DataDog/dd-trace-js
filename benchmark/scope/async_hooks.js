@@ -6,10 +6,7 @@ const { ServerResponse } = require('http')
 
 const proxyquire = require('proxyquire')
 const platform = require('../../packages/dd-trace/src/platform')
-const node = require('../../packages/dd-trace/src/platform/node')
 const benchmark = require('../benchmark')
-
-platform.use(node)
 
 const suite = benchmark('scope (async_hooks)')
 

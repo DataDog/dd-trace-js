@@ -3,7 +3,6 @@
   "version": "0.30.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
-  "browser": "browser.js",
   "typings": "index.d.ts",
   "scripts": {
     "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
@@ -57,7 +56,6 @@
   "dependencies": {
     "@types/node": "^10.12.18",
     "axios": "^0.21.1",
-    "core-js": "^3.6.0",
     "form-data": "^3.0.0",
     "hdr-histogram-js": "^1.1.4",
     "koalas": "^1.0.2",
@@ -82,14 +80,10 @@
     "shimmer": "^1.2.0",
     "source-map": "^0.7.3",
     "source-map-resolve": "^0.6.0",
-    "url-parse": "^1.4.3",
-    "whatwg-fetch": "^3.0.0"
+    "url-parse": "^1.4.3"
   },
   "devDependencies": {
-    "@babel/core": "^7.6.4",
-    "@babel/preset-env": "^7.6.3",
     "autocannon": "^4.5.2",
-    "babel-loader": "^8.0.6",
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
     "chai": "^4.2.0",
@@ -109,12 +103,6 @@
     "graphql": "0.13.2",
     "int64-buffer": "^0.1.9",
     "jszip": "^3.5.0",
-    "karma": "^4.3.0",
-    "karma-browserstack-launcher": "^1.5.1",
-    "karma-chrome-launcher": "^3.1.0",
-    "karma-firefox-launcher": "^1.2.0",
-    "karma-mocha": "^1.3.0",
-    "karma-webpack": "^4.0.2",
     "mkdirp": "^0.5.1",
     "mocha": "^5.2.0",
     "msgpack-lite": "^0.1.26",
@@ -127,8 +115,6 @@
     "sinon-chai": "^3.4.0",
     "tape": "^4.9.1",
     "tar": "^4.4.8",
-    "wait-on": "^5.0.0",
-    "webpack": "^4.40.2",
-    "webpack-cli": "^3.3.9"
+    "wait-on": "^5.0.0"
   }
 }

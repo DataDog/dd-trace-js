@@ -23,6 +23,9 @@ const hasSupportedAsyncLocalStorage = semver.satisfies(process.versions.node, '>
 
 const platform = {
   _config: {},
+  configure (config) {
+    this._config = config
+  },
   name: () => 'nodejs',
   version: () => process.version,
   engine: () => process.jsEngine || 'v8',

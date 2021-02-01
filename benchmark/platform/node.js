@@ -2,10 +2,7 @@
 
 const benchmark = require('../benchmark')
 const platform = require('../../packages/dd-trace/src/platform')
-const node = require('../../packages/dd-trace/src/platform/node')
 const Config = require('../../packages/dd-trace/src/config')
-
-platform.use(node)
 
 const suite = benchmark('platform (node)')
 

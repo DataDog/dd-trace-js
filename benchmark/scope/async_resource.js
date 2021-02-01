@@ -2,11 +2,7 @@
 
 const { AsyncResource } = require('async_hooks')
 
-const platform = require('../../packages/dd-trace/src/platform')
-const node = require('../../packages/dd-trace/src/platform/node')
 const benchmark = require('../benchmark')
-
-platform.use(node)
 
 const suite = benchmark('scope (executionAsyncResource)')
 
