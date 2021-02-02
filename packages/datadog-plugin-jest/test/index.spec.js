@@ -12,23 +12,24 @@ describe('Plugin', () => {
   const TEST_SUITE = 'test-file.js'
   const BUILD_SOURCE_ROOT = '/source-root'
 
-  withVersions(plugin, 'jest-environment-node', version => {
+  withVersions(plugin, ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       return agent.close()
     })
     beforeEach(() => {
       tracer = require('../../dd-trace')
       return agent.load('jest').then(() => {
-        DatadogJestEnvironment = require(`../../../versions/jest-environment-node@${version}`).get()
+        DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
-        datadogJestEnv.context.expect = {
-          getState: () => {
-            return {
-              currentTestName: TEST_NAME
-            }
+        datadogJestEnv.getVmContext = () => ({
+          expect: {
+            getState: () =>
+              ({
+                currentTestName: TEST_NAME
+              })
           }
-        }
+        })
       })
     })
 

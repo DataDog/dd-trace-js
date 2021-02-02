@@ -43,7 +43,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
       'x-datadog-parent-id': '0000000000000000',
       'x-datadog-sampled': 1
     })
-    const { currentTestName } = this.context.expect.getState()
+    const { currentTestName } = this.getVmContext().expect.getState()
     const commonSpanTags = {
       [TEST_TYPE]: 'test',
       [TEST_NAME]: currentTestName,
