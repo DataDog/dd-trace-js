@@ -26,13 +26,18 @@ function waitForMssql () {
 
         // Create a stored procedure for tests
         const storedProc = 'CREATE PROCEDURE dbo.ddTestProc @num INT AS SELECT @num + 1 GO;'
-        const request = new tedious.Request(storedProc, () => {
+        const request = new tedious.Request(storedProc, (err, result) => {
           connection.close()
-          resolve()
+          if (
+            err &&
+            !err.message.includes('There is already an object named \'ddTestProc\' in the database.')
+          ) reject(err)
+          else resolve()
         })
 
         connection.execSql(request)
       })
+      connection.connect()
     })
   })
 }
