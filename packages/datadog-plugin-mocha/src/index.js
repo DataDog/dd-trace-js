@@ -62,8 +62,13 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
           const activeSpan = tracer.scope().active()
           let result
           try {
-            result = await specFunction()
-            activeSpan.setTag(TEST_STATUS, 'pass')
+            const context = this.test.ctx
+            result = await specFunction.call(context)
+            if (context.test.state !== 'failed' && !context.test.timedOut) {
+              activeSpan.setTag(TEST_STATUS, 'pass')
+            } else {
+              activeSpan.setTag(TEST_STATUS, 'fail')
+            }
           } catch (error) {
             activeSpan.setTag(TEST_STATUS, 'fail')
             throw error
