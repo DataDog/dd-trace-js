@@ -43,16 +43,21 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
       'x-datadog-parent-id': '0000000000000000',
       'x-datadog-sampled': 1
     })
-    const { currentTestName } = this.getVmContext().expect.getState()
+    let testName = event.test.name
+    const context = this.getVmContext()
+    if (context) {
+      const { currentTestName } = context.expect.getState()
+      testName = currentTestName
+    }
     const commonSpanTags = {
       [TEST_TYPE]: 'test',
-      [TEST_NAME]: currentTestName,
+      [TEST_NAME]: testName,
       [TEST_SUITE]: this.testSuite,
       [SAMPLING_RULE_DECISION]: 1,
       [SAMPLING_PRIORITY]: AUTO_KEEP,
       ...testEnvironmentMetadata
     }
-    const resource = `${this.testSuite}.${currentTestName}`
+    const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
       tracer.startSpan(
         'jest.test',

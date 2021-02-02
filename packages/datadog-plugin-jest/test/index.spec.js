@@ -222,6 +222,37 @@ describe('Plugin', () => {
         expect(datadogJestEnv.testSuite).to.equal(TEST_SUITE)
       })
 
+      it('does not crash with an empty context and uses test name from event', (done) => {
+        const TEST_NAME_FROM_EVENT = `${TEST_NAME}_FROM_EVENT`
+
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              'test.name': TEST_NAME_FROM_EVENT,
+              'test.status': 'pass',
+              'test.suite': TEST_SUITE,
+              'test.type': 'test'
+            })
+            expect(traces[0][0].type).to.equal('test')
+            expect(traces[0][0].name).to.equal('jest.test')
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME_FROM_EVENT}`)
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME_FROM_EVENT
+          }
+        }
+        datadogJestEnv.getVmContext = () => null
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {
