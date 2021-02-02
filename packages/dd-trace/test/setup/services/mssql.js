@@ -25,13 +25,10 @@ function waitForMssql () {
         if (err) return reject(err)
 
         // Create a stored procedure for tests
-        const storedProc = 'CREATE PROCEDURE dbo.ddTestProc @num INT AS SELECT @num + 1 GO;'
-        const request = new tedious.Request(storedProc, (err, result) => {
+        const storedProc = 'CREATE OR ALTER PROCEDURE dbo.ddTestProc @num INT AS SELECT @num + 1 GO;'
+        const request = new tedious.Request(storedProc, (err) => {
           connection.close()
-          if (
-            err &&
-            !err.message.includes('There is already an object named \'ddTestProc\' in the database.')
-          ) reject(err)
+          if (err) reject(err)
           else resolve()
         })
 
