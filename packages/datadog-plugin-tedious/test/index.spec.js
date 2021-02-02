@@ -13,6 +13,7 @@ describe('Plugin', () => {
   let tds
   let tracer
   let connection
+  let connectionIsClosed
 
   withVersions(plugin, 'tedious', version => {
     beforeEach(() => {
@@ -53,12 +54,23 @@ describe('Plugin', () => {
           config.password = MSSQL_PASSWORD
         }
 
+        connectionIsClosed = false
         connection = new tds.Connection(config)
           .on('connect', done)
+
+        // see https://github.com/tediousjs/tedious/releases/tag/v10.0.0
+        if (semver.intersects(version, '>=10.0.0')) {
+          connection.connect()
+        }
       })
 
-      afterEach(() => {
-        connection.close()
+      afterEach(function (done) {
+        if (connectionIsClosed) {
+          done()
+        } else {
+          connection.on('end', () => done())
+          connection.close()
+        }
       })
 
       it('should run the Request callback in the parent context', done => {
@@ -78,12 +90,13 @@ describe('Plugin', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
         const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
-          done(err)
+          if (err) done(err)
         })
 
         tracer.scope().activate(span, () => {
           request.on('requestCompleted', () => {
             expect(tracer.scope().active()).to.equal(span)
+            done()
           })
         })
         connection.execSql(request)
@@ -96,6 +109,7 @@ describe('Plugin', () => {
         tracer.scope().activate(span, () => {
           connection.on('end', () => {
             expect(tracer.scope().active()).to.equal(span)
+            connectionIsClosed = true
             done()
           })
         })
