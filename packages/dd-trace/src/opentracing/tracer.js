@@ -18,6 +18,7 @@ const formats = require('../../../../ext/formats')
 const log = require('../log')
 const constants = require('../constants')
 const platform = require('../platform')
+const getExporter = require('../exporter')
 
 const REFERENCE_NOOP = constants.REFERENCE_NOOP
 const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
@@ -27,7 +28,7 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super()
 
-    const Exporter = platform.exporter(config.experimental.exporter)
+    const Exporter = getExporter(config.experimental.exporter)
 
     this._service = config.service
     this._version = config.version

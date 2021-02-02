@@ -9,16 +9,10 @@ const request = require('./request')
 const metrics = require('./metrics')
 const plugins = require('../../plugins')
 const hostname = require('./hostname')
-const Loader = require('./loader')
-const scopes = require('../../../../../ext/scopes')
-const exporter = require('./exporter')
 const pkg = require('./pkg')
 const startupLog = require('./startup-log')
-const semver = require('semver')
 
 const emitter = new EventEmitter()
-
-const hasSupportedAsyncLocalStorage = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
 
 const platform = {
   _config: {},
@@ -41,18 +35,7 @@ const platform = {
   startupLog,
   hostname,
   on: emitter.on.bind(emitter),
-  off: emitter.removeListener.bind(emitter),
-  Loader,
-  getScope (scope) {
-    if (scope === scopes.ASYNC_RESOURCE) {
-      return require('../../scope/async_resource')
-    } else if (scope === scopes.ASYNC_LOCAL_STORAGE || (!scope && hasSupportedAsyncLocalStorage)) {
-      return require('../../scope/async_local_storage')
-    } else {
-      return require('../../scope/async_hooks')
-    }
-  },
-  exporter
+  off: emitter.removeListener.bind(emitter)
 }
 
 process.once('beforeExit', () => emitter.emit('exit'))

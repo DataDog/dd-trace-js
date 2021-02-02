@@ -3,6 +3,7 @@
 const shimmer = require('shimmer')
 const log = require('./log')
 const platform = require('./platform')
+const Loader = require('./loader')
 const { isTrue, isFalse } = require('./util')
 
 shimmer({ logger: () => {} })
@@ -46,7 +47,7 @@ function getConfig (name, config = {}) {
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
-    this._loader = new platform.Loader(this)
+    this._loader = new Loader(this)
     this._enabled = false
     this._names = new Set()
     this._plugins = new Map()
