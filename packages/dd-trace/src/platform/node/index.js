@@ -19,7 +19,8 @@ const semver = require('semver')
 
 const emitter = new EventEmitter()
 
-const hasSupportedAsyncLocalStorage = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
+// https://github.com/nodejs/node/pull/33801
+const hasJavaScriptAsyncHooks = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
 
 const platform = {
   _config: {},
@@ -44,7 +45,7 @@ const platform = {
   getScope (scope) {
     if (scope === scopes.ASYNC_LOCAL_STORAGE) {
       return require('../../scope/async_local_storage')
-    } else if (scope === scopes.ASYNC_RESOURCE || (!scope && hasSupportedAsyncLocalStorage)) {
+    } else if (scope === scopes.ASYNC_RESOURCE || (!scope && hasJavaScriptAsyncHooks)) {
       return require('../../scope/async_resource')
     } else {
       return require('../../scope/async_hooks')
