@@ -7,6 +7,7 @@ const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const { fork } = require('child_process')
 const http = require('http')
+const rl = require('readline')
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -85,6 +86,11 @@ class FakeAgent extends EventEmitter {
 
 function spawnProc (filename, options = {}) {
   const proc = fork(filename, options)
+  if (proc.stdout) {
+    rl.createInterface(proc.stdout).on('line', line => {
+      proc.emit('logLine', line)
+    })
+  }
   return new Promise((resolve, reject) => {
     proc.on('message', ({ port }) => {
       proc.url = `http://localhost:${port}`

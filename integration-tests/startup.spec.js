@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   spawnProc,
-  curlAndAssertMessage
+  curlAndAssertMessage,
+  curl
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
@@ -37,13 +38,15 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
 
-    it('works for options.url', async () => {
+    it('works for options.url and options.scope: async_hooks', async () => {
       proc = await spawnProc(startupTestFile, {
         env: {
-          AGENT_URL: `http://localhost:${agent.port}`
+          AGENT_URL: `http://localhost:${agent.port}`,
+          SCOPE: 'async_hooks'
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -53,7 +56,35 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
+    })
+
+    it('uses log exporter correctly', async () => {
+      proc = await spawnProc(startupTestFile, {
+        env: {
+          AWS_LAMBDA_FUNCTION_NAME: 'fake-lambda'
+        },
+        stdio: 'pipe'
+      })
+      const logPromise = new Promise((resolve, reject) => {
+        proc.once('logLine', line => {
+          try {
+            const { traces } = JSON.parse(line)
+            assert.isArray(traces)
+            assert.strictEqual(traces.length, 1)
+            assert.isArray(traces[0])
+            assert.strictEqual(traces[0].length, 1)
+            assert.propertyVal(traces[0][0], 'name', 'http.request')
+            assert.propertyVal(traces[0][0].meta, 'foo', 'bar')
+            resolve()
+          } catch (e) {
+            reject(e)
+          }
+        })
+      })
+      const curlPromise = curl(proc)
+      return Promise.all([logPromise, curlPromise])
     })
   })
 
@@ -80,13 +111,15 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
 
-    it('works for DD_TRACE_AGENT_URL', async () => {
+    it('works for DD_TRACE_AGENT_URL and DD_TRACE_SCOPE=async_resource', async () => {
       proc = await spawnProc(startupTestFile, {
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
+          DD_TRACE_SCOPE: 'async_resource'
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -96,6 +129,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
   })
@@ -121,6 +155,7 @@ describe('startup', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0].meta, 'foo', 'bar')
       })
     })
   })

@@ -20,6 +20,7 @@ const semver = require('semver')
 const emitter = new EventEmitter()
 
 const hasSupportedAsyncLocalStorage = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
+const hasSupportedAsyncResource = semver.satisfies(process.versions.node, '>= 14 || ^13.9.0 || ^12.19.0')
 
 const platform = {
   _config: {},
@@ -42,9 +43,9 @@ const platform = {
   off: emitter.removeListener.bind(emitter),
   Loader,
   getScope (scope) {
-    if (scope === scopes.ASYNC_RESOURCE) {
+    if (hasSupportedAsyncResource && scope === scopes.ASYNC_RESOURCE) {
       return require('../../scope/async_resource')
-    } else if (scope === scopes.ASYNC_LOCAL_STORAGE || (!scope && hasSupportedAsyncLocalStorage)) {
+    } else if (hasSupportedAsyncLocalStorage && (scope === scopes.ASYNC_LOCAL_STORAGE || !scope)) {
       return require('../../scope/async_local_storage')
     } else {
       return require('../../scope/async_hooks')
