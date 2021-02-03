@@ -42,10 +42,10 @@ const platform = {
   off: emitter.removeListener.bind(emitter),
   Loader,
   getScope (scope) {
-    if (scope === scopes.ASYNC_RESOURCE) {
-      return require('../../scope/async_resource')
-    } else if (scope === scopes.ASYNC_LOCAL_STORAGE || (!scope && hasSupportedAsyncLocalStorage)) {
+    if (scope === scopes.ASYNC_LOCAL_STORAGE) {
       return require('../../scope/async_local_storage')
+    } else if (scope === scopes.ASYNC_RESOURCE || (!scope && hasSupportedAsyncLocalStorage)) {
+      return require('../../scope/async_resource')
     } else {
       return require('../../scope/async_hooks')
     }

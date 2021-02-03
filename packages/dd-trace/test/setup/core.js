@@ -15,7 +15,7 @@ const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 
 const defaultScope = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
-  ? 'async_local_storage'
+  ? 'async_resource'
   : 'async_hooks'
 
 const asyncHooksScope = new AsyncHooksScope({
