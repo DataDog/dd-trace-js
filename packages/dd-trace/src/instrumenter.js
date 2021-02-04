@@ -6,10 +6,9 @@ const platform = require('./platform')
 const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue, isFalse } = require('./util')
+const plugins = require('./plugins')
 
 shimmer({ logger: () => {} })
-
-const plugins = platform.plugins
 
 const disabldPlugins = platform.env('DD_TRACE_DISABLED_PLUGINS')
 

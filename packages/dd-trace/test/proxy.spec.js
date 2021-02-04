@@ -15,6 +15,7 @@ describe('TracerProxy', () => {
   let metrics
   let analyticsSampler
   let log
+  let profiler
 
   beforeEach(() => {
     tracer = {
@@ -65,10 +66,7 @@ describe('TracerProxy', () => {
     Config = sinon.stub().returns(config)
 
     platform = {
-      load: sinon.spy(),
-      profiler: sinon.stub().returns({
-        start: sinon.spy()
-      })
+      load: sinon.spy()
     }
 
     metrics = {
@@ -79,6 +77,10 @@ describe('TracerProxy', () => {
       enable: sinon.spy()
     }
 
+    profiler = {
+      start: sinon.spy()
+    }
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
@@ -87,7 +89,8 @@ describe('TracerProxy', () => {
       './metrics': metrics,
       './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,
-      './log': log
+      './log': log,
+      './profiler': profiler
     })
 
     proxy = new Proxy()
