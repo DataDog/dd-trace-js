@@ -9,7 +9,6 @@ const request = require('./request')
 const plugins = require('../../plugins')
 const hostname = require('./hostname')
 const pkg = require('./pkg')
-const startupLog = require('./startup-log')
 
 const emitter = new EventEmitter()
 
@@ -30,7 +29,6 @@ const platform = {
   appVersion: () => pkg.version,
   request,
   plugins,
-  startupLog,
   hostname,
   on: emitter.on.bind(emitter),
   off: emitter.removeListener.bind(emitter)

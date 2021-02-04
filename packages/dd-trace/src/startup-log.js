@@ -1,10 +1,10 @@
 'use strict'
 
-const mainLogger = require('../../log')
+const mainLogger = require('./log')
 const path = require('path')
 const os = require('os')
 const { inspect } = require('util')
-const tracerVersion = require('../../../lib/version')
+const tracerVersion = require('../lib/version')
 
 const logger = Object.create(mainLogger)
 logger._enabled = true

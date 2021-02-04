@@ -1,7 +1,7 @@
 'use strict'
 
 const os = require('os')
-const tracerVersion = require('../../../lib/version')
+const tracerVersion = require('../lib/version')
 
 describe('startup logging', () => {
   let semverVersion
@@ -11,13 +11,13 @@ describe('startup logging', () => {
     sinon.stub(console, 'info')
     sinon.stub(console, 'warn')
     semverVersion = require('semver/package.json').version
-    delete require.cache[require.resolve('../../../src/platform/node/startup-log')]
+    delete require.cache[require.resolve('../src/startup-log')]
     const {
       setStartupLogConfig,
       setStartupLogInstrumenter,
       setSamplingRules,
       startupLog
-    } = require('../../../src/platform/node/startup-log')
+    } = require('../src/startup-log')
     setStartupLogInstrumenter({
       _instrumented: {
         keys () {

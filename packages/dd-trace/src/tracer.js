@@ -1,10 +1,10 @@
 'use strict'
 
-const semver = require('semver')
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
 const platform = require('./platform')
+const getScope = require('./scope')
 const { setStartupLogConfig } = platform.startupLog
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -13,14 +13,14 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const ANALYTICS = tags.ANALYTICS
 const NOOP = scopes.NOOP
 
-const hasSupportedAsyncLocalStorage = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
-
 class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
+    const Scope = getScope()
+
     this._scopeManager = getScopeManager(config)
-    this._scope = getScope(config)
+    this._scope = new Scope(config)
     setStartupLogConfig(config)
   }
 
@@ -160,22 +160,6 @@ function getScopeManager (config) {
   }
 
   return new ScopeManager()
-}
-
-function getScope (config) {
-  let Scope
-
-  if (config.scope === NOOP) {
-    Scope = require('./scope/base')
-  } else if (config.scope === scopes.ASYNC_RESOURCE) {
-    Scope = require('./scope/async_resource')
-  } else if (config.scope === scopes.ASYNC_LOCAL_STORAGE || (!config.scope && hasSupportedAsyncLocalStorage)) {
-    Scope = require('./scope/async_local_storage')
-  } else {
-    Scope = require('./scope/async_hooks')
-  }
-
-  return new Scope(config)
 }
 
 module.exports = DatadogTracer
