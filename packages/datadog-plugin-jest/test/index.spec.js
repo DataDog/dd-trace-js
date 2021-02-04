@@ -12,23 +12,24 @@ describe('Plugin', () => {
   const TEST_SUITE = 'test-file.js'
   const BUILD_SOURCE_ROOT = '/source-root'
 
-  withVersions(plugin, 'jest-environment-node', version => {
+  withVersions(plugin, ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       return agent.close()
     })
     beforeEach(() => {
       tracer = require('../../dd-trace')
       return agent.load('jest').then(() => {
-        DatadogJestEnvironment = require(`../../../versions/jest-environment-node@${version}`).get()
+        DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
-        datadogJestEnv.context.expect = {
-          getState: () => {
-            return {
-              currentTestName: TEST_NAME
-            }
+        datadogJestEnv.getVmContext = () => ({
+          expect: {
+            getState: () =>
+              ({
+                currentTestName: TEST_NAME
+              })
           }
-        }
+        })
       })
     })
 
@@ -219,6 +220,37 @@ describe('Plugin', () => {
       it('should set testSuite on the constructor', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         expect(datadogJestEnv.testSuite).to.equal(TEST_SUITE)
+      })
+
+      it('does not crash with an empty context and uses test name from event', (done) => {
+        const TEST_NAME_FROM_EVENT = `${TEST_NAME}_FROM_EVENT`
+
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              'test.name': TEST_NAME_FROM_EVENT,
+              'test.status': 'pass',
+              'test.suite': TEST_SUITE,
+              'test.type': 'test'
+            })
+            expect(traces[0][0].type).to.equal('test')
+            expect(traces[0][0].name).to.equal('jest.test')
+            expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME_FROM_EVENT}`)
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME_FROM_EVENT
+          }
+        }
+        datadogJestEnv.getVmContext = () => null
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
       })
 
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
