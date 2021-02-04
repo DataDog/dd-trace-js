@@ -6,6 +6,7 @@ const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')
 const platform = require('./platform')
+const metrics = require('./metrics')
 const profiler = require('./profiler')
 const log = require('./log')
 const { setStartupLogInstrumenter } = platform.startupLog
@@ -40,7 +41,7 @@ class Tracer extends BaseTracer {
           platform.validate()
 
           if (config.runtimeMetrics) {
-            platform.metrics().start()
+            metrics.start(config)
           }
 
           if (config.analytics) {

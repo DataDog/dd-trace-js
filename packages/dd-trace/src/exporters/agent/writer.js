@@ -1,6 +1,7 @@
 'use strict'
 
 const platform = require('../../platform')
+const metrics = require('../../metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
 
@@ -24,18 +25,18 @@ class Writer {
   }
 
   _sendPayload (data, count, done) {
-    platform.metrics().increment(`${METRIC_PREFIX}.requests`, true)
+    metrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
       if (status) {
-        platform.metrics().increment(`${METRIC_PREFIX}.responses`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
+        metrics.increment(`${METRIC_PREFIX}.responses`, true)
+        metrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
       } else if (err) {
-        platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
 
         if (err.code) {
-          platform.metrics().increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+          metrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
         }
       }
 
@@ -54,8 +55,8 @@ class Writer {
       } catch (e) {
         log.error(e)
 
-        platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
       done()
     })

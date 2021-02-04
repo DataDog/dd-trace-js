@@ -4,6 +4,7 @@ const opentracing = require('opentracing')
 const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const platform = require('../platform')
+const metrics = require('../metrics')
 const constants = require('../constants')
 const id = require('../id')
 const tagger = require('../tagger')
@@ -35,7 +36,7 @@ class DatadogSpan extends Span {
     this._startTime = fields.startTime || this._getTime()
 
     if (debug) {
-      this._handle = platform.metrics().track(this)
+      this._handle = metrics.track(this)
     }
   }
 

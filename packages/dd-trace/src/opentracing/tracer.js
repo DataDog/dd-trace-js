@@ -18,6 +18,7 @@ const formats = require('../../../../ext/formats')
 const log = require('../log')
 const constants = require('../constants')
 const platform = require('../platform')
+const metrics = require('../metrics')
 const getExporter = require('../exporter')
 
 const REFERENCE_NOOP = constants.REFERENCE_NOOP
@@ -108,7 +109,7 @@ class DatadogTracer extends Tracer {
       this._propagators[format].inject(spanContext, carrier)
     } catch (e) {
       log.error(e)
-      platform.metrics().increment('datadog.tracer.node.inject.errors', true)
+      metrics.increment('datadog.tracer.node.inject.errors', true)
     }
 
     return this
@@ -119,7 +120,7 @@ class DatadogTracer extends Tracer {
       return this._propagators[format].extract(carrier)
     } catch (e) {
       log.error(e)
-      platform.metrics().increment('datadog.tracer.node.extract.errors', true)
+      metrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
   }

@@ -3,6 +3,7 @@
 const shimmer = require('shimmer')
 const log = require('./log')
 const platform = require('./platform')
+const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue, isFalse } = require('./util')
 
@@ -176,7 +177,7 @@ class Instrumenter {
     const instrumentations = [].concat(plugin)
     const enabled = meta.config.enabled !== false
 
-    platform.metrics().boolean(`datadog.tracer.node.plugin.enabled.by.name`, enabled, `name:${meta.name}`)
+    metrics.boolean(`datadog.tracer.node.plugin.enabled.by.name`, enabled, `name:${meta.name}`)
 
     try {
       instrumentations
@@ -188,7 +189,7 @@ class Instrumenter {
       this.unload(plugin)
       log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
 
-      platform.metrics().increment(`datadog.tracer.node.plugin.errors`, true)
+      metrics.increment(`datadog.tracer.node.plugin.errors`, true)
     }
   }
 
@@ -204,7 +205,7 @@ class Instrumenter {
     if (meta) {
       this._plugins.delete(plugin)
 
-      platform.metrics().boolean(`datadog.tracer.node.plugin.enabled.by.name`, false, `name:${meta.name}`)
+      metrics.boolean(`datadog.tracer.node.plugin.enabled.by.name`, false, `name:${meta.name}`)
     }
   }
 

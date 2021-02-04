@@ -23,6 +23,7 @@ const config = new Config({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
+const metrics = require('../../packages/dd-trace/src/metrics')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
 const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
@@ -114,6 +115,41 @@ suite
   .add('Histogram', {
     fn () {
       histogram.record(Math.round(Math.random() * 3.6e12))
+    }
+  })
+  .add('metrics#track', {
+    fn () {
+      metrics.track(spanStub).finish()
+    }
+  })
+  .add('metrics#boolean', {
+    fn () {
+      metrics.boolean('test', Math.random() < 0.5)
+    }
+  })
+  .add('metrics#histogram', {
+    fn () {
+      metrics.histogram('test', Math.random() * 3.6e12)
+    }
+  })
+  .add('metrics#gauge', {
+    fn () {
+      metrics.gauge('test', Math.random())
+    }
+  })
+  .add('metrics#increment', {
+    fn () {
+      metrics.boolean('test')
+    }
+  })
+  .add('metrics#increment (monotonic)', {
+    fn () {
+      metrics.boolean('test', true)
+    }
+  })
+  .add('metrics#decrement', {
+    fn () {
+      metrics.boolean('test')
     }
   })
 

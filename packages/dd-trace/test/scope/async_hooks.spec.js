@@ -4,7 +4,7 @@ const { AsyncResource, executionAsyncId } = require('async_hooks')
 const semver = require('semver')
 const Scope = require('../../src/scope/async_hooks')
 const Span = require('opentracing').Span
-const platform = require('../../src/platform')
+const metrics = require('../../src/metrics')
 const testScope = require('./test')
 
 wrapIt('async_hooks')
@@ -12,11 +12,8 @@ wrapIt('async_hooks')
 describe('Scope (async_hooks)', () => {
   let scope
   let span
-  let metrics
 
   beforeEach(() => {
-    metrics = platform.metrics()
-
     sinon.spy(metrics, 'increment')
     sinon.spy(metrics, 'decrement')
 

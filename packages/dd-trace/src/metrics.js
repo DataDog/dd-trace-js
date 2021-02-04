@@ -6,14 +6,13 @@ const v8 = require('v8')
 const path = require('path')
 const os = require('os')
 const Client = require('./dogstatsd')
-const log = require('../../log')
-const Histogram = require('../../histogram')
+const log = require('./log')
+const Histogram = require('./histogram')
 
 const INTERVAL = 10 * 1000
 
 let nativeMetrics = null
 
-let metrics
 let interval
 let client
 let time
@@ -24,126 +23,122 @@ let histograms
 
 reset()
 
-module.exports = function () {
-  return metrics || (metrics = { // cache the metrics instance
-    start: (options) => {
-      const tags = []
+module.exports = { // cache the metrics instance
+  start (config) {
+    const tags = []
 
-      Object.keys(this._config.tags)
-        .filter(key => typeof this._config.tags[key] === 'string')
-        .forEach(key => {
-          // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = this._config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+    Object.keys(config.tags)
+      .filter(key => typeof config.tags[key] === 'string')
+      .forEach(key => {
+        // https://docs.datadoghq.com/tagging/#defining-tags
+        const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
 
-          tags.push(`${key}:${value}`)
-        })
-
-      options = options || {}
-
-      try {
-        nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..', '..', '..'))
-        nativeMetrics.start()
-      } catch (e) {
-        log.error(e)
-        nativeMetrics = null
-      }
-
-      client = new Client({
-        host: this._config.dogstatsd.hostname,
-        port: this._config.dogstatsd.port,
-        tags
+        tags.push(`${key}:${value}`)
       })
 
-      time = process.hrtime()
-
-      if (nativeMetrics) {
-        interval = setInterval(() => {
-          captureCommonMetrics()
-          captureNativeMetrics()
-          client.flush()
-        }, INTERVAL)
-      } else {
-        cpuUsage = process.cpuUsage()
-
-        interval = setInterval(() => {
-          captureCommonMetrics()
-          captureCpuUsage()
-          captureHeapSpace()
-          client.flush()
-        }, INTERVAL)
-      }
-
-      interval.unref()
-    },
-
-    stop: () => {
-      if (nativeMetrics) {
-        nativeMetrics.stop()
-      }
-
-      clearInterval(interval)
-      reset()
-    },
-
-    track (span) {
-      if (nativeMetrics) {
-        const handle = nativeMetrics.track(span)
-
-        return {
-          finish: () => nativeMetrics.finish(handle)
-        }
-      }
-
-      return { finish: () => {} }
-    },
-
-    boolean (name, value, tag) {
-      metrics.gauge(name, value ? 1 : 0, tag)
-    },
-
-    histogram (name, value, tag) {
-      if (!client) return
-
-      histograms[name] = histograms[name] || new Map()
-
-      if (!histograms[name].has(tag)) {
-        histograms[name].set(tag, new Histogram())
-      }
-
-      histograms[name].get(tag).record(value)
-    },
-
-    count (name, count, tag, monotonic = false) {
-      if (!client) return
-      if (typeof tag === 'boolean') {
-        monotonic = tag
-        tag = undefined
-      }
-
-      const map = monotonic ? counters : gauges
-
-      map[name] = map[name] || new Map()
-
-      const value = map[name].get(tag) || 0
-
-      map[name].set(tag, value + count)
-    },
-
-    gauge (name, value, tag) {
-      if (!client) return
-
-      gauges[name] = gauges[name] || new Map()
-      gauges[name].set(tag, value)
-    },
-
-    increment (name, tag, monotonic) {
-      this.count(name, 1, tag, monotonic)
-    },
-
-    decrement (name, tag) {
-      this.count(name, -1, tag)
+    try {
+      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..', '..', '..'))
+      nativeMetrics.start()
+    } catch (e) {
+      log.error(e)
+      nativeMetrics = null
     }
-  })
+
+    client = new Client({
+      host: config.dogstatsd.hostname,
+      port: config.dogstatsd.port,
+      tags
+    })
+
+    time = process.hrtime()
+
+    if (nativeMetrics) {
+      interval = setInterval(() => {
+        captureCommonMetrics()
+        captureNativeMetrics()
+        client.flush()
+      }, INTERVAL)
+    } else {
+      cpuUsage = process.cpuUsage()
+
+      interval = setInterval(() => {
+        captureCommonMetrics()
+        captureCpuUsage()
+        captureHeapSpace()
+        client.flush()
+      }, INTERVAL)
+    }
+
+    interval.unref()
+  },
+
+  stop () {
+    if (nativeMetrics) {
+      nativeMetrics.stop()
+    }
+
+    clearInterval(interval)
+    reset()
+  },
+
+  track (span) {
+    if (nativeMetrics) {
+      const handle = nativeMetrics.track(span)
+
+      return {
+        finish: () => nativeMetrics.finish(handle)
+      }
+    }
+
+    return { finish: () => {} }
+  },
+
+  boolean (name, value, tag) {
+    this.gauge(name, value ? 1 : 0, tag)
+  },
+
+  histogram (name, value, tag) {
+    if (!client) return
+
+    histograms[name] = histograms[name] || new Map()
+
+    if (!histograms[name].has(tag)) {
+      histograms[name].set(tag, new Histogram())
+    }
+
+    histograms[name].get(tag).record(value)
+  },
+
+  count (name, count, tag, monotonic = false) {
+    if (!client) return
+    if (typeof tag === 'boolean') {
+      monotonic = tag
+      tag = undefined
+    }
+
+    const map = monotonic ? counters : gauges
+
+    map[name] = map[name] || new Map()
+
+    const value = map[name].get(tag) || 0
+
+    map[name].set(tag, value + count)
+  },
+
+  gauge (name, value, tag) {
+    if (!client) return
+
+    gauges[name] = gauges[name] || new Map()
+    gauges[name].set(tag, value)
+  },
+
+  increment (name, tag, monotonic) {
+    this.count(name, 1, tag, monotonic)
+  },
+
+  decrement (name, tag) {
+    this.count(name, -1, tag)
+  }
 }
 
 function reset () {

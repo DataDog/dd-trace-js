@@ -14,6 +14,7 @@ describe('Span', () => {
   let prioritySampler
   let sampler
   let platform
+  let metrics
   let handle
   let id
   let tagger
@@ -23,10 +24,11 @@ describe('Span', () => {
 
     handle = { finish: sinon.spy() }
     platform = {
-      now: sinon.stub().returns(0),
-      metrics: sinon.stub().returns({
-        track: sinon.stub().returns(handle)
-      })
+      now: sinon.stub().returns(0)
+    }
+
+    metrics = {
+      track: sinon.stub().returns(handle)
     }
 
     id = sinon.stub()
@@ -157,7 +159,7 @@ describe('Span', () => {
   it('should keep track of its memory lifecycle in debug mode', () => {
     span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' }, true)
 
-    expect(platform.metrics().track).to.have.been.calledWith(span)
+    expect(metrics.track).to.have.been.calledWith(span)
 
     span.finish()
 
