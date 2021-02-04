@@ -23,7 +23,7 @@ const config = new Config({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
-const metrics = require('../../packages/dd-trace/src/metrics')
+const metrics = require('../packages/dd-trace/src/metrics')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
 const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
