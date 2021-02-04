@@ -1,6 +1,7 @@
 'use strict'
 
 const platform = require('../../platform')
+const { startupLog } = require('../../startup-log')
 const metrics = require('../../metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
@@ -40,7 +41,7 @@ class Writer {
         }
       }
 
-      platform.startupLog.startupLog({ agentError: err })
+      startupLog({ agentError: err })
 
       if (err) {
         log.error(err)
@@ -126,7 +127,7 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
   platform.request(Object.assign({ data }, options), (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
-      platform.startupLog.startupLog({
+      startupLog({
         agentError: status !== 404 && status !== 200 ? err : undefined
       })
     }
