@@ -9,7 +9,7 @@ const platform = require('./platform')
 const metrics = require('./metrics')
 const profiler = require('./profiler')
 const log = require('./log')
-const { setStartupLogInstrumenter } = platform.startupLog
+const { setStartupLogInstrumenter } = require('./startup-log')
 const analyticsSampler = require('./analytics_sampler')
 
 const noop = new NoopTracer()
