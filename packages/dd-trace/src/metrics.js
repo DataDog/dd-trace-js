@@ -23,7 +23,7 @@ let histograms
 
 reset()
 
-module.exports = { // cache the metrics instance
+module.exports = {
   start (config) {
     const tags = []
 
