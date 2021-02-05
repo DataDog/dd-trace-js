@@ -15,6 +15,7 @@ describe('Tracer', () => {
   let SpanProcessor
   let processor
   let exporter
+  let agentExporter
   let Sampler
   let sampler
   let spanContext
@@ -41,10 +42,10 @@ describe('Tracer', () => {
     }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
-    exporter = {
+    agentExporter = {
       export: sinon.spy()
     }
-    AgentExporter = sinon.stub().returns(exporter)
+    AgentExporter = sinon.stub().returns(agentExporter)
 
     processor = {
       process: sinon.spy()
@@ -85,9 +86,10 @@ describe('Tracer', () => {
     }
 
     platform = {
-      hostname: sinon.stub().returns('my_hostname'),
-      exporter: sinon.stub().returns(AgentExporter)
+      hostname: sinon.stub().returns('my_hostname')
     }
+
+    exporter = sinon.stub().returns(AgentExporter)
 
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
@@ -99,7 +101,8 @@ describe('Tracer', () => {
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
       '../log': log,
-      '../platform': platform
+      '../platform': platform,
+      '../exporter': exporter
     })
   })
 
@@ -108,7 +111,7 @@ describe('Tracer', () => {
 
     expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
+    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler)
   })
 
   it('should support sampling', () => {
