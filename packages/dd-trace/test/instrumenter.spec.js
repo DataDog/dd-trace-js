@@ -12,6 +12,8 @@ describe('Instrumenter', () => {
   let tracer
 
   beforeEach(() => {
+    process.env.DD_TRACE_DISABLED_PLUGINS = 'mocha'
+
     tracer = {
       _tracer: 'tracer'
     }
@@ -77,6 +79,8 @@ describe('Instrumenter', () => {
       .forEach(name => {
         delete require.cache[name]
       })
+
+    process.env.DD_TRACE_DISABLED_PLUGINS = 'mocha'
   })
 
   describe('with integrations enabled', () => {
