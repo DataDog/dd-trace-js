@@ -52,13 +52,11 @@ describe('Instrumenter', () => {
     }
 
     Instrumenter = proxyquire('../src/instrumenter', {
-      './platform': {
-        plugins: {
-          'http': integrations.http,
-          'express-mock': integrations.express,
-          'mysql-mock': integrations.mysql,
-          'other': integrations.other
-        }
+      './plugins': {
+        'http': integrations.http,
+        'express-mock': integrations.express,
+        'mysql-mock': integrations.mysql,
+        'other': integrations.other
       },
       '../../datadog-plugin-http/src': integrations.http,
       '../../datadog-plugin-express-mock/src': integrations.express,
@@ -437,10 +435,8 @@ describe('Instrumenter', () => {
     beforeEach(() => {
       Instrumenter = proxyquire('../src/instrumenter', {
         'shimmer': shimmer,
-        './platform': {
-          plugins: {
-            'mysql-mock': integrations.mysql
-          }
+        './plugins': {
+          'mysql-mock': integrations.mysql
         },
         '../../datadog-plugin-mysql-mock/src': integrations.mysql
       })
@@ -506,13 +502,11 @@ describe('Instrumenter', () => {
 
       Instrumenter = proxyquire('../src/instrumenter', {
         'shimmer': shimmer,
-        './platform': {
-          plugins: {
-            'http': integrations.http,
-            'express-mock': integrations.express,
-            'mysql-mock': integrations.mysql,
-            'other': integrations.other
-          }
+        './plugins': {
+          'http': integrations.http,
+          'express-mock': integrations.express,
+          'mysql-mock': integrations.mysql,
+          'other': integrations.other
         },
         '../../datadog-plugin-http/src': integrations.http,
         '../../datadog-plugin-express-mock/src': integrations.express,

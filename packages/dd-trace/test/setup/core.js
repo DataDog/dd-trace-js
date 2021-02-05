@@ -1,5 +1,7 @@
 'use strict'
 
+process.env.DD_TRACE_DISABLED_PLUGINS = 'mocha'
+
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
