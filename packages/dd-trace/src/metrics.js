@@ -37,7 +37,7 @@ module.exports = { // cache the metrics instance
       })
 
     try {
-      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..', '..', '..'))
+      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
       nativeMetrics.start()
     } catch (e) {
       log.error(e)
