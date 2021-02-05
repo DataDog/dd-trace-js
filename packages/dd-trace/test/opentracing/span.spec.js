@@ -56,7 +56,8 @@ describe('Span', () => {
     Span = proxyquire('../src/opentracing/span', {
       '../platform': platform,
       '../id': id,
-      '../tagger': tagger
+      '../tagger': tagger,
+      '../metrics': metrics
     })
   })
 
