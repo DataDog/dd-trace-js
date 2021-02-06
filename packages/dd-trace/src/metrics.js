@@ -149,6 +149,7 @@ function reset () {
   gauges = {}
   counters = {}
   histograms = {}
+  nativeMetrics = null
 }
 
 function captureCpuUsage () {
