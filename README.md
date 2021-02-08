@@ -5,9 +5,9 @@
 [![CircleCI](https://circleci.com/gh/DataDog/dd-trace-js.svg?style=shield)](https://circleci.com/gh/DataDog/dd-trace-js)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
-**JavaScript APM Tracer**
+**Node.js APM Tracer**
 
-Datadog APM tracing client for JavaScript.
+Datadog APM tracing client for Node.js.
 
 ## Getting Started
 
