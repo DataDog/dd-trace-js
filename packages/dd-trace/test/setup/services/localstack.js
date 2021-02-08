@@ -21,6 +21,7 @@ function waitForAWS () {
     const snsEndpoint = new AWS.Endpoint('http://localhost:4575')
     const route53Endpoint = new AWS.Endpoint('http://localhost:4580')
     const redshiftEndpoint = new AWS.Endpoint('http://localhost:4577')
+    const lambdaEndpoint = new AWS.Endpoint('http://localhost:4566')
 
     const ddb = new AWS.DynamoDB({ endpoint: ddbEndpoint })
     const kinesis = new AWS.Kinesis({ endpoint: kinesisEndpoint })
@@ -29,6 +30,7 @@ function waitForAWS () {
     const sqs = new AWS.SQS({ endpoint: sqsEndpoint })
     const sns = new AWS.SNS({ endpoint: snsEndpoint })
     const redshift = new AWS.Redshift({ endpoint: redshiftEndpoint })
+    const lambda = new AWS.Lambda({ endpoint: lambdaEndpoint })
 
     operation.attempt(currentAttempt => {
       Promise.all([
@@ -38,7 +40,8 @@ function waitForAWS () {
         sqs.listQueues({}).promise(),
         sns.listTopics({}).promise(),
         route53.listHealthChecks({}).promise(),
-        redshift.describeClusters({}).promise()
+        redshift.describeClusters({}).promise(),
+        lambda.listFunctions({}).promise()
       ]).then(data => {
         resolve()
       }).catch(err => {

@@ -364,7 +364,7 @@ jobs:
       - image: node:8
         environment:
           - PLUGINS=aws-sdk
-          - SERVICES=aws-sdk
+          - SERVICES=localstack
       - image: localstack/localstack:0.11.2
         environment:
           - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
