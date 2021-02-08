@@ -16,7 +16,7 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
-    const Scope = getScope()
+    const Scope = getScope(config.scope)
 
     this._scopeManager = getScopeManager(config)
     this._scope = new Scope(config)
