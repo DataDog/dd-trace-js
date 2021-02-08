@@ -16,7 +16,7 @@ const collectDisabledPlugins = () => {
 }
 
 function cleanEnv (name) {
-  return process.env[`DD_TRACE_${name.toUpperCase()}`].replace(/[^a-z0-9_]/ig, '_')
+  return process.env[`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_')]
 }
 
 function getConfig (name, config = {}) {
