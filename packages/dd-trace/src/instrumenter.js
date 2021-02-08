@@ -2,7 +2,6 @@
 
 const shimmer = require('shimmer')
 const log = require('./log')
-const platform = require('./platform')
 const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue, isFalse } = require('./util')
@@ -10,14 +9,14 @@ const plugins = require('./plugins')
 
 shimmer({ logger: () => {} })
 
-const disabldPlugins = platform.env('DD_TRACE_DISABLED_PLUGINS')
+const disabldPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
 const collectDisabledPlugins = () => {
   return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
 }
 
 function cleanEnv (name) {
-  return platform.env(`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_'))
+  return process.env[`DD_TRACE_${name.toUpperCase()}`].replace(/[^a-z0-9_]/ig, '_')
 }
 
 function getConfig (name, config = {}) {

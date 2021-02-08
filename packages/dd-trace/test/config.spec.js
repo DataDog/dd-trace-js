@@ -3,17 +3,24 @@
 describe('Config', () => {
   let Config
   let platform
+  let env
 
   beforeEach(() => {
     platform = {
-      env: sinon.stub(),
       service: sinon.stub(),
       appVersion: sinon.stub()
     }
 
+    env = process.env
+    process.env = {}
+
     Config = proxyquire('../src/config', {
       './platform': platform
     })
+  })
+
+  afterEach(() => {
+    process.env = env
   })
 
   it('should initialize with the correct defaults', () => {
@@ -57,22 +64,22 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
-    platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
-    platform.env.withArgs('DD_DOGSTATSD_HOSTNAME').returns('dsd-agent')
-    platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
-    platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
-    platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
-    platform.env.withArgs('DD_TRACE_AGENT_PROTOCOL_VERSION').returns('0.5')
-    platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
-    platform.env.withArgs('DD_SERVICE').returns('service')
-    platform.env.withArgs('DD_VERSION').returns('1.0.0')
-    platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
-    platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
-    platform.env.withArgs('DD_ENV').returns('test')
-    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
-    platform.env.withArgs('DD_TRACE_SAMPLE_RATE').returns('0.5')
-    platform.env.withArgs('DD_TRACE_RATE_LIMIT').returns('-1')
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
+    process.env.DD_TRACE_AGENT_PORT = '6218'
+    process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
+    process.env.DD_DOGSTATSD_PORT = '5218'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+    process.env.DD_TRACE_ANALYTICS = 'true'
+    process.env.DD_SERVICE = 'service'
+    process.env.DD_VERSION = '1.0.0'
+    process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+    process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
+    process.env.DD_ENV = 'test'
+    process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
+    process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+    process.env.DD_TRACE_RATE_LIMIT = '-1'
 
     const config = new Config()
 
@@ -94,10 +101,10 @@ describe('Config', () => {
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
-    platform.env.withArgs('DD_TRACE_ENABLED').returns('False')
-    platform.env.withArgs('DD_TRACE_DEBUG').returns('TRUE')
-    platform.env.withArgs('DD_TRACE_ANALYTICS').returns('1')
-    platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('0')
+    process.env.DD_TRACE_ENABLED = 'False'
+    process.env.DD_TRACE_DEBUG = 'TRUE'
+    process.env.DD_TRACE_ANALYTICS = '1'
+    process.env.DD_RUNTIME_METRICS_ENABLED = '0'
 
     const config = new Config()
 
@@ -108,14 +115,14 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:7777')
-    platform.env.withArgs('DD_SITE').returns('datadoghq.eu')
-    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
-    platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
-    platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
-    platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
-    platform.env.withArgs('DD_SERVICE').returns('service')
-    platform.env.withArgs('DD_ENV').returns('test')
+    process.env.DD_TRACE_AGENT_URL = 'https://agent2:7777'
+    process.env.DD_SITE = 'datadoghq.eu'
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
+    process.env.DD_TRACE_AGENT_PORT = '6218'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_SERVICE = 'service'
+    process.env.DD_ENV = 'test'
 
     const config = new Config()
 
@@ -240,10 +247,10 @@ describe('Config', () => {
   })
 
   it('should give priority to the common agent environment variable', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('trace-agent')
-    platform.env.withArgs('DD_AGENT_HOST').returns('agent')
-    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:foo')
-    platform.env.withArgs('DD_TAGS').returns('foo:bar,baz:qux')
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'trace-agent'
+    process.env.DD_AGENT_HOST = 'agent'
+    process.env.DD_TRACE_GLOBAL_TAGS = 'foo:foo'
+    process.env.DD_TAGS = 'foo:bar,baz:qux'
 
     const config = new Config()
 
@@ -252,23 +259,23 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('https://agent2:6218')
-    platform.env.withArgs('DD_SITE').returns('datadoghq.eu')
-    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
-    platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
-    platform.env.withArgs('DD_DOGSTATSD_PORT').returns('5218')
-    platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
-    platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
-    platform.env.withArgs('DD_TRACE_AGENT_PROTOCOL_VERSION').returns('0.4')
-    platform.env.withArgs('DD_TRACE_ANALYTICS').returns('true')
-    platform.env.withArgs('DD_SERVICE').returns('service')
-    platform.env.withArgs('DD_VERSION').returns('0.0.0')
-    platform.env.withArgs('DD_RUNTIME_METRICS_ENABLED').returns('true')
-    platform.env.withArgs('DD_TRACE_REPORT_HOSTNAME').returns('true')
-    platform.env.withArgs('DD_ENV').returns('test')
-    platform.env.withArgs('DD_API_KEY').returns('123')
-    platform.env.withArgs('DD_APP_KEY').returns('456')
-    platform.env.withArgs('DD_TRACE_GLOBAL_TAGS').returns('foo:bar,baz:qux')
+    process.env.DD_TRACE_AGENT_URL = 'https://agent2:6218'
+    process.env.DD_SITE = 'datadoghq.eu'
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
+    process.env.DD_TRACE_AGENT_PORT = '6218'
+    process.env.DD_DOGSTATSD_PORT = '5218'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    process.env.DD_TRACE_ANALYTICS = 'true'
+    process.env.DD_SERVICE = 'service'
+    process.env.DD_VERSION = '0.0.0'
+    process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+    process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
+    process.env.DD_ENV = 'test'
+    process.env.DD_API_KEY = '123'
+    process.env.DD_APP_KEY = '456'
+    process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
 
     const config = new Config({
       enabled: true,
@@ -331,13 +338,13 @@ describe('Config', () => {
   })
 
   it('should give priority to the options especially url', () => {
-    platform.env.withArgs('DD_TRACE_AGENT_URL').returns('http://agent2:6218')
-    platform.env.withArgs('DD_TRACE_AGENT_HOSTNAME').returns('agent')
-    platform.env.withArgs('DD_TRACE_AGENT_PORT').returns('6218')
-    platform.env.withArgs('DD_TRACE_ENABLED').returns('false')
-    platform.env.withArgs('DD_TRACE_DEBUG').returns('true')
-    platform.env.withArgs('DD_SERVICE_NAME').returns('service')
-    platform.env.withArgs('DD_ENV').returns('test')
+    process.env.DD_TRACE_AGENT_URL = 'http://agent2:6218'
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
+    process.env.DD_TRACE_AGENT_PORT = '6218'
+    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_SERVICE_NAME = 'service'
+    process.env.DD_ENV = 'test'
 
     const config = new Config({
       enabled: true,
@@ -360,10 +367,10 @@ describe('Config', () => {
   })
 
   it('should give priority to individual options over tags', () => {
-    platform.env.withArgs('DD_SERVICE').returns('test')
-    platform.env.withArgs('DD_ENV').returns('dev')
-    platform.env.withArgs('DD_VERSION').returns('1.0.0')
-    platform.env.withArgs('DD_TAGS', 'service=foo,env=bar,version=0.0.0')
+    process.env.DD_SERVICE = 'test'
+    process.env.DD_ENV = 'dev'
+    process.env.DD_VERSION = '1.0.0'
+    process.env.DD_TAGS = 'service=foo,env=bar,version=0.0.0'
 
     const config = new Config()
 
@@ -381,7 +388,7 @@ describe('Config', () => {
   })
 
   it('should ignore empty service names', () => {
-    platform.env.withArgs('DD_SERVICE').returns('')
+    process.env.DD_SERVICE = ''
 
     const config = new Config()
 

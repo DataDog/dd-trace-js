@@ -4,36 +4,33 @@ const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
 
 describe('exporter', () => {
-  let platform
+  let env
 
   beforeEach(() => {
-    platform = {
-      env: sinon.stub()
-    }
+    env = process.env
+    process.env = {}
+  })
+
+  afterEach(() => {
+    process.env = env
   })
 
   it('should create an AgentExporter by default', () => {
-    const Exporter = proxyquire('../src/exporter', {
-      './platform': platform
-    })()
+    const Exporter = require('../src/exporter')()
 
     expect(Exporter).to.be.equal(AgentExporter)
   })
 
   it('should create an LogExporter when in Lambda environment', () => {
-    platform.env.withArgs('AWS_LAMBDA_FUNCTION_NAME').returns('my-func')
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
 
-    const Exporter = proxyquire('../src/exporter', {
-      './platform': platform
-    })()
+    const Exporter = require('../src/exporter')()
 
     expect(Exporter).to.be.equal(LogExporter)
   })
 
   it('should allow configuring the exporter', () => {
-    const Exporter = proxyquire('../src/exporter', {
-      './platform': platform
-    })('log')
+    const Exporter = require('../src/exporter')('log')
 
     expect(Exporter).to.be.equal(LogExporter)
   })
