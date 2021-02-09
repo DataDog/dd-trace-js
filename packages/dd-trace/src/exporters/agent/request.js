@@ -2,14 +2,13 @@
 
 const http = require('http')
 const https = require('https')
-const agents = require('./agents')
 const docker = require('./docker')
 
+const httpAgent = new http.Agent({ keepAlive: true })
+const httpsAgent = new https.Agent({ keepAlive: true })
 const containerId = docker.id()
 
 function request (options, callback) {
-  const platform = this
-
   options = Object.assign({
     headers: {},
     data: [],
@@ -18,7 +17,6 @@ function request (options, callback) {
 
   const data = [].concat(options.data)
   const isSecure = options.protocol === 'https:'
-  const { httpAgent, httpsAgent } = agents(platform._config)
   const client = isSecure ? https : http
   const agent = isSecure ? httpsAgent : httpAgent
 

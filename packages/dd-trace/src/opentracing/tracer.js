@@ -18,7 +18,6 @@ const formats = require('../../../../ext/formats')
 
 const log = require('../log')
 const constants = require('../constants')
-const platform = require('../platform')
 const metrics = require('../metrics')
 const getExporter = require('../exporter')
 
@@ -99,7 +98,6 @@ class DatadogTracer extends Tracer {
 
     span.addTags(this._tags)
     span.addTags(fields.tags)
-    span.addTags(platform.tags())
 
     return span
   }

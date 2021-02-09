@@ -1,6 +1,6 @@
 'use strict'
 
-const platform = require('../../platform')
+const request = require('./request')
 const { startupLog } = require('../../startup-log')
 const metrics = require('../../metrics')
 const log = require('../../log')
@@ -124,7 +124,7 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  platform.request(Object.assign({ data }, options), (err, res, status) => {
+  request(Object.assign({ data }, options), (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({

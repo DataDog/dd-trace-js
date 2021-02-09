@@ -6,7 +6,7 @@ function describeWriter (protocolVersion) {
   let Writer
   let writer
   let span
-  let platform
+  let request
   let response
   let encoder
   let url
@@ -22,12 +22,7 @@ function describeWriter (protocolVersion) {
       }
     })
 
-    platform = {
-      request: sinon.stub().yieldsAsync(null, response, 200),
-      msgpack: {
-        prefix: sinon.stub().returns([Buffer.alloc(0)])
-      }
-    }
+    request = sinon.stub().yieldsAsync(null, response, 200)
 
     encoder = {
       encode: sinon.stub(),
@@ -54,9 +49,9 @@ function describeWriter (protocolVersion) {
     }
 
     Writer = proxyquire('../src/exporters/agent/writer', {
+      './request': request,
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
-      '../../platform': platform,
       '../../../lib/version': 'tracerVersion',
       '../../log': log
     })
@@ -81,7 +76,7 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([Buffer.alloc(0)])
       writer.flush()
-      expect(platform.request).to.have.been.calledWithMatch({
+      expect(request).to.have.been.calledWithMatch({
         protocol: url.protocol,
         hostname: url.hostname,
         port: url.port
@@ -114,7 +109,7 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
       writer.flush(() => {
-        expect(platform.request).to.have.been.calledWithMatch({
+        expect(request).to.have.been.calledWithMatch({
           protocol: url.protocol,
           hostname: url.hostname,
           port: url.port,
@@ -138,7 +133,7 @@ function describeWriter (protocolVersion) {
     it('should log request errors', done => {
       const error = new Error('boom')
 
-      platform.request.yields(error)
+      request.yields(error)
 
       encoder.count.returns(1)
       writer.flush()
@@ -169,7 +164,7 @@ function describeWriter (protocolVersion) {
         encoder.count.returns(1)
         writer.flush()
         setImmediate(() => {
-          expect(platform.request).to.have.been.calledWithMatch({
+          expect(request).to.have.been.calledWithMatch({
             socketPath: url.pathname
           })
         })
