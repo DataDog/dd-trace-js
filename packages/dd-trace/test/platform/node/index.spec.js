@@ -99,22 +99,6 @@ describe('Platform', () => {
       })
     })
 
-    describe('now', () => {
-      let now
-      let performanceNow
-
-      beforeEach(() => {
-        performanceNow = sinon.stub().returns(100.1111)
-        now = proxyquire('../src/platform/node/now', {
-          'performance-now': performanceNow
-        })
-      })
-
-      it('should return the ticks since process start in milliseconds with high resolution', () => {
-        expect(now()).to.equal(100.1111)
-      })
-    })
-
     describe('service', () => {
       beforeEach(() => {
         platform = require('../../../src/platform/node')

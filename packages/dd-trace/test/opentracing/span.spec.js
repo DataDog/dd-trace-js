@@ -13,7 +13,7 @@ describe('Span', () => {
   let processor
   let prioritySampler
   let sampler
-  let platform
+  let now
   let metrics
   let handle
   let id
@@ -23,9 +23,7 @@ describe('Span', () => {
     sinon.stub(Date, 'now').returns(1500000000000)
 
     handle = { finish: sinon.spy() }
-    platform = {
-      now: sinon.stub().returns(0)
-    }
+    now = sinon.stub().returns(0)
 
     metrics = {
       track: sinon.stub().returns(handle)
@@ -54,7 +52,7 @@ describe('Span', () => {
     }
 
     Span = proxyquire('../src/opentracing/span', {
-      '../platform': platform,
+      'performance-now': now,
       '../id': id,
       '../tagger': tagger,
       '../metrics': metrics
@@ -79,9 +77,9 @@ describe('Span', () => {
   })
 
   it('should calculate its start time and duration relative to the trace start', () => {
-    platform.now.onFirstCall().returns(100)
-    platform.now.onSecondCall().returns(300)
-    platform.now.onThirdCall().returns(700)
+    now.onFirstCall().returns(100)
+    now.onSecondCall().returns(300)
+    now.onThirdCall().returns(700)
 
     span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
     span.finish()
@@ -91,16 +89,16 @@ describe('Span', () => {
   })
 
   it('should use the parent span to find the trace start', () => {
-    platform.now.onFirstCall().returns(100)
-    platform.now.onSecondCall().returns(100)
+    now.onFirstCall().returns(100)
+    now.onSecondCall().returns(100)
 
     const parent = new Span(tracer, processor, sampler, prioritySampler, {
       operationName: 'parent'
     })
 
-    platform.now.resetHistory()
-    platform.now.onFirstCall().returns(300)
-    platform.now.onSecondCall().returns(700)
+    now.resetHistory()
+    now.onFirstCall().returns(300)
+    now.onSecondCall().returns(700)
 
     span = new Span(tracer, processor, sampler, prioritySampler, {
       operationName: 'operation',
@@ -119,9 +117,9 @@ describe('Span', () => {
       'x-datadog-parent-id': '5678'
     })
 
-    platform.now.onFirstCall().returns(100)
-    platform.now.onSecondCall().returns(300)
-    platform.now.onThirdCall().returns(700)
+    now.onFirstCall().returns(100)
+    now.onSecondCall().returns(300)
+    now.onThirdCall().returns(700)
 
     span = new Span(tracer, processor, sampler, prioritySampler, {
       operationName: 'operation',

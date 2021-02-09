@@ -2,7 +2,6 @@
 
 const EventEmitter = require('events')
 const crypto = require('./crypto')
-const now = require('./now')
 const validate = require('./validate')
 const request = require('./request')
 const hostname = require('./hostname')
@@ -19,7 +18,6 @@ const platform = {
   version: () => process.version,
   engine: () => process.jsEngine || 'v8',
   crypto,
-  now,
   tags: () => ({}),
   validate,
   service: () => process.env['AWS_LAMBDA_FUNCTION_NAME'] || pkg.name,

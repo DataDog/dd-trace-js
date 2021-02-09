@@ -1,9 +1,9 @@
 'use strict'
 
 const opentracing = require('opentracing')
+const now = require('performance-now')
 const Span = opentracing.Span
 const SpanContext = require('./span_context')
-const platform = require('../platform')
 const metrics = require('../metrics')
 const constants = require('../constants')
 const id = require('../id')
@@ -80,7 +80,7 @@ class DatadogSpan extends Span {
 
     spanContext._trace.started.push(this)
     spanContext._trace.startTime = spanContext._trace.startTime || Date.now()
-    spanContext._trace.ticks = spanContext._trace.ticks || platform.now()
+    spanContext._trace.ticks = spanContext._trace.ticks || now()
 
     return spanContext
   }
@@ -88,7 +88,7 @@ class DatadogSpan extends Span {
   _getTime () {
     const { startTime, ticks } = this._spanContext._trace
 
-    return startTime + platform.now() - ticks
+    return startTime + now() - ticks
   }
 
   _context () {
