@@ -1,7 +1,6 @@
 'use strict'
 
 const EventEmitter = require('events')
-const crypto = require('./crypto')
 const validate = require('./validate')
 const pkg = require('./pkg')
 
@@ -12,7 +11,6 @@ const platform = {
   configure (config) {
     this._config = config
   },
-  crypto,
   validate,
   service: () => process.env['AWS_LAMBDA_FUNCTION_NAME'] || pkg.name,
   appVersion: () => pkg.version,

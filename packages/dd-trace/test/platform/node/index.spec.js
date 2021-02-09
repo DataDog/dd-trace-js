@@ -20,35 +20,6 @@ describe('Platform', () => {
       })
     }
 
-    describe('crypto', () => {
-      let crypto
-      let randomBytes
-      let buffer
-
-      beforeEach(() => {
-        buffer = Buffer.alloc(4)
-
-        buffer.writeUInt32BE(0xabcd1234)
-
-        randomBytes = sinon.stub().returns(buffer)
-
-        crypto = proxyquire('../src/platform/node/crypto', {
-          'crypto': { randomBytes }
-        })
-      })
-
-      it('should fill the typed array with random values', () => {
-        const typedArray = new Uint8Array(4)
-
-        crypto.getRandomValues(typedArray)
-
-        expect(typedArray[0]).to.equal(0xab)
-        expect(typedArray[1]).to.equal(0xcd)
-        expect(typedArray[2]).to.equal(0x12)
-        expect(typedArray[3]).to.equal(0x34)
-      })
-    })
-
     describe('service', () => {
       beforeEach(() => {
         platform = require('../../../src/platform/node')

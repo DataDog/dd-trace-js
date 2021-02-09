@@ -4,25 +4,21 @@ wrapIt()
 
 describe('id', () => {
   let id
-  let platform
+  let crypto
 
   beforeEach(() => {
     const seeds = new Uint32Array(2)
 
     seeds[0] = seeds[1] = 0xFF000000
 
-    platform = {
-      crypto: {
-        getRandomValues (typedArray) {
-          typedArray.set(seeds)
-        }
-      }
+    crypto = {
+      randomBytes: sinon.stub().returns(Buffer.from(seeds.buffer))
     }
 
     sinon.stub(Math, 'random')
 
     id = proxyquire('../src/id', {
-      './platform': platform
+      'crypto': crypto
     })
   })
 

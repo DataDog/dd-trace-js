@@ -1,17 +1,13 @@
 'use strict'
 
-const platform = require('./platform')
+const { randomBytes } = require('crypto')
 
 const UINT_MAX = 4294967296
 
 const zeroId = new Uint8Array(8)
 
 // Cryptographically secure local seeds to mitigate Math.random() seed reuse.
-const seed = new Uint32Array(2)
-
-if (platform.crypto) {
-  platform.crypto.getRandomValues(seed)
-}
+const seed = new Uint32Array(randomBytes(8).buffer)
 
 const map = Array.prototype.map
 const pad = byte => `${byte < 16 ? '0' : ''}${byte.toString(16)}`
