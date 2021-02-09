@@ -1,6 +1,7 @@
 'use strict'
 
 const opentracing = require('opentracing')
+const os = require('os')
 const Tracer = opentracing.Tracer
 const Reference = opentracing.Reference
 const Span = require('./span')
@@ -52,7 +53,7 @@ class DatadogTracer extends Tracer {
       [formats.LOG]: new LogPropagator(config)
     }
     if (config.reportHostname) {
-      this._hostname = platform.hostname()
+      this._hostname = os.hostname()
     }
   }
 
