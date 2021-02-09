@@ -23,9 +23,6 @@ function describeWriter (protocolVersion) {
     })
 
     platform = {
-      name: sinon.stub(),
-      version: sinon.stub(),
-      engine: sinon.stub(),
       request: sinon.stub().yieldsAsync(null, response, 200),
       msgpack: {
         prefix: sinon.stub().returns([Buffer.alloc(0)])
@@ -112,10 +109,6 @@ function describeWriter (protocolVersion) {
     })
 
     it('should flush its traces to the agent, and call callback', (done) => {
-      platform.name.returns('lang')
-      platform.version.returns('version')
-      platform.engine.returns('interpreter')
-
       const expectedData = Buffer.from('prefixed')
 
       encoder.count.returns(2)
@@ -129,9 +122,9 @@ function describeWriter (protocolVersion) {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/msgpack',
-            'Datadog-Meta-Lang': 'lang',
-            'Datadog-Meta-Lang-Version': 'version',
-            'Datadog-Meta-Lang-Interpreter': 'interpreter',
+            'Datadog-Meta-Lang': 'nodejs',
+            'Datadog-Meta-Lang-Version': process.version,
+            'Datadog-Meta-Lang-Interpreter': 'v8',
             'Datadog-Meta-Tracer-Version': 'tracerVersion',
             'X-Datadog-Trace-Count': '2'
           },

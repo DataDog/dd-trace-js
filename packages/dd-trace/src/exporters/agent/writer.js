@@ -110,9 +110,9 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
     lookup
   }
 
-  setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
-  setHeader(options.headers, 'Datadog-Meta-Lang-Version', platform.version())
-  setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', platform.engine())
+  setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
+  setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
+  setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
   if (url.protocol === 'unix:') {
     options.socketPath = url.pathname

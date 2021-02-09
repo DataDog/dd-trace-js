@@ -13,9 +13,6 @@ const platform = {
   configure (config) {
     this._config = config
   },
-  name: () => 'nodejs',
-  version: () => process.version,
-  engine: () => process.jsEngine || 'v8',
   crypto,
   tags: () => ({}),
   validate,

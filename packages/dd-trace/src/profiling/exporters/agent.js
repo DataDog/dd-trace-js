@@ -3,7 +3,6 @@
 const FormData = require('form-data')
 const { URL } = require('url')
 const { Encoder } = require('../encoders/pprof')
-const platform = require('../../platform')
 const { eachOfSeries } = require('../util')
 
 class AgentExporter {
@@ -15,16 +14,15 @@ class AgentExporter {
   export ({ profiles, start, end, tags }, callback) {
     const form = new FormData()
     const types = Object.keys(profiles)
-    const runtime = platform.name()
 
     form.append('recording-start', start.toISOString())
     form.append('recording-end', end.toISOString())
     form.append('language', 'javascript')
-    form.append('runtime', runtime)
+    form.append('runtime', 'nodejs')
     form.append('format', 'pprof')
 
     form.append('tags[]', 'language:javascript')
-    form.append('tags[]', `runtime:${runtime}`)
+    form.append('tags[]', `runtime:nodejs`)
     form.append('tags[]', 'format:pprof')
 
     for (const key in tags) {
