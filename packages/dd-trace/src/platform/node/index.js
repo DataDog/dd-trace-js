@@ -1,10 +1,7 @@
 'use strict'
 
-const EventEmitter = require('events')
 const validate = require('./validate')
 const pkg = require('./pkg')
-
-const emitter = new EventEmitter()
 
 const platform = {
   _config: {},
@@ -13,11 +10,7 @@ const platform = {
   },
   validate,
   service: () => process.env['AWS_LAMBDA_FUNCTION_NAME'] || pkg.name,
-  appVersion: () => pkg.version,
-  on: emitter.on.bind(emitter),
-  off: emitter.removeListener.bind(emitter)
+  appVersion: () => pkg.version
 }
-
-process.once('beforeExit', () => emitter.emit('exit'))
 
 module.exports = platform

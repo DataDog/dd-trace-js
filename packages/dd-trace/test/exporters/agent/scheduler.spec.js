@@ -1,25 +1,23 @@
 'use strict'
 
-const EventEmitter = require('eventemitter3')
-const proxyquire = require('proxyquire').noCallThru()
-
 describe('Scheduler', () => {
   let Scheduler
   let clock
-  let platform
+  let once
+  let off
 
   beforeEach(() => {
-    platform = new EventEmitter()
-
-    Scheduler = proxyquire('../../../src/exporters/agent/scheduler', {
-      '../../platform': platform
-    })
+    Scheduler = require('../../../src/exporters/agent/scheduler')
 
     clock = sinon.useFakeTimers()
+    once = process.once
+    off = process.off
   })
 
   afterEach(() => {
     clock.restore()
+    process.once = once
+    process.off = off
   })
 
   describe('start', () => {
@@ -38,11 +36,13 @@ describe('Scheduler', () => {
     })
 
     it('should call the callback when the process exits gracefully', () => {
+      process.once = sinon.spy()
+
       const spy = sinon.spy()
       const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
-      platform.emit('exit')
+      process.once.withArgs('beforeExit').yield()
 
       expect(spy).to.have.been.called
     })
@@ -61,14 +61,16 @@ describe('Scheduler', () => {
     })
 
     it('should stop calling the callback when the process exits gracefully', () => {
+      process.once = sinon.spy()
+      process.off = sinon.spy()
+
       const spy = sinon.spy()
       const scheduler = new Scheduler(spy, 5000)
 
       scheduler.start()
       scheduler.stop()
-      platform.emit('exit')
 
-      expect(spy).to.not.have.been.called
+      expect(process.off).to.have.been.calledWith('beforeExit', process.once.firstCall.args[1])
     })
   })
 
