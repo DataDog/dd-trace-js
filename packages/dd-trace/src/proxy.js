@@ -5,7 +5,6 @@ const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')
-const platform = require('./platform')
 const metrics = require('./metrics')
 const profiler = require('./profiler')
 const log = require('./log')
@@ -34,12 +33,9 @@ class Tracer extends BaseTracer {
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
-        platform.configure(config)
         profiler.start(config)
 
         if (config.enabled) {
-          platform.validate()
-
           if (config.runtimeMetrics) {
             metrics.start(config)
           }

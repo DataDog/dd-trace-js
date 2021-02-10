@@ -2,17 +2,13 @@
 
 const { AsyncResource } = require('async_hooks')
 
-const proxyquire = require('proxyquire')
-const platform = require('../../packages/dd-trace/src/platform')
 const benchmark = require('../benchmark')
 
 const suite = benchmark('scope (AsyncLocalStorage)')
 
 const spanStub = require('../stubs/span')
 
-const Scope = proxyquire('../../packages/dd-trace/src/scope/async_local_storage', {
-  '../platform': platform
-})
+const Scope = require('../../packages/dd-trace/src/scope/async_local_storage')
 
 const scope = new Scope({
   experimental: {}

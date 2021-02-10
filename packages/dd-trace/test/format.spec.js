@@ -18,7 +18,6 @@ describe('format', () => {
   let span
   let trace
   let spanContext
-  let platform
 
   beforeEach(() => {
     spanContext = {
@@ -41,13 +40,7 @@ describe('format', () => {
       _duration: 100
     }
 
-    platform = {
-      hostname: sinon.stub().returns('my_hostname')
-    }
-
-    format = proxyquire('../src/format', {
-      './platform': platform
-    })
+    format = require('../src/format')
   })
 
   describe('format', () => {

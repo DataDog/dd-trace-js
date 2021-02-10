@@ -7,7 +7,6 @@ const { InspectorCpuProfiler } = require('./profilers/inspector/cpu')
 const { InspectorHeapProfiler } = require('./profilers/inspector/heap')
 const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
-const platform = require('../platform')
 
 const {
   DD_PROFILING_ENABLED,
@@ -21,9 +20,9 @@ class Config {
   constructor (options = {}) {
     const enabled = coalesce(options.enabled, DD_PROFILING_ENABLED, true)
     const env = coalesce(options.env, DD_ENV)
-    const service = coalesce(options.service, DD_SERVICE, platform.service())
+    const service = coalesce(options.service, DD_SERVICE)
     const host = os.hostname()
-    const version = coalesce(options.version, DD_VERSION, platform.appVersion())
+    const version = coalesce(options.version, DD_VERSION)
     const flushInterval = 60 * 1000
 
     this.enabled = String(enabled) !== 'false'

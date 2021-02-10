@@ -8,7 +8,7 @@ const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
 const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
-  './platform': { request: () => Promise.resolve() },
+  './request': () => Promise.resolve(),
   '../../encode/0.4': {
     AgentEncoder: function () {
       return { encode () {} }

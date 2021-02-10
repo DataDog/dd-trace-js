@@ -2,20 +2,20 @@
 
 describe('Config', () => {
   let Config
-  let platform
+  let pkg
   let env
 
   beforeEach(() => {
-    platform = {
-      service: sinon.stub(),
-      appVersion: sinon.stub()
+    pkg = {
+      name: '',
+      version: ''
     }
 
     env = process.env
     process.env = {}
 
     Config = proxyquire('../src/config', {
-      './platform': platform
+      './pkg': pkg
     })
   })
 
@@ -46,7 +46,7 @@ describe('Config', () => {
   })
 
   it('should initialize from the default service', () => {
-    platform.service.returns('test')
+    pkg.name = 'test'
 
     const config = new Config()
 
@@ -55,7 +55,7 @@ describe('Config', () => {
   })
 
   it('should initialize from the default version', () => {
-    platform.appVersion.returns('1.2.3')
+    pkg.version = '1.2.3'
 
     const config = new Config()
 

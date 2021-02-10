@@ -27,7 +27,6 @@ describe('Tracer', () => {
   let propagator
   let config
   let log
-  let platform
 
   beforeEach(() => {
     fields = {}
@@ -85,10 +84,6 @@ describe('Tracer', () => {
       error: sinon.spy()
     }
 
-    platform = {
-      hostname: sinon.stub().returns('my_hostname')
-    }
-
     exporter = sinon.stub().returns(AgentExporter)
 
     Tracer = proxyquire('../src/opentracing/tracer', {
@@ -101,7 +96,6 @@ describe('Tracer', () => {
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
       '../log': log,
-      '../platform': platform,
       '../exporter': exporter
     })
   })

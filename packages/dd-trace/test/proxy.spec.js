@@ -11,7 +11,6 @@ describe('TracerProxy', () => {
   let instrumenter
   let Config
   let config
-  let platform
   let metrics
   let analyticsSampler
   let log
@@ -65,10 +64,6 @@ describe('TracerProxy', () => {
     }
     Config = sinon.stub().returns(config)
 
-    platform = {
-      load: sinon.spy()
-    }
-
     metrics = {
       start: sinon.spy()
     }
@@ -85,7 +80,6 @@ describe('TracerProxy', () => {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
       './config': Config,
-      './platform': platform,
       './metrics': metrics,
       './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,

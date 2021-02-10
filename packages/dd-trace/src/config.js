@@ -1,7 +1,7 @@
 'use strict'
 
 const URL = require('url-parse')
-const platform = require('./platform')
+const pkg = require('./pkg')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
@@ -70,7 +70,8 @@ class Config {
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
       this.tags.service ||
-      platform.service() ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      pkg.name ||
       'node'
     const DD_ENV = coalesce(
       options.env,
@@ -81,7 +82,7 @@ class Config {
       options.version,
       process.env.DD_VERSION,
       this.tags.version,
-      platform.appVersion()
+      pkg.version
     )
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,

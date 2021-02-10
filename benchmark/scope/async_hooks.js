@@ -4,17 +4,13 @@ const { AsyncResource } = require('async_hooks')
 const EventEmitter = require('events')
 const { ServerResponse } = require('http')
 
-const proxyquire = require('proxyquire')
-const platform = require('../../packages/dd-trace/src/platform')
 const benchmark = require('../benchmark')
 
 const suite = benchmark('scope (async_hooks)')
 
 const spanStub = require('../stubs/span')
 
-const Scope = proxyquire('../../packages/dd-trace/src/scope/async_hooks', {
-  '../platform': platform
-})
+const Scope = require('../../packages/dd-trace/src/scope/async_hooks')
 
 // This is also done in the `http` plugin.
 Scope._wrapEmitter(ServerResponse.prototype)
