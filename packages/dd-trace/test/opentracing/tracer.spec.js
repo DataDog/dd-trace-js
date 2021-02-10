@@ -1,6 +1,7 @@
 'use strict'
 
 const opentracing = require('opentracing')
+const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
 const Reference = opentracing.Reference
 
@@ -185,7 +186,7 @@ describe('Tracer', () => {
           'service.name': 'service'
         },
         startTime: fields.startTime,
-        hostname: 'my_hostname'
+        hostname: os.hostname()
       })
 
       expect(testSpan).to.equal(span)
