@@ -20,7 +20,7 @@ class Config {
   constructor (options = {}) {
     const enabled = coalesce(options.enabled, DD_PROFILING_ENABLED, true)
     const env = coalesce(options.env, DD_ENV)
-    const service = coalesce(options.service, DD_SERVICE, 'node')
+    const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
     const flushInterval = 60 * 1000
