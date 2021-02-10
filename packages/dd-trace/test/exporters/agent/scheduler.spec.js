@@ -4,20 +4,20 @@ describe('Scheduler', () => {
   let Scheduler
   let clock
   let once
-  let off
+  let removeListener
 
   beforeEach(() => {
     Scheduler = require('../../../src/exporters/agent/scheduler')
 
     clock = sinon.useFakeTimers()
     once = process.once
-    off = process.off
+    removeListener = process.removeListener
   })
 
   afterEach(() => {
     clock.restore()
     process.once = once
-    process.off = off
+    process.removeListener = removeListener
   })
 
   describe('start', () => {
@@ -62,7 +62,7 @@ describe('Scheduler', () => {
 
     it('should stop calling the callback when the process exits gracefully', () => {
       process.once = sinon.spy()
-      process.off = sinon.spy()
+      process.removeListener = sinon.spy()
 
       const spy = sinon.spy()
       const scheduler = new Scheduler(spy, 5000)
@@ -70,7 +70,7 @@ describe('Scheduler', () => {
       scheduler.start()
       scheduler.stop()
 
-      expect(process.off).to.have.been.calledWith('beforeExit', process.once.firstCall.args[1])
+      expect(process.removeListener).to.have.been.calledWith('beforeExit', process.once.firstCall.args[1])
     })
   })
 

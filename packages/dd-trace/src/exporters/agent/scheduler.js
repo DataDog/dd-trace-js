@@ -17,7 +17,7 @@ class Scheduler {
   stop () {
     clearInterval(this._timer)
 
-    process.off('beforeExit', this._callback)
+    process.removeListener('beforeExit', this._callback)
   }
 
   reset () {
