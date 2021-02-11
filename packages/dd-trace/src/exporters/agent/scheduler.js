@@ -1,7 +1,5 @@
 'use strict'
 
-const platform = require('../../platform')
-
 class Scheduler {
   constructor (callback, interval) {
     this._timer = null
@@ -13,13 +11,13 @@ class Scheduler {
     this._timer = setInterval(this._callback, this._interval)
     this._timer.unref && this._timer.unref()
 
-    platform.on('exit', this._callback)
+    process.once('beforeExit', this._callback)
   }
 
   stop () {
     clearInterval(this._timer)
 
-    platform.off('exit', this._callback)
+    process.removeListener('beforeExit', this._callback)
   }
 
   reset () {

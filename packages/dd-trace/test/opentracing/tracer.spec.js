@@ -1,6 +1,7 @@
 'use strict'
 
 const opentracing = require('opentracing')
+const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
 const Reference = opentracing.Reference
 
@@ -15,6 +16,7 @@ describe('Tracer', () => {
   let SpanProcessor
   let processor
   let exporter
+  let agentExporter
   let Sampler
   let sampler
   let spanContext
@@ -26,7 +28,6 @@ describe('Tracer', () => {
   let propagator
   let config
   let log
-  let platform
 
   beforeEach(() => {
     fields = {}
@@ -41,10 +42,10 @@ describe('Tracer', () => {
     }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
-    exporter = {
+    agentExporter = {
       export: sinon.spy()
     }
-    AgentExporter = sinon.stub().returns(exporter)
+    AgentExporter = sinon.stub().returns(agentExporter)
 
     processor = {
       process: sinon.spy()
@@ -84,10 +85,7 @@ describe('Tracer', () => {
       error: sinon.spy()
     }
 
-    platform = {
-      hostname: sinon.stub().returns('my_hostname'),
-      exporter: sinon.stub().returns(AgentExporter)
-    }
+    exporter = sinon.stub().returns(AgentExporter)
 
     Tracer = proxyquire('../src/opentracing/tracer', {
       './span': Span,
@@ -99,7 +97,7 @@ describe('Tracer', () => {
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
       '../log': log,
-      '../platform': platform
+      '../exporter': exporter
     })
   })
 
@@ -108,7 +106,7 @@ describe('Tracer', () => {
 
     expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
+    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler)
   })
 
   it('should support sampling', () => {
@@ -188,7 +186,7 @@ describe('Tracer', () => {
           'service.name': 'service'
         },
         startTime: fields.startTime,
-        hostname: 'my_hostname'
+        hostname: os.hostname()
       })
 
       expect(testSpan).to.equal(span)

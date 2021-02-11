@@ -52,7 +52,6 @@ getPipeline()
   .then(downloadArtifacts)
   .then(validatePrebuilds)
   .then(extractPrebuilds)
-  .then(bundle)
   .catch(e => {
     process.exitCode = 1
     console.error(e)
@@ -164,9 +163,4 @@ function extractPrebuilds () {
     file: path.join(os.tmpdir(), 'prebuilds.tgz'),
     cwd: path.join(__dirname, '..')
   })
-}
-
-function bundle () {
-  rimraf.sync('dist')
-  exec('yarn bundle')
 }

@@ -5,7 +5,7 @@ const hook = require('require-in-the-middle')
 const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
-const log = require('../../log')
+const log = require('./log')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 

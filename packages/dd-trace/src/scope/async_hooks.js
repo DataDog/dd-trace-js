@@ -2,7 +2,7 @@
 
 const asyncHooks = require('async_hooks')
 const Base = require('./base')
-const platform = require('../platform')
+const metrics = require('../metrics')
 const semver = require('semver')
 
 // https://github.com/nodejs/node/issues/19859
@@ -113,7 +113,6 @@ class Scope extends Base {
     }
 
     if (this._debug) {
-      const metrics = platform.metrics()
       metrics.increment('runtime.node.async.resources')
       metrics.increment('runtime.node.async.resources.by.type', `resource_type:${type}`)
     }
@@ -136,7 +135,6 @@ class Scope extends Base {
     const type = this._types.get(asyncId)
 
     if (type && this._debug) {
-      const metrics = platform.metrics()
       metrics.decrement('runtime.node.async.resources')
       metrics.decrement('runtime.node.async.resources.by.type', `resource_type:${type}`)
     }

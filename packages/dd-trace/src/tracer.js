@@ -3,8 +3,8 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
-const platform = require('./platform')
-const { setStartupLogConfig } = platform.startupLog
+const getScope = require('./scope')
+const { setStartupLogConfig } = require('./startup-log')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -16,8 +16,10 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
+    const Scope = getScope(config.scope)
+
     this._scopeManager = getScopeManager(config)
-    this._scope = getScope(config)
+    this._scope = new Scope(config)
     setStartupLogConfig(config)
   }
 
@@ -157,18 +159,6 @@ function getScopeManager (config) {
   }
 
   return new ScopeManager()
-}
-
-function getScope (config) {
-  let Scope
-
-  if (config.scope === NOOP) {
-    Scope = require('./scope/base')
-  } else {
-    Scope = platform.getScope(config.scope)
-  }
-
-  return new Scope(config)
 }
 
 module.exports = DatadogTracer

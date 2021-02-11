@@ -1034,46 +1034,12 @@ jobs:
       - store_artifacts:
           path: ./prebuilds.tgz.sha1
 
-  # Browser
-
-  browser:
-    docker:
-      - image: circleci/node:10-browsers
-    resource_class: small
-    working_directory: ~/dd-trace-js
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - run:
-          name: Integration tests
-          command: yarn test:browser
-
-  browserstack:
-    docker:
-      - image: circleci/node:10-browsers
-    resource_class: small
-    working_directory: ~/dd-trace-js
-    steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - run:
-          name: Integration tests
-          command: yarn test:browserstack
-
 workflows:
   version: 2
   build:
     jobs:
       - lint
       - typescript
-      - browser
-      - browserstack
       - node-core-8
       - node-core-10
       - node-core-12
@@ -1267,8 +1233,6 @@ workflows:
               only:
                 - master
     jobs:
-      - browser
-      - browserstack
       - node-core-8
       - node-core-10
       - node-core-12

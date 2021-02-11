@@ -2,21 +2,21 @@
 
 const shimmer = require('shimmer')
 const log = require('./log')
-const platform = require('./platform')
+const metrics = require('./metrics')
+const Loader = require('./loader')
 const { isTrue, isFalse } = require('./util')
+const plugins = require('./plugins')
 
 shimmer({ logger: () => {} })
 
-const plugins = platform.plugins
-
-const disabldPlugins = platform.env('DD_TRACE_DISABLED_PLUGINS')
+const disabldPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
 const collectDisabledPlugins = () => {
   return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
 }
 
 function cleanEnv (name) {
-  return platform.env(`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_'))
+  return process.env[`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_')]
 }
 
 function getConfig (name, config = {}) {
@@ -46,7 +46,7 @@ function getConfig (name, config = {}) {
 class Instrumenter {
   constructor (tracer) {
     this._tracer = tracer
-    this._loader = new platform.Loader(this)
+    this._loader = new Loader(this)
     this._enabled = false
     this._names = new Set()
     this._plugins = new Map()
@@ -175,7 +175,7 @@ class Instrumenter {
     const instrumentations = [].concat(plugin)
     const enabled = meta.config.enabled !== false
 
-    platform.metrics().boolean(`datadog.tracer.node.plugin.enabled.by.name`, enabled, `name:${meta.name}`)
+    metrics.boolean(`datadog.tracer.node.plugin.enabled.by.name`, enabled, `name:${meta.name}`)
 
     try {
       instrumentations
@@ -187,7 +187,7 @@ class Instrumenter {
       this.unload(plugin)
       log.debug(`Error while trying to patch ${meta.name}. The plugin has been disabled.`)
 
-      platform.metrics().increment(`datadog.tracer.node.plugin.errors`, true)
+      metrics.increment(`datadog.tracer.node.plugin.errors`, true)
     }
   }
 
@@ -203,7 +203,7 @@ class Instrumenter {
     if (meta) {
       this._plugins.delete(plugin)
 
-      platform.metrics().boolean(`datadog.tracer.node.plugin.enabled.by.name`, false, `name:${meta.name}`)
+      metrics.boolean(`datadog.tracer.node.plugin.enabled.by.name`, false, `name:${meta.name}`)
     }
   }
 

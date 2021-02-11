@@ -1,6 +1,8 @@
 'use strict'
 
-const platform = require('../../platform')
+const request = require('./request')
+const { startupLog } = require('../../startup-log')
+const metrics = require('../../metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
 
@@ -24,22 +26,22 @@ class Writer {
   }
 
   _sendPayload (data, count, done) {
-    platform.metrics().increment(`${METRIC_PREFIX}.requests`, true)
+    metrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
       if (status) {
-        platform.metrics().increment(`${METRIC_PREFIX}.responses`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
+        metrics.increment(`${METRIC_PREFIX}.responses`, true)
+        metrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
       } else if (err) {
-        platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
 
         if (err.code) {
-          platform.metrics().increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+          metrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
         }
       }
 
-      platform.startupLog.startupLog({ agentError: err })
+      startupLog({ agentError: err })
 
       if (err) {
         log.error(err)
@@ -54,8 +56,8 @@ class Writer {
       } catch (e) {
         log.error(e)
 
-        platform.metrics().increment(`${METRIC_PREFIX}.errors`, true)
-        platform.metrics().increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors`, true)
+        metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
       }
       done()
     })
@@ -108,9 +110,9 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
     lookup
   }
 
-  setHeader(options.headers, 'Datadog-Meta-Lang', platform.name())
-  setHeader(options.headers, 'Datadog-Meta-Lang-Version', platform.version())
-  setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', platform.engine())
+  setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
+  setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
+  setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
   if (url.protocol === 'unix:') {
     options.socketPath = url.pathname
@@ -122,10 +124,10 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  platform.request(Object.assign({ data }, options), (err, res, status) => {
+  request(Object.assign({ data }, options), (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
-      platform.startupLog.startupLog({
+      startupLog({
         agentError: status !== 404 && status !== 200 ? err : undefined
       })
     }

@@ -336,21 +336,7 @@ export declare interface TracerOptions {
      * Whether to write traces to log output, rather than send to an agent
      * @default false
      */
-    exporter?: 'log' | 'browser' | 'agent'
-
-    /**
-     * List of origins to allow for distributed tracing. This is used to determine whether to propagate context from the browser for CORS.
-     * @default []
-     */
-    distributedTracingOriginAllowlist?: (string|RegExp)[]
-
-    /**
-     * Deprecated in favor of `distributedTracingOriginAllowlist`.
-     *
-     * @deprecated
-     * @hidden
-     */
-    distributedTracingOriginWhitelist?: (string|RegExp)[]
+    exporter?: 'log' | 'agent'
 
     /**
      * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
@@ -422,11 +408,6 @@ export declare interface TracerOptions {
    * @default false
    */
   reportHostname?: boolean
-
-  /**
-   * Client token for browser tracing. Can be generated in the UI at `Integrations -> APIs`.
-   */
-  clientToken?: string
 
   /**
    * A string representing the minimum tracer log level to use when debug logging is enabled

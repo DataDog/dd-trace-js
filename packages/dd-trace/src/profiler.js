@@ -1,12 +1,10 @@
 'use strict'
 
-const log = require('../../log')
-const { profiler, AgentExporter, FileExporter } = require('../../profiling')
+const log = require('./log')
+const { profiler, AgentExporter, FileExporter } = require('./profiling')
 
-let cached
-
-module.exports = config => cached || (cached = {
-  start: () => {
+module.exports = {
+  start: config => {
     const { service, version, env } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
@@ -30,7 +28,7 @@ module.exports = config => cached || (cached = {
   stop: () => {
     profiler.stop()
   }
-})
+}
 
 function getExporters (names, { url, hostname, port }) {
   const exporters = []

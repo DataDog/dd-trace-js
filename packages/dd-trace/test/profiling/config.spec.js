@@ -7,8 +7,6 @@ const { InspectorCpuProfiler } = require('../../src/profiling/profilers/inspecto
 const { InspectorHeapProfiler } = require('../../src/profiling/profilers/inspector/heap')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
-const pkg = require('../../../../node_modules/mocha/package.json')
-
 describe('config', () => {
   let Config
 
@@ -17,20 +15,16 @@ describe('config', () => {
   })
 
   it('should have the correct defaults', () => {
-    const service = pkg.name
-    const version = pkg.version
     const config = new Config()
 
     expect(config).to.deep.include({
       enabled: true,
-      service,
-      version,
+      service: 'node',
       flushInterval: 60 * 1000
     })
 
     expect(config.tags).to.deep.equal({
-      service,
-      version,
+      service: 'node',
       host: os.hostname()
     })
 

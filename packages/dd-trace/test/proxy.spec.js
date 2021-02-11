@@ -11,9 +11,10 @@ describe('TracerProxy', () => {
   let instrumenter
   let Config
   let config
-  let platform
+  let metrics
   let analyticsSampler
   let log
+  let profiler
 
   beforeEach(() => {
     tracer = {
@@ -63,28 +64,27 @@ describe('TracerProxy', () => {
     }
     Config = sinon.stub().returns(config)
 
-    platform = {
-      load: sinon.spy(),
-      metrics: sinon.stub().returns({
-        start: sinon.spy()
-      }),
-      profiler: sinon.stub().returns({
-        start: sinon.spy()
-      })
+    metrics = {
+      start: sinon.spy()
     }
 
     analyticsSampler = {
       enable: sinon.spy()
     }
 
+    profiler = {
+      start: sinon.spy()
+    }
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
       './config': Config,
-      './platform': platform,
+      './metrics': metrics,
       './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,
-      './log': log
+      './log': log,
+      './profiler': profiler
     })
 
     proxy = new Proxy()
@@ -151,7 +151,7 @@ describe('TracerProxy', () => {
       it('should not capture metrics by default', () => {
         proxy.init()
 
-        expect(platform.metrics().start).to.not.have.been.called
+        expect(metrics.start).to.not.have.been.called
       })
 
       it('should start capturing metrics when configured', () => {
@@ -159,7 +159,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(platform.metrics().start).to.have.been.called
+        expect(metrics.start).to.have.been.called
       })
 
       it('should enable the analytics sampler when configured', () => {

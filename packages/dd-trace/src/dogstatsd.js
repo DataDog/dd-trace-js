@@ -2,7 +2,7 @@
 
 const dgram = require('dgram')
 const lookup = require('dns').lookup // cache to avoid instrumentation
-const log = require('../../log')
+const log = require('./log')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
