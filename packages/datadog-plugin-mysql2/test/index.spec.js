@@ -5,7 +5,7 @@ const plugin = require('../src')
 
 wrapIt()
 
-describe.only('Plugin', () => {
+describe('Plugin', () => {
   let mysql2
   let tracer
 
