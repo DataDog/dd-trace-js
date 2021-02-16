@@ -32,7 +32,7 @@ class Tracer extends BaseTracer {
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
-        profiler.start()
+        profiler.start(config)
 
         if (config.enabled) {
           if (config.runtimeMetrics) {

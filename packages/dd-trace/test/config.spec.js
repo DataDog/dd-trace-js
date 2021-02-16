@@ -431,7 +431,6 @@ describe('Config', () => {
         service: 'test',
         version: '1.0.0',
         env: 'development',
-        clientToken: '789',
         tags: {
           foo: 'foo'
         }
@@ -451,7 +450,6 @@ describe('Config', () => {
       expect(config).to.have.property('service', 'test')
       expect(config).to.have.property('version', '1.0.0')
       expect(config).to.have.property('env', 'development')
-      expect(config).to.have.property('clientToken', '789')
       expect(config.tags).to.include({ foo: 'foo' })
       expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     })

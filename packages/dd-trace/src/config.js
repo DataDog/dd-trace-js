@@ -12,7 +12,7 @@ const { isTrue, isFalse } = require('./util')
 const runtimeId = `${id().toString()}${id().toString()}`
 
 function pluginEnv (name) {
-  return platform.env(`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_'))
+  return process.env[`DD_TRACE_${name.toUpperCase()}`.replace(/[^a-z0-9_]/ig, '_')]
 }
 
 class Config extends EventEmitter {
@@ -216,7 +216,7 @@ class Config extends EventEmitter {
     this.site = coalesce(options.site, this.site, process.env.DD_SITE, 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
-    if (!this.url || (!platform.env('DD_TRACE_AGENT_URL') && !options.url)) {
+    if (!this.url || (!process.env.DD_TRACE_AGENT_URL && !options.url)) {
       this.url = new URL(`${this.url ? this.url.protocol : 'http:'}//${this.hostname}:${this.port}`)
     }
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), this.flushInterval, 2000)

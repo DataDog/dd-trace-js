@@ -107,8 +107,8 @@ describe('Tracer', () => {
     tracer = new Tracer()
 
     expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(exporter, prioritySampler)
+    expect(AgentExporter).to.have.been.calledWith(prioritySampler)
+    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler)
   })
 
   it('should support sampling', () => {

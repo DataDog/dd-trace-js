@@ -1,5 +1,7 @@
 'use strict'
 
+const proxyquire = require('proxyquire')
+
 describe('Scheduler', () => {
   let Scheduler
   let clock
