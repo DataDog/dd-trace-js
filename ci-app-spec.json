@@ -1,0 +1,21 @@
+[
+  "test.type",
+  "test.status",
+  "test.framework",
+  "test.suite",
+  "test.name",
+  "resource.name",
+  "ci.pipeline.id",
+  "ci.pipeline.name",
+  "ci.pipeline.number",
+  "ci.pipeline.url",
+  "ci.provider.name",
+  "ci.workspace_path",
+  "git.repository_url",
+  "ci.job.url",
+  "ci.job.name",
+  "ci.stage.name",
+  "git.commit.sha",
+  "git.branch",
+  "git.tag"
+]
