@@ -19,6 +19,7 @@ class Config extends EventEmitter {
   constructor (options) {
     super()
     this._hasEmitted = {}
+    this.setMaxListeners(100) // TODO find the real number here
     this.configure(options)
   }
 
@@ -149,7 +150,7 @@ class Config extends EventEmitter {
       options.port,
       this.port,
       process.env.DD_TRACE_AGENT_PORT,
-     '8126'
+      '8126'
     )
     const DD_TRACE_AGENT_URL = coalesce(
       options.url,
