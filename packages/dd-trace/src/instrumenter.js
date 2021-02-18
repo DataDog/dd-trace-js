@@ -56,8 +56,9 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          config.configurePlugin(name)
+          config.configurePlugin(name, undefined, false)
         })
+      config.retroEmit('update.plugins')
     }
   }
 

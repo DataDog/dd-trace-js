@@ -31,7 +31,7 @@ class Config extends EventEmitter {
     this.configure()
   }
 
-  configurePlugin (name, config = {}) {
+  configurePlugin (name, config = {}, emitUpdate = true) {
     this.pluginConfigs = this.pluginConfigs || {}
 
     if (!name) {
@@ -60,8 +60,10 @@ class Config extends EventEmitter {
 
     this.pluginConfigs[name] = Object.assign(this.pluginConfigs[name] || {}, config)
 
-    this.retroEmit(`update.plugin.${name}`) // TODO this is not needed while the instrumenter managers plugin state
-    this.retroEmit('update.plugins')
+    if (emitUpdate) {
+      this.retroEmit(`update.plugin.${name}`) // TODO this is not needed while the instrumenter managers plugin state
+      this.retroEmit('update.plugins')
+    }
   }
 
   retroOn (name, handler) {

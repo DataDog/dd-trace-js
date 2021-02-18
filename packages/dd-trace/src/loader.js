@@ -36,11 +36,6 @@ class Loader {
   }
 
   _getModules (instrumentation) {
-    const cached = instrumentation._loaderCachedModules
-    if (cached) {
-      return cached
-    }
-
     const modules = []
     const ids = Object.keys(require.cache)
 
@@ -70,8 +65,6 @@ class Loader {
 
       modules.push(require.cache[ids[i]].exports)
     }
-
-    instrumentation._loaderCachedModules = modules
 
     return modules
   }
