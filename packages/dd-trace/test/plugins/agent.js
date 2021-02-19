@@ -130,8 +130,6 @@ module.exports = {
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close () {
-    this.wipe()
-
     listener.close()
     listener = null
     sockets.forEach(socket => socket.end())
@@ -148,19 +146,5 @@ module.exports = {
         resolve()
       })
     })
-  },
-
-  // Wipe the require cache.
-  wipe () {
-    const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
-    const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
-      .map(exception => new RegExp(exception))
-
-    Object.keys(require.cache)
-      .filter(name => name.indexOf(basedir) !== -1)
-      .filter(name => !exceptions.some(exception => exception.test(name)))
-      .forEach(name => {
-        delete require.cache[name]
-      })
   }
 }
