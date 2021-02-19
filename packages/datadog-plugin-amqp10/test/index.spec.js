@@ -28,7 +28,6 @@ describe('Plugin', () => {
           .then(() => {
             client.disconnect()
             agent.close()
-            agent.wipe()
           })
       })
 

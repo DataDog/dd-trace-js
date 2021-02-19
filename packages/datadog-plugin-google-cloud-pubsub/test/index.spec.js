@@ -24,7 +24,6 @@ describe('Plugin', () => {
     })
     afterEach(() => {
       agent.close()
-      agent.wipe()
     })
     withVersions(plugin, '@google-cloud/pubsub', version => {
       let pubsub
