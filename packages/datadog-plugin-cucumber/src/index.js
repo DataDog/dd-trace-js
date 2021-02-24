@@ -64,7 +64,7 @@ function createWrapRun(tracer, testEnvironmentMetadata, sourceRoot) {
 function createWrapRunStep(tracer) {
   return function wrapRunStep(runStep) {
     return async function handleRunStep(...args) {
-      const resource = args[0].isHook ? "hook" : args[0].pickleStep?.text
+      const resource = args[0].isHook ? "hook" : args[0].pickleStep.text
       return await tracer.trace(
         "cucumber.step",
         { type: "test", resource: resource },
