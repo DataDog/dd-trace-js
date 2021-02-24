@@ -108,7 +108,7 @@ describe('Plugin', () => {
             argv, cwd, stdout
           })
 
-          let result = await cli.run()
+          const result = await cli.run()
           expect(result.success).to.equal(test.success)
           await checkTraces
         })
