@@ -27,7 +27,7 @@ function setStatusFromResult (span, result) {
 
 function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRun (run) {
-    return async function handleRun (...args) {
+    return async function handleRun () {
       const testName = this.pickle.name
       const testSuite = relative(sourceRoot, this.pickle.uri)
 
@@ -47,7 +47,7 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
           tags: commonSpanTags
         },
         async (span) => {
-          const runResult = await run.apply(this, args)
+          const runResult = await run.apply(this, arguments)
           setStatusFromResult(span, this.getWorstStepResult())
           return runResult
         }
@@ -59,13 +59,13 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
 
 function createWrapRunStep (tracer) {
   return function wrapRunStep (runStep) {
-    return async function handleRunStep (...args) {
-      const resource = args[0].isHook ? 'hook' : args[0].pickleStep.text
+    return async function handleRunStep () {
+      const resource = arguments[0].isHook ? 'hook' : arguments[0].pickleStep.text
       return tracer.trace(
         'cucumber.step',
         { type: 'test', resource: resource },
         async (span) => {
-          const result = await runStep.apply(this, args)
+          const result = await runStep.apply(this, arguments)
           setStatusFromResult(span, result)
           return result
         }
