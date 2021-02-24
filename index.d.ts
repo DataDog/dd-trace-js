@@ -488,6 +488,7 @@ interface Plugins {
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
   "couchbase": plugins.couchbase;
+  "cucumber": plugins.cucumber;
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
