@@ -3,7 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -79,8 +78,8 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               // take the last top level trace
-              const trace = traces[0][traces[0].length-1]
-              expect(traces[0][traces[0].length-1].meta).to.contain({
+              const trace = traces[0][traces[0].length - 1]
+              expect(traces[0][traces[0].length - 1].meta).to.contain({
                 language: 'javascript',
                 service: 'test',
                 [TEST_NAME]: test.testName,
@@ -97,16 +96,17 @@ describe('Plugin', () => {
 
           const stdout = new PassThrough()
           const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
-          const cucumber_js = `${cwd}/node-modules/.bin/cucumber-js`;
+          const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
           const argv = [
             'node',
-            cucumber_js,
-            '--require', __dirname + '/features/' + test.requireName,
-            __dirname + '/features/' + test.featureName + test.featureSuffix
+            cucumberJs,
+            '--require',
+            path.join(__dirname, 'features', test.requireName),
+            path.join(__dirname, 'features', `${test.featureName}${test.featureSuffix}`)
           ]
           const cli = new Cucumber.Cli({
             argv, cwd, stdout
-          });
+          })
 
           cli.run().then(result => {
             expect(result.success).to.equal(test.success)
