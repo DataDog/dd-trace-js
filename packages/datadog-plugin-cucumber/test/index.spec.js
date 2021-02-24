@@ -71,11 +71,11 @@ describe('Plugin', () => {
 
     describe('cucumber', () => {
       TESTS.forEach(test => {
-        it(`should create a test span for ${test.featureName}${test.featureSuffix || ''}`, function (done) {
+        it(`should create a test span for ${test.featureName}${test.featureSuffix || ''}`, async function () {
           this.timeout(20000)
           const testFilePath = path.join(__dirname, 'features', test.featureName)
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
-          agent
+          const checkTraces = agent
             .use(traces => {
               // take the last top level trace
               const trace = traces[0][traces[0].length - 1]
@@ -92,7 +92,7 @@ describe('Plugin', () => {
               expect(trace.type).to.equal('test')
               expect(trace.name).to.equal('cucumber.test')
               expect(trace.resource).to.equal(`${test.testName}`)
-            }).then(done, done)
+            })
 
           const stdout = new PassThrough()
           const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
@@ -102,17 +102,15 @@ describe('Plugin', () => {
             cucumberJs,
             '--require',
             path.join(__dirname, 'features', test.requireName),
-            path.join(__dirname, 'features', `${test.featureName}${test.featureSuffix}`)
+            path.join(__dirname, 'features', `${test.featureName}${test.featureSuffix || ''}`)
           ]
           const cli = new Cucumber.Cli({
             argv, cwd, stdout
           })
 
-          cli.run().then(result => {
-            expect(result.success).to.equal(test.success)
-          }, reason => {
-            throw reason
-          })
+          let result = await cli.run()
+          expect(result.success).to.equal(test.success)
+          await checkTraces
         })
       })
     })
