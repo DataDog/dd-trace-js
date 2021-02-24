@@ -783,6 +783,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [cucumber](https://www.npmjs.com/package/@cucumber/cucumber) module.
+   */
+  interface cucumber extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
    * [dns](https://nodejs.org/api/dns.html) module.
    */
   interface dns extends Instrumentation {}
