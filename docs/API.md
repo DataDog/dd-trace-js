@@ -29,6 +29,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-config"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="couchbase"></h5>
+<h5 id="cucumber"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
 <h5 id="elasticsearch-tags"></h5>
@@ -95,6 +96,7 @@ tracer.use('pg', {
 * [aws-sdk](./interfaces/plugins.aws_sdk.html)
 * [bluebird](./interfaces/plugins.bluebird.html)
 * [couchbase](./interfaces/plugins.couchbase.html)
+* [cucumber](./interfaces/plugins.cucumber.html)
 * [bunyan](./interfaces/plugins.bunyan.html)
 * [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
 * [connect](./interfaces/plugins.connect.html)
