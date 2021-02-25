@@ -34,7 +34,10 @@ node-core-base: &node-core-base
         name: Unit tests
         command: yarn test:core:ci
     - store_artifacts:
-        path: ./coverage/lcov-report
+        path: ./coverage
+    - run:
+        name: Code coverage
+        command: yarn codecov
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -113,6 +116,9 @@ node-plugin-base: &node-plugin-base
         command: yarn test:plugins:ci
     - store_artifacts:
         path: ./coverage/lcov-report
+    - run:
+        name: Code coverage
+        command: yarn codecov
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
