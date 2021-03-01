@@ -47,7 +47,7 @@ const TESTS = [
     requireName: 'simple.js',
     testName: 'skip scenario based on tag',
     success: true,
-    statuses: ['skip', 'skip'],  // includes first step and marks it as skipped
+    statuses: ['skip', 'skip'], // includes first step and marks it as skipped
     errors: ['skipped', 'skipped']
   }
 ]
@@ -84,7 +84,10 @@ describe('Plugin', () => {
               expect(traces[0].map(s => s.meta[TEST_STATUS])).to.have.members(test.statuses)
               if (test.errors !== undefined) {
                 test.errors.forEach((msg, i) => {
-                  expect(traces[0][i].meta['error.msg'], `item ${i} should start with "${msg}"`).to.satisfy(err => msg === undefined || err.startsWith(msg))
+                  expect(
+                    traces[0][i].meta['error.msg'],
+                    `item ${i} should start with "${msg}"`
+                  ).to.satisfy(err => msg === undefined || err.startsWith(msg))
                 })
               }
               // take the last top level trace
