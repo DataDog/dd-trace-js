@@ -67,8 +67,8 @@ function createWrapRunStep (tracer) {
         { type: 'test', resource: resource },
         async (span) => {
           const promise = runStep.apply(this, arguments)
-          promise.then(() => {
-            setStatusFromResult(span, this)
+          promise.then((result) => {
+            setStatusFromResult(span, result)
           })
           return promise
         }

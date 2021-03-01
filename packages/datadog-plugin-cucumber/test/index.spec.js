@@ -20,32 +20,35 @@ const TESTS = [
     featureSuffix: ':3',
     requireName: 'simple.js',
     testName: 'pass scenario',
-    status: 'pass',
-    success: true
+    success: true,
+    statuses: ['pass', 'pass', 'pass', 'pass']
   },
   {
     featureName: 'simple.feature',
     featureSuffix: ':8',
     requireName: 'simple.js',
     testName: 'fail scenario',
-    status: 'fail',
-    success: false
+    success: false,
+    statuses: ['pass', 'pass', 'fail', 'fail'],
+    errors: [undefined, undefined, 'AssertionError', 'AssertionError']
   },
   {
     featureName: 'simple.feature',
     featureSuffix: ':13',
     requireName: 'simple.js',
     testName: 'skip scenario',
-    status: 'skip',
-    success: true
+    success: true,
+    statuses: ['pass', 'pass', 'skip', 'skip'],
+    errors: [undefined, undefined, 'skipped', 'skipped']
   },
   {
     featureName: 'simple.feature',
     featureSuffix: ':19',
     requireName: 'simple.js',
     testName: 'skip scenario based on tag',
-    status: 'skip',
-    success: true
+    success: true,
+    statuses: ['skip', 'skip'],  // includes first step and marks it as skipped
+    errors: ['skipped', 'skipped']
   }
 ]
 
@@ -77,13 +80,19 @@ describe('Plugin', () => {
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
           const checkTraces = agent
             .use(traces => {
+              expect(traces[0].length).to.equal(test.statuses.length)
+              expect(traces[0].map(s => s.meta[TEST_STATUS])).to.have.members(test.statuses)
+              if (test.errors !== undefined) {
+                test.errors.forEach((msg, i) => {
+                  expect(traces[0][i].meta['error.msg'], `item ${i} should start with "${msg}"`).to.satisfy(err => msg === undefined || err.startsWith(msg))
+                })
+              }
               // take the last top level trace
-              const trace = traces[0][traces[0].length - 1]
+              const trace = traces[0][test.statuses.length - 1]
               expect(traces[0][traces[0].length - 1].meta).to.contain({
                 language: 'javascript',
                 service: 'test',
                 [TEST_NAME]: test.testName,
-                [TEST_STATUS]: test.status,
                 [TEST_TYPE]: 'test',
                 [TEST_FRAMEWORK]: 'cucumber',
                 [TEST_SUITE]: testSuite
