@@ -4,7 +4,6 @@
   "test.framework",
   "test.suite",
   "test.name",
-  "resource.name",
   "ci.pipeline.id",
   "ci.pipeline.name",
   "ci.pipeline.number",
@@ -17,5 +16,12 @@
   "ci.stage.name",
   "git.commit.sha",
   "git.branch",
-  "git.tag"
+  "git.tag",
+  "git.commit.message",
+  "git.commit.committer.date",
+  "git.commit.committer.email",
+  "git.commit.committer.name",
+  "git.commit.author.date",
+  "git.commit.author.email",
+  "git.commit.author.name"
 ]
