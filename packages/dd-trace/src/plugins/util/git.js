@@ -42,7 +42,7 @@ function getGitMetadata (ciMetadata) {
     branch: gitBranch,
     tag: gitTag,
     sha: gitCommitSHA
-  } = getRepoInfo()
+  } = getRepoInfo(process.cwd())
 
   const { name: authorName, email: authorEmail } = parseUser(author)
   const { name: committerName, email: committerEmail } = parseUser(committer)
