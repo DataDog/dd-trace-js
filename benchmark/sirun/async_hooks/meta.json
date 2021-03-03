@@ -1,0 +1,9 @@
+{
+  "name": "async_hooks",
+  "run": "node -r ../monitor .",
+  "variants": [
+    { "env": { "ASYNC_HOOKS": "" } },
+    { "env": { "ASYNC_HOOKS": "init" } },
+    { "env": { "ASYNC_HOOKS": "init,before,after,destroy,promiseResolve" } }
+  ]
+}

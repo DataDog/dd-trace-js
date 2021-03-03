@@ -87,7 +87,7 @@ node-bench-sirun-base: &node-bench-sirun-base
     - run:
         name: Run sirun
         command: |
-          cd $SIRUN_TEST_DIR
+          cd benchmark/sirun/$SIRUN_TEST_DIR
           node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee /tmp/sirun-output.ndjson
     - store_artifacts:
         path: /tmp/sirun-output.ndjson
@@ -283,7 +283,14 @@ jobs:
     docker:
       - image: node
         environment:
-          - SIRUN_TEST_DIR=/root/dd-trace-js/benchmark/sirun/startup/
+          - SIRUN_TEST_DIR=startup
+
+  node-bench-async-hooks:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - SIRUN_TEST_DIR=async_hooks
 
   # Core tests
 
@@ -1125,6 +1132,7 @@ workflows:
       - node-bench-profiler-latest
       - node-bench-e2e-latest
       - node-bench-sirun-startup-latest
+      - node-bench-async-hooks
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1376,6 +1384,7 @@ workflows:
       - node-bench-profiler-latest
       - node-bench-e2e-latest
       - node-bench-sirun-startup-latest
+      - node-bench-async-hooks
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
