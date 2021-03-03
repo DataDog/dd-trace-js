@@ -115,7 +115,7 @@ node-plugin-base: &node-plugin-base
         name: Unit tests
         command: yarn test:plugins:ci
     - store_artifacts:
-        path: ./coverage/lcov-report
+        path: ./coverage
     - run:
         name: Code coverage
         command: yarn codecov
