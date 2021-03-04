@@ -33,8 +33,15 @@ node-core-base: &node-core-base
       run:
         name: Unit tests
         command: yarn test:core:ci
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
     - store_artifacts:
-        path: ./coverage/lcov-report
+        path: ./coverage
+    - persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - .nyc_merge/*
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -111,8 +118,15 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
     - store_artifacts:
-        path: ./coverage/lcov-report
+        path: ./coverage
+    - persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - .nyc_merge/*
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
@@ -774,6 +788,28 @@ jobs:
       - store_artifacts:
           path: ./docs/out
 
+  # Code coverage
+
+  codecov:
+    docker:
+      - image: node
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - attach_workspace:
+          at: ~/dd-trace-js
+      - run:
+          name: Build code coverage report
+          command: yarn cover:report
+      - run:
+          name: Submit code coverage report
+          command: yarn codecov
+
   # Prebuilds (linux x64)
 
   linux-x64-15:
@@ -1105,6 +1141,63 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - codecov:
+          requires:
+            - node-core-8
+            - node-core-10
+            - node-core-12
+            - node-core-14
+            - node-core-15
+            - node-core-latest
+            - node-amqplib
+            - node-amqp10
+            - node-aws-sdk
+            - node-bluebird
+            - node-bunyan
+            - node-cassandra
+            - node-connect
+            - node-couchbase
+            - node-dns
+            - node-elasticsearch
+            - node-express
+            - node-fastify
+            - node-fs-8
+            - node-fs-10
+            - node-fs-12
+            - node-fs-14
+            - node-fs-15
+            - node-fs-latest
+            - node-generic-pool
+            - node-google-cloud-pubsub
+            - node-graphql
+            - node-grpc
+            - node-hapi
+            - node-http
+            - node-http2
+            - node-jest
+            - node-kafkajs
+            - node-knex
+            - node-koa
+            # - node-limitd-client
+            - node-memcached
+            - node-microgateway-core
+            - node-mocha
+            - node-mongodb-core
+            - node-mongoose
+            - node-mysql
+            - node-net
+            - node-paperplane
+            - node-pino
+            - node-postgres
+            - node-promise-js
+            - node-promise
+            - node-q
+            - node-redis
+            - node-restify
+            - node-router
+            - node-tedious
+            - node-when
+            - node-winston
   prebuild:
     jobs:
       # Linux x64
