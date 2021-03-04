@@ -29,7 +29,7 @@
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
     "cover:merge": "nyc merge ./.nyc_output ./.nyc_merge/$CIRCLE_JOB.json",
-    "cover:report": "nyc report -t ./.nyc_merge -n 'packages/dd-trace/src/**/*.js'",
+    "cover:report": "nyc report -t ./.nyc_merge -n 'packages/**/*.js'",
     "codecov": "codecov"
   },
   "repository": {
