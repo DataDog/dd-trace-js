@@ -41,7 +41,7 @@ node-core-base: &node-core-base
     - persist_to_workspace:
         root: ~/dd-trace-js
         paths:
-          - .nyc_output/$CIRCLE_JOB
+          - .nyc_output/$CIRCLE_JOB.json
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -126,7 +126,7 @@ node-plugin-base: &node-plugin-base
     - persist_to_workspace:
         root: ~/dd-trace-js
         paths:
-          - .nyc_output/$CIRCLE_JOB
+          - .nyc_output/$CIRCLE_JOB.json
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
