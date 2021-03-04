@@ -33,12 +33,15 @@ node-core-base: &node-core-base
       run:
         name: Unit tests
         command: yarn test:core:ci
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
     - store_artifacts:
         path: ./coverage
     - persist_to_workspace:
         root: ~/dd-trace-js
         paths:
-          - .nyc_output/*
+          - .nyc_output/$CIRCLE_JOB
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -115,12 +118,15 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
     - store_artifacts:
         path: ./coverage
     - persist_to_workspace:
         root: ~/dd-trace-js
         paths:
-          - .nyc_output/*
+          - .nyc_output/$CIRCLE_JOB
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
