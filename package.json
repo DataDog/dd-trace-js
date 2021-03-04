@@ -28,6 +28,7 @@
     "test:integration": "mocha --timeout 30000 \"integration-tests/**/*.spec.js\"",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
+    "cover:report": "nyc report",
     "codecov": "codecov"
   },
   "repository": {
