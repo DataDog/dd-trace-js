@@ -188,7 +188,7 @@ function wrapRemoveListener (removeListener) {
 
     listeners.delete(listener)
 
-    return removeListener.call(this, eventName, listener)
+    return removeListener.call(this, arguments)
   }
 }
 
@@ -202,7 +202,7 @@ function wrapRemoveAllListeners (removeAllListeners) {
       }
     }
 
-    return removeAllListeners.call(this, eventName)
+    return removeAllListeners.call(this, arguments)
   }
 }
 
