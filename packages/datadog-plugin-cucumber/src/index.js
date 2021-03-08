@@ -46,7 +46,7 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
           resource: testName,
           tags: commonSpanTags
         },
-        async (span) => {
+        (span) => {
           const promise = run.apply(this, arguments)
           promise.then(() => {
             setStatusFromResult(span, this.getWorstStepResult())
@@ -65,7 +65,7 @@ function createWrapRunStep (tracer) {
       return tracer.trace(
         'cucumber.step',
         { type: 'test', resource: resource },
-        async (span) => {
+        (span) => {
           const promise = runStep.apply(this, arguments)
           promise.then((result) => {
             setStatusFromResult(span, result)
