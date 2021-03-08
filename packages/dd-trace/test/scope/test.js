@@ -300,6 +300,43 @@ module.exports = factory => {
 
         expect(spy).to.not.have.been.called
       })
+
+      it('should remove all listeners of a type', () => {
+        const spy = sinon.spy()
+        const spy2 = sinon.spy()
+
+        scope.bind(emitter)
+
+        scope.activate(span, () => {
+          emitter.once('test', spy)
+          emitter.once('test', spy2)
+          emitter.removeAllListeners('test')
+        })
+
+        emitter.emit('test')
+
+        expect(spy).to.not.have.been.called
+        expect(spy2).to.not.have.been.called
+      })
+
+      it('should remove all listeners', () => {
+        const spy = sinon.spy()
+        const spy2 = sinon.spy()
+
+        scope.bind(emitter)
+
+        scope.activate(span, () => {
+          emitter.once('test', spy)
+          emitter.once('test2', spy2)
+          emitter.removeAllListeners()
+        })
+
+        emitter.emit('test')
+        emitter.emit('test2')
+
+        expect(spy).to.not.have.been.called
+        expect(spy2).to.not.have.been.called
+      })
     })
 
     describe('with an unsupported target', () => {
