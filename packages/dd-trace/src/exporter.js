@@ -3,9 +3,15 @@
 const AgentExporter = require('./exporters/agent')
 const LogExporter = require('./exporters/log')
 const exporters = require('../../../ext/exporters')
+const fs = require('fs')
+const constants = require('./constants')
 
 module.exports = name => {
   const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+  let usingLambdaExtension = false
+  if (inAWSLambda) {
+    usingLambdaExtension = fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH)
+  }
 
   switch (name) {
     case exporters.LOG:
@@ -13,6 +19,6 @@ module.exports = name => {
     case exporters.AGENT:
       return AgentExporter
     default:
-      return inAWSLambda ? LogExporter : AgentExporter
+      return inAWSLambda && !usingLambdaExtension ? LogExporter : AgentExporter
   }
 }

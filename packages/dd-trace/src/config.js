@@ -114,6 +114,9 @@ class Config {
       rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, process.env.DD_TRACE_RATE_LIMIT)
     })
 
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+    const defaultFlushInterval = inAWSLambda ? 0 : 2000
+
     this.enabled = isTrue(DD_TRACE_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
@@ -122,7 +125,7 @@ class Config {
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), 2000)
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)

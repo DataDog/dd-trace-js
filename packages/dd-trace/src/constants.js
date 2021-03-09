@@ -9,5 +9,6 @@ module.exports = {
   REFERENCE_NOOP: 'noop',
   SAMPLING_RULE_DECISION: '_dd.rule_psr',
   SAMPLING_LIMIT_DECISION: '_dd.limit_psr',
-  SAMPLING_AGENT_DECISION: '_dd.agent_psr'
+  SAMPLING_AGENT_DECISION: '_dd.agent_psr',
+  DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent'
 }
