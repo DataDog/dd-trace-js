@@ -9,7 +9,7 @@ const {
 } = require('../../../src/plugins/util/env')
 
 describe('env', () => {
-  it('reads env data', () => {
+  it('reads runtime and OS metadata', () => {
     const envMetadata = getRuntimeAndOSMetadata()
 
     expect(envMetadata).to.eql(
