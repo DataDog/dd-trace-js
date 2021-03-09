@@ -1,5 +1,5 @@
 // From https://github.com/rwjblue/git-repo-info/blob/d3ab418ef8b392eabbe911a37871708b15201b70/index.js
-
+// License MIT, Copyright Robert Jackson and Contributors
 'use strict';
 
 var fs   = require('fs');
