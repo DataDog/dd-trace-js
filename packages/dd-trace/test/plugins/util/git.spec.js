@@ -30,7 +30,7 @@ const {
     './exec': {
       'sanitizedExec': sanitizedExecStub
     },
-    'git-repo-info': gitRepoInfoStub
+    './git-repo-info': gitRepoInfoStub
   }
 )
 

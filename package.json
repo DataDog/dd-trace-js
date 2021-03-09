@@ -54,7 +54,6 @@
     "@types/node": "^10.12.18",
     "axios": "^0.21.1",
     "form-data": "^3.0.0",
-    "git-repo-info": "^2.1.1",
     "hdr-histogram-js": "^2.0.1",
     "koalas": "^1.0.2",
     "limiter": "^1.1.4",
