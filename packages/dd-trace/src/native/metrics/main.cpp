@@ -6,6 +6,7 @@
 #include "Object.hpp"
 #include "Process.hpp"
 #include "SpanTracker.hpp"
+#include "MemoryUsage.hpp"
 
 namespace datadog {
   namespace {
@@ -14,6 +15,7 @@ namespace datadog {
     Heap heap;
     Process process;
     SpanTracker tracker;
+    MemoryUsage mem;
 
     NAN_GC_CALLBACK(before_gc) {
       gc.before(type);
@@ -26,6 +28,8 @@ namespace datadog {
     NAN_METHOD(start) {
       eventLoop.enable();
       tracker.enable();
+      mem.enable();
+      heap.enable();
 
       Nan::AddGCPrologueCallback(before_gc);
       Nan::AddGCEpilogueCallback(after_gc);
@@ -34,6 +38,8 @@ namespace datadog {
     NAN_METHOD(stop) {
       eventLoop.disable();
       tracker.disable();
+      mem.disable();
+      heap.disable();
 
       Nan::RemoveGCPrologueCallback(before_gc);
       Nan::RemoveGCEpilogueCallback(after_gc);
@@ -47,6 +53,7 @@ namespace datadog {
       process.inject(obj);
       heap.inject(obj);
       tracker.inject(obj);
+      mem.inject(obj);
 
       info.GetReturnValue().Set(obj.to_json());
     }
@@ -63,17 +70,15 @@ namespace datadog {
 
       tracker.finish(handle);
     }
+
+    NODE_MODULE_INIT() {
+      Object obj = Object(exports);
+
+      obj.set("start", start);
+      obj.set("stop", stop);
+      obj.set("stats", stats);
+      obj.set("track", track);
+      obj.set("finish", finish);
+    }
   }
-
-  NAN_MODULE_INIT(init) {
-    Object obj = Object(target);
-
-    obj.set("start", start);
-    obj.set("stop", stop);
-    obj.set("stats", stats);
-    obj.set("track", track);
-    obj.set("finish", finish);
-  }
-
-  NODE_MODULE(metrics, init);
 }

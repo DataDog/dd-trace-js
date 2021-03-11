@@ -10,6 +10,7 @@
       "packages/dd-trace/src/native/metrics/Object.cpp",
       "packages/dd-trace/src/native/metrics/Process.cpp",
       "packages/dd-trace/src/native/metrics/SpanTracker.cpp",
+      "packages/dd-trace/src/native/metrics/MemoryUsage.cpp",
       "packages/dd-trace/src/native/metrics/utils.cpp",
       "packages/dd-trace/src/native/metrics/main.cpp"
     ],

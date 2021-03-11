@@ -1,7 +1,5 @@
 'use strict'
 
-// TODO: capture every second and flush every 10 seconds
-
 const v8 = require('v8')
 const path = require('path')
 const os = require('os')
@@ -9,7 +7,15 @@ const Client = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
 
-const INTERVAL = 10 * 1000
+let workerThreads
+let INTERVAL
+try {
+  workerThreads = require('worker_threads')
+  INTERVAL = 1 * 1000
+} catch (e) {
+  // no worker threads. fall back to running in this thread.
+  INTERVAL = 10 * 1000
+}
 
 let nativeMetrics = null
 
@@ -20,6 +26,30 @@ let cpuUsage
 let gauges
 let counters
 let histograms
+let worker
+
+if (workerThreads && !workerThreads.isMainThread) {
+  const onMessageInterval = setInterval(() => {
+    const { parentPort } = workerThreads
+    if (!parentPort) {
+      return
+    }
+    clearInterval(onMessageInterval)
+    parentPort.on('message', ({ name, args }) => {
+      module.exports[name](...args)
+    })
+  }, 100)
+}
+
+const workerMsgQueue = []
+function postToWorker (name, args) {
+  const msg = { name, args: args ? [...args] : [] }
+  if (worker) {
+    worker.postMessage(msg)
+  } else {
+    workerMsgQueue.push(msg)
+  }
+}
 
 reset()
 
@@ -36,12 +66,30 @@ module.exports = {
         tags.push(`${key}:${value}`)
       })
 
-    try {
-      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
-      nativeMetrics.start()
-    } catch (e) {
-      log.error(e)
-      nativeMetrics = null
+    if (workerThreads && workerThreads.isMainThread) {
+      try {
+        nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
+        nativeMetrics.start()
+        nativeMetrics._hasStarted = true
+      } catch (e) {
+        log.error(e)
+        nativeMetrics = null
+      }
+      worker = new workerThreads.Worker(__filename)
+      workerMsgQueue.forEach(msg => worker.postMessage(msg))
+      workerMsgQueue.length = 0
+      postToWorker('start', [config])
+      return
+    } else {
+      try {
+        nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
+        if (!workerThreads) {
+          nativeMetrics.start()
+          nativeMetrics._hasStarted = true
+        }
+      } catch (e) {
+        nativeMetrics = null
+      }
     }
 
     client = new Client({
@@ -73,14 +121,28 @@ module.exports = {
   },
 
   stop () {
-    if (nativeMetrics) {
-      nativeMetrics.stop()
+    if (!workerThreads || workerThreads.isMainThread) {
+      if (nativeMetrics) {
+        if (!nativeMetrics._hasStarted) {
+          throw new Error('attempted to stop before starting')
+        }
+        nativeMetrics.stop()
+        nativeMetrics._hasStarted = false
+      }
+      if (workerThreads) {
+        postToWorker('stop')
+        return
+      }
     }
 
     clearInterval(interval)
     reset()
+    if (workerThreads && !workerThreads.isMainThread) {
+      process.exit() // this just kills the thread
+    }
   },
 
+  // this one always runs in the main thread
   track (span) {
     if (nativeMetrics) {
       const handle = nativeMetrics.track(span)
@@ -98,6 +160,11 @@ module.exports = {
   },
 
   histogram (name, value, tag) {
+    if (workerThreads && workerThreads.isMainThread) {
+      postToWorker('histogram', arguments)
+      return
+    }
+
     if (!client) return
 
     histograms[name] = histograms[name] || new Map()
@@ -110,6 +177,11 @@ module.exports = {
   },
 
   count (name, count, tag, monotonic = false) {
+    if (workerThreads && workerThreads.isMainThread) {
+      postToWorker('count', arguments)
+      return
+    }
+
     if (!client) return
     if (typeof tag === 'boolean') {
       monotonic = tag
@@ -126,6 +198,11 @@ module.exports = {
   },
 
   gauge (name, value, tag) {
+    if (workerThreads && workerThreads.isMainThread) {
+      postToWorker('gauge', arguments)
+      return
+    }
+
     if (!client) return
 
     gauges[name] = gauges[name] || new Map()
@@ -171,8 +248,8 @@ function captureCpuUsage () {
   client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 }
 
-function captureMemoryUsage () {
-  const stats = process.memoryUsage()
+function captureMemoryUsage (stats) {
+  stats = stats.memoryUsage
 
   client.gauge('runtime.node.mem.heap_total', stats.heapTotal)
   client.gauge('runtime.node.mem.heap_used', stats.heapUsed)
@@ -180,15 +257,16 @@ function captureMemoryUsage () {
   client.gauge('runtime.node.mem.total', os.totalmem())
   client.gauge('runtime.node.mem.free', os.freemem())
 
-  stats.external && client.gauge('runtime.node.mem.external', stats.external)
+  // TODO
+  // stats.external && client.gauge('runtime.node.mem.external', stats.external)
 }
 
 function captureProcess () {
   client.gauge('runtime.node.process.uptime', Math.round(process.uptime()))
 }
 
-function captureHeapStats () {
-  const stats = v8.getHeapStatistics()
+function captureHeapStats (stats) {
+  stats = stats.memoryUsage
 
   client.gauge('runtime.node.heap.total_heap_size', stats.total_heap_size)
   client.gauge('runtime.node.heap.total_heap_size_executable', stats.total_heap_size_executable)
@@ -243,11 +321,9 @@ function captureHistograms () {
 }
 
 function captureCommonMetrics () {
-  captureMemoryUsage()
-  captureProcess()
-  captureHeapStats()
-  captureGauges()
-  captureCounters()
+  captureProcess() // no prob on other thread
+  captureGauges() // no prob on other thread
+  captureCounters() // no prob on other thread
   captureHistograms()
 }
 
@@ -300,6 +376,9 @@ function captureNativeMetrics () {
       client.gauge('runtime.node.spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
     })
   }
+
+  captureMemoryUsage(stats)
+  captureHeapStats(stats)
 }
 
 function histogram (name, stats, tags) {
