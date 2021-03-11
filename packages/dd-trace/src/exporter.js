@@ -8,10 +8,7 @@ const constants = require('./constants')
 
 module.exports = name => {
   const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-  let usingLambdaExtension = false
-  if (inAWSLambda) {
-    usingLambdaExtension = fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH)
-  }
+  const usingLambdaExtension = inAWSLambda && fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH)
 
   switch (name) {
     case exporters.LOG:
