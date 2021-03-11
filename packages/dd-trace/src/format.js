@@ -5,7 +5,6 @@ const tags = require('../../../ext/tags')
 const log = require('./log')
 const id = require('./id')
 
-const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
 const MEASURED = tags.MEASURED
@@ -50,7 +49,6 @@ function extractTags (trace, span) {
   const origin = context._trace.origin
   const tags = context._tags
   const hostname = context._hostname
-  const priority = context._sampling.priority
   const internalErrors = span.tracer()._internalErrors
 
   for (const tag in tags) {
@@ -91,7 +89,6 @@ function extractTags (trace, span) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
-  addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
 }

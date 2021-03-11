@@ -250,6 +250,14 @@ describe('Span', () => {
 
       expect(tagger.add).to.have.been.calledWith(span.context()._tags, tags)
     })
+
+    it('should sample based on the tags', () => {
+      const tags = { foo: 'bar' }
+
+      span.addTags(tags)
+
+      expect(prioritySampler.sample).to.have.been.calledWith(span, false)
+    })
   })
 
   describe('finish', () => {

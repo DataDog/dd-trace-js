@@ -8,7 +8,8 @@ const { setSamplingRules } = require('./startup-log')
 const {
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
-  SAMPLING_AGENT_DECISION
+  SAMPLING_AGENT_DECISION,
+  SAMPLING_PRIORITY_KEY
 } = require('./constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
@@ -41,7 +42,7 @@ class PrioritySampler {
       : this._isSampledByAgent(context)
   }
 
-  sample (span) {
+  sample (span, auto = true) {
     if (!span) return
 
     const context = this._getContext(span)
@@ -51,11 +52,13 @@ class PrioritySampler {
     const tag = this._getPriority(context._tags)
 
     if (this.validate(tag)) {
-      context._sampling.priority = tag
+      this._setPriority(context, tag)
       return
     }
 
-    context._sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
+    if (auto) {
+      this._setPriority(context, this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT)
+    }
   }
 
   update (rates) {
@@ -105,8 +108,19 @@ class PrioritySampler {
     }
   }
 
+  _setPriority (context, priority) {
+    const root = context._trace.started[0]
+
+    if (!root) return
+
+    const rootContext = root.context()
+
+    rootContext._sampling.priority = priority
+    rootContext._tags[SAMPLING_PRIORITY_KEY] = priority
+  }
+
   _isSampledByRule (context, rule) {
-    context._tags[SAMPLING_RULE_DECISION] = rule.sampleRate
+    this._tagRoot(context, SAMPLING_RULE_DECISION, rule.sampleRate)
 
     return rule.sampler.isSampled(context)
   }
@@ -114,7 +128,7 @@ class PrioritySampler {
   _isSampledByRateLimit (context) {
     const allowed = this._limiter.isAllowed()
 
-    context._tags[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+    this._tagRoot(context, SAMPLING_LIMIT_DECISION, this._limiter.effectiveRate())
 
     return allowed
   }
@@ -123,9 +137,27 @@ class PrioritySampler {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._tags[SAMPLING_AGENT_DECISION] = sampler.rate()
+    this._tagRoot(context, SAMPLING_AGENT_DECISION, sampler.rate())
 
     return sampler.isSampled(context)
+  }
+
+  _isRoot (context) {
+    const parentId = context._parentId
+
+    return !parentId || parentId.toString(10) === '0'
+  }
+
+  _tagRoot (context, key, value) {
+    const root = context._trace.started[0]
+
+    if (!root) return
+
+    const rootContext = root.context()
+
+    if (!this._isRoot(rootContext)) return
+
+    rootContext._tags[key] = value
   }
 
   _normalizeRules (rules, sampleRate) {

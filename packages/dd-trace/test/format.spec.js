@@ -4,7 +4,6 @@ const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
 
-const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
 const MEASURED = tags.MEASURED
@@ -297,12 +296,6 @@ describe('format', () => {
       expect(trace.meta).to.not.have.property('baz.qux')
       expect(trace.start).to.be.a('number')
       expect(trace.duration).to.be.a('number')
-    })
-
-    it('should include the sampling priority', () => {
-      spanContext._sampling.priority = 0
-      trace = format(span)
-      expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })
 
     it('should support objects without a toString implementation', () => {
