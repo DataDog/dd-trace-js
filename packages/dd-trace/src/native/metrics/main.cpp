@@ -71,8 +71,8 @@ namespace datadog {
       tracker.finish(handle);
     }
 
-    NODE_MODULE_INIT() {
-      Object obj = Object(exports);
+    NAN_MODULE_INIT(init) {
+      Object obj = Object(target);
 
       obj.set("start", start);
       obj.set("stop", stop);
@@ -80,5 +80,7 @@ namespace datadog {
       obj.set("track", track);
       obj.set("finish", finish);
     }
+
+    NAN_MODULE_WORKER_ENABLED(metrics, init)
   }
 }
