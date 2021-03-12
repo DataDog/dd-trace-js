@@ -2,6 +2,13 @@
 
 wrapIt()
 
+let describe = global.describe
+try {
+  require('worker_threads')
+} catch (e) {
+  describe = describe.skip
+}
+
 describe('metrics via worker thread', () => {
   let metrics
   let config
