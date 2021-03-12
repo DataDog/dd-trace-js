@@ -27,14 +27,6 @@ namespace datadog {
     );
   }
 
-  void Object::set(std::string key, size_t value) {
-    Nan::Set(
-      target_,
-      Nan::New(key).ToLocalChecked(),
-      Nan::New<v8::Number>(static_cast<double>(value))
-    );
-  }
-
   void Object::set(std::string key, v8::Local<v8::Object> value) {
     Nan::Set(
       target_,
