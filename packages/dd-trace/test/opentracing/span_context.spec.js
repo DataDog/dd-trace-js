@@ -76,7 +76,8 @@ describe('SpanContext', () => {
       _noop: null,
       _trace: {
         started: [],
-        finished: []
+        finished: [],
+        tags: {}
       }
     })
   })
