@@ -2,7 +2,6 @@
 
 const id = require('../src/id')
 const ext = require('../../../ext')
-const { SAMPLING_PRIORITY_KEY } = require('../src/constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -20,27 +19,11 @@ describe('PrioritySampler', () => {
   let sampler
   let context
   let span
-  let rootContext
-  let rootSpan
 
   beforeEach(() => {
-    const sampling = {}
-
-    rootContext = {
-      _tags: {},
-      _sampling: sampling,
-      _trace: {
-        started: []
-      }
-    }
-
-    rootSpan = {
-      context: sinon.stub().returns(rootContext)
-    }
-
     context = {
       _tags: {},
-      _sampling: sampling,
+      _sampling: {},
       _trace: {
         started: []
       }
@@ -49,9 +32,6 @@ describe('PrioritySampler', () => {
     span = {
       context: sinon.stub().returns(context)
     }
-
-    context._trace.started.push(rootSpan, span)
-    rootContext._trace.started.push(rootSpan, span)
 
     sampler = {
       isSampled: sinon.stub(),
@@ -108,7 +88,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(span)
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should set the priority from the corresponding tag', () => {
@@ -117,7 +96,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(span)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, USER_KEEP)
     })
 
     it('should freeze the sampling priority once set', () => {
@@ -128,14 +106,12 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(span)
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should accept a span context', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should support manual keep', () => {
@@ -144,7 +120,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, USER_KEEP)
     })
 
     it('should support manual drop', () => {
@@ -153,7 +128,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_REJECT)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, USER_REJECT)
     })
 
     it('should support opentracing keep', () => {
@@ -162,7 +136,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, USER_KEEP)
     })
 
     it('should support opentracing drop', () => {
@@ -171,7 +144,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_REJECT)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, USER_REJECT)
     })
 
     it('should support a global sample rate', () => {
@@ -179,14 +151,12 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
 
       delete context._sampling.priority
 
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_REJECT)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_REJECT)
     })
 
     it('should support a sample rate from a rule on service as string', () => {
@@ -201,7 +171,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should support a sample rate from a rule on service as string as regex', () => {
@@ -216,7 +185,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should support a sample rate from a rule on name as string', () => {
@@ -232,7 +200,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should support a sample rate from a rule on name as regex', () => {
@@ -248,7 +215,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should fallback to the global sample rate', () => {
@@ -263,7 +229,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should support a rate limit', () => {
@@ -274,14 +239,12 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
 
       delete context._sampling.priority
 
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_REJECT)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_REJECT)
     })
 
     it('should support disabling the rate limit', () => {
@@ -292,20 +255,18 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
 
       delete context._sampling.priority
 
       prioritySampler.sample(context)
 
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
-      expect(rootContext._tags).to.have.property(SAMPLING_PRIORITY_KEY, AUTO_KEEP)
     })
 
     it('should add metrics for agent sample rate', () => {
       prioritySampler.sample(span)
 
-      expect(rootContext._tags).to.have.property('_dd.agent_psr', 1)
+      expect(context._trace).to.have.property('_dd.agent_psr', 1)
     })
 
     it('should add metrics for rule sample rate', () => {
@@ -314,8 +275,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(rootContext._tags).to.have.property('_dd.rule_psr', 0)
-      expect(rootContext._tags).to.not.have.property('_dd.limit_psr')
+      expect(context._trace).to.have.property('_dd.rule_psr', 0)
+      expect(context._trace).to.not.have.property('_dd.limit_psr')
     })
 
     it('should add metrics for rate limiter sample rate', () => {
@@ -325,16 +286,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(rootContext._tags).to.have.property('_dd.rule_psr', 0.5)
-      expect(rootContext._tags).to.have.property('_dd.limit_psr', 1)
-    })
-
-    it('should not add metrics for non-root spans', () => {
-      rootContext._parentId = id()
-
-      prioritySampler.sample(span)
-
-      expect(rootContext._tags).to.not.have.property('_dd.agent_psr')
+      expect(context._trace).to.have.property('_dd.rule_psr', 0.5)
+      expect(context._trace).to.have.property('_dd.limit_psr', 1)
     })
 
     it('should ignore empty span', () => {
@@ -348,7 +301,6 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(span, false)
 
       expect(context._sampling.priority).to.be.undefined
-      expect(rootContext._tags).to.not.have.property(SAMPLING_PRIORITY_KEY)
     })
   })
 

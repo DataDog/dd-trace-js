@@ -8,8 +8,7 @@ const { setSamplingRules } = require('./startup-log')
 const {
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
-  SAMPLING_AGENT_DECISION,
-  SAMPLING_PRIORITY_KEY
+  SAMPLING_AGENT_DECISION
 } = require('./constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
@@ -52,12 +51,12 @@ class PrioritySampler {
     const tag = this._getPriority(context._tags)
 
     if (this.validate(tag)) {
-      this._setPriority(context, tag)
+      context._sampling.priority = tag
       return
     }
 
     if (auto) {
-      this._setPriority(context, this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT)
+      context._sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
     }
   }
 
@@ -108,19 +107,8 @@ class PrioritySampler {
     }
   }
 
-  _setPriority (context, priority) {
-    const root = context._trace.started[0]
-
-    if (!root) return
-
-    const rootContext = root.context()
-
-    rootContext._sampling.priority = priority
-    rootContext._tags[SAMPLING_PRIORITY_KEY] = priority
-  }
-
   _isSampledByRule (context, rule) {
-    this._tagRoot(context, SAMPLING_RULE_DECISION, rule.sampleRate)
+    context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
 
     return rule.sampler.isSampled(context)
   }
@@ -128,7 +116,7 @@ class PrioritySampler {
   _isSampledByRateLimit (context) {
     const allowed = this._limiter.isAllowed()
 
-    this._tagRoot(context, SAMPLING_LIMIT_DECISION, this._limiter.effectiveRate())
+    context._trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
 
     return allowed
   }
@@ -137,27 +125,9 @@ class PrioritySampler {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    this._tagRoot(context, SAMPLING_AGENT_DECISION, sampler.rate())
+    context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
     return sampler.isSampled(context)
-  }
-
-  _isRoot (context) {
-    const parentId = context._parentId
-
-    return !parentId || parentId.toString(10) === '0'
-  }
-
-  _tagRoot (context, key, value) {
-    const root = context._trace.started[0]
-
-    if (!root) return
-
-    const rootContext = root.context()
-
-    if (!this._isRoot(rootContext)) return
-
-    rootContext._tags[key] = value
   }
 
   _normalizeRules (rules, sampleRate) {

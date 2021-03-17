@@ -4,11 +4,15 @@ const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
 
+const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const ANALYTICS = tags.ANALYTICS
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
+const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
+const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
+const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
 
 const spanId = id('0234567812345678')
 
@@ -26,7 +30,9 @@ describe('format', () => {
       _tags: {},
       _metrics: {},
       _sampling: {},
-      _trace: {},
+      _trace: {
+        started: []
+      },
       _name: 'operation'
     }
 
@@ -38,6 +44,8 @@ describe('format', () => {
       _startTime: 1500000000000.123456,
       _duration: 100
     }
+
+    spanContext._trace.started.push(span)
 
     format = require('../src/format')
   })
@@ -81,6 +89,35 @@ describe('format', () => {
       expect(trace.service).to.equal('service')
       expect(trace.type).to.equal('type')
       expect(trace.resource).to.equal('resource')
+    })
+
+    it('should extract Datadog specific root tags', () => {
+      spanContext._parentId = null
+      spanContext._trace[SAMPLING_AGENT_DECISION] = 0.8
+      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
+      spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
+
+      trace = format(span)
+
+      expect(trace.metrics).to.include({
+        [SAMPLING_AGENT_DECISION]: 0.8,
+        [SAMPLING_LIMIT_DECISION]: 0.2,
+        [SAMPLING_RULE_DECISION]: 0.5
+      })
+    })
+
+    it('should not extract Datadog specific root tags from non-root spans', () => {
+      spanContext._trace[SAMPLING_AGENT_DECISION] = 0.8
+      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
+      spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
+
+      trace = format(span)
+
+      expect(trace.metrics).to.not.have.keys(
+        SAMPLING_AGENT_DECISION,
+        SAMPLING_LIMIT_DECISION,
+        SAMPLING_RULE_DECISION
+      )
     })
 
     it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
@@ -296,6 +333,12 @@ describe('format', () => {
       expect(trace.meta).to.not.have.property('baz.qux')
       expect(trace.start).to.be.a('number')
       expect(trace.duration).to.be.a('number')
+    })
+
+    it('should include the sampling priority', () => {
+      spanContext._sampling.priority = 0
+      trace = format(span)
+      expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })
 
     it('should support objects without a toString implementation', () => {

@@ -5,7 +5,11 @@ const tags = require('../../../ext/tags')
 const log = require('./log')
 const id = require('./id')
 
+const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
+const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
+const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
+const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
 const ANALYTICS = tags.ANALYTICS
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
@@ -21,6 +25,7 @@ function format (span) {
   const formatted = formatSpan(span)
 
   extractError(formatted, span)
+  extractRootTags(formatted, span)
   extractTags(formatted, span)
   extractAnalytics(formatted, span)
 
@@ -49,6 +54,7 @@ function extractTags (trace, span) {
   const origin = context._trace.origin
   const tags = context._tags
   const hostname = context._hostname
+  const priority = context._sampling.priority
   const internalErrors = span.tracer()._internalErrors
 
   for (const tag in tags) {
@@ -89,8 +95,21 @@ function extractTags (trace, span) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
+  addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
+}
+
+function extractRootTags (trace, span) {
+  const context = span.context()
+  const isLocalRoot = span === context._trace.started[0]
+  const parentId = context._parentId
+
+  if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
+
+  addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
+  addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
+  addTag({}, trace.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
 }
 
 function extractError (trace, span) {
