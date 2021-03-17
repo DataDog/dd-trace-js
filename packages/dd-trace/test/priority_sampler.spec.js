@@ -1,6 +1,5 @@
 'use strict'
 
-const id = require('../src/id')
 const ext = require('../../../ext')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
