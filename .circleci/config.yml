@@ -88,7 +88,10 @@ node-bench-sirun-base: &node-bench-sirun-base
         name: Run sirun
         command: |
           cd $SIRUN_TEST_DIR
-          node /root/dd-trace-js/benchmark/sirun/run-all-variants.js
+          node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee /tmp/sirun-output.ndjson
+    - store_artifacts:
+        path: /tmp/sirun-output.ndjson
+        destination: sirun-output.ndjson
 
 
 node-integration-base: &node-integration-base
