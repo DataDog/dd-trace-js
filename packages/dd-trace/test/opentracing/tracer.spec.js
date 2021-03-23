@@ -3,6 +3,7 @@
 const opentracing = require('opentracing')
 const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
+const NoopSpan = require('../../src/noop/span')
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
@@ -297,13 +298,9 @@ describe('Tracer', () => {
     it('should return the same instance when the parent is a noop', () => {
       tracer = new Tracer(config)
 
-      sampler.isSampled.returns(false)
-      const parent = tracer.startSpan('parent', fields)
-      sampler.isSampled.returns(true)
+      const parent = new NoopSpan(tracer)
 
-      fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
-      ]
+      fields.childOf = parent
 
       span = tracer.startSpan('name', fields)
 
