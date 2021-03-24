@@ -8,10 +8,9 @@ const { CIRCLE_TOKEN } = process.env
 const ref = process.argv.length > 2 ? process.arv[2] : 'HEAD'
 const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
 
-const circleHeaders = {
-  'circle-token': CIRCLE_TOKEN,
-  accept: 'application/json'
-}
+const circleHeaders = CIRCLE_TOKEN ? {
+  'circle-token': CIRCLE_TOKEN
+} : {}
 
 const statusUrl = ref =>
   `https://api.github.com/repos/DataDog/dd-trace-js/commits/${ref}/statuses?per_page=100`
@@ -21,7 +20,8 @@ const artifactsUrl = num =>
 function get (url, headers) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: Object.assign({
-      'user-agent': 'dd-results-retriever'
+      'user-agent': 'dd-results-retriever',
+      accept: 'application/json'
     }, headers) }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
         resolve(get(res.headers.location))
