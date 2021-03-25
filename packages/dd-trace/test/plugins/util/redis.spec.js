@@ -1,5 +1,7 @@
 'use strict'
 
+wrapIt()
+
 describe('plugins/util/redis', () => {
   let redis
   let tracer

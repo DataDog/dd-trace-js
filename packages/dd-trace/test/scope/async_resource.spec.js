@@ -27,10 +27,6 @@ function test () {
     span = new Span()
   })
 
-  afterEach(() => {
-    scope.disable()
-  })
-
   it('should not break propagation for nested resources', () => {
     scope.activate(span, () => {
       const asyncResource = new AsyncResource(
