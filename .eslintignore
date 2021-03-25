@@ -6,4 +6,4 @@ node_modules
 protobuf
 versions
 acmeair-nodejs
-packages/dd-trace/src/plugins/util/git-repo-info.js
+vendor
