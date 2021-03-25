@@ -17,5 +17,10 @@
   "ci.stage.name",
   "git.commit.sha",
   "git.branch",
-  "git.tag"
+  "git.tag",
+  "os.platform",
+  "os.version",
+  "os.architecture",
+  "runtime.name",
+  "runtime.version"
 ]
