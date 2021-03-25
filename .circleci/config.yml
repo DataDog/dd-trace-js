@@ -33,8 +33,15 @@ node-core-base: &node-core-base
       run:
         name: Unit tests
         command: yarn test:core:ci
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
     - store_artifacts:
-        path: ./coverage/lcov-report
+        path: ./coverage
+    - persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - .nyc_merge/*
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -61,6 +68,31 @@ node-bench-e2e-base: &node-bench-e2e-base
     - run:
         name: E2E Benchmark
         command: yarn bench:e2e
+
+node-bench-sirun-base: &node-bench-sirun-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - *yarn-install
+    - *save-yarn-cache
+    - run:
+        name: Install system deps
+        command: apt-get update && apt-get install -y valgrind wget
+    - run:
+        name: Install sirun
+        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.3/sirun-v0.1.3-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.3-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
+    - run:
+        name: Run sirun
+        command: |
+          cd $SIRUN_TEST_DIR
+          node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee /tmp/sirun-output.ndjson
+    - store_artifacts:
+        path: /tmp/sirun-output.ndjson
+        destination: sirun-output.ndjson
+
 
 node-integration-base: &node-integration-base
   resource_class: small
@@ -111,8 +143,15 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
     - store_artifacts:
-        path: ./coverage/lcov-report
+        path: ./coverage
+    - persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - .nyc_merge/*
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
@@ -238,6 +277,13 @@ jobs:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
       - image: circleci/mongo
+
+  node-bench-sirun-startup-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - SIRUN_TEST_DIR=/root/dd-trace-js/benchmark/sirun/startup/
 
   # Core tests
 
@@ -433,7 +479,7 @@ jobs:
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - SERVICES=elasticsearch
           - PLUGINS=elasticsearch
@@ -623,7 +669,7 @@ jobs:
   node-tedious:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - SERVICES=mssql
           - PLUGINS=tedious
@@ -773,6 +819,28 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
+
+  # Code coverage
+
+  codecov:
+    docker:
+      - image: node
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - attach_workspace:
+          at: ~/dd-trace-js
+      - run:
+          name: Build code coverage report
+          command: yarn cover:report
+      - run:
+          name: Submit code coverage report
+          command: yarn codecov
 
   # Prebuilds (linux x64)
 
@@ -1056,6 +1124,7 @@ workflows:
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
+      - node-bench-sirun-startup-latest
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1105,6 +1174,63 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+      - codecov:
+          requires:
+            - node-core-8
+            - node-core-10
+            - node-core-12
+            - node-core-14
+            - node-core-15
+            - node-core-latest
+            - node-amqplib
+            - node-amqp10
+            - node-aws-sdk
+            - node-bluebird
+            - node-bunyan
+            - node-cassandra
+            - node-connect
+            - node-couchbase
+            - node-dns
+            - node-elasticsearch
+            - node-express
+            - node-fastify
+            - node-fs-8
+            - node-fs-10
+            - node-fs-12
+            - node-fs-14
+            - node-fs-15
+            - node-fs-latest
+            - node-generic-pool
+            - node-google-cloud-pubsub
+            - node-graphql
+            - node-grpc
+            - node-hapi
+            - node-http
+            - node-http2
+            - node-jest
+            - node-kafkajs
+            - node-knex
+            - node-koa
+            # - node-limitd-client
+            - node-memcached
+            - node-microgateway-core
+            - node-mocha
+            - node-mongodb-core
+            - node-mongoose
+            - node-mysql
+            - node-net
+            - node-paperplane
+            - node-pino
+            - node-postgres
+            - node-promise-js
+            - node-promise
+            - node-q
+            - node-redis
+            - node-restify
+            - node-router
+            - node-tedious
+            - node-when
+            - node-winston
   prebuild:
     jobs:
       # Linux x64
@@ -1249,6 +1375,7 @@ workflows:
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
+      - node-bench-sirun-startup-latest
       - node-amqplib
       - node-amqp10
       - node-aws-sdk

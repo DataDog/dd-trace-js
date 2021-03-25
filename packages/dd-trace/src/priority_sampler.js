@@ -41,7 +41,7 @@ class PrioritySampler {
       : this._isSampledByAgent(context)
   }
 
-  sample (span) {
+  sample (span, auto = true) {
     if (!span) return
 
     const context = this._getContext(span)
@@ -55,7 +55,9 @@ class PrioritySampler {
       return
     }
 
-    context._sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
+    if (auto) {
+      context._sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
+    }
   }
 
   update (rates) {
@@ -106,7 +108,7 @@ class PrioritySampler {
   }
 
   _isSampledByRule (context, rule) {
-    context._tags[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
 
     return rule.sampler.isSampled(context)
   }
@@ -114,7 +116,7 @@ class PrioritySampler {
   _isSampledByRateLimit (context) {
     const allowed = this._limiter.isAllowed()
 
-    context._tags[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+    context._trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
 
     return allowed
   }
@@ -123,7 +125,7 @@ class PrioritySampler {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._tags[SAMPLING_AGENT_DECISION] = sampler.rate()
+    context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
     return sampler.isSampled(context)
   }

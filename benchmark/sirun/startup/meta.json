@@ -1,0 +1,18 @@
+{
+  "name": "startup",
+  "run": "node startup-test.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "control": {
+      "env": {
+        "USE_TRACER": "0"
+      }
+    },
+    "with-tracer": {
+      "env": {
+        "USE_TRACER": "1"
+      }
+    }
+  }
+}

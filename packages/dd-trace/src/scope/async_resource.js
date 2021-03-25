@@ -3,9 +3,15 @@
 const { createHook, executionAsyncResource } = require('async_hooks')
 const Base = require('./base')
 
+let singleton = null
+
 class Scope extends Base {
   constructor (config) {
+    if (singleton) return singleton
+
     super()
+
+    singleton = this
 
     this._ddResourceStore = Symbol('ddResourceStore')
     this._config = config

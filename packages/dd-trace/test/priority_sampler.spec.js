@@ -22,7 +22,10 @@ describe('PrioritySampler', () => {
   beforeEach(() => {
     context = {
       _tags: {},
-      _sampling: {}
+      _sampling: {},
+      _trace: {
+        started: []
+      }
     }
 
     span = {
@@ -262,7 +265,7 @@ describe('PrioritySampler', () => {
     it('should add metrics for agent sample rate', () => {
       prioritySampler.sample(span)
 
-      expect(context._tags).to.have.property('_dd.agent_psr', 1)
+      expect(context._trace).to.have.property('_dd.agent_psr', 1)
     })
 
     it('should add metrics for rule sample rate', () => {
@@ -271,8 +274,8 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(context._tags).to.have.property('_dd.rule_psr', 0)
-      expect(context._tags).to.not.have.property('_dd.limit_psr')
+      expect(context._trace).to.have.property('_dd.rule_psr', 0)
+      expect(context._trace).to.not.have.property('_dd.limit_psr')
     })
 
     it('should add metrics for rate limiter sample rate', () => {
@@ -282,14 +285,21 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(span)
 
-      expect(context._tags).to.have.property('_dd.rule_psr', 0.5)
-      expect(context._tags).to.have.property('_dd.limit_psr', 1)
+      expect(context._trace).to.have.property('_dd.rule_psr', 0.5)
+      expect(context._trace).to.have.property('_dd.limit_psr', 1)
     })
 
     it('should ignore empty span', () => {
+      expect(() => {
+        prioritySampler.sample()
+      }).to.not.throw()
       prioritySampler.sample()
+    })
 
-      expect(context._sampling).to.not.have.property('priority')
+    it('should support manual only sampling', () => {
+      prioritySampler.sample(span, false)
+
+      expect(context._sampling.priority).to.be.undefined
     })
   })
 

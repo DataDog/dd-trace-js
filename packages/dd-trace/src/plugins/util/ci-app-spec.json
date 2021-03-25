@@ -23,5 +23,10 @@
   "git.commit.committer.name",
   "git.commit.author.date",
   "git.commit.author.email",
-  "git.commit.author.name"
+  "git.commit.author.name",
+  "os.platform",
+  "os.version",
+  "os.architecture",
+  "runtime.name",
+  "runtime.version"
 ]

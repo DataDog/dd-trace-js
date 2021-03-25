@@ -1,5 +1,6 @@
 const { getGitMetadata, GIT_BRANCH, GIT_COMMIT_SHA, GIT_REPOSITORY_URL, GIT_TAG } = require('./git')
 const { getCIMetadata } = require('./ci')
+const { getRuntimeAndOSMetadata } = require('./env')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_TYPE = 'test.type'
@@ -28,9 +29,12 @@ function getTestEnvironmentMetadata (testFramework) {
 
   const gitMetadata = getGitMetadata({ commitSHA, branch, repositoryUrl, tag })
 
+  const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
+
   return {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
-    ...ciMetadata
+    ...ciMetadata,
+    ...runtimeAndOSMetadata
   }
 }
