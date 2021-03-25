@@ -55,23 +55,6 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  startSpan (name, fields) {
-    if (fields) {
-      if (fields.references) {
-        return super.startSpan(name, fields)
-      } else if (fields.childOf) {
-        let parent = fields.childOf
-        if (parent instanceof Span) {
-          parent = parent.context()
-        }
-        if (parent instanceof SpanContext) {
-          return this._startSpanInternal(name, fields, parent, REFERENCE_CHILD_OF)
-        }
-      }
-    }
-    return this._startSpanInternal(name, fields, null, null)
-  }
-
   _startSpan (name, fields) {
     const reference = getParent(fields.references)
     const type = reference && reference.type()
