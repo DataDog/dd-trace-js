@@ -1,30 +1,18 @@
 stages:
   - deploy
 
-variables:
-  INDEX_FILE: index.txt
-
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
-copy_to_s3:
-  <<: *common
+deploy_to_reliability_env
   stage: deploy
-  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "master"'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == "testing"'
-      when: on_success
-    - when: manual
-  script:
-    - export ACCESS_KEY_ID=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.secret_key_id --with-decryption --query "Parameter.Value" --out text)
-    - export SECRET_ACCESS_KEY=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.secret_sec_key_id --with-decryption --query "Parameter.Value" --out text)
-    - export AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID
-    - export AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY
-    - echo $CI_COMMIT_REF_NAME >> $INDEX_FILE
-    - echo $CI_COMMIT_SHA >> $INDEX_FILE
-    - echo $GITLAB_USER_NAME >> $INDEX_FILE
-    - aws s3 cp $INDEX_FILE s3://datadog-reliability-env/node/$INDEX_FILE
-    - echo Wrote the following $INDEX_FILE to S3 ...
-    - cat $INDEX_FILE
+  when: on_success
+  trigger:
+    project: DataDog/datadog-reliability-env
+    branch: landerson/node-downstream
+  variables:
+    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
+    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
+    FORCE_TRIGGER: $FORCE_TRIGGER
