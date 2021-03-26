@@ -3,6 +3,7 @@
 !ext/**/*
 !packages/*/lib/**/*
 !packages/*/src/**/*
+!packages/*/browser.js
 !packages/*/index.js
 !prebuilds/**/*
 !protobuf/**/*
@@ -12,6 +13,7 @@
 !LICENSE-3rdparty.csv
 !README.md
 !binding.gyp
+!browser.js
 !index.d.ts
 !index.js
 !init.js
