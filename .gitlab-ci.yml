@@ -4,7 +4,7 @@ stages:
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
-deploy_to_reliability_env
+deploy_to_reliability_env:
   stage: deploy
   when: on_success
   trigger:
