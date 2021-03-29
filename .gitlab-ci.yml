@@ -9,7 +9,6 @@ deploy_to_reliability_env:
   when: on_success
   trigger:
     project: DataDog/datadog-reliability-env
-    branch: landerson/node-downstream
   variables:
     UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
     UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
