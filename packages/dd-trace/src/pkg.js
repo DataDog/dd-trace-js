@@ -9,7 +9,7 @@ function findRoot () {
 
 function findPkg () {
   const cwd = findRoot()
-  const up = readPackageupSync({ cwd })
+  const up = readPackageUpSync({ cwd })
 
   return up && up.pkg ? up.pkg : {}
 }
