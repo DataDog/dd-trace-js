@@ -285,7 +285,7 @@ jobs:
         environment:
           - SIRUN_TEST_DIR=startup
 
-  node-bench-async-hooks:
+  node-bench-sirun-async-hooks:
     <<: *node-bench-sirun-base
     docker:
       - image: node
@@ -1132,7 +1132,7 @@ workflows:
       - node-bench-profiler-latest
       - node-bench-e2e-latest
       - node-bench-sirun-startup-latest
-      - node-bench-async-hooks
+      - node-bench-sirun-async-hooks
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1384,7 +1384,7 @@ workflows:
       - node-bench-profiler-latest
       - node-bench-e2e-latest
       - node-bench-sirun-startup-latest
-      - node-bench-async-hooks
+      - node-bench-sirun-async-hooks
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
