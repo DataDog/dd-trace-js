@@ -1,6 +1,6 @@
 const { createHistogram, PerformanceObserver } = require('perf_hooks')
-const DogStatsD = require('./dogstatsd')
-const statsd = new DogStatsD()
+const StatsD = require('./statsd')
+const statsd = new StatsD()
 
 const histogram = createHistogram()
 const observer = new PerformanceObserver((list) => {

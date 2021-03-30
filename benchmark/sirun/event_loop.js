@@ -1,8 +1,8 @@
 'use strict'
 
 const { monitorEventLoopDelay } = require('perf_hooks')
-const DogStatsD = require('./dogstatsd')
-const statsd = new DogStatsD()
+const StatsD = require('./statsd')
+const statsd = new StatsD()
 
 const histogram = monitorEventLoopDelay({ resolution: 1 })
 
