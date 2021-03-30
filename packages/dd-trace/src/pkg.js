@@ -1,7 +1,7 @@
 'use strict'
 
 const path = require('path')
-const { readPackageUpSync } = require('read-pkg-up')
+const readPkgUp = require('read-pkg-up')
 
 function findRoot () {
   return require.main && require.main.filename ? path.dirname(require.main.filename) : process.cwd()
@@ -9,7 +9,7 @@ function findRoot () {
 
 function findPkg () {
   const cwd = findRoot()
-  const up = readPackageUpSync({ cwd })
+  const up = readPkgUp.sync({ cwd })
 
   return up && up.pkg ? up.pkg : {}
 }
