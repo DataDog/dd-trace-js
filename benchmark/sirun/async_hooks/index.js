@@ -1,8 +1,8 @@
 'use strict'
 
 const ASYNC_HOOKS = process.env.ASYNC_HOOKS && process.env.ASYNC_HOOKS.split(',')
-const DURATION = process.env.DURATION || 15 // seconds
-const PROMISES_PER_SECOND = process.env.PROMISES_PER_SECOND || 250000
+const PROMISES_PER_INTERVAL = process.env.PROMISES_PER_INTERVAL || 250000
+const INTERVALS = process.env.INTERVALS || 10
 
 if (ASYNC_HOOKS) {
   const { createHook } = require('async_hooks')
@@ -16,16 +16,20 @@ if (ASYNC_HOOKS) {
   createHook(hooks).enable()
 }
 
-const interval = setInterval(async () => {
+async function run (count = 0) {
+  if (count >= INTERVALS) return
+
   const promises = []
 
-  for (let i = 0; i < PROMISES_PER_SECOND; i++) {
+  for (let i = 0; i < PROMISES_PER_INTERVAL; i++) {
     promises.push(new Promise((resolve, reject) => resolve()))
   }
 
   await Promise.all(promises)
-}, 1000)
 
-setTimeout(() => {
-  clearInterval(interval)
-}, DURATION * 1000)
+  count++
+
+  setTimeout(() => run(count + 1), 100)
+}
+
+run()
