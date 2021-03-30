@@ -1,5 +1,5 @@
 const coalesce = require('koalas')
-const getRepoInfo = require('../../../../../vendor/git-repo-info')
+const getRepoInfo = require('../../vendor/git-repo-info')
 
 const { sanitizedExec } = require('./exec')
 
