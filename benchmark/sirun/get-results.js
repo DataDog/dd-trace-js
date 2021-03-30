@@ -5,7 +5,7 @@ const { execSync } = require('child_process')
 
 const { CIRCLE_TOKEN } = process.env
 
-const ref = process.argv.length > 2 ? process.arv[2] : 'HEAD'
+const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
 const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
 
 const circleHeaders = CIRCLE_TOKEN ? {
@@ -47,6 +47,35 @@ async function getBuildNumsFromGithub (ref) {
   return namesAndNums
 }
 
+function mean (items) {
+  const len = items.length
+  const total = items.reduce((prev, cur) => prev + cur, 0)
+  return total / len
+}
+
+function stddev (m, items) {
+  return Math.sqrt(mean(items.map(x => (x - m) ** 2)))
+}
+
+function summary (iterations) {
+  const stats = {}
+  for (const iteration of iterations) {
+    for (const [k, v] of Object.entries(iteration)) {
+      if (!stats[k]) {
+        stats[k] = []
+      }
+      stats[k].push(v)
+    }
+  }
+  const result = {}
+  for (const [name, items] of Object.entries(stats)) {
+    const m = mean(items)
+    const s = stddev(m, items)
+    result[name] = { mean: m, stddev: s }
+  }
+  return result
+}
+
 async function main () {
   const builds = await getBuildNumsFromGithub(gitCommit)
   const buildData = {}
@@ -63,6 +92,10 @@ async function main () {
       }
       delete result.name
       delete result.variant
+      if (result.iterations) {
+        result.summary = summary(result.iterations)
+      }
+      delete result.iterations
       buildData[name][variant] = result
     }
   }
