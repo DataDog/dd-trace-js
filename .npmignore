@@ -6,6 +6,7 @@
 !prebuilds/**/*
 !protobuf/**/*
 !scripts/**/*
+!vendor/**/*
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
@@ -15,4 +16,3 @@
 !index.js
 !init.js
 !package.json
-!vendor/*
