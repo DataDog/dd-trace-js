@@ -15,3 +15,4 @@
 !index.js
 !init.js
 !package.json
+!vendor/*
