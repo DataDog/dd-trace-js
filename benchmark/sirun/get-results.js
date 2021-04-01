@@ -78,7 +78,7 @@ function summary (iterations) {
   for (const [name, items] of Object.entries(stats)) {
     const m = mean(items)
     const s = stddev(m, items)
-    result[name] = { mean: m, stddev: s }
+    result[name] = { mean: m, stddev: s, min: Math.min(...items), max: Math.max(...items) }
   }
   return result
 }
