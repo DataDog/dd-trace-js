@@ -12,8 +12,8 @@ const circleHeaders = CIRCLE_TOKEN ? {
   'circle-token': CIRCLE_TOKEN
 } : {}
 
-const statusUrl = ref =>
-  `https://api.github.com/repos/DataDog/dd-trace-js/commits/${ref}/statuses?per_page=100`
+const statusUrl = (ref, page) =>
+  `https://api.github.com/repos/DataDog/dd-trace-js/commits/${ref}/statuses?per_page=100&page=${page}`
 const artifactsUrl = num =>
   `https://circleci.com/api/v1.1/project/github/DataDog/dd-trace-js/${num}/artifacts`
 
@@ -38,7 +38,14 @@ function get (url, headers) {
 }
 
 async function getBuildNumsFromGithub (ref) {
-  const results = JSON.parse(await get(statusUrl(ref)))
+  const results = []
+  let page = 1
+  let reply = JSON.parse(await get(statusUrl(ref, page)))
+  results.push(...reply)
+  while (reply.length === 100) {
+    reply = JSON.parse(await get(statusUrl(ref, ++page)))
+    results.push(...reply)
+  }
   const namesAndNums = {}
   for (const build of results.filter(s => s.context.includes('-sirun-'))) {
     const url = new URL(build.target_url)
