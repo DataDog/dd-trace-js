@@ -18,7 +18,7 @@ require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,parent-module,MIT,Copyright Sindre Sorhus
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
-require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
+require,pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,read-pkg-up,MIT,Copyright Sindre Sorhus
 require,require-in-the-middle,MIT,Copyright 2016-2018 Thomas Watson Steen
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
