@@ -39,13 +39,12 @@ function get (url, headers) {
 
 async function getBuildNumsFromGithub (ref) {
   const results = []
-  let page = 1
-  let reply = JSON.parse(await get(statusUrl(ref, page)))
-  results.push(...reply)
-  while (reply.length === 100) {
+  let page = 0
+  let reply
+  do {
     reply = JSON.parse(await get(statusUrl(ref, ++page)))
     results.push(...reply)
-  }
+  } while (reply.length === 100)
   const namesAndNums = {}
   for (const build of results.filter(s => s.context.includes('-sirun-'))) {
     const url = new URL(build.target_url)
