@@ -1,4 +1,5 @@
 {
+  "name": "scope-manager",
   "run": "node index.js",
   "cachegrind": true,
   "iterations": 10,
