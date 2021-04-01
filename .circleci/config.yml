@@ -310,6 +310,13 @@ jobs:
           - PLUGINS=q
           - SIRUN_TEST_DIR=plugin-q
 
+  node-bench-sirun-scope-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - SIRUN_TEST_DIR=scope
+
   # Core tests
 
   node-core-8:
@@ -1261,6 +1268,7 @@ workflows:
       - node-bench-sirun-async-hooks
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
+      - node-bench-sirun-scope-latest
   prebuild:
     jobs:
       # Linux x64
@@ -1467,3 +1475,4 @@ workflows:
       - node-bench-sirun-async-hooks
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
+      - node-bench-sirun-scope-latest
