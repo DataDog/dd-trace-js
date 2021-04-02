@@ -35,7 +35,7 @@ describe('profilers/inspector/cpu', () => {
       })
     })
 
-    it('should skip redundant samples', done => {
+    it.skip('should skip redundant samples', done => {
       profiler.start({ mapper })
 
       setTimeout(() => {
