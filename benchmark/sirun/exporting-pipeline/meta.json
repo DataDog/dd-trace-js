@@ -1,4 +1,5 @@
 {
+  "name": "exporting pipeline",
   "setup": "bash -c \"nohup node ../../e2e/fake-agent.js &\"",
   "run": "node index.js",
   "iterations": 10,
