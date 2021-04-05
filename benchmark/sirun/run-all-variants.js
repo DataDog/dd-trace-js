@@ -19,10 +19,9 @@ const interval = setInterval(() => {
   // eslint-disable-next-line no-console
   console.error('This test is still running one minute later...')
 }, 60000)
-const clear = () => clearInterval(interval)
 
-if (metaJson.variants) {
-  (async () => {
+;(async () => {
+  if (metaJson.variants) {
     const variants = metaJson.variants
     const len = Object.keys(variants).length
     let count = 0
@@ -30,10 +29,11 @@ if (metaJson.variants) {
       const variantEnv = Object.assign({}, env, { SIRUN_VARIANT: variant })
       await exec('sirun', ['meta.json'], { env: variantEnv, stdio: 'inherit' })
       if (++count === len) {
-        clear()
+        clearInterval(interval)
       }
     }
-  })()
-} else {
-  childProcess.exec('sirun', ['meta.json'], { env, stdio: 'inherit' }).on('exit', clear)
-}
+  } else {
+    await exec('sirun', ['meta.json'], { env, stdio: 'inherit' })
+    clearInterval(interval)
+  }
+})()
