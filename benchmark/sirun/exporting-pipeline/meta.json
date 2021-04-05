@@ -1,8 +1,8 @@
 {
-  "setup": "nohup node ../../e2e/fake-agent.js",
+  "setup": "bash -c \"nohup node ../../e2e/fake-agent.js &\"",
   "run": "node index.js",
+  "iterations": 10,
   "cachegrind": true,
-  "iterations": 5,
   "variants": {
     "0.4": { "env": { "ENCODER_VERSION": "0.4" } },
     "0.5": { "env": { "ENCODER_VERSION": "0.5" } }
