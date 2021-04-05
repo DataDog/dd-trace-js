@@ -4,49 +4,25 @@
   "cachegrind": true,
   "iterations": 10,
   "variants": {
-    "base_1k": {
-      "env": {
-        "SCOPE_MANAGER": "base",
-        "COUNT": "1000"
-      }
-    },
-    "async_hooks_1k": {
-      "env": {
-        "SCOPE_MANAGER": "async_hooks",
-        "COUNT": "1000"
-      }
-    },
-    "async_local_storage_1k": {
-      "env": {
-        "SCOPE_MANAGER": "async_local_storage",
-        "COUNT": "1000"
-      }
-    },
-    "async_resource_1k": {
-      "env": {
-        "SCOPE_MANAGER": "async_resource",
-        "COUNT": "1000"
-      }
-    },
-    "base_10k": {
+    "base": {
       "env": {
         "SCOPE_MANAGER": "base",
         "COUNT": "10000"
       }
     },
-    "async_hooks_10k": {
+    "async_hooks": {
       "env": {
         "SCOPE_MANAGER": "async_hooks",
         "COUNT": "10000"
       }
     },
-    "async_local_storage_10k": {
+    "async_local_storage": {
       "env": {
         "SCOPE_MANAGER": "async_local_storage",
         "COUNT": "10000"
       }
     },
-    "async_resource_10k": {
+    "async_resource": {
       "env": {
         "SCOPE_MANAGER": "async_resource",
         "COUNT": "10000"
