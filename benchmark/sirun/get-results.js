@@ -5,15 +5,15 @@ const { execSync } = require('child_process')
 
 const { CIRCLE_TOKEN } = process.env
 
-const ref = process.argv.length > 2 ? process.arv[2] : 'HEAD'
+const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
 const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
 
 const circleHeaders = CIRCLE_TOKEN ? {
   'circle-token': CIRCLE_TOKEN
 } : {}
 
-const statusUrl = ref =>
-  `https://api.github.com/repos/DataDog/dd-trace-js/commits/${ref}/statuses?per_page=100`
+const statusUrl = (ref, page) =>
+  `https://api.github.com/repos/DataDog/dd-trace-js/commits/${ref}/statuses?per_page=100&page=${page}`
 const artifactsUrl = num =>
   `https://circleci.com/api/v1.1/project/github/DataDog/dd-trace-js/${num}/artifacts`
 
@@ -38,13 +38,48 @@ function get (url, headers) {
 }
 
 async function getBuildNumsFromGithub (ref) {
-  const results = JSON.parse(await get(statusUrl(ref)))
+  const results = []
+  let page = 0
+  let reply
+  do {
+    reply = JSON.parse(await get(statusUrl(ref, ++page)))
+    results.push(...reply)
+  } while (reply.length === 100)
   const namesAndNums = {}
   for (const build of results.filter(s => s.context.includes('-sirun-'))) {
     const url = new URL(build.target_url)
     namesAndNums[build.context.replace('ci/circleci: ', '')] = url.pathname.split('/').pop()
   }
   return namesAndNums
+}
+
+function mean (items) {
+  const len = items.length
+  const total = items.reduce((prev, cur) => prev + cur, 0)
+  return total / len
+}
+
+function stddev (m, items) {
+  return Math.sqrt(mean(items.map(x => (x - m) ** 2)))
+}
+
+function summary (iterations) {
+  const stats = {}
+  for (const iteration of iterations) {
+    for (const [k, v] of Object.entries(iteration)) {
+      if (!stats[k]) {
+        stats[k] = []
+      }
+      stats[k].push(v)
+    }
+  }
+  const result = {}
+  for (const [name, items] of Object.entries(stats)) {
+    const m = mean(items)
+    const s = stddev(m, items)
+    result[name] = { mean: m, stddev: s, min: Math.min(...items), max: Math.max(...items) }
+  }
+  return result
 }
 
 async function main () {
@@ -63,6 +98,10 @@ async function main () {
       }
       delete result.name
       delete result.variant
+      if (result.iterations) {
+        result.summary = summary(result.iterations)
+      }
+      delete result.iterations
       buildData[name][variant] = result
     }
   }

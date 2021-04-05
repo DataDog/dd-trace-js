@@ -1,0 +1,10 @@
+{
+  "name": "encoders",
+  "run": "node index.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "0.4": { "env": { "ENCODER_VERSION": "0.4" } },
+    "0.5": { "env": { "ENCODER_VERSION": "0.5" } }
+  }
+}
