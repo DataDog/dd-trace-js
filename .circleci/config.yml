@@ -1135,12 +1135,6 @@ workflows:
       - node-integration-14
       - node-integration-15
       - node-integration-latest
-      - node-bench-latest
-      - node-bench-profiler-latest
-      - node-bench-e2e-latest
-      - node-bench-sirun-startup-latest
-      - node-bench-sirun-async-hooks
-      - node-bench-sirun-encoders-latest
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1247,6 +1241,14 @@ workflows:
             - node-tedious
             - node-when
             - node-winston
+  bench:
+    jobs:
+      - node-bench-latest
+      - node-bench-profiler-latest
+      - node-bench-e2e-latest
+      - node-bench-sirun-startup-latest
+      - node-bench-sirun-async-hooks
+      - node-bench-sirun-encoders-latest
   prebuild:
     jobs:
       # Linux x64
@@ -1388,12 +1390,6 @@ workflows:
       - node-integration-14
       - node-integration-15
       - node-integration-latest
-      - node-bench-latest
-      - node-bench-profiler-latest
-      - node-bench-e2e-latest
-      - node-bench-sirun-startup-latest
-      - node-bench-sirun-async-hooks
-      - node-bench-sirun-encoders-latest
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1443,3 +1439,18 @@ workflows:
       - node-tedious
       - node-when
       - node-winston
+  nightly-bench:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - node-bench-latest
+      - node-bench-profiler-latest
+      - node-bench-e2e-latest
+      - node-bench-sirun-startup-latest
+      - node-bench-sirun-async-hooks
+      - node-bench-sirun-encoders-latest
