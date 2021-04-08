@@ -1,0 +1,32 @@
+{
+  "name": "scope-manager",
+  "run": "node index.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "base": {
+      "env": {
+        "SCOPE_MANAGER": "base",
+        "COUNT": "10000"
+      }
+    },
+    "async_hooks": {
+      "env": {
+        "SCOPE_MANAGER": "async_hooks",
+        "COUNT": "10000"
+      }
+    },
+    "async_local_storage": {
+      "env": {
+        "SCOPE_MANAGER": "async_local_storage",
+        "COUNT": "10000"
+      }
+    },
+    "async_resource": {
+      "env": {
+        "SCOPE_MANAGER": "async_resource",
+        "COUNT": "10000"
+      }
+    }
+  }
+}
