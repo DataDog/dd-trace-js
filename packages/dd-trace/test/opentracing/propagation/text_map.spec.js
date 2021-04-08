@@ -191,6 +191,19 @@ describe('TextMapPropagator', () => {
       expect(spanContext._traceFlags).to.have.property('sampled', false)
     })
 
+    it('should extract from an aws-sqsd header', () => {
+      const carrier = {
+        'x-aws-sqsd-attr-_datadog': JSON.stringify(textMap)
+      }
+
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: id('123', 10),
+        spanId: id('-456', 10)
+      }))
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.experimental.b3 = true
