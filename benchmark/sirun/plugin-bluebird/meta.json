@@ -1,0 +1,20 @@
+{
+  "name": "plugin-bluebird",
+  "run": "node index.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "control": {
+      "env": {
+        "USE_TRACER": "0",
+        "COUNT": "50000"
+      }
+    },
+    "with-tracer": {
+      "env": {
+        "USE_TRACER": "1",
+        "COUNT": "50000"
+      }
+    }
+  }
+}
