@@ -310,6 +310,14 @@ jobs:
           - PLUGINS=q
           - SIRUN_TEST_DIR=plugin-q
 
+  node-bench-sirun-plugin-bluebird-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - PLUGINS=bluebird
+          - SIRUN_TEST_DIR=plugin-bluebird
+
   node-bench-sirun-scope-latest:
     <<: *node-bench-sirun-base
     docker:
@@ -1268,6 +1276,7 @@ workflows:
       - node-bench-sirun-async-hooks
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
+      - node-bench-sirun-plugin-bluebird-latest
       - node-bench-sirun-scope-latest
   prebuild:
     jobs:
@@ -1475,4 +1484,5 @@ workflows:
       - node-bench-sirun-async-hooks
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
+      - node-bench-sirun-plugin-bluebird-latest
       - node-bench-sirun-scope-latest
