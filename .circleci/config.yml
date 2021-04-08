@@ -79,6 +79,9 @@ node-bench-sirun-base: &node-bench-sirun-base
     - *yarn-install
     - *save-yarn-cache
     - run:
+        name: Install dependencies
+        command: "[[ -n $PLUGINS ]] && node ./scripts/install_plugin_modules || exit 0"
+    - run:
         name: Install system deps
         command: apt-get update && apt-get install -y valgrind wget
     - run:
@@ -298,6 +301,14 @@ jobs:
       - image: node
         environment:
           - SIRUN_TEST_DIR=encoding
+
+  node-bench-sirun-plugin-q-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - PLUGINS=q
+          - SIRUN_TEST_DIR=plugin-q
 
   # Core tests
 
@@ -1249,6 +1260,7 @@ workflows:
       - node-bench-sirun-startup-latest
       - node-bench-sirun-async-hooks
       - node-bench-sirun-encoders-latest
+      - node-bench-sirun-plugin-q-latest
   prebuild:
     jobs:
       # Linux x64
@@ -1454,3 +1466,4 @@ workflows:
       - node-bench-sirun-startup-latest
       - node-bench-sirun-async-hooks
       - node-bench-sirun-encoders-latest
+      - node-bench-sirun-plugin-q-latest
