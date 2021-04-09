@@ -129,6 +129,24 @@ describe('Plugin', () => {
               triggerBucket.on('connect', () => triggerBucket.disconnect())
             }
           })
+
+          it('should handle storage queries', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'couchbase.upsert')
+                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('resource', 'couchbase.upsert')
+                expect(span.meta).to.have.property('span.kind', 'client')
+                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
+              })
+              .then(done)
+              .catch(done)
+
+            bucket.upsert('testdoc', { name: 'Frank' }, (err, result) => {
+              if (err) done(err)
+            })
+          })
         })
 
         describe('queries on buckets', () => {
