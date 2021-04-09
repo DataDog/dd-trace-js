@@ -10,6 +10,9 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  ERROR_TYPE,
   getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -92,6 +95,9 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
           tracer.scope().active().setTag(TEST_STATUS, 'pass')
         } catch (error) {
           tracer.scope().active().setTag(TEST_STATUS, 'fail')
+          tracer.scope().active().setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
+          tracer.scope().active().setTag(ERROR_MESSAGE, error.message)
+          tracer.scope().active().setTag(ERROR_STACK, error.stack)
           throw error
         } finally {
           tracer
