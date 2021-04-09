@@ -670,6 +670,33 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (protocol === 'http') {
+          it('should skip requests to the agent', done => {
+            const app = express()
+
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
+
+            getPort().then(port => {
+              const timer = setTimeout(done, 100)
+
+              agent
+                .use(() => {
+                  done(new Error('Request to the agent was traced.'))
+                  clearTimeout(timer)
+                })
+
+              appListener = server(app, port, () => {
+                const req = http.request(tracer._tracer._url.href)
+
+                req.on('error', () => {})
+                req.end()
+              })
+            })
+          })
+        }
       })
 
       describe('with service configuration', () => {

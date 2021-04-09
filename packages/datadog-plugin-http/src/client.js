@@ -297,7 +297,7 @@ function getAgentFilter (url) {
   // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
   const agentFilter = url.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-  return RegExp(`^${agentFilter}/.*$`, 'i')
+  return RegExp(`^${agentFilter}.*$`, 'i')
 }
 
 function normalizeConfig (tracer, config) {
