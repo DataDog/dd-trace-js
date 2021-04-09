@@ -9,6 +9,9 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  ERROR_TYPE,
   getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -71,6 +74,9 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             }
           } catch (error) {
             activeSpan.setTag(TEST_STATUS, 'fail')
+            activeSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
+            activeSpan.setTag(ERROR_MESSAGE, error.message)
+            activeSpan.setTag(ERROR_STACK, error.stack)
             throw error
           } finally {
             activeSpan
