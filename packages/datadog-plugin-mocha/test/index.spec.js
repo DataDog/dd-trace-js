@@ -84,7 +84,7 @@ const TESTS = [
   }
 ]
 
-describe('mocha', () => {
+describe('Plugin', () => {
   let Mocha
   withVersions(plugin, 'mocha', version => {
     afterEach(() => {
