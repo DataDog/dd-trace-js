@@ -1,0 +1,21 @@
+{
+  "name": "net",
+  "variants": {
+    "client-control": {
+      "setup": "bash -c \"nohup node server.js &\"",
+      "run": "node client.js"
+    },
+    "client-with-tracer": {
+      "setup": "bash -c \"nohup node server.js &\"",
+      "run": "node -r ../../../init.js client.js"
+    },
+    "server-control": {
+      "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
+      "run": "node server.js"
+    },
+    "server-with-tracer": {
+      "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
+      "run": "node -r ../../../init.js server.js"
+    }
+  }
+}
