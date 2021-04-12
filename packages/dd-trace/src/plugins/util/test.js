@@ -8,12 +8,19 @@ const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
 
+const ERROR_TYPE = 'error.type'
+const ERROR_MESSAGE = 'error.message'
+const ERROR_STACK = 'error.stack'
+
 module.exports = {
   TEST_FRAMEWORK,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  ERROR_TYPE,
+  ERROR_MESSAGE,
+  ERROR_STACK,
   getTestEnvironmentMetadata
 }
 

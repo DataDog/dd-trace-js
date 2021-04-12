@@ -7,7 +7,10 @@ const {
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
-  TEST_STATUS
+  TEST_STATUS,
+  ERROR_TYPE,
+  ERROR_MESSAGE,
+  ERROR_STACK
 } = require('../../dd-trace/src/plugins/util/test')
 const { expect } = require('chai')
 const path = require('path')
@@ -117,6 +120,13 @@ describe('Plugin', () => {
                 [TEST_FRAMEWORK]: 'mocha',
                 [TEST_SUITE]: testSuite
               })
+              if (test.fileName === 'mocha-test-fail.js') {
+                expect(traces[0][0].meta).to.contain({
+                  [ERROR_TYPE]: 'AssertionError',
+                  [ERROR_MESSAGE]: 'expected true to equal false'
+                })
+                expect(traces[0][0].meta[ERROR_STACK]).not.to.be.undefined
+              }
               expect(traces[0][0].meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
               expect(traces[0][0].type).to.equal('test')
               expect(traces[0][0].name).to.equal('mocha.test')

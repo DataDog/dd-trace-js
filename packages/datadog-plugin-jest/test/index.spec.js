@@ -3,6 +3,16 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const { expect } = require('chai')
+const {
+  TEST_FRAMEWORK,
+  TEST_TYPE,
+  TEST_NAME: TEST_NAME_TAG,
+  TEST_SUITE: TEST_SUITE_TAG,
+  TEST_STATUS,
+  ERROR_TYPE,
+  ERROR_MESSAGE,
+  ERROR_STACK
+} = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
   let tracer
@@ -41,10 +51,11 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
-              'test.name': TEST_NAME,
-              'test.status': 'pass',
-              'test.suite': TEST_SUITE,
-              'test.type': 'test'
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME_TAG]: TEST_NAME,
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE_TAG]: TEST_SUITE,
+              [TEST_TYPE]: 'test'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
@@ -73,11 +84,15 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
-              'test.name': TEST_NAME,
-              'test.status': 'fail',
-              'test.suite': TEST_SUITE,
-              'test.type': 'test'
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME_TAG]: TEST_NAME,
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE_TAG]: TEST_SUITE,
+              [TEST_TYPE]: 'test',
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'custom error message'
             })
+            expect(traces[0][0].meta[ERROR_STACK]).not.to.be.undefined
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
             expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
@@ -87,7 +102,7 @@ describe('Plugin', () => {
           name: 'test_start',
           test: {
             fn: () => {
-              throw Error
+              throw Error('custom error message')
             },
             name: TEST_NAME
           }
@@ -104,10 +119,11 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
-              'test.name': TEST_NAME,
-              'test.status': 'skip',
-              'test.suite': TEST_SUITE,
-              'test.type': 'test'
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME_TAG]: TEST_NAME,
+              [TEST_STATUS]: 'skip',
+              [TEST_SUITE_TAG]: TEST_SUITE,
+              [TEST_TYPE]: 'test'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
@@ -133,10 +149,11 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
-              'test.name': TEST_NAME,
-              'test.status': 'pass',
-              'test.suite': TEST_SUITE,
-              'test.type': 'test'
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME_TAG]: TEST_NAME,
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE_TAG]: TEST_SUITE,
+              [TEST_TYPE]: 'test'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
@@ -231,10 +248,11 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
-              'test.name': TEST_NAME_FROM_EVENT,
-              'test.status': 'pass',
-              'test.suite': TEST_SUITE,
-              'test.type': 'test'
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME_TAG]: TEST_NAME_FROM_EVENT,
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE_TAG]: TEST_SUITE,
+              [TEST_TYPE]: 'test'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
@@ -269,10 +287,11 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
-              'test.name': TEST_NAME,
-              'test.status': 'fail',
-              'test.suite': TEST_SUITE,
-              'test.type': 'test'
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME_TAG]: TEST_NAME,
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE_TAG]: TEST_SUITE,
+              [TEST_TYPE]: 'test'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
