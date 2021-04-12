@@ -1,5 +1,7 @@
 {
   "name": "net",
+  "iterations": 10,
+  "cachegrind": true,
   "variants": {
     "client-control": {
       "setup": "bash -c \"nohup node server.js &\"",
