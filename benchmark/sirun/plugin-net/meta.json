@@ -1,27 +1,15 @@
 {
   "name": "net",
-  "iterations": 10,
   "cachegrind": true,
+  "iterations": 10,
+  "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 & echo $! > server.pid\"",
+  "teardown": "bash -c \"kill -9 `cat server.pid`\"",
   "variants": {
-    "client-control": {
-      "setup": "bash -c \"nohup node server.js &\"",
-      "run": "node client.js",
-      "env": { "PORT": "3001" }
+    "control": {
+      "run": "node client.js"
     },
-    "client-with-tracer": {
-      "setup": "bash -c \"nohup node server.js &\"",
-      "run": "node -r ../../../init.js client.js",
-      "env": { "PORT": "3002" }
-    },
-    "server-control": {
-      "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
-      "run": "node server.js",
-      "env": { "PORT": "3003" }
-    },
-    "server-with-tracer": {
-      "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
-      "run": "node -r ../../../init.js server.js",
-      "env": { "PORT": "3004" }
+    "with-tracer": {
+      "run": "node -r ../../../init.js client.js"
     }
   }
 }
