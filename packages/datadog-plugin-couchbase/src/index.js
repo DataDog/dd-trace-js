@@ -109,7 +109,7 @@ function addBucketTag (span, bucket) {
 }
 
 function findCallbackIndex (args) {
-  for (let i = args.length - 1; i >= 0; i--) {
+  for (let i = args.length - 1; i >= 2; i--) {
     if (typeof args[i] === 'function') return i
   }
 
@@ -128,7 +128,7 @@ function wrapCallback (span, callback) {
 module.exports = [
   {
     name: 'couchbase',
-    versions: ['^2.4.2'],
+    versions: ['^2.6'],
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       tracer.scope().bind(Bucket.prototype)
@@ -157,7 +157,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['^2.4.2'],
+    versions: ['^2.6'],
     file: 'lib/cluster.js',
     patch (Cluster, tracer, config) {
       this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))

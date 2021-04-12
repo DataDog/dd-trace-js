@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -146,6 +147,14 @@ describe('Plugin', () => {
             bucket.upsert('testdoc', { name: 'Frank' }, (err, result) => {
               if (err) done(err)
             })
+          })
+
+          it('should skip instrumentation for invalid arguments', () => {
+            try {
+              bucket.upsert('testdoc', { name: 'Frank' })
+            } catch (e) {
+              expect(e.message).to.equal('Third argument needs to be an object or callback.')
+            }
           })
         })
 
