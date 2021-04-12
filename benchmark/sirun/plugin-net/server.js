@@ -8,4 +8,4 @@ const server = net.createServer(c => {
     c.on('end', () => server.close())
   }
   c.pipe(c)
-}).listen(3000)
+}).listen(process.env.PORT)

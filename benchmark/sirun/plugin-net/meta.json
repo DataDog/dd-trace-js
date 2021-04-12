@@ -5,19 +5,23 @@
   "variants": {
     "client-control": {
       "setup": "bash -c \"nohup node server.js &\"",
-      "run": "node client.js"
+      "run": "node client.js",
+      "env": { "PORT": "3001" }
     },
     "client-with-tracer": {
       "setup": "bash -c \"nohup node server.js &\"",
-      "run": "node -r ../../../init.js client.js"
+      "run": "node -r ../../../init.js client.js",
+      "env": { "PORT": "3002" }
     },
     "server-control": {
       "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
-      "run": "node server.js"
+      "run": "node server.js",
+      "env": { "PORT": "3003" }
     },
     "server-with-tracer": {
       "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
-      "run": "node -r ../../../init.js server.js"
+      "run": "node -r ../../../init.js server.js",
+      "env": { "PORT": "3004" }
     }
   }
 }
