@@ -4,16 +4,15 @@ const Tags = require('../../../ext/tags')
 const Kinds = require('../../../ext/kinds')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function startQuerySpan (tracer, config, query) {
+function startSpan (tracer, config, operation, resource) {
   const childOf = tracer.scope().active()
-  const span = tracer.startSpan('couchbase.query', {
+  const span = tracer.startSpan(`couchbase.${operation}`, {
     childOf,
     tags: {
       'db.type': 'couchbase',
-      'span.type': 'sql',
       'component': 'couchbase',
       'service.name': config.service || `${tracer._service}-couchbase`,
-      'resource.name': query,
+      'resource.name': resource,
       [Tags.SPAN_KIND]: Kinds.CLIENT
     }
   })
@@ -74,7 +73,9 @@ function createWrapN1qlReq (tracer, config) {
 
       const scope = tracer.scope()
       const n1qlQuery = q && q.statement
-      const span = startQuerySpan(tracer, config, n1qlQuery)
+      const span = startSpan(tracer, config, 'query', n1qlQuery)
+
+      span.setTag('span.type', 'sql')
 
       addBucketTag(span, this)
       onRequestFinish(emitter, span)
@@ -84,51 +85,87 @@ function createWrapN1qlReq (tracer, config) {
   }
 }
 
+function createWrapStore (tracer, config, operation) {
+  return function wrapStore (store) {
+    return function storeWithTrace (key, value, options, callback) {
+      const callbackIndex = findCallbackIndex(arguments)
+
+      if (callbackIndex < 0) return store.apply(this, arguments)
+
+      const scope = tracer.scope()
+      const span = startSpan(tracer, config, operation)
+
+      addBucketTag(span, this)
+
+      arguments[callbackIndex] = wrapCallback(span, arguments[callbackIndex])
+
+      return scope.bind(store, span).apply(this, arguments)
+    }
+  }
+}
+
 function addBucketTag (span, bucket) {
   span.setTag('couchbase.bucket.name', bucket.name || bucket._name)
 }
 
-function wrapRequests (Class, tracer, config) {
-  this.wrap(Class.prototype, '_n1qlReq', createWrapN1qlReq(tracer, config))
+function findCallbackIndex (args) {
+  for (let i = args.length - 1; i >= 2; i--) {
+    if (typeof args[i] === 'function') return i
+  }
+
+  return -1
 }
 
-function unwrapRequests (Class) {
-  this.unwrap(Class.prototype, '_n1qlReq')
-}
+function wrapCallback (span, callback) {
+  return function (err, result) {
+    span.setTag('error', err)
+    span.finish()
 
-function wrapCouchbase (Class, tracer, config) {
-  this.wrap(Class.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
-  this.wrap(Class.prototype, 'query', createWrapQuery(tracer))
-}
-
-function unwrapCouchbase (Class) {
-  this.unwrap(Class.prototype, '_maybeInvoke')
-  this.unwrap(Class.prototype, 'query')
+    return callback.apply(this, arguments)
+  }
 }
 
 module.exports = [
   {
     name: 'couchbase',
-    versions: ['^2.4.2'],
+    versions: ['^2.6'],
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       tracer.scope().bind(Bucket.prototype)
 
-      wrapCouchbase.call(this, Bucket, tracer, config)
-      wrapRequests.call(this, Bucket, tracer, config)
+      this.wrap(Bucket.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
+      this.wrap(Bucket.prototype, 'query', createWrapQuery(tracer))
+      this.wrap(Bucket.prototype, '_n1qlReq', createWrapN1qlReq(tracer, config))
+      this.wrap(Bucket.prototype, 'upsert', createWrapStore(tracer, config, 'upsert'))
+      this.wrap(Bucket.prototype, 'insert', createWrapStore(tracer, config, 'insert'))
+      this.wrap(Bucket.prototype, 'replace', createWrapStore(tracer, config, 'replace'))
+      this.wrap(Bucket.prototype, 'append', createWrapStore(tracer, config, 'append'))
+      this.wrap(Bucket.prototype, 'prepend', createWrapStore(tracer, config, 'prepend'))
     },
     unpatch (Bucket, tracer) {
       tracer.scope().unbind(Bucket.prototype)
 
-      unwrapCouchbase.call(this, Bucket)
-      unwrapRequests.call(this, Bucket)
+      this.unwrap(Bucket.prototype, '_maybeInvoke')
+      this.unwrap(Bucket.prototype, 'query')
+      this.unwrap(Bucket.prototype, '_n1qlReq')
+      this.unwrap(Bucket.prototype, 'upsert')
+      this.unwrap(Bucket.prototype, 'insert')
+      this.unwrap(Bucket.prototype, 'replace')
+      this.unwrap(Bucket.prototype, 'append')
+      this.unwrap(Bucket.prototype, 'prepend')
     }
   },
   {
     name: 'couchbase',
-    versions: ['^2.4.2'],
+    versions: ['^2.6'],
     file: 'lib/cluster.js',
-    patch: wrapCouchbase,
-    unpatch: unwrapCouchbase
+    patch (Cluster, tracer, config) {
+      this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
+      this.wrap(Cluster.prototype, 'query', createWrapQuery(tracer))
+    },
+    unpatch (Cluster) {
+      this.unwrap(Cluster.prototype, '_maybeInvoke')
+      this.unwrap(Cluster.prototype, 'query')
+    }
   }
 ]

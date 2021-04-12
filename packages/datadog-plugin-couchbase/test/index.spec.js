@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -127,6 +128,32 @@ describe('Plugin', () => {
                 if (err) done(err)
               })
               triggerBucket.on('connect', () => triggerBucket.disconnect())
+            }
+          })
+
+          it('should handle storage queries', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'couchbase.upsert')
+                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('resource', 'couchbase.upsert')
+                expect(span.meta).to.have.property('span.kind', 'client')
+                expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
+              })
+              .then(done)
+              .catch(done)
+
+            bucket.upsert('testdoc', { name: 'Frank' }, (err, result) => {
+              if (err) done(err)
+            })
+          })
+
+          it('should skip instrumentation for invalid arguments', () => {
+            try {
+              bucket.upsert('testdoc', { name: 'Frank' })
+            } catch (e) {
+              expect(e.message).to.equal('Third argument needs to be an object or callback.')
             }
           })
         })
