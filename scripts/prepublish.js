@@ -12,14 +12,9 @@ const tar = require('tar')
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
-title(`Downloading and compiling files for release.`)
+const { CIRCLE_TOKEN } = process.env
 
-if (!process.env.CIRCLE_TOKEN) {
-  throw new Error([
-    'The prepublish script needs to authenticate to CircleCI.',
-    'Please set the CIRCLE_TOKEN environment variable.'
-  ].join(' '))
-}
+title(`Downloading and compiling files for release.`)
 
 const revision = exec.pipe(`git rev-parse HEAD`)
 
@@ -29,12 +24,13 @@ const branch = exec.pipe(`git symbolic-ref --short HEAD`)
 
 console.log(branch)
 
+const headers = CIRCLE_TOKEN ? {
+  'circle-token': CIRCLE_TOKEN
+} : {}
 const client = axios.create({
   baseURL: 'https://circleci.com/api/v2/',
   timeout: 5000,
-  headers: {
-    'Circle-Token': process.env.CIRCLE_TOKEN
-  }
+  headers
 })
 
 const fetch = (url, options) => {
