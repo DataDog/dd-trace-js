@@ -3,9 +3,9 @@
 const coalesce = require('koalas')
 const os = require('os')
 const { AgentExporter } = require('./exporters/agent')
-const { InspectorCpuProfiler } = require('./profilers/inspector/cpu')
-const { InspectorHeapProfiler } = require('./profilers/inspector/heap')
 const { ConsoleLogger } = require('./loggers/console')
+const CpuProfiler = require('./profilers/cpu')
+const HeapProfiler = require('./profilers/heap')
 const { tagger } = require('./tagger')
 
 const {
@@ -41,8 +41,8 @@ class Config {
       new AgentExporter()
     ]
     this.profilers = options.profilers || [
-      new InspectorCpuProfiler(),
-      new InspectorHeapProfiler()
+      new CpuProfiler(),
+      new HeapProfiler()
     ]
   }
 }
