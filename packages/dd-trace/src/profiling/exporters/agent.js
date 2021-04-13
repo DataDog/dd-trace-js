@@ -2,16 +2,13 @@
 
 const FormData = require('form-data')
 const { URL } = require('url')
-const { Encoder } = require('../encoders/pprof')
-const { eachOfSeries } = require('../util')
 
 class AgentExporter {
   constructor ({ url } = {}) {
     this._url = typeof url === 'string' ? new URL(url) : url
-    this._encoder = new Encoder()
   }
 
-  export ({ profiles, start, end, tags }, callback) {
+  export ({ profiles, start, end, tags }) {
     const form = new FormData()
     const types = Object.keys(profiles)
 
@@ -22,31 +19,26 @@ class AgentExporter {
     form.append('format', 'pprof')
 
     form.append('tags[]', 'language:javascript')
-    form.append('tags[]', `runtime:nodejs`)
+    form.append('tags[]', 'runtime:nodejs')
     form.append('tags[]', 'format:pprof')
 
     for (const key in tags) {
       form.append('tags[]', `${key}:${tags[key]}`)
     }
 
-    eachOfSeries(types, (type, index, callback) => {
-      const profile = profiles[type]
+    for (let index = 0; index < types.length; index++) {
+      const type = types[index]
+      const buffer = profiles[type]
 
-      this._encoder.encode(profile, (err, buffer) => {
-        if (err) return callback(err)
-
-        form.append(`types[${index}]`, type)
-        form.append(`data[${index}]`, buffer, {
-          filename: `${type}.pb.gz`,
-          contentType: 'application/octet-stream',
-          knownLength: buffer.length
-        })
-
-        callback(null, buffer)
+      form.append(`types[${index}]`, type)
+      form.append(`data[${index}]`, buffer, {
+        filename: `${type}.pb.gz`,
+        contentType: 'application/octet-stream',
+        knownLength: buffer.length
       })
-    }, err => {
-      if (err) return callback(err)
+    }
 
+    return new Promise((resolve, reject) => {
       const options = {
         method: 'POST',
         path: '/profiling/v1/input',
@@ -62,12 +54,12 @@ class AgentExporter {
       }
 
       form.submit(options, (err, res) => {
-        if (err) return callback(err)
+        if (err) return reject(err)
         if (res.statusCode >= 400) {
-          return callback(new Error(`Error from the agent: ${res.statusCode}`))
+          return reject(new Error(`Error from the agent: ${res.statusCode}`))
         }
 
-        callback()
+        resolve()
       })
     })
   }

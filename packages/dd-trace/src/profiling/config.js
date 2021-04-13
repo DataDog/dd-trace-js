@@ -5,9 +5,9 @@ const os = require('os')
 const { URL } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
-const { InspectorCpuProfiler } = require('./profilers/inspector/cpu')
-const { InspectorHeapProfiler } = require('./profilers/inspector/heap')
 const { ConsoleLogger } = require('./loggers/console')
+const CpuProfiler = require('./profilers/cpu')
+const HeapProfiler = require('./profilers/heap')
 const { tagger } = require('./tagger')
 
 const {
@@ -54,8 +54,8 @@ class Config {
     ], options)
 
     this.profilers = options.profilers || [
-      new InspectorCpuProfiler(),
-      new InspectorHeapProfiler()
+      new CpuProfiler(),
+      new HeapProfiler()
     ]
   }
 }
