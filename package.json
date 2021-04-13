@@ -25,6 +25,7 @@
     "test:core:ci": "nyc --include \"packages/dd-trace/src/**/*.js\" -- npm run test:core --  --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter-config.json",
     "test:plugins": "mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
     "test:plugins:ci": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
+    "test:profiler": "mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:integration": "mocha --timeout 30000 \"integration-tests/**/*.spec.js\"",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
@@ -71,7 +72,6 @@
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
-    "protobufjs": "^6.9.0",
     "semver": "^5.5.0",
     "shimmer": "1.2.1",
     "source-map": "^0.7.3",
@@ -113,5 +113,8 @@
     "tape": "^4.9.1",
     "tar": "^4.4.8",
     "wait-on": "^5.0.0"
+  },
+  "optionalDependencies": {
+    "pprof": "^3.0.0"
   }
 }
