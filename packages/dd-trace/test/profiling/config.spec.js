@@ -3,8 +3,8 @@
 const { expect } = require('chai')
 const os = require('os')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
-const { InspectorCpuProfiler } = require('../../src/profiling/profilers/inspector/cpu')
-const { InspectorHeapProfiler } = require('../../src/profiling/profilers/inspector/heap')
+const CpuProfiler = require('../../src/profiling/profilers/cpu')
+const HeapProfiler = require('../../src/profiling/profilers/heap')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 describe('config', () => {
@@ -30,8 +30,8 @@ describe('config', () => {
 
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.profilers[0]).to.be.an.instanceof(InspectorCpuProfiler)
-    expect(config.profilers[1]).to.be.an.instanceof(InspectorHeapProfiler)
+    expect(config.profilers[0]).to.be.an.instanceof(CpuProfiler)
+    expect(config.profilers[1]).to.be.an.instanceof(HeapProfiler)
   })
 
   it('should support configuration options', () => {
@@ -46,7 +46,7 @@ describe('config', () => {
         error () {}
       },
       exporters: ['agent'],
-      profilers: [new InspectorCpuProfiler()],
+      profilers: [new CpuProfiler()],
       url: 'http://localhost:1234/'
     }
 
@@ -66,7 +66,7 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(InspectorCpuProfiler)
+    expect(config.profilers[0]).to.be.an.instanceOf(CpuProfiler)
   })
 
   it('should support tags', () => {
