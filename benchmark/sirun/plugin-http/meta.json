@@ -1,33 +1,35 @@
 {
   "name": "plugin-http",
-  "setup": "bash -c \"nohup node server.js &\"",
-  "run": "node client.js",
   "variants": {
-    "without-tracers": {
+    "client-control": {
+      "setup": "bash -c \"nohup node server.js &\"",
+      "run": "node client.js",
       "env": {
-        "SERVER_USE_TRACER": "0",
         "CLIENT_USE_TRACER": "0",
         "COUNT": "5000"
       }
     },
-    "with-server-tracer": {
+    "client-with-tracer": {
+      "setup": "bash -c \"nohup node server.js &\"",
+      "run": "node client.js",
       "env": {
-        "SERVER_USE_TRACER": "1",
-        "CLIENT_USE_TRACER": "0",
+        "CLIENT_USE_TRACER": "1",
         "COUNT": "5000"
       }
     },
-    "with-client-tracer": {
+    "server-control": {
+      "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
+      "run": "node server.js",
       "env": {
         "SERVER_USE_TRACER": "0",
-        "CLIENT_USE_TRACER": "1",
         "COUNT": "5000"
       }
     },
-    "with-both-tracers": {
+    "server-with-tracer": {
+      "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
+      "run": "node server.js",
       "env": {
         "SERVER_USE_TRACER": "1",
-        "CLIENT_USE_TRACER": "1",
         "COUNT": "5000"
       }
     }

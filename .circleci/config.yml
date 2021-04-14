@@ -514,13 +514,6 @@ jobs:
         environment:
           - PLUGINS=bluebird
 
-  node-http:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - PLUGINS=http
-
   node-bunyan:
     <<: *node-plugin-base
     docker:
@@ -1235,7 +1228,6 @@ workflows:
       - node-amqp10
       - node-aws-sdk
       - node-bluebird
-      - node-http
       - node-bunyan
       - node-cassandra
       - node-connect
@@ -1293,7 +1285,6 @@ workflows:
             - node-amqp10
             - node-aws-sdk
             - node-bluebird
-            - node-http
             - node-bunyan
             - node-cassandra
             - node-connect
