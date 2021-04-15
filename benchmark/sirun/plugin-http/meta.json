@@ -7,7 +7,8 @@
       "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
         "SET_PID": "server",
-        "CLIENT_USE_TRACER": "0"
+        "CLIENT_USE_TRACER": "0",
+        "PORT": "3001" 
       }
     },
     "client-with-tracer": {
@@ -16,7 +17,8 @@
       "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
         "SET_PID": "server",
-        "CLIENT_USE_TRACER": "1"
+        "CLIENT_USE_TRACER": "1",
+        "PORT": "3002" 
       }
     },
     "server-control": {
@@ -25,7 +27,8 @@
       "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
         "SET_PID": "client",
-        "SERVER_USE_TRACER": "0"
+        "SERVER_USE_TRACER": "0",
+        "PORT": "3003" 
       }
     },
     "server-with-tracer": {
@@ -34,7 +37,8 @@
       "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
         "SET_PID": "client",
-        "SERVER_USE_TRACER": "1"
+        "SERVER_USE_TRACER": "1",
+        "PORT": "3004" 
       }
     }
   }
