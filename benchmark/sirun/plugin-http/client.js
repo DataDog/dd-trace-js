@@ -12,6 +12,7 @@ let connectionsMade = 0
 
 function request (url) {
   http.get(`${url}`, (res) => {
+    res.on('data', () => {})
     res.on('end', () => {
       if (++connectionsMade === 10000 && process.env.SET_PID !== 'client') {
         process.exit()
