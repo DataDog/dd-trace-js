@@ -18,6 +18,10 @@ function request (url) {
       }
       request(`http://localhost:${process.env.PORT}/`)
     })
+  }).on('error', () => {
+    setTimeout(() => {
+      request(`http://localhost:${process.env.PORT}/`)
+    }, 1000)
   })
 }
 
