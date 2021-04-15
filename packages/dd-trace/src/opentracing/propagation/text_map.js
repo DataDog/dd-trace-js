@@ -20,6 +20,7 @@ const b3ParentKey = 'x-b3-parentspanid'
 const b3SampledKey = 'x-b3-sampled'
 const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
+const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
@@ -109,7 +110,7 @@ class TextMapPropagator {
   }
 
   _extractContext (carrier) {
-    return this._extractDatadogContext(carrier) || this._extractB3Context(carrier)
+    return this._extractDatadogContext(carrier) || this._extractB3Context(carrier) || this._extractSqsdContext(carrier)
   }
 
   _extractDatadogContext (carrier) {
@@ -126,6 +127,20 @@ class TextMapPropagator {
     const sampled = this._isSampled(b3[b3SampledKey], debug)
 
     return this._extractGenericContext(b3, b3TraceKey, b3SpanKey, { sampled, debug })
+  }
+
+  _extractSqsdContext (carrier) {
+    const headerValue = carrier[sqsdHeaderHey]
+    if (!headerValue) {
+      return null
+    }
+    let parsed
+    try {
+      parsed = JSON.parse(headerValue)
+    } catch (e) {
+      return null
+    }
+    return this._extractDatadogContext(parsed)
   }
 
   _extractGenericContext (carrier, traceKey, spanKey, traceFlags, radix) {
