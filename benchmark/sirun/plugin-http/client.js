@@ -16,9 +16,9 @@ function request (url) {
       if (++connectionsMade === 10000 && process.env.SET_PID !== 'client') {
         process.exit()
       }
-      request('http://localhost:9090/')
+      request(`http://localhost:${process.env.PORT}/`)
     })
   })
 }
 
-request('http://localhost:9090/')
+request(`http://localhost:${process.env.PORT}/`)
