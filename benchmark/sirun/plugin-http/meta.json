@@ -4,33 +4,37 @@
     "client-control": {
       "setup": "bash -c \"nohup node server.js &\"",
       "run": "node client.js",
+      "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
-        "CLIENT_USE_TRACER": "0",
-        "COUNT": "5000"
+        "SET_PID": "server",
+        "CLIENT_USE_TRACER": "0"
       }
     },
     "client-with-tracer": {
       "setup": "bash -c \"nohup node server.js &\"",
       "run": "node client.js",
+      "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
-        "CLIENT_USE_TRACER": "1",
-        "COUNT": "5000"
+        "SET_PID": "server",
+        "CLIENT_USE_TRACER": "1"
       }
     },
     "server-control": {
       "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
       "run": "node server.js",
+      "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
-        "SERVER_USE_TRACER": "0",
-        "COUNT": "5000"
+        "SET_PID": "client",
+        "SERVER_USE_TRACER": "0"
       }
     },
     "server-with-tracer": {
       "setup": "bash -c \"sleep 2 && nohup node client.js &\"",
       "run": "node server.js",
+      "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
-        "SERVER_USE_TRACER": "1",
-        "COUNT": "5000"
+        "SET_PID": "client",
+        "SERVER_USE_TRACER": "1"
       }
     }
   }

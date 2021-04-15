@@ -2,13 +2,23 @@ if (Number(process.env.CLIENT_USE_TRACER)) {
   require('../../..').init()
 }
 
+if (process.env.SET_PID === 'client') {
+  const fs = require('fs')
+  fs.writeFileSync('client.pid', '' + process.pid)
+}
+
 const http = require('http')
-const count = process.env.COUNT ? Number(process.env.COUNT) : 5000
+let connectionsMade = 0
 
 function request (url) {
-  for (let i = 0; i < count; i++) {
-    http.get(`${url}`)
-  }
+  http.get(`${url}`, (res) => {
+    res.on('end', () => {
+      if (++connectionsMade === 10000 && process.env.SET_PID !== 'client') {
+        process.exit()
+      }
+      request('http://localhost:9090/')
+    })
+  })
 }
 
 request('http://localhost:9090/')
