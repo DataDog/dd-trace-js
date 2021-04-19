@@ -6,6 +6,14 @@ const { Config } = require('./config')
 const { SourceMapper } = require('./mapper')
 
 class Profiler extends EventEmitter {
+  constructor () {
+    super()
+    this._enabled = false
+    this._logger = undefined
+    this._config = undefined
+    this._timer = undefined
+  }
+
   start (options) {
     if (this._enabled) return
 
@@ -52,15 +60,21 @@ class Profiler extends EventEmitter {
     }
 
     clearTimeout(this._timer)
+    this._timer = undefined
 
     return this
   }
 
   _capture (timeout) {
+    if (!this._enabled) return
     const start = new Date()
 
-    this._timer = setTimeout(() => this._collect(start), timeout)
-    this._timer.unref()
+    if (!this._timer || timeout !== this._config.flushInterval) {
+      this._timer = setTimeout(() => this._collect(start), timeout)
+      this._timer.unref()
+    } else {
+      this._timer.refresh()
+    }
   }
 
   async _collect (start) {
@@ -76,7 +90,7 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._config.flushInterval)
-      this._submit(profiles, start, end)
+      await this._submit(profiles, start, end)
     } catch (err) {
       this._logger.error(err)
       this.stop()
