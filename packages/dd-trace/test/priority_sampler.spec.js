@@ -32,6 +32,8 @@ describe('PrioritySampler', () => {
       context: sinon.stub().returns(context)
     }
 
+    context._trace.started.push(span)
+
     sampler = {
       isSampled: sinon.stub(),
       rate: sinon.stub().returns(0.5)
@@ -301,9 +303,33 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling.priority).to.be.undefined
     })
+
+    it('should support noop spans', () => {
+      context._trace.started.length = 0
+
+      prioritySampler.sample(span)
+
+      expect(context._sampling.priority).to.be.undefined
+    })
   })
 
   describe('update', () => {
+    let rootSpan
+    let rootContext
+
+    beforeEach(() => {
+      rootContext = {
+        ...context,
+        _tags: {}
+      }
+
+      rootSpan = {
+        context: sinon.stub().returns(rootContext)
+      }
+
+      rootContext._trace.started.unshift(rootSpan)
+    })
+
     it('should update the default rate', () => {
       prioritySampler.update({
         'service:,env:': AUTO_REJECT
@@ -315,10 +341,11 @@ describe('PrioritySampler', () => {
     })
 
     it('should update service rates', () => {
-      context._tags[SERVICE_NAME] = 'hello'
+      rootContext._tags[SERVICE_NAME] = 'foo'
+      context._tags[SERVICE_NAME] = 'bar'
 
       prioritySampler.update({
-        'service:hello,env:test': AUTO_REJECT
+        'service:foo,env:test': AUTO_REJECT
       })
 
       prioritySampler.sample(span)

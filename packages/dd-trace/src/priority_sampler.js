@@ -45,8 +45,10 @@ class PrioritySampler {
     if (!span) return
 
     const context = this._getContext(span)
+    const root = context._trace.started[0]
 
     if (context._sampling.priority !== undefined) return
+    if (!root) return // noop span
 
     const tag = this._getPriority(context._tags)
 
@@ -56,7 +58,7 @@ class PrioritySampler {
     }
 
     if (auto) {
-      context._sampling.priority = this.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
+      context._sampling.priority = this.isSampled(root) ? AUTO_KEEP : AUTO_REJECT
     }
   }
 
