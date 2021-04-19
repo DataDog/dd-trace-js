@@ -73,16 +73,14 @@ function getWorkflow (pipeline) {
     .then(response => {
       const workflows = response.data.items
         .sort((a, b) => (a.stopped_at < b.stopped_at) ? 1 : -1)
-      const running = workflows.find(workflow => !workflow.stopped_at)
-
-      if (running) {
-        throw new Error(`Workflow ${running.id} is still running for pipeline ${pipeline.id}.`)
-      }
-
       const workflow = workflows.find(workflow => workflow.name === 'prebuild')
 
       if (!workflow) {
         throw new Error(`Unable to find CircleCI workflow for pipeline ${pipeline.id}.`)
+      }
+
+      if (!workflow.stopped_at) {
+        throw new Error(`Workflow ${workflow.id} is still running for pipeline ${pipeline.id}.`)
       }
 
       if (workflow.status !== 'success') {
