@@ -396,6 +396,13 @@ jobs:
         environment:
           - SIRUN_TEST_DIR=plugin-net
 
+  node-bench-sirun-profiler-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - SIRUN_TEST_DIR=profiler
+
   node-bench-sirun-all:
     docker:
       - image: node
@@ -1403,6 +1410,7 @@ workflows:
       - node-bench-sirun-plugin-net-latest
       - node-bench-sirun-scope-latest
       - node-bench-sirun-exporting-pipeline-latest
+      - node-bench-sirun-profiler-latest
       - node-bench-sirun-all:
           requires:
             - node-bench-sirun-startup-latest
@@ -1416,6 +1424,7 @@ workflows:
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
             - node-bench-sirun-exporting-pipeline-latest
+            - node-bench-sirun-profiler-latest
   upstream:
     jobs:
       # - node-upstream-node
@@ -1606,6 +1615,7 @@ workflows:
       - node-bench-sirun-plugin-net-latest
       - node-bench-sirun-scope-latest
       - node-bench-sirun-exporting-pipeline-latest
+      - node-bench-sirun-profiler-latest
       - node-bench-sirun-all:
           requires:
             - node-bench-sirun-startup-latest
@@ -1619,6 +1629,7 @@ workflows:
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
             - node-bench-sirun-exporting-pipeline-latest
+            - node-bench-sirun-profiler-latest
   nightly-upstream:
     triggers:
       - schedule:
