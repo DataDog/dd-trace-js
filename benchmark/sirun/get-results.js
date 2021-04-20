@@ -3,13 +3,17 @@
 const https = require('https')
 const { execSync } = require('child_process')
 
-const { CIRCLE_TOKEN } = process.env
+const { CIRCLE_TOKEN, GITHUB_TOKEN } = process.env
 
 const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
 const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
 
 const circleHeaders = CIRCLE_TOKEN ? {
   'circle-token': CIRCLE_TOKEN
+} : {}
+
+const githubHeaders = GITHUB_TOKEN ? {
+  Authorization: `token ${GITHUB_TOKEN}`
 } : {}
 
 const statusUrl = (ref, page) =>
@@ -42,7 +46,7 @@ async function getBuildNumsFromGithub (ref) {
   let page = 0
   let reply
   do {
-    reply = JSON.parse(await get(statusUrl(ref, ++page)))
+    reply = JSON.parse(await get(statusUrl(ref, ++page), githubHeaders))
     results.push(...reply)
   } while (reply.length === 100)
   const namesAndNums = {}
@@ -77,7 +81,13 @@ function summary (iterations) {
   for (const [name, items] of Object.entries(stats)) {
     const m = mean(items)
     const s = stddev(m, items)
-    result[name] = { mean: m, stddev: s, min: Math.min(...items), max: Math.max(...items) }
+    result[name] = {
+      mean: m,
+      stddev: s,
+      stddev_pct: (s / m) * 100.0,
+      min: Math.min(...items),
+      max: Math.max(...items)
+    }
   }
   return result
 }
@@ -87,7 +97,9 @@ async function main () {
   const buildData = {}
   for (const name in builds) {
     const artifacts = JSON.parse(await get(artifactsUrl(builds[name]), circleHeaders))
-    const artifactUrl = artifacts.find(a => a.path === 'sirun-output.ndjson').url
+    const artifact = artifacts.find(a => a.path === 'sirun-output.ndjson')
+    if (!artifact) continue
+    const artifactUrl = artifact.url
     const testResults = (await get(artifactUrl, circleHeaders))
       .trim().split('\n').map(x => JSON.parse(x))
     for (const result of testResults) {
@@ -106,7 +118,7 @@ async function main () {
     }
   }
   // eslint-disable-next-line no-console
-  console.log(require('util').inspect(buildData, false, null, true))
+  console.log(JSON.stringify(buildData, null, 4))
 }
 
 main()
