@@ -2,7 +2,7 @@
 
 const { execSync } = require('child_process')
 
-function getResults(hash) {
+function getResults (hash) {
   return JSON.parse(execSync(`node get-results.js ${hash}`).toString('utf8'))
 }
 
@@ -32,4 +32,5 @@ function walk (tree, oldTree) {
   throw new Error(tree.toString())
 }
 
+// eslint-disable-next-line no-console
 console.log(JSON.stringify(walk(results2, results1), null, 2))
