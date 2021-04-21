@@ -14,17 +14,10 @@ function findPkg () {
   const filePath = findUp('package.json', cwd)
 
   try {
-    return readPkg(path.dirname(filePath))
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'))
   } catch (e) {
     return {}
   }
-}
-
-function readPkg (cwd) {
-  const filePath = path.resolve(cwd, 'package.json')
-  const json = JSON.parse(fs.readFileSync(filePath, 'utf8'))
-
-  return json
 }
 
 function findUp (name, cwd) {
