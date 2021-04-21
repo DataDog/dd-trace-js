@@ -15,7 +15,6 @@ require,multer,MIT,Copyright 2014 Hage Yaapa
 require,nan,MIT,Copyright 2018 NAN contributors
 require,node-gyp-build,MIT,Copyright 2017 Mathias Buus
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
-require,parent-module,MIT,Copyright Sindre Sorhus
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
 require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz

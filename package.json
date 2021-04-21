@@ -54,7 +54,6 @@
   },
   "dependencies": {
     "@types/node": "^10.12.18",
-    "axios": "^0.21.1",
     "form-data": "^3.0.0",
     "hdr-histogram-js": "^2.0.1",
     "koalas": "^1.0.2",
@@ -69,7 +68,6 @@
     "nan": "^2.12.1",
     "node-gyp-build": "^3.8.0",
     "opentracing": ">=0.12.1",
-    "parent-module": "^0.1.0",
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
     "protobufjs": "^6.9.0",
@@ -82,6 +80,7 @@
   },
   "devDependencies": {
     "autocannon": "^4.5.2",
+    "axios": "^0.21.1",
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
     "chai": "^4.2.0",
