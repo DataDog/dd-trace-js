@@ -352,6 +352,7 @@ jobs:
             mkdir -p /tmp/artifacts
             node ~/dd-trace-js/benchmark/sirun/aggregate | tee /tmp/artifacts/summary.json
             cp ~/dd-trace-js/benchmark/sirun/*.ndjson /tmp/artifacts/
+            node ~/dd-trace-js/benchmark/sirun/diff-recent | tee /tmp/artifacts/diff.json
       - store_artifacts:
           path: /tmp/artifacts
 
