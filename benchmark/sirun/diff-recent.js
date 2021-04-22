@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const https = require('https')
 const { execSync } = require('child_process')
 
@@ -90,4 +91,7 @@ function walk (tree, oldTree) {
 
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(diffTree, null, 2))
+
+  const html = fs.readFileSync(path.join(__dirname, 'diff.html'), 'utf8')
+  fs.writeFileSync('/tmp/artifacts/diff.html', html.replace('REPLACE_ME_DIFF_DATA', JSON.stringify(diffTree, null, 2)))
 })()

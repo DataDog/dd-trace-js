@@ -1,0 +1,74 @@
+<html>
+  <head>
+    <style>
+body {
+  font-family: monospace;
+}
+
+#charts {
+  max-width: 1000px;
+}
+    </style>
+  </head>
+  <body>
+    <h1>Sirun differences between this commit and the previous one</h1>
+    <p>Numbers are the difference between current and previous, as a percentage of the previous.</p>
+    <div id="charts"></div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+const diffData = REPLACE_ME_DIFF_DATA
+
+function getColor(num, opacity) {
+  if (num > 0) {
+    return `rgb(255, 0, 0, ${opacity})`
+  } else {
+    return `rgb(0, 255, 0, ${opacity})`
+  }
+}
+
+Chart.defaults.plugins.legend.display = false
+
+const charts = document.getElementById('charts')
+for (const testName in diffData) {
+  const test = diffData[testName]
+
+  const testDiv = document.createElement('div', {})
+  testDiv.id = testName
+  testDiv.className = 'test'
+  testDiv.innerHTML += '<hr/><h2>' + testName + '</h2>'
+  charts.appendChild(testDiv)
+
+  for (const variantName in test) {
+    const variantDiv = document.createElement('div', {})
+    variantDiv.id = variantName
+    variantDiv.className = 'variant'
+    testDiv.appendChild(variantDiv)
+    variantDiv.innerHTML += '<h3>' + variantName + '</h3>'
+
+    const variant = test[variantName]
+    const canvas = document.createElement('canvas')
+    canvas.height = '50'
+    canvas.width = '400'
+    variantDiv.appendChild(canvas)
+
+    const ctx = canvas.getContext('2d')
+    const data = [
+      variant.instructions,
+      ...Object.keys(variant.summary).map(name => variant.summary[name].mean)
+    ]
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['instructions', ...Object.keys(variant.summary)],
+        datasets: [{
+          data,
+          backgroundColor: data.map(n => getColor(n, 0.2)),
+          borderColor: data.map(n => getColor(n, 1))
+        }]
+      }
+    })
+  }
+}
+    </script>
+  </body>
+</html>
