@@ -1,3 +1,5 @@
+
+
 <html>
   <head>
     <style>
@@ -15,8 +17,11 @@ body {
     <p>Numbers are the difference between current and previous, as a percentage of the previous.</p>
     <div id="charts"></div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
 const diffData = REPLACE_ME_DIFF_DATA
+
+const readmes = REPLACE_ME_READMES
 
 function getColor(num, opacity) {
   if (num > 0) {
@@ -36,6 +41,9 @@ for (const testName in diffData) {
   testDiv.id = testName
   testDiv.className = 'test'
   testDiv.innerHTML += '<hr/><h2>' + testName + '</h2>'
+  if (readmes[testName]) {
+    testDiv.innerHTML += marked(readmes[testName])
+  }
   charts.appendChild(testDiv)
 
   for (const variantName in test) {
@@ -72,3 +80,4 @@ for (const testName in diffData) {
     </script>
   </body>
 </html>
+

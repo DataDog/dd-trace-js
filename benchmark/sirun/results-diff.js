@@ -6,12 +6,6 @@ function getResults (hash) {
   return JSON.parse(execSync(`node get-results.js ${hash}`).toString('utf8'))
 }
 
-const commit1 = process.argv[2]
-const commit2 = process.argv[3]
-
-const results1 = getResults(commit1)
-const results2 = getResults(commit2)
-
 function walk (tree, oldTree) {
   if (typeof tree === 'number') {
     const diff = tree - oldTree
@@ -32,5 +26,15 @@ function walk (tree, oldTree) {
   throw new Error(tree.toString())
 }
 
-// eslint-disable-next-line no-console
-console.log(JSON.stringify(walk(results2, results1), null, 2))
+module.exports = walk
+
+if (require.main === module) {
+  const commit1 = process.argv[2]
+  const commit2 = process.argv[3]
+
+  const results1 = getResults(commit1)
+  const results2 = getResults(commit2)
+
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(walk(results2, results1), null, 2))
+}
