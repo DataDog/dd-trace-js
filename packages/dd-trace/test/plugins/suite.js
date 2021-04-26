@@ -89,6 +89,7 @@ async function run (repoUrl, commitish) {
 }
 
 function defaultRunner ({ withoutTracer, withTracer }) {
+  expect(withTracer.code).to.equal(0)
   expect(withTracer.code).to.equal(withoutTracer.code)
 }
 
