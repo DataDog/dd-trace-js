@@ -1,10 +1,13 @@
 'use strict'
 
 const childProcess = require('child_process')
-const fs = require('fs/promises')
+const fs = require('fs')
+const util = require('util')
 const os = require('os')
 const path = require('path')
 const https = require('https')
+
+const mkdtemp = util.promisify(fs.mkdtemp)
 
 const ddTraceInit = path.resolve('../../../../init')
 
@@ -62,7 +65,7 @@ function exec (cmd, opts = {}) {
 
 function getTmpDir () {
   const prefix = path.join(os.tmpdir(), 'dd-trace-js-suites-')
-  return fs.mkdtemp(prefix)
+  return mkdtemp(prefix)
 }
 
 async function runOne (modName, repoUrl, commitish, withTracer) {
@@ -75,7 +78,7 @@ async function runOne (modName, repoUrl, commitish, withTracer) {
   const env = withTracer ? { NODE_OPTIONS: `--require ${ddTraceInit}` } : {}
   await exec(`npm install`, { cwd })
   const result = await exec(`npm test`, { cwd, env })
-  await fs.rmdir(cwd, { recursive: true })
+  await exec(`rm -rf ${cwd}`)
   return result
 }
 
