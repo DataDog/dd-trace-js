@@ -54,7 +54,14 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (const span of trace) {
-      bytes.push(0x8c)
+      if (span.type) {
+        bytes.push(0x8c)
+
+        this._encodeString(bytes, 'type')
+        this._encodeString(bytes, span.type)
+      } else {
+        bytes.push(0x8b)
+      }
 
       this._encodeString(bytes, 'trace_id')
       this._encodeId(bytes, span.trace_id)
@@ -68,8 +75,6 @@ class AgentEncoder {
       this._encodeString(bytes, span.resource)
       this._encodeString(bytes, 'service')
       this._encodeString(bytes, span.service)
-      this._encodeString(bytes, 'type')
-      this._encodeString(bytes, span.type)
       this._encodeString(bytes, 'error')
       this._encodeInteger(bytes, span.error)
       this._encodeString(bytes, 'start')
@@ -111,7 +116,11 @@ class AgentEncoder {
   }
 
   _encodeInteger (bytes, value) {
-    bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
+    if (value < 0x100000000) { // uint 32
+      bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
+    } else {
+      this._encodeLong(bytes, value)
+    }
   }
 
   _encodeLong (bytes, value) {
@@ -152,6 +161,9 @@ class AgentEncoder {
         break
       case 'number':
         this._encodeFloat(bytes, value)
+        break
+      case 'object':
+        this._encodeMap(bytes, value)
         break
       default:
         // should not happen
