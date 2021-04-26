@@ -37,7 +37,7 @@ describe('encode', () => {
   it('should encode to msgpack', () => {
     encoder.encode(data)
 
-    const buffer = Buffer.concat(encoder.makePayload())
+    const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer, { codec })
     const trace = decoded[0]
 
@@ -46,8 +46,8 @@ describe('encode', () => {
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0].start).to.equal(123)
-    expect(trace[0].duration).to.equal(456)
+    expect(trace[0].start.toNumber()).to.equal(123)
+    expect(trace[0].duration.toNumber()).to.equal(456)
     expect(trace[0].name).to.equal(data[0].name)
     expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
@@ -60,7 +60,7 @@ describe('encode', () => {
 
     encoder.encode(data)
 
-    const buffer = Buffer.concat(encoder.makePayload())
+    const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer, { codec })
     const trace = decoded[0]
 
@@ -96,8 +96,11 @@ describe('encode', () => {
     const payload = encoder.makePayload()
 
     expect(encoder.count()).to.equal(0)
-    expect(payload).to.have.length(1)
-    expect(payload[0]).to.have.length(5)
-    expect(payload[0][4]).to.equal(0)
+    expect(payload).to.have.length(5)
+    expect(payload[0]).to.equal(0xdd)
+    expect(payload[1]).to.equal(0)
+    expect(payload[2]).to.equal(0)
+    expect(payload[3]).to.equal(0)
+    expect(payload[4]).to.equal(0)
   })
 })
