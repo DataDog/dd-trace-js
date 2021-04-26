@@ -6,6 +6,10 @@ const docker = require('./docker')
 
 const httpAgent = new http.Agent({ keepAlive: true })
 const httpsAgent = new https.Agent({ keepAlive: true })
+
+const httpAgentNotKeepAlive = new http.Agent()
+const httpsAgentNotKeepAlive = new https.Agent()
+
 const containerId = docker.id()
 
 function request (options, callback) {
@@ -19,8 +23,9 @@ function request (options, callback) {
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
   const agent = isSecure ? httpsAgent : httpAgent
+  const agentNotKeepAlive = isSecure ? httpsAgentNotKeepAlive : httpAgentNotKeepAlive
 
-  options.agent = agent
+  options.agent = options.httpAgentKeepAlive ? agent : agentNotKeepAlive
   options.headers['Content-Length'] = byteLength(data)
 
   if (containerId) {

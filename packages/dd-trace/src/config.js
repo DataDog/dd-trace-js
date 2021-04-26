@@ -105,6 +105,12 @@ class Config {
       '0.4'
     )
 
+    const DD_HTTP_AGENT_KEEP_ALIVE = coalesce(
+      options.httpAgentKeepAlive,
+      process.env.DD_HTTP_AGENT_KEEP_ALIVE,
+      true
+    )
+
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
@@ -163,6 +169,7 @@ class Config {
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
+    this.httpAgentKeepAlive = DD_HTTP_AGENT_KEEP_ALIVE
 
     tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
 

@@ -9,7 +9,7 @@ const tracerVersion = require('../../../lib/version')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer {
-  constructor ({ url, prioritySampler, lookup, protocolVersion }) {
+  constructor ({ url, prioritySampler, lookup, protocolVersion, httpAgentKeepAlive }) {
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._url = url
@@ -17,6 +17,7 @@ class Writer {
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._encoderForVersion = new AgentEncoder(this)
+    this._httpAgentKeepAlive = httpAgentKeepAlive
   }
 
   append (spans) {
@@ -28,39 +29,40 @@ class Writer {
   _sendPayload (data, count, done) {
     metrics.increment(`${METRIC_PREFIX}.requests`, true)
 
-    makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
-      if (status) {
-        metrics.increment(`${METRIC_PREFIX}.responses`, true)
-        metrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
-      } else if (err) {
-        metrics.increment(`${METRIC_PREFIX}.errors`, true)
-        metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+    makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, this._httpAgentKeepAlive,
+      (err, res, status) => {
+        if (status) {
+          metrics.increment(`${METRIC_PREFIX}.responses`, true)
+          metrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
+        } else if (err) {
+          metrics.increment(`${METRIC_PREFIX}.errors`, true)
+          metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
 
-        if (err.code) {
-          metrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+          if (err.code) {
+            metrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+          }
         }
-      }
 
-      startupLog({ agentError: err })
+        startupLog({ agentError: err })
 
-      if (err) {
-        log.error(err)
+        if (err) {
+          log.error(err)
+          done()
+          return
+        }
+
+        log.debug(`Response from the agent: ${res}`)
+
+        try {
+          this._prioritySampler.update(JSON.parse(res).rate_by_service)
+        } catch (e) {
+          log.error(e)
+
+          metrics.increment(`${METRIC_PREFIX}.errors`, true)
+          metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        }
         done()
-        return
-      }
-
-      log.debug(`Response from the agent: ${res}`)
-
-      try {
-        this._prioritySampler.update(JSON.parse(res).rate_by_service)
-      } catch (e) {
-        log.error(e)
-
-        metrics.increment(`${METRIC_PREFIX}.errors`, true)
-        metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
-      }
-      done()
-    })
+      })
   }
 
   setUrl (url) {
@@ -98,7 +100,7 @@ function getEncoder (protocolVersion) {
   }
 }
 
-function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
+function makeRequest (version, data, count, url, lookup, needsStartupLog, httpAgentKeepAlive, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -107,7 +109,8 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
       'Datadog-Meta-Tracer-Version': tracerVersion,
       'X-Datadog-Trace-Count': String(count)
     },
-    lookup
+    lookup,
+    httpAgentKeepAlive
   }
 
   setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
