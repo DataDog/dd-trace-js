@@ -553,7 +553,7 @@ jobs:
   node-connect:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - PLUGINS=connect
 
@@ -602,7 +602,7 @@ jobs:
   node-fastify:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - PLUGINS=fastify
 
@@ -847,7 +847,7 @@ jobs:
   node-pino:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - PLUGINS=pino
 
@@ -873,14 +873,14 @@ jobs:
   node-promise:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - PLUGINS=promise
 
   node-q:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - PLUGINS=q
 
