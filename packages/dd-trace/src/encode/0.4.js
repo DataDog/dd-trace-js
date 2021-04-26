@@ -116,11 +116,7 @@ class AgentEncoder {
   }
 
   _encodeInteger (bytes, value) {
-    if (value < 0x100000000) { // uint 32
-      bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
-    } else {
-      this._encodeLong(bytes, value)
-    }
+    bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
   }
 
   _encodeLong (bytes, value) {
@@ -161,9 +157,6 @@ class AgentEncoder {
         break
       case 'number':
         this._encodeFloat(bytes, value)
-        break
-      case 'object':
-        this._encodeMap(bytes, value)
         break
       default:
         // should not happen
