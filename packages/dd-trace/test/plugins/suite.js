@@ -92,8 +92,22 @@ async function run (repoUrl, commitish) {
 }
 
 function defaultRunner ({ withoutTracer, withTracer }) {
-  expect(withTracer.code).to.equal(0)
-  expect(withTracer.code).to.equal(withoutTracer.code)
+  try {
+    expect(withTracer.code).to.equal(0)
+    expect(withTracer.code).to.equal(withoutTracer.code)
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.log(`======= BEGIN STDOUT WITHOUT TRACER
+${withoutTracer.stdout}
+======= BEGIN STDERR WITHOUT TRACER
+${withoutTracer.stderr}
+======= BEGIN STDOUT WITH TRACER
+${withTracer.stdout}
+======= BEGIN STDERR WITH TRACER
+${withTracer.stderr}
+`)
+    throw e
+  }
 }
 
 const DEFAULT_TIMEOUT = 10 * 60 * 1000 // 10 min
