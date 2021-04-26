@@ -75,7 +75,10 @@ async function runOne (modName, repoUrl, commitish, withTracer) {
   const cwd = await getTmpDir()
   await exec(`git clone https://github.com/${repoUrl}.git ${cwd}`)
   await exec(`git checkout ${commitish}`, { cwd })
-  const env = withTracer ? { NODE_OPTIONS: `--require ${ddTraceInit}` } : {}
+  const env = Object.assign({}, process.env)
+  if (withTracer) {
+    env.NODE_OPTIONS = `--require ${ddTraceInit}`
+  }
   await exec(`npm install`, { cwd })
   const result = await exec(`npm test`, { cwd, env })
   await exec(`rm -rf ${cwd}`)
