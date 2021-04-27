@@ -1,7 +1,11 @@
 'use strict'
 
-const TracerProxy = require('./src/proxy')
+if (!process._ddtrace) {
+  const TracerProxy = require('./src/proxy')
 
-module.exports = new TracerProxy()
-module.exports.default = module.exports
-module.exports.tracer = module.exports
+  process._ddtrace = new TracerProxy()
+  process._ddtrace.default = process._ddtrace
+  process._ddtrace.tracer = process._ddtrace
+}
+
+module.exports = process._ddtrace

@@ -514,6 +514,7 @@ interface Plugins {
   "mysql": plugins.mysql;
   "mysql2": plugins.mysql2;
   "net": plugins.net;
+  "next": plugins.next;
   "paperplane": plugins.paperplane;
   "pg": plugins.pg;
   "pino": plugins.pino;
@@ -1113,9 +1114,26 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [next](https://nextjs.org/) module.
+   */
+  interface next extends Instrumentation {
+    /**
+     * Hooks to run before spans are finished.
+     */
+     hooks?: {
+      /**
+       * Hook to execute just before the request span finishes.
+       */
+      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
+    };
+  }
+
+  /**
+   * This plugin automatically instruments the
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
-  interface paperplane extends HttpServer {}
+   interface paperplane extends HttpServer {}
+
 
   /**
    * This plugin automatically instruments the

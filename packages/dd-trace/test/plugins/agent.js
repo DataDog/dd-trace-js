@@ -138,6 +138,7 @@ module.exports = {
     agent = null
     handlers.clear()
     delete require.cache[require.resolve('../..')]
+    delete process._ddtrace
 
     return new Promise((resolve, reject) => {
       server.on('close', () => {
