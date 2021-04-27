@@ -63,6 +63,16 @@ function exec (cmd, opts = {}) {
   })
 }
 
+async function execOrError (cmd, opts = {}) {
+  const result = await exec(cmd, opts)
+  if (result.code !== 0) {
+    const err = new Error(`command "${cmd}" exited with code ${result.code}`)
+    err.result = result
+    throw err
+  }
+  return result
+}
+
 function getTmpDir () {
   const prefix = path.join(os.tmpdir(), 'dd-trace-js-suites-')
   return mkdtemp(prefix)
@@ -73,15 +83,15 @@ async function runOne (modName, repoUrl, commitish, withTracer) {
     commitish = await getLatest(modName, repoUrl)
   }
   const cwd = await getTmpDir()
-  await exec(`git clone https://github.com/${repoUrl}.git ${cwd}`)
-  await exec(`git checkout ${commitish}`, { cwd })
+  await execOrError(`git clone https://github.com/${repoUrl}.git ${cwd}`)
+  await execOrError(`git checkout ${commitish}`, { cwd })
   const env = Object.assign({}, process.env)
   if (withTracer) {
     env.NODE_OPTIONS = `--require ${ddTraceInit}`
   }
-  await exec(`npm install`, { cwd })
+  await execOrError(`npm install`, { cwd })
   const result = await exec(`npm test`, { cwd, env })
-  await exec(`rm -rf ${cwd}`)
+  await execOrError(`rm -rf ${cwd}`)
   return result
 }
 
