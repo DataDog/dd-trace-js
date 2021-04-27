@@ -46,11 +46,12 @@ function request (options, callback) {
   })
 
   req.setTimeout(options.timeout, req.abort)
-  req.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
+  req.on('error', callback)
 
   data.forEach(buffer => req.write(buffer))
 
   req.end()
+  return req
 }
 
 function byteLength (data) {
