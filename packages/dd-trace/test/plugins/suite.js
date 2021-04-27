@@ -78,7 +78,7 @@ function getTmpDir () {
   return mkdtemp(prefix)
 }
 
-async function runOne (modName, repoUrl, commitish, withTracer) {
+async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   if (commitish === 'latest') {
     commitish = await getLatest(modName, repoUrl)
   }
@@ -90,14 +90,14 @@ async function runOne (modName, repoUrl, commitish, withTracer) {
     env.NODE_OPTIONS = `--require ${ddTraceInit}`
   }
   await execOrError(`npm install`, { cwd })
-  const result = await exec(`npm test`, { cwd, env })
+  const result = await exec(testCmd, { cwd, env })
   await execOrError(`rm -rf ${cwd}`)
   return result
 }
 
-async function run (repoUrl, commitish) {
-  const withoutTracer = await runOne(repoUrl, commitish, false)
-  const withTracer = await runOne(repoUrl, commitish, true)
+async function run (modName, repoUrl, commitish, testCmd) {
+  const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
+  const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
   return { withoutTracer, withTracer }
 }
 
@@ -122,14 +122,44 @@ ${withTracer.stderr}
 
 const DEFAULT_TIMEOUT = 10 * 60 * 1000 // 10 min
 
-function runWithMocha (fn, modName, repoUrl, commitish, runner = defaultRunner, timeout = DEFAULT_TIMEOUT) {
-  if (arguments.length === 3 && typeof runner === 'number') {
-    timeout = runner
-    runner = defaultRunner
+function getOpts (args) {
+  args = Array.from(args)
+  const [ modName, repoUrl, commitish, runner, timeout, testCmd ] = args
+  const options = {
+    modName,
+    repoUrl,
+    commitish,
+    testCmd,
+    runner,
+    timeout
   }
+  if (testCmd) {
+    options.testCmd = testCmd
+  }
+  if (runner) {
+    options.runner = runner
+  }
+  if (timeout) {
+    options.timeout = timeout
+  }
+  return options
+}
+
+function runWithMocha (fn, options) {
+  if (typeof options !== 'object') {
+    options = getOpts(Array.prototype.slice.call(arguments, 1))
+  }
+  const {
+    modName,
+    repoUrl,
+    commitish,
+    testCmd = 'npm test',
+    runner = defaultRunner,
+    timeout = DEFAULT_TIMEOUT
+  } = options
   fn('should pass equivalently with and without tracer for ' + commitish, async function () {
     this.timeout(timeout)
-    return runner.call(this, await run(modName, repoUrl, commitish))
+    return runner.call(this, await run(modName, repoUrl, commitish, testCmd))
   })
 }
 

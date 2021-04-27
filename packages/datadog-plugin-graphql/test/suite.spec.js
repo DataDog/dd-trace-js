@@ -3,6 +3,11 @@ const suiteTest = require('../../dd-trace/test/plugins/suite')
 
 describe('Plugin', () => {
   describe('graphql test suite', () => {
-    suiteTest('graphql', 'graphql/graphql-js', 'latest')
+    suiteTest({
+      modName: 'graphql',
+      repoUrl: 'graphql/graphql-js',
+      commitish: 'latest',
+      testCmd: 'npm run testonly'
+    })
   })
 })
