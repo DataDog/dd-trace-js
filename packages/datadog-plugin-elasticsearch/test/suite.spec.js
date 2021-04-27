@@ -2,7 +2,7 @@
 const suiteTest = require('../../dd-trace/test/plugins/suite')
 
 describe('Plugin', () => {
-  describe('elasticsearch test suite', () => {
+  describe.skip('elasticsearch test suite', () => {
     suiteTest('elasticsearch', 'elastic/elasticsearch-js-legacy', 'latest')
   })
 })
