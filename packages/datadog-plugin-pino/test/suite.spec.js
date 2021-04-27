@@ -7,7 +7,7 @@ describe('Plugin', () => {
       modName: 'pino',
       repoUrl: 'pinojs/pino',
       commitish: 'latest',
-      testCmd: 'tap test/*test.js test/*/*test.js'
+      testCmd: 'node_modules/.bin/tap test/*test.js test/*/*test.js --no-coverage'
     })
   })
 })

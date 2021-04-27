@@ -6,10 +6,11 @@ const util = require('util')
 const os = require('os')
 const path = require('path')
 const https = require('https')
+const url = require('url')
 
 const mkdtemp = util.promisify(fs.mkdtemp)
 
-const ddTraceInit = path.resolve('../../../../init')
+const ddTraceInit = path.resolve(__dirname, '../../../../init')
 
 const latestCache = []
 async function getLatest (modName, repoUrl) {
@@ -21,15 +22,20 @@ async function getLatest (modName, repoUrl) {
   const tags = await get(`https://api.github.com/repos/${repoUrl}/git/refs/tags`)
   for (const tag of tags) {
     if (tag.ref.includes(latest)) {
-      return tag.split('/').pop()
+      return tag.ref.split('/').pop()
     }
   }
 }
 
-function get (url) {
+function get (theUrl) {
   return new Promise((resolve, reject) => {
-    https.get(url, res => {
+    const options = url.parse(theUrl)
+    options.headers = {
+      'user-agent': 'dd-trace plugin test suites'
+    }
+    https.get(options, res => {
       if (res.statusCode >= 300) {
+        res.pipe(process.stderr)
         reject(new Error(res.statusCode))
         return
       }
@@ -48,17 +54,16 @@ function exec (cmd, opts = {}) {
       shell: true
     }, opts))
     proc.on('error', reject)
-    const results = {
-      stdout: [],
-      stderr: []
-    }
-    proc.stdout.on('data', d => results.stdout.push(d))
-    proc.stderr.on('data', d => results.stderr.push(d))
+    const stdout = []
+    const stderr = []
+    proc.stdout.on('data', d => stdout.push(d))
+    proc.stderr.on('data', d => stderr.push(d))
     proc.on('exit', code => {
-      results.code = code
-      results.stdout = Buffer.concat(results.stdout).toString('utf8')
-      results.stderr = Buffer.concat(results.stderr).toString('utf8')
-      resolve(results)
+      resolve({
+        code,
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8')
+      })
     })
   })
 }
