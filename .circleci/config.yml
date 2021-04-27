@@ -354,10 +354,10 @@ jobs:
     docker:
       - image: node:14
 
-  node-core-15:
+  node-core-16:
     <<: *node-core-base
     docker:
-      - image: node:15
+      - image: node:16
 
   node-core-latest:
     <<: *node-core-base
@@ -417,10 +417,10 @@ jobs:
     docker:
       - image: node:14
 
-  node-integration-15:
+  node-integration-16:
     <<: *node-integration-base
     docker:
-      - image: node:15
+      - image: node:16
 
   node-integration-latest:
     <<: *node-integration-base
@@ -577,10 +577,10 @@ jobs:
         environment:
           - PLUGINS=fs
 
-  node-fs-15:
+  node-fs-16:
     <<: *node-plugin-base
     docker:
-      - image: node:15
+      - image: node:16
         environment:
           - PLUGINS=fs
 
@@ -891,13 +891,13 @@ jobs:
 
   # Prebuilds (linux x64)
 
-  linux-x64-15:
+  linux-x64-16:
     <<: *prebuild-linux-base
     docker:
       - image: node:12.0.0
     environment:
       - ARCH=x64
-      - NODE_VERSIONS=15
+      - NODE_VERSIONS=15 - 16
 
   linux-x64-14:
     <<: *prebuild-linux-base
@@ -927,10 +927,10 @@ jobs:
 
   ## Tests
 
-  linux-x64-15-test:
+  linux-x64-16-test:
     <<: *test-prebuild-linux-base
     docker:
-      - image: node:15
+      - image: node:16
 
   linux-x64-14-test:
     <<: *test-prebuild-linux-base
@@ -962,7 +962,7 @@ jobs:
     steps:
       - run:
           name: Install job dependencies
-          command: apk add g++ git make python
+          command: apk add g++ git make python3
       - checkout
       - *yarn-versions
       - *restore-yarn-cache
@@ -1024,6 +1024,12 @@ jobs:
 
   # Prebuilds (darwin x64)
 
+  mac-x64-16:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=16
+
   mac-x64-14:
     <<: *prebuild-darwin-base
     environment:
@@ -1049,6 +1055,12 @@ jobs:
       - NODE_VERSIONS=8 - 9
 
   # Prebuilds (darwin ia32)
+
+  mac-ia32-16:
+    <<: *prebuild-darwin-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=16
 
   mac-ia32-14:
     <<: *prebuild-darwin-base
@@ -1076,6 +1088,12 @@ jobs:
 
   # Prebuilds (win32 x64)
 
+  win-x64-16:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=x64
+      - NODE_VERSIONS=16
+
   win-x64-14:
     <<: *prebuild-win32-base
     environment:
@@ -1101,6 +1119,12 @@ jobs:
       - NODE_VERSIONS=8 - 9
 
   # Prebuilds (win32 ia32)
+
+  win-ia32-16:
+    <<: *prebuild-win32-base
+    environment:
+      - ARCH=ia32
+      - NODE_VERSIONS=16
 
   win-ia32-14:
     <<: *prebuild-win32-base
@@ -1159,14 +1183,14 @@ workflows:
       - node-core-10
       - node-core-12
       - node-core-14
-      - node-core-15
+      - node-core-16
       - node-core-latest
       - node-core-windows
       - node-integration-8
       - node-integration-10
       - node-integration-12
       - node-integration-14
-      - node-integration-15
+      - node-integration-16
       - node-integration-latest
       - node-amqplib
       - node-amqp10
@@ -1184,7 +1208,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-fs-14
-      - node-fs-15
+      - node-fs-16
       - node-fs-latest
       - node-generic-pool
       - node-google-cloud-pubsub
@@ -1223,7 +1247,7 @@ workflows:
             - node-core-10
             - node-core-12
             - node-core-14
-            - node-core-15
+            - node-core-16
             - node-core-latest
             - node-amqplib
             - node-amqp10
@@ -1241,7 +1265,7 @@ workflows:
             - node-fs-10
             - node-fs-12
             - node-fs-14
-            - node-fs-15
+            - node-fs-16
             - node-fs-latest
             - node-generic-pool
             - node-google-cloud-pubsub
@@ -1289,7 +1313,7 @@ workflows:
   prebuild:
     jobs:
       # Linux x64
-      - linux-x64-15:
+      - linux-x64-16:
           <<: *prebuild-job
       - linux-x64-14:
           <<: *prebuild-job
@@ -1299,9 +1323,9 @@ workflows:
           <<: *prebuild-job
       - linux-x64-8:
           <<: *prebuild-job
-      - linux-x64-15-test:
+      - linux-x64-16-test:
           requires:
-            - linux-x64-15
+            - linux-x64-16
       - linux-x64-14-test:
           requires:
             - linux-x64-14
@@ -1378,7 +1402,7 @@ workflows:
       # Artifacts
       - prebuilds:
           requires:
-            - linux-x64-15-test
+            - linux-x64-16-test
             - linux-x64-14-test
             - linux-x64-12-test
             - linux-x64-10-test
@@ -1418,14 +1442,14 @@ workflows:
       - node-core-10
       - node-core-12
       - node-core-14
-      - node-core-15
+      - node-core-16
       - node-core-latest
       - node-core-windows
       - node-integration-8
       - node-integration-10
       - node-integration-12
       - node-integration-14
-      - node-integration-15
+      - node-integration-16
       - node-integration-latest
       - node-amqplib
       - node-amqp10
@@ -1443,7 +1467,7 @@ workflows:
       - node-fs-10
       - node-fs-12
       - node-fs-14
-      - node-fs-15
+      - node-fs-16
       - node-fs-latest
       - node-generic-pool
       - node-google-cloud-pubsub
