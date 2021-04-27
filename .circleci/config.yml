@@ -962,7 +962,7 @@ jobs:
     steps:
       - run:
           name: Install job dependencies
-          command: apk add g++ git make python
+          command: apk add g++ git make python3
       - checkout
       - *yarn-versions
       - *restore-yarn-cache
