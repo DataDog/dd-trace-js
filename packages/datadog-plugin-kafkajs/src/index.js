@@ -87,7 +87,11 @@ function extract (tracer, bufferMap) {
   const textMap = {}
 
   for (const key of Object.keys(bufferMap)) {
-    textMap[key] = bufferMap[key].toString()
+    // Even though the values in `bufferMap` appear to be Buffers, it seems
+    // necessary to parse them as a Buffer again in order to obtain the correct
+    // values - this would have no impact if they were in fact actual Buffers
+    // to begin with, so is safe to do either way
+    textMap[key] = Buffer.from(bufferMap[key]).toString("utf-8")
   }
 
   return tracer.extract('text_map', textMap)
