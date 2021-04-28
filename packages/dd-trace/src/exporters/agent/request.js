@@ -61,7 +61,7 @@ function request (options, callback) {
       retriedReq.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
       retriedReq.end()
     } else {
-      callback(error)
+      callback(new Error(`Network error trying to reach the agent: ${error.message}`))
     }
   }
 
