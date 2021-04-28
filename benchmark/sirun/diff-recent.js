@@ -33,7 +33,9 @@ function getReadmes () {
   const builds = await getBuildNumsFromGithub(prev)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
 
-  const artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
+  let artifacts = await get(artifactsUrl(build), circleHeaders)
+  console.log(artifacts)
+  artifacts = JSON.parse(artifacts)
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) return
   const prevSummary = JSON.parse(await get(artifact.url, circleHeaders))

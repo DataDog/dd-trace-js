@@ -13,6 +13,13 @@ function walk (tree, oldTree) {
     return pctDiff
   }
 
+  if (typeof tree === 'string') {
+    return {
+      prev: oldTree,
+      curr: tree
+    }
+  }
+
   if (typeof tree === 'object') {
     const result = {}
     for (const name in tree) {
