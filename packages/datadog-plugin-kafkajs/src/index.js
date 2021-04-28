@@ -91,7 +91,7 @@ function extract (tracer, bufferMap) {
     // necessary to parse them as a Buffer again in order to obtain the correct
     // values - this would have no impact if they were in fact actual Buffers
     // to begin with, so is safe to do either way
-    textMap[key] = Buffer.from(bufferMap[key]).toString("utf-8")
+    textMap[key] = Buffer.from(bufferMap[key]).toString('utf-8')
   }
 
   return tracer.extract('text_map', textMap)
