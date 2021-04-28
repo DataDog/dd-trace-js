@@ -124,11 +124,7 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  const req = request(Object.assign({ data }, options), (err, res, status) => {
-    if (err && err.code === 'ECONNRESET' && req.reusedSocket) {
-      log.error('Retrying request to the agent')
-      return makeRequest(version, data, count, url, lookup, needsStartupLog, cb)
-    }
+  request(Object.assign({ data }, options), (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({
