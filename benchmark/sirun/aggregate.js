@@ -6,9 +6,9 @@ const { summarizeResults } = require('./get-results')
 
 const ndjsons = fs.readdirSync(__dirname)
   .map(n =>
-    n.endsWith('.ndjson') ?
-      fs.readFileSync(path.join(__dirname, n.toString()), 'utf8').trim() :
-      ''
+    n.endsWith('.ndjson')
+      ? fs.readFileSync(path.join(__dirname, n.toString()), 'utf8').trim()
+      : ''
   )
   .join('\n')
 
@@ -19,4 +19,5 @@ const testResults = ndjsons
   .trim().split('\n').map(x => JSON.parse(x))
 summarizeResults(buildData, testResults)
 
+// eslint-disable-next-line no-console
 console.log(JSON.stringify(buildData, null, 2))

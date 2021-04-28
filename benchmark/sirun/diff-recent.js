@@ -2,7 +2,6 @@
 
 const fs = require('fs')
 const path = require('path')
-const https = require('https')
 const { execSync } = require('child_process')
 const walk = require('./results-diff')
 const {
@@ -29,7 +28,7 @@ function getReadmes () {
   return readmes
 }
 
-;(async () => {
+(async () => {
   const prev = execSync('git rev-parse HEAD^').toString().trim()
   const builds = await getBuildNumsFromGithub(prev)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]

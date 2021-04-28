@@ -5,8 +5,6 @@ const { execSync } = require('child_process')
 
 const { CIRCLE_TOKEN, GITHUB_TOKEN } = process.env
 
-
-
 const circleHeaders = CIRCLE_TOKEN ? {
   'circle-token': CIRCLE_TOKEN
 } : {}
