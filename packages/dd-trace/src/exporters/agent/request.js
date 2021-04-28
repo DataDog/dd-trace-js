@@ -3,6 +3,7 @@
 const http = require('http')
 const https = require('https')
 const docker = require('./docker')
+const log = require('../../log')
 
 const httpAgent = new http.Agent({ keepAlive: true })
 const httpsAgent = new https.Agent({ keepAlive: true })
@@ -51,15 +52,16 @@ function request (options, callback) {
   }
   const firstRequest = retriableRequest(options, callback, client, data)
 
-  // The first requeste will be retried if it fails due to a socket connection close
-  const firstRequestErrorHandler = e => {
-    if (firstRequest.reusedSocket && (e.code === 'ECONNRESET' || e.code === 'EPIPE')) {
+  // The first request will be retried if it fails due to a socket connection close
+  const firstRequestErrorHandler = error => {
+    if (firstRequest.reusedSocket && (error.code === 'ECONNRESET' || error.code === 'EPIPE')) {
+      log.warn('Retrying request due to socket connection error')
       const retriedReq = retriableRequest(options, callback, client, data)
       // The retried request will fail normally
-      retriedReq.on('error', callback)
+      retriedReq.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
       retriedReq.end()
     } else {
-      callback(e)
+      callback(error)
     }
   }
 
