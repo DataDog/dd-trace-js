@@ -55,7 +55,7 @@ function request (options, callback) {
   // The first request will be retried if it fails due to a socket connection close
   const firstRequestErrorHandler = error => {
     if (firstRequest.reusedSocket && (error.code === 'ECONNRESET' || error.code === 'EPIPE')) {
-      log.warn('Retrying request due to socket connection error')
+      log.debug('Retrying request due to socket connection error')
       const retriedReq = retriableRequest(options, callback, client, data)
       // The retried request will fail normally
       retriedReq.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
