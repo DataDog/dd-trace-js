@@ -1,12 +1,11 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const https = require('https')
 const { execSync } = require('child_process')
 
 const { CIRCLE_TOKEN, GITHUB_TOKEN } = process.env
-
-const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
-const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
 
 const circleHeaders = CIRCLE_TOKEN ? {
   'circle-token': CIRCLE_TOKEN
@@ -28,7 +27,14 @@ function get (url, headers) {
       accept: 'application/json'
     }, headers) }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
+        console.log('redirecting to', res.headers.location)
         resolve(get(res.headers.location))
+        return
+      }
+      if (res.statusCode >= 400) {
+        console.error('status code', res.statusCode, 'from', url)
+        console.error('headers', res.headers)
+        reject(new Error(`bad response from ${url} (see above)`))
         return
       }
       res.on('error', reject)
@@ -92,7 +98,26 @@ function summary (iterations) {
   return result
 }
 
+function summarizeResults (buildData, testResults) {
+  for (const result of testResults) {
+    const name = result.name
+    const variant = result.variant
+    if (!buildData[name]) {
+      buildData[name] = {}
+    }
+    delete result.name
+    delete result.variant
+    if (result.iterations) {
+      result.summary = summary(result.iterations)
+    }
+    delete result.iterations
+    buildData[name][variant] = result
+  }
+}
+
 async function main () {
+  const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
+  const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
   const builds = await getBuildNumsFromGithub(gitCommit)
   const buildData = {}
   for (const name in builds) {
@@ -102,23 +127,18 @@ async function main () {
     const artifactUrl = artifact.url
     const testResults = (await get(artifactUrl, circleHeaders))
       .trim().split('\n').map(x => JSON.parse(x))
-    for (const result of testResults) {
-      const name = result.name
-      const variant = result.variant
-      if (!buildData[name]) {
-        buildData[name] = {}
-      }
-      delete result.name
-      delete result.variant
-      if (result.iterations) {
-        result.summary = summary(result.iterations)
-      }
-      delete result.iterations
-      buildData[name][variant] = result
-    }
+    summarizeResults(buildData, testResults)
   }
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(buildData, null, 4))
 }
 
-main()
+module.exports = {
+  getBuildNumsFromGithub,
+  get,
+  artifactsUrl,
+  circleHeaders,
+  summarizeResults
+}
+if (require.main === module) {
+  main()
+}
