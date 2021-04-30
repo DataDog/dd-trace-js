@@ -28,28 +28,35 @@ function getReadmes () {
   return readmes
 }
 
-(async () => {
+function diff (beforeSummary, afterSummary) {
+  const diffTree = walk(afterSummary, beforeSummary)
+  const html = fs.readFileSync(path.join(__dirname, 'diff.html'), 'utf8')
+    .replace('REPLACE_ME_DIFF_DATA', JSON.stringify(diffTree, null, 2))
+    .replace('REPLACE_ME_READMES', JSON.stringify(getReadmes(), null, 2))
+  return { diffTree, html }
+}
+
+const main = async () => {
   const prev = execSync('git rev-parse HEAD^').toString().trim()
   const builds = await getBuildNumsFromGithub(prev)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
 
-  let artifacts = await get(artifactsUrl(build), circleHeaders)
-  console.log(artifacts)
-  artifacts = JSON.parse(artifacts)
+  let artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) return
   const prevSummary = JSON.parse(await get(artifact.url, circleHeaders))
   const currentSummary = JSON.parse(fs.readFileSync('/tmp/artifacts/summary.json'))
 
-  const diffTree = walk(currentSummary, prevSummary)
+  const { diffTree, html } = diff(prevSummary, currentSummary)
 
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(diffTree, null, 2))
 
-  const html = fs.readFileSync(path.join(__dirname, 'diff.html'), 'utf8')
-  fs.writeFileSync(
-    '/tmp/artifacts/diff.html',
-    html.replace('REPLACE_ME_DIFF_DATA', JSON.stringify(diffTree, null, 2))
-      .replace('REPLACE_ME_READMES', JSON.stringify(getReadmes(), null, 2))
-  )
-})()
+  fs.writeFileSync('/tmp/artifacts/diff.html', html)
+}
+
+module.exports = diff
+
+if (require.main === 'module') {
+  main()
+}
