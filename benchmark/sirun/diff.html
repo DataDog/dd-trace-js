@@ -13,8 +13,8 @@ body {
     </style>
   </head>
   <body>
-    <h1>Sirun differences between this commit and the previous one</h1>
-    <p>Numbers are the difference between current and previous, as a percentage of the previous.</p>
+    <h1>Sirun differences between REPLACE_ME_PREV and REPLACE_ME_CURR</h1>
+    <p>Numbers are the difference between REPLACE_ME_PREV and REPLACE_ME_CURR, as a percentage of the REPLACE_ME_PREV.</p>
     <div id="charts"></div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -54,6 +54,14 @@ for (const testName in diffData) {
     variantDiv.innerHTML += '<h3>' + variantName + '</h3>'
 
     const variant = test[variantName]
+    if (variant.nodeVersion) {
+      variantDiv.innerHTML += `
+<table>
+  <tr style="font-weight:bold"><td></td><td>REPLACE_ME_PREV</td><td>REPLACE_ME_CURR</td></tr>
+  <tr><td style="font-weight:bold">Node.js Verison</td><td>${variant.nodeVersion.prev}</td><td>${variant.nodeVersion.curr}</td></tr>
+</table>
+      `
+    }
     const canvas = document.createElement('canvas')
     canvas.height = '50'
     canvas.width = '400'

@@ -30,16 +30,18 @@ function getReadmes () {
   return readmes
 }
 
-function diff (beforeSummary, afterSummary) {
+function diff (beforeSummary, afterSummary, prev = 'master', curr = 'this commit') {
   const diffTree = walk(afterSummary, beforeSummary)
   const html = fs.readFileSync(path.join(__dirname, 'diff.html'), 'utf8')
     .replace('REPLACE_ME_DIFF_DATA', JSON.stringify(diffTree, null, 2))
     .replace('REPLACE_ME_READMES', JSON.stringify(getReadmes(), null, 2))
+    .replace(/REPLACE_ME_PREV/g, prev)
+    .replace(/REPLACE_ME_CURR/g, curr)
   return { diffTree, html }
 }
 
 const main = async () => {
-  const prev = execSync('git rev-parse HEAD^').toString().trim()
+  const prev = execSync('git rev-parse master').toString().trim()
   const builds = await getBuildNumsFromGithub(prev)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
 
@@ -53,7 +55,8 @@ const main = async () => {
   const prevSummary = JSON.parse(await get(artifact.url, circleHeaders))
   const currentSummary = JSON.parse(fs.readFileSync('/tmp/artifacts/summary.json'))
 
-  const { diffTree, html } = diff(prevSummary, currentSummary)
+  const thisCommit = execSync('git rev-parse HEAD').toString().trim()
+  const { diffTree, html } = diff(prevSummary, currentSummary, 'master', thisCommit)
 
   console.log(JSON.stringify(diffTree, null, 2))
 
@@ -62,6 +65,6 @@ const main = async () => {
 
 module.exports = diff
 
-if (require.main === 'module') {
+if (require.main === module) {
   main()
 }
