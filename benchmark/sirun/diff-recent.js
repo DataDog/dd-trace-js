@@ -43,12 +43,17 @@ function diff (beforeSummary, afterSummary, prev = 'master', curr = 'this commit
 const main = async () => {
   const prev = execSync('git rev-parse master').toString().trim()
   const builds = await getBuildNumsFromGithub(prev)
-  const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
+  const buildId = Object.keys(builds).find(n => n.includes('sirun-all'))
+  if (!buildId) {
+    console.error('No `sirun-all` build found on master.')
+    return
+  }
+  const build = builds[buildId]
 
   const artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) {
-    console.error('summary.json artifact not found')
+    console.error('summary.json artifact not found on master')
     console.error('artifacts', JSON.stringify(artifacts, null, 2))
     return
   }

@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const https = require('https')
 const { execSync } = require('child_process')
 
@@ -25,7 +27,14 @@ function get (url, headers) {
       accept: 'application/json'
     }, headers) }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
+        console.log('redirecting to', res.headers.location)
         resolve(get(res.headers.location))
+        return
+      }
+      if (res.statusCode >= 400) {
+        console.error('status code', res.statusCode, 'from', url)
+        console.error('headers', res.headers)
+        reject(new Error(`bad response from ${url} (see above)`))
         return
       }
       res.on('error', reject)
@@ -120,7 +129,6 @@ async function main () {
       .trim().split('\n').map(x => JSON.parse(x))
     summarizeResults(buildData, testResults)
   }
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(buildData, null, 4))
 }
 
