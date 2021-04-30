@@ -41,7 +41,7 @@ const main = async () => {
   const builds = await getBuildNumsFromGithub(prev)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
 
-  let artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
+  const artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) return
   const prevSummary = JSON.parse(await get(artifact.url, circleHeaders))
