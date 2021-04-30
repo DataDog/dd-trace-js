@@ -10,6 +10,14 @@ body {
 #charts {
   max-width: 1000px;
 }
+
+table {
+  border: 1px solid;
+}
+
+td {
+  border: 1px solid;
+}
     </style>
   </head>
   <body>
@@ -58,7 +66,7 @@ for (const testName in diffData) {
       variantDiv.innerHTML += `
 <table>
   <tr style="font-weight:bold"><td></td><td>REPLACE_ME_PREV</td><td>REPLACE_ME_CURR</td></tr>
-  <tr><td style="font-weight:bold">Node.js Verison</td><td>${variant.nodeVersion.prev}</td><td>${variant.nodeVersion.curr}</td></tr>
+  <tr><td style="font-weight:bold">Node.js Version</td><td>${variant.nodeVersion.prev}</td><td>${variant.nodeVersion.curr}</td></tr>
 </table>
       `
     }
