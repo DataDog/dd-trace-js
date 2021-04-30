@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -43,13 +45,16 @@ const main = async () => {
 
   const artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
-  if (!artifact) return
+  if (!artifact) {
+    console.error('summary.json artifact not found')
+    console.error('artifacts', JSON.stringify(artifacts, null, 2))
+    return
+  }
   const prevSummary = JSON.parse(await get(artifact.url, circleHeaders))
   const currentSummary = JSON.parse(fs.readFileSync('/tmp/artifacts/summary.json'))
 
   const { diffTree, html } = diff(prevSummary, currentSummary)
 
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(diffTree, null, 2))
 
   fs.writeFileSync('/tmp/artifacts/diff.html', html)
