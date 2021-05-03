@@ -873,7 +873,7 @@ jobs:
     resource_class: small
     working_directory: ~/dd-trace-js
     docker:
-      - image: cimg:3.9.4-node
+      - image: cimg/python:3.9.4-node
       - image: kyleverhoog/dd-trace-test-agent:latest
     steps:
       - checkout
