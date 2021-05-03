@@ -866,6 +866,30 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
+  
+  # Node langage tests
+
+  node-langage-tests:
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    docker:
+      - image: cimg:3.9.4-node
+      - image: kyleverhoog/dd-trace-test-agent:latest
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - run:
+        name: Pull the NodeJS repository
+        command: "git clone --branch v14.x https://github.com/nodejs/node.git ~/node"
+      - run:
+        name: Run test script
+        command: python language-tests/run_test.py
+        environment:
+          NODE_PROJECT: "~/node"
+          NODE_BIN: "/usr/local/bin/node"
 
   # Code coverage
 
