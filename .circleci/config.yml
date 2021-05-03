@@ -882,8 +882,8 @@ jobs:
       - *yarn-install
       - *save-yarn-cache
       - run:
-        name: Pull the NodeJS repository
-        command: "git clone --branch v14.x https://github.com/nodejs/node.git ~/node"
+          name: Pull the NodeJS repository
+          command: "git clone --branch v14.x https://github.com/nodejs/node.git ~/node"
       - run:
           name: Run test script
           command: python language-tests/run_test.py
