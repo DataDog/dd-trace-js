@@ -10,8 +10,8 @@ from itertools import groupby
 from operator import itemgetter
 from pathlib import Path
 
-NODE_BIN = Path(os.environ.get("NODE_BIN", "/usr/bin/node"))
-NODE_PROJECT_PATH = Path(os.environ["NODE_PROJECT"])
+NODE_BIN = Path(os.environ.get("NODE_BIN", "/usr/bin/node")).expanduser()
+NODE_PROJECT_PATH = Path(os.environ["NODE_PROJECT"]).expanduser()
 
 NEEDS_TO_SPAWN_AGENT = False
 
