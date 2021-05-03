@@ -867,9 +867,9 @@ jobs:
       - store_artifacts:
           path: ./docs/out
   
-  # Node langage tests
+  # Node core language tests
 
-  node-langage-tests:
+  node-core-language-tests:
     resource_class: small
     working_directory: ~/dd-trace-js
     docker:
@@ -1216,7 +1216,7 @@ workflows:
       - node-integration-14
       - node-integration-16
       - node-integration-latest
-      - node-langage-tests
+      - node-core-language-tests
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
