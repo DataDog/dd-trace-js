@@ -13,7 +13,7 @@ from pathlib import Path
 NODE_BIN = Path(os.environ.get("NODE_BIN", "/usr/bin/node"))
 NODE_PROJECT_PATH = Path(os.environ["NODE_PROJECT"])
 
-NEEDS_TO_SPAWN_AGENT = True
+NEEDS_TO_SPAWN_AGENT = False
 
 MODULES = [
     "dns",
