@@ -1216,6 +1216,7 @@ workflows:
       - node-integration-14
       - node-integration-16
       - node-integration-latest
+      - node-langage-tests
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
