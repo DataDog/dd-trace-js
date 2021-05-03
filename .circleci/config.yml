@@ -885,11 +885,11 @@ jobs:
         name: Pull the NodeJS repository
         command: "git clone --branch v14.x https://github.com/nodejs/node.git ~/node"
       - run:
-        name: Run test script
-        command: python language-tests/run_test.py
-        environment:
-          NODE_PROJECT: "~/node"
-          NODE_BIN: "/usr/local/bin/node"
+          name: Run test script
+          command: python language-tests/run_test.py
+          environment:
+            NODE_PROJECT: "~/node"
+            NODE_BIN: "/usr/local/bin/node"
 
   # Code coverage
 
