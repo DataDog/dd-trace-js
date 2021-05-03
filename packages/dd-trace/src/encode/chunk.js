@@ -24,22 +24,30 @@ class Chunk {
 
   write (value) {
     const length = Buffer.byteLength(value)
+    const offset = this.length
 
     if (length < 0x20) { // fixstr
       this.push(length | 0xa0)
-    } else if (length < 0x100) { // str 8
-      this.push(0xd9, length)
-    } else if (length < 0x10000) { // str 16
-      this.push(0xda, length >> 8, length)
     } else if (length < 0x100000000) { // str 32
       this.push(0xdb, length >> 24, length >> 16, length >> 8, length)
-    } else {
-      throw new Error('String too long')
     }
 
     this._reserve(length)
 
     this.length += this.buffer.utf8Write(value, this.length, length)
+
+    return this.length - offset
+  }
+
+  copy (target, sourceStart, sourceEnd) {
+    target.set(new Uint8Array(this.buffer.buffer, sourceStart, sourceEnd - sourceStart))
+  }
+
+  set (array) {
+    this._reserve(array.length)
+
+    this.buffer.set(array, this.length)
+    this.length += array.length
   }
 
   _reserve (size) {
