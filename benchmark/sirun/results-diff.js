@@ -1,6 +1,5 @@
 'use strict'
 
-const { execSync } = require('child_process')
 const { getResults } = require('./get-results')
 
 function walk (tree, oldTree, path = []) {
@@ -20,9 +19,6 @@ function walk (tree, oldTree, path = []) {
   if (typeof tree === 'object') {
     const result = {}
     for (const name in tree) {
-      if (typeof oldTree === 'undefined') {
-        throw new Error(path.join('.') + ' is undefined '+ path.length)
-      }
       if (name in oldTree) {
         result[name] = walk(tree[name], oldTree[name], [...path, name])
       }

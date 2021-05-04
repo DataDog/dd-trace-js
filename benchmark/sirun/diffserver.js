@@ -1,5 +1,7 @@
 'use strict'
 
+/* global BigInt */
+
 const express = require('express')
 const diffRecent = require('./diff-recent')
 const {
