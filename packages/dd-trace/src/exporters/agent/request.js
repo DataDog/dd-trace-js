@@ -67,6 +67,8 @@ function request (options, callback) {
 
   firstRequest.on('error', firstRequestErrorHandler)
   firstRequest.end()
+
+  return firstRequest
 }
 
 function byteLength (data) {
