@@ -12,6 +12,7 @@ const {
   artifactsUrl,
   circleHeaders
 } = require('./get-results')
+const goalSummary = require('./goal.json')
 
 function getReadmes () {
   const readmes = {}
@@ -34,6 +35,9 @@ function diff (beforeSummary, afterSummary, prev = 'master', curr = 'this commit
   const diffTree = walk(afterSummary, beforeSummary)
   const html = fs.readFileSync(path.join(__dirname, 'diff.html'), 'utf8')
     .replace('REPLACE_ME_DIFF_DATA', JSON.stringify(diffTree, null, 2))
+    .replace('REPLACE_ME_PREV_DATA', JSON.stringify(beforeSummary, null, 2))
+    .replace('REPLACE_ME_CURR_DATA', JSON.stringify(afterSummary, null, 2))
+    .replace('REPLACE_ME_GOAL_DATA', JSON.stringify(goalSummary, null, 2))
     .replace('REPLACE_ME_READMES', JSON.stringify(getReadmes(), null, 2))
     .replace(/REPLACE_ME_PREV/g, prev)
     .replace(/REPLACE_ME_CURR/g, curr)
