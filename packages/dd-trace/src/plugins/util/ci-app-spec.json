@@ -28,5 +28,6 @@
   "os.version",
   "os.architecture",
   "runtime.name",
-  "runtime.version"
+  "runtime.version",
+  "test.parameters"
 ]

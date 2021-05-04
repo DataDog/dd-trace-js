@@ -1,4 +1,5 @@
 const { promisify } = require('util')
+const shimmer = require('shimmer')
 
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -13,6 +14,7 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
+  TEST_PARAMETERS,
   getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -36,8 +38,25 @@ function createWrapTeardown (tracer) {
   }
 }
 
+let params = {}
+
 function createHandleTestEvent (tracer, testEnvironmentMetadata) {
   return async function handleTestEventWithTrace (event) {
+    if (event.name === 'start_describe_definition') {
+      params = {}
+      shimmer.wrap(this.global.test, 'each', function (original) {
+        return function () {
+          const [parameters] = arguments
+          const test = original.apply(this, arguments)
+          return function () {
+            const [testName] = arguments
+            params[testName] = parameters
+            return test.apply(this, arguments)
+          }
+        }
+      })
+    }
+
     if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
       return
     }
@@ -59,6 +78,11 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
       [SAMPLING_RULE_DECISION]: 1,
       [SAMPLING_PRIORITY]: AUTO_KEEP,
       ...testEnvironmentMetadata
+    }
+    let testParameters = params[event.test.name]
+    if (testParameters) {
+      testParameters = testParameters.shift()
+      commonSpanTags[TEST_PARAMETERS] = JSON.stringify(testParameters)
     }
     const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
