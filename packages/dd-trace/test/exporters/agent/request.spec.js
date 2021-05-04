@@ -13,7 +13,8 @@ describe('request', () => {
     nock.disableNetConnect()
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
+      debug: sinon.spy()
     }
     docker = {
       id: sinon.stub().returns('abcd')
@@ -143,5 +144,98 @@ describe('request', () => {
     }, (err, res) => {
       expect(res).to.equal('OK')
     })
+  })
+
+  it('should retry under ECONNRESET errors with reusedSocket', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError({ code: 'ECONNRESET' })
+      .put('/path')
+      .reply(200, 'OK')
+
+    const req = request({
+      path: '/path',
+      method: 'PUT'
+    }, (err, res) => {
+      expect(log.debug).to.have.been.calledOnceWith('Retrying request due to socket connection error')
+      expect(res).to.equal('OK')
+      done()
+    })
+    req.reusedSocket = true
+  })
+
+  it('should retry under EPIPE errors with reusedSocket', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError({ code: 'EPIPE' })
+      .put('/path')
+      .reply(200, 'OK')
+
+    const req = request({
+      path: '/path',
+      method: 'PUT'
+    }, (err, res) => {
+      expect(log.debug).to.have.been.calledOnceWith('Retrying request due to socket connection error')
+      expect(res).to.equal('OK')
+      done()
+    })
+    req.reusedSocket = true
+  })
+
+  it('should not retry under ECONNRESET errors without reusedSocket', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError({ code: 'ECONNRESET', message: 'Error ECONNRESET' })
+      .put('/path')
+      .reply(200, 'OK')
+
+    const req = request({
+      path: '/path',
+      method: 'PUT'
+    }, (err) => {
+      expect(log.debug).not.to.have.been.called
+      expect(err).to.be.instanceof(Error)
+      expect(err.message).to.equal('Network error trying to reach the agent: Error ECONNRESET')
+      done()
+    })
+    req.reusedSocket = false
+  })
+
+  it('should not retry under EPIPE errors without reusedSocket', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError({ code: 'EPIPE', message: 'Error EPIPE' })
+      .put('/path')
+      .reply(200, 'OK')
+
+    const req = request({
+      path: '/path',
+      method: 'PUT'
+    }, (err) => {
+      expect(log.debug).not.to.have.been.called
+      expect(err).to.be.instanceof(Error)
+      expect(err.message).to.equal('Network error trying to reach the agent: Error EPIPE')
+      done()
+    })
+    req.reusedSocket = false
+  })
+
+  it('should not retry more than once', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .replyWithError({ code: 'ECONNRESET', message: 'Error ECONNRESET' })
+      .put('/path')
+      .replyWithError({ code: 'ECONNRESET', message: 'Error ECONNRESET' })
+
+    const req = request({
+      path: '/path',
+      method: 'PUT'
+    }, (err, res) => {
+      expect(log.debug).to.have.been.calledOnceWith('Retrying request due to socket connection error')
+      expect(err).to.be.instanceof(Error)
+      expect(err.message).to.equal('Network error trying to reach the agent: Error ECONNRESET')
+      done()
+    })
+    req.reusedSocket = true
   })
 })
