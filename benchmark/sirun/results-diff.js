@@ -1,12 +1,8 @@
 'use strict'
 
-const { execSync } = require('child_process')
+const { getResults } = require('./get-results')
 
-function getResults (hash) {
-  return JSON.parse(execSync(`node get-results.js ${hash}`).toString('utf8'))
-}
-
-function walk (tree, oldTree) {
+function walk (tree, oldTree, path = []) {
   if (typeof tree === 'number') {
     const diff = tree - oldTree
     const pctDiff = 100 * diff / oldTree
@@ -24,7 +20,7 @@ function walk (tree, oldTree) {
     const result = {}
     for (const name in tree) {
       if (name in oldTree) {
-        result[name] = walk(tree[name], oldTree[name])
+        result[name] = walk(tree[name], oldTree[name], [...path, name])
       }
     }
     return result

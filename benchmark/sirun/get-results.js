@@ -5,14 +5,14 @@
 const https = require('https')
 const { execSync } = require('child_process')
 
-const { CIRCLE_TOKEN, GITHUB_TOKEN } = process.env
+const { CIRCLE_TOKEN, GITHUB_STATUS_TOKEN } = process.env
 
 const circleHeaders = CIRCLE_TOKEN ? {
   'circle-token': CIRCLE_TOKEN
 } : {}
 
-const githubHeaders = GITHUB_TOKEN ? {
-  Authorization: `token ${GITHUB_TOKEN}`
+const githubHeaders = GITHUB_STATUS_TOKEN ? {
+  Authorization: `token ${GITHUB_STATUS_TOKEN}`
 } : {}
 
 const statusUrl = (ref, page) =>
@@ -27,7 +27,6 @@ function get (url, headers) {
       accept: 'application/json'
     }, headers) }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
-        console.log('redirecting to', res.headers.location)
         resolve(get(res.headers.location))
         return
       }
@@ -115,9 +114,7 @@ function summarizeResults (buildData, testResults) {
   }
 }
 
-async function main () {
-  const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
-  const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
+async function getResults (gitCommit) {
   const builds = await getBuildNumsFromGithub(gitCommit)
   const buildData = {}
   for (const name in builds) {
@@ -129,7 +126,13 @@ async function main () {
       .trim().split('\n').map(x => JSON.parse(x))
     summarizeResults(buildData, testResults)
   }
-  console.log(JSON.stringify(buildData, null, 4))
+  return buildData
+}
+
+async function main () {
+  const ref = process.argv.length > 2 ? process.argv[2] : 'HEAD'
+  const gitCommit = execSync(`git rev-parse ${ref}`).toString().trim()
+  console.log(JSON.stringify(getResults(gitCommit), null, 4))
 }
 
 module.exports = {
@@ -137,7 +140,8 @@ module.exports = {
   get,
   artifactsUrl,
   circleHeaders,
-  summarizeResults
+  summarizeResults,
+  getResults
 }
 if (require.main === module) {
   main()
