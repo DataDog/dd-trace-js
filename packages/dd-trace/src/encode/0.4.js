@@ -26,12 +26,19 @@ class AgentEncoder {
 
   encode (trace) {
     const bytes = this._traceBytes
+    const start = bytes.length
 
     this._traceCount++
 
     this._encode(bytes, trace)
 
-    log.debug(() => `Adding encoded trace to buffer: ${bytes.map(b => b.toString(16)).join(' ')}`)
+    const end = bytes.length
+
+    log.debug(() => {
+      const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
+
+      return `Adding encoded trace to buffer: ${hex}`
+    })
 
     // we can go over the soft limit since the agent has a 50MB hard limit
     if (this._traceBytes.length > SOFT_LIMIT || this._stringBytes.length > SOFT_LIMIT) {
@@ -94,8 +101,6 @@ class AgentEncoder {
     this._stringCount = 0
     this._stringBytes.length = 0
     this._stringMap = {}
-    this._stringStarts = {}
-    this._stringEnds = {}
 
     this._cacheString('')
   }
