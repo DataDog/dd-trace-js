@@ -869,11 +869,11 @@ jobs:
   
   # Node core language tests
 
-  node-core-language-tests:
+  node-upstream-tests:
     resource_class: small
     working_directory: ~/dd-trace-js
     docker:
-      - image: cimg/python:3.9.4-node
+      - image: node:14
       - image: kyleverhoog/dd-trace-test-agent:latest
     steps:
       - checkout
@@ -886,7 +886,7 @@ jobs:
           command: "git clone --branch v14.x https://github.com/nodejs/node.git ~/node"
       - run:
           name: Run test script
-          command: python nodejs-core-tests/run_test.py
+          command: node node-upstream-tests/run_test.py
           environment:
             NODE_PROJECT: "~/node"
             NODE_BIN: "/usr/local/bin/node"
@@ -1216,7 +1216,7 @@ workflows:
       - node-integration-14
       - node-integration-16
       - node-integration-latest
-      - node-core-language-tests
+      - node-upstream-tests
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
