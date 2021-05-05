@@ -14,7 +14,7 @@ if (testing !== 'server') {
 
 const server = http.createServer((req, res) => {
   res.end('Hello, World!')
-  if (++connectionsMade === 100000 && testing === 'server') {
+  if (++connectionsMade === 10000 && testing === 'server') {
     setImmediate(() => {
       process.exit()
     })

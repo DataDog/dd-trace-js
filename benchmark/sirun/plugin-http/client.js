@@ -16,7 +16,7 @@ function request (url) {
   http.get(`${url}`, (res) => {
     res.on('data', () => {})
     res.on('end', () => {
-      if (++connectionsMade === 100000 && testing === 'client') {
+      if (++connectionsMade === 10000 && testing === 'client') {
         process.exit()
       }
       request(url)
