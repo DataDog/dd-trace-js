@@ -118,7 +118,7 @@ module.exports = [
       this.wrap(AWS.Request.prototype, 'send', createWrapRequest(tracer, config))
     },
     unpatch (AWS) {
-      this.wrap(AWS.Request.prototype, 'send')
+      this.unwrap(AWS.Request.prototype, 'send')
     }
   }
 ]
