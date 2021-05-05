@@ -15,7 +15,7 @@ if (NODE_REPO_PATH === undefined) {
   throw new Error('The env variable NODE_PROJECT is not set. This is required to locate the root of the nodejs repo')
 }
 
-const NEEDS_TO_SPAWN_AGENT = true
+const NEEDS_TO_SPAWN_AGENT = false
 
 const MODULES = [
   'dns',
