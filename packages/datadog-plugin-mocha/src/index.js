@@ -107,7 +107,6 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
       runTests.apply(this, arguments)
-      // we might have to do this recursively, as this.suite.tests is empty but this.suite.suites isn't
       this.suite.tests.forEach(test => {
         const { pending: isSkipped } = test
         if (!isSkipped) {
