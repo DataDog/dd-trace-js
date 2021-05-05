@@ -1,3 +1,4 @@
-This creates multiple http request from client to server, test on the server then the client side. 
+This creates 100,000 HTTP requests from client to server.
 
-The variants are with the tracer and without it.
+The variants are with the tracer and without it, and instrumenting on the server
+and the client separately.

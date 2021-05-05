@@ -6,9 +6,9 @@
       "run": "node client.js",
       "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
-        "SET_PID": "server",
+        "TESTING": "client",
         "CLIENT_USE_TRACER": "0",
-        "PORT": "3001" 
+        "PORT": "3001"
       }
     },
     "client-with-tracer": {
@@ -16,9 +16,9 @@
       "run": "node client.js",
       "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
-        "SET_PID": "server",
+        "TESTING": "client",
         "CLIENT_USE_TRACER": "1",
-        "PORT": "3002" 
+        "PORT": "3002"
       }
     },
     "server-control": {
@@ -26,9 +26,9 @@
       "run": "node server.js",
       "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
-        "SET_PID": "client",
+        "TESTING": "server",
         "SERVER_USE_TRACER": "0",
-        "PORT": "3003" 
+        "PORT": "3003"
       }
     },
     "server-with-tracer": {
@@ -36,9 +36,9 @@
       "run": "node server.js",
       "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
-        "SET_PID": "client",
+        "TESTING": "server",
         "SERVER_USE_TRACER": "1",
-        "PORT": "3004" 
+        "PORT": "3004"
       }
     }
   }

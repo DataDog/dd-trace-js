@@ -2,7 +2,9 @@ if (Number(process.env.CLIENT_USE_TRACER)) {
   require('../../..').init()
 }
 
-if (process.env.SET_PID === 'client') {
+const testing = process.env.TESTING
+
+if (testing !== 'client') {
   const fs = require('fs')
   fs.writeFileSync('client.pid', '' + process.pid)
 }
@@ -14,14 +16,14 @@ function request (url) {
   http.get(`${url}`, (res) => {
     res.on('data', () => {})
     res.on('end', () => {
-      if (++connectionsMade === 10000 && process.env.SET_PID !== 'client') {
+      if (++connectionsMade === 100000 && testing === 'client') {
         process.exit()
       }
-      request(`http://localhost:${process.env.PORT}/`)
+      request(url)
     })
   }).on('error', () => {
     setTimeout(() => {
-      request(`http://localhost:${process.env.PORT}/`)
+      request(url)
     }, 1000)
   })
 }

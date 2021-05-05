@@ -1,0 +1,19 @@
+starting connection
+got response
+starting connection
+got response
+/Users/bryan.english/dd-trace-js/benchmark/sirun/plugin-http/client.js:17
+    res.uncork()
+        ^
+
+TypeError: res.uncork is not a function
+    at ClientRequest.<anonymous> (/Users/bryan.english/dd-trace-js/benchmark/sirun/plugin-http/client.js:17:9)
+    at Object.onceWrapper (node:events:476:26)
+    at ClientRequest.emit (node:events:369:20)
+    at HTTPParser.parserOnIncomingClient [as onIncoming] (node:_http_client:643:27)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:129:17)
+    at Socket.socketOnData (node:_http_client:509:22)
+    at Socket.emit (node:events:369:20)
+    at addChunk (node:internal/streams/readable:313:12)
+    at readableAddChunk (node:internal/streams/readable:288:9)
+    at Socket.Readable.push (node:internal/streams/readable:227:10)
