@@ -2,12 +2,9 @@ if (Number(process.env.CLIENT_USE_TRACER)) {
   require('../../..').init()
 }
 
-const testing = process.env.TESTING
+const { port, reqs } = require('./common')
 
-if (testing !== 'client') {
-  const fs = require('fs')
-  fs.writeFileSync('client.pid', '' + process.pid)
-}
+const testing = process.env.TESTING
 
 const http = require('http')
 let connectionsMade = 0
@@ -16,7 +13,7 @@ function request (url) {
   http.get(`${url}`, (res) => {
     res.on('data', () => {})
     res.on('end', () => {
-      if (++connectionsMade === 10000 && testing === 'client') {
+      if (++connectionsMade === reqs && testing === 'client') {
         process.exit()
       }
       request(url)
@@ -24,8 +21,8 @@ function request (url) {
   }).on('error', () => {
     setTimeout(() => {
       request(url)
-    }, 1000)
+    }, 10)
   })
 }
 
-request(`http://localhost:${process.env.PORT}/`)
+request(`http://localhost:${port}/`)
