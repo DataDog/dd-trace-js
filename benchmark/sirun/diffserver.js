@@ -23,26 +23,38 @@ function cleanName (commitish) {
   return isHex(commitish) ? commitish.substr(0, 8) : commitish
 }
 
+const summaryCache = {}
+
 async function getSummary (commitish) {
+  const cached = summaryCache[commitish]
+  if (cached) {
+    return cached
+  }
   const builds = await getBuildNumsFromGithub(commitish)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
   if (!build) {
-    return getResults(commitish)
+    const result = getResults(commitish)
+    summaryCache[commitish] = result
+    return result
   }
   let artifacts = await get(artifactsUrl(build), circleHeaders)
   artifacts = JSON.parse(artifacts)
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) {
-    return getResults(commitish)
+    const result = getResults(commitish)
+    summaryCache[commitish] = result
+    return result
   }
 
-  return JSON.parse(await get(artifact.url, circleHeaders))
+  const result = JSON.parse(await get(artifact.url, circleHeaders))
+  summaryCache[commitish] = result
+  return result
 }
 
 app.get('/', async (req, res) => {
   const { before, after, beforeName, afterName } = req.query
   if (!before || !after) {
-    res.end('Please use <code>before</code> and </after> querystring options to specify commit range.')
+    res.end('Please use <code>before</code> and <code>after</code> querystring options to specify commit range.')
     return
   }
   const beforeSummary = await getSummary(before)
