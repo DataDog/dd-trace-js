@@ -196,7 +196,11 @@ async function nodeVersion (nodeBin) {
 }
 
 async function nodeRepoVersion (repoPath) {
-  const { stdout } = await runCmd(['git', 'branch', '--show-current'], true, { cwd: repoPath })
+  const { stdout } = await runCmd(
+    ['git', 'rev-parse', '--symbolic-full-name', '--symbolic-full-name', '--abbrev-ref', 'HEAD'],
+    true,
+    { cwd: repoPath }
+  )
   const version = stdout.trim()
   const match = version.match(/v(\d+)(\.[a-z0-9]+){0,2}/)
   if (match === null) {
