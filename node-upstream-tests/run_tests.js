@@ -116,7 +116,7 @@ async function samePath (path, other) {
 function runCmd (cmd, errorOnCode = false, options) {
   return new Promise((resolve, reject) => {
     try {
-      const process = childProcess.spawn(cmd[0], cmd.slice(1), options)
+      const process = childProcess.execFile(cmd[0], cmd.slice(1), options)
 
       process.on('error', (e) => {
         reject(e)
