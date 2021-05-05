@@ -50,6 +50,15 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
 
       const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test, sourceRoot)
 
+      const testParamsList = nameToParams[this.test.title]
+      if (testParamsList) {
+        // test is invoked with each parameter set sequencially
+        const testParams = testParamsList.shift()
+        try {
+          testSpanMetadata['test.parameters'] = JSON.stringify(testParams)
+          // eslint-disable-next-line
+        } catch (e) {}
+      }
       this.test.fn = tracer.wrap(
         'mocha.test',
         {
@@ -98,6 +107,7 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
       runTests.apply(this, arguments)
+      // we might have to do this recursively, as this.suite.tests is empty but this.suite.suites isn't
       this.suite.tests.forEach(test => {
         const { pending: isSkipped } = test
         if (!isSkipped) {
@@ -121,6 +131,8 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   }
 }
 
+const nameToParams = {}
+
 module.exports = [
   {
     name: 'mocha',
@@ -135,6 +147,24 @@ module.exports = [
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
       this.unwrap(Runner.prototype, 'runTest')
+    }
+  },
+  {
+    name: 'mocha-each',
+    versions: ['>=2.0.1'],
+    patch (each) {
+      const oldEach = each
+      return function () {
+        const [params] = arguments
+        const { it, ...rest } = oldEach.apply(this, arguments)
+        return {
+          it: function (name) {
+            nameToParams[name] = params
+            it.apply(this, arguments)
+          },
+          ...rest
+        }
+      }
     }
   }
 ]
