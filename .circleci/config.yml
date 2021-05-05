@@ -888,7 +888,7 @@ jobs:
           name: Run test script
           command: node node-upstream-tests/run_tests.js
           environment:
-            NODE_PROJECT: "~/node"
+            NODE_PROJECT: "/root/node"
             NODE_BIN: "/usr/local/bin/node"
 
   # Code coverage
