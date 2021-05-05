@@ -133,6 +133,20 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
 
 const nameToParams = {}
 
+function wrapMochaEach (mochaEach) {
+  return function mochaEachWithTrace () {
+    const [params] = arguments
+    const { it, ...rest } = mochaEach.apply(this, arguments)
+    return {
+      it: function (name) {
+        nameToParams[name] = params
+        it.apply(this, arguments)
+      },
+      ...rest
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'mocha',
@@ -152,19 +166,11 @@ module.exports = [
   {
     name: 'mocha-each',
     versions: ['>=2.0.1'],
-    patch (each) {
-      const oldEach = each
-      return function () {
-        const [params] = arguments
-        const { it, ...rest } = oldEach.apply(this, arguments)
-        return {
-          it: function (name) {
-            nameToParams[name] = params
-            it.apply(this, arguments)
-          },
-          ...rest
-        }
-      }
+    patch (mochaEach) {
+      return this.wrapExport(mochaEach, wrapMochaEach(mochaEach))
+    },
+    unpatch (mochaEach) {
+      this.unwrapExport(mochaEach)
     }
   }
 ]
