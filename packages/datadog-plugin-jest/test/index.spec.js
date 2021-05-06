@@ -1,4 +1,5 @@
 'use strict'
+const shimmer = require('shimmer')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -11,7 +12,8 @@ const {
   TEST_STATUS,
   ERROR_TYPE,
   ERROR_MESSAGE,
-  ERROR_STACK
+  ERROR_STACK,
+  TEST_PARAMETERS
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -267,6 +269,46 @@ describe('Plugin', () => {
           }
         }
         datadogJestEnv.getVmContext = () => null
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
+      it('should work with parameterized tests', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+        sinon.spy(shimmer, 'wrap')
+
+        const startDescribeEvent = {
+          name: 'start_describe_definition'
+        }
+
+        const thisArg = {
+          global: {
+            test: {
+              each: () => () => {}
+            }
+          }
+        }
+
+        datadogJestEnv.handleTestEvent.call(thisArg, startDescribeEvent)
+        expect(shimmer.wrap).to.have.been.calledWith(thisArg.global.test, 'each')
+        thisArg.global.test.each([[{ parameterA: 'a' }]])('test-name')
+        shimmer.wrap.restore()
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [TEST_PARAMETERS]: JSON.stringify([{ parameterA: 'a' }])
+            })
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: 'test-name'
+          }
+        }
         datadogJestEnv.handleTestEvent(passingTestEvent)
         passingTestEvent.test.fn()
       })
