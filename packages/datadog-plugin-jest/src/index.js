@@ -50,7 +50,11 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
           const test = original.apply(this, arguments)
           return function () {
             const [testName] = arguments
-            params[testName] = parameters
+            // TODO: support string templates as well
+            // https://github.com/facebook/jest/tree/master/packages/jest-each#eachtagged-templatetestname-suitefn
+            if (Array.isArray(parameters) && Array.isArray(parameters[0])) {
+              params[testName] = parameters
+            }
             return test.apply(this, arguments)
           }
         }
@@ -80,9 +84,12 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
       ...testEnvironmentMetadata
     }
     let testParameters = params[event.test.name]
-    if (testParameters) {
-      testParameters = testParameters.shift()
-      commonSpanTags[TEST_PARAMETERS] = JSON.stringify(testParameters)
+    if (testParameters && Array.isArray(testParameters)) {
+      try {
+        testParameters = testParameters.shift()
+        commonSpanTags[TEST_PARAMETERS] = JSON.stringify(testParameters)
+        // eslint-disable-next-line
+      } catch (e) {}
     }
     const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
