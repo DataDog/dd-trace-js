@@ -86,7 +86,7 @@ node-bench-sirun-base: &node-bench-sirun-base
         command: apt-get update && apt-get install -y valgrind wget
     - run:
         name: Install sirun
-        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.6/sirun-v0.1.6-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.6-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
+        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.7/sirun-v0.1.7-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.7-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
     - run:
         name: Run sirun
         command: |
@@ -318,6 +318,14 @@ jobs:
         environment:
           - PLUGINS=bluebird
           - SIRUN_TEST_DIR=plugin-bluebird
+
+  node-bench-sirun-plugin-http-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - PLUGINS=http
+          - SIRUN_TEST_DIR=plugin-http
 
   node-bench-sirun-scope-latest:
     <<: *node-bench-sirun-base
@@ -1332,6 +1340,7 @@ workflows:
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
       - node-bench-sirun-plugin-bluebird-latest
+      - node-bench-sirun-plugin-http-latest
       - node-bench-sirun-scope-latest
       - node-bench-sirun-exporting-pipeline-latest
       - node-bench-sirun-all:
@@ -1489,6 +1498,7 @@ workflows:
       - node-amqp10
       - node-aws-sdk
       - node-bluebird
+      - node-http
       - node-bunyan
       - node-cassandra
       - node-connect
@@ -1551,6 +1561,7 @@ workflows:
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
       - node-bench-sirun-plugin-bluebird-latest
+      - node-bench-sirun-plugin-http-latest
       - node-bench-sirun-scope-latest
       - node-bench-sirun-exporting-pipeline-latest
       - node-bench-sirun-all:
