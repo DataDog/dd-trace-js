@@ -9,6 +9,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_PARAMETERS,
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
@@ -55,7 +56,7 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
         // test is invoked with each parameter set sequencially
         const testParams = testParamsList.shift()
         try {
-          testSpanMetadata['test.parameters'] = JSON.stringify(testParams)
+          testSpanMetadata[TEST_PARAMETERS] = JSON.stringify(testParams)
           // eslint-disable-next-line
         } catch (e) {}
       }
