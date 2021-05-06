@@ -874,7 +874,6 @@ jobs:
     working_directory: ~/dd-trace-js
     docker:
       - image: node:14
-      - image: kyleverhoog/dd-trace-test-agent:latest
     steps:
       - checkout
       - *yarn-versions
@@ -883,12 +882,12 @@ jobs:
       - *save-yarn-cache
       - run:
           name: Pull the NodeJS repository
-          command: "git clone --branch v14.x https://github.com/nodejs/node.git ~/node"
+          command: "git clone --depth 1 --branch v14.x https://github.com/nodejs/node.git ~/node"
       - run:
           name: Run test script
-          command: node node-upstream-tests/run_tests.js
+          command: node node-upstream-tests/node/run_tests.js
           environment:
-            NODE_PROJECT: "/root/node"
+            NODE_REPO_PATH: "/root/node"
             NODE_BIN: "/usr/local/bin/node"
 
   # Code coverage

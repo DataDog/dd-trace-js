@@ -2,20 +2,15 @@
 
 /* eslint-disable no-console */
 
-const promisify = require('util').promisify
-const axios = require('axios')
 const childProcess = require('child_process')
-const fs = require('fs')
-const glob = promisify(require('glob'))
 const path = require('path')
+const fsUtils = require('./fs_utils')
 
 const NODE_BIN = process.env['NODE_BIN'] || '/usr/bin/node'
-const NODE_REPO_PATH = process.env['NODE_PROJECT']
+const NODE_REPO_PATH = process.env['NODE_REPO_PATH']
 if (NODE_REPO_PATH === undefined) {
-  throw new Error('The env variable NODE_PROJECT is not set. This is required to locate the root of the nodejs repo')
+  throw new Error('The env variable NODE_REPO_PATH is not set. This is required to locate the root of the nodejs repo')
 }
-
-const NEEDS_TO_SPAWN_AGENT = false
 
 const MODULES = [
   'dns',
@@ -84,35 +79,6 @@ const UNEXPECTED_FAILURES = [
   'test/parallel/test-fs-truncate.js'
 ]
 
-// These tests trigger a stackoverflow in the test agent because
-// traces are too deep
-const TEST_AGENT_IGNORE = [
-  'test/parallel/test-http-pipeline-requests-connection-leak.js',
-  'test/parallel/test-http2-forget-closed-streams.js'
-]
-
-const readFile = promisify(fs.readFile)
-const acess = promisify(fs.access)
-const stat = promisify(fs.stat)
-
-async function pathExists (path) {
-  try {
-    await acess(path)
-    return true
-  } catch (e) {
-    if (e.code === 'ENOENT') {
-      return false
-    }
-    throw e
-  }
-}
-
-async function samePath (path, other) {
-  const pathStat = await stat(path)
-  const otherStat = await stat(other)
-  return pathStat.ino === otherStat.ino
-}
-
 function runCmd (cmd, errorOnCode = false, options) {
   return new Promise((resolve, reject) => {
     try {
@@ -142,12 +108,8 @@ function runCmd (cmd, errorOnCode = false, options) {
   })
 }
 
-function sleep (ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 async function listJsTests (nodeRepoPath) {
-  const tests = (await glob('test/**/test-*.js', { cwd: nodeRepoPath }))
+  const tests = (await fsUtils.glob('test/**/test-*.js', { cwd: nodeRepoPath }))
     .map(testPath => {
       const moduleName = path.basename(testPath, '.js').split('-')[1]
       const abolutePath = path.join(nodeRepoPath, testPath)
@@ -160,29 +122,9 @@ async function listJsTests (nodeRepoPath) {
 }
 
 async function shouldRunTest (moduleName, testPath) {
-  return (await pathExists(path.join(path.dirname(testPath), 'testcfg.py'))) &&
+  return (await fsUtils.pathExists(path.join(path.dirname(testPath), 'testcfg.py'))) &&
     MODULES.includes(moduleName) &&
-    !IGNORED_SUITES.includes(path.basename(path.dirname(testPath)))
-}
-
-async function startTestAgent () {
-  const cmd = [
-    'docker',
-    'run',
-    '-d',
-    '--rm',
-    '--name',
-    'dd-test-agent',
-    '-p',
-    '8126:8126',
-    'kyleverhoog/dd-trace-test-agent:latest'
-  ]
-  await runCmd(cmd, true)
-}
-
-async function stopTestAgent () {
-  const cmd = ['docker', 'stop', 'dd-test-agent']
-  await runCmd(cmd, true)
+    !IGNORED_SUITES.includes(fsUtils.parentName(testPath))
 }
 
 async function nodeVersion (nodeBin) {
@@ -209,36 +151,9 @@ async function nodeRepoVersion (repoPath) {
   return { version, major: match[1] }
 }
 
-const AXIOS_CONFIG = {
-  validateStatus: undefined,
-  responseType: 'text',
-  transformResponse: [(data) => data]
-}
-
-async function startAgentTest (testIdentifier) {
-  const res = await axios(
-    `http://127.0.0.1:8126/test/start?token=${testIdentifier}`,
-    AXIOS_CONFIG
-  )
-  if (!res.status === 200) {
-    throw new Error(
-      `Error while starting a new test with the test agent\n` +
-      `status: ${res.status} response: ${res.data}`
-    )
-  }
-}
-
-async function getAgentResult (testIdentifier) {
-  const res = await axios(
-    `http://127.0.0.1:8126/test/check?token=${testIdentifier}`,
-    AXIOS_CONFIG
-  )
-  return { status: res.status, response: res.data }
-}
-
 async function findFlags (testPath) {
   const flags = []
-  const content = await readFile(testPath, { encoding: 'utf-8' })
+  const content = await fsUtils.readFile(testPath, { encoding: 'utf-8' })
   for (const match of content.matchAll(/^\/\/\s+Flags:(.*)$/gm)) {
     flags.push(...match[1].trim().split(' '))
   }
@@ -251,7 +166,7 @@ async function runTest (nodeBin, testPath) {
     nodeBin,
     ...flags,
     '--require',
-    path.join(path.dirname(path.dirname(__filename)), 'init.js'),
+    path.join(fsUtils.parentDir(__filename, 3), 'init.js'),
     testPath
   ]
   return runCmd(cmd, false, { cwd: NODE_REPO_PATH })
@@ -261,13 +176,9 @@ async function runModuleTests (moduleName, tests) {
   console.log(`Running ${tests.length} tests for module ${moduleName}`)
   const results = []
   for (const test of tests) {
-    const testIdentifier = path.basename(test, '.js')
-    await startAgentTest(testIdentifier)
-
     const { rc, stderr } = await runTest(NODE_BIN, test)
-    const { status, response } = await getAgentResult(testIdentifier)
 
-    const result = await new TestResult(test, rc, stderr, status, response).init()
+    const result = await new TestResult(test, rc, stderr, 200, '').init()
     results.push(result)
   }
 
@@ -289,40 +200,29 @@ async function runModuleTests (moduleName, tests) {
 }
 
 class TestResult {
-  constructor (testPath, rc, stderr, statusCode, response) {
+  constructor (testPath, rc, stderr) {
     this.testPath = testPath
     this.rc = rc
     this.stderr = stderr
-    this.statusCode = statusCode
-    this.response = response
 
     this.isPass = null
     this.isIgnore = null
   }
   async init () {
-    const isAgentIgnore = (await Promise.all(TEST_AGENT_IGNORE.map(
-      (ignore) => samePath(this.testPath, path.join(NODE_REPO_PATH, ignore))
-    ))).some(same => same) ||
-      this.response.includes('No traces found for token')
+    this.isPass = this.rc === 0
 
-    this.isPass = this.rc === 0 &&
-      (this.statusCode === 200 || isAgentIgnore)
-
-    this.isIgnore = (path.basename(path.dirname(this.testPath)) === 'known_issues') ||
+    this.isIgnore = (fsUtils.parentName(this.testPath) === 'known_issues') ||
       (await Promise.all(UNEXPECTED_FAILURES.map((failure) => {
-        return samePath(this.testPath, path.join(NODE_REPO_PATH, failure))
+        return fsUtils.samePath(this.testPath, path.join(NODE_REPO_PATH, failure))
       }))).some(same => same) ||
       TRACING_HEADERS.some(header => {
         return this.stderr.includes(header)
       })
+
     return this
   }
   errorMessage () {
     let message = ''
-    message += `Test agent reponse code ${this.statusCode}\n`
-    for (const line of this.response.split('\n')) {
-      message += `|    ${line}\n`
-    }
     message += `Test output: rc ${this.rc}\n`
     for (const line of this.stderr.split('\n')) {
       message += `|    ${line}\n`
@@ -338,11 +238,6 @@ async function main () {
     console.log(`Running tests for node ${version}`)
     if (major !== (await nodeRepoVersion(NODE_REPO_PATH)).major) {
       throw new Error('The Node repo isn\'t at the same version  as the binary')
-    }
-    if (NEEDS_TO_SPAWN_AGENT) {
-      console.log('Start docker agent')
-      await startTestAgent()
-      await sleep(5000)
     }
     const tests = await listJsTests(NODE_REPO_PATH)
     tests.sort(({ testPath }, { testPath2 }) => {
@@ -371,15 +266,6 @@ async function main () {
     }
   } catch (e) {
     console.error('Fatal: ', e, e.stack)
-  } finally {
-    if (NEEDS_TO_SPAWN_AGENT) {
-      console.log('Stop docker agent')
-      try {
-        await stopTestAgent()
-      } catch (e) {
-        console.error(`Failed to stop docker agent: ${e}`)
-      }
-    }
   }
   process.exit(exitCode)
 }
