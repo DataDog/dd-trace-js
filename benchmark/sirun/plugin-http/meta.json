@@ -4,43 +4,31 @@
   "iterations": 10,
   "variants": {
     "client-control": {
-      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 & echo $! > server.pid\"",
+      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
-      "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
-        "TESTING": "client",
-        "CLIENT_USE_TRACER": "0",
-        "PORT": "3030"
+        "CLIENT_USE_TRACER": "0"
       }
     },
     "client-with-tracer": {
-      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 & echo $! > server.pid\"",
+      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
-      "teardown": "bash -c \"kill -9 `cat server.pid`\"",
       "env": {
-        "TESTING": "client",
-        "CLIENT_USE_TRACER": "1",
-        "PORT": "3030"
+        "CLIENT_USE_TRACER": "1"
       }
     },
     "server-control": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 & echo $! > client.pid\"",
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node server.js",
-      "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
-        "TESTING": "server",
-        "SERVER_USE_TRACER": "0",
-        "PORT": "3030"
+        "SERVER_USE_TRACER": "0"
       }
     },
     "server-with-tracer": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 & echo $! > client.pid\"",
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node server.js",
-      "teardown": "bash -c \"kill -9 `cat client.pid`\"",
       "env": {
-        "TESTING": "server",
-        "SERVER_USE_TRACER": "1",
-        "PORT": "3030"
+        "SERVER_USE_TRACER": "1"
       }
     }
   }
