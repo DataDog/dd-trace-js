@@ -1,5 +1,4 @@
 const { promisify } = require('util')
-const shimmer = require('shimmer')
 
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -27,9 +26,11 @@ function wrapEnvironment (BaseEnvironment) {
   }
 }
 
-function createWrapTeardown (tracer) {
+function createWrapTeardown (tracer, instrumenter) {
   return function wrapTeardown (teardown) {
     return async function teardownWithTrace () {
+      instrumenter.unwrap(this.global.test, 'each')
+      params = {}
       await new Promise((resolve) => {
         tracer._exporter._writer.flush(resolve)
       })
@@ -40,14 +41,13 @@ function createWrapTeardown (tracer) {
 
 let params = {}
 
-function createHandleTestEvent (tracer, testEnvironmentMetadata) {
+function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
-    if (event.name === 'start_describe_definition') {
-      params = {}
-      shimmer.wrap(this.global.test, 'each', function (original) {
+    if (event.name === 'setup') {
+      instrumenter.wrap(this.global.test, 'each', function (original) {
         return function () {
           const [parameters] = arguments
-          const test = original.apply(this, arguments)
+          const eachBind = original.apply(this, arguments)
           return function () {
             const [testName] = arguments
             // TODO: support string templates as well
@@ -55,7 +55,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
             if (Array.isArray(parameters) && Array.isArray(parameters[0])) {
               params[testName] = parameters
             }
-            return test.apply(this, arguments)
+            return eachBind.apply(this, arguments)
           }
         }
       })
@@ -84,12 +84,15 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
       ...testEnvironmentMetadata
     }
     let testParameters = params[event.test.name]
-    if (testParameters && Array.isArray(testParameters)) {
+    if (Array.isArray(testParameters)) {
       try {
+        // test is invoked with each parameter set sequencially
         testParameters = testParameters.shift()
         commonSpanTags[TEST_PARAMETERS] = JSON.stringify(testParameters)
-        // eslint-disable-next-line
-      } catch (e) {}
+      } catch (e) {
+        // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
+        // so we ignore the test parameters and move on
+      }
     }
     const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -151,9 +154,9 @@ module.exports = [
     patch: function (NodeEnvironment, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
-      this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
-      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata)
+      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
       newHandleTestEvent._dd_original = NodeEnvironment.prototype.handleTestEvent
       NodeEnvironment.prototype.handleTestEvent = newHandleTestEvent
 
@@ -170,9 +173,9 @@ module.exports = [
     patch: function (JsdomEnvironment, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
-      this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
-      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata)
+      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
       newHandleTestEvent._dd_original = JsdomEnvironment.prototype.handleTestEvent
       JsdomEnvironment.prototype.handleTestEvent = newHandleTestEvent
 

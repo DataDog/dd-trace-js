@@ -1,6 +1,4 @@
 'use strict'
-const shimmer = require('shimmer')
-
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const { expect } = require('chai')
@@ -232,7 +230,15 @@ describe('Plugin', () => {
         tracer._tracer._exporter._writer.flush = sinon.spy((done) => {
           done()
         })
-        await datadogJestEnv.teardown()
+        const thisArg = {
+          global: {
+            close: () => {},
+            test: {
+              each: () => () => {}
+            }
+          }
+        }
+        await datadogJestEnv.teardown.call(thisArg)
         expect(tracer._tracer._exporter._writer.flush).to.have.been.called
       })
 
@@ -276,10 +282,11 @@ describe('Plugin', () => {
       it('should work with parameterized tests', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
-        sinon.spy(shimmer, 'wrap')
+        const tracer = require('../../dd-trace')
+        sinon.spy(tracer._instrumenter, 'wrap')
 
-        const startDescribeEvent = {
-          name: 'start_describe_definition'
+        const setupEvent = {
+          name: 'setup'
         }
 
         const thisArg = {
@@ -290,10 +297,10 @@ describe('Plugin', () => {
           }
         }
 
-        datadogJestEnv.handleTestEvent.call(thisArg, startDescribeEvent)
-        expect(shimmer.wrap).to.have.been.calledWith(thisArg.global.test, 'each')
+        datadogJestEnv.handleTestEvent.call(thisArg, setupEvent)
+        expect(tracer._instrumenter.wrap).to.have.been.calledWith(thisArg.global.test, 'each')
         thisArg.global.test.each([[{ parameterA: 'a' }]])('test-name')
-        shimmer.wrap.restore()
+        tracer._instrumenter.wrap.restore()
 
         agent
           .use(traces => {
