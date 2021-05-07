@@ -52,13 +52,15 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
       const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test, sourceRoot)
 
       const testParamsList = nameToParams[this.test.title]
-      if (testParamsList) {
-        // test is invoked with each parameter set sequencially
-        const testParams = testParamsList.shift()
+      if (Array.isArray(testParamsList)) {
         try {
+          // test is invoked with each parameter set sequencially
+          const testParams = testParamsList.shift()
           testSpanMetadata[TEST_PARAMETERS] = JSON.stringify(testParams)
-          // eslint-disable-next-line
-        } catch (e) {}
+        } catch (e) {
+          // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
+          // so we ignore the test parameters and move on
+        }
       }
       this.test.fn = tracer.wrap(
         'mocha.test',
