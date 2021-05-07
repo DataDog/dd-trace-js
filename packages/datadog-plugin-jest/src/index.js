@@ -13,6 +13,7 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
+  TEST_PARAMETERS,
   getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -25,9 +26,11 @@ function wrapEnvironment (BaseEnvironment) {
   }
 }
 
-function createWrapTeardown (tracer) {
+function createWrapTeardown (tracer, instrumenter) {
   return function wrapTeardown (teardown) {
     return async function teardownWithTrace () {
+      instrumenter.unwrap(this.global.test, 'each')
+      params = {}
       await new Promise((resolve) => {
         tracer._exporter._writer.flush(resolve)
       })
@@ -36,8 +39,28 @@ function createWrapTeardown (tracer) {
   }
 }
 
-function createHandleTestEvent (tracer, testEnvironmentMetadata) {
+let params = {}
+
+function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
+    if (event.name === 'setup') {
+      instrumenter.wrap(this.global.test, 'each', function (original) {
+        return function () {
+          const [parameters] = arguments
+          const eachBind = original.apply(this, arguments)
+          return function () {
+            const [testName] = arguments
+            // TODO: support string templates as well
+            // https://github.com/facebook/jest/tree/master/packages/jest-each#eachtagged-templatetestname-suitefn
+            if (Array.isArray(parameters) && Array.isArray(parameters[0])) {
+              params[testName] = parameters
+            }
+            return eachBind.apply(this, arguments)
+          }
+        }
+      })
+    }
+
     if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
       return
     }
@@ -59,6 +82,17 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata) {
       [SAMPLING_RULE_DECISION]: 1,
       [SAMPLING_PRIORITY]: AUTO_KEEP,
       ...testEnvironmentMetadata
+    }
+    let testParameters = params[event.test.name]
+    if (Array.isArray(testParameters)) {
+      try {
+        // test is invoked with each parameter set sequencially
+        testParameters = testParameters.shift()
+        commonSpanTags[TEST_PARAMETERS] = JSON.stringify(testParameters)
+      } catch (e) {
+        // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
+        // so we ignore the test parameters and move on
+      }
     }
     const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -120,9 +154,9 @@ module.exports = [
     patch: function (NodeEnvironment, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
-      this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
-      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata)
+      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
       newHandleTestEvent._dd_original = NodeEnvironment.prototype.handleTestEvent
       NodeEnvironment.prototype.handleTestEvent = newHandleTestEvent
 
@@ -139,9 +173,9 @@ module.exports = [
     patch: function (JsdomEnvironment, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
-      this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer))
+      this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
-      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata)
+      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
       newHandleTestEvent._dd_original = JsdomEnvironment.prototype.handleTestEvent
       JsdomEnvironment.prototype.handleTestEvent = newHandleTestEvent
 
