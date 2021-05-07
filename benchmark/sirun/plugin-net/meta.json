@@ -2,8 +2,7 @@
   "name": "net",
   "cachegrind": true,
   "iterations": 10,
-  "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 & echo $! > server.pid\"",
-  "teardown": "bash -c \"kill -9 `cat server.pid`\"",
+  "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
   "variants": {
     "control": {
       "run": "node client.js"
