@@ -25,10 +25,15 @@ const interval = setInterval(() => {
 function streamAddVersion (input) {
   input.rl = readline.createInterface({ input })
   input.rl.on('line', function (line) {
-    const json = JSON.parse(line.toString())
-    json.nodeVersion = process.versions.node
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify(json))
+    try {
+      const json = JSON.parse(line.toString())
+      json.nodeVersion = process.versions.node
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(json))
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log(line)
+    }
   })
 }
 

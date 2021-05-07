@@ -8,10 +8,16 @@ const id = require('../../src/id')
 describe('encode', () => {
   let encoder
   let writer
+  let logger
   let data
 
   beforeEach(() => {
-    const { AgentEncoder } = require('../../src/encode/0.4')
+    logger = {
+      debug: sinon.stub()
+    }
+    const { AgentEncoder } = proxyquire('../src/encode/0.4', {
+      '../log': logger
+    })
     writer = { flush: sinon.spy() }
     encoder = new AgentEncoder(writer)
     data = [{
@@ -102,5 +108,13 @@ describe('encode', () => {
     expect(payload[2]).to.equal(0)
     expect(payload[3]).to.equal(0)
     expect(payload[4]).to.equal(0)
+  })
+
+  it('should log adding an encoded trace to the buffer', () => {
+    encoder.encode(data)
+
+    const message = logger.debug.firstCall.args[0]()
+
+    expect(message).to.match(/^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
   })
 })

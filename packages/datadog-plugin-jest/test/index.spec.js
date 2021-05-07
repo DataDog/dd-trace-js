@@ -1,5 +1,4 @@
 'use strict'
-
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const { expect } = require('chai')
@@ -11,7 +10,8 @@ const {
   TEST_STATUS,
   ERROR_TYPE,
   ERROR_MESSAGE,
-  ERROR_STACK
+  ERROR_STACK,
+  TEST_PARAMETERS
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -230,7 +230,15 @@ describe('Plugin', () => {
         tracer._tracer._exporter._writer.flush = sinon.spy((done) => {
           done()
         })
-        await datadogJestEnv.teardown()
+        const thisArg = {
+          global: {
+            close: () => {},
+            test: {
+              each: () => () => {}
+            }
+          }
+        }
+        await datadogJestEnv.teardown.call(thisArg)
         expect(tracer._tracer._exporter._writer.flush).to.have.been.called
       })
 
@@ -267,6 +275,47 @@ describe('Plugin', () => {
           }
         }
         datadogJestEnv.getVmContext = () => null
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
+      it('should work with parameterized tests', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+        const tracer = require('../../dd-trace')
+        sinon.spy(tracer._instrumenter, 'wrap')
+
+        const setupEvent = {
+          name: 'setup'
+        }
+
+        const thisArg = {
+          global: {
+            test: {
+              each: () => () => {}
+            }
+          }
+        }
+
+        datadogJestEnv.handleTestEvent.call(thisArg, setupEvent)
+        expect(tracer._instrumenter.wrap).to.have.been.calledWith(thisArg.global.test, 'each')
+        thisArg.global.test.each([[{ parameterA: 'a' }]])('test-name')
+        tracer._instrumenter.wrap.restore()
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [TEST_PARAMETERS]: JSON.stringify([{ parameterA: 'a' }])
+            })
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: 'test-name'
+          }
+        }
         datadogJestEnv.handleTestEvent(passingTestEvent)
         passingTestEvent.test.fn()
       })
