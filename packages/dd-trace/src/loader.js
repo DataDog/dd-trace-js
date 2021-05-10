@@ -1,7 +1,7 @@
 'use strict'
 
 const semver = require('semver')
-const hook = require('require-in-the-middle')
+const hook = require('./ritm')
 const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
@@ -26,7 +26,7 @@ class Loader {
     this._names = new Set(instrumentations
       .map(instrumentation => filename(instrumentation)))
 
-    hook(instrumentedModules, { internals: true }, this._hookModule.bind(this))
+    hook(instrumentedModules, this._hookModule.bind(this))
   }
 
   load (instrumentation, config) {
