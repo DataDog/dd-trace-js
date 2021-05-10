@@ -26,7 +26,7 @@ class Loader {
     this._names = new Set(instrumentations
       .map(instrumentation => filename(instrumentation)))
 
-    hook(instrumentedModules, { internals: true }, this._hookModule.bind(this))
+    hook(instrumentedModules, this._hookModule.bind(this))
   }
 
   load (instrumentation, config) {

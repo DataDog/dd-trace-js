@@ -3,21 +3,10 @@
 const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
-const log = require('./log')
 
 const orig = Module.prototype.require
 
-module.exports = function hook (modules, options, onrequire) {
-  if (typeof modules === 'function') return hook(null, {}, modules)
-  if (typeof options === 'function') return hook(modules, {}, options)
-
-  if (typeof Module._resolveFilename !== 'function') {
-    log.error('Expected Module._resolveFilename to be a function - aborting.')
-    return
-  }
-
-  options = options || {}
-
+module.exports = function hook (modules, onrequire) {
   hook.cache = {}
 
   const patching = {}
@@ -60,18 +49,11 @@ module.exports = function hook (modules, options, onrequire) {
       if (modules && modules.indexOf(name) === -1) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
-      let res
-      try {
-        res = Module._findPath(name, [basedir, ...Module._resolveLookupPaths(name, this, true)])
-      } catch (e) {
-        return exports // abort if module could not be resolved (e.g. no main in package.json and no index.js file)
-      }
+      const res = Module._findPath(name, [basedir, ...Module._resolveLookupPaths(name, this, true)])
       if (res !== filename) {
         // this is a module-internal file
-        if (options.internals) {
-          // use the module-relative path to the file, prefixed by original module name
-          name = name + path.sep + path.relative(basedir, filename)
-        } else return exports // abort if not main module file
+        // use the module-relative path to the file, prefixed by original module name
+        name = name + path.sep + path.relative(basedir, filename)
       }
     }
 
