@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url-parse')
+const URL = require('url').URL
 
 function describeWriter (protocolVersion) {
   let Writer

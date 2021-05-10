@@ -1,4 +1,4 @@
-const Url = require('url-parse')
+const URL = require('url').URL
 
 const { GIT_BRANCH, GIT_COMMIT_SHA, GIT_TAG } = require('./git')
 
@@ -42,11 +42,14 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   if (repositoryUrl.startsWith('git@')) {
     return repositoryUrl
   }
-  const { protocol, hostname, pathname } = new Url(repositoryUrl)
-  if (!protocol || !hostname) {
+
+  try {
+    const { protocol, hostname, pathname } = new URL(repositoryUrl)
+
+    return `${protocol}//${hostname}${pathname}`
+  } catch (e) {
     return repositoryUrl
   }
-  return `${protocol}//${hostname}${pathname}`
 }
 
 function resolveTilde (filePath) {
