@@ -42,6 +42,7 @@ function prebuildify () {
       `--target_arch=${arch}`,
       `--devdir=${cache}`,
       '--release',
+      '--jobs=max',
       '--build_v8_with_gn=false',
       '--v8_enable_pointer_compression=""',
       '--v8_enable_31bit_smis_on_64bit_arch=""',
