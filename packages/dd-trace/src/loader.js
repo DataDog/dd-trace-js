@@ -1,7 +1,7 @@
 'use strict'
 
 const semver = require('semver')
-const hook = require('require-in-the-middle')
+const hook = require('./ritm')
 const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
