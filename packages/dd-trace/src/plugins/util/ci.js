@@ -42,11 +42,14 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   if (repositoryUrl.startsWith('git@')) {
     return repositoryUrl
   }
-  const { protocol, hostname, pathname } = new URL(repositoryUrl)
-  if (!protocol || !hostname) {
+
+  try {
+    const { protocol, hostname, pathname } = new URL(repositoryUrl)
+
+    return `${protocol}//${hostname}${pathname}`
+  } catch (e) {
     return repositoryUrl
   }
-  return `${protocol}//${hostname}${pathname}`
 }
 
 function resolveTilde (filePath) {
