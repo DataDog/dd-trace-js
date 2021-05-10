@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  win: circleci/windows@1.0.0
+  win: circleci/windows@2.2.0
 
 node-core-base: &node-core-base
   resource_class: small
@@ -221,7 +221,9 @@ prebuild-darwin-base: &prebuild-darwin-base
     - *persist-prebuilds
 
 prebuild-win32-base: &prebuild-win32-base
-  executor: win/vs2019
+  executor:
+    name: win/default
+    size: medium
   working_directory: ~/dd-trace-js
   steps:
     - checkout
@@ -423,7 +425,9 @@ jobs:
   # Windows tests
 
   node-core-windows:
-    executor: win/vs2019
+    executor:
+      name: win/default
+      size: medium
     working_directory: ~/dd-trace-js
     steps:
       - checkout
