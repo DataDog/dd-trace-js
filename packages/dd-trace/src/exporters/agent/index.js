@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url-parse')
+const URL = require('url').URL
 const log = require('../../log')
 const Writer = require('./writer')
 const Scheduler = require('./scheduler')
