@@ -1,6 +1,6 @@
 const proxyquire = require('proxyquire')
 
-const sanitizedExecStub = sinon.stub()
+const sanitizedExecStub = sinon.stub().returns('')
 const gitRepoInfoStub = sinon.stub().returns({
   author: 'author <author@commit.com>',
   committer: 'committer <committer@commit.com>',
@@ -78,10 +78,10 @@ describe('git', () => {
     )
     expect(sanitizedExecStub).not.to.have.been.called
   })
-  it('does not crash with empty or badly shapen author or committer', () => {
+  it('does not crash badly shapen author', () => {
     gitRepoInfoStub.returns({
       author: 'author <>',
-      committer: undefined,
+      committer: 'committer <committer@email.com>',
       authorDate: '1970',
       committerDate: '1971',
       commitMessage: 'commit message',
@@ -89,6 +89,7 @@ describe('git', () => {
       tag: 'gitTag',
       sha: 'gitSha'
     })
+
     const ciMetadata = { repositoryUrl: 'ciRepositoryUrl' }
     const metadata = getGitMetadata(ciMetadata)
 
@@ -96,11 +97,79 @@ describe('git', () => {
       {
         [GIT_COMMIT_MESSAGE]: 'commit message',
         [GIT_COMMIT_COMMITTER_DATE]: '1971',
-        [GIT_COMMIT_COMMITTER_EMAIL]: '',
-        [GIT_COMMIT_COMMITTER_NAME]: '',
+        [GIT_COMMIT_COMMITTER_EMAIL]: 'committer@email.com',
+        [GIT_COMMIT_COMMITTER_NAME]: 'committer',
         [GIT_COMMIT_AUTHOR_DATE]: '1970',
         [GIT_COMMIT_AUTHOR_EMAIL]: '',
         [GIT_COMMIT_AUTHOR_NAME]: 'author',
+        [GIT_TAG]: 'gitTag',
+        [GIT_BRANCH]: 'gitBranch',
+        [GIT_COMMIT_SHA]: 'gitSha',
+        [GIT_REPOSITORY_URL]: 'ciRepositoryUrl'
+      }
+    )
+  })
+  it('does not crash with empty committer', () => {
+    gitRepoInfoStub.returns({
+      author: 'author <author@email.com>',
+      committer: '',
+      authorDate: '1970',
+      committerDate: '1971',
+      commitMessage: 'commit message',
+      branch: 'gitBranch',
+      tag: 'gitTag',
+      sha: 'gitSha'
+    })
+    sanitizedExecStub.returns('git committer,git.committer@email.com,1972')
+
+    const ciMetadata = { repositoryUrl: 'ciRepositoryUrl' }
+    const metadata = getGitMetadata(ciMetadata)
+
+    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%cn,%ce,%cd', { stdio: 'pipe' })
+
+    expect(metadata).to.eql(
+      {
+        [GIT_COMMIT_MESSAGE]: 'commit message',
+        [GIT_COMMIT_COMMITTER_DATE]: '1972',
+        [GIT_COMMIT_COMMITTER_EMAIL]: 'git.committer@email.com',
+        [GIT_COMMIT_COMMITTER_NAME]: 'git committer',
+        [GIT_COMMIT_AUTHOR_DATE]: '1970',
+        [GIT_COMMIT_AUTHOR_EMAIL]: 'author@email.com',
+        [GIT_COMMIT_AUTHOR_NAME]: 'author',
+        [GIT_TAG]: 'gitTag',
+        [GIT_BRANCH]: 'gitBranch',
+        [GIT_COMMIT_SHA]: 'gitSha',
+        [GIT_REPOSITORY_URL]: 'ciRepositoryUrl'
+      }
+    )
+  })
+  it('does not crash with empty author', () => {
+    gitRepoInfoStub.returns({
+      author: undefined,
+      committer: 'committer <committer@email.com>',
+      authorDate: '1970',
+      committerDate: '1971',
+      commitMessage: 'commit message',
+      branch: 'gitBranch',
+      tag: 'gitTag',
+      sha: 'gitSha'
+    })
+    sanitizedExecStub.returns('git author,git.author@email.com,1973')
+
+    const ciMetadata = { repositoryUrl: 'ciRepositoryUrl' }
+    const metadata = getGitMetadata(ciMetadata)
+
+    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%an,%ae,%ad', { stdio: 'pipe' })
+
+    expect(metadata).to.eql(
+      {
+        [GIT_COMMIT_MESSAGE]: 'commit message',
+        [GIT_COMMIT_COMMITTER_DATE]: '1971',
+        [GIT_COMMIT_COMMITTER_EMAIL]: 'committer@email.com',
+        [GIT_COMMIT_COMMITTER_NAME]: 'committer',
+        [GIT_COMMIT_AUTHOR_DATE]: '1973',
+        [GIT_COMMIT_AUTHOR_EMAIL]: 'git.author@email.com',
+        [GIT_COMMIT_AUTHOR_NAME]: 'git author',
         [GIT_TAG]: 'gitTag',
         [GIT_BRANCH]: 'gitBranch',
         [GIT_COMMIT_SHA]: 'gitSha',
