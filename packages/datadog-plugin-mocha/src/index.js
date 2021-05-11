@@ -13,7 +13,8 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
@@ -51,17 +52,11 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
 
       const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test, sourceRoot)
 
-      const testParamsList = nameToParams[this.test.title]
-      if (Array.isArray(testParamsList)) {
-        try {
-          // test is invoked with each parameter set sequencially
-          const testParams = testParamsList.shift()
-          testSpanMetadata[TEST_PARAMETERS] = JSON.stringify(testParams)
-        } catch (e) {
-          // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
-          // so we ignore the test parameters and move on
-        }
+      const testParametersString = getTestParametersString(nameToParams, this.test.title)
+      if (testParametersString) {
+        testSpanMetadata[TEST_PARAMETERS] = testParametersString
       }
+
       this.test.fn = tracer.wrap(
         'mocha.test',
         {

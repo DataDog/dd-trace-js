@@ -14,7 +14,8 @@ const {
   ERROR_STACK,
   ERROR_TYPE,
   TEST_PARAMETERS,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
 
 function wrapEnvironment (BaseEnvironment) {
@@ -30,7 +31,7 @@ function createWrapTeardown (tracer, instrumenter) {
   return function wrapTeardown (teardown) {
     return async function teardownWithTrace () {
       instrumenter.unwrap(this.global.test, 'each')
-      params = {}
+      nameToParams = {}
       await new Promise((resolve) => {
         tracer._exporter._writer.flush(resolve)
       })
@@ -39,7 +40,7 @@ function createWrapTeardown (tracer, instrumenter) {
   }
 }
 
-let params = {}
+let nameToParams = {}
 
 function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
@@ -53,7 +54,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
             // TODO: support string templates as well
             // https://github.com/facebook/jest/tree/master/packages/jest-each#eachtagged-templatetestname-suitefn
             if (Array.isArray(parameters) && Array.isArray(parameters[0])) {
-              params[testName] = parameters
+              nameToParams[testName] = parameters
             }
             return eachBind.apply(this, arguments)
           }
@@ -83,17 +84,12 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       [SAMPLING_PRIORITY]: AUTO_KEEP,
       ...testEnvironmentMetadata
     }
-    let testParameters = params[event.test.name]
-    if (Array.isArray(testParameters)) {
-      try {
-        // test is invoked with each parameter set sequencially
-        testParameters = testParameters.shift()
-        commonSpanTags[TEST_PARAMETERS] = JSON.stringify(testParameters)
-      } catch (e) {
-        // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
-        // so we ignore the test parameters and move on
-      }
+
+    const testParametersString = getTestParametersString(nameToParams, event.test.name)
+    if (testParametersString) {
+      commonSpanTags[TEST_PARAMETERS] = testParametersString
     }
+
     const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
       tracer.startSpan(
