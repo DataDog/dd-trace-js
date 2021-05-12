@@ -41,9 +41,18 @@ function createWrapTeardown (tracer, instrumenter) {
 }
 
 let nameToParams = {}
+const spanByName = {}
 
 function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
+    if (event.name === 'test_fn_failure') {
+      const context = this.getVmContext()
+      if (context) {
+        const { currentTestName } = context.expect.getState()
+        const testSpan = spanByName[currentTestName]
+        testSpan.setTag(TEST_STATUS, 'fail')
+      }
+    }
     if (event.name === 'setup') {
       instrumenter.wrap(this.global.test, 'each', function (original) {
         return function () {
@@ -120,9 +129,13 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       },
       async () => {
         let result
+        spanByName[testName] = tracer.scope().active()
         try {
           result = await specFunction()
-          tracer.scope().active().setTag(TEST_STATUS, 'pass')
+          // it may have been set already if the test timed out
+          if (!tracer.scope().active()._spanContext._tags['test.status']) {
+            tracer.scope().active().setTag(TEST_STATUS, 'pass')
+          }
         } catch (error) {
           tracer.scope().active().setTag(TEST_STATUS, 'fail')
           tracer.scope().active().setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
