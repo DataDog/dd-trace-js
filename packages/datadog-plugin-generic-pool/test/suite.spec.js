@@ -2,7 +2,7 @@
 const suiteTest = require('../../dd-trace/test/plugins/suite')
 
 describe('Plugin', () => {
-  describe('generic-pool test suite', () => {
+  describe.skip('generic-pool test suite', () => {
     suiteTest({
       modName: 'generic-pool',
       repoUrl: 'coopernurse/node-pool',
