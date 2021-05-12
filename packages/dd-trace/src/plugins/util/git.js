@@ -29,6 +29,18 @@ function parseUser (user) {
   return { name: user.replace(`<${email}>`, '').trim(), email }
 }
 
+function removeEmptyValues (tags) {
+  return Object.keys(tags).reduce((filteredTags, tag) => {
+    if (!tags[tag]) {
+      return filteredTags
+    }
+    return {
+      ...filteredTags,
+      [tag]: tags[tag]
+    }
+  }, {})
+}
+
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
   const { commitSHA, branch, repositoryUrl, tag } = ciMetadata
@@ -54,9 +66,11 @@ function getGitMetadata (ciMetadata) {
     authorDate = repoInfo.authorDate
   } else {
     const author = sanitizedExec('git show -s --format=%an,%ae,%ad', { stdio: 'pipe' }).split(',')
-    authorName = author[0]
-    authorEmail = author[1]
-    authorDate = author[2]
+    if (author.length === 3) {
+      authorName = author[0]
+      authorEmail = author[1]
+      authorDate = author[2]
+    }
   }
 
   if (repoInfo.committer && repoInfo.committerDate) {
@@ -66,12 +80,14 @@ function getGitMetadata (ciMetadata) {
     committerDate = repoInfo.committerDate
   } else {
     const committer = sanitizedExec('git show -s --format=%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
-    committerName = committer[0]
-    committerEmail = committer[1]
-    committerDate = committer[2]
+    if (committer.length === 3) {
+      committerName = committer[0]
+      committerEmail = committer[1]
+      committerDate = committer[2]
+    }
   }
 
-  return {
+  const spanTags = {
     // With stdio: 'pipe', errors in this command will not be output to the parent process,
     // so if `git` is not present in the env, we won't show a warning to the user.
     [GIT_REPOSITORY_URL]: repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
@@ -86,6 +102,8 @@ function getGitMetadata (ciMetadata) {
     [GIT_COMMIT_SHA]: coalesce(commitSHA, gitCommitSHA),
     [GIT_TAG]: coalesce(tag, gitTag)
   }
+
+  return removeEmptyValues(spanTags)
 }
 
 module.exports = {

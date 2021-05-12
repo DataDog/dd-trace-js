@@ -100,7 +100,6 @@ describe('git', () => {
         [GIT_COMMIT_COMMITTER_EMAIL]: 'committer@email.com',
         [GIT_COMMIT_COMMITTER_NAME]: 'committer',
         [GIT_COMMIT_AUTHOR_DATE]: '1970',
-        [GIT_COMMIT_AUTHOR_EMAIL]: '',
         [GIT_COMMIT_AUTHOR_NAME]: 'author',
         [GIT_TAG]: 'gitTag',
         [GIT_BRANCH]: 'gitBranch',
@@ -170,6 +169,36 @@ describe('git', () => {
         [GIT_COMMIT_AUTHOR_DATE]: '1973',
         [GIT_COMMIT_AUTHOR_EMAIL]: 'git.author@email.com',
         [GIT_COMMIT_AUTHOR_NAME]: 'git author',
+        [GIT_TAG]: 'gitTag',
+        [GIT_BRANCH]: 'gitBranch',
+        [GIT_COMMIT_SHA]: 'gitSha',
+        [GIT_REPOSITORY_URL]: 'ciRepositoryUrl'
+      }
+    )
+  })
+
+  it('does not crash when git command is not available', () => {
+    gitRepoInfoStub.returns({
+      author: undefined,
+      committer: 'committer <committer@email.com>',
+      authorDate: '1970',
+      committerDate: '1971',
+      commitMessage: 'commit message',
+      branch: 'gitBranch',
+      tag: 'gitTag',
+      sha: 'gitSha'
+    })
+    sanitizedExecStub.returns('')
+    const ciMetadata = { repositoryUrl: 'ciRepositoryUrl' }
+    const metadata = getGitMetadata(ciMetadata)
+    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%an,%ae,%ad', { stdio: 'pipe' })
+
+    expect(metadata).to.eql(
+      {
+        [GIT_COMMIT_MESSAGE]: 'commit message',
+        [GIT_COMMIT_COMMITTER_DATE]: '1971',
+        [GIT_COMMIT_COMMITTER_EMAIL]: 'committer@email.com',
+        [GIT_COMMIT_COMMITTER_NAME]: 'committer',
         [GIT_TAG]: 'gitTag',
         [GIT_BRANCH]: 'gitBranch',
         [GIT_COMMIT_SHA]: 'gitSha',
