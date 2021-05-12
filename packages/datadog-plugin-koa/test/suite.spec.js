@@ -8,7 +8,7 @@ describe('Plugin', () => {
 })
 
 describe('Plugin', () => {
-  describe('@koa/router test suite', () => {
+  describe.skip('@koa/router test suite', () => {
     suiteTest('@koa/router', 'koajs/router', 'latest')
   })
 })
