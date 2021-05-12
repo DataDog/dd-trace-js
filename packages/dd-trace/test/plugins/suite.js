@@ -13,21 +13,12 @@ const mkdtemp = util.promisify(fs.mkdtemp)
 
 const ddTraceInit = path.resolve(__dirname, '../../../../init')
 
-function log (str) {
-  process.stdout.write(` -> ${str} ... `)
-}
-
-function logDone () {
-  // eslint-disable-next-line no-console
-  console.log('-> done!')
-}
-
 const latestCache = []
-async function getLatest (modName, repoUrl) {
+async function getLatest (withTracer, modName, repoUrl) {
   if (latestCache[modName]) {
     return latestCache[modName]
   }
-  const { stdout } = await exec(`npm view ${modName} dist-tags --json`)
+  const { stdout } = await exec(withTracer, `npm view ${modName} dist-tags --json`)
   const { latest } = JSON.parse(stdout)
   const tags = await get(`https://api.github.com/repos/${repoUrl}/git/refs/tags`)
   for (const tag of tags) {
@@ -58,8 +49,9 @@ function get (theUrl) {
   })
 }
 
-function exec (cmd, opts = {}) {
-  log(`running \`${cmd}\``)
+function exec (withTracer, cmd, opts = {}) {
+  // eslint-disable-next-line no-console
+  console.log(withTracer ? 'WITH TRACER' : '  NO TRACER', `-> running \`${cmd}\` ...`)
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(cmd, Object.assign({
       shell: true
@@ -70,7 +62,6 @@ function exec (cmd, opts = {}) {
     proc.stdout.on('data', d => stdout.push(d))
     proc.stderr.on('data', d => stderr.push(d))
     proc.on('exit', code => {
-      logDone()
       resolve({
         code,
         stdout: Buffer.concat(stdout).toString('utf8'),
@@ -80,8 +71,8 @@ function exec (cmd, opts = {}) {
   })
 }
 
-async function execOrError (cmd, opts = {}) {
-  const result = await exec(cmd, opts)
+async function execOrError (withTracer, cmd, opts = {}) {
+  const result = await exec(withTracer, cmd, opts)
   if (result.code !== 0) {
     const err = new Error(`command "${cmd}" exited with code ${result.code}`)
     err.result = result
@@ -97,24 +88,26 @@ function getTmpDir () {
 
 async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   if (commitish === 'latest') {
-    commitish = await getLatest(modName, repoUrl)
+    commitish = await getLatest(withTracer, modName, repoUrl)
   }
   const cwd = await getTmpDir()
-  await execOrError(`git clone https://github.com/${repoUrl}.git ${cwd}`)
-  await execOrError(`git checkout ${commitish}`, { cwd })
+  await execOrError(withTracer, `git clone https://github.com/${repoUrl}.git ${cwd}`)
+  await execOrError(withTracer, `git checkout ${commitish}`, { cwd })
   const env = Object.assign({}, process.env)
   if (withTracer) {
     env.NODE_OPTIONS = `--require ${ddTraceInit}`
   }
-  await execOrError(`npm install`, { cwd })
-  const result = await exec(testCmd, { cwd, env })
-  await execOrError(`rm -rf ${cwd}`)
+  await execOrError(withTracer, `npm install`, { cwd })
+  const result = await exec(withTracer, testCmd, { cwd, env })
+  await execOrError(withTracer, `rm -rf ${cwd}`)
   return result
 }
 
 async function run (modName, repoUrl, commitish, testCmd) {
-  const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
-  const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
+  const [withoutTracer, withTracer] = await Promise.all([
+    runOne(modName, repoUrl, commitish, false, testCmd),
+    runOne(modName, repoUrl, commitish, true, testCmd)
+  ])
   return { withoutTracer, withTracer }
 }
 
