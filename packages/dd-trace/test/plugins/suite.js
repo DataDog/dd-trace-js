@@ -12,6 +12,15 @@ const mkdtemp = util.promisify(fs.mkdtemp)
 
 const ddTraceInit = path.resolve(__dirname, '../../../../init')
 
+function log (str) {
+  process.stdout.write(` -> ${str} ... `)
+}
+
+function logDone () {
+  // eslint-disable-next-line no-console
+  console.log('-> done!')
+}
+
 const latestCache = []
 async function getLatest (modName, repoUrl) {
   if (latestCache[modName]) {
@@ -69,12 +78,14 @@ function exec (cmd, opts = {}) {
 }
 
 async function execOrError (cmd, opts = {}) {
+  log(`running \`${cmd}\``)
   const result = await exec(cmd, opts)
   if (result.code !== 0) {
     const err = new Error(`command "${cmd}" exited with code ${result.code}`)
     err.result = result
     throw err
   }
+  logDone()
   return result
 }
 
@@ -85,7 +96,9 @@ function getTmpDir () {
 
 async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   if (commitish === 'latest') {
+    log('getting `latest` commit hash')
     commitish = await getLatest(modName, repoUrl)
+    logDone()
   }
   const cwd = await getTmpDir()
   await execOrError(`git clone https://github.com/${repoUrl}.git ${cwd}`)
