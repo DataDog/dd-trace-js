@@ -7,6 +7,7 @@ const os = require('os')
 const path = require('path')
 const https = require('https')
 const url = require('url')
+const { expect } = require('chai')
 
 const mkdtemp = util.promisify(fs.mkdtemp)
 
@@ -96,9 +97,7 @@ function getTmpDir () {
 
 async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   if (commitish === 'latest') {
-    log('getting `latest` commit hash')
     commitish = await getLatest(modName, repoUrl)
-    logDone()
   }
   const cwd = await getTmpDir()
   await execOrError(`git clone https://github.com/${repoUrl}.git ${cwd}`)
@@ -138,8 +137,6 @@ ${withTracer.stderr}
   }
 }
 
-const DEFAULT_TIMEOUT = 10 * 60 * 1000 // 10 min
-
 function getOpts (args) {
   args = Array.from(args)
   const [ modName, repoUrl, commitish, runner, timeout, testCmd ] = args
@@ -163,24 +160,50 @@ function getOpts (args) {
   return options
 }
 
-function runWithMocha (fn, options) {
-  if (typeof options !== 'object') {
-    options = getOpts(Array.prototype.slice.call(arguments, 1))
+module.exports = async function runWithOptions (options) {
+  try {
+    if (typeof options !== 'object') {
+      options = getOpts(Array.from(arguments))
+    }
+    const {
+      modName,
+      repoUrl,
+      commitish,
+      testCmd = 'npm test',
+      runner = defaultRunner
+    } = options
+    return runner(await run(modName, repoUrl, commitish, testCmd))
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(e)
+    process.exitCode = 1
   }
-  const {
-    modName,
-    repoUrl,
-    commitish,
-    testCmd = 'npm test',
-    runner = defaultRunner,
-    timeout = DEFAULT_TIMEOUT
-  } = options
-  fn('should pass equivalently with and without tracer for ' + commitish, async function () {
-    this.timeout(timeout)
-    return runner.call(this, await run(modName, repoUrl, commitish, testCmd))
+}
+
+function once (ee, event) {
+  // TODO remove this fn once we drop node 8 support
+  return new Promise(resolve => {
+    ee.once(event, resolve)
   })
 }
 
-module.exports = (...args) => runWithMocha(it, ...args)
-module.exports.only = (...args) => runWithMocha(it.only, ...args)
-module.exports.skip = (...args) => runWithMocha(it.skip, ...args)
+if (require.main === module) {
+  const { PLUGINS } = process.env
+  const plugins = PLUGINS.split('|')
+  ;(async () => {
+    for (const plugin of plugins) {
+      const suitePath = path.join(__dirname, `../../../datadog-plugin-${plugin}/test/suite.js`)
+      if (fs.existsSync(suitePath)) {
+        const proc = childProcess.spawn('node', [suitePath], { stdio: 'inherit' })
+        const code = await once(proc, 'exit')
+        if (code !== 0) {
+          process.exitCode = code
+          break
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('no test file found at', suitePath)
+      }
+    }
+  })()
+}

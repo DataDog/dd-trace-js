@@ -148,6 +148,9 @@ node-plugin-base: &node-plugin-base
         name: Unit tests
         command: yarn test:plugins:ci
     - run:
+        name: Library test suite
+        command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
+    - run:
         name: Merge coverage report
         command: yarn cover:merge
     - store_artifacts:
