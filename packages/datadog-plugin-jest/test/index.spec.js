@@ -305,7 +305,7 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
-              [TEST_PARAMETERS]: JSON.stringify([{ parameterA: 'a' }])
+              [TEST_PARAMETERS]: JSON.stringify({ arguments: [{ parameterA: 'a' }], metadata: {} })
             })
           }).then(done).catch(done)
 
