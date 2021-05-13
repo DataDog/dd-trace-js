@@ -29,18 +29,6 @@ function parseUser (user) {
   return { name: user.replace(`<${email}>`, '').trim(), email }
 }
 
-function removeEmptyValues (tags) {
-  return Object.keys(tags).reduce((filteredTags, tag) => {
-    if (!tags[tag]) {
-      return filteredTags
-    }
-    return {
-      ...filteredTags,
-      [tag]: tags[tag]
-    }
-  }, {})
-}
-
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
   const { commitSHA, branch, repositoryUrl, tag } = ciMetadata
@@ -87,7 +75,7 @@ function getGitMetadata (ciMetadata) {
     }
   }
 
-  const spanTags = {
+  return {
     // With stdio: 'pipe', errors in this command will not be output to the parent process,
     // so if `git` is not present in the env, we won't show a warning to the user.
     [GIT_REPOSITORY_URL]: repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
@@ -102,8 +90,6 @@ function getGitMetadata (ciMetadata) {
     [GIT_COMMIT_SHA]: coalesce(commitSHA, gitCommitSHA),
     [GIT_TAG]: coalesce(tag, gitTag)
   }
-
-  return removeEmptyValues(spanTags)
 }
 
 module.exports = {
