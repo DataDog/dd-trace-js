@@ -8,6 +8,7 @@ function createWrapRequest (tracer, config) {
         component: '@google-cloud/pubsub',
         'resource.name': [cfg.method, topic].filter(x => x).join(' '),
         'service.name': config.service || `${tracer._service}-pubsub`,
+        'span.kind': 'client',
         'pubsub.method': cfg.method,
         'gcloud.project_id': this.projectId,
         'pubsub.topic': topic

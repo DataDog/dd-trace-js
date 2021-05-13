@@ -33,6 +33,7 @@ function wrapExecute (tracer, config, execute) {
         'service.name': config.service || `${tracer._service}-mysql`,
         'resource.name': sql,
         'span.type': 'sql',
+        'span.kind': 'client',
         'db.type': 'mysql',
         'db.user': connectionConfig.user,
         'db.name': connectionConfig.database,

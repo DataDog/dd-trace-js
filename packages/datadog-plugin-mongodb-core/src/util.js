@@ -56,6 +56,7 @@ function addTags (span, tracer, config, ns, cmd, topology, operationName) {
     'service.name': config.service || `${tracer._service}-mongodb`,
     'resource.name': resource,
     'span.type': 'mongodb',
+    'span.kind': 'client',
     'db.name': ns
   })
 

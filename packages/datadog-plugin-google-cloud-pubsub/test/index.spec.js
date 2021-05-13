@@ -46,7 +46,8 @@ describe('Plugin', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               meta: {
-                'pubsub.method': 'createTopic'
+                'pubsub.method': 'createTopic',
+                'span.kind': 'client'
               }
             })
             await pubsub.createTopic(topicName)

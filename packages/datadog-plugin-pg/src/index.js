@@ -18,6 +18,7 @@ function createWrapQuery (tracer, config) {
           [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': service,
           'span.type': 'sql',
+          'span.kind': 'client',
           'db.type': 'postgres'
         }
       })
