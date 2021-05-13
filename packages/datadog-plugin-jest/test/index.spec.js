@@ -320,6 +320,32 @@ describe('Plugin', () => {
         passingTestEvent.test.fn()
       })
 
+      it('should detect timeouts as failed tests', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+        const timedoutTestEvent = {
+          name: 'test_fn_failure',
+          error: 'Exceeded timeout of 100ms'
+        }
+        datadogJestEnv.handleTestEvent(timedoutTestEvent)
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [ERROR_TYPE]: 'Timeout',
+              [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
+            })
+          }).then(done).catch(done)
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {

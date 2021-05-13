@@ -32,6 +32,7 @@ function createWrapTeardown (tracer, instrumenter) {
     return async function teardownWithTrace () {
       instrumenter.unwrap(this.global.test, 'each')
       nameToParams = {}
+      spanByName = {}
       await new Promise((resolve) => {
         tracer._exporter._writer.flush(resolve)
       })
@@ -41,16 +42,29 @@ function createWrapTeardown (tracer, instrumenter) {
 }
 
 let nameToParams = {}
-const spanByName = {}
+let spanByName = {}
+
+const isTimeout = (event) => {
+  return event.error &&
+  typeof event.error === 'string' &&
+  event.error.startsWith('Exceeded timeout')
+}
 
 function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
     if (event.name === 'test_fn_failure') {
+      if (!isTimeout(event)) {
+        return
+      }
       const context = this.getVmContext()
       if (context) {
         const { currentTestName } = context.expect.getState()
         const testSpan = spanByName[currentTestName]
-        testSpan.setTag(TEST_STATUS, 'fail')
+        if (testSpan) {
+          testSpan.setTag(ERROR_TYPE, 'Timeout')
+          testSpan.setTag(ERROR_MESSAGE, event.error)
+          testSpan.setTag(TEST_STATUS, 'fail')
+        }
       }
     }
     if (event.name === 'setup') {
