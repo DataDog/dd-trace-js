@@ -89,7 +89,7 @@ const TESTS = [
     root: 'mocha-parameterized',
     status: 'pass',
     extraSpanTags: {
-      [TEST_PARAMETERS]: JSON.stringify([1, 2, 3])
+      [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
     }
   }
 ]

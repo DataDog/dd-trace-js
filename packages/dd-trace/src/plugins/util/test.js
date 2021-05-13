@@ -56,7 +56,7 @@ function getTestParametersString (parametersByTestName, testName) {
   try {
     // test is invoked with each parameter set sequencially
     const testParameters = parametersByTestName[testName].shift()
-    return JSON.stringify(testParameters)
+    return JSON.stringify({ arguments: testParameters, metadata: {} })
   } catch (e) {
     // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
     // so we ignore the test parameters and move on
