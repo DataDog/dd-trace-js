@@ -3,9 +3,13 @@ const { getTestParametersString } = require('../../../src/plugins/util/test')
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
     const input = { 'test_stuff': [['params'], [{ b: 'c' }]] }
-    expect(getTestParametersString(input, 'test_stuff')).to.equal(JSON.stringify(['params']))
+    expect(getTestParametersString(input, 'test_stuff')).to.equal(
+      JSON.stringify({ arguments: ['params'], metadata: {} })
+    )
     expect(input).to.eql({ 'test_stuff': [[{ b: 'c' }]] })
-    expect(getTestParametersString(input, 'test_stuff')).to.equal(JSON.stringify([{ b: 'c' }]))
+    expect(getTestParametersString(input, 'test_stuff')).to.equal(
+      JSON.stringify({ arguments: [{ b: 'c' }], metadata: {} })
+    )
     expect(input).to.eql({ 'test_stuff': [] })
   })
   it('does not crash when test name is not found and does not modify input', () => {
@@ -20,6 +24,8 @@ describe('getTestParametersString', () => {
     const input = { 'test_stuff': [[circular], ['params2']] }
     expect(getTestParametersString(input, 'test_stuff')).to.equal('')
     expect(input).to.eql({ 'test_stuff': [['params2']] })
-    expect(getTestParametersString(input, 'test_stuff')).to.equal(JSON.stringify(['params2']))
+    expect(getTestParametersString(input, 'test_stuff')).to.equal(
+      JSON.stringify({ arguments: ['params2'], metadata: {} })
+    )
   })
 })
