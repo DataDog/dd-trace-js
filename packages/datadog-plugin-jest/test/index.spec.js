@@ -322,15 +322,16 @@ describe('Plugin', () => {
 
       it('should detect timeouts as failed tests', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-        const passingTestEvent = {
+        const testStartEvent = {
           name: 'test_start',
           test: {
             fn: () => {},
             name: TEST_NAME
           }
         }
-        datadogJestEnv.handleTestEvent(passingTestEvent)
-        passingTestEvent.test.fn()
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
         const timedoutTestEvent = {
           name: 'test_fn_failure',
           error: 'Exceeded timeout of 100ms'
@@ -342,6 +343,38 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               [ERROR_TYPE]: 'Timeout',
               [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
+            })
+          }).then(done).catch(done)
+      })
+
+      it('should not consider other errors as timeout', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+              throw new Error('non timeout error')
+            },
+            name: TEST_NAME
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+        const timedoutTestEvent = {
+          name: 'test_fn_failure',
+          error: new Error('other error')
+        }
+        const thisArg = {
+          getVmContext: sinon.spy()
+        }
+        datadogJestEnv.handleTestEvent.call(thisArg, timedoutTestEvent)
+        expect(thisArg.getVmContext).not.to.have.been.called
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'non timeout error'
             })
           }).then(done).catch(done)
       })
