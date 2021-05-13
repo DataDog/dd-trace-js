@@ -78,7 +78,7 @@ describe('git', () => {
     )
     expect(sanitizedExecStub).not.to.have.been.called
   })
-  it('does not crash badly shapen author', () => {
+  it('does not crash with badly shapen author', () => {
     gitRepoInfoStub.returns({
       author: 'author <>',
       committer: 'committer <committer@email.com>',
@@ -99,6 +99,7 @@ describe('git', () => {
         [GIT_COMMIT_COMMITTER_DATE]: '1971',
         [GIT_COMMIT_COMMITTER_EMAIL]: 'committer@email.com',
         [GIT_COMMIT_COMMITTER_NAME]: 'committer',
+        [GIT_COMMIT_AUTHOR_EMAIL]: '',
         [GIT_COMMIT_AUTHOR_DATE]: '1970',
         [GIT_COMMIT_AUTHOR_NAME]: 'author',
         [GIT_TAG]: 'gitTag',
@@ -199,6 +200,9 @@ describe('git', () => {
         [GIT_COMMIT_COMMITTER_DATE]: '1971',
         [GIT_COMMIT_COMMITTER_EMAIL]: 'committer@email.com',
         [GIT_COMMIT_COMMITTER_NAME]: 'committer',
+        [GIT_COMMIT_AUTHOR_DATE]: undefined,
+        [GIT_COMMIT_AUTHOR_EMAIL]: undefined,
+        [GIT_COMMIT_AUTHOR_NAME]: undefined,
         [GIT_TAG]: 'gitTag',
         [GIT_BRANCH]: 'gitBranch',
         [GIT_COMMIT_SHA]: 'gitSha',
