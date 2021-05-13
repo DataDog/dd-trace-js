@@ -67,6 +67,10 @@
     {
       "name": "mocha",
       "versions": [">=5.2.0"]
+    },
+    {
+      "name": "mocha-each",
+      "versions": [">=2.0.1"]
     }
   ],
   "mongodb-core": [
