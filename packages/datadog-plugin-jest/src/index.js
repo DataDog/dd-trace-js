@@ -23,6 +23,7 @@ function wrapEnvironment (BaseEnvironment) {
     constructor (config, context) {
       super(config, context)
       this.testSuite = context.testPath.replace(`${config.rootDir}/`, '')
+      this.testSpansByTestName = {}
     }
   }
 }
@@ -32,7 +33,6 @@ function createWrapTeardown (tracer, instrumenter) {
     return async function teardownWithTrace () {
       instrumenter.unwrap(this.global.test, 'each')
       nameToParams = {}
-      spanByName = {}
       await new Promise((resolve) => {
         tracer._exporter._writer.flush(resolve)
       })
@@ -42,7 +42,6 @@ function createWrapTeardown (tracer, instrumenter) {
 }
 
 let nameToParams = {}
-let spanByName = {}
 
 const isTimeout = (event) => {
   return event.error &&
@@ -59,7 +58,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       const context = this.getVmContext()
       if (context) {
         const { currentTestName } = context.expect.getState()
-        const testSpan = spanByName[currentTestName]
+        const testSpan = this.testSpansByTestName[currentTestName]
         if (testSpan) {
           testSpan.setTag(ERROR_TYPE, 'Timeout')
           testSpan.setTag(ERROR_MESSAGE, event.error)
@@ -130,6 +129,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       return
     }
     // event.name === test_start at this point
+    const environment = this
     let specFunction = event.test.fn
     if (specFunction.length) {
       specFunction = promisify(specFunction)
@@ -143,7 +143,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       },
       async () => {
         let result
-        spanByName[testName] = tracer.scope().active()
+        environment.testSpansByTestName[testName] = tracer.scope().active()
         try {
           result = await specFunction()
           // it may have been set already if the test timed out
