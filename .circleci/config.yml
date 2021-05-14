@@ -1215,7 +1215,6 @@ workflows:
       - node-integration-14
       - node-integration-16
       - node-integration-latest
-      - node-upstream-node
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1543,3 +1542,13 @@ workflows:
       - node-bench-sirun-plugin-bluebird-latest
       - node-bench-sirun-scope-latest
       - node-bench-sirun-exporting-pipeline-latest
+  nightly-upstream:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - node-upstream-node
