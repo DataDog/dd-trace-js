@@ -11,6 +11,7 @@ const NODE_REPO_PATH = process.env['NODE_REPO_PATH']
 if (NODE_REPO_PATH === undefined) {
   throw new Error('The env variable NODE_REPO_PATH is not set. This is required to locate the root of the nodejs repo')
 }
+const MAX_PARALLEL_TESTS = 8
 
 const MODULES = [
   'dns',
@@ -151,6 +152,10 @@ async function nodeRepoVersion (repoPath) {
   return { version, major: match[1] }
 }
 
+async function isTestParallel (testPath) {
+  return (await fsUtils.parentName(testPath)) === 'parallel'
+}
+
 async function findFlags (testPath) {
   const flags = []
   const content = await fsUtils.readFile(testPath, { encoding: 'utf-8' })
@@ -160,7 +165,7 @@ async function findFlags (testPath) {
   return flags
 }
 
-async function runTest (nodeBin, testPath) {
+async function runTest (nodeBin, testPath, serialId = 0) {
   const flags = await findFlags(testPath)
   const cmd = [
     nodeBin,
@@ -169,16 +174,48 @@ async function runTest (nodeBin, testPath) {
     path.join(fsUtils.parentDir(__filename, 3), 'init.js'),
     testPath
   ]
-  return runCmd(cmd, false, { cwd: NODE_REPO_PATH })
+  return runCmd(cmd, false, { cwd: NODE_REPO_PATH, env: { TEST_SERIAL_ID: serialId } })
+}
+
+async function runTestsParallel (tests, maxParallelExecutions) {
+  const pool = new Map()
+  const results = []
+  for (const i in tests) {
+    if (pool.size >= maxParallelExecutions) {
+      const [resultIdx, result] = await Promise.race(pool.values())
+      results.push(result)
+      pool.delete(resultIdx)
+    }
+    pool.set(
+      i,
+      runTest(NODE_BIN, tests[i], i)
+        .then(async ({ rc, stderr }) => [i, await new TestResult(tests[i], rc, stderr).init()])
+    )
+  }
+  results.push(
+    ...(await Promise.all(pool.values()))
+      .map(([_resultIdx, r]) => r)
+  )
+  return results
 }
 
 async function runModuleTests (moduleName, tests) {
   console.log(`Running ${tests.length} tests for module ${moduleName}`)
-  const results = []
+  const parallelTests = []
+  const sequentialTests = []
   for (const test of tests) {
-    const { rc, stderr } = await runTest(NODE_BIN, test)
+    if (await isTestParallel(test)) {
+      parallelTests.push(test)
+    } else {
+      sequentialTests.push(test)
+    }
+  }
+  const results = []
 
-    const result = await new TestResult(test, rc, stderr, 200, '').init()
+  results.push(...await runTestsParallel(parallelTests, MAX_PARALLEL_TESTS))
+  for (const test of sequentialTests) {
+    const { rc, stderr } = await runTest(NODE_BIN, test)
+    const result = await new TestResult(test, rc, stderr).init()
     results.push(result)
   }
 
