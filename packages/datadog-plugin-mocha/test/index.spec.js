@@ -8,6 +8,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_PARAMETERS,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK
@@ -81,6 +82,15 @@ const TESTS = [
     testName: 'does not timeout',
     root: 'mocha-test-timeout-pass',
     status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-parameterized.js',
+    testName: 'can do parameterized',
+    root: 'mocha-parameterized',
+    status: 'pass',
+    extraSpanTags: {
+      [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
+    }
   }
 ]
 
@@ -118,7 +128,8 @@ describe('Plugin', () => {
                 [TEST_STATUS]: test.status,
                 [TEST_TYPE]: 'test',
                 [TEST_FRAMEWORK]: 'mocha',
-                [TEST_SUITE]: testSuite
+                [TEST_SUITE]: testSuite,
+                ...test.extraSpanTags
               })
               if (test.fileName === 'mocha-test-fail.js') {
                 expect(traces[0][0].meta).to.contain({

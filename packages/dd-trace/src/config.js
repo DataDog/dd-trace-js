@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url-parse')
+const URL = require('url').URL
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')

@@ -139,6 +139,7 @@ function extractAnalytics (trace, span) {
 function addTag (meta, metrics, key, value, seen) {
   switch (typeof value) {
     case 'string':
+      if (!value) break
       meta[key] = value
       break
     case 'number':

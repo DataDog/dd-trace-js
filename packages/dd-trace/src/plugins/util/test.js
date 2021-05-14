@@ -7,6 +7,7 @@ const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
+const TEST_PARAMETERS = 'test.parameters'
 
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.message'
@@ -18,10 +19,12 @@ module.exports = {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_PARAMETERS,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  getTestParametersString
 }
 
 function getTestEnvironmentMetadata (testFramework) {
@@ -43,5 +46,20 @@ function getTestEnvironmentMetadata (testFramework) {
     ...gitMetadata,
     ...ciMetadata,
     ...runtimeAndOSMetadata
+  }
+}
+
+function getTestParametersString (parametersByTestName, testName) {
+  if (!parametersByTestName[testName]) {
+    return ''
+  }
+  try {
+    // test is invoked with each parameter set sequencially
+    const testParameters = parametersByTestName[testName].shift()
+    return JSON.stringify({ arguments: testParameters, metadata: {} })
+  } catch (e) {
+    // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
+    // so we ignore the test parameters and move on
+    return ''
   }
 }

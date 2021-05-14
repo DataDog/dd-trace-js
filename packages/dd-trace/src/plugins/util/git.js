@@ -33,34 +33,62 @@ function parseUser (user) {
 function getGitMetadata (ciMetadata) {
   const { commitSHA, branch, repositoryUrl, tag } = ciMetadata
 
-  const {
-    author,
-    committer,
-    authorDate,
-    committerDate,
-    commitMessage,
-    branch: gitBranch,
-    tag: gitTag,
-    sha: gitCommitSHA
-  } = getRepoInfo(process.cwd())
+  const repoInfo = getRepoInfo(process.cwd())
 
-  const { name: authorName, email: authorEmail } = parseUser(author)
-  const { name: committerName, email: committerEmail } = parseUser(committer)
+  let authorName
+  let authorEmail
+  let authorDate
+  let committerName
+  let committerEmail
+  let committerDate
+
+  const commitMessage = repoInfo.commitMessage
+  const gitBranch = repoInfo.branch
+  const gitTag = repoInfo.tag
+  const gitCommitSHA = repoInfo.sha
+
+  if (repoInfo.author && repoInfo.authorDate) {
+    const parsedUser = parseUser(repoInfo.author)
+    authorName = parsedUser.name
+    authorEmail = parsedUser.email
+    authorDate = repoInfo.authorDate
+  } else {
+    const author = sanitizedExec('git show -s --format=%an,%ae,%ad', { stdio: 'pipe' }).split(',')
+    if (author.length === 3) {
+      authorName = author[0]
+      authorEmail = author[1]
+      authorDate = author[2]
+    }
+  }
+
+  if (repoInfo.committer && repoInfo.committerDate) {
+    const parsedUser = parseUser(repoInfo.committer)
+    committerName = parsedUser.name
+    committerEmail = parsedUser.email
+    committerDate = repoInfo.committerDate
+  } else {
+    const committer = sanitizedExec('git show -s --format=%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
+    if (committer.length === 3) {
+      committerName = committer[0]
+      committerEmail = committer[1]
+      committerDate = committer[2]
+    }
+  }
 
   return {
     // With stdio: 'pipe', errors in this command will not be output to the parent process,
     // so if `git` is not present in the env, we won't show a warning to the user.
     [GIT_REPOSITORY_URL]: repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
-    [GIT_BRANCH]: coalesce(branch, gitBranch),
-    [GIT_COMMIT_SHA]: coalesce(commitSHA, gitCommitSHA),
-    [GIT_TAG]: coalesce(tag, gitTag),
-    [GIT_COMMIT_MESSAGE]: commitMessage,
+    [GIT_COMMIT_MESSAGE]: commitMessage || sanitizedExec('git show -s --format=%s', { stdio: 'pipe' }),
     [GIT_COMMIT_AUTHOR_DATE]: authorDate,
     [GIT_COMMIT_AUTHOR_NAME]: authorName,
     [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
     [GIT_COMMIT_COMMITTER_DATE]: committerDate,
     [GIT_COMMIT_COMMITTER_NAME]: committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail
+    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
+    [GIT_BRANCH]: coalesce(branch, gitBranch),
+    [GIT_COMMIT_SHA]: coalesce(commitSHA, gitCommitSHA),
+    [GIT_TAG]: coalesce(tag, gitTag)
   }
 }
 

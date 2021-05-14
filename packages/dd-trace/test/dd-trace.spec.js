@@ -52,7 +52,7 @@ describe('dd-trace', () => {
       expect(payload[0][0].name).to.equal('hello')
       expect(payload[0][0].resource).to.equal('/hello/:name')
       expect(payload[0][0].start).to.be.instanceof(Uint64BE)
-      expect(payload[0][0].duration).to.be.a('number')
+      expect(payload[0][0].duration).to.be.instanceof(Uint64BE)
 
       res.status(200).send('OK')
 

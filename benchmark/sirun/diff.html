@@ -1,0 +1,186 @@
+
+
+<html>
+  <head>
+    <style>
+body {
+  font-family: monospace;
+}
+
+#charts {
+  max-width: 1000px;
+}
+
+table {
+  border: 1px solid;
+}
+
+td {
+  border: 1px solid;
+}
+    </style>
+  </head>
+  <body>
+    <h1>Sirun differences between REPLACE_ME_PREV and REPLACE_ME_CURR</h1>
+    <div id=summary>
+      <h3>Summary Statistics</h3>
+      <p>These are the geometric mean (i.e. \(\sqrt[n]{\prod_{i=0}^n {x_i}}\)) of the measurements across all tests and variants, excluding control cases.</p>
+      <table>
+        <tr style="font-weight: bold">
+          <td></td>
+          <td>REPLACE_ME_CURR</td>
+          <td>REPLACE_ME_PREV</td>
+          <td>% Diff From REPLACE_ME_PREV</td>
+          <td>Goal</td>
+          <td>% Diff From Goal</td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold">Instructions</td>
+          <td id="curr-instructions"></td>
+          <td id="prev-instructions"></td>
+          <td id="diff-instructions"></td>
+          <td id="goal-instructions"></td>
+          <td id="diff-goal-instructions"></td>
+        </tr>
+        <tr>
+          <td style="font-weight:bold">Memory</td>
+          <td id="curr-mem"></td>
+          <td id="prev-mem"></td>
+          <td id="diff-mem"></td>
+          <td id="goal-mem"></td>
+          <td id="diff-goal-mem"></td>
+        </tr>
+      </table>
+    </div>
+    <p>Numbers in the charts below are the difference between REPLACE_ME_PREV and REPLACE_ME_CURR, as a percentage of the REPLACE_ME_PREV.</p>
+    <div id="charts"></div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+
+const beforeSummary = REPLACE_ME_PREV_DATA
+const afterSummary = REPLACE_ME_CURR_DATA
+const goalSummary = REPLACE_ME_GOAL_DATA
+const diffData = REPLACE_ME_DIFF_DATA
+const readmes = REPLACE_ME_READMES
+
+const beforeStats = summaryStats(beforeSummary)
+const afterStats = summaryStats(afterSummary)
+const goalStats = summaryStats(goalSummary)
+
+document.getElementById('prev-instructions').innerHTML = Math.floor(beforeStats.instructions)
+document.getElementById('curr-instructions').innerHTML = Math.floor(afterStats.instructions)
+diffPctElem('diff-instructions', beforeStats, afterStats, 'instructions')
+document.getElementById('goal-instructions').innerHTML = Math.floor(goalStats.instructions)
+diffPctElem('diff-goal-instructions', goalStats, afterStats, 'instructions')
+
+document.getElementById('prev-mem').innerHTML = Math.floor(beforeStats.mem)
+document.getElementById('curr-mem').innerHTML = Math.floor(afterStats.mem)
+diffPctElem('diff-mem', beforeStats, afterStats, 'mem')
+document.getElementById('goal-mem').innerHTML = Math.floor(goalStats.mem)
+diffPctElem('diff-goal-mem', goalStats, afterStats, 'mem')
+
+function diffPctElem(elemName, beforeStats, afterStats, prop) {
+  const elem = document.getElementById(elemName)
+  const val = (100*(afterStats[prop] - beforeStats[prop])/beforeStats[prop]).toFixed(2)
+  elem.innerHTML = val
+  if (val >= 5) {
+    elem.style.backgroundColor = 'red'
+  } else if (val > 0) {
+    elem.style.backgroundColor = 'yellow'
+  } else if (val < 0) {
+    elem.style.backgroundColor = 'green'
+  }
+}
+
+function summaryStats(summary) {
+  let count = 0
+  let instructions = 1
+  let mem = 1
+  for (const testName in summary) {
+    if (testName.startsWith('//')) {
+      continue
+    }
+    const test = summary[testName]
+    for (const variantName in test) {
+      if (variantName === 'control' || variantName === 'no-tracer' || variantName === 'no-hooks') {
+        continue
+      }
+      count++
+      const variant = test[variantName]
+      instructions *= variant.instructions
+      mem *= variant.summary['max.res.size'].mean
+    }
+  }
+  return {
+    instructions: Math.pow(instructions, 1/count),
+    mem: Math.pow(mem, 1/count)
+  }
+}
+
+function getColor(num, opacity) {
+  if (num > 0) {
+    return `rgb(255, 0, 0, ${opacity})`
+  } else {
+    return `rgb(0, 255, 0, ${opacity})`
+  }
+}
+
+Chart.defaults.plugins.legend.display = false
+
+const charts = document.getElementById('charts')
+for (const testName in diffData) {
+  const test = diffData[testName]
+
+  const testDiv = document.createElement('div', {})
+  testDiv.id = testName
+  testDiv.className = 'test'
+  testDiv.innerHTML += '<hr/><h2>' + testName + '</h2>'
+  if (readmes[testName]) {
+    testDiv.innerHTML += marked(readmes[testName])
+  }
+  charts.appendChild(testDiv)
+
+  for (const variantName in test) {
+    const variantDiv = document.createElement('div', {})
+    variantDiv.id = variantName
+    variantDiv.className = 'variant'
+    testDiv.appendChild(variantDiv)
+    variantDiv.innerHTML += '<h3>' + variantName + '</h3>'
+
+    const variant = test[variantName]
+    if (variant.nodeVersion) {
+      variantDiv.innerHTML += `
+<table>
+  <tr style="font-weight:bold"><td></td><td>REPLACE_ME_PREV</td><td>REPLACE_ME_CURR</td></tr>
+  <tr><td style="font-weight:bold">Node.js Version</td><td>${variant.nodeVersion.prev}</td><td>${variant.nodeVersion.curr}</td></tr>
+</table>
+      `
+    }
+    const canvas = document.createElement('canvas')
+    canvas.height = '50'
+    canvas.width = '400'
+    variantDiv.appendChild(canvas)
+
+    const ctx = canvas.getContext('2d')
+    const data = [
+      variant.instructions,
+      ...Object.keys(variant.summary).map(name => variant.summary[name].mean)
+    ]
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['instructions', ...Object.keys(variant.summary)],
+        datasets: [{
+          data,
+          backgroundColor: data.map(n => getColor(n, 0.2)),
+          borderColor: data.map(n => getColor(n, 1))
+        }]
+      }
+    })
+  }
+}
+    </script>
+  </body>
+</html>

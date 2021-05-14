@@ -9,10 +9,12 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_PARAMETERS,
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
@@ -49,6 +51,11 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
       }
 
       const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, this.test, sourceRoot)
+
+      const testParametersString = getTestParametersString(nameToParams, this.test.title)
+      if (testParametersString) {
+        testSpanMetadata[TEST_PARAMETERS] = testParametersString
+      }
 
       this.test.fn = tracer.wrap(
         'mocha.test',
@@ -121,6 +128,22 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   }
 }
 
+const nameToParams = {}
+
+function wrapMochaEach (mochaEach) {
+  return function mochaEachWithTrace () {
+    const [params] = arguments
+    const { it, ...rest } = mochaEach.apply(this, arguments)
+    return {
+      it: function (name) {
+        nameToParams[name] = params
+        it.apply(this, arguments)
+      },
+      ...rest
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'mocha',
@@ -135,6 +158,16 @@ module.exports = [
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
       this.unwrap(Runner.prototype, 'runTest')
+    }
+  },
+  {
+    name: 'mocha-each',
+    versions: ['>=2.0.1'],
+    patch (mochaEach) {
+      return this.wrapExport(mochaEach, wrapMochaEach(mochaEach))
+    },
+    unpatch (mochaEach) {
+      this.unwrapExport(mochaEach)
     }
   }
 ]

@@ -1,12 +1,12 @@
 {
   "name": "dd-trace",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
     "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
-    "rebuild": "node-gyp rebuild",
+    "rebuild": "node-gyp rebuild --jobs=max",
     "prebuild": "node scripts/prebuild.js",
     "prebuilds": "node scripts/prebuilds.js",
     "protobuf": "pbjs -t static-module -w commonjs -o protobuf/profile.js protobuf/profile.proto && pbts -o protobuf/profile.d.ts protobuf/profile.js",
@@ -71,12 +71,10 @@
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
     "protobufjs": "^6.9.0",
-    "require-in-the-middle": "^2.2.2",
     "semver": "^5.5.0",
     "shimmer": "1.2.1",
     "source-map": "^0.7.3",
-    "source-map-resolve": "^0.6.0",
-    "url-parse": "^1.4.3"
+    "source-map-resolve": "^0.6.0"
   },
   "devDependencies": {
     "autocannon": "^4.5.2",
@@ -85,8 +83,8 @@
     "body-parser": "^1.18.2",
     "chai": "^4.2.0",
     "checksum": "^0.1.1",
-    "codecov": "^3.8.1",
-    "dotenv": "^8.2.0",
+    "codecov": "3.8.1",
+    "dotenv": "8.2.0",
     "eslint": "^4.15.0",
     "eslint-config-standard": "^11.0.0-beta.0",
     "eslint-plugin-import": "^2.8.0",
