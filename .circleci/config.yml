@@ -1389,6 +1389,9 @@ workflows:
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
             - node-bench-sirun-exporting-pipeline-latest
+  upstream:
+    jobs:
+      - node-upstream-node
 
   prebuild:
     jobs:
