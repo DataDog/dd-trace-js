@@ -11,7 +11,7 @@ const { FINISH } = process.env
 
 const spans = []
 
-for (let i = 0; i < 1000000; i++) {
+for (let i = 0; i < 100000; i++) {
   const span = tracer.startSpan('some.span.name', {})
   if (FINISH === 'now') {
     span.finish()
@@ -21,7 +21,7 @@ for (let i = 0; i < 1000000; i++) {
 }
 
 if (FINISH !== 'now') {
-  for (let i = 0; i < 1000000; i++) {
+  for (let i = 0; i < 100000; i++) {
     spans[i].finish()
   }
 }
