@@ -32,7 +32,7 @@ node-core-base: &node-core-base
     - &yarn-test-core
       run:
         name: Unit tests
-        command: yarn test:core:ci --reporter=mocha-junit-reporter
+        command: yarn test:core:ci
     - run:
         name: Upload JUnit XML Report
         command: yarn junit:upload
