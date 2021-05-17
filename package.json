@@ -30,7 +30,8 @@
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
     "cover:merge": "nyc merge ./.nyc_output ./.nyc_merge/$CIRCLE_JOB.json",
     "cover:report": "nyc report -t ./.nyc_merge -n 'packages/**/*.js'",
-    "codecov": "codecov"
+    "codecov": "codecov",
+    "junit:upload": "datadog-ci junit upload --service dd-trace-js-core-tests ./test-results.xml"
   },
   "repository": {
     "type": "git",
@@ -77,6 +78,7 @@
     "source-map-resolve": "^0.6.0"
   },
   "devDependencies": {
+    "@datadog/datadog-ci": "^0.12.0",
     "autocannon": "^4.5.2",
     "axios": "^0.21.1",
     "benchmark": "^2.1.4",
@@ -99,6 +101,7 @@
     "jszip": "^3.5.0",
     "mkdirp": "^0.5.1",
     "mocha": "^5.2.0",
+    "mocha-junit-reporter": "^2.0.0",
     "msgpack-lite": "^0.1.26",
     "nock": "^11.3.3",
     "nyc": "^14.1.1",
