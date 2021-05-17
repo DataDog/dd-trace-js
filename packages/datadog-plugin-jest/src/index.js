@@ -15,7 +15,8 @@ const {
   ERROR_TYPE,
   TEST_PARAMETERS,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  getFormattedJestTestParameters
 } = require('../../dd-trace/src/plugins/util/test')
 
 function wrapEnvironment (BaseEnvironment) {
@@ -69,15 +70,11 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
     if (event.name === 'setup') {
       instrumenter.wrap(this.global.test, 'each', function (original) {
         return function () {
-          const [parameters] = arguments
+          const testParameters = getFormattedJestTestParameters(arguments)
           const eachBind = original.apply(this, arguments)
           return function () {
             const [testName] = arguments
-            // TODO: support string templates as well
-            // https://github.com/facebook/jest/tree/master/packages/jest-each#eachtagged-templatetestname-suitefn
-            if (Array.isArray(parameters) && Array.isArray(parameters[0])) {
-              nameToParams[testName] = parameters
-            }
+            nameToParams[testName] = testParameters
             return eachBind.apply(this, arguments)
           }
         }
