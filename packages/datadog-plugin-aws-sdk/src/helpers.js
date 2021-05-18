@@ -61,7 +61,8 @@ const helpers = {
     const extraTags = services[serviceName] ? services[serviceName].generateTags(params, operation, response) : {}
     const tags = Object.assign({
       'aws.response.request_id': response.requestId,
-      'resource.name': operation
+      'resource.name': operation,
+      'span.kind': 'client'
     }, extraTags)
 
     span.addTags(tags)

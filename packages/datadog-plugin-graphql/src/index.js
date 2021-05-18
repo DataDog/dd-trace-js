@@ -240,7 +240,8 @@ function addExecutionTags (span, config, operation, document, operationName) {
   const type = operation && operation.operation
   const name = operation && operation.name && operation.name.value
   const tags = {
-    'resource.name': getSignature(document, name, type, config.signature)
+    'resource.name': getSignature(document, name, type, config.signature),
+    'span.kind': 'server'
   }
 
   if (type) {

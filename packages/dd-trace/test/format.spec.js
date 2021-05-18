@@ -300,7 +300,7 @@ describe('format', () => {
       spanContext._tags['error.type'] = 'Error'
       spanContext._tags['error.msg'] = 'boom'
       spanContext._tags['error.stack'] = ''
-      spanContext._tags['span.kind'] = 'internal'
+      spanContext._name = 'fs.operation'
 
       trace = format(span)
 
@@ -309,7 +309,7 @@ describe('format', () => {
 
     it('should not set the error flag for internal spans with error tag', () => {
       spanContext._tags['error'] = new Error('boom')
-      spanContext._tags['span.kind'] = 'internal'
+      spanContext._name = 'fs.operation'
 
       trace = format(span)
 
@@ -542,6 +542,30 @@ describe('format', () => {
       spanContext._tags[MEASURED] = undefined
       trace = format(span)
       expect(trace.metrics[MEASURED]).to.equal(1)
+    })
+
+    it('should not measure internal spans', () => {
+      spanContext._tags['span.kind'] = 'internal'
+      trace = format(span)
+      expect(trace.metrics).to.not.have.property(MEASURED)
+    })
+
+    it('should not measure unknown spans', () => {
+      trace = format(span)
+      expect(trace.metrics).to.not.have.property(MEASURED)
+    })
+
+    it('should measure non-internal spans', () => {
+      spanContext._tags['span.kind'] = 'server'
+      trace = format(span)
+      expect(trace.metrics[MEASURED]).to.equal(1)
+    })
+
+    it('should not override explicit measure decision', () => {
+      spanContext._tags[MEASURED] = 0
+      spanContext._tags['span.kind'] = 'server'
+      trace = format(span)
+      expect(trace.metrics[MEASURED]).to.equal(0)
     })
   })
 })

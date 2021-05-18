@@ -104,7 +104,6 @@ function startSpan (tracer, config, operation, tags) {
   const span = tracer.startSpan(operation, {
     childOf,
     tags: Object.assign({
-      'span.kind': 'client',
       'service.name': config.service || `${tracer._service}-dns`
     }, tags)
   })

@@ -33,8 +33,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'dns.hostname': 'localhost',
-            'dns.address': '127.0.0.1',
-            'span.kind': 'client'
+            'dns.address': '127.0.0.1'
           })
         })
         .then(done)
@@ -52,8 +51,7 @@ describe('Plugin', () => {
             resource: '127.0.0.1:22'
           })
           expect(traces[0][0].meta).to.deep.include({
-            'dns.address': '127.0.0.1',
-            'span.kind': 'client'
+            'dns.address': '127.0.0.1'
           })
           expect(traces[0][0].metrics).to.deep.include({
             'dns.port': 22
@@ -75,8 +73,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'dns.hostname': 'localhost',
-            'dns.rrtype': 'A',
-            'span.kind': 'client'
+            'dns.rrtype': 'A'
           })
         })
         .then(done)
@@ -95,8 +92,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'dns.hostname': 'localhost',
-            'dns.rrtype': 'ANY',
-            'span.kind': 'client'
+            'dns.rrtype': 'ANY'
           })
         })
         .then(done)
@@ -114,8 +110,7 @@ describe('Plugin', () => {
             resource: '127.0.0.1'
           })
           expect(traces[0][0].meta).to.deep.include({
-            'dns.ip': '127.0.0.1',
-            'span.kind': 'client'
+            'dns.ip': '127.0.0.1'
           })
         })
         .then(done)
@@ -160,8 +155,7 @@ describe('Plugin', () => {
             })
             expect(traces[0][0].meta).to.deep.include({
               'dns.hostname': 'localhost',
-              'dns.rrtype': 'A',
-              'span.kind': 'client'
+              'dns.rrtype': 'A'
             })
           })
           .then(done)

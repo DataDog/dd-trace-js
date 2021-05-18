@@ -25,8 +25,15 @@ class Sqs {
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl
     })
 
-    if (operation === 'receiveMessage') {
-      tags['span.type'] = 'worker'
+    switch (operation) {
+      case 'receiveMessage':
+        tags['span.type'] = 'worker'
+        tags['span.kind'] = 'consumer'
+        break
+      case 'sendMessage':
+      case 'sendMessageBatch':
+        tags['span.kind'] = 'producer'
+        break
     }
 
     return tags

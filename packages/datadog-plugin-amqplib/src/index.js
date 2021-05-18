@@ -126,6 +126,8 @@ function addTags (channel, tracer, config, span, method, fields) {
         'span.type': 'worker'
       })
       break
+    default:
+      span.setTag('span.kind', 'client')
   }
 
   fieldNames.forEach(field => {

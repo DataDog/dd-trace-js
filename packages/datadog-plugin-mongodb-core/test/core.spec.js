@@ -85,6 +85,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('service', 'test-mongodb')
                 expect(span).to.have.property('resource', resource)
                 expect(span).to.have.property('type', 'mongodb')
+                expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', 'localhost')
               })
