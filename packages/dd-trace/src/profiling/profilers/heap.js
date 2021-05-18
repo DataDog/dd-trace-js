@@ -27,8 +27,7 @@ class NativeHeapProfiler {
 
   profile () {
     if (!this._pprof) return
-    const profile = this._pprof.heap.profile()
-    return this._pprof.encode(profile)
+    return this._pprof.heap.profile()
   }
 
   stop () {
