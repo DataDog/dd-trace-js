@@ -497,8 +497,8 @@ function unpatchDirFunctions (fs) {
 module.exports = {
   name: 'fs',
   patch (fs, tracer, config) {
-    const realpathNative = fs.realpath.native;
-    const realpathSyncNative = fs.realpathSync.native;
+    const realpathNative = fs.realpath.native
+    const realpathSyncNative = fs.realpathSync.native
     patchClassicFunctions.call(this, fs, tracer, config)
     if (fs.promises) {
       patchFileHandle.call(this, fs, tracer, config)
