@@ -916,6 +916,29 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
+  
+  # Node upstream tests
+
+  node-upstream-node:
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    docker:
+      - image: node:14
+    steps:
+      - checkout
+      - *yarn-versions
+      - *restore-yarn-cache
+      - *yarn-install
+      - *save-yarn-cache
+      - run:
+          name: Pull the NodeJS repository
+          command: "git clone --depth 1 --branch v14.x https://github.com/nodejs/node.git ~/node"
+      - run:
+          name: Run test script
+          command: node node-upstream-tests/node/run_tests.js
+          environment:
+            NODE_REPO_PATH: "/root/node"
+            NODE_BIN: "/usr/local/bin/node"
 
   # Code coverage
 
@@ -1375,6 +1398,9 @@ workflows:
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
             - node-bench-sirun-exporting-pipeline-latest
+  upstream:
+    jobs:
+      - node-upstream-node
 
   prebuild:
     jobs:
@@ -1601,3 +1627,13 @@ workflows:
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
             - node-bench-sirun-exporting-pipeline-latest
+  nightly-upstream:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - node-upstream-node
