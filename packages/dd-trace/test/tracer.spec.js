@@ -490,5 +490,19 @@ describe('Tracer', () => {
         })
       })
     })
+
+    describe('when the options object is a function returning a falsy value', () => {
+      it('should trace', () => {
+        const fn = tracer.wrap('name', () => false, () => {})
+
+        sinon.stub(tracer, 'trace').callsFake((_, options) => {
+          expect(options).to.equal(false)
+        })
+
+        fn()
+
+        expect(tracer.trace).to.have.been.called
+      })
+    })
   })
 })

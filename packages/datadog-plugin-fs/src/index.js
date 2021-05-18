@@ -338,7 +338,7 @@ function makeFSTags (resourceName, path, options, config, tracer) {
 
   switch (typeof path) {
     case 'object': {
-      if (path === null) return
+      if (path === null) return tags
       const src = 'src' in path ? path.src : null
       const dest = 'dest' in path ? path.dest : null
       if (src || dest) {

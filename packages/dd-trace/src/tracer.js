@@ -75,7 +75,7 @@ class DatadogTracer extends Tracer {
         optionsObj = optionsObj.apply(this, arguments)
       }
 
-      if (optionsObj.orphanable === false && !tracer.scope().active()) {
+      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active()) {
         return fn.apply(this, arguments)
       }
 
