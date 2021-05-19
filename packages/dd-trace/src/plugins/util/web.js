@@ -408,7 +408,7 @@ function extractURL (req) {
   if (req.stream) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
   } else {
-    const protocol = req.connection.encrypted ? 'https' : 'http'
+    const protocol = req.socket.encrypted ? 'https' : 'http'
     return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
   }
 }

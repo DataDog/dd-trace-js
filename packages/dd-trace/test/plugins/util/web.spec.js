@@ -39,7 +39,7 @@ describe('plugins/util/web', () => {
         'host': 'localhost',
         'date': 'now'
       },
-      connection: {}
+      socket: {}
     }
     end = sinon.stub()
     res = {
