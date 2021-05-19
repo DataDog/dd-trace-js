@@ -5,7 +5,9 @@ if (!global._ddtrace) {
 
   Object.defineProperty(global, '_ddtrace', {
     value: new TracerProxy(),
-    enumerable: false
+    enumerable: false,
+    configurable: true,
+    writable: true
   })
 
   global._ddtrace.default = global._ddtrace
