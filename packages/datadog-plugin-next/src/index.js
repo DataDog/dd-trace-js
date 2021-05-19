@@ -86,7 +86,7 @@ function trace (tracer, config, req, res, handler) {
 
 function addPage (req, page) {
   req._datadog_next.span.addTags({
-    'resource.name': `${req.method} ${page}`,
+    'resource.name': `${req.method} ${page}`.trim(),
     'next.page': page
   })
 }
