@@ -13,6 +13,8 @@ module.exports = name => {
 
   if (name === NOOP) {
     Scope = require('./scope/base')
+  } else if (name === scopes.SYNC) {
+    Scope = require('./scope/sync')
   } else if (name === scopes.ASYNC_LOCAL_STORAGE) {
     Scope = require('./scope/async_local_storage')
   } else if (name === scopes.ASYNC_RESOURCE || (!name && hasJavaScriptAsyncHooks)) {

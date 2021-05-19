@@ -401,7 +401,7 @@ export declare interface TracerOptions {
    * implementation for the runtime. Only change this if you know what you are
    * doing.
    */
-  scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'noop'
+  scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
 
   /**
    * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
