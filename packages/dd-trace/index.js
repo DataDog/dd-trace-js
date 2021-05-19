@@ -1,11 +1,11 @@
 'use strict'
 
-if (!process._ddtrace) {
+if (!global._ddtrace) {
   const TracerProxy = require('./src/proxy')
 
-  process._ddtrace = new TracerProxy()
-  process._ddtrace.default = process._ddtrace
-  process._ddtrace.tracer = process._ddtrace
+  global._ddtrace = new TracerProxy()
+  global._ddtrace.default = global._ddtrace
+  global._ddtrace.tracer = global._ddtrace
 }
 
-module.exports = process._ddtrace
+module.exports = global._ddtrace

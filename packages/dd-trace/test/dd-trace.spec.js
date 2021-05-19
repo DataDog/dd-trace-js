@@ -31,7 +31,7 @@ describe('dd-trace', () => {
   afterEach(() => {
     listener.close()
     delete require.cache[require.resolve('../')]
-    delete process._ddtrace
+    delete global._ddtrace
   })
 
   it('should record and send a trace to the agent', (done) => {
