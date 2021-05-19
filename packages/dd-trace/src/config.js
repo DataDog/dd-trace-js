@@ -104,6 +104,30 @@ class Config {
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
       '0.4'
     )
+    const DD_TRACE_B3_ENABLED = coalesce(
+      options.experimental && options.experimental.b3,
+      process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+      false
+    )
+    const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
+      options.experimental && options.experimental.runtimeId,
+      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      false
+    )
+    const DD_TRACE_EXPORTER = coalesce(
+      options.experimental && options.experimental.exporter,
+      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
+    )
+    const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
+      options.experimental && options.experimental.enableGetRumData,
+      process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
+      false
+    )
+    const DD_TRACE_INTERNAL_ERRORS_ENABLED = coalesce(
+      options.experimental && options.experimental.internalErrors,
+      process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
+      false
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
@@ -139,12 +163,12 @@ class Config {
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
     this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
-      b3: !(!options.experimental || !options.experimental.b3),
-      runtimeId: !(!options.experimental || !options.experimental.runtimeId),
-      exporter: options.experimental && options.experimental.exporter,
-      enableGetRumData: (options.experimental && !!options.experimental.enableGetRumData),
+      b3: isTrue(DD_TRACE_B3_ENABLED),
+      runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
+      exporter: DD_TRACE_EXPORTER,
+      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
       sampler,
-      internalErrors: options.experimental && options.experimental.internalErrors
+      internalErrors: isTrue(DD_TRACE_INTERNAL_ERRORS_ENABLED)
     }
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = isFalse(process.env.DD_CONTEXT_PROPAGATION)

@@ -1,5 +1,7 @@
 'use strict'
 
+const { expect } = require('chai')
+
 describe('Config', () => {
   let Config
   let pkg
@@ -43,6 +45,10 @@ describe('Config', () => {
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.nested.property('experimental.b3', false)
+    expect(config).to.have.nested.property('experimental.runtimeId', false)
+    expect(config).to.have.nested.property('experimental.exporter', undefined)
+    expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('experimental.internalErrors', false)
   })
 
   it('should initialize from the default service', () => {
@@ -80,6 +86,11 @@ describe('Config', () => {
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
+    process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
+    process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
 
     const config = new Config()
 
@@ -98,6 +109,11 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
+    expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.runtimeId', true)
+    expect(config).to.have.nested.property('experimental.exporter', 'log')
+    expect(config).to.have.nested.property('experimental.enableGetRumData', true)
+    expect(config).to.have.nested.property('experimental.internalErrors', true)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -171,10 +187,13 @@ describe('Config', () => {
       experimental: {
         b3: true,
         runtimeId: true,
+        exporter: 'log',
+        enableGetRumData: true,
         sampler: {
           sampleRate: 1,
           rateLimit: 1000
-        }
+        },
+        internalErrors: true
       }
     })
 
@@ -209,6 +228,9 @@ describe('Config', () => {
     expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{32}$/)
     expect(config).to.have.nested.property('experimental.b3', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
+    expect(config).to.have.nested.property('experimental.exporter', 'log')
+    expect(config).to.have.nested.property('experimental.enableGetRumData', true)
+    expect(config).to.have.nested.property('experimental.internalErrors', true)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
   })
 
@@ -276,6 +298,11 @@ describe('Config', () => {
     process.env.DD_API_KEY = '123'
     process.env.DD_APP_KEY = '456'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
+    process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
+    process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
 
     const config = new Config({
       enabled: true,
@@ -296,6 +323,13 @@ describe('Config', () => {
       env: 'development',
       tags: {
         foo: 'foo'
+      },
+      experimental: {
+        b3: false,
+        runtimeId: false,
+        exporter: 'agent',
+        enableGetRumData: false,
+        internalErrors: false
       }
     })
 
@@ -316,6 +350,11 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
+    expect(config).to.have.nested.property('experimental.b3', false)
+    expect(config).to.have.nested.property('experimental.runtimeId', false)
+    expect(config).to.have.nested.property('experimental.exporter', 'agent')
+    expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('experimental.internalErrors', false)
   })
 
   it('should give priority to non-experimental options', () => {
