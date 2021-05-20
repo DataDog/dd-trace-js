@@ -1134,7 +1134,6 @@ declare namespace plugins {
    */
    interface paperplane extends HttpServer {}
 
-
   /**
    * This plugin automatically instruments the
    * [pg](https://node-postgres.com/) module.
