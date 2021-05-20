@@ -790,12 +790,13 @@ jobs:
 
   node-oracledb:
     <<: *node-plugin-base
+    resource_class: large
     docker:
-      - image: node:14
+      - image: bengl/node-10-with-oracle-client
         environment:
           - SERVICES=oracledb
           - PLUGINS=oracledb
-      - image: bengl/node-10-with-oracle-client
+      - image: quillbuilduser/oracle-18-xe
 
   node-mongodb-core:
     <<: *node-plugin-base

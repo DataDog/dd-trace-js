@@ -1,23 +1,24 @@
+'use strict'
+
 function createWrapExecute (tracer, config) {
   return function wrapExecute (execute) {
     return function executeWithTrace (dbQuery, ...args) {
       const connAttrs = this._dd_connAttrs
       const service = getServiceName(tracer, config, connAttrs)
       const connectStringObj = new URL('http://' + connAttrs.connectString)
-      return tracer.trace('exec.query', {
-        tags: {
-          'span.kind': 'client',
-          'sql.query': dbQuery,
-          'db.instance': connectStringObj.pathname.substring(1),
-          'db.hostname': connectStringObj.hostname,
-          'db.user': config.user,
-          'db.port': connectStringObj.port,
-          'resource.name': dbQuery,
-          'service.name': service
-        }
-      }, (span) => {
-        return execute.call(this, dbQuery, ...args)
-      })
+      const tags = {
+        'span.kind': 'client',
+        'span.type': 'sql',
+        'sql.query': dbQuery,
+        'db.instance': connectStringObj.pathname.substring(1),
+        'db.hostname': connectStringObj.hostname,
+        'db.user': config.user,
+        'db.port': connectStringObj.port,
+        'resource.name': dbQuery,
+        'service.name': service
+      }
+
+      return tracer.wrap('oracle.query', { tags }, execute).apply(this, arguments)
     }
   }
 }
@@ -93,7 +94,7 @@ function getServiceName (tracer, config, connAttrs) {
   } else if (config.service) {
     return config.service
   } else {
-    return `${tracer._service}-oracledb`
+    return `${tracer._service}-oracle`
   }
 }
 

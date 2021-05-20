@@ -5,19 +5,21 @@ function waitForOracledb () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('oracledb')
     operation.attempt(currentAttempt => {
-      oracledb.getConnection({
-        user: 'sys',
-        password: 'Oracle18',
-        connectString: 'oracledb:1521/xepdb1',
-        privilege: 2
-      }).then((connection) => {
-        resolve(connection)
-      }, (err) => {
-        if (!operation.retry(err)) reject(err)
-      })
+      oracledb
+        .getConnection({
+          user: 'sys',
+          password: 'Oracle18',
+          connectString: 'localhost:1521/xepdb1',
+          privilege: 2
+        })
+        .then(connection => {
+          return ensureTestUser(connection)
+        })
+        .then(resolve)
+        .catch(err => {
+          if (!operation.retry(err)) reject(err)
+        })
     })
-  }).then((connection) => {
-    return ensureTestUser(connection)
   })
 }
 
