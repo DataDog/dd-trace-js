@@ -20,16 +20,26 @@ const TESTS = [
     featureSuffix: ':3',
     requireName: 'simple.js',
     testName: 'pass scenario',
-    success: true,
-    statuses: ['pass', 'pass', 'pass', 'pass']
+    testStatus: 'pass',
+    steps: [
+      { name: 'datadog', stepStatus: 'pass' },
+      { name: 'run', stepStatus: 'pass' },
+      { name: 'pass', stepStatus: 'pass' }
+    ],
+    success: true
   },
   {
     featureName: 'simple.feature',
     featureSuffix: ':8',
     requireName: 'simple.js',
     testName: 'fail scenario',
+    testStatus: 'fail',
+    steps: [
+      { name: 'datadog', stepStatus: 'pass' },
+      { name: 'run', stepStatus: 'pass' },
+      { name: 'fail', stepStatus: 'fail' }
+    ],
     success: false,
-    statuses: ['pass', 'pass', 'fail', 'fail'],
     errors: [undefined, undefined, 'AssertionError', 'AssertionError']
   },
   {
@@ -37,8 +47,13 @@ const TESTS = [
     featureSuffix: ':13',
     requireName: 'simple.js',
     testName: 'skip scenario',
+    testStatus: 'skip',
+    steps: [
+      { name: 'datadog', stepStatus: 'pass' },
+      { name: 'run', stepStatus: 'pass' },
+      { name: 'skip', stepStatus: 'skip' }
+    ],
     success: true,
-    statuses: ['pass', 'pass', 'skip', 'skip'],
     errors: [undefined, undefined, 'skipped', 'skipped']
   },
   {
@@ -46,8 +61,9 @@ const TESTS = [
     featureSuffix: ':19',
     requireName: 'simple.js',
     testName: 'skip scenario based on tag',
+    testStatus: 'skip',
+    steps: [{ name: 'datadog', stepStatus: 'skip' }],
     success: true,
-    statuses: ['skip', 'skip'], // includes first step and marks it as skipped
     errors: ['skipped', 'skipped']
   }
 ]
@@ -80,8 +96,6 @@ describe('Plugin', () => {
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
           const checkTraces = agent
             .use(traces => {
-              expect(traces[0].length).to.equal(test.statuses.length)
-              expect(traces[0].map(s => s.meta[TEST_STATUS])).to.have.members(test.statuses)
               if (test.errors !== undefined) {
                 test.errors.forEach((msg, i) => {
                   expect(
@@ -90,20 +104,30 @@ describe('Plugin', () => {
                   ).to.satisfy(err => msg === undefined || err.startsWith(msg))
                 })
               }
-              // take the last top level trace
-              const trace = traces[0][test.statuses.length - 1]
+              // take the test span
+              const testSpan = traces[0][traces[0].length - 1]
               expect(traces[0][traces[0].length - 1].meta).to.contain({
                 language: 'javascript',
                 service: 'test',
                 [TEST_NAME]: test.testName,
                 [TEST_TYPE]: 'test',
                 [TEST_FRAMEWORK]: 'cucumber',
-                [TEST_SUITE]: testSuite
+                [TEST_SUITE]: testSuite,
+                [TEST_STATUS]: test.testStatus
               })
-              expect(trace.meta[TEST_SUITE].endsWith(test.featureName)).to.equal(true)
-              expect(trace.type).to.equal('test')
-              expect(trace.name).to.equal('cucumber.test')
-              expect(trace.resource).to.equal(`${test.testName}`)
+              expect(testSpan.meta[TEST_SUITE].endsWith(test.featureName)).to.equal(true)
+              expect(testSpan.type).to.equal('test')
+              expect(testSpan.name).to.equal('cucumber.test')
+              expect(testSpan.resource).to.equal(`${test.testName}`)
+              // step spans
+              const stepSpans = traces[0].filter(span => span.name === 'cucumber.step')
+              expect(stepSpans.length).to.equal(test.steps.length)
+              stepSpans.forEach((stepSpan, index) => {
+                // all steps are children of the test span
+                expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+                expect(stepSpan.meta['cucumber.step']).to.equal(test.steps[index].name)
+                expect(stepSpan.meta['step.status']).to.equal(test.steps[index].stepStatus)
+              })
             })
 
           const stdout = new PassThrough()

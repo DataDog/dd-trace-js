@@ -10,17 +10,17 @@ const {
   getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
 
-function setStatusFromResult (span, result) {
+function setStatusFromResult (span, result, tag) {
   if (result.status === 1) {
-    span.setTag(TEST_STATUS, 'pass')
+    span.setTag(tag, 'pass')
   } else if (result.status === 2) {
-    span.setTag(TEST_STATUS, 'skip')
+    span.setTag(tag, 'skip')
     span.setTag('error.msg', 'skipped')
   } else if (result.status === 4) {
-    span.setTag(TEST_STATUS, 'skip')
+    span.setTag(tag, 'skip')
     span.setTag('error.msg', 'not implemented')
   } else {
-    span.setTag(TEST_STATUS, 'fail')
+    span.setTag(tag, 'fail')
     span.setTag('error.msg', result.message)
   }
 }
@@ -49,7 +49,7 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
         (span) => {
           const promise = run.apply(this, arguments)
           promise.then(() => {
-            setStatusFromResult(span, this.getWorstStepResult())
+            setStatusFromResult(span, this.getWorstStepResult(), TEST_STATUS)
           })
           return promise
         }
@@ -64,11 +64,11 @@ function createWrapRunStep (tracer) {
       const resource = arguments[0].isHook ? 'hook' : arguments[0].pickleStep.text
       return tracer.trace(
         'cucumber.step',
-        { type: 'test', resource: resource },
+        { type: 'test', resource: resource, tags: { 'cucumber.step': resource } },
         (span) => {
           const promise = runStep.apply(this, arguments)
           promise.then((result) => {
-            setStatusFromResult(span, result)
+            setStatusFromResult(span, result, 'step.status')
           })
           return promise
         }
