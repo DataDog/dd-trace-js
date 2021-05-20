@@ -215,6 +215,8 @@ tracer.use('mysql');
 tracer.use('mysql2');
 tracer.use('net');
 tracer.use('next');
+tracer.use('oracledb');
+tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('paperplane');
 tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');

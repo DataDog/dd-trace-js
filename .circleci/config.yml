@@ -788,16 +788,6 @@ jobs:
           - MYSQL_ALLOW_EMPTY_PASSWORD=yes
           - MYSQL_DATABASE=db
 
-  node-oracledb:
-    <<: *node-plugin-base
-    resource_class: large
-    docker:
-      - image: bengl/node-10-with-oracle-client
-        environment:
-          - SERVICES=oracledb
-          - PLUGINS=oracledb
-      - image: quillbuilduser/oracle-18-xe
-
   node-mongodb-core:
     <<: *node-plugin-base
     docker:
@@ -829,6 +819,16 @@ jobs:
       - image: node:12
         environment:
           - PLUGINS=next
+
+  node-oracledb:
+    <<: *node-plugin-base
+    resource_class: large
+    docker:
+      - image: bengl/node-10-with-oracle-client
+        environment:
+          - SERVICES=oracledb
+          - PLUGINS=oracledb
+      - image: quillbuilduser/oracle-18-xe
 
   node-paperplane:
     <<: *node-plugin-base
@@ -1318,9 +1318,9 @@ workflows:
       - node-mongodb-core
       - node-mongoose
       - node-mysql
-      - node-oracledb
       - node-net
       - node-next
+      - node-oracledb
       - node-paperplane
       - node-pino
       - node-postgres
@@ -1379,6 +1379,7 @@ workflows:
             - node-mysql
             - node-net
             - node-next
+            - node-oracledb
             - node-paperplane
             - node-pino
             - node-postgres
@@ -1600,9 +1601,9 @@ workflows:
       - node-mongodb-core
       - node-mongoose
       - node-mysql
-      - node-oracledb
       - node-net
       - node-next
+      - node-oracledb
       - node-paperplane
       - node-pino
       - node-postgres

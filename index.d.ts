@@ -515,6 +515,7 @@ interface Plugins {
   "mysql2": plugins.mysql2;
   "net": plugins.net;
   "next": plugins.next;
+  "oracledb": plugins.oracledb;
   "paperplane": plugins.paperplane;
   "pg": plugins.pg;
   "pino": plugins.pino;
@@ -1126,6 +1127,17 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
+  }
+
+  /**
+   * This plugin automatically instruments the
+   * [oracledb](https://github.com/oracle/node-oracledb) module.
+   */
+  interface oracledb extends Instrumentation {
+    /**
+     * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
+     */
+    service?: string | ((params: any) => string);
   }
 
   /**
