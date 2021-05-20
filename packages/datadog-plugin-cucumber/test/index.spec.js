@@ -108,7 +108,10 @@ describe('Plugin', () => {
               }
               // take the test span
               const testSpan = traces[0][traces[0].length - 1]
-              expect(traces[0][traces[0].length - 1].meta).to.contain({
+
+              // having no parent span means there is no span leak from other tests
+              expect(testSpan.parent_id.toString()).to.equal('0')
+              expect(testSpan.meta).to.contain({
                 language: 'javascript',
                 service: 'test',
                 [TEST_NAME]: test.testName,
