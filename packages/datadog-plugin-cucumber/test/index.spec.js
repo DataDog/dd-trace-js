@@ -96,6 +96,8 @@ describe('Plugin', () => {
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
           const checkTraces = agent
             .use(traces => {
+              // number of tests + one test span
+              expect(traces[0].length).to.equal(test.steps.length + 1)
               if (test.errors !== undefined) {
                 test.errors.forEach((msg, i) => {
                   expect(
