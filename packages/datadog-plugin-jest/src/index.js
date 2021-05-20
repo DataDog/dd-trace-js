@@ -4,7 +4,6 @@ const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
-
 const {
   TEST_TYPE,
   TEST_NAME,
@@ -15,9 +14,9 @@ const {
   ERROR_TYPE,
   TEST_PARAMETERS,
   getTestEnvironmentMetadata,
-  getTestParametersString,
-  getFormattedJestTestParameters
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
+const { getFormattedJestTestParameters } = require('./util')
 
 function wrapEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
