@@ -323,9 +323,6 @@ describe('Plugin', () => {
       it('should work with tests parameterized through a string', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
-        const tracer = require('../../dd-trace')
-        sinon.spy(tracer._instrumenter, 'wrap')
-
         const setupEvent = {
           name: 'setup'
         }
@@ -339,10 +336,7 @@ describe('Plugin', () => {
         }
 
         datadogJestEnv.handleTestEvent.call(thisArg, setupEvent)
-        expect(tracer._instrumenter.wrap).to.have.been.calledWith(thisArg.global.test, 'each')
         thisArg.global.test.each(['\n    a    | b    | expected\n    '], 1, 2, 3)('test-name')
-        tracer._instrumenter.wrap.restore()
-
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
