@@ -1,7 +1,17 @@
 'use strict'
 
-const TracerProxy = require('./src/proxy')
+if (!global._ddtrace) {
+  const TracerProxy = require('./src/proxy')
 
-module.exports = new TracerProxy()
-module.exports.default = module.exports
-module.exports.tracer = module.exports
+  Object.defineProperty(global, '_ddtrace', {
+    value: new TracerProxy(),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  })
+
+  global._ddtrace.default = global._ddtrace
+  global._ddtrace.tracer = global._ddtrace
+}
+
+module.exports = global._ddtrace

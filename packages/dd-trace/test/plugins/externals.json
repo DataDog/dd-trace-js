@@ -85,6 +85,16 @@
       "versions": ["3.2.7"]
     }
   ],
+  "next": [
+    {
+      "name": "react",
+      "versions": ["17.0.2"]
+    },
+    {
+      "name": "react-dom",
+      "versions": ["17.0.2"]
+    }
+  ],
   "pg": [
     {
       "name": "pg-native",

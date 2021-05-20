@@ -214,6 +214,7 @@ tracer.use('mongoose');
 tracer.use('mysql');
 tracer.use('mysql2');
 tracer.use('net');
+tracer.use('next');
 tracer.use('paperplane');
 tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');

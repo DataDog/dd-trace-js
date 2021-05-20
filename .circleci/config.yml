@@ -823,6 +823,13 @@ jobs:
         environment:
           - PLUGINS=net
 
+  node-next:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - PLUGINS=next
+
   node-paperplane:
     <<: *node-plugin-base
     docker:
@@ -1313,6 +1320,7 @@ workflows:
       - node-mysql
       - node-oracledb
       - node-net
+      - node-next
       - node-paperplane
       - node-pino
       - node-postgres
@@ -1370,6 +1378,7 @@ workflows:
             - node-mongoose
             - node-mysql
             - node-net
+            - node-next
             - node-paperplane
             - node-pino
             - node-postgres
@@ -1593,6 +1602,7 @@ workflows:
       - node-mysql
       - node-oracledb
       - node-net
+      - node-next
       - node-paperplane
       - node-pino
       - node-postgres
