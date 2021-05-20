@@ -96,6 +96,27 @@ describe('Plugin', function () {
               })
               .catch(done)
           })
+
+          it('should handle routes not found', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'next.request')
+                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET /404')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '404')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/api/missing`)
+              .catch(() => {})
+          })
         })
 
         describe('for pages', () => {
@@ -118,6 +139,27 @@ describe('Plugin', function () {
             axios
               .get(`http://localhost:${port}/hello/world`)
               .catch(done)
+          })
+
+          it('should handle pages not found', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'next.request')
+                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET /404')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '404')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/missing`)
+              .catch(() => {})
           })
         })
       })

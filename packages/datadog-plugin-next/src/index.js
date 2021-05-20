@@ -67,7 +67,6 @@ function trace (tracer, config, req, res, handler) {
     'resource.name': req.method,
     'span.type': 'web',
     'span.kind': 'server',
-    'http.status_code': res.statusCode,
     'http.method': req.method
   }
   const span = tracer.startSpan('next.request', { childOf, tags })
@@ -92,6 +91,9 @@ function addPage (req, page) {
 }
 
 function finish (span, config, req, res) {
+  span.addTags({
+    'http.status_code': res.statusCode
+  })
   config.hooks.request(span, req, res)
   span.finish()
 }
