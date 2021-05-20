@@ -64,7 +64,7 @@ function createWrapRunStep (tracer) {
       const resource = arguments[0].isHook ? 'hook' : arguments[0].pickleStep.text
       return tracer.trace(
         'cucumber.step',
-        { type: 'test', resource: resource, tags: { 'cucumber.step': resource } },
+        { resource, tags: { 'cucumber.step': resource } },
         (span) => {
           const promise = runStep.apply(this, arguments)
           promise.then((result) => {

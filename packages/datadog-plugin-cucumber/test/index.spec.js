@@ -129,6 +129,7 @@ describe('Plugin', () => {
                 expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
                 expect(stepSpan.meta['cucumber.step']).to.equal(test.steps[index].name)
                 expect(stepSpan.meta['step.status']).to.equal(test.steps[index].stepStatus)
+                expect(stepSpan.type).not.to.equal('test')
               })
             })
 
