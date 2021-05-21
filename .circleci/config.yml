@@ -557,6 +557,13 @@ jobs:
         environment:
           - PLUGINS=connect
 
+  node-cucumber:
+    <<: *node-plugin-base
+    docker:
+      - image: node:10
+        environment:
+          - PLUGINS=cucumber
+
   node-couchbase:
     <<: *node-plugin-base
     docker:
@@ -923,7 +930,7 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
-  
+
   # Node upstream tests
 
   node-upstream-node:
@@ -1280,6 +1287,7 @@ workflows:
       - node-cassandra
       - node-connect
       - node-couchbase
+      - node-cucumber
       - node-dns
       - node-elasticsearch
       - node-express
@@ -1338,6 +1346,7 @@ workflows:
             - node-cassandra
             - node-connect
             - node-couchbase
+            - node-cucumber
             - node-dns
             - node-elasticsearch
             - node-express
@@ -1561,6 +1570,7 @@ workflows:
       - node-cassandra
       - node-connect
       - node-couchbase
+      - node-cucumber
       - node-dns
       - node-elasticsearch
       - node-express

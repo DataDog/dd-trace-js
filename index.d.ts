@@ -488,6 +488,7 @@ interface Plugins {
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
   "couchbase": plugins.couchbase;
+  "cucumber": plugins.cucumber;
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
@@ -780,6 +781,12 @@ declare namespace plugins {
    * [couchbase](https://www.npmjs.com/package/couchbase) module.
    */
   interface couchbase extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [cucumber](https://www.npmjs.com/package/@cucumber/cucumber) module.
+   */
+  interface cucumber extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
