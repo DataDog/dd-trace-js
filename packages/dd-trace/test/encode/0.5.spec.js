@@ -2,7 +2,6 @@
 
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const { Uint64BE } = require('int64-buffer')
 const id = require('../../src/id')
 
 describe('encode 0.5', () => {
