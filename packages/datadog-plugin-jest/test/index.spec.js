@@ -279,7 +279,7 @@ describe('Plugin', () => {
         passingTestEvent.test.fn()
       })
 
-      it('should work with parameterized tests', (done) => {
+      it('should work with tests parameterized through an array', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         const tracer = require('../../dd-trace')
@@ -306,6 +306,43 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               [TEST_PARAMETERS]: JSON.stringify({ arguments: [{ parameterA: 'a' }], metadata: {} })
+            })
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: 'test-name'
+          }
+        }
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
+      it('should work with tests parameterized through a string', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+
+        const setupEvent = {
+          name: 'setup'
+        }
+
+        const thisArg = {
+          global: {
+            test: {
+              each: () => () => {}
+            }
+          }
+        }
+
+        datadogJestEnv.handleTestEvent.call(thisArg, setupEvent)
+        thisArg.global.test.each(['\n    a    | b    | expected\n    '], 1, 2, 3)('test-name')
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [TEST_PARAMETERS]: JSON.stringify({
+                arguments: { a: 1, b: 2, expected: 3 }, metadata: {}
+              })
             })
           }).then(done).catch(done)
 

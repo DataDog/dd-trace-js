@@ -4,7 +4,6 @@ const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
-
 const {
   TEST_TYPE,
   TEST_NAME,
@@ -17,6 +16,7 @@ const {
   getTestEnvironmentMetadata,
   getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
+const { getFormattedJestTestParameters } = require('./util')
 
 function wrapEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
@@ -69,15 +69,11 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
     if (event.name === 'setup') {
       instrumenter.wrap(this.global.test, 'each', function (original) {
         return function () {
-          const [parameters] = arguments
+          const testParameters = getFormattedJestTestParameters(arguments)
           const eachBind = original.apply(this, arguments)
           return function () {
             const [testName] = arguments
-            // TODO: support string templates as well
-            // https://github.com/facebook/jest/tree/master/packages/jest-each#eachtagged-templatetestname-suitefn
-            if (Array.isArray(parameters) && Array.isArray(parameters[0])) {
-              nameToParams[testName] = parameters
-            }
+            nameToParams[testName] = testParameters
             return eachBind.apply(this, arguments)
           }
         }
