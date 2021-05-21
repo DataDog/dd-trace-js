@@ -827,6 +827,16 @@ jobs:
         environment:
           - PLUGINS=next
 
+  node-oracledb:
+    <<: *node-plugin-base
+    resource_class: large
+    docker:
+      - image: bengl/node-10-with-oracle-client
+        environment:
+          - SERVICES=oracledb
+          - PLUGINS=oracledb
+      - image: quillbuilduser/oracle-18-xe
+
   node-paperplane:
     <<: *node-plugin-base
     docker:
@@ -1318,6 +1328,7 @@ workflows:
       - node-mysql
       - node-net
       - node-next
+      - node-oracledb
       - node-paperplane
       - node-pino
       - node-postgres
@@ -1377,6 +1388,7 @@ workflows:
             - node-mysql
             - node-net
             - node-next
+            - node-oracledb
             - node-paperplane
             - node-pino
             - node-postgres
@@ -1601,6 +1613,7 @@ workflows:
       - node-mysql
       - node-net
       - node-next
+      - node-oracledb
       - node-paperplane
       - node-pino
       - node-postgres
