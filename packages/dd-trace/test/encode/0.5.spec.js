@@ -2,6 +2,7 @@
 
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
+const { Uint64BE } = require('int64-buffer')
 const id = require('../../src/id')
 
 describe('encode 0.5', () => {
@@ -27,8 +28,8 @@ describe('encode 0.5', () => {
       metrics: {
         example: 1
       },
-      start: 123,
-      duration: 456
+      start: 123123123123123120,
+      duration: 456456456456456456
     }]
   })
 
@@ -48,8 +49,8 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
-    expect(trace[0][6]).to.equal(data[0].start)
-    expect(trace[0][7]).to.equal(data[0].duration)
+    expect(trace[0][6].toNumber()).to.equal(data[0].start)
+    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
     expect(trace[0][8]).to.equal(0)
     expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
