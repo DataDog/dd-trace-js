@@ -923,7 +923,7 @@ jobs:
           command: yarn type:doc
       - store_artifacts:
           path: ./docs/out
-  
+
   # Node upstream tests
 
   node-upstream-node:
@@ -1338,6 +1338,7 @@ workflows:
             - node-cassandra
             - node-connect
             - node-couchbase
+            - node-cucumber
             - node-dns
             - node-elasticsearch
             - node-express

@@ -1,8 +1,9 @@
 'use strict'
+const path = require('path')
+const { PassThrough } = require('stream')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
-
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -10,9 +11,6 @@ const {
   TEST_SUITE,
   TEST_STATUS
 } = require('../../dd-trace/src/plugins/util/test')
-const { expect } = require('chai')
-const path = require('path')
-const { PassThrough } = require('stream')
 
 const TESTS = [
   {
@@ -26,7 +24,8 @@ const TESTS = [
       { name: 'run', stepStatus: 'pass' },
       { name: 'pass', stepStatus: 'pass' }
     ],
-    success: true
+    success: true,
+    errors: []
   },
   {
     featureName: 'simple.feature',
@@ -70,6 +69,26 @@ const TESTS = [
 
 wrapIt()
 
+const runCucumber = (version, Cucumber, requireName, featureName, featureSuffix) => {
+  const stdout = new PassThrough()
+  const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
+  const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
+  const argv = [
+    'node',
+    cucumberJs,
+    '--require',
+    path.join(__dirname, 'features', requireName),
+    path.join(__dirname, 'features', `${featureName}${featureSuffix}`)
+  ]
+  const cli = new Cucumber.Cli({
+    argv,
+    cwd,
+    stdout
+  })
+
+  return cli.run()
+}
+
 describe('Plugin', () => {
   let Cucumber
 
@@ -90,69 +109,75 @@ describe('Plugin', () => {
 
     describe('cucumber', () => {
       TESTS.forEach(test => {
-        it(`should create a test span for ${test.featureName}${test.featureSuffix || ''}`, async function () {
-          this.timeout(20000)
-          const testFilePath = path.join(__dirname, 'features', test.featureName)
-          const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
-          const checkTraces = agent
-            .use(traces => {
-              // number of tests + one test span
-              expect(traces[0].length).to.equal(test.steps.length + 1)
-              if (test.errors !== undefined) {
-                test.errors.forEach((msg, i) => {
-                  expect(
-                    traces[0][i].meta['error.msg'],
-                    `item ${i} should start with "${msg}"`
-                  ).to.satisfy(err => msg === undefined || err.startsWith(msg))
-                })
-              }
-              // take the test span
-              const testSpan = traces[0][traces[0].length - 1]
+        const testFilePath = path.join(__dirname, 'features', test.featureName)
+        const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
+        const {
+          featureName,
+          featureSuffix,
+          requireName,
+          testName,
+          testStatus,
+          steps,
+          success,
+          errors
+        } = test
+
+        describe(`for ${featureName}${featureSuffix}`, () => {
+          it('should create a test span', async () => {
+            const checkTraces = agent.use(traces => {
+              expect(traces.length).to.equal(1)
+              const testTrace = traces[0]
+              // number of tests + one test span
+              expect(testTrace.length).to.equal(steps.length + 1)
+              // take the test span
+              const testSpan = testTrace.find(span => span.name === 'cucumber.test')
               // having no parent span means there is no span leak from other tests
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta).to.contain({
                 language: 'javascript',
                 service: 'test',
-                [TEST_NAME]: test.testName,
+                [TEST_NAME]: testName,
                 [TEST_TYPE]: 'test',
                 [TEST_FRAMEWORK]: 'cucumber',
                 [TEST_SUITE]: testSuite,
-                [TEST_STATUS]: test.testStatus
+                [TEST_STATUS]: testStatus
               })
-              expect(testSpan.meta[TEST_SUITE].endsWith(test.featureName)).to.equal(true)
+              expect(testSpan.meta[TEST_SUITE].endsWith(featureName)).to.equal(true)
               expect(testSpan.type).to.equal('test')
               expect(testSpan.name).to.equal('cucumber.test')
-              expect(testSpan.resource).to.equal(`${test.testName}`)
-              // step spans
-              const stepSpans = traces[0].filter(span => span.name === 'cucumber.step')
-              expect(stepSpans.length).to.equal(test.steps.length)
-              stepSpans.forEach((stepSpan, index) => {
-                // all steps are children of the test span
-                expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
-                expect(stepSpan.meta['cucumber.step']).to.equal(test.steps[index].name)
-                expect(stepSpan.meta['step.status']).to.equal(test.steps[index].stepStatus)
-                expect(stepSpan.type).not.to.equal('test')
-              })
+              expect(testSpan.resource).to.equal(testName)
             })
-
-          const stdout = new PassThrough()
-          const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
-          const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
-          const argv = [
-            'node',
-            cucumberJs,
-            '--require',
-            path.join(__dirname, 'features', test.requireName),
-            path.join(__dirname, 'features', `${test.featureName}${test.featureSuffix || ''}`)
-          ]
-          const cli = new Cucumber.Cli({
-            argv, cwd, stdout
+            const result = await runCucumber(version, Cucumber, requireName, featureName, featureSuffix)
+            expect(result.success).to.equal(success)
+            await checkTraces
           })
 
-          const result = await cli.run()
-          expect(result.success).to.equal(test.success)
-          await checkTraces
+          it('should create spans for each cucumber step', async () => {
+            const checkTraces = agent.use(traces => {
+              const testTrace = traces[0]
+              const testSpan = testTrace.find(span => span.name === 'cucumber.test')
+              // step spans
+              const stepSpans = testTrace.filter(span => span.name === 'cucumber.step')
+              expect(stepSpans.length).to.equal(steps.length)
+              stepSpans.forEach((stepSpan, spanIndex) => {
+                // all steps are children of the test span
+                expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+                expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
+                expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
+                expect(stepSpan.type).not.to.equal('test')
+              })
+              errors.forEach((msg, errorIndex) => {
+                expect(
+                  testTrace[errorIndex].meta['error.msg'],
+                  `error ${errorIndex} should start with "${msg}"`
+                ).to.satisfy(err => msg === undefined || err.startsWith(msg))
+              })
+            })
+            const result = await runCucumber(version, Cucumber, requireName, featureName, featureSuffix)
+            expect(result.success).to.equal(success)
+            await checkTraces
+          })
         })
       })
     })
