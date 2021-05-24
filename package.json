@@ -32,7 +32,7 @@
     "cover:report": "nyc report -t ./.nyc_merge -n 'packages/**/*.js'",
     "codecov": "codecov",
     "junit:upload:ci": "node ./scripts/junit_report.js",
-    "junit:upload": "datadog-ci junit upload --tags runtime.version=$CI_NODE_VERSION --service dd-trace-js-core-tests ./test-results.xml"
+    "junit:upload": "datadog-ci junit upload --tags runtime.version:$CI_NODE_VERSION --service dd-trace-js-core-tests ./test-results.xml"
   },
   "repository": {
     "type": "git",
