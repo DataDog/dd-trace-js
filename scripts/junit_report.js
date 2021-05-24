@@ -11,7 +11,12 @@ function uploadJUnitXMLReport () {
   // we install @datadog/datadog-ci
   execSync('yarn add --dev @datadog/datadog-ci@0.13.0', { stdio: 'inherit' })
   // we execute the upload command
-  execSync('yarn junit:upload', { stdio: 'inherit' })
+  execSync('yarn junit:upload',
+    {
+      stdio: 'inherit',
+      env: { ...process.env, CI_NODE_VERSION: process.version }
+    }
+  )
 }
 
 uploadJUnitXMLReport()
