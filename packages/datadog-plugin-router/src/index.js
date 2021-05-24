@@ -50,6 +50,15 @@ function wrapLayerHandle (layer, handle) {
   // that contains the real handle function
   wrapCallHandle._datadog_orig = handle
 
+  // This is a workaround for `ghost`, which occaisionally iterates over this
+  // stack property without first checking that it exists.
+  Object.defineProperty(wrapCallHandle, 'stack', {
+    get: () => handle.stack,
+    set: stack => {
+      handle.stack = stack
+    }
+  })
+
   return wrapCallHandle
 }
 
