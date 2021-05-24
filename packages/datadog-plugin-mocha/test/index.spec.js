@@ -17,18 +17,22 @@ const { expect } = require('chai')
 const path = require('path')
 
 const TESTS = [
-  // {
-  //   fileName: 'mocha-test-pass.js',
-  //   testName: 'can pass',
-  //   root: 'mocha-test-pass',
-  //   status: 'pass'
-  // },
-  // {
-  //   fileName: 'mocha-test-fail.js',
-  //   testName: 'can fail',
-  //   root: 'mocha-test-fail',
-  //   status: 'fail'
-  // },
+  {
+    fileName: 'mocha-test-pass.js',
+    testNames: [
+      'mocha-test-pass can pass',
+      'mocha-test-pass can pass two',
+      'mocha-test-pass-two can pass',
+      'mocha-test-pass-two can pass two'
+    ],
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-fail.js',
+    testName: 'can fail',
+    root: 'mocha-test-fail',
+    status: 'fail'
+  },
   {
     fileName: 'mocha-test-skip.js',
     testNames: [
@@ -38,63 +42,63 @@ const TESTS = [
     ],
     status: 'skip'
   },
-  // {
-  //   fileName: 'mocha-test-done-pass.js',
-  //   testName: 'can do passed tests with done',
-  //   root: 'mocha-test-done-pass',
-  //   status: 'pass'
-  // },
-  // {
-  //   fileName: 'mocha-test-done-fail.js',
-  //   testName: 'can do failed tests with done',
-  //   root: 'mocha-test-done-fail',
-  //   status: 'fail'
-  // },
-  // {
-  //   fileName: 'mocha-test-promise-pass.js',
-  //   testName: 'can do passed promise tests',
-  //   root: 'mocha-test-promise-pass',
-  //   status: 'pass'
-  // },
-  // {
-  //   fileName: 'mocha-test-promise-fail.js',
-  //   testName: 'can do failed promise tests',
-  //   root: 'mocha-test-promise-fail',
-  //   status: 'fail'
-  // },
-  // {
-  //   fileName: 'mocha-test-async-pass.js',
-  //   testName: 'can do passed async tests',
-  //   root: 'mocha-test-async-pass',
-  //   status: 'pass'
-  // },
-  // {
-  //   fileName: 'mocha-test-async-fail.js',
-  //   testName: 'can do failed async tests',
-  //   root: 'mocha-test-async-fail',
-  //   status: 'fail'
-  // },
-  // {
-  //   fileName: 'mocha-test-timeout-fail.js',
-  //   testName: 'times out',
-  //   root: 'mocha-test-timeout-fail',
-  //   status: 'fail'
-  // },
-  // {
-  //   fileName: 'mocha-test-timeout-pass.js',
-  //   testName: 'does not timeout',
-  //   root: 'mocha-test-timeout-pass',
-  //   status: 'pass'
-  // },
-  // {
-  //   fileName: 'mocha-test-parameterized.js',
-  //   testName: 'can do parameterized',
-  //   root: 'mocha-parameterized',
-  //   status: 'pass',
-  //   extraSpanTags: {
-  //     [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
-  //   }
-  // }
+  {
+    fileName: 'mocha-test-done-pass.js',
+    testName: 'can do passed tests with done',
+    root: 'mocha-test-done-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-done-fail.js',
+    testName: 'can do failed tests with done',
+    root: 'mocha-test-done-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-promise-pass.js',
+    testName: 'can do passed promise tests',
+    root: 'mocha-test-promise-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-promise-fail.js',
+    testName: 'can do failed promise tests',
+    root: 'mocha-test-promise-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-async-pass.js',
+    testName: 'can do passed async tests',
+    root: 'mocha-test-async-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-async-fail.js',
+    testName: 'can do failed async tests',
+    root: 'mocha-test-async-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-timeout-fail.js',
+    testName: 'times out',
+    root: 'mocha-test-timeout-fail',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-test-timeout-pass.js',
+    testName: 'does not timeout',
+    root: 'mocha-test-timeout-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-parameterized.js',
+    testName: 'can do parameterized',
+    root: 'mocha-parameterized',
+    status: 'pass',
+    extraSpanTags: {
+      [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
+    }
+  }
 ]
 
 describe('Plugin', () => {
@@ -123,11 +127,13 @@ describe('Plugin', () => {
           const testFilePath = path.join(__dirname, test.fileName)
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
-          if (test.fileName === 'mocha-test-skip.js') {
+          if (test.fileName === 'mocha-test-skip.js' || test.fileName === 'mocha-test-pass.js') {
             const assertionPromises = test.testNames.map(testName => {
-              return agent.use(traces => {
-                expect(traces[0][0].meta[TEST_STATUS]).to.equal('skip')
-                expect(traces[0][0].meta[TEST_NAME]).to.equal(testName)
+              return agent.use(trace => {
+                const testSpan = trace[0][0]
+                expect(testSpan.parent_id.toString()).to.equal('0')
+                expect(testSpan.meta[TEST_STATUS]).to.equal(test.status)
+                expect(testSpan.meta[TEST_NAME]).to.equal(testName)
               })
             })
             Promise.all(assertionPromises)
@@ -136,8 +142,8 @@ describe('Plugin', () => {
           } else {
             agent
               .use(traces => {
-                expect(traces.length).to.equal(3)
-                expect(traces[0][0].meta).to.contain({
+                const testSpan = traces[0][0]
+                expect(testSpan.meta).to.contain({
                   language: 'javascript',
                   service: 'test',
                   [TEST_NAME]: `${test.root} ${test.testName}`,
@@ -148,16 +154,17 @@ describe('Plugin', () => {
                   ...test.extraSpanTags
                 })
                 if (test.fileName === 'mocha-test-fail.js') {
-                  expect(traces[0][0].meta).to.contain({
+                  expect(testSpan.meta).to.contain({
                     [ERROR_TYPE]: 'AssertionError',
                     [ERROR_MESSAGE]: 'expected true to equal false'
                   })
-                  expect(traces[0][0].meta[ERROR_STACK]).not.to.be.undefined
+                  expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
                 }
-                expect(traces[0][0].meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
-                expect(traces[0][0].type).to.equal('test')
-                expect(traces[0][0].name).to.equal('mocha.test')
-                expect(traces[0][0].resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
+                expect(testSpan.parent_id.toString()).to.equal('0')
+                expect(testSpan.meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
+                expect(testSpan.type).to.equal('test')
+                expect(testSpan.name).to.equal('mocha.test')
+                expect(testSpan.resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
               }).then(done, done)
           }
 
