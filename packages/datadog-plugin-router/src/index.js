@@ -56,7 +56,8 @@ function wrapLayerHandle (layer, handle) {
     get: () => handle.stack,
     set: stack => {
       handle.stack = stack
-    }
+    },
+    configurable: true
   })
 
   return wrapCallHandle
