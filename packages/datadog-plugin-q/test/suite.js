@@ -1,4 +1,4 @@
 'use strict'
-// const suiteTest = require('../../dd-trace/test/plugins/suite')
+const suiteTest = require('../../dd-trace/test/plugins/suite')
 
-// suiteTest('winston', 'winstonjs/winston', 'latest')
+suiteTest('q', 'kriskowal/q', 'latest')

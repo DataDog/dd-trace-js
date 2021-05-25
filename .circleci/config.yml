@@ -148,9 +148,6 @@ node-plugin-base: &node-plugin-base
         name: Unit tests
         command: yarn test:plugins:ci
     - run:
-        name: Library test suite
-        command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
-    - run:
         name: Merge coverage report
         command: yarn cover:merge
     - store_artifacts:
@@ -159,6 +156,30 @@ node-plugin-base: &node-plugin-base
         root: ~/dd-trace-js
         paths:
           - .nyc_merge/*
+
+node-upstream-base: &node-upstream-base
+  docker:
+    - image: node:8
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - *yarn-versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - run:
+        name: Install dependencies
+        command: yarn install
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
+    - run:
+        name: Library test suite
+        command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
@@ -491,6 +512,15 @@ jobs:
           - PLUGINS=amqplib
       - image: rabbitmq:3.6-alpine
 
+  node-upstream-amqplib:
+    <<: *node-upstream-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=rabbitmq
+          - PLUGINS=amqplib
+      - image: rabbitmq:3.6-alpine
+
   node-amqp10:
     <<: *node-plugin-base
     docker:
@@ -498,6 +528,19 @@ jobs:
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10|rhea
+      - image: scholzj/qpid-cpp:1.38.0
+        command: -p 5673
+        environment:
+          - QPIDD_ADMIN_USERNAME=admin
+          - QPIDD_ADMIN_PASSWORD=admin
+
+  node-upstream-amqp10:
+    <<: *node-upstream-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=qpid
+          - PLUGINS=amqp10
       - image: scholzj/qpid-cpp:1.38.0
         command: -p 5673
         environment:
@@ -542,6 +585,13 @@ jobs:
         environment:
           - PLUGINS=bunyan
 
+  node-upstream-bunyan:
+    <<: *node-upstream-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=bunyan
+
   node-cassandra:
     <<: *node-plugin-base
     docker:
@@ -560,6 +610,13 @@ jobs:
         environment:
           - PLUGINS=connect
 
+  node-upstream-connect:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
+        environment:
+          - PLUGINS=connect
+
   node-cucumber:
     <<: *node-plugin-base
     docker:
@@ -569,6 +626,15 @@ jobs:
 
   node-couchbase:
     <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=couchbase
+          - PLUGINS=couchbase
+      - image: rishabhdev/couchbase-server-sandbox:latest
+
+  node-upstream-couchbase:
+    <<: *node-upstream-base
     docker:
       - image: node:8
         environment:
@@ -688,6 +754,13 @@ jobs:
         environment:
           - PLUGINS=graphql
 
+  node-upstream-graphql:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
+        environment:
+          - PLUGINS=graphql
+
   node-grpc:
     <<: *node-plugin-base
     docker:
@@ -732,6 +805,13 @@ jobs:
 
   node-koa:
     <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=koa
+
+  node-upstream-koa:
+    <<: *node-upstream-base
     docker:
       - image: node:8
         environment:
@@ -854,6 +934,13 @@ jobs:
         environment:
           - PLUGINS=pino
 
+  node-upstream-pino:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
+        environment:
+          - PLUGINS=pino
+
   node-postgres:
     <<: *node-plugin-base
     docker:
@@ -880,8 +967,22 @@ jobs:
         environment:
           - PLUGINS=promise
 
+  node-upstream-promise:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
+        environment:
+          - PLUGINS=promise
+
   node-q:
     <<: *node-plugin-base
+    docker:
+      - image: node:10
+        environment:
+          - PLUGINS=q
+
+  node-upstream-q:
+    <<: *node-upstream-base
     docker:
       - image: node:10
         environment:
@@ -1434,6 +1535,15 @@ workflows:
   upstream:
     jobs:
       - node-upstream-node
+      - node-upstream-amqp10
+      - node-upstream-amqplib
+      - node-upstream-bunyan
+      - node-upstream-connect
+      - node-upstream-graphql
+      - node-upstream-koa
+      - node-upstream-pino
+      - node-upstream-promise
+      - node-upstream-q
 
   prebuild:
     jobs:
@@ -1673,3 +1783,12 @@ workflows:
                 - master
     jobs:
       - node-upstream-node
+      - node-upstream-amqp10
+      - node-upstream-amqplib
+      - node-upstream-bunyan
+      - node-upstream-connect
+      - node-upstream-graphql
+      - node-upstream-koa
+      - node-upstream-pino
+      - node-upstream-promise
+      - node-upstream-q
