@@ -13,7 +13,7 @@ function uploadJUnitXMLReport () {
     return
   }
   // we install @datadog/datadog-ci
-  execSync('yarn add --dev @datadog/datadog-ci@0.13.0', { stdio: 'inherit' })
+  execSync('yarn add --dev @datadog/datadog-ci@0.13.1', { stdio: 'inherit' })
   // we execute the upload command
   execSync('yarn junit:upload',
     {
