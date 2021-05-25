@@ -65,6 +65,9 @@ describe('Plugin', () => {
 
           router.use('/parent', childRouter)
           expect(router.stack[0].handle.stack.length).to.equal(1)
+          // Next two lines are to test the setter.
+          router.stack[0].handle.stack = 5
+          expect(router.stack[0].handle.stack).to.equal(5)
         })
 
         it('should add the route to the request span', done => {
