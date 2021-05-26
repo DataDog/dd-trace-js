@@ -33,9 +33,13 @@ node-core-base: &node-core-base
       run:
         name: Unit tests
         command: yarn test:core:ci
+    - &yarn-test-core
+      run:
+        name: Unit tests for JUnit XML Report
+        command: yarn test:core:ci:junit
     - run:
         name: Upload JUnit XML Report
-        command: yarn junit:upload:ci
+        command: yarn junit:upload
     - run:
         name: Merge coverage report
         command: yarn cover:merge

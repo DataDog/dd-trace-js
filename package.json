@@ -22,7 +22,8 @@
     "tdd": "node scripts/tdd.js",
     "test": "SERVICES=* yarn services && mocha --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:core": "mocha --exit --expose-gc --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
-    "test:core:ci": "nyc --include \"packages/dd-trace/src/**/*.js\" -- npm run test:core -- --reporter=mocha-junit-reporter",
+    "test:core:ci": "nyc --include \"packages/dd-trace/src/**/*.js\" -- npm run test:core",
+    "test:core:ci:junit": "yarn test:core:ci --reporter=mocha-junit-reporter",
     "test:plugins": "mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
     "test:plugins:ci": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
     "test:integration": "mocha --timeout 30000 \"integration-tests/**/*.spec.js\"",
@@ -31,8 +32,7 @@
     "cover:merge": "nyc merge ./.nyc_output ./.nyc_merge/$CIRCLE_JOB.json",
     "cover:report": "nyc report -t ./.nyc_merge -n 'packages/**/*.js'",
     "codecov": "codecov",
-    "junit:upload:ci": "node ./scripts/junit_report.js",
-    "junit:upload": "datadog-ci junit upload --tags runtime.version:$CI_NODE_VERSION --service dd-trace-js-core-tests ./test-results.xml"
+    "junit:upload": "node ./scripts/junit_report.js"
   },
   "repository": {
     "type": "git",
