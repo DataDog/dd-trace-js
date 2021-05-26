@@ -165,18 +165,11 @@ node-upstream-base: &node-upstream-base
   steps:
     - checkout
     - *yarn-versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - *restore-yarn-cache
     - run:
         name: Install dependencies
         command: yarn install
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
+    - *save-yarn-cache
     - run:
         name: Library test suite
         command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js

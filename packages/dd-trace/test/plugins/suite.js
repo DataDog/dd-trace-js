@@ -51,7 +51,7 @@ function get (theUrl) {
 
 function exec (withTracer, cmd, opts = {}) {
   // eslint-disable-next-line no-console
-  console.log(withTracer ? 'WITH TRACER' : '  NO TRACER', `-> running \`${cmd}\` ...`)
+  console.log(withTracer ? 'WITH TRACER' : '  NO TRACER', `-> (${new Date()}) running \`${cmd}\` ...`)
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(cmd, Object.assign({
       shell: true
