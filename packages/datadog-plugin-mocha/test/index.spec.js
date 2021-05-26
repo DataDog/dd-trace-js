@@ -19,8 +19,12 @@ const path = require('path')
 const TESTS = [
   {
     fileName: 'mocha-test-pass.js',
-    testName: 'can pass',
-    root: 'mocha-test-pass',
+    testNames: [
+      'mocha-test-pass can pass',
+      'mocha-test-pass can pass two',
+      'mocha-test-pass-two can pass',
+      'mocha-test-pass-two can pass two'
+    ],
     status: 'pass'
   },
   {
@@ -31,8 +35,11 @@ const TESTS = [
   },
   {
     fileName: 'mocha-test-skip.js',
-    testName: 'can skip',
-    root: 'mocha-test-skip',
+    testNames: [
+      'mocha-test-skip can skip',
+      'mocha-test-skip-different can skip too',
+      'mocha-test-skip-different can skip twice'
+    ],
     status: 'skip'
   },
   {
@@ -119,30 +126,48 @@ describe('Plugin', () => {
           if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
           const testFilePath = path.join(__dirname, test.fileName)
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.contain({
-                language: 'javascript',
-                service: 'test',
-                [TEST_NAME]: `${test.root} ${test.testName}`,
-                [TEST_STATUS]: test.status,
-                [TEST_TYPE]: 'test',
-                [TEST_FRAMEWORK]: 'mocha',
-                [TEST_SUITE]: testSuite,
-                ...test.extraSpanTags
+
+          if (test.fileName === 'mocha-test-skip.js' || test.fileName === 'mocha-test-pass.js') {
+            const assertionPromises = test.testNames.map(testName => {
+              return agent.use(trace => {
+                const testSpan = trace[0][0]
+                expect(testSpan.parent_id.toString()).to.equal('0')
+                expect(testSpan.meta[TEST_STATUS]).to.equal(test.status)
+                expect(testSpan.meta[TEST_NAME]).to.equal(testName)
               })
-              if (test.fileName === 'mocha-test-fail.js') {
-                expect(traces[0][0].meta).to.contain({
-                  [ERROR_TYPE]: 'AssertionError',
-                  [ERROR_MESSAGE]: 'expected true to equal false'
+            })
+            Promise.all(assertionPromises)
+              .then(() => done())
+              .catch(done)
+          } else {
+            agent
+              .use(traces => {
+                const testSpan = traces[0][0]
+                expect(testSpan.meta).to.contain({
+                  language: 'javascript',
+                  service: 'test',
+                  [TEST_NAME]: `${test.root} ${test.testName}`,
+                  [TEST_STATUS]: test.status,
+                  [TEST_TYPE]: 'test',
+                  [TEST_FRAMEWORK]: 'mocha',
+                  [TEST_SUITE]: testSuite,
+                  ...test.extraSpanTags
                 })
-                expect(traces[0][0].meta[ERROR_STACK]).not.to.be.undefined
-              }
-              expect(traces[0][0].meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
-              expect(traces[0][0].type).to.equal('test')
-              expect(traces[0][0].name).to.equal('mocha.test')
-              expect(traces[0][0].resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
-            }).then(done, done)
+                if (test.fileName === 'mocha-test-fail.js') {
+                  expect(testSpan.meta).to.contain({
+                    [ERROR_TYPE]: 'AssertionError',
+                    [ERROR_MESSAGE]: 'expected true to equal false'
+                  })
+                  expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
+                }
+                expect(testSpan.parent_id.toString()).to.equal('0')
+                expect(testSpan.meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
+                expect(testSpan.type).to.equal('test')
+                expect(testSpan.name).to.equal('mocha.test')
+                expect(testSpan.resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
+              }).then(done, done)
+          }
+
           const mocha = new Mocha({
             reporter: function () {} // silent on internal tests
           })

@@ -100,16 +100,38 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
   }
 }
 
+function getAllTestsInSuite (root) {
+  const tests = []
+  function getTests (suiteOrTest) {
+    suiteOrTest.tests.forEach(test => {
+      tests.push(test)
+    })
+    suiteOrTest.suites.forEach(suite => {
+      getTests(suite)
+    })
+  }
+  getTests(root)
+  return tests
+}
+
 // Necessary to get the skipped tests, that do not go through runTest
 function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
       runTests.apply(this, arguments)
-      this.suite.tests.forEach(test => {
+      const suite = arguments[0]
+      const tests = getAllTestsInSuite(suite)
+      tests.forEach(test => {
         const { pending: isSkipped } = test
-        if (!isSkipped) {
+        // We call `getAllTestsInSuite` with the root suite so every skipped test
+        // should already have an associated test span.
+        // This function is called with every suite, so we need a way to mark
+        // the test as already accounted for. We do this through `__datadog_skipped`.
+        // If the test is already marked as skipped, we don't create an additional test span.
+        if (!isSkipped || test.__datadog_skipped) {
           return
         }
+        test.__datadog_skipped = true
         const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, test, sourceRoot)
 
         tracer
