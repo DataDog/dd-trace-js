@@ -16,9 +16,9 @@ function uploadJUnitXMLReport () {
   execSync('yarn add --dev @datadog/datadog-ci@0.13.1', { stdio: 'inherit' })
   // we execute the upload command
   execSync(
-    `yarn run datadog-ci junit upload
-    --tags runtime.version:${process.version}
-    --service dd-trace-js-core-tests
+    `yarn run datadog-ci junit upload \
+    --tags runtime.version:${process.version} \
+    --service dd-trace-js-core-tests \
     ./test-results.xml`,
     {
       stdio: 'inherit'
