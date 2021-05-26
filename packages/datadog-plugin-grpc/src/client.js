@@ -180,7 +180,11 @@ function ensureMetadata (client, args) {
     normalized.push(new client._datadog.grpc.Metadata())
   }
 
-  for (let i = 1; i < args.length; i++) {
+  if (args[1]) {
+    normalized.push(args[1])
+  }
+
+  for (let i = 2; i < args.length; i++) {
     normalized.push(args[i])
   }
 

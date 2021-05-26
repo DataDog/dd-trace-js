@@ -335,6 +335,37 @@ describe('Plugin', () => {
             })
         })
 
+        it('should handle undefined metadata', async () => {
+          const client = await buildClient({
+            getUnary: (_, callback) => callback()
+          })
+
+          client.getUnary({ first: 'foobar' }, undefined, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.deep.include({
+                name: 'grpc.request',
+                service: 'test-grpc-client',
+                resource: '/test.TestService/getUnary'
+              })
+
+              expect(traces[0][0].meta).to.include({
+                'grpc.method.name': 'getUnary',
+                'grpc.method.service': 'TestService',
+                'grpc.method.package': 'test',
+                'grpc.method.path': '/test.TestService/getUnary',
+                'grpc.method.kind': kinds.unary,
+                'span.kind': 'client',
+                'component': 'grpc'
+              })
+
+              expect(traces[0][0].metrics).to.deep.include({
+                'grpc.status.code': 0
+              })
+            })
+        })
+
         it('should inject its parent span in the metadata', done => {
           buildClient({
             getUnary: (call, callback) => {
