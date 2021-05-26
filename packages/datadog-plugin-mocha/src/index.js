@@ -123,6 +123,11 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
       const tests = getAllTestsInSuite(suite)
       tests.forEach(test => {
         const { pending: isSkipped } = test
+        // We call `getAllTestsInSuite` with the root suite so every skipped test
+        // should already have an associated test span.
+        // This function is called with every suite, so we need a way to mark
+        // the test as already accounted for. We do this through `__datadog_skipped`.
+        // If the test is already marked as skipped, we don't create an additional test span.
         if (!isSkipped || test.__datadog_skipped) {
           return
         }
