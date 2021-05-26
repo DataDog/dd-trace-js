@@ -38,7 +38,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        appListener.close()
+        appListener && appListener.close()
       })
 
       describe('without configuration', () => {
@@ -52,6 +52,22 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           Router = require(`../../../versions/router@${version}`).get()
+        })
+
+        it('should expose router handle properties', () => {
+          const router = Router()
+          const childRouter = Router()
+
+          childRouter.use('/child/:id', (req, res) => {
+            res.writeHead(200)
+            res.end()
+          })
+
+          router.use('/parent', childRouter)
+          expect(router.stack[0].handle.stack.length).to.equal(1)
+          // Next two lines are to test the setter.
+          router.stack[0].handle.stack = 5
+          expect(router.stack[0].handle.stack).to.equal(5)
         })
 
         it('should add the route to the request span', done => {
