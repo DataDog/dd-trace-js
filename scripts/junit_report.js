@@ -13,13 +13,13 @@ function uploadJUnitXMLReport () {
     return
   }
   // we install @datadog/datadog-ci
-  execSync('yarn add --dev @datadog/datadog-ci@0.13.1', { stdio: 'inherit' })
+  execSync('yarn global add @datadog/datadog-ci@0.13.1', { stdio: 'inherit' })
   // we execute the upload command
   execSync(
-    `yarn run datadog-ci junit upload \
+    `datadog-ci junit upload \
     --tags runtime.version:${process.version} \
     --service dd-trace-js-core-tests \
-    ./test-results.xml`,
+    ./xunit.xml`,
     {
       stdio: 'inherit'
     }
