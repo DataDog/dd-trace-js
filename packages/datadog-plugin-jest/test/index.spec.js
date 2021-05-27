@@ -429,8 +429,11 @@ describe('Plugin', () => {
             const testSpan = trace[0].find(span => span.type === 'test')
             const fsOperationSpans = trace[0].filter(span => span.name === 'fs.operation')
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.parent_id.toString()).to.equal('0')
             expect(fsOperationSpans.length > 1).to.equal(true)
             expect(fsOperationSpans.every(span => span.meta[ORIGIN_KEY] === CI_APP_ORIGIN)).to.equal(true)
+            const fsReadFileSyncSpan = trace[0].find(span => span.resource === 'readFileSync')
+            expect(fsReadFileSyncSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
           }).then(done).catch(done)
 
         const passingTestEvent = {
