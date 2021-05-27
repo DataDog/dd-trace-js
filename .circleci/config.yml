@@ -157,6 +157,23 @@ node-plugin-base: &node-plugin-base
         paths:
           - .nyc_merge/*
 
+node-upstream-base: &node-upstream-base
+  docker:
+    - image: node:8
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout
+    - *yarn-versions
+    - *restore-yarn-cache
+    - run:
+        name: Install dependencies
+        command: yarn install
+    - *save-yarn-cache
+    - run:
+        name: Library test suite
+        command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
+
 prebuild-linux-base: &prebuild-linux-base
   docker:
     - image: node:10.0.0
@@ -488,6 +505,15 @@ jobs:
           - PLUGINS=amqplib
       - image: rabbitmq:3.6-alpine
 
+  node-upstream-amqplib:
+    <<: *node-upstream-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=rabbitmq
+          - PLUGINS=amqplib
+      - image: rabbitmq:3.6-alpine
+
   node-amqp10:
     <<: *node-plugin-base
     docker:
@@ -495,6 +521,19 @@ jobs:
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10|rhea
+      - image: scholzj/qpid-cpp:1.38.0
+        command: -p 5673
+        environment:
+          - QPIDD_ADMIN_USERNAME=admin
+          - QPIDD_ADMIN_PASSWORD=admin
+
+  node-upstream-amqp10:
+    <<: *node-upstream-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=qpid
+          - PLUGINS=amqp10
       - image: scholzj/qpid-cpp:1.38.0
         command: -p 5673
         environment:
@@ -539,6 +578,13 @@ jobs:
         environment:
           - PLUGINS=bunyan
 
+  node-upstream-bunyan:
+    <<: *node-upstream-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=bunyan
+
   node-cassandra:
     <<: *node-plugin-base
     docker:
@@ -553,7 +599,14 @@ jobs:
   node-connect:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
+        environment:
+          - PLUGINS=connect
+
+  node-upstream-connect:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
         environment:
           - PLUGINS=connect
 
@@ -566,6 +619,15 @@ jobs:
 
   node-couchbase:
     <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - SERVICES=couchbase
+          - PLUGINS=couchbase
+      - image: rishabhdev/couchbase-server-sandbox:latest
+
+  node-upstream-couchbase:
+    <<: *node-upstream-base
     docker:
       - image: node:8
         environment:
@@ -602,7 +664,7 @@ jobs:
   node-fastify:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
         environment:
           - PLUGINS=fastify
 
@@ -681,7 +743,14 @@ jobs:
   node-graphql:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
+        environment:
+          - PLUGINS=graphql
+
+  node-upstream-graphql:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
         environment:
           - PLUGINS=graphql
 
@@ -729,6 +798,13 @@ jobs:
 
   node-koa:
     <<: *node-plugin-base
+    docker:
+      - image: node:8
+        environment:
+          - PLUGINS=koa
+
+  node-upstream-koa:
+    <<: *node-upstream-base
     docker:
       - image: node:8
         environment:
@@ -847,7 +923,14 @@ jobs:
   node-pino:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
+        environment:
+          - PLUGINS=pino
+
+  node-upstream-pino:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
         environment:
           - PLUGINS=pino
 
@@ -873,14 +956,28 @@ jobs:
   node-promise:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
+        environment:
+          - PLUGINS=promise
+
+  node-upstream-promise:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
         environment:
           - PLUGINS=promise
 
   node-q:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:10
+        environment:
+          - PLUGINS=q
+
+  node-upstream-q:
+    <<: *node-upstream-base
+    docker:
+      - image: node:10
         environment:
           - PLUGINS=q
 
@@ -1431,6 +1528,15 @@ workflows:
   upstream:
     jobs:
       - node-upstream-node
+      - node-upstream-amqp10
+      - node-upstream-amqplib
+      - node-upstream-bunyan
+      - node-upstream-connect
+      - node-upstream-graphql
+      - node-upstream-koa
+      - node-upstream-pino
+      - node-upstream-promise
+      - node-upstream-q
 
   prebuild:
     jobs:
@@ -1670,3 +1776,12 @@ workflows:
                 - master
     jobs:
       - node-upstream-node
+      - node-upstream-amqp10
+      - node-upstream-amqplib
+      - node-upstream-bunyan
+      - node-upstream-connect
+      - node-upstream-graphql
+      - node-upstream-koa
+      - node-upstream-pino
+      - node-upstream-promise
+      - node-upstream-q
