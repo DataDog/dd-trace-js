@@ -19,7 +19,7 @@ function uploadJUnitXMLReport () {
     `datadog-ci junit upload \
     --tags runtime.version:${process.version} \
     --service dd-trace-js-core-tests \
-    ./xunit.xml`,
+    ./core-test-results/mocha/test-results.xml`,
     {
       stdio: 'inherit'
     }
