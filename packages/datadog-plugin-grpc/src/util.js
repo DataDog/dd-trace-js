@@ -14,18 +14,22 @@ module.exports = {
 
     const methodParts = path.split('/')
 
-    if (methodParts.length < 2) return
+    if (methodParts.length > 2) {
+      const serviceParts = methodParts[1].split('.')
+      const name = methodParts[2]
+      const service = serviceParts.pop()
+      const pkg = serviceParts.join('.')
 
-    const serviceParts = methodParts[1].split('.')
-    const name = methodParts[2]
-    const service = serviceParts.pop()
-    const pkg = serviceParts.join('.')
-
-    span.addTags({
-      'grpc.method.name': name,
-      'grpc.method.service': service,
-      'grpc.method.package': pkg
-    })
+      span.addTags({
+        'grpc.method.name': name,
+        'grpc.method.service': service,
+        'grpc.method.package': pkg
+      })
+    } else {
+      span.addTags({
+        'grpc.method.name': methodParts[methodParts.length - 1]
+      })
+    }
   },
 
   addMetadataTags (span, metadata, filter, type) {

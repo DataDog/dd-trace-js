@@ -6,9 +6,19 @@ const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
-function createWrapLoadPackageDefinition (tracer, config) {
-  config = config.client || config
+function createWrapMakeRequest (tracer, config, methodKind) {
+  const filter = getFilter(config, 'metadata')
 
+  return function wrapMakeRequest (makeRequest) {
+    return function makeRequestWithTrace (path) {
+      const args = ensureMetadata(this, arguments, 4)
+
+      return callMethod(tracer, config, this, makeRequest, args, path, args[4], methodKind, filter)
+    }
+  }
+}
+
+function createWrapLoadPackageDefinition (tracer, config) {
   return function wrapLoadPackageDefinition (loadPackageDefinition) {
     return function loadPackageDefinitionWithTrace (packageDef) {
       const result = loadPackageDefinition.apply(this, arguments)
@@ -23,8 +33,6 @@ function createWrapLoadPackageDefinition (tracer, config) {
 }
 
 function createWrapMakeClientConstructor (tracer, config) {
-  config = config.client || config
-
   return function wrapMakeClientConstructor (makeClientConstructor) {
     return function makeClientConstructorWithTrace (methods) {
       const ServiceClient = makeClientConstructor.apply(this, arguments)
@@ -78,31 +86,9 @@ function wrapMethod (tracer, config, method, path, methodKind) {
   const filter = getFilter(config, 'metadata')
 
   const methodWithTrace = function methodWithTrace () {
-    const args = ensureMetadata(this, arguments)
-    const length = args.length
-    const metadata = args[1]
-    const callback = args[length - 1]
-    const scope = tracer.scope()
-    const span = startSpan(tracer, config, path, methodKind)
+    const args = ensureMetadata(this, arguments, 1)
 
-    if (metadata) {
-      addMetadataTags(span, metadata, filter, 'request')
-      inject(tracer, span, metadata)
-    }
-
-    if (methodKind === kinds.unary || methodKind === kinds.client_stream) {
-      if (typeof callback === 'function') {
-        args[length - 1] = wrapCallback(span, callback)
-      } else {
-        args[length] = wrapCallback(span)
-      }
-    }
-
-    const call = scope.bind(method, span).apply(this, args)
-
-    wrapStream(span, call, filter)
-
-    return scope.bind(call)
+    return callMethod(tracer, config, this, method, args, path, args[1], methodKind, filter)
   }
 
   Object.assign(methodWithTrace, method)
@@ -152,6 +138,32 @@ function wrapStream (span, call, filter) {
   }
 }
 
+function callMethod (tracer, config, client, method, args, path, metadata, methodKind, filter) {
+  const length = args.length
+  const callback = args[length - 1]
+  const scope = tracer.scope()
+  const span = startSpan(tracer, config, path, methodKind)
+
+  if (metadata) {
+    addMetadataTags(span, metadata, filter, 'request')
+    inject(tracer, span, metadata)
+  }
+
+  if (methodKind === kinds.unary || methodKind === kinds.client_stream) {
+    if (typeof callback === 'function') {
+      args[length - 1] = wrapCallback(span, callback)
+    } else {
+      args[length] = wrapCallback(span)
+    }
+  }
+
+  const call = scope.bind(method, span).apply(client, args)
+
+  wrapStream(span, call, filter)
+
+  return scope.bind(call)
+}
+
 function startSpan (tracer, config, path, methodKind) {
   const scope = tracer.scope()
   const childOf = scope.active()
@@ -171,20 +183,25 @@ function startSpan (tracer, config, path, methodKind) {
   return span
 }
 
-function ensureMetadata (client, args) {
+function ensureMetadata (client, args, index) {
   if (!client || !client._datadog) return args
 
-  const normalized = [args[0]]
+  const meta = args[index]
+  const normalized = []
 
-  if (!args[1] || !args[1].constructor || args[1].constructor.name !== 'Metadata') {
+  for (let i = 0; i < index; i++) {
+    normalized.push(args[i])
+  }
+
+  if (!meta || !meta.constructor || meta.constructor.name !== 'Metadata') {
     normalized.push(new client._datadog.grpc.Metadata())
   }
 
-  if (args[1]) {
-    normalized.push(args[1])
+  if (meta) {
+    normalized.push(meta)
   }
 
-  for (let i = 2; i < args.length; i++) {
+  for (let i = index + 1; i < args.length; i++) {
     normalized.push(args[i])
   }
 
@@ -219,18 +236,38 @@ function getMethodKind (definition) {
   return kinds.unary
 }
 
+function patch (grpc, tracer, config) {
+  if (config.client === false) return
+
+  config = config.client || config
+
+  const proto = grpc.Client.prototype
+
+  proto._datadog = { grpc }
+
+  this.wrap(proto, 'makeBidiStreamRequest', createWrapMakeRequest(tracer, config, kinds.bidi))
+  this.wrap(proto, 'makeClientStreamRequest', createWrapMakeRequest(tracer, config, kinds.clientStream))
+  this.wrap(proto, 'makeServerStreamRequest', createWrapMakeRequest(tracer, config, kinds.serverStream))
+  this.wrap(proto, 'makeUnaryRequest', createWrapMakeRequest(tracer, config, kinds.unary))
+}
+
+function unpatch (grpc) {
+  const proto = grpc.Client.prototype
+
+  delete proto._datadog
+
+  this.unwrap(proto, 'makeBidiStreamRequest')
+  this.unwrap(proto, 'makeClientStreamRequest')
+  this.unwrap(proto, 'makeServerStreamRequest')
+  this.unwrap(proto, 'makeUnaryRequest')
+}
+
 module.exports = [
   {
     name: 'grpc',
     versions: ['>=1.13'],
-    patch (grpc, tracer, config) {
-      if (config.client === false) return
-
-      grpc.Client.prototype._datadog = { grpc }
-    },
-    unpatch (grpc) {
-      delete grpc.Client._datadog
-    }
+    patch,
+    unpatch
   },
   {
     name: 'grpc',
@@ -238,6 +275,8 @@ module.exports = [
     file: 'src/client.js',
     patch (client, tracer, config) {
       if (config.client === false) return
+
+      config = config.client || config
 
       this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config))
     },
@@ -248,14 +287,8 @@ module.exports = [
   {
     name: '@grpc/grpc-js',
     versions: ['>=1.0.3'],
-    patch (grpc, tracer, config) {
-      if (config.client === false) return
-
-      grpc.Client.prototype._datadog = { grpc }
-    },
-    unpatch (grpc) {
-      delete grpc.Client._datadog
-    }
+    patch,
+    unpatch
   },
   {
     name: '@grpc/grpc-js',
@@ -263,6 +296,8 @@ module.exports = [
     file: 'build/src/make-client.js',
     patch (client, tracer, config) {
       if (config.client === false) return
+
+      config = config.client || config
 
       this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config))
       this.wrap(client, 'loadPackageDefinition', createWrapLoadPackageDefinition(tracer, config))
