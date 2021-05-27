@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const plugin = require('../src')
 const {
   TEST_FRAMEWORK,
@@ -11,7 +12,8 @@ const {
   TEST_PARAMETERS,
   ERROR_TYPE,
   ERROR_MESSAGE,
-  ERROR_STACK
+  ERROR_STACK,
+  CI_APP_ORIGIN
 } = require('../../dd-trace/src/plugins/util/test')
 const { expect } = require('chai')
 const path = require('path')
@@ -46,6 +48,12 @@ const TESTS = [
     fileName: 'mocha-test-done-pass.js',
     testName: 'can do passed tests with done',
     root: 'mocha-test-done-pass',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-integration.js',
+    testName: 'can do integration tests',
+    root: 'mocha-test-integration',
     status: 'pass'
   },
   {
@@ -115,7 +123,7 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
-      return agent.load('mocha').then(() => {
+      return agent.load(['mocha', 'fs']).then(() => {
         Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
@@ -134,11 +142,23 @@ describe('Plugin', () => {
                 expect(testSpan.parent_id.toString()).to.equal('0')
                 expect(testSpan.meta[TEST_STATUS]).to.equal(test.status)
                 expect(testSpan.meta[TEST_NAME]).to.equal(testName)
+                expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
               })
             })
             Promise.all(assertionPromises)
               .then(() => done())
               .catch(done)
+          } else if (test.fileName === 'mocha-test-integration.js') {
+            agent.use(trace => {
+              const testSpan = trace[0].find(span => span.type === 'test')
+              const fsOperationSpan = trace[0].find(span => span.name === 'fs.operation')
+              expect(testSpan.parent_id.toString()).to.equal('0')
+              expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
+              expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-integration can do integration tests')
+              expect(fsOperationSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+              expect(fsOperationSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            }).then(done, done)
           } else {
             agent
               .use(traces => {

@@ -1,7 +1,9 @@
 'use strict'
+const { expect } = require('chai')
+
+const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
-const { expect } = require('chai')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -11,7 +13,8 @@ const {
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
-  TEST_PARAMETERS
+  TEST_PARAMETERS,
+  CI_APP_ORIGIN
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -28,7 +31,7 @@ describe('Plugin', () => {
     })
     beforeEach(() => {
       tracer = require('../../dd-trace')
-      return agent.load('jest').then(() => {
+      return agent.load(['jest', 'fs']).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
@@ -51,6 +54,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
               service: 'test',
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
               [TEST_STATUS]: 'pass',
@@ -86,6 +90,7 @@ describe('Plugin', () => {
               service: 'test',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_STATUS]: 'fail',
               [TEST_SUITE_TAG]: TEST_SUITE,
               [TEST_TYPE]: 'test',
@@ -121,6 +126,7 @@ describe('Plugin', () => {
               service: 'test',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_STATUS]: 'skip',
               [TEST_SUITE_TAG]: TEST_SUITE,
               [TEST_TYPE]: 'test'
@@ -414,6 +420,32 @@ describe('Plugin', () => {
               [ERROR_MESSAGE]: 'non timeout error'
             })
           }).then(done).catch(done)
+      })
+
+      it('set _dd.origin=ciapp-test to the test span and all children spans', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            const fsOperationSpans = trace[0].filter(span => span.name === 'fs.operation')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(fsOperationSpans.length > 1).to.equal(true)
+            expect(fsOperationSpans.every(span => span.meta[ORIGIN_KEY] === CI_APP_ORIGIN)).to.equal(true)
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+              const fs = require('fs')
+              fs.readFileSync('./package.json')
+            },
+            name: TEST_NAME
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
       })
 
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`

@@ -13,6 +13,8 @@ const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.message'
 const ERROR_STACK = 'error.stack'
 
+const CI_APP_ORIGIN = 'ciapp-test'
+
 module.exports = {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -23,6 +25,7 @@ module.exports = {
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
+  CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString
 }

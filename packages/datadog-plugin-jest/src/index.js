@@ -13,6 +13,7 @@ const {
   ERROR_STACK,
   ERROR_TYPE,
   TEST_PARAMETERS,
+  CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
@@ -110,7 +111,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
 
     const resource = `${this.testSuite}.${testName}`
     if (event.name === 'test_skip' || event.name === 'test_todo') {
-      tracer.startSpan(
+      const testSpan = tracer.startSpan(
         'jest.test',
         {
           childOf,
@@ -121,7 +122,9 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
             [TEST_STATUS]: 'skip'
           }
         }
-      ).finish()
+      )
+      testSpan.context()._trace.origin = CI_APP_ORIGIN
+      testSpan.finish()
       return
     }
     // event.name === test_start at this point
@@ -139,26 +142,25 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       },
       async () => {
         let result
-        environment.testSpansByTestName[testName] = tracer.scope().active()
+        const testSpan = tracer.scope().active()
+        environment.testSpansByTestName[testName] = testSpan
+        testSpan.context()._trace.origin = CI_APP_ORIGIN
         try {
           result = await specFunction()
           // it may have been set already if the test timed out
-          if (!tracer.scope().active()._spanContext._tags['test.status']) {
-            tracer.scope().active().setTag(TEST_STATUS, 'pass')
+          if (!testSpan._spanContext._tags['test.status']) {
+            testSpan.setTag(TEST_STATUS, 'pass')
           }
         } catch (error) {
-          tracer.scope().active().setTag(TEST_STATUS, 'fail')
-          tracer.scope().active().setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
-          tracer.scope().active().setTag(ERROR_MESSAGE, error.message)
-          tracer.scope().active().setTag(ERROR_STACK, error.stack)
+          testSpan.setTag(TEST_STATUS, 'fail')
+          testSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
+          testSpan.setTag(ERROR_MESSAGE, error.message)
+          testSpan.setTag(ERROR_STACK, error.stack)
           throw error
         } finally {
-          tracer
-            .scope()
-            .active()
-            .context()._trace.started.forEach((span) => {
-              span.finish()
-            })
+          testSpan.context()._trace.started.forEach((span) => {
+            span.finish()
+          })
         }
         return result
       }
