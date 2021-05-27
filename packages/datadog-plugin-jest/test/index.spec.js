@@ -213,7 +213,7 @@ describe('Plugin', () => {
 
       it('should call startSpan and span finish on skipped tests', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-        const span = { finish: sinon.spy(() => {}) }
+        const span = { finish: sinon.spy(() => {}), context: sinon.spy(() => ({ _trace: { origin: '' } })) }
         tracer._tracer.startSpan = sinon.spy(() => {
           return span
         })
@@ -229,6 +229,7 @@ describe('Plugin', () => {
         skippedTestEvent.test.fn()
         expect(tracer._tracer.startSpan).to.have.been.called
         expect(span.finish).to.have.been.called
+        expect(span.context).to.have.been.called
       })
 
       it('should call flush on teardown', async () => {
