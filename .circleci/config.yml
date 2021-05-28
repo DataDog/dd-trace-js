@@ -1597,6 +1597,8 @@ workflows:
       - alpine-ia32:
           <<: *prebuild-job
       # Darwin x64
+      - mac-x64-16:
+          <<: *prebuild-job
       - mac-x64-14:
           <<: *prebuild-job
       - mac-x64-12:
@@ -1606,6 +1608,8 @@ workflows:
       - mac-x64-8:
           <<: *prebuild-job
       # Darwin ia32
+      - mac-ia32-16:
+          <<: *prebuild-job
       - mac-ia32-14:
           <<: *prebuild-job
       - mac-ia32-12:
@@ -1615,6 +1619,8 @@ workflows:
       - mac-ia32-8:
           <<: *prebuild-job
       # Windows x64
+      - win-x64-16:
+          <<: *prebuild-job
       - win-x64-14:
           <<: *prebuild-job
       - win-x64-12:
@@ -1624,6 +1630,8 @@ workflows:
       - win-x64-8:
           <<: *prebuild-job
       # Windows ia32
+      - win-ia32-16:
+          <<: *prebuild-job
       - win-ia32-14:
           <<: *prebuild-job
       - win-ia32-12:
@@ -1646,18 +1654,22 @@ workflows:
             - linux-ia32-8-test
             - alpine-x64
             - alpine-ia32
+            - mac-x64-16
             - mac-x64-14
             - mac-x64-12
             - mac-x64-10
             - mac-x64-8
+            - mac-ia32-16
             - mac-ia32-14
             - mac-ia32-12
             - mac-ia32-10
             - mac-ia32-8
+            - win-x64-16
             - win-x64-14
             - win-x64-12
             - win-x64-10
             - win-x64-8
+            - win-ia32-16
             - win-ia32-14
             - win-ia32-12
             - win-ia32-10
