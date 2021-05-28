@@ -37,15 +37,19 @@ class Scope extends Base {
   _active () {
     if (!this._enabled) return null
 
-    const resource = executionAsyncResource()
+    const resource = this._activeResource()
 
     return resource[this._ddResourceStore] || null
+  }
+
+  _activeResource () {
+    return executionAsyncResource() || {}
   }
 
   _activate (span, callback) {
     if (!this._enabled) return callback()
 
-    const resource = executionAsyncResource()
+    const resource = this._activeResource()
 
     this._enter(span, resource)
 
@@ -66,7 +70,7 @@ class Scope extends Base {
   }
 
   _init (asyncId, type, triggerAsyncId, resource) {
-    const triggerResource = executionAsyncResource()
+    const triggerResource = this._activeResource()
     const span = triggerResource[this._ddResourceStore]
 
     if (span) {
