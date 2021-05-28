@@ -18,7 +18,7 @@
       "<!(node -e \"require('nan')\")"
     ],
     "xcode_settings": {
-      "MACOSX_DEPLOYMENT_TARGET": "10.9",
+      "MACOSX_DEPLOYMENT_TARGET": "10.10",
       "OTHER_CFLAGS": [
         "-std=c++14",
         "-stdlib=libc++",
