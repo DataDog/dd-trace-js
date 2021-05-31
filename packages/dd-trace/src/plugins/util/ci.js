@@ -12,7 +12,6 @@ const GIT_REPOSITORY_URL = 'git.repository_url'
 const CI_JOB_URL = 'ci.job.url'
 const CI_JOB_NAME = 'ci.job.name'
 const CI_STAGE_NAME = 'ci.stage.name'
-const CI_JOB_ID = 'ci.job.id'
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -154,7 +153,6 @@ module.exports = {
       const {
         CIRCLE_WORKFLOW_ID,
         CIRCLE_PROJECT_REPONAME,
-        CIRCLE_BUILD_NUM,
         CIRCLE_BUILD_URL,
         CIRCLE_WORKING_DIRECTORY,
         CIRCLE_BRANCH,
@@ -171,7 +169,6 @@ module.exports = {
         [CI_PIPELINE_NAME]: CIRCLE_PROJECT_REPONAME,
         [CI_PIPELINE_URL]: pipelineUrl,
         [CI_JOB_NAME]: CIRCLE_JOB,
-        [CI_JOB_ID]: CIRCLE_BUILD_NUM,
         [CI_PROVIDER_NAME]: 'circleci',
         [GIT_COMMIT_SHA]: CIRCLE_SHA1,
         [GIT_REPOSITORY_URL]: CIRCLE_REPOSITORY_URL,
