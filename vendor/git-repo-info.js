@@ -8,6 +8,9 @@ var zlib = require('zlib');
 
 var GIT_DIR = '.git';
 
+const GPG_SIGNATURE_START_TAG = 'gpgsig -----BEGIN PGP SIGNATURE-----'
+const GPG_SIGNATURE_END_TAG = '-----END PGP SIGNATURE-----'
+
 function changeGitDir(newDirName) {
   GIT_DIR = newDirName;
 }
@@ -303,7 +306,14 @@ function getCommitData(gitPath, sha) {
   var objectPath = path.join(gitPath, 'objects', sha.slice(0, 2), sha.slice(2));
 
   if (zlib.inflateSync && fs.existsSync(objectPath)) {
-    var objectContents = zlib.inflateSync(fs.readFileSync(objectPath)).toString();
+    let objectContents = zlib.inflateSync(fs.readFileSync(objectPath)).toString();
+
+    // if there's a gpg signature, we remove it
+    const startIndexGPGSignature = objectContents.indexOf(GPG_SIGNATURE_START_TAG)
+    if (startIndexGPGSignature !== -1) {
+      const endIndex = objectContents.indexOf(GPG_SIGNATURE_END_TAG)
+      objectContents = objectContents.slice(0, startIndexGPGSignature) + objectContents.slice(endIndex + GPG_SIGNATURE_END_TAG.length)
+    }
 
     return objectContents.split(/\0|\r?\n/)
       .filter(function(item) {

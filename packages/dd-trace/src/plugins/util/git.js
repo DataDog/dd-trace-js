@@ -29,66 +29,84 @@ function parseUser (user) {
   return { name: user.replace(`<${email}>`, '').trim(), email }
 }
 
+function getGitAuthor (repoInfo) {
+  const author = sanitizedExec('git show -s --format=%an,%ae,%ad', { stdio: 'pipe' }).split(',')
+  if (author.length === 3) {
+    return {
+      authorName: author[0],
+      authorEmail: author[1],
+      authorDate: author[2]
+    }
+  }
+  const parsedUser = parseUser(repoInfo.author)
+  return {
+    authorName: parsedUser.name,
+    authorEmail: parsedUser.email,
+    authorDate: repoInfo.authorDate
+  }
+}
+
+function getGitCommitter (repoInfo) {
+  const committer = sanitizedExec('git show -s --format=%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
+  if (committer.length === 3) {
+    return {
+      committerName: committer[0],
+      committerEmail: committer[1],
+      committerDate: committer[2]
+    }
+  }
+  const parsedUser = parseUser(repoInfo.committer)
+  return {
+    committerName: parsedUser.name,
+    committerEmail: parsedUser.email,
+    committerDate: repoInfo.committerDate
+  }
+}
+
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
   const { commitSHA, branch, repositoryUrl, tag } = ciMetadata
 
   const repoInfo = getRepoInfo(process.cwd())
 
-  let authorName
-  let authorEmail
-  let authorDate
-  let committerName
-  let committerEmail
-  let committerDate
+  let commitMessage
+  let branchFromGit
+  let commitSHAFromGit
 
-  const commitMessage = repoInfo.commitMessage
-  const gitBranch = repoInfo.branch
-  const gitTag = repoInfo.tag
-  const gitCommitSHA = repoInfo.sha
+  const { authorName, authorEmail, authorDate } = getGitAuthor(repoInfo)
+  const { committerName, committerEmail, committerDate } = getGitCommitter(repoInfo)
 
-  if (repoInfo.author && repoInfo.authorDate) {
-    const parsedUser = parseUser(repoInfo.author)
-    authorName = parsedUser.name
-    authorEmail = parsedUser.email
-    authorDate = repoInfo.authorDate
-  } else {
-    const author = sanitizedExec('git show -s --format=%an,%ae,%ad', { stdio: 'pipe' }).split(',')
-    if (author.length === 3) {
-      authorName = author[0]
-      authorEmail = author[1]
-      authorDate = author[2]
-    }
+  commitMessage = sanitizedExec('git show -s --format=%s', { stdio: 'pipe' })
+  if (!commitMessage) {
+    commitMessage = repoInfo.commitMessage
   }
 
-  if (repoInfo.committer && repoInfo.committerDate) {
-    const parsedUser = parseUser(repoInfo.committer)
-    committerName = parsedUser.name
-    committerEmail = parsedUser.email
-    committerDate = repoInfo.committerDate
-  } else {
-    const committer = sanitizedExec('git show -s --format=%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
-    if (committer.length === 3) {
-      committerName = committer[0]
-      committerEmail = committer[1]
-      committerDate = committer[2]
-    }
+  branchFromGit = sanitizedExec('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
+  if (!branchFromGit) {
+    branchFromGit = repoInfo.branch
   }
+
+  commitSHAFromGit = sanitizedExec('git rev-parse HEAD', { stdio: 'pipe' })
+  if (!commitSHAFromGit) {
+    commitSHAFromGit = repoInfo.sha
+  }
+
+  const repositoryUrlFromGit = sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' })
 
   return {
     // With stdio: 'pipe', errors in this command will not be output to the parent process,
     // so if `git` is not present in the env, we won't show a warning to the user.
-    [GIT_REPOSITORY_URL]: repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
-    [GIT_COMMIT_MESSAGE]: commitMessage || sanitizedExec('git show -s --format=%s', { stdio: 'pipe' }),
+    [GIT_REPOSITORY_URL]: coalesce(repositoryUrl, repositoryUrlFromGit),
+    [GIT_COMMIT_MESSAGE]: commitMessage,
     [GIT_COMMIT_AUTHOR_DATE]: authorDate,
     [GIT_COMMIT_AUTHOR_NAME]: authorName,
     [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
     [GIT_COMMIT_COMMITTER_DATE]: committerDate,
     [GIT_COMMIT_COMMITTER_NAME]: committerName,
     [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
-    [GIT_BRANCH]: coalesce(branch, gitBranch),
-    [GIT_COMMIT_SHA]: coalesce(commitSHA, gitCommitSHA),
-    [GIT_TAG]: coalesce(tag, gitTag)
+    [GIT_BRANCH]: coalesce(branch, branchFromGit),
+    [GIT_COMMIT_SHA]: coalesce(commitSHA, commitSHAFromGit),
+    [GIT_TAG]: coalesce(tag, repoInfo.tag)
   }
 }
 
