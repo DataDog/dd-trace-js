@@ -16,7 +16,7 @@ function uploadJUnitXMLReport () {
   execSync('yarn global add @datadog/datadog-ci@0.13.1', { stdio: 'inherit' })
   // we execute the upload command
   execSync(
-    `datadog-ci junit upload \
+    `DD_ENV=CI datadog-ci junit upload \
     --tags runtime.version:${process.version} \
     --service dd-trace-js-core-tests \
     ./core-test-results/mocha/test-results.xml`,
