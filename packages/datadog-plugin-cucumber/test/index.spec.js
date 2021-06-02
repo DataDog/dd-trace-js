@@ -3,13 +3,15 @@ const path = require('path')
 const { PassThrough } = require('stream')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const plugin = require('../src')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
-  TEST_STATUS
+  TEST_STATUS,
+  CI_APP_ORIGIN
 } = require('../../dd-trace/src/plugins/util/test')
 
 const TESTS = [
@@ -134,6 +136,7 @@ describe('Plugin', () => {
               const testSpan = testTrace.find(span => span.name === 'cucumber.test')
               // having no parent span means there is no span leak from other tests
               expect(testSpan.parent_id.toString()).to.equal('0')
+              expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
               expect(testSpan.meta).to.contain({
                 language: 'javascript',
                 service: 'test',
@@ -161,6 +164,8 @@ describe('Plugin', () => {
               const stepSpans = testTrace.filter(span => span.name === 'cucumber.step')
               expect(stepSpans.length).to.equal(steps.length)
               stepSpans.forEach((stepSpan, spanIndex) => {
+                // children spans should carry _dd.origin
+                expect(stepSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
                 // all steps are children of the test span
                 expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
                 expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)

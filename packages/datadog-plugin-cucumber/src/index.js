@@ -7,6 +7,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  CI_APP_ORIGIN,
   getTestEnvironmentMetadata
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -46,10 +47,11 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
           resource: testName,
           tags: commonSpanTags
         },
-        (span) => {
+        (testSpan) => {
+          testSpan.context()._trace.origin = CI_APP_ORIGIN
           const promise = run.apply(this, arguments)
           promise.then(() => {
-            setStatusFromResult(span, this.getWorstStepResult(), TEST_STATUS)
+            setStatusFromResult(testSpan, this.getWorstStepResult(), TEST_STATUS)
           })
           return promise
         }

@@ -13,6 +13,7 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   ERROR_TYPE,
+  CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
@@ -70,6 +71,7 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
         },
         async () => {
           const activeSpan = tracer.scope().active()
+          activeSpan.context()._trace.origin = CI_APP_ORIGIN
           let result
           try {
             const context = this.test.ctx
@@ -134,7 +136,7 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
         test.__datadog_skipped = true
         const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, test, sourceRoot)
 
-        tracer
+        const testSpan = tracer
           .startSpan('mocha.test', {
             childOf,
             tags: {
@@ -144,7 +146,9 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
               ...testEnvironmentMetadata
             }
           })
-          .finish()
+        testSpan.context()._trace.origin = CI_APP_ORIGIN
+
+        testSpan.finish()
       })
     }
   }
