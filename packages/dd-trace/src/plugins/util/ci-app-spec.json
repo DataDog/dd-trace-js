@@ -29,5 +29,6 @@
   "os.architecture",
   "runtime.name",
   "runtime.version",
-  "test.parameters"
+  "test.parameters",
+  "_dd.origin"
 ]
