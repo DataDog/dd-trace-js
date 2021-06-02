@@ -162,7 +162,7 @@ module.exports = {
         CIRCLE_JOB
       } = env
 
-      const pipelineUrl = `https://app.circle.com/pipelines/workflows/${CIRCLE_WORKFLOW_ID}`
+      const pipelineUrl = `https://app.circleci.com/pipelines/workflows/${CIRCLE_WORKFLOW_ID}`
 
       tags = {
         [CI_PIPELINE_ID]: CIRCLE_WORKFLOW_ID,
