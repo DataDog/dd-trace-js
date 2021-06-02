@@ -58,4 +58,3 @@ dev,tape,MIT,Copyright James Halliday
 dev,wait-on,MIT,Copyright 2015 Jeff Barczewski
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
 file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns
-file,git-repo-info.js,MIT,Copyright Robert Jackson and Contributors
