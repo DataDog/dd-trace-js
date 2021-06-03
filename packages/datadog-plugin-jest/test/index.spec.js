@@ -452,6 +452,37 @@ describe('Plugin', () => {
         passingTestEvent.test.fn()
       })
 
+      it('should detect snapshot errors', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.getVmContext = () => ({
+          expect: {
+            getState: () =>
+              ({
+                currentTestName: TEST_NAME,
+                suppressedErrors: [new Error('snapshot error message')]
+              })
+          }
+        })
+
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'snapshot error message'
+            })
+          }).then(done).catch(done)
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {
