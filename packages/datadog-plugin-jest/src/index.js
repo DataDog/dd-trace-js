@@ -148,7 +148,19 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
         try {
           result = await specFunction()
           // it may have been set already if the test timed out
-          if (!testSpan._spanContext._tags['test.status']) {
+          let suppressedErrors = []
+          const context = environment.getVmContext()
+          if (context) {
+            suppressedErrors = context.expect.getState().suppressedErrors
+          }
+          if (suppressedErrors && suppressedErrors.length) {
+            const testError = suppressedErrors[0]
+            testSpan.setTag(ERROR_TYPE, testError.constructor ? testError.constructor.name : 'Error')
+            testSpan.setTag(ERROR_MESSAGE, testError.message)
+            testSpan.setTag(ERROR_STACK, testError.stack)
+            testSpan.setTag(TEST_STATUS, 'fail')
+          }
+          if (!testSpan._spanContext._tags[TEST_STATUS]) {
             testSpan.setTag(TEST_STATUS, 'pass')
           }
         } catch (error) {
