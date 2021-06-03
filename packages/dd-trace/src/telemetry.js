@@ -36,11 +36,8 @@ function recursiveGetDeps (nmDir, results = []) {
     } else {
       const pkgPath = path.join(moduleDir, 'package.json')
       try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-        results.push({
-          name: pkg.name,
-          verison: pkg.version
-        })
+        const { name, version } = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        results.push({ name, version })
       } catch (e) { /* skip */ }
       const newNmDir = path.join(moduleDir, 'node_modules')
       recursiveGetDeps(newNmDir, results)
@@ -56,13 +53,14 @@ function getDependencies () {
 }
 
 function flatten (input, result = {}, prefix = []) {
-  for (const [key, value] in Object.entries(input)) {
+  for (const [key, value] of Object.entries(input)) {
     if (typeof value === 'object' && value !== null) {
       flatten(value, result, [...prefix, key])
     } else {
       result[[...prefix, key].join('.')] = value
     }
   }
+  return result
 }
 
 function sendTelemetry () {
@@ -112,7 +110,7 @@ function sendTelemetry () {
   }
 
   if (!data.service_version) {
-    data.service_version = pkg.version
+    data.service_version = config.version
   }
 
   if (!data.language_version) {
@@ -147,13 +145,14 @@ function sendData (data) {
   req.on('error', () => {
     // Ignore errors
   })
-  req.end(JSON.stringify(data))
+  req.write(JSON.stringify(data))
+  req.end()
 }
 
 function startTelemetry (aConfig, theInstrumenter) {
   config = aConfig
   instrumenter = theInstrumenter
-  return setInterval(sendTelemetry, 6 * 1000)
+  return setInterval(sendTelemetry, 60 * 1000)
 }
 
 module.exports = startTelemetry
