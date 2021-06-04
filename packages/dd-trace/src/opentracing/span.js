@@ -15,7 +15,7 @@ const KINDS = require('../../../../ext/kinds')
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 class DatadogSpan extends Span {
-  constructor(tracer, processor, sampler, prioritySampler, fields, debug) {
+  constructor (tracer, processor, sampler, prioritySampler, fields, debug) {
     super()
 
     const operationName = fields.operationName
@@ -46,11 +46,11 @@ class DatadogSpan extends Span {
     this._processor.onStart(this, this._spanContext)
   }
 
-  get spanContext() {
+  get spanContext () {
     return this.context()
   }
 
-  get kind() {
+  get kind () {
     const spanContext = this.context()
     switch (spanContext._tags[TAGS.SPAN_KIND]) {
       case KINDS.CLIENT: {
@@ -71,49 +71,49 @@ class DatadogSpan extends Span {
     }
   }
 
-  get status() {
+  get status () {
     return this._status
   }
 
-  setStatus(status) {
+  setStatus (status) {
     if (this.ended) return this
     this._status = status
     return this
   }
 
-  get events() {
+  get events () {
     return []
   }
 
-  get ended() {
+  get ended () {
     return this._duration !== undefined
   }
 
-  get resource() {
+  get resource () {
     // retun this._parentTracer.resource
     return {
       attributes: {}
     }
   }
 
-  get links() {
+  get links () {
     return []
   }
 
-  get startTime() {
+  get startTime () {
     return numberToHrtime(this._startTime)
   }
 
-  get duration() {
+  get duration () {
     return numberToHrtime(this._duration)
   }
 
-  get name() {
+  get name () {
     const spanContext = this.context()
     return spanContext._name
   }
 
-  get parentSpanId() {
+  get parentSpanId () {
     const spanContext = this.context()
     return (
       spanContext._parentId &&
@@ -121,12 +121,12 @@ class DatadogSpan extends Span {
     )
   }
 
-  get attributes() {
+  get attributes () {
     const spanContext = this.context()
     return spanContext._tags
   }
 
-  toString() {
+  toString () {
     const spanContext = this.context()
     const resourceName = spanContext._tags['resource.name']
     const resource =
@@ -145,7 +145,7 @@ class DatadogSpan extends Span {
     return `Span${json}`
   }
 
-  _createContext(parent) {
+  _createContext (parent) {
     let spanContext
 
     if (parent) {
@@ -172,43 +172,43 @@ class DatadogSpan extends Span {
     return spanContext
   }
 
-  _getTime() {
+  _getTime () {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
   }
 
-  _context() {
+  _context () {
     return this._spanContext
   }
 
-  _tracer() {
+  _tracer () {
     return this._parentTracer
   }
 
-  _setOperationName(name) {
+  _setOperationName (name) {
     this._spanContext._name = name
   }
 
-  _setBaggageItem(key, value) {
+  _setBaggageItem (key, value) {
     this._spanContext._baggageItems[key] = value
   }
 
-  _getBaggageItem(key) {
+  _getBaggageItem (key) {
     return this._spanContext._baggageItems[key]
   }
 
-  _addTags(keyValuePairs) {
+  _addTags (keyValuePairs) {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
   }
 
-  end(finishTime) {
+  end (finishTime) {
     return this._finish(finishTime)
   }
 
-  _finish(finishTime) {
+  _finish (finishTime) {
     if (this._duration !== undefined) {
       return
     }
@@ -236,13 +236,13 @@ class DatadogSpan extends Span {
     this._processor.onEnd(this)
   }
 
-  setValue() {
+  setValue () {
     return this.setBaggageItem.apply(this, arguments)
   }
-  getValue() {
+  getValue () {
     return this.getBaggageItem.apply(this, arguments)
   }
-  deleteValue() {
+  deleteValue () {
     return this.deleteValue.apply(this, arguments)
   }
 }
@@ -252,7 +252,7 @@ module.exports = DatadogSpan
 const NANOSECOND_DIGITS = 9
 const SECOND_TO_NANOSECONDS = Math.pow(10, NANOSECOND_DIGITS)
 
-function numberToHrtime(epochMillis) {
+function numberToHrtime (epochMillis) {
   const epochSeconds = epochMillis / 1000
   // Decimals only.
   const seconds = Math.trunc(epochSeconds)
@@ -263,6 +263,6 @@ function numberToHrtime(epochMillis) {
   return [seconds, nanos]
 }
 
-function hasError(tags) {
+function hasError (tags) {
   return tags['error.name'] || tags['error.key'] || tags['error.stack']
 }

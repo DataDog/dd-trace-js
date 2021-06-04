@@ -16,7 +16,7 @@ const NoopSpan = require('./noop/span')
 const noop = new NoopTracer()
 
 class Tracer extends BaseTracer {
-  constructor() {
+  constructor () {
     super()
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
@@ -31,7 +31,7 @@ class Tracer extends BaseTracer {
       )
   }
 
-  init(options) {
+  init (options) {
     if (this._tracer === noop) {
       try {
         const config = new Config(options)
@@ -62,12 +62,12 @@ class Tracer extends BaseTracer {
     return this
   }
 
-  use() {
+  use () {
     this._instrumenter.use.apply(this._instrumenter, arguments)
     return this
   }
 
-  trace(name, options, fn) {
+  trace (name, options, fn) {
     if (!fn) {
       fn = options
       options = {}
@@ -80,7 +80,7 @@ class Tracer extends BaseTracer {
     return this._tracer.trace(name, options, fn)
   }
 
-  wrap(name, options, fn) {
+  wrap (name, options, fn) {
     if (!fn) {
       fn = options
       options = {}
@@ -93,62 +93,59 @@ class Tracer extends BaseTracer {
     return this._tracer.wrap(name, options, fn)
   }
 
-  setUrl() {
+  setUrl () {
     this._tracer.setUrl.apply(this._tracer, arguments)
     return this
   }
 
-  startSpan(name, options = {}, parentSpan) {
+  startSpan (name, options = {}, parentSpan) {
     parentSpan = parentSpan || this.scope().active()
-    return this._tracer.startSpan.apply(this._tracer, [
-      name,
-      {
-        childOf: !options || !options.root ? parentSpan : undefined,
-        ...options
-      }
-    ])
+    return this._tracer.startSpan(name, {
+      childOf: !options || !options.root ? parentSpan : undefined,
+      ...options
+    })
   }
 
-  inject() {
+  inject () {
     return this._tracer.inject.apply(this._tracer, arguments)
   }
 
-  extract() {
+  extract () {
     return this._tracer.extract.apply(this._tracer, arguments)
   }
 
-  scopeManager() {
+  scopeManager () {
     this._deprecate('scopeManager')
     return this._tracer.scopeManager.apply(this._tracer, arguments)
   }
 
-  scope() {
+  scope () {
     return this._tracer.scope.apply(this._tracer, arguments)
   }
 
-  currentSpan() {
+  currentSpan () {
     this._deprecate('currentSpan')
     return this._tracer.currentSpan.apply(this._tracer, arguments)
   }
 
-  addSpanProcessor() {
+  addSpanProcessor () {
     return this._tracer.addSpanProcessor.apply(this._tracer, arguments)
   }
 
-  bind(callback) {
+  bind (callback) {
     this._deprecate('bind')
     return callback
   }
 
-  bindEmitter() {
+  bindEmitter () {
     this._deprecate('bindEmitter')
   }
 
-  getRumData() {
+  getRumData () {
     return this._tracer.getRumData.apply(this._tracer, arguments)
   }
 
-  register() {
+  register () {
     opentelemetry.trace.setGlobalTracerProvider(this)
     opentelemetry.context.setGlobalContextManager({
       active: () => {

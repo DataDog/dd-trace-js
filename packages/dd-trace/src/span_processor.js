@@ -1,19 +1,19 @@
 const log = require('./log')
 
 class SpanProcessor {
-  constructor(exporter, prioritySampler) {
+  constructor (exporter, prioritySampler) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
   }
 
   // opentelemetry compat
-  onStart() {}
-  onEnd(span) {
+  onStart () {}
+  onEnd (span) {
     this.process(span)
   }
   // end open telemetry compat
 
-  process(span) {
+  process (span) {
     const spanContext = span.context()
     const trace = spanContext._trace
     if (trace.started.length === trace.finished.length) {
@@ -33,7 +33,7 @@ class SpanProcessor {
     }
   }
 
-  _erase(trace) {
+  _erase (trace) {
     trace.finished.forEach((span) => {
       span.context()._tags = {}
     })

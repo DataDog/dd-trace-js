@@ -42,11 +42,11 @@ const memoize = (func) => {
   return memoized
 }
 
-function processMsg(msg) {
+function processMsg (msg) {
   return typeof msg === 'function' ? msg() : msg
 }
 
-function withNoop(fn) {
+function withNoop (fn) {
   if (!log._tracer) {
     fn()
   } else {
@@ -55,11 +55,11 @@ function withNoop(fn) {
 }
 
 const log = {
-  _isLogLevelEnabled(level) {
+  _isLogLevelEnabled (level) {
     return _logLevels[level] >= this._logLevel
   },
 
-  use(logger) {
+  use (logger) {
     if (
       logger &&
       logger.debug instanceof Function &&
@@ -71,7 +71,7 @@ const log = {
     return this
   },
 
-  toggle(enabled, logLevel, tracer) {
+  toggle (enabled, logLevel, tracer) {
     this._enabled = enabled
     this._logLevel = _checkLogLevel(logLevel)
     this._tracer = tracer
@@ -79,14 +79,14 @@ const log = {
     return this
   },
 
-  _noopSpan() {
+  _noopSpan () {
     if (!this.__noopSpan) {
       this.__noopSpan = new NoopSpan(this._tracer)
     }
     return this.__noopSpan
   },
 
-  reset() {
+  reset () {
     this._logger = _default
     this._enabled = false
     delete this._tracer
@@ -100,7 +100,7 @@ const log = {
     return this
   },
 
-  debug(message) {
+  debug (message) {
     if (this._enabled && this._isLogLevelEnabled('debug')) {
       withNoop(() => this._logger.debug(processMsg(message)))
     }
@@ -108,7 +108,7 @@ const log = {
     return this
   },
 
-  info(message) {
+  info (message) {
     if (!this._logger.info) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('info')) {
       withNoop(() => this._logger.info(processMsg(message)))
@@ -117,7 +117,7 @@ const log = {
     return this
   },
 
-  warn(message) {
+  warn (message) {
     if (!this._logger.warn) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('warn')) {
       withNoop(() => this._logger.warn(processMsg(message)))
@@ -126,7 +126,7 @@ const log = {
     return this
   },
 
-  error(err) {
+  error (err) {
     if (this._enabled && this._isLogLevelEnabled('error')) {
       if (err instanceof Function) {
         err = err()
@@ -148,7 +148,7 @@ const log = {
     return this
   },
 
-  deprecate(code, message) {
+  deprecate (code, message) {
     return this._deprecate(code, message)
   }
 }

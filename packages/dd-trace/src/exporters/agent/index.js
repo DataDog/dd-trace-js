@@ -6,7 +6,7 @@ const Writer = require('./writer')
 const Scheduler = require('./scheduler')
 
 class AgentExporter {
-  constructor(
+  constructor (
     { url, hostname, port, flushInterval, lookup, protocolVersion },
     prioritySampler
   ) {
@@ -24,7 +24,7 @@ class AgentExporter {
     this._scheduler && this._scheduler.start()
   }
 
-  setUrl(url) {
+  setUrl (url) {
     try {
       url = new URL(url)
       this._url = url
@@ -34,7 +34,7 @@ class AgentExporter {
     }
   }
 
-  export(spans) {
+  export (spans) {
     this._writer.append(spans.map(format))
 
     if (!this._scheduler) {

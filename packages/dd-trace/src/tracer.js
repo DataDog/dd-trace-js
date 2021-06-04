@@ -13,7 +13,7 @@ const ANALYTICS = tags.ANALYTICS
 const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
-  constructor(config) {
+  constructor (config) {
     super(config)
 
     const Scope = getScope(config.scope)
@@ -23,7 +23,7 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
   }
 
-  trace(name, options, fn) {
+  trace (name, options, fn) {
     options = Object.assign(
       {},
       {
@@ -72,7 +72,7 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  wrap(name, options, fn) {
+  wrap (name, options, fn) {
     const tracer = this
 
     return function () {
@@ -108,36 +108,24 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  setUrl(url) {
+  setUrl (url) {
     this._exporter.setUrl(url)
   }
 
-  scopeManager() {
+  scopeManager () {
     return this._scopeManager
   }
 
-  scope() {
+  scope () {
     return this._scope
   }
 
-  currentSpan() {
+  currentSpan () {
     return this.scope().active()
-  }
-
-  getRumData() {
-    if (!this._enableGetRumData) {
-      return ''
-    }
-    const span = this.scope().active().context()
-    const traceId = span.toTraceId()
-    const traceTime = Date.now()
-    return `\
-<meta name="dd-trace-id" content="${traceId}" />\
-<meta name="dd-trace-time" content="${traceTime}" />`
   }
 }
 
-function addError(span, error) {
+function addError (span, error) {
   if (error && error instanceof Error) {
     span.addTags({
       'error.type': error.name,
@@ -147,7 +135,7 @@ function addError(span, error) {
   }
 }
 
-function addTags(span, options) {
+function addTags (span, options) {
   const tags = {}
 
   if (options.type) tags[SPAN_TYPE] = options.type
@@ -159,7 +147,7 @@ function addTags(span, options) {
   span.addTags(tags)
 }
 
-function getScopeManager(config) {
+function getScopeManager (config) {
   let ScopeManager
 
   if (config.scope === NOOP) {

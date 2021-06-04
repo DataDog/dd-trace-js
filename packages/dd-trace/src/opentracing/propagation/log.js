@@ -4,15 +4,15 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 
 class LogPropagator {
-  constructor(config) {
+  constructor (config) {
     this._config = config
   }
 
-  inject(spanContext, carrier) {
+  inject (spanContext, carrier) {
     if (!carrier) return
 
     if (spanContext) {
-      //github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md#trace-context-fields
+      // github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md
       carrier.trace_id = spanContext.toTraceId()
       carrier.span_id = spanContext.toSpanId()
     }
@@ -22,7 +22,7 @@ class LogPropagator {
     if (this._config.env) carrier.dd.env = this._config.env
   }
 
-  extract(carrier) {
+  extract (carrier) {
     if (!carrier || !carrier.trace_id || !carrier.span_id) {
       return null
     }

@@ -27,7 +27,7 @@ const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 
 class DatadogTracer extends Tracer {
-  constructor(config) {
+  constructor (config) {
     super()
 
     const Exporter = getExporter(config.experimental.exporter)
@@ -60,23 +60,21 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  addSpanProcessor(processor) {
+  addSpanProcessor (processor) {
     this._processor = processor
   }
 
-  _startSpan(name, fields) {
+  _startSpan (name, fields) {
     const reference = getParent(fields.references)
     const type = reference && reference.type()
     const parent = reference && reference.referencedContext()
     return this._startSpanInternal(name, fields, parent, type)
   }
 
-  _startSpanInternal(name, fields = {}, parent, type) {
+  _startSpanInternal (name, fields = {}, parent, type) {
     if (parent && parent._noop) return parent._noop
-    if (!isSampled(this._sampler, parent, type))
-      return new NoopSpan(this, parent)
-    if (parent && isInstrumentationSuppressed(parent))
-      return new NoopSpan(this, parent)
+    if (!isSampled(this._sampler, parent, type)) { return new NoopSpan(this, parent) }
+    if (parent && isInstrumentationSuppressed(parent)) { return new NoopSpan(this, parent) }
 
     const tags = {
       'service.name': this._service
@@ -103,7 +101,7 @@ class DatadogTracer extends Tracer {
     return span
   }
 
-  _inject(spanContext, format, carrier) {
+  _inject (spanContext, format, carrier) {
     try {
       this._prioritySampler.sample(spanContext)
       this._propagators[format].inject(spanContext, carrier)
@@ -115,7 +113,7 @@ class DatadogTracer extends Tracer {
     return this
   }
 
-  _extract(format, carrier) {
+  _extract (format, carrier) {
     try {
       return this._propagators[format].extract(carrier)
     } catch (e) {
@@ -126,7 +124,7 @@ class DatadogTracer extends Tracer {
   }
 }
 
-function getParent(references = []) {
+function getParent (references = []) {
   let parent = null
 
   for (let i = 0; i < references.length; i++) {
@@ -166,7 +164,7 @@ function getParent(references = []) {
   return parent
 }
 
-function isSampled(sampler, parent, type) {
+function isSampled (sampler, parent, type) {
   if (type === REFERENCE_NOOP) return false
   if (parent && !parent._traceFlags.sampled) return false
   if (!parent && !sampler.isSampled()) return false

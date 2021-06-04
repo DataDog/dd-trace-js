@@ -1,11 +1,11 @@
 'use strict'
 
 class Scope {
-  active() {
+  active () {
     return this._active() || null
   }
 
-  activate(span, callback) {
+  activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
     try {
@@ -19,7 +19,7 @@ class Scope {
     }
   }
 
-  bind(target, span) {
+  bind (target, span) {
     target = this._bindEmitter(target, span)
     target = this._bindPromise(target, span)
     target = this._bindFn(target, span)
@@ -27,7 +27,7 @@ class Scope {
     return target
   }
 
-  unbind(target) {
+  unbind (target) {
     target = this._unbindFn(target)
     target = this._unbindPromise(target)
     target = this._unbindEmitter(target)
@@ -35,15 +35,15 @@ class Scope {
     return target
   }
 
-  _active() {
+  _active () {
     return null
   }
 
-  _activate(span, callback) {
+  _activate (span, callback) {
     return callback()
   }
 
-  _bindFn(fn, span) {
+  _bindFn (fn, span) {
     if (typeof fn !== 'function') return fn
 
     const scope = this
@@ -60,13 +60,13 @@ class Scope {
     return bound
   }
 
-  _unbindFn(fn) {
+  _unbindFn (fn) {
     if (typeof fn !== 'function') return fn
 
     return fn._datadog_unbound || fn
   }
 
-  _bindEmitter(emitter, span) {
+  _bindEmitter (emitter, span) {
     if (!this._isEmitter(emitter)) return emitter
     if (!emitter.__is_dd_emitter) {
       Scope._wrapEmitter(emitter)
@@ -79,7 +79,7 @@ class Scope {
   // Occasionally we want to wrap a prototype rather than emitter instances,
   // so we're exposing this as a static method. This gives us a faster
   // path for binding instances of known EventEmitter subclasses.
-  static _wrapEmitter(emitter) {
+  static _wrapEmitter (emitter) {
     wrapMethod(emitter, 'addListener', wrapAddListener)
     wrapMethod(emitter, 'prependListener', wrapAddListener)
     wrapMethod(emitter, 'on', wrapAddListener)
@@ -90,14 +90,14 @@ class Scope {
     emitter.__is_dd_emitter = true
   }
 
-  _unbindEmitter(emitter) {
+  _unbindEmitter (emitter) {
     if (!this._isEmitter(emitter)) return emitter
     delete emitter.__dd_scope
     delete emitter.__dd_span
     return emitter
   }
 
-  _bindPromise(promise, span) {
+  _bindPromise (promise, span) {
     if (!this._isPromise(promise)) return promise
 
     wrapMethod(promise, 'then', wrapThen, this, span)
@@ -105,7 +105,7 @@ class Scope {
     return promise
   }
 
-  _unbindPromise(promise) {
+  _unbindPromise (promise) {
     if (!this._isPromise(promise)) return promise
 
     promise.then = promise.then._datadog_unbound || promise.then
@@ -113,11 +113,11 @@ class Scope {
     return promise
   }
 
-  _spanOrActive(span) {
+  _spanOrActive (span) {
     return span !== undefined ? span : this.active()
   }
 
-  _isEmitter(emitter) {
+  _isEmitter (emitter) {
     return (
       emitter &&
       typeof emitter.emit === 'function' &&
@@ -127,13 +127,13 @@ class Scope {
     )
   }
 
-  _isPromise(promise) {
+  _isPromise (promise) {
     return promise && typeof promise.then === 'function'
   }
 }
 
-function wrapThen(then, scope, span) {
-  return function thenWithTrace(onFulfilled, onRejected) {
+function wrapThen (then, scope, span) {
+  return function thenWithTrace (onFulfilled, onRejected) {
     const args = new Array(arguments.length)
 
     for (let i = 0, l = args.length; i < l; i++) {
@@ -144,8 +144,8 @@ function wrapThen(then, scope, span) {
   }
 }
 
-function wrapAddListener(addListener) {
-  return function addListenerWithTrace(eventName, listener) {
+function wrapAddListener (addListener) {
+  return function addListenerWithTrace (eventName, listener) {
     if (
       !this.__dd_scope ||
       !listener ||
@@ -177,8 +177,8 @@ function wrapAddListener(addListener) {
   }
 }
 
-function wrapRemoveListener(removeListener) {
-  return function removeListenerWithTrace(eventName, listener) {
+function wrapRemoveListener (removeListener) {
+  return function removeListenerWithTrace (eventName, listener) {
     if (!this.__dd_scope) {
       return removeListener.apply(this, arguments)
     }
@@ -199,8 +199,8 @@ function wrapRemoveListener(removeListener) {
   }
 }
 
-function wrapRemoveAllListeners(removeAllListeners) {
-  return function removeAllListenersWithTrace(eventName) {
+function wrapRemoveAllListeners (removeAllListeners) {
+  return function removeAllListenersWithTrace (eventName) {
     if (this.__dd_scope && this._datadog_events) {
       if (eventName) {
         delete this._datadog_events[eventName]
@@ -213,7 +213,7 @@ function wrapRemoveAllListeners(removeAllListeners) {
   }
 }
 
-function wrapMethod(target, name, wrapper, ...args) {
+function wrapMethod (target, name, wrapper, ...args) {
   if (!target[name] || target[name]._datadog_unbound) return
 
   const original = target[name]
