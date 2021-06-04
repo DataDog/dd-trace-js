@@ -2,6 +2,8 @@
 const path = require('path')
 const { PassThrough } = require('stream')
 
+const nock = require('nock')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const plugin = require('../src')
@@ -17,7 +19,7 @@ const {
 const TESTS = [
   {
     featureName: 'simple.feature',
-    featureSuffix: ':3',
+    featureLineNumber: ':3',
     requireName: 'simple.js',
     testName: 'pass scenario',
     testStatus: 'pass',
@@ -31,7 +33,7 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureSuffix: ':8',
+    featureLineNumber: ':8',
     requireName: 'simple.js',
     testName: 'fail scenario',
     testStatus: 'fail',
@@ -45,7 +47,7 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureSuffix: ':13',
+    featureLineNumber: ':13',
     requireName: 'simple.js',
     testName: 'skip scenario',
     testStatus: 'skip',
@@ -59,19 +61,33 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureSuffix: ':19',
+    featureLineNumber: ':19',
     requireName: 'simple.js',
     testName: 'skip scenario based on tag',
     testStatus: 'skip',
     steps: [{ name: 'datadog', stepStatus: 'skip' }],
     success: true,
     errors: ['skipped', 'skipped']
+  },
+  {
+    featureName: 'simple.feature',
+    featureLineNumber: ':22',
+    requireName: 'simple.js',
+    testName: 'integration scenario',
+    testStatus: 'pass',
+    steps: [
+      { name: 'datadog', stepStatus: 'pass' },
+      { name: 'integration', stepStatus: 'pass' },
+      { name: 'pass', stepStatus: 'pass' }
+    ],
+    success: true,
+    errors: []
   }
 ]
 
 wrapIt()
 
-const runCucumber = (version, Cucumber, requireName, featureName, featureSuffix) => {
+const runCucumber = (version, Cucumber, requireName, featureName, featureLineNumber) => {
   const stdout = new PassThrough()
   const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
   const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
@@ -80,7 +96,7 @@ const runCucumber = (version, Cucumber, requireName, featureName, featureSuffix)
     cucumberJs,
     '--require',
     path.join(__dirname, 'features', requireName),
-    path.join(__dirname, 'features', `${featureName}${featureSuffix}`)
+    path.join(__dirname, 'features', `${featureName}${featureLineNumber}`)
   ]
   const cli = new Cucumber.Cli({
     argv,
@@ -104,19 +120,25 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
-      return agent.load('cucumber').then(() => {
+      // for http integration tests
+      nock('http://test:123')
+        .get('/')
+        .reply(200, 'OK')
+
+      return agent.load(['cucumber', 'http']).then(() => {
         Cucumber = require(`../../../versions/@cucumber/cucumber@${version}`).get()
       })
     })
 
     describe('cucumber', () => {
+
       TESTS.forEach(test => {
         const testFilePath = path.join(__dirname, 'features', test.featureName)
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
         const {
           featureName,
-          featureSuffix,
+          featureLineNumber,
           requireName,
           testName,
           testStatus,
@@ -125,13 +147,16 @@ describe('Plugin', () => {
           errors
         } = test
 
-        describe(`for ${featureName}${featureSuffix}`, () => {
-          it('should create a test span', async () => {
+        describe(`for ${featureName}${featureLineNumber}`, () => {
+          it('should create a test span and spans for integrations', async function () {
+            this.timeout(200000)
             const checkTraces = agent.use(traces => {
               expect(traces.length).to.equal(1)
               const testTrace = traces[0]
-              // number of tests + one test span
-              expect(testTrace.length).to.equal(steps.length + 1)
+              const isIntegrationTest = testName === 'integration scenario'
+              // number of tests + one test span + possibly one http span
+              const numExpectedSpans = steps.length + (isIntegrationTest ? 2 : 1)
+              expect(testTrace.length).to.equal(numExpectedSpans)
               // take the test span
               const testSpan = testTrace.find(span => span.name === 'cucumber.test')
               // having no parent span means there is no span leak from other tests
@@ -150,8 +175,15 @@ describe('Plugin', () => {
               expect(testSpan.type).to.equal('test')
               expect(testSpan.name).to.equal('cucumber.test')
               expect(testSpan.resource).to.equal(testName)
+              if (isIntegrationTest) {
+                const httpSpan = testTrace.find(span => span.name === 'http.request')
+                expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+                expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+                const parentCucumberStep = testTrace.find(span => span.meta['cucumber.step'] === 'integration')
+                expect(httpSpan.parent_id.toString()).to.equal(parentCucumberStep.span_id.toString())
+              }
             })
-            const result = await runCucumber(version, Cucumber, requireName, featureName, featureSuffix)
+            const result = await runCucumber(version, Cucumber, requireName, featureName, featureLineNumber)
             expect(result.success).to.equal(success)
             await checkTraces
           })
@@ -179,7 +211,7 @@ describe('Plugin', () => {
                 ).to.satisfy(err => msg === undefined || err.startsWith(msg))
               })
             })
-            const result = await runCucumber(version, Cucumber, requireName, featureName, featureSuffix)
+            const result = await runCucumber(version, Cucumber, requireName, featureName, featureLineNumber)
             expect(result.success).to.equal(success)
             await checkTraces
           })

@@ -52,6 +52,10 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
           const promise = run.apply(this, arguments)
           promise.then(() => {
             setStatusFromResult(testSpan, this.getWorstStepResult(), TEST_STATUS)
+          }).finally(() => {
+            testSpan.context()._trace.started.forEach((span) => {
+              span.finish()
+            })
           })
           return promise
         }

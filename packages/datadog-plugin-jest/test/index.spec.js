@@ -1,5 +1,4 @@
 'use strict'
-const { expect } = require('chai')
 const nock = require('nock')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
