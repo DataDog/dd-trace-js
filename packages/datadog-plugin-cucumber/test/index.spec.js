@@ -131,7 +131,6 @@ describe('Plugin', () => {
     })
 
     describe('cucumber', () => {
-
       TESTS.forEach(test => {
         const testFilePath = path.join(__dirname, 'features', test.featureName)
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
