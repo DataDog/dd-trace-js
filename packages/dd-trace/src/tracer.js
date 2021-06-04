@@ -13,7 +13,7 @@ const ANALYTICS = tags.ANALYTICS
 const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
-  constructor (config) {
+  constructor(config) {
     super(config)
 
     const Scope = getScope(config.scope)
@@ -23,10 +23,14 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
   }
 
-  trace (name, options, fn) {
-    options = Object.assign({}, {
-      childOf: this.scope().active()
-    }, options)
+  trace(name, options, fn) {
+    options = Object.assign(
+      {},
+      {
+        childOf: this.scope().active()
+      },
+      options
+    )
 
     if (!options.childOf && options.orphanable === false) {
       return fn(null, () => {})
@@ -38,10 +42,12 @@ class DatadogTracer extends Tracer {
 
     try {
       if (fn.length > 1) {
-        return this.scope().activate(span, () => fn(span, err => {
-          addError(span, err)
-          span.finish()
-        }))
+        return this.scope().activate(span, () =>
+          fn(span, (err) => {
+            addError(span, err)
+            span.finish()
+          })
+        )
       }
 
       const result = this.scope().activate(span, () => fn(span))
@@ -49,7 +55,7 @@ class DatadogTracer extends Tracer {
       if (result && typeof result.then === 'function') {
         result.then(
           () => span.finish(),
-          err => {
+          (err) => {
             addError(span, err)
             span.finish()
           }
@@ -66,7 +72,7 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  wrap (name, options, fn) {
+  wrap(name, options, fn) {
     const tracer = this
 
     return function () {
@@ -75,7 +81,11 @@ class DatadogTracer extends Tracer {
         optionsObj = optionsObj.apply(this, arguments)
       }
 
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active()) {
+      if (
+        optionsObj &&
+        optionsObj.orphanable === false &&
+        !tracer.scope().active()
+      ) {
         return fn.apply(this, arguments)
       }
 
@@ -98,23 +108,23 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  setUrl (url) {
+  setUrl(url) {
     this._exporter.setUrl(url)
   }
 
-  scopeManager () {
+  scopeManager() {
     return this._scopeManager
   }
 
-  scope () {
+  scope() {
     return this._scope
   }
 
-  currentSpan () {
+  currentSpan() {
     return this.scope().active()
   }
 
-  getRumData () {
+  getRumData() {
     if (!this._enableGetRumData) {
       return ''
     }
@@ -127,7 +137,7 @@ class DatadogTracer extends Tracer {
   }
 }
 
-function addError (span, error) {
+function addError(span, error) {
   if (error && error instanceof Error) {
     span.addTags({
       'error.type': error.name,
@@ -137,7 +147,7 @@ function addError (span, error) {
   }
 }
 
-function addTags (span, options) {
+function addTags(span, options) {
   const tags = {}
 
   if (options.type) tags[SPAN_TYPE] = options.type
@@ -149,7 +159,7 @@ function addTags (span, options) {
   span.addTags(tags)
 }
 
-function getScopeManager (config) {
+function getScopeManager(config) {
   let ScopeManager
 
   if (config.scope === NOOP) {

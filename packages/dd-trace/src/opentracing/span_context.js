@@ -3,7 +3,7 @@
 const SpanContext = require('opentracing').SpanContext
 
 class DatadogSpanContext extends SpanContext {
-  constructor (props) {
+  constructor(props) {
     super()
 
     props = props || {}
@@ -26,12 +26,24 @@ class DatadogSpanContext extends SpanContext {
     }
   }
 
-  toTraceId () {
-    return this._traceId.toString(10)
+  get traceId() {
+    return this._traceId.toString(10).padStart(32, '0')
   }
 
-  toSpanId () {
+  get spanId() {
     return this._spanId.toString(10)
+  }
+
+  toTraceId() {
+    return this._traceId.toString(10).padStart(32, '0')
+  }
+
+  toSpanId() {
+    return this._spanId.toString(10)
+  }
+
+  getValue(key) {
+    return this._baggageItems[key]
   }
 }
 

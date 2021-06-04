@@ -3,31 +3,33 @@
 const NoopSpan = require('./noop/span')
 
 const _default = {
-  debug: msg => console.debug(msg), /* eslint-disable-line no-console */
-  info: msg => console.info(msg), /* eslint-disable-line no-console */
-  warn: msg => console.warn(msg), /* eslint-disable-line no-console */
-  error: msg => console.error(msg) /* eslint-disable-line no-console */
+  debug: (msg) => console.debug(msg) /* eslint-disable-line no-console */,
+  info: (msg) => console.info(msg) /* eslint-disable-line no-console */,
+  warn: (msg) => console.warn(msg) /* eslint-disable-line no-console */,
+  error: (msg) => console.error(msg) /* eslint-disable-line no-console */
 }
 
 // based on: https://github.com/trentm/node-bunyan#levels
 const _logLevels = {
-  'debug': 20,
-  'info': 30,
-  'warn': 40,
-  'error': 50
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50
 }
 
 const _defaultLogLevel = 'debug'
 
 const _checkLogLevel = (logLevel) => {
   if (logLevel && typeof logLevel === 'string') {
-    return _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
+    return (
+      _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
+    )
   }
 
   return _logLevels[_defaultLogLevel]
 }
 
-const memoize = func => {
+const memoize = (func) => {
   const cache = {}
   const memoized = function (key) {
     if (!cache[key]) {
@@ -40,11 +42,11 @@ const memoize = func => {
   return memoized
 }
 
-function processMsg (msg) {
+function processMsg(msg) {
   return typeof msg === 'function' ? msg() : msg
 }
 
-function withNoop (fn) {
+function withNoop(fn) {
   if (!log._tracer) {
     fn()
   } else {
@@ -53,19 +55,23 @@ function withNoop (fn) {
 }
 
 const log = {
-  _isLogLevelEnabled (level) {
+  _isLogLevelEnabled(level) {
     return _logLevels[level] >= this._logLevel
   },
 
-  use (logger) {
-    if (logger && logger.debug instanceof Function && logger.error instanceof Function) {
+  use(logger) {
+    if (
+      logger &&
+      logger.debug instanceof Function &&
+      logger.error instanceof Function
+    ) {
       this._logger = logger
     }
 
     return this
   },
 
-  toggle (enabled, logLevel, tracer) {
+  toggle(enabled, logLevel, tracer) {
     this._enabled = enabled
     this._logLevel = _checkLogLevel(logLevel)
     this._tracer = tracer
@@ -73,14 +79,14 @@ const log = {
     return this
   },
 
-  _noopSpan () {
+  _noopSpan() {
     if (!this.__noopSpan) {
       this.__noopSpan = new NoopSpan(this._tracer)
     }
     return this.__noopSpan
   },
 
-  reset () {
+  reset() {
     this._logger = _default
     this._enabled = false
     delete this._tracer
@@ -94,7 +100,7 @@ const log = {
     return this
   },
 
-  debug (message) {
+  debug(message) {
     if (this._enabled && this._isLogLevelEnabled('debug')) {
       withNoop(() => this._logger.debug(processMsg(message)))
     }
@@ -102,7 +108,7 @@ const log = {
     return this
   },
 
-  info (message) {
+  info(message) {
     if (!this._logger.info) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('info')) {
       withNoop(() => this._logger.info(processMsg(message)))
@@ -111,7 +117,7 @@ const log = {
     return this
   },
 
-  warn (message) {
+  warn(message) {
     if (!this._logger.warn) return this.debug(message)
     if (this._enabled && this._isLogLevelEnabled('warn')) {
       withNoop(() => this._logger.warn(processMsg(message)))
@@ -120,7 +126,7 @@ const log = {
     return this
   },
 
-  error (err) {
+  error(err) {
     if (this._enabled && this._isLogLevelEnabled('error')) {
       if (err instanceof Function) {
         err = err()
@@ -142,7 +148,7 @@ const log = {
     return this
   },
 
-  deprecate (code, message) {
+  deprecate(code, message) {
     return this._deprecate(code, message)
   }
 }

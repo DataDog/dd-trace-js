@@ -1,6 +1,7 @@
 'use strict'
 
 const BaseTracer = require('opentracing').Tracer
+const opentelemetry = require('@opentelemetry/api')
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
@@ -10,22 +11,27 @@ const profiler = require('./profiler')
 const log = require('./log')
 const { setStartupLogInstrumenter } = require('./startup-log')
 const analyticsSampler = require('./analytics_sampler')
+const NoopSpan = require('./noop/span')
 
 const noop = new NoopTracer()
 
 class Tracer extends BaseTracer {
-  constructor () {
+  constructor() {
     super()
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
-    this._deprecate = method => log.deprecate(`tracer.${method}`, [
-      `tracer.${method}() is deprecated.`,
-      'Please use tracer.startSpan() and tracer.scope() instead.',
-      'See: https://datadog.github.io/dd-trace-js/#manual-instrumentation.'
-    ].join(' '))
+    this._deprecate = (method) =>
+      log.deprecate(
+        `tracer.${method}`,
+        [
+          `tracer.${method}() is deprecated.`,
+          'Please use tracer.startSpan() and tracer.scope() instead.',
+          'See: https://datadog.github.io/dd-trace-js/#manual-instrumentation.'
+        ].join(' ')
+      )
   }
 
-  init (options) {
+  init(options) {
     if (this._tracer === noop) {
       try {
         const config = new Config(options)
@@ -52,16 +58,16 @@ class Tracer extends BaseTracer {
         log.error(e)
       }
     }
-
+    this.register()
     return this
   }
 
-  use () {
+  use() {
     this._instrumenter.use.apply(this._instrumenter, arguments)
     return this
   }
 
-  trace (name, options, fn) {
+  trace(name, options, fn) {
     if (!fn) {
       fn = options
       options = {}
@@ -74,7 +80,7 @@ class Tracer extends BaseTracer {
     return this._tracer.trace(name, options, fn)
   }
 
-  wrap (name, options, fn) {
+  wrap(name, options, fn) {
     if (!fn) {
       fn = options
       options = {}
@@ -87,48 +93,72 @@ class Tracer extends BaseTracer {
     return this._tracer.wrap(name, options, fn)
   }
 
-  setUrl () {
+  setUrl() {
     this._tracer.setUrl.apply(this._tracer, arguments)
     return this
   }
 
-  startSpan () {
-    return this._tracer.startSpan.apply(this._tracer, arguments)
+  startSpan(name, options = {}, parentSpan) {
+    parentSpan = parentSpan || this.scope().active()
+    return this._tracer.startSpan.apply(this._tracer, [
+      name,
+      {
+        childOf: !options || !options.root ? parentSpan : undefined,
+        ...options
+      }
+    ])
   }
 
-  inject () {
+  inject() {
     return this._tracer.inject.apply(this._tracer, arguments)
   }
 
-  extract () {
+  extract() {
     return this._tracer.extract.apply(this._tracer, arguments)
   }
 
-  scopeManager () {
+  scopeManager() {
     this._deprecate('scopeManager')
     return this._tracer.scopeManager.apply(this._tracer, arguments)
   }
 
-  scope () {
+  scope() {
     return this._tracer.scope.apply(this._tracer, arguments)
   }
 
-  currentSpan () {
+  currentSpan() {
     this._deprecate('currentSpan')
     return this._tracer.currentSpan.apply(this._tracer, arguments)
   }
 
-  bind (callback) {
+  addSpanProcessor() {
+    return this._tracer.addSpanProcessor.apply(this._tracer, arguments)
+  }
+
+  bind(callback) {
     this._deprecate('bind')
     return callback
   }
 
-  bindEmitter () {
+  bindEmitter() {
     this._deprecate('bindEmitter')
   }
 
-  getRumData () {
+  getRumData() {
     return this._tracer.getRumData.apply(this._tracer, arguments)
+  }
+
+  register() {
+    opentelemetry.trace.setGlobalTracerProvider(this)
+    opentelemetry.context.setGlobalContextManager({
+      active: () => {
+        const activeSpan = this.scope().active()
+        return activeSpan || new NoopSpan(this, null)
+      },
+      with: (span, fn, ...args) => {
+        return this.scope().activate(span, () => fn.apply(...args))
+      }
+    })
   }
 }
 

@@ -5,22 +5,22 @@ const NoopSpanContext = require('../noop/span_context')
 const id = require('../id')
 
 class NoopSpan extends Span {
-  constructor (tracer, parent) {
+  constructor(tracer, parent) {
     super()
 
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent)
   }
 
-  _context () {
+  _context() {
     return this._noopContext
   }
 
-  _tracer () {
+  _tracer() {
     return this._noopTracer
   }
 
-  _createContext (parent) {
+  _createContext(parent) {
     const spanId = id()
 
     if (parent) {
@@ -38,6 +38,15 @@ class NoopSpan extends Span {
         spanId
       })
     }
+  }
+  setValue() {
+    return this.setBaggageItem.apply(this, arguments)
+  }
+  getValue() {
+    return this.getBaggageItem.apply(this, arguments)
+  }
+  deleteValue() {
+    return this.deleteValue.apply(this, arguments)
   }
 }
 

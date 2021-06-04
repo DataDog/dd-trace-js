@@ -1,5 +1,5 @@
 'use strict'
-
+const format = require('../../format')
 const log = require('../../log')
 
 const TRACE_PREFIX = '{"traces":[['
@@ -8,7 +8,8 @@ const TRACE_FORMAT_OVERHEAD = TRACE_PREFIX.length + TRACE_SUFFIX.length
 const MAX_SIZE = 64 * 1024 // 64kb
 
 class LogExporter {
-  export (spans) {
+  export(spans) {
+    spans = spans.map(format)
     log.debug(() => `Adding trace to queue: ${JSON.stringify(spans)}`)
 
     let size = TRACE_FORMAT_OVERHEAD
@@ -33,7 +34,7 @@ class LogExporter {
     }
   }
 
-  _printSpans (queue) {
+  _printSpans(queue) {
     let logLine = TRACE_PREFIX
     let firstTrace = true
     for (const spanStr of queue) {
