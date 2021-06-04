@@ -173,11 +173,12 @@ describe('Plugin', () => {
             }).then(done, done)
           } else if (test.fileName === 'mocha-test-integration-http.js') {
             agent.use(trace => {
-              const httpSpan = trace[0].find(span => span.type === 'http')
+              const httpSpan = trace[0].find(span => span.name === 'http.request')
               const testSpan = trace[0].find(span => span.type === 'test')
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
               expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
               expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(testSpan.meta).to.contain({
                 language: 'javascript',
