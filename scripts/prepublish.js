@@ -24,9 +24,11 @@ const branch = exec.pipe(`git symbolic-ref --short HEAD`)
 
 console.log(branch)
 
-const headers = CIRCLE_TOKEN ? {
-  'circle-token': CIRCLE_TOKEN
-} : {}
+const headers = CIRCLE_TOKEN
+  ? {
+    'circle-token': CIRCLE_TOKEN
+  }
+  : {}
 const client = axios.create({
   baseURL: 'https://circleci.com/api/v2/',
   timeout: 5000,
@@ -36,7 +38,8 @@ const client = axios.create({
 const fetch = (url, options) => {
   console.log(`GET ${url}`)
 
-  return client.get(url, options)
+  return client
+    .get(url, options)
     .catch(() => client.get(url, options))
     .catch(() => client.get(url, options))
 }
@@ -48,96 +51,89 @@ getPipeline()
   .then(downloadArtifacts)
   .then(validatePrebuilds)
   .then(extractPrebuilds)
-  .catch(e => {
+  .catch((e) => {
     process.exitCode = 1
     console.error(e)
   })
 
 function getPipeline () {
-  return fetch(`project/github/DataDog/dd-trace-js/pipeline?branch=${branch}`)
-    .then(response => {
-      const pipeline = response.data.items
-        .filter(item => item.trigger.type !== 'schedule')
-        .find(item => item.vcs.revision === revision)
+  return fetch(`project/github/DataDog/dd-trace-js/pipeline?branch=${branch}`).then((response) => {
+    const pipeline = response.data.items
+      .filter((item) => item.trigger.type !== 'schedule')
+      .find((item) => item.vcs.revision === revision)
 
-      if (!pipeline) {
-        throw new Error(`Unable to find CircleCI pipeline for ${branch}@${revision}.`)
-      }
+    if (!pipeline) {
+      throw new Error(`Unable to find CircleCI pipeline for ${branch}@${revision}.`)
+    }
 
-      return pipeline
-    })
+    return pipeline
+  })
 }
 
 function getWorkflow (pipeline) {
-  return fetch(`pipeline/${pipeline.id}/workflow`)
-    .then(response => {
-      const workflows = response.data.items
-        .sort((a, b) => (a.stopped_at < b.stopped_at) ? 1 : -1)
-      const workflow = workflows.find(workflow => workflow.name === 'prebuild')
+  return fetch(`pipeline/${pipeline.id}/workflow`).then((response) => {
+    const workflows = response.data.items.sort((a, b) => (a.stopped_at < b.stopped_at ? 1 : -1))
+    const workflow = workflows.find((workflow) => workflow.name === 'prebuild')
 
-      if (!workflow) {
-        throw new Error(`Unable to find CircleCI workflow for pipeline ${pipeline.id}.`)
-      }
+    if (!workflow) {
+      throw new Error(`Unable to find CircleCI workflow for pipeline ${pipeline.id}.`)
+    }
 
-      if (!workflow.stopped_at) {
-        throw new Error(`Workflow ${workflow.id} is still running for pipeline ${pipeline.id}.`)
-      }
+    if (!workflow.stopped_at) {
+      throw new Error(`Workflow ${workflow.id} is still running for pipeline ${pipeline.id}.`)
+    }
 
-      if (workflow.status !== 'success') {
-        throw new Error(`Aborting because CircleCI workflow ${workflow.id} did not succeed.`)
-      }
+    if (workflow.status !== 'success') {
+      throw new Error(`Aborting because CircleCI workflow ${workflow.id} did not succeed.`)
+    }
 
-      return workflow
-    })
+    return workflow
+  })
 }
 
 function getPrebuildsJob (workflow) {
-  return fetch(`workflow/${workflow.id}/job`)
-    .then(response => {
-      const job = response.data.items
-        .find(item => item.name === 'prebuilds')
+  return fetch(`workflow/${workflow.id}/job`).then((response) => {
+    const job = response.data.items.find((item) => item.name === 'prebuilds')
 
-      if (!job) {
-        throw new Error(`Missing prebuild jobs in workflow ${workflow.id}.`)
-      }
+    if (!job) {
+      throw new Error(`Missing prebuild jobs in workflow ${workflow.id}.`)
+    }
 
-      return job
-    })
+    return job
+  })
 }
 
 function getPrebuildArtifacts (job) {
-  return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`)
-    .then(response => {
-      const artifacts = response.data.items
-        .filter(artifact => /\/prebuilds\.tgz/.test(artifact.url))
+  return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`).then((response) => {
+    const artifacts = response.data.items.filter((artifact) => /\/prebuilds\.tgz/.test(artifact.url))
 
-      if (artifacts.length === 0) {
-        throw new Error(`Missing artifacts in job ${job.job_number}.`)
-      }
+    if (artifacts.length === 0) {
+      throw new Error(`Missing artifacts in job ${job.job_number}.`)
+    }
 
-      return artifacts
-    })
+    return artifacts
+  })
 }
 
 function downloadArtifacts (artifacts) {
-  const files = artifacts.map(artifact => artifact.url)
+  const files = artifacts.map((artifact) => artifact.url)
 
   return Promise.all(files.map(downloadArtifact))
 }
 
 function downloadArtifact (file) {
-  return fetch(file, { responseType: 'stream' })
-    .then(response => {
-      const parts = file.split('/')
-      const basename = os.tmpdir()
-      const filename = parts.slice(-1)[0]
+  return fetch(file, { responseType: 'stream' }).then((response) => {
+    const parts = file.split('/')
+    const basename = os.tmpdir()
+    const filename = parts.slice(-1)[0]
 
-      return new Promise((resolve, reject) => {
-        response.data.pipe(fs.createWriteStream(path.join(basename, filename)))
-          .on('finish', () => resolve())
-          .on('error', reject)
-      })
+    return new Promise((resolve, reject) => {
+      response.data
+        .pipe(fs.createWriteStream(path.join(basename, filename)))
+        .on('finish', () => resolve())
+        .on('error', reject)
     })
+  })
 }
 
 function validatePrebuilds () {

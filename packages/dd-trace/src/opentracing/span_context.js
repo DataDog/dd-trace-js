@@ -26,16 +26,8 @@ class DatadogSpanContext extends SpanContext {
     }
   }
 
-  get traceId () {
-    return this._traceId.toString(10).padStart(32, '0')
-  }
-
-  get spanId () {
-    return this._spanId.toString(10)
-  }
-
   toTraceId () {
-    return this._traceId.toString(10).padStart(32, '0')
+    return this._traceId.toString(10)
   }
 
   toSpanId () {

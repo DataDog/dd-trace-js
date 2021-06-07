@@ -43,11 +43,6 @@ class DatadogSpan extends Span {
     if (debug) {
       this._handle = metrics.track(this)
     }
-    this._processor.onStart(this, this._spanContext)
-  }
-
-  get spanContext () {
-    return this.context()
   }
 
   get kind () {
@@ -75,64 +70,10 @@ class DatadogSpan extends Span {
     return this._status
   }
 
-  setStatus (status) {
-    if (this.ended) return this
-    this._status = status
-    return this
-  }
-
-  get events () {
-    return []
-  }
-
-  get ended () {
-    return this._duration !== undefined
-  }
-
-  get resource () {
-    // retun this._parentTracer.resource
-    return {
-      attributes: {}
-    }
-  }
-
-  get links () {
-    return []
-  }
-
-  get startTime () {
-    return numberToHrtime(this._startTime)
-  }
-
-  get duration () {
-    return numberToHrtime(this._duration)
-  }
-
-  get name () {
-    const spanContext = this.context()
-    return spanContext._name
-  }
-
-  get parentSpanId () {
-    const spanContext = this.context()
-    return (
-      spanContext._parentId &&
-      spanContext._parentId.toString(10).padStart(32, '0')
-    )
-  }
-
-  get attributes () {
-    const spanContext = this.context()
-    return spanContext._tags
-  }
-
   toString () {
     const spanContext = this.context()
     const resourceName = spanContext._tags['resource.name']
-    const resource =
-      resourceName && resourceName.length > 100
-        ? `${resourceName.substring(0, 97)}...`
-        : resourceName
+    const resource = resourceName && resourceName.length > 100 ? `${resourceName.substring(0, 97)}...` : resourceName
     const json = JSON.stringify({
       traceId: spanContext.traceId,
       spanId: spanContext._spanId,
@@ -222,18 +163,7 @@ class DatadogSpan extends Span {
     if (this._debug) {
       this._handle.finish()
     }
-    if (hasError(this._spanContext._tags)) {
-      this.setStatus({
-        code: SPAN_STATUS_CODE.ERROR,
-        message: this._spanContext._tags['error.message']
-      })
-    } else {
-      this.setStatus({
-        code: SPAN_STATUS_CODE.OK
-      })
-    }
-
-    this._processor.onEnd(this)
+    this._processor.process(this)
   }
 
   setValue () {
@@ -248,21 +178,3 @@ class DatadogSpan extends Span {
 }
 
 module.exports = DatadogSpan
-
-const NANOSECOND_DIGITS = 9
-const SECOND_TO_NANOSECONDS = Math.pow(10, NANOSECOND_DIGITS)
-
-function numberToHrtime (epochMillis) {
-  const epochSeconds = epochMillis / 1000
-  // Decimals only.
-  const seconds = Math.trunc(epochSeconds)
-  // Round sub-nanosecond accuracy to nanosecond.
-  const nanos =
-    Number((epochSeconds - seconds).toFixed(NANOSECOND_DIGITS)) *
-    SECOND_TO_NANOSECONDS
-  return [seconds, nanos]
-}
-
-function hasError (tags) {
-  return tags['error.name'] || tags['error.key'] || tags['error.stack']
-}

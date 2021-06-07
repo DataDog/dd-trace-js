@@ -100,12 +100,8 @@ class Tracer extends BaseTracer {
     return this
   }
 
-  startSpan (name, options = {}, parentSpan) {
-    parentSpan = parentSpan || this.scope().active()
-    return this._tracer.startSpan(name, {
-      childOf: !options || !options.root ? parentSpan : undefined,
-      ...options
-    })
+  startSpan () {
+    return this._tracer.startSpan.apply(this._tracer, arguments)
   }
 
   inject () {
