@@ -11,10 +11,12 @@ describe('pkg', () => {
   if (os.platform() !== 'win32') {
     describe('in pre-require', () => {
       it('should load the package.json correctly', () => {
-        const pkg = JSON.parse(execSync(`node --require ./pkg-loader.js -e ""`, {
-          cwd: __dirname
-        }).toString())
-        expect(pkg.name).to.equal('dd-trace')
+        const pkg = JSON.parse(
+          execSync(`node --require ./pkg-loader.js -e ""`, {
+            cwd: __dirname
+          }).toString()
+        )
+        expect(pkg.name).to.equal('@chatlayer/tracer')
       })
     })
   }

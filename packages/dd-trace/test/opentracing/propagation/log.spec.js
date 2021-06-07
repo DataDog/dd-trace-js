@@ -16,10 +16,8 @@ describe('LogPropagator', () => {
       version: '1.0.0'
     })
     log = {
-      dd: {
-        trace_id: '123',
-        span_id: '18446744073709551160' // -456 casted to uint64
-      }
+      trace_id: '123',
+      span_id: '18446744073709551160' // -456 casted to uint64
     }
   })
 
@@ -32,10 +30,8 @@ describe('LogPropagator', () => {
       })
 
       propagator.inject(spanContext, carrier)
-
-      expect(carrier).to.have.property('dd')
-      expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier).to.have.property('trace_id', '123')
+      expect(carrier).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
     })
 
     it('should inject the global context into the carrier', () => {
@@ -58,10 +54,12 @@ describe('LogPropagator', () => {
       const carrier = log
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('-456', 10)
-      }))
+      expect(spanContext).to.deep.equal(
+        new SpanContext({
+          traceId: id('123', 10),
+          spanId: id('-456', 10)
+        })
+      )
     })
 
     it('should return null if the carrier does not contain a trace', () => {

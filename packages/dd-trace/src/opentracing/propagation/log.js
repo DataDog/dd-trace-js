@@ -11,6 +11,7 @@ class LogPropagator {
   inject (spanContext, carrier) {
     if (!carrier) return
 
+    carrier.dd = {}
     if (spanContext) {
       // github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md
       carrier.trace_id = spanContext.toTraceId()

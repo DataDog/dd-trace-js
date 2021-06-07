@@ -44,7 +44,7 @@ describe('Tracer', () => {
 
   describe('trace', () => {
     it('should run the callback with a new span', () => {
-      tracer.trace('name', {}, span => {
+      tracer.trace('name', {}, (span) => {
         expect(span).to.be.instanceof(Span)
         expect(span.context()._name).to.equal('name')
       })
@@ -60,7 +60,7 @@ describe('Tracer', () => {
         }
       }
 
-      tracer.trace('name', options, span => {
+      tracer.trace('name', options, (span) => {
         expect(span).to.be.instanceof(Span)
         expect(span.context()._tags).to.include(options.tags)
         expect(span.context()._tags).to.include({
@@ -72,13 +72,13 @@ describe('Tracer', () => {
     })
 
     it('should support analytics', () => {
-      tracer.trace('name', { analytics: 0.5 }, span => {
+      tracer.trace('name', { analytics: 0.5 }, (span) => {
         expect(span.context()._tags).to.have.property(ANALYTICS, 0.5)
       })
     })
 
     it('should activate the span', () => {
-      tracer.trace('name', {}, span => {
+      tracer.trace('name', {}, (span) => {
         expect(tracer.scope().active()).to.equal(span)
       })
     })
@@ -87,7 +87,7 @@ describe('Tracer', () => {
       const childOf = tracer.startSpan('parent')
 
       tracer.scope().activate(childOf, () => {
-        tracer.trace('name', {}, span => {
+        tracer.trace('name', {}, (span) => {
           expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
@@ -98,14 +98,14 @@ describe('Tracer', () => {
       const childOf = tracer.startSpan('parent')
 
       tracer.scope().activate(root, () => {
-        tracer.trace('name', { childOf }, span => {
+        tracer.trace('name', { childOf }, (span) => {
           expect(span.context()._parentId.toString(10)).to.equal(childOf.context().toSpanId())
         })
       })
     })
 
     it('should return the value from the callback', () => {
-      const result = tracer.trace('name', {}, span => 'test')
+      const result = tracer.trace('name', {}, (span) => 'test')
 
       expect(result).to.equal('test')
     })
@@ -126,7 +126,7 @@ describe('Tracer', () => {
       let tags
 
       try {
-        tracer.trace('name', {}, _span => {
+        tracer.trace('name', {}, (_span) => {
           span = _span
           tags = span.context()._tags
           sinon.spy(span, 'finish')
@@ -185,16 +185,16 @@ describe('Tracer', () => {
     })
 
     describe('with a callback returning a promise', () => {
-      it('should wait for the promise to resolve before finishing the span', done => {
+      it('should wait for the promise to resolve before finishing the span', (done) => {
         const deferred = {}
-        const promise = new Promise(resolve => {
+        const promise = new Promise((resolve) => {
           deferred.resolve = resolve
         })
 
         let span
 
         tracer
-          .trace('name', {}, _span => {
+          .trace('name', {}, (_span) => {
             span = _span
             sinon.spy(span, 'finish')
             return promise
@@ -210,18 +210,18 @@ describe('Tracer', () => {
         deferred.resolve()
       })
 
-      it('should handle rejected promises', done => {
+      it('should handle rejected promises', (done) => {
         let span
         let tags
 
         tracer
-          .trace('name', {}, _span => {
+          .trace('name', {}, (_span) => {
             span = _span
             tags = span.context()._tags
             sinon.spy(span, 'finish')
             return Promise.reject(new Error('boom'))
           })
-          .catch(e => {
+          .catch((e) => {
             expect(span.finish).to.have.been.called
             expect(tags).to.include({
               'error.type': e.name,
@@ -293,36 +293,6 @@ describe('Tracer', () => {
     })
   })
 
-  describe('getRumData', () => {
-    beforeEach(() => {
-      const now = Date.now()
-      sinon.stub(Date, 'now').returns(now)
-    })
-
-    afterEach(() => {
-      Date.now.restore()
-    })
-
-    it('should be disabled by default', () => {
-      tracer.trace('getRumData', {}, () => {
-        expect(tracer.getRumData()).to.equal('')
-      })
-    })
-
-    it('should return correct string', () => {
-      tracer._enableGetRumData = true
-      tracer.trace('getRumData', {}, () => {
-        const data = tracer.getRumData()
-        const time = Date.now()
-        const re = /<meta name="dd-trace-id" content="([\d\w]+)" \/><meta name="dd-trace-time" content="(\d+)" \/>/
-        const [, traceId, traceTime] = re.exec(data)
-        const span = tracer.scope().active().context()
-        expect(traceId).to.equal(span.toTraceId())
-        expect(traceTime).to.equal(time.toString())
-      })
-    })
-  })
-
   describe('wrap', () => {
     it('should return a new function that automatically calls tracer.trace()', () => {
       const it = {}
@@ -344,30 +314,34 @@ describe('Tracer', () => {
       expect(result).to.equal('test')
     })
 
-    it('should wait for the callback to be called before finishing the span', done => {
-      const fn = tracer.wrap('name', {}, sinon.spy(function (cb) {
-        const span = tracer.scope().active()
+    it('should wait for the callback to be called before finishing the span', (done) => {
+      const fn = tracer.wrap(
+        'name',
+        {},
+        sinon.spy(function (cb) {
+          const span = tracer.scope().active()
 
-        sinon.spy(span, 'finish')
+          sinon.spy(span, 'finish')
 
-        setImmediate(() => {
-          expect(span.finish).to.not.have.been.called
+          setImmediate(() => {
+            expect(span.finish).to.not.have.been.called
+          })
+
+          setImmediate(() => cb())
+
+          setImmediate(() => {
+            expect(span.finish).to.have.been.called
+            done()
+          })
         })
-
-        setImmediate(() => cb())
-
-        setImmediate(() => {
-          expect(span.finish).to.have.been.called
-          done()
-        })
-      }))
+      )
 
       sinon.spy(tracer, 'trace')
 
       fn(() => {})
     })
 
-    it('should handle rejected promises', done => {
+    it('should handle rejected promises', (done) => {
       const fn = tracer.wrap('name', {}, (cb) => cb())
       const catchHandler = sinon.spy(({ message }) => expect(message).to.equal('boom'))
 
@@ -493,7 +467,11 @@ describe('Tracer', () => {
 
     describe('when the options object is a function returning a falsy value', () => {
       it('should trace', () => {
-        const fn = tracer.wrap('name', () => false, () => {})
+        const fn = tracer.wrap(
+          'name',
+          () => false,
+          () => {}
+        )
 
         sinon.stub(tracer, 'trace').callsFake((_, options) => {
           expect(options).to.equal(false)

@@ -1,15 +1,11 @@
 'use strict'
-const format = require('../../format')
 const URL = require('url').URL
 const log = require('../../log')
 const Writer = require('./writer')
 const Scheduler = require('./scheduler')
 
 class AgentExporter {
-  constructor (
-    { url, hostname, port, flushInterval, lookup, protocolVersion },
-    prioritySampler
-  ) {
+  constructor ({ url, hostname, port, flushInterval, lookup, protocolVersion }, prioritySampler) {
     this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
     this._writer = new Writer({
       url: this._url,
@@ -35,7 +31,7 @@ class AgentExporter {
   }
 
   export (spans) {
-    this._writer.append(spans.map(format))
+    this._writer.append(spans)
 
     if (!this._scheduler) {
       this._writer.flush()
