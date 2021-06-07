@@ -9,7 +9,7 @@ class JaegerExporterProxy {
       host: hostname,
       port,
       serviceName: service,
-      endpoint: url.toString()
+      endpoint: this._url.toString()
     })
     // in the DD implementation
     // the batching resposability belongs in the exporter
