@@ -23,3 +23,8 @@ Feature: Datadog integration
     Given datadog
     When integration
     Then pass
+
+  Scenario: integration db scenario
+    Given datadog
+    When db
+    Then pass

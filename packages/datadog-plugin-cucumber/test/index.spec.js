@@ -78,6 +78,19 @@ const TESTS = [
     steps: [
       { name: 'datadog', stepStatus: 'pass' },
       { name: 'integration', stepStatus: 'pass' },
+    ],
+    success: true,
+    errors: []
+  },
+  {
+    featureName: 'simple.feature',
+    featureLineNumber: ':27',
+    requireName: 'simple.js',
+    testName: 'integration db scenario',
+    testStatus: 'pass',
+    steps: [
+      { name: 'datadog', stepStatus: 'pass' },
+      { name: 'db', stepStatus: 'pass' },
       { name: 'pass', stepStatus: 'pass' }
     ],
     success: true,
@@ -125,7 +138,7 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['cucumber', 'http']).then(() => {
+      return agent.load(['cucumber', 'http', 'pg']).then(() => {
         Cucumber = require(`../../../versions/@cucumber/cucumber@${version}`).get()
       })
     })
@@ -149,14 +162,16 @@ describe('Plugin', () => {
         describe(`for ${featureName}${featureLineNumber}`, () => {
           it('should create a test span and spans for integrations', async function () {
             const checkTraces = agent.use(traces => {
+              const isIntegrationTestDatabase = testName === 'integration db scenario'
               expect(traces.length).to.equal(1)
               const testTrace = traces[0]
               const isIntegrationTest = testName === 'integration scenario'
               // number of tests + one test span + possibly one http span
-              const numExpectedSpans = steps.length + (isIntegrationTest ? 2 : 1)
+              const numExpectedSpans = steps.length + ((isIntegrationTest || isIntegrationTestDatabase) ? 2 : 1)
               expect(testTrace.length).to.equal(numExpectedSpans)
               // take the test span
               const testSpan = testTrace.find(span => span.name === 'cucumber.test')
+
               // having no parent span means there is no span leak from other tests
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
@@ -179,6 +194,13 @@ describe('Plugin', () => {
                 expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
                 const parentCucumberStep = testTrace.find(span => span.meta['cucumber.step'] === 'integration')
                 expect(httpSpan.parent_id.toString()).to.equal(parentCucumberStep.span_id.toString())
+              }
+              if (isIntegrationTestDatabase) {
+                const databaseSpan = testTrace.find(span => span.name === 'pg.query')
+                const parentCucumberStep = testTrace.find(span => span.meta['cucumber.step'] === 'db')
+                expect(databaseSpan.parent_id.toString()).to.equal(parentCucumberStep.span_id.toString())
+                expect(databaseSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+                expect(databaseSpan.resource).to.equal('SELECT $1::text as message')
               }
             })
             const result = await runCucumber(version, Cucumber, requireName, featureName, featureLineNumber)

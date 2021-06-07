@@ -30,6 +30,18 @@ When('integration', function () {
   })
 })
 
+When('db', () => {
+  const { Client } = require('../../../../versions/pg').get()
+  const client = new Client({
+    user: 'postgres',
+    password: 'postgres',
+    database: 'postgres'
+  })
+  return client.connect().then(() => {
+    return client.query('SELECT $1::text as message', ['Hello world!'])
+  })
+})
+
 Then('pass', function () {
   expect(this.datadog).to.eql('datadog')
 })
