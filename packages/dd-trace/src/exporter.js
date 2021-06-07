@@ -18,6 +18,9 @@ module.exports = (name) => {
     case exporters.AGENT:
       return AgentExporter
     default:
-      return inAWSLambda && !usingLambdaExtension ? LogExporter : JaegerExporter
+      if (inAWSLambda) {
+        return !usingLambdaExtension ? LogExporter : AgentExporter
+      }
+      return JaegerExporter
   }
 }

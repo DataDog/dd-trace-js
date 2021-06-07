@@ -4,6 +4,7 @@ const fs = require('fs')
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
 const JaegerExporter = require('../src/exporters/jaeger')
+
 describe('exporter', () => {
   let env
 
