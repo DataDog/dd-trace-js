@@ -3,13 +3,13 @@ const { BatchSpanProcessor } = require('@opentelemetry/tracing')
 const URL = require('url').URL
 
 class JaegerExporterProxy {
-  constructor({ url, hostname, port, service, flushInterval }, sampler) {
+  constructor ({ url, hostname, port, service, flushInterval }, sampler) {
     this._url = url ? new URL(url) : new URL(`http://${hostname || 'localhost'}:${port}`)
     this._exporter = new JaegerExporter({
       host: hostname,
       port,
       serviceName: service,
-      endpoint: url.toString()
+      endpoint: this._url.toString()
     })
     // in the DD implementation
     // the batching resposability belongs in the exporter
@@ -26,13 +26,13 @@ class JaegerExporterProxy {
     })
   }
 
-  export(spans) {
+  export (spans) {
     spans.map(formatSpan).forEach((span) => this._processor.onEnd(span))
   }
 }
 module.exports = JaegerExporterProxy
 
-function formatSpan(span) {
+function formatSpan (span) {
   const context = span.context()
   return {
     spanContext: {
