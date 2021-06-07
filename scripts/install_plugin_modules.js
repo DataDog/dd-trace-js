@@ -28,9 +28,9 @@ function assertVersions () {
     names = names.filter(name => ~filter.indexOf(name))
   }
 
-  if (process.env.hasOwnProperty('INTEGRATIONS')) {
-    const integrations = process.env.INTEGRATIONS.split('|')
-    names = names.concat(integrations)
+  if (process.env.hasOwnProperty('TEST_DEPENDENCIES')) {
+    const testDependencies = process.env.TEST_DEPENDENCIES.split('|')
+    names = names.concat(testDependencies)
   }
 
   const internals = names

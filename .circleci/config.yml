@@ -851,8 +851,7 @@ jobs:
         environment:
           - SERVICES=postgres
           - PLUGINS=mocha
-          - INTEGRATIONS=pg
-          - image: node:8
+          - TEST_DEPENDENCIES=pg
       - image: postgres:9.5
         environment:
           - POSTGRES_PASSWORD=postgres
