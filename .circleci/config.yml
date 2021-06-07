@@ -851,6 +851,7 @@ jobs:
         environment:
           - SERVICES=postgres
           - PLUGINS=mocha
+          - INTEGRATIONS=pg
           - image: node:8
       - image: postgres:9.5
         environment:

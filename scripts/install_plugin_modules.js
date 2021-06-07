@@ -28,6 +28,11 @@ function assertVersions () {
     names = names.filter(name => ~filter.indexOf(name))
   }
 
+  if (process.env.hasOwnProperty('INTEGRATIONS')) {
+    const integrations = process.env.INTEGRATIONS.split('|')
+    names = names.concat(integrations)
+  }
+
   const internals = names
     .map(key => plugins[key])
     .reduce((prev, next) => prev.concat(next), [])

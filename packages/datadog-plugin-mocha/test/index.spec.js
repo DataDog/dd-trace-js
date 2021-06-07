@@ -200,11 +200,9 @@ describe('Plugin', () => {
               const testSpan = trace[0].find(span => span.type === 'test')
               const databaseSpan = trace[0].find(span => span.name === 'pg.query')
 
-              console.log('testSpan.meta', testSpan.meta)
-
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-              // expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
+              expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
               expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-integration-db can do integration tests with db')
               expect(databaseSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(databaseSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
