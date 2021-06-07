@@ -14,9 +14,6 @@ const title = require('./helpers/title')
 
 const { CIRCLE_TOKEN } = process.env
 
-// skip this for Chatlayer
-return 0
-
 title(`Downloading and compiling files for release.`)
 
 const revision = exec.pipe(`git rev-parse HEAD`)
@@ -29,8 +26,8 @@ console.log(branch)
 
 const headers = CIRCLE_TOKEN
   ? {
-      'circle-token': CIRCLE_TOKEN
-    }
+    'circle-token': CIRCLE_TOKEN
+  }
   : {}
 const client = axios.create({
   baseURL: 'https://circleci.com/api/v2/',
@@ -59,7 +56,7 @@ getPipeline()
     console.error(e)
   })
 
-function getPipeline() {
+function getPipeline () {
   return fetch(`project/github/DataDog/dd-trace-js/pipeline?branch=${branch}`).then((response) => {
     const pipeline = response.data.items
       .filter((item) => item.trigger.type !== 'schedule')
@@ -73,7 +70,7 @@ function getPipeline() {
   })
 }
 
-function getWorkflow(pipeline) {
+function getWorkflow (pipeline) {
   return fetch(`pipeline/${pipeline.id}/workflow`).then((response) => {
     const workflows = response.data.items.sort((a, b) => (a.stopped_at < b.stopped_at ? 1 : -1))
     const workflow = workflows.find((workflow) => workflow.name === 'prebuild')
@@ -94,7 +91,7 @@ function getWorkflow(pipeline) {
   })
 }
 
-function getPrebuildsJob(workflow) {
+function getPrebuildsJob (workflow) {
   return fetch(`workflow/${workflow.id}/job`).then((response) => {
     const job = response.data.items.find((item) => item.name === 'prebuilds')
 
@@ -106,7 +103,7 @@ function getPrebuildsJob(workflow) {
   })
 }
 
-function getPrebuildArtifacts(job) {
+function getPrebuildArtifacts (job) {
   return fetch(`project/github/DataDog/dd-trace-js/${job.job_number}/artifacts`).then((response) => {
     const artifacts = response.data.items.filter((artifact) => /\/prebuilds\.tgz/.test(artifact.url))
 
@@ -118,13 +115,13 @@ function getPrebuildArtifacts(job) {
   })
 }
 
-function downloadArtifacts(artifacts) {
+function downloadArtifacts (artifacts) {
   const files = artifacts.map((artifact) => artifact.url)
 
   return Promise.all(files.map(downloadArtifact))
 }
 
-function downloadArtifact(file) {
+function downloadArtifact (file) {
   return fetch(file, { responseType: 'stream' }).then((response) => {
     const parts = file.split('/')
     const basename = os.tmpdir()
@@ -139,7 +136,7 @@ function downloadArtifact(file) {
   })
 }
 
-function validatePrebuilds() {
+function validatePrebuilds () {
   const file = path.join(os.tmpdir(), 'prebuilds.tgz')
   const content = fs.readFileSync(file)
   const sum = fs.readFileSync(path.join(`${file}.sha1`), 'ascii')
@@ -149,7 +146,7 @@ function validatePrebuilds() {
   }
 }
 
-function extractPrebuilds() {
+function extractPrebuilds () {
   rimraf.sync('prebuilds')
 
   return tar.extract({
