@@ -3,7 +3,7 @@
 **Node.js APM Tracer**
 
 APM tracing client for Node.js.
-Adapted from the datadog tracer to be compatible with the opentelemtry tracing api.
+Adapted from the Datadog tracer to be compatible with the opentelemtry tracing api.
 
 ### Requirements
 
