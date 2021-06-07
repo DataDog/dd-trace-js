@@ -116,3 +116,4 @@ dist
 acmeair-nodejs
 !packages/*/test/**/dist
 !packages/*/test/**/node_modules
+core-test-results/mocha/test-results.xml

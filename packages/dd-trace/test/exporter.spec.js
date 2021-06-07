@@ -3,6 +3,7 @@ const fs = require('fs')
 
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
+const JaegerExporter = require('../src/exporters/jaeger')
 
 describe('exporter', () => {
   let env
@@ -16,10 +17,10 @@ describe('exporter', () => {
     process.env = env
   })
 
-  it('should create an AgentExporter by default', () => {
+  it('should create an JaegerExporter by default', () => {
     const Exporter = require('../src/exporter')()
 
-    expect(Exporter).to.be.equal(AgentExporter)
+    expect(Exporter).to.be.equal(JaegerExporter)
   })
 
   it('should create an LogExporter when in Lambda environment', () => {
@@ -45,5 +46,10 @@ describe('exporter', () => {
     const Exporter = require('../src/exporter')('log')
 
     expect(Exporter).to.be.equal(LogExporter)
+  })
+  it('should allow configuring the exporter', () => {
+    const Exporter = require('../src/exporter')('jaeger')
+
+    expect(Exporter).to.be.equal(JaegerExporter)
   })
 })

@@ -1,25 +1,9 @@
-# dd-trace-js
-
-[![npm](https://img.shields.io/npm/v/dd-trace.svg?colorB=blue)](https://www.npmjs.com/package/dd-trace)
-[![npm (tag)](https://img.shields.io/npm/v/dd-trace/dev.svg)](https://www.npmjs.com/package/dd-trace/v/dev)
-[![CircleCI](https://circleci.com/gh/DataDog/dd-trace-js.svg?style=shield)](https://circleci.com/gh/DataDog/dd-trace-js)
-[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
+# @chatlayer/tracer
 
 **Node.js APM Tracer**
 
-Datadog APM tracing client for Node.js.
-
-## Getting Started
-
-For a basic product overview, check out our [setup documentation](https://docs.datadoghq.com/tracing/languages/nodejs/).
-
-For installation, configuration, and details about using the API, check out our [API documentation](https://datadog.github.io/dd-trace-js).
-
-For descriptions of terminology used in APM, take a look at the [official documentation](https://docs.datadoghq.com/tracing/visualization/).
-
-## Development
-
-Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
+APM tracing client for Node.js.
+Adapted from the Datadog tracer to be compatible with the opentelemtry tracing api.
 
 ### Requirements
 
@@ -77,23 +61,6 @@ To run the linter, use:
 
 ```sh
 $ yarn lint
-```
-
-### Continuous Integration
-
-We rely on CircleCI 2.0 for our tests. If you want to test how the CI behaves
-locally, you can use the CircleCI Command Line Interface as described here:
-https://circleci.com/docs/2.0/local-jobs/
-
-After installing the `circleci` CLI, simply run one of the following:
-
-```sh
-$ circleci build --job lint
-$ circleci build --job node-leaks
-$ circleci build --job node-core-8
-$ circleci build --job node-core-10
-$ circleci build --job node-core-12
-$ circleci build --job node-core-latest
 ```
 
 ### Benchmarks

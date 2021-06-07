@@ -15,7 +15,7 @@ describe('dd-trace', () => {
   beforeEach(() => {
     tracer = require('../')
 
-    return getPort().then(port => {
+    return getPort().then((port) => {
       agent = express()
       listener = agent.listen()
 
@@ -23,7 +23,10 @@ describe('dd-trace', () => {
         service: 'test',
         port: listener.address().port,
         flushInterval: 0,
-        plugins: false
+        plugins: false,
+        experimental: {
+          exporter: 'agent'
+        }
       })
     })
   })
