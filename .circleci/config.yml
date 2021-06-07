@@ -849,7 +849,7 @@ jobs:
     docker:
       - image: node
         environment:
-          - PLUGINS=mocha
+          - PLUGINS=mocha|pg
 
   node-tedious:
     <<: *node-plugin-base
