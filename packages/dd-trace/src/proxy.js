@@ -58,6 +58,8 @@ class Tracer extends BaseTracer {
         log.error(e)
       }
     }
+    // register as global opentelemetry tracer
+    // and context manager
     this.register()
     return this
   }

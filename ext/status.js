@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 module.exports = {
   /**
@@ -13,5 +13,5 @@ module.exports = {
   /**
    * The operation contains an error.
    */
-  ERROR: 2,
-};
+  ERROR: 2
+}
