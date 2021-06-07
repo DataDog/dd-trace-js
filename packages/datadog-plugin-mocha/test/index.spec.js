@@ -114,6 +114,12 @@ const TESTS = [
     testName: 'can do integration http',
     root: 'mocha-test-integration-http',
     status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-integration-db.js',
+    testName: 'can do integration tests with db',
+    root: 'mocha-test-integration-db',
+    status: 'pass'
   }
 ]
 
@@ -136,7 +142,7 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['mocha', 'fs', 'http']).then(() => {
+      return agent.load(['mocha', 'fs', 'http', 'pg']).then(() => {
         Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
@@ -188,6 +194,19 @@ describe('Plugin', () => {
                 [TEST_FRAMEWORK]: 'mocha',
                 [TEST_SUITE]: testSuite
               })
+            })
+          } else if (test.fileName === 'mocha-test-integration-db.js') {
+            agent.use(trace => {
+              const testSpan = trace[0].find(span => span.type === 'test')
+              const databaseSpan = trace[0].find(span => span.name === 'pg.query')
+
+              expect(testSpan.parent_id.toString()).to.equal('0')
+              expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
+              expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-integration-db can do integration tests with db')
+              expect(databaseSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+              expect(databaseSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(databaseSpan.resource).to.equal('SELECT $1::text as message')
             }).then(done, done)
           } else {
             agent
