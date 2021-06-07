@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Client } = require('../../../versions/pg@>=4').get()
+const { Client } = require('../../../versions/pg@4.0.0').get()
 
 describe('mocha-test-integration-db', () => {
   it('can do integration tests with db', async () => {
