@@ -36,7 +36,7 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       tracer = require('../../dd-trace')
-      return agent.load(['jest', 'fs', 'http']).then(() => {
+      return agent.load(['jest', 'fs', 'http', 'pg']).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
@@ -432,7 +432,7 @@ describe('Plugin', () => {
           }).then(done).catch(done)
       })
 
-      it('set _dd.origin=ciapp-test to the test span and all children spans', (done) => {
+      it('sets _dd.origin=ciapp-test to the test span and all children spans', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
           .use(trace => {
@@ -460,7 +460,6 @@ describe('Plugin', () => {
         datadogJestEnv.handleTestEvent(passingTestEvent)
         passingTestEvent.test.fn()
       })
-
       it('works with http integration', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
@@ -473,13 +472,47 @@ describe('Plugin', () => {
             expect(testSpan.parent_id.toString()).to.equal('0')
             expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
           }).then(done).catch(done)
-
         const passingTestEvent = {
           name: 'test_start',
           test: {
             fn: () => {
               const http = require('http')
               http.request('http://test:123')
+            },
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
+      it('works with database integration', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            const databaseSpan = trace[0].find(span => span.name === 'pg.query')
+
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
+            expect(databaseSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+            expect(databaseSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(databaseSpan.resource).to.equal('SELECT $1::text as message')
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: async () => {
+              const { Client } = require('../../../versions/pg').get()
+              const client = new Client({
+                user: 'postgres',
+                password: 'postgres',
+                database: 'postgres'
+              })
+              await client.connect()
+              await client.query('SELECT $1::text as message', ['Hello world!'])
             },
             name: TEST_NAME
           }

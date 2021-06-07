@@ -792,7 +792,12 @@ jobs:
     docker:
       - image: node:10
         environment:
+          - SERVICES=postgres
           - PLUGINS=jest
+          - TEST_DEPENDENCIES=pg
+      - image: postgres:9.5
+        environment:
+          - POSTGRES_PASSWORD=postgres
 
   node-knex:
     <<: *node-plugin-base
