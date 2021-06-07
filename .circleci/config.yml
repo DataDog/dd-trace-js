@@ -849,7 +849,12 @@ jobs:
     docker:
       - image: node
         environment:
+          - SERVICES=postgres
           - PLUGINS=mocha|pg
+          - image: node:8
+      - image: postgres:9.5
+        environment:
+          - POSTGRES_PASSWORD=postgres
 
   node-tedious:
     <<: *node-plugin-base
