@@ -14,3 +14,17 @@ jobs:
       - run: yarn install
       - run: yarn lint
 
+  node-bench-latest:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x, 14.x, 15.x]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: yarn install
+      - name: Benchmark Tracer
+        run: yarn bench
