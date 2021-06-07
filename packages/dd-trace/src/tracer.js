@@ -24,9 +24,13 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = Object.assign({}, {
-      childOf: this.scope().active()
-    }, options)
+    options = Object.assign(
+      {},
+      {
+        childOf: this.scope().active()
+      },
+      options
+    )
 
     if (!options.childOf && options.orphanable === false) {
       return fn(null, () => {})
@@ -38,10 +42,12 @@ class DatadogTracer extends Tracer {
 
     try {
       if (fn.length > 1) {
-        return this.scope().activate(span, () => fn(span, err => {
-          addError(span, err)
-          span.finish()
-        }))
+        return this.scope().activate(span, () =>
+          fn(span, (err) => {
+            addError(span, err)
+            span.finish()
+          })
+        )
       }
 
       const result = this.scope().activate(span, () => fn(span))
@@ -49,7 +55,7 @@ class DatadogTracer extends Tracer {
       if (result && typeof result.then === 'function') {
         result.then(
           () => span.finish(),
-          err => {
+          (err) => {
             addError(span, err)
             span.finish()
           }
@@ -75,7 +81,11 @@ class DatadogTracer extends Tracer {
         optionsObj = optionsObj.apply(this, arguments)
       }
 
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active()) {
+      if (
+        optionsObj &&
+        optionsObj.orphanable === false &&
+        !tracer.scope().active()
+      ) {
         return fn.apply(this, arguments)
       }
 
@@ -112,18 +122,6 @@ class DatadogTracer extends Tracer {
 
   currentSpan () {
     return this.scope().active()
-  }
-
-  getRumData () {
-    if (!this._enableGetRumData) {
-      return ''
-    }
-    const span = this.scope().active().context()
-    const traceId = span.toTraceId()
-    const traceTime = Date.now()
-    return `\
-<meta name="dd-trace-id" content="${traceId}" />\
-<meta name="dd-trace-time" content="${traceTime}" />`
   }
 }
 

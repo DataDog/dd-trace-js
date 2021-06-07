@@ -3,31 +3,33 @@
 const NoopSpan = require('./noop/span')
 
 const _default = {
-  debug: msg => console.debug(msg), /* eslint-disable-line no-console */
-  info: msg => console.info(msg), /* eslint-disable-line no-console */
-  warn: msg => console.warn(msg), /* eslint-disable-line no-console */
-  error: msg => console.error(msg) /* eslint-disable-line no-console */
+  debug: (msg) => console.debug(msg) /* eslint-disable-line no-console */,
+  info: (msg) => console.info(msg) /* eslint-disable-line no-console */,
+  warn: (msg) => console.warn(msg) /* eslint-disable-line no-console */,
+  error: (msg) => console.error(msg) /* eslint-disable-line no-console */
 }
 
 // based on: https://github.com/trentm/node-bunyan#levels
 const _logLevels = {
-  'debug': 20,
-  'info': 30,
-  'warn': 40,
-  'error': 50
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50
 }
 
 const _defaultLogLevel = 'debug'
 
 const _checkLogLevel = (logLevel) => {
   if (logLevel && typeof logLevel === 'string') {
-    return _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
+    return (
+      _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
+    )
   }
 
   return _logLevels[_defaultLogLevel]
 }
 
-const memoize = func => {
+const memoize = (func) => {
   const cache = {}
   const memoized = function (key) {
     if (!cache[key]) {
@@ -58,7 +60,11 @@ const log = {
   },
 
   use (logger) {
-    if (logger && logger.debug instanceof Function && logger.error instanceof Function) {
+    if (
+      logger &&
+      logger.debug instanceof Function &&
+      logger.error instanceof Function
+    ) {
       this._logger = logger
     }
 

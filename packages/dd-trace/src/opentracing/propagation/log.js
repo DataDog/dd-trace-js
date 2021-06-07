@@ -11,11 +11,10 @@ class LogPropagator {
   inject (spanContext, carrier) {
     if (!carrier) return
 
-    carrier.dd = {}
-
     if (spanContext) {
-      carrier.dd.trace_id = spanContext.toTraceId()
-      carrier.dd.span_id = spanContext.toSpanId()
+      // github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md
+      carrier.trace_id = spanContext.toTraceId()
+      carrier.span_id = spanContext.toSpanId()
     }
 
     if (this._config.service) carrier.dd.service = this._config.service
@@ -24,13 +23,13 @@ class LogPropagator {
   }
 
   extract (carrier) {
-    if (!carrier || !carrier.dd || !carrier.dd.trace_id || !carrier.dd.span_id) {
+    if (!carrier || !carrier.trace_id || !carrier.span_id) {
       return null
     }
 
     const spanContext = new DatadogSpanContext({
-      traceId: id(carrier.dd.trace_id, 10),
-      spanId: id(carrier.dd.span_id, 10)
+      traceId: id(carrier.trace_id, 10),
+      spanId: id(carrier.span_id, 10)
     })
 
     return spanContext

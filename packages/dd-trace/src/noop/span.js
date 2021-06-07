@@ -39,6 +39,15 @@ class NoopSpan extends Span {
       })
     }
   }
+  setValue () {
+    return this.setBaggageItem.apply(this, arguments)
+  }
+  getValue () {
+    return this.getBaggageItem.apply(this, arguments)
+  }
+  deleteValue () {
+    return this.deleteValue.apply(this, arguments)
+  }
 }
 
 module.exports = NoopSpan

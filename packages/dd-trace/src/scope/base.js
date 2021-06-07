@@ -118,11 +118,13 @@ class Scope {
   }
 
   _isEmitter (emitter) {
-    return emitter &&
+    return (
+      emitter &&
       typeof emitter.emit === 'function' &&
       typeof emitter.on === 'function' &&
       typeof emitter.addListener === 'function' &&
       typeof emitter.removeListener === 'function'
+    )
   }
 
   _isPromise (promise) {
@@ -144,7 +146,12 @@ function wrapThen (then, scope, span) {
 
 function wrapAddListener (addListener) {
   return function addListenerWithTrace (eventName, listener) {
-    if (!this.__dd_scope || !listener || listener._datadog_unbound || listener.listener) {
+    if (
+      !this.__dd_scope ||
+      !listener ||
+      listener._datadog_unbound ||
+      listener.listener
+    ) {
       return addListener.apply(this, arguments)
     }
     const scope = this.__dd_scope
