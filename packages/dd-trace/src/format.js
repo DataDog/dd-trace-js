@@ -119,7 +119,8 @@ function extractRootTags (trace, span) {
 function extractError (trace, span) {
   const error = span.context()._tags['error']
 
-  if (error instanceof Error) {
+  // JestAssertionErrors are not instance of Error, so we need this extra check
+  if (error instanceof Error || (error && error.constructor && error.constructor.name === 'JestAssertionError')) {
     addTag(trace.meta, trace.metrics, 'error.msg', error.message)
     addTag(trace.meta, trace.metrics, 'error.type', error.name)
     addTag(trace.meta, trace.metrics, 'error.stack', error.stack)

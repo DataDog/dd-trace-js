@@ -10,7 +10,6 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   ERROR_MESSAGE,
-  ERROR_STACK,
   ERROR_TYPE,
   TEST_PARAMETERS,
   CI_APP_ORIGIN,
@@ -154,10 +153,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
             suppressedErrors = context.expect.getState().suppressedErrors
           }
           if (suppressedErrors && suppressedErrors.length) {
-            const testError = suppressedErrors[0]
-            testSpan.setTag(ERROR_TYPE, testError.constructor ? testError.constructor.name : 'Error')
-            testSpan.setTag(ERROR_MESSAGE, testError.message)
-            testSpan.setTag(ERROR_STACK, testError.stack)
+            testSpan.setTag('error', suppressedErrors[0])
             testSpan.setTag(TEST_STATUS, 'fail')
           }
           if (!testSpan._spanContext._tags[TEST_STATUS]) {
@@ -165,9 +161,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           }
         } catch (error) {
           testSpan.setTag(TEST_STATUS, 'fail')
-          testSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
-          testSpan.setTag(ERROR_MESSAGE, error.message)
-          testSpan.setTag(ERROR_STACK, error.stack)
+          testSpan.setTag('error', error)
           throw error
         } finally {
           testSpan.context()._trace.started.forEach((span) => {
