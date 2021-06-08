@@ -8,7 +8,8 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   CI_APP_ORIGIN,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
 function setStatusFromResult (span, result, tag) {
@@ -53,9 +54,7 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot) {
           promise.then(() => {
             setStatusFromResult(testSpan, this.getWorstStepResult(), TEST_STATUS)
           }).finally(() => {
-            testSpan.context()._trace.started.forEach((span) => {
-              span.finish()
-            })
+            finishAllTraceSpans(testSpan)
           })
           return promise
         }

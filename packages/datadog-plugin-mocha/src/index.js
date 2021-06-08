@@ -15,7 +15,8 @@ const {
   ERROR_TYPE,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
@@ -88,11 +89,7 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             activeSpan.setTag(ERROR_STACK, error.stack)
             throw error
           } finally {
-            activeSpan
-              .context()
-              ._trace.started.forEach((span) => {
-                span.finish()
-              })
+            finishAllTraceSpans(activeSpan)
           }
           return result
         }

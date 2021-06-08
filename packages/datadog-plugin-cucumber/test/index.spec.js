@@ -148,7 +148,6 @@ describe('Plugin', () => {
 
         describe(`for ${featureName}${featureLineNumber}`, () => {
           it('should create a test span and spans for integrations', async function () {
-            this.timeout(200000)
             const checkTraces = agent.use(traces => {
               expect(traces.length).to.equal(1)
               const testTrace = traces[0]

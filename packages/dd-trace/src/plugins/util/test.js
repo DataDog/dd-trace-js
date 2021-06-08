@@ -27,7 +27,8 @@ module.exports = {
   ERROR_STACK,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 }
 
 function getTestEnvironmentMetadata (testFramework) {
@@ -65,4 +66,10 @@ function getTestParametersString (parametersByTestName, testName) {
     // so we ignore the test parameters and move on
     return ''
   }
+}
+
+function finishAllTraceSpans (span) {
+  span.context()._trace.started.forEach((span) => {
+    span.finish()
+  })
 }
