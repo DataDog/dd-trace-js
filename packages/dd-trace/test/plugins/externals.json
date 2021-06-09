@@ -94,7 +94,7 @@
   "pino": [
     {
       "name": "pino-pretty",
-      "versions": ["*"]
+      "versions": [">=3"]
     }
   ]
 }
