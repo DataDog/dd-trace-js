@@ -98,7 +98,7 @@ module.exports = [
   },
   {
     name: 'pino-pretty',
-    versions: ['>=3'],
+    versions: ['>=3'], // will only work starting from pino@5.0.0 as previous versions are not using pino-pretty
     file: 'lib/utils.js',
     patch (utils, tracer, config) {
       if (!tracer._logInjection) return
