@@ -55,7 +55,7 @@ describe('Plugin', () => {
           })
         })
 
-        if (!semver.intersects(version, '>=4.10.0 <=5.0.0-rc.1')) {
+        if (semver.intersects(version, '>=5')) {
           it('should not alter the default behavior with pretty print', () => {
             setup(version, { prettyPrint: true })
 
@@ -152,7 +152,7 @@ describe('Plugin', () => {
           })
         }
 
-        if (!semver.intersects(version, '>=4.10.0 <=5.0.0-rc.1')) {
+        if (semver.intersects(version, '>=5')) {
           it('should add the trace identifiers to logger instances with pretty print', () => {
             setup(version, { prettyPrint: true })
 
