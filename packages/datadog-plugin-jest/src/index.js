@@ -26,6 +26,7 @@ function wrapEnvironment (BaseEnvironment) {
       super(config, context)
       this.testSuite = context.testPath.replace(`${config.rootDir}/`, '')
       this.testSpansByTestName = {}
+      this.originalTestFnByTestName = {}
     }
   }
 }
@@ -53,6 +54,15 @@ const isTimeout = (event) => {
 
 function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
+    if (event.name === 'test_retry') {
+      const context = this.getVmContext()
+      const { currentTestName } = context.expect.getState()
+      // If it's a retry, we restore the original test function so that it is not wrapped again
+      if (this.originalTestFnByTestName[currentTestName]) {
+        event.test.fn = this.originalTestFnByTestName[currentTestName]
+      }
+      return
+    }
     if (event.name === 'test_fn_failure') {
       if (!isTimeout(event)) {
         return
@@ -60,13 +70,14 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       const context = this.getVmContext()
       if (context) {
         const { currentTestName } = context.expect.getState()
-        const testSpan = this.testSpansByTestName[currentTestName]
+        const testSpan = this.testSpansByTestName[`${currentTestName}_${event.test.invocations}`]
         if (testSpan) {
           testSpan.setTag(ERROR_TYPE, 'Timeout')
           testSpan.setTag(ERROR_MESSAGE, event.error)
           testSpan.setTag(TEST_STATUS, 'fail')
         }
       }
+      return
     }
     if (event.name === 'setup') {
       instrumenter.wrap(this.global.test, 'each', function (original) {
@@ -80,6 +91,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           }
         }
       })
+      return
     }
 
     if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
@@ -130,6 +142,8 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
     }
     // event.name === test_start at this point
     const environment = this
+    environment.originalTestFnByTestName[testName] = event.test.fn
+
     let specFunction = event.test.fn
     if (specFunction.length) {
       specFunction = promisify(specFunction)
@@ -144,12 +158,12 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       async () => {
         let result
         const testSpan = tracer.scope().active()
-        environment.testSpansByTestName[testName] = testSpan
+        environment.testSpansByTestName[`${testName}_${event.test.invocations}`] = testSpan
         testSpan.context()._trace.origin = CI_APP_ORIGIN
         try {
           result = await specFunction()
           // it may have been set already if the test timed out
-          if (!testSpan._spanContext._tags['test.status']) {
+          if (!testSpan._spanContext._tags[TEST_STATUS]) {
             testSpan.setTag(TEST_STATUS, 'pass')
           }
         } catch (error) {
