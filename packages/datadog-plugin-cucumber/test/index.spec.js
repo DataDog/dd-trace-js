@@ -78,6 +78,7 @@ const TESTS = [
     steps: [
       { name: 'datadog', stepStatus: 'pass' },
       { name: 'integration', stepStatus: 'pass' },
+      { name: 'pass', stepStatus: 'pass' }
     ],
     success: true,
     errors: []

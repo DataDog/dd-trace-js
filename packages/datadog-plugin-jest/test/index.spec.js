@@ -472,7 +472,8 @@ describe('Plugin', () => {
             expect(testSpan.parent_id.toString()).to.equal('0')
             expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
           }).then(done).catch(done)
-        const passingTestEvent = {
+
+        const httpTestEvent = {
           name: 'test_start',
           test: {
             fn: () => {
@@ -482,8 +483,8 @@ describe('Plugin', () => {
             name: TEST_NAME
           }
         }
-        datadogJestEnv.handleTestEvent(passingTestEvent)
-        passingTestEvent.test.fn()
+        datadogJestEnv.handleTestEvent(httpTestEvent)
+        httpTestEvent.test.fn()
       })
 
       it('works with database integration', (done) => {
@@ -501,7 +502,7 @@ describe('Plugin', () => {
             expect(databaseSpan.resource).to.equal('SELECT $1::text as message')
           }).then(done).catch(done)
 
-        const passingTestEvent = {
+        const databaseTestEvent = {
           name: 'test_start',
           test: {
             fn: async () => {
@@ -518,8 +519,8 @@ describe('Plugin', () => {
           }
         }
 
-        datadogJestEnv.handleTestEvent(passingTestEvent)
-        passingTestEvent.test.fn()
+        datadogJestEnv.handleTestEvent(databaseTestEvent)
+        databaseTestEvent.test.fn()
       })
 
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
