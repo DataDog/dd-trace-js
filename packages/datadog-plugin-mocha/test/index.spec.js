@@ -1,5 +1,9 @@
 'use strict'
 
+const path = require('path')
+
+const nock = require('nock')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const plugin = require('../src')
@@ -15,8 +19,6 @@ const {
   ERROR_STACK,
   CI_APP_ORIGIN
 } = require('../../dd-trace/src/plugins/util/test')
-const { expect } = require('chai')
-const path = require('path')
 
 const TESTS = [
   {
@@ -48,12 +50,6 @@ const TESTS = [
     fileName: 'mocha-test-done-pass.js',
     testName: 'can do passed tests with done',
     root: 'mocha-test-done-pass',
-    status: 'pass'
-  },
-  {
-    fileName: 'mocha-test-integration.js',
-    testName: 'can do integration tests',
-    root: 'mocha-test-integration',
     status: 'pass'
   },
   {
@@ -106,6 +102,18 @@ const TESTS = [
     extraSpanTags: {
       [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
     }
+  },
+  {
+    fileName: 'mocha-test-integration.js',
+    testName: 'can do integration tests',
+    root: 'mocha-test-integration',
+    status: 'pass'
+  },
+  {
+    fileName: 'mocha-test-integration-http.js',
+    testName: 'can do integration http',
+    root: 'mocha-test-integration-http',
+    status: 'pass'
   }
 ]
 
@@ -123,11 +131,15 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
-      return agent.load(['mocha', 'fs']).then(() => {
+      // for http integration tests
+      nock('http://test:123')
+        .get('/')
+        .reply(200, 'OK')
+
+      return agent.load(['mocha', 'fs', 'http']).then(() => {
         Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
-
     describe('mocha', () => {
       TESTS.forEach(test => {
         it(`should create a test span for ${test.fileName}`, (done) => {
@@ -158,6 +170,24 @@ describe('Plugin', () => {
               expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-integration can do integration tests')
               expect(fsOperationSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(fsOperationSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            }).then(done, done)
+          } else if (test.fileName === 'mocha-test-integration-http.js') {
+            agent.use(trace => {
+              const httpSpan = trace[0].find(span => span.name === 'http.request')
+              const testSpan = trace[0].find(span => span.type === 'test')
+              expect(testSpan.parent_id.toString()).to.equal('0')
+              expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+              expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+              expect(testSpan.meta).to.contain({
+                language: 'javascript',
+                service: 'test',
+                [TEST_NAME]: `${test.root} ${test.testName}`,
+                [TEST_STATUS]: test.status,
+                [TEST_FRAMEWORK]: 'mocha',
+                [TEST_SUITE]: testSuite
+              })
             }).then(done, done)
           } else {
             agent

@@ -14,7 +14,8 @@ const {
   TEST_PARAMETERS,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 const { getFormattedJestTestParameters } = require('./util')
 
@@ -164,9 +165,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           testSpan.setTag('error', error)
           throw error
         } finally {
-          testSpan.context()._trace.started.forEach((span) => {
-            span.finish()
-          })
+          finishAllTraceSpans(testSpan)
         }
         return result
       }

@@ -1,5 +1,5 @@
 'use strict'
-const { expect } = require('chai')
+const nock = require('nock')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -30,8 +30,13 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
+      // for http integration tests
+      nock('http://test:123')
+        .get('/')
+        .reply(200, 'OK')
+
       tracer = require('../../dd-trace')
-      return agent.load(['jest', 'fs']).then(() => {
+      return agent.load(['jest', 'fs', 'http']).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
@@ -183,6 +188,7 @@ describe('Plugin', () => {
 
       it('should call wrap on test_start event', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+        const originalWrap = tracer._tracer.wrap
         tracer._tracer.wrap = sinon.spy(() => {})
 
         const testEvent = {
@@ -198,10 +204,12 @@ describe('Plugin', () => {
         }
         datadogJestEnv.handleTestEvent(testEvent)
         expect(tracer._tracer.wrap).to.have.been.called
+        tracer._tracer.wrap = originalWrap
       })
 
       it('should not call wrap on events other than test_start or test_skip', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+        const originalWrap = tracer._tracer.wrap
         tracer._tracer.wrap = sinon.spy(() => {})
 
         const testFnStartEvent = {
@@ -209,6 +217,7 @@ describe('Plugin', () => {
         }
         datadogJestEnv.handleTestEvent(testFnStartEvent)
         expect(tracer._tracer.wrap).not.to.have.been.called
+        tracer._tracer.wrap = originalWrap
       })
 
       it('should call startSpan and span finish on skipped tests', () => {
@@ -481,6 +490,34 @@ describe('Plugin', () => {
               [ERROR_MESSAGE]: 'snapshot error message'
             })
           }).then(done).catch(done)
+      })
+
+      it('works with http integration', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            const httpSpan = trace[0].find(span => span.name === 'http.request')
+            expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+              const http = require('http')
+              http.request('http://test:123')
+            },
+            name: TEST_NAME
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
       })
 
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
