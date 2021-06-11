@@ -69,7 +69,10 @@ function getTestParametersString (parametersByTestName, testName) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach((span) => {
+  const spansToFinish = span.context()._trace.started.filter(traceSpan =>
+    !traceSpan.context()._isFinished && span !== traceSpan
+  )
+  spansToFinish.forEach(span => {
     span.finish()
   })
 }
