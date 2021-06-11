@@ -74,6 +74,7 @@ class Instrumenter {
 
   enable (config) {
     config = config || {}
+    const serviceMapping = config.serviceMapping
 
     this._enabled = true
 
@@ -82,8 +83,8 @@ class Instrumenter {
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
           const config = {}
-          if (this.serviceMapping && this.serviceMapping[name]) {
-            config.service = this.serviceMapping[name]
+          if (serviceMapping && serviceMapping[name]) {
+            config.service = serviceMapping[name]
           }
           this._set(plugins[name], { name, config: getConfig(name, config) })
         })
