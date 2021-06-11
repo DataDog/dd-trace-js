@@ -39,14 +39,34 @@ describe('config', () => {
       enabled: false,
       service: 'test',
       version: '1.2.3-test.0',
-      logger: 'logger',
-      exporters: ['exporter'],
-      profilers: ['profiler']
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error () {}
+      },
+      exporters: ['agent'],
+      profilers: [new InspectorCpuProfiler()],
+      url: 'http://localhost:1234/'
     }
 
     const config = new Config(options)
 
-    expect(config).to.deep.include(options)
+    expect(config.enabled).to.equal(options.enabled)
+    expect(config.service).to.equal(options.service)
+    expect(config.host).to.be.a('string')
+    expect(config.version).to.equal(options.version)
+    expect(config.tags).to.be.an('object')
+    expect(config.tags.host).to.be.a('string')
+    expect(config.tags.service).to.equal(options.service)
+    expect(config.tags.version).to.equal(options.version)
+    expect(config.flushInterval).to.equal(60 * 1000)
+    expect(config.exporters).to.be.an('array')
+    expect(config.exporters.length).to.equal(1)
+    expect(config.exporters[0]._url.toString()).to.equal(options.url)
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(InspectorCpuProfiler)
   })
 
   it('should support tags', () => {
