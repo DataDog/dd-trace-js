@@ -378,6 +378,7 @@ describe('Plugin', () => {
         const testStartEvent = {
           name: 'test_start',
           test: {
+            invocations: 1,
             fn: () => {},
             name: TEST_NAME
           }
@@ -387,6 +388,9 @@ describe('Plugin', () => {
 
         const timedoutTestEvent = {
           name: 'test_fn_failure',
+          test: {
+            invocations: 1
+          },
           error: 'Exceeded timeout of 100ms'
         }
         datadogJestEnv.handleTestEvent(timedoutTestEvent)
@@ -398,6 +402,59 @@ describe('Plugin', () => {
               [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
             })
           }).then(done).catch(done)
+      })
+
+      it('should work with timed out retries', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            invocations: 1,
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        const timedoutTestEvent = {
+          name: 'test_fn_failure',
+          test: {
+            invocations: 1
+          },
+          error: 'Exceeded timeout of 100ms'
+        }
+        datadogJestEnv.handleTestEvent(timedoutTestEvent)
+
+        const testRetryEvent = {
+          name: 'test_retry',
+          test: {
+            invocations: 1,
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.handleTestEvent(testRetryEvent)
+
+        testStartEvent.test.invocations++
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        const agentPromises = [
+          agent.use(trace => {
+            expect(trace[0][0].meta).to.contain({
+              [TEST_STATUS]: 'fail',
+              [ERROR_TYPE]: 'Timeout',
+              [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
+            })
+          }),
+          agent.use(trace => {
+            expect(trace[0][0].meta).to.contain({
+              [TEST_STATUS]: 'pass'
+            })
+          })
+        ]
+        Promise.all(agentPromises).then(() => done()).catch(done)
       })
 
       it('should not consider other errors as timeout', (done) => {
