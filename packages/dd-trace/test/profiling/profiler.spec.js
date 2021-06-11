@@ -30,6 +30,9 @@ describe('profiler', () => {
       export: sinon.stub().yields()
     }
     consoleLogger = {
+      debug: sinon.spy(),
+      info: sinon.spy(),
+      warn: sinon.spy(),
       error: sinon.spy()
     }
 

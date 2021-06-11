@@ -1,11 +1,11 @@
 'use strict'
 
 const log = require('./log')
-const { profiler, AgentExporter, FileExporter } = require('./profiling')
+const { profiler } = require('./profiling')
 
 module.exports = {
   start: config => {
-    const { service, version, env } = config
+    const { service, version, env, url, hostname, port } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
@@ -21,28 +21,14 @@ module.exports = {
       env,
       logger,
       sourceMap,
-      exporters: getExporters(exporters, config)
+      exporters,
+      url,
+      hostname,
+      port
     })
   },
 
   stop: () => {
     profiler.stop()
   }
-}
-
-function getExporters (names, { url, hostname, port }) {
-  const exporters = []
-
-  for (const name of names.split(',')) {
-    switch (name) {
-      case 'agent':
-        exporters.push(new AgentExporter({ url, hostname, port }))
-        break
-      case 'file':
-        exporters.push(new FileExporter())
-        break
-    }
-  }
-
-  return exporters
 }
