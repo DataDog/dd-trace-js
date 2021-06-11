@@ -10,8 +10,8 @@ const { isTrue, isFalse } = require('./util')
 
 const runtimeId = `${id().toString()}${id().toString()}`
 
-const fromEntries = Object.fromEntries || (entries) =>
-  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {})
+const fromEntries = Object.fromEntries || (entries =>
+  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
 
 class Config {
   constructor (options) {
@@ -76,9 +76,7 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       pkg.name ||
       'node'
-    const DD_SERVICE_MAPPING = options.serviceMapping ||
-      process.env.DD_SERVICE_MAPPING ||
-      ''
+    const DD_SERVICE_MAPPING = process.env.DD_SERVICE_MAPPING || ''
     const DD_ENV = coalesce(
       options.env,
       process.env.DD_ENV,
@@ -160,9 +158,9 @@ class Config {
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
-    this.serviceMapping = Object.fromEntries(
+    this.serviceMapping = DD_SERVICE_MAPPING.length ? fromEntries(
       DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
-    )
+    ) : {}
     this.version = DD_VERSION
     this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
     this.dogstatsd = {

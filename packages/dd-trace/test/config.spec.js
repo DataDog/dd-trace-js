@@ -449,4 +449,20 @@ describe('Config', () => {
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
   })
+
+  it('should support the serviceMapping environment variable', () => {
+    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    let config = new Config()
+
+    expect(config.serviceMapping).to.deep.equal({
+      a: 'aa',
+      b: 'bb'
+    })
+
+    delete process.env.DD_SERVICE_MAPPING
+
+    config = new Config()
+
+    expect(config.serviceMapping).to.deep.equal({})
+  })
 })
