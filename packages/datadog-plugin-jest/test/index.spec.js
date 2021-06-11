@@ -440,21 +440,18 @@ describe('Plugin', () => {
         datadogJestEnv.handleTestEvent(testStartEvent)
         testStartEvent.test.fn()
 
-        const agentPromises = [
-          agent.use(trace => {
-            expect(trace[0][0].meta).to.contain({
-              [TEST_STATUS]: 'fail',
-              [ERROR_TYPE]: 'Timeout',
-              [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
-            })
-          }),
-          agent.use(trace => {
-            expect(trace[0][0].meta).to.contain({
-              [TEST_STATUS]: 'pass'
-            })
+        agent.use(trace => {
+          const failedTest = trace[0].find(span => span.meta[TEST_STATUS] === 'fail')
+          const passedTest = trace[0].find(span => span.meta[TEST_STATUS] === 'pass')
+          expect(failedTest.meta).to.contain({
+            [TEST_STATUS]: 'fail',
+            [ERROR_TYPE]: 'Timeout',
+            [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
           })
-        ]
-        Promise.all(agentPromises).then(() => done()).catch(done)
+          expect(passedTest.meta).to.contain({
+            [TEST_STATUS]: 'pass'
+          })
+        }).then(() => done()).catch(done)
       })
 
       it('should not consider other errors as timeout', (done) => {
