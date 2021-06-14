@@ -28,19 +28,26 @@ describe('git', () => {
     sanitizedExecStub.reset()
   })
   it('returns ci metadata if it is present and does not call git for those parameters', () => {
-    const ciMetadata = { commitSHA: 'ciSHA', branch: 'myBranch' }
+    const ciMetadata = {
+      commitSHA: 'ciSHA',
+      branch: 'myBranch',
+      commitMessage: 'myCommitMessage',
+      authorName: 'ciAuthorName'
+    }
     const metadata = getGitMetadata(ciMetadata)
 
     expect(metadata).to.contain(
       {
         [GIT_COMMIT_SHA]: 'ciSHA',
-        [GIT_BRANCH]: 'myBranch'
+        [GIT_BRANCH]: 'myBranch',
+        [GIT_COMMIT_MESSAGE]: 'myCommitMessage',
+        [GIT_COMMIT_AUTHOR_NAME]: 'ciAuthorName'
       }
     )
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
     expect(sanitizedExecStub).to.have.been.calledWith('git ls-remote --get-url', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%s', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%an,%ae,%ad,%cn,%ce,%cd', { stdio: 'pipe' })
+    expect(sanitizedExecStub).not.to.have.been.calledWith('git show -s --format=%s', { stdio: 'pipe' })
     expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
   })
@@ -65,8 +72,8 @@ describe('git', () => {
   it('returns all git metadata is git is available', () => {
     sanitizedExecStub
       .onCall(0).returns('git author,git.author@email.com,1972,git committer,git.committer@email.com,1973')
-      .onCall(1).returns('this is a commit message')
-      .onCall(2).returns('gitRepositoryUrl')
+      .onCall(1).returns('gitRepositoryUrl')
+      .onCall(2).returns('this is a commit message')
       .onCall(3).returns('gitBranch')
       .onCall(4).returns('gitCommitSHA')
 
