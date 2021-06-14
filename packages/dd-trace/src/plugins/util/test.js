@@ -10,7 +10,7 @@ const TEST_STATUS = 'test.status'
 const TEST_PARAMETERS = 'test.parameters'
 
 const ERROR_TYPE = 'error.type'
-const ERROR_MESSAGE = 'error.message'
+const ERROR_MESSAGE = 'error.msg'
 const ERROR_STACK = 'error.stack'
 
 const CI_APP_ORIGIN = 'ciapp-test'
@@ -69,7 +69,9 @@ function getTestParametersString (parametersByTestName, testName) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach((span) => {
-    span.finish()
+  span.context()._trace.started.forEach(traceSpan => {
+    if (traceSpan !== span) {
+      traceSpan.finish()
+    }
   })
 }
