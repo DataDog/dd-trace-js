@@ -451,6 +451,10 @@ describe('Config', () => {
   })
 
   it('should support the serviceMapping environment variable', () => {
+    let origVar
+    if ('DD_SERVICE_MAPPING' in process.env) {
+      origVar = Object.getOwnPropertyDescriptor(process.env, 'DD_SERVICE')
+    }
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
     let config = new Config()
 
@@ -459,7 +463,11 @@ describe('Config', () => {
       b: 'bb'
     })
 
-    delete process.env.DD_SERVICE_MAPPING
+    if (origVar) {
+      Object.defineProperty(process.env, 'DD_SERVICE', origVar)
+    } else {
+      delete process.env.DD_SERVICE_MAPPING
+    }
 
     config = new Config()
 

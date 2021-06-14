@@ -82,11 +82,11 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          const config = {}
+          const pluginConfig = {}
           if (serviceMapping && serviceMapping[name]) {
-            config.service = serviceMapping[name]
+            pluginConfig.service = serviceMapping[name]
           }
-          this._set(plugins[name], { name, config: getConfig(name, config) })
+          this._set(plugins[name], { name, config: getConfig(name, pluginConfig) })
         })
     }
 

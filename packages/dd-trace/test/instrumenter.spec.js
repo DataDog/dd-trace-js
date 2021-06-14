@@ -426,6 +426,19 @@ describe('Instrumenter', () => {
         service: 'something-else'
       })
     })
+
+    it('should defer to programmatic plugin config', () => {
+      instrumenter.enable({ serviceMapping: { 'express-mock': 'something-else' } })
+      instrumenter.use('express-mock', {
+        service: 'something-else-entirely'
+      })
+
+      const express = require('express-mock')
+
+      expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {
+        service: 'something-else-entirely'
+      })
+    })
   })
 
   describe('with the instrumenter disabled', () => {
