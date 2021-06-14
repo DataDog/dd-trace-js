@@ -5,6 +5,7 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
+    "preinstall": "node scripts/preinstall.js",
     "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
     "rebuild": "node-gyp rebuild --jobs=max",
     "prebuild": "node scripts/prebuild.js",
@@ -51,8 +52,8 @@
     "url": "https://github.com/DataDog/dd-trace-js/issues"
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
-  "engines": {
-    "node": ">=12"
+  "dd-trace": {
+    "nodejsVersions": [8, 9, 10, 11, 12, 13, 14, 15, 16]
   },
   "dependencies": {
     "@types/node": "^10.12.18",
