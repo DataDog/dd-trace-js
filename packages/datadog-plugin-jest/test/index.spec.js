@@ -440,21 +440,18 @@ describe('Plugin', () => {
         datadogJestEnv.handleTestEvent(testStartEvent)
         testStartEvent.test.fn()
 
-        const agentPromises = [
-          agent.use(trace => {
-            expect(trace[0][0].meta).to.contain({
-              [TEST_STATUS]: 'fail',
-              [ERROR_TYPE]: 'Timeout',
-              [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
-            })
-          }),
-          agent.use(trace => {
-            expect(trace[0][0].meta).to.contain({
-              [TEST_STATUS]: 'pass'
-            })
+        agent.use(trace => {
+          const failedTest = trace[0].find(span => span.meta[TEST_STATUS] === 'fail')
+          const passedTest = trace[0].find(span => span.meta[TEST_STATUS] === 'pass')
+          expect(failedTest.meta).to.contain({
+            [TEST_STATUS]: 'fail',
+            [ERROR_TYPE]: 'Timeout',
+            [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
           })
-        ]
-        Promise.all(agentPromises).then(() => done()).catch(done)
+          expect(passedTest.meta).to.contain({
+            [TEST_STATUS]: 'pass'
+          })
+        }).then(() => done()).catch(done)
       })
 
       it('should not consider other errors as timeout', (done) => {
@@ -516,6 +513,37 @@ describe('Plugin', () => {
 
         datadogJestEnv.handleTestEvent(passingTestEvent)
         passingTestEvent.test.fn()
+      })
+
+      it('should detect snapshot errors', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.getVmContext = () => ({
+          expect: {
+            getState: () =>
+              ({
+                currentTestName: TEST_NAME,
+                suppressedErrors: [new Error('snapshot error message')]
+              })
+          }
+        })
+
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'snapshot error message'
+            })
+          }).then(done).catch(done)
       })
 
       it('works with http integration', (done) => {

@@ -10,7 +10,6 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   ERROR_MESSAGE,
-  ERROR_STACK,
   ERROR_TYPE,
   TEST_PARAMETERS,
   CI_APP_ORIGIN,
@@ -163,14 +162,21 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
         try {
           result = await specFunction()
           // it may have been set already if the test timed out
+          let suppressedErrors = []
+          const context = environment.getVmContext()
+          if (context) {
+            suppressedErrors = context.expect.getState().suppressedErrors
+          }
+          if (suppressedErrors && suppressedErrors.length) {
+            testSpan.setTag('error', suppressedErrors[0])
+            testSpan.setTag(TEST_STATUS, 'fail')
+          }
           if (!testSpan._spanContext._tags[TEST_STATUS]) {
             testSpan.setTag(TEST_STATUS, 'pass')
           }
         } catch (error) {
           testSpan.setTag(TEST_STATUS, 'fail')
-          testSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
-          testSpan.setTag(ERROR_MESSAGE, error.message)
-          testSpan.setTag(ERROR_STACK, error.stack)
+          testSpan.setTag('error', error)
           throw error
         } finally {
           finishAllTraceSpans(testSpan)
