@@ -14,7 +14,15 @@ const GIT_COMMIT_AUTHOR_NAME = 'git.commit.author.name'
 
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
-  const { commitSHA, branch, repositoryUrl, tag } = ciMetadata
+  const {
+    commitSHA,
+    branch,
+    repositoryUrl,
+    tag,
+    commitMessage,
+    authorName: ciAuthorName,
+    authorEmail: ciAuthorEmail
+  } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
   // so if `git` is not present in the env, we won't show a warning to the user.
@@ -27,14 +35,12 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git show -s --format=%an,%ae,%ad,%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
 
-  const commitMessage = sanitizedExec('git show -s --format=%s', { stdio: 'pipe' })
-
   return {
     [GIT_REPOSITORY_URL]: repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
-    [GIT_COMMIT_MESSAGE]: commitMessage,
+    [GIT_COMMIT_MESSAGE]: commitMessage || sanitizedExec('git show -s --format=%s', { stdio: 'pipe' }),
     [GIT_COMMIT_AUTHOR_DATE]: authorDate,
-    [GIT_COMMIT_AUTHOR_NAME]: authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
+    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
+    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
     [GIT_COMMIT_COMMITTER_DATE]: committerDate,
     [GIT_COMMIT_COMMITTER_NAME]: committerName,
     [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
