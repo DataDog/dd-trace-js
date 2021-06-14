@@ -1,0 +1,32 @@
+{
+  "name": "fastify-overhead",
+  "run": "node -r ../monitor index.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "control": {
+      "env": {
+        "PROFILER": "false",
+        "TRACER": "false"
+      }
+    },
+    "with-profiler": {
+      "env": {
+        "PROFILER": "true",
+        "TRACER": "false"
+      }
+    },
+    "with-tracer": {
+      "env": {
+        "PROFILER": "true",
+        "TRACER": "false"
+      }
+    },
+    "with-both": {
+      "env": {
+        "PROFILER": "true",
+        "TRACER": "true"
+      }
+    }
+  }
+}
