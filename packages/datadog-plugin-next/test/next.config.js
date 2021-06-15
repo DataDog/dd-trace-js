@@ -1,6 +1,10 @@
 const path = require('path')
 
 module.exports = {
+  eslint: {
+    ignoreDuringBuilds: true
+  },
+
   webpack: (config) => {
     const react = path.resolve(__dirname, '../../../versions/node_modules/react')
     const reactDom = path.resolve(__dirname, '../../../versions/node_modules/react-dom')
