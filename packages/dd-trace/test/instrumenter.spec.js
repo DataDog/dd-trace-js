@@ -416,6 +416,31 @@ describe('Instrumenter', () => {
     })
   })
 
+  describe('with service mapping', () => {
+    it('should change the service name in plugin config', () => {
+      instrumenter.enable({ serviceMapping: { 'express-mock': 'something-else' } })
+
+      const express = require('express-mock')
+
+      expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {
+        service: 'something-else'
+      })
+    })
+
+    it('should defer to programmatic plugin config', () => {
+      instrumenter.enable({ serviceMapping: { 'express-mock': 'something-else' } })
+      instrumenter.use('express-mock', {
+        service: 'something-else-entirely'
+      })
+
+      const express = require('express-mock')
+
+      expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {
+        service: 'something-else-entirely'
+      })
+    })
+  })
+
   describe('with the instrumenter disabled', () => {
     describe('use', () => {
       it('should not patch if the tracer is disabled', () => {

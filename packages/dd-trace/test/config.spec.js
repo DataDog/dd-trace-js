@@ -449,4 +449,28 @@ describe('Config', () => {
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
   })
+
+  it('should support the serviceMapping environment variable', () => {
+    let origVar
+    if ('DD_SERVICE_MAPPING' in process.env) {
+      origVar = Object.getOwnPropertyDescriptor(process.env, 'DD_SERVICE')
+    }
+    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    let config = new Config()
+
+    expect(config.serviceMapping).to.deep.equal({
+      a: 'aa',
+      b: 'bb'
+    })
+
+    if (origVar) {
+      Object.defineProperty(process.env, 'DD_SERVICE', origVar)
+    } else {
+      delete process.env.DD_SERVICE_MAPPING
+    }
+
+    config = new Config()
+
+    expect(config.serviceMapping).to.deep.equal({})
+  })
 })
