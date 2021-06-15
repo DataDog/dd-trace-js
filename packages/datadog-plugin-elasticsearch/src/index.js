@@ -24,8 +24,8 @@ function createWrapRequest (tracer, config) {
         }
       })
 
-      if (params.body) {
-        span.setTag('elasticsearch.body', JSON.stringify(params.body))
+      if (params.body || params.bulkBody) {
+        span.setTag('elasticsearch.body', JSON.stringify(params.body || params.bulkBody))
       }
 
       analyticsSampler.sample(span, config.analytics)
