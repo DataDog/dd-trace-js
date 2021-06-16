@@ -153,6 +153,9 @@ node-plugin-base: &node-plugin-base
         name: Unit tests
         command: yarn test:plugins:ci
     - run:
+        name: Upload JUnit XML Report
+        command: yarn junit:upload
+    - run:
         name: Merge coverage report
         command: yarn cover:merge
     - store_artifacts:
