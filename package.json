@@ -43,6 +43,9 @@
     "datadog",
     "trace",
     "tracing",
+    "profile",
+    "profiler",
+    "profiling",
     "opentracing",
     "apm"
   ],
