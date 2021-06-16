@@ -892,7 +892,7 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
-      - image: circleci/mongo
+      - image: circleci/mongo:3.4
 
   node-net:
     <<: *node-plugin-base
