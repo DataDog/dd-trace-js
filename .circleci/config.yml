@@ -152,9 +152,13 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
+    - store_test_results:
+        path: plugins-test-results
+        when: always
     - run:
         name: Upload JUnit XML Report
         command: yarn junit:upload
+        when: always
     - run:
         name: Merge coverage report
         command: yarn cover:merge
