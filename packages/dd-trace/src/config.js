@@ -1,7 +1,7 @@
 'use strict'
 
 const URL = require('url').URL
-const pkg = require('./pkg')
+const findPkg = require('./pkg')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
@@ -12,6 +12,8 @@ const runtimeId = `${id().toString()}${id().toString()}`
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
+
+const pkg = findPkg()
 
 class Config {
   constructor (options) {

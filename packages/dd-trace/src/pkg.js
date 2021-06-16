@@ -9,8 +9,7 @@ function findRoot () {
     : process.cwd()
 }
 
-function findPkg () {
-  const cwd = findRoot()
+function findPkg (cwd = findRoot()) {
   const filePath = findUp('package.json', cwd)
 
   try {
@@ -34,4 +33,4 @@ function findUp (name, cwd) {
   }
 }
 
-module.exports = findPkg()
+module.exports = findPkg

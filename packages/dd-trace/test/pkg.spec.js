@@ -20,7 +20,7 @@ describe('pkg', () => {
   }
 
   beforeEach(() => {
-    pkg = require('../src/pkg')
+    pkg = require('../src/pkg')()
   })
 
   it('should load the service name from the main module', () => {

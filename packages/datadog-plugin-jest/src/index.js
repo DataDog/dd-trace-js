@@ -17,6 +17,7 @@ const {
   getTestParametersString,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
+const findPkg = require('../../dd-trace/src/pkg')
 const { getFormattedJestTestParameters } = require('./util')
 
 function wrapEnvironment (BaseEnvironment) {
@@ -193,7 +194,12 @@ module.exports = [
     versions: ['>=24.8.0'],
     patch: function (NodeEnvironment, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
-
+      // it if is the default service, we substitute it
+      const serviceUnderTest = findPkg('package.json', process.cwd()).name
+      if (serviceUnderTest && (tracer._service === 'jest' || tracer._service === 'jest-worker')) {
+        tracer._service = serviceUnderTest
+        tracer._tags.service = serviceUnderTest
+      }
       this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
       const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
