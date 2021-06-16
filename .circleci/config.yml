@@ -1532,7 +1532,7 @@ workflows:
             - node-bench-sirun-exporting-pipeline-latest
   upstream:
     jobs:
-      - node-upstream-node
+      # - node-upstream-node
       - node-upstream-amqp10
       - node-upstream-amqplib
       - node-upstream-bunyan
@@ -1792,7 +1792,7 @@ workflows:
               only:
                 - master
     jobs:
-      - node-upstream-node
+      # - node-upstream-node
       - node-upstream-amqp10
       - node-upstream-amqplib
       - node-upstream-bunyan
