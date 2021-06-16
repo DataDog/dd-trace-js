@@ -17,7 +17,7 @@ describe('Config', () => {
     process.env = {}
 
     Config = proxyquire('../src/config', {
-      './pkg': pkg
+      './pkg': () => pkg
     })
   })
 
