@@ -14,7 +14,7 @@ function uploadJUnitXMLReport () {
   }
   // we install @datadog/datadog-ci
   execSync('yarn global add @datadog/datadog-ci@0.13.2', { stdio: 'inherit' })
-  const service = process.env.PLUGINS || 'core'
+  const service = process.env.PLUGINS ? 'plugins' : 'core'
   // we execute the upload command
   execSync(
     `DD_ENV=ci datadog-ci junit upload \
