@@ -13,7 +13,8 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  ERROR_MESSAGE
 } = require('../../dd-trace/src/plugins/util/test')
 
 const TESTS = [
@@ -82,6 +83,20 @@ const TESTS = [
     ],
     success: true,
     errors: []
+  },
+  {
+    featureName: 'simple.feature',
+    featureLineNumber: ':28',
+    requireName: 'simple.js',
+    testName: 'hooks fail',
+    testStatus: 'fail',
+    steps: [
+      { name: 'datadog', stepStatus: 'skip' },
+      { name: 'run', stepStatus: 'skip' },
+      { name: 'pass', stepStatus: 'skip' }
+    ],
+    success: false,
+    errors: ['skipped', 'skipped', 'skipped']
   }
 ]
 
@@ -180,6 +195,10 @@ describe('Plugin', () => {
                 const parentCucumberStep = testTrace.find(span => span.meta['cucumber.step'] === 'integration')
                 expect(httpSpan.parent_id.toString()).to.equal(parentCucumberStep.span_id.toString())
               }
+              if (testName === 'hooks fail') {
+                expect(testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`))
+                  .to.equal(true)
+              }
             })
             const result = await runCucumber(version, Cucumber, requireName, featureName, featureLineNumber)
             expect(result.success).to.equal(success)
@@ -204,7 +223,7 @@ describe('Plugin', () => {
               })
               errors.forEach((msg, errorIndex) => {
                 expect(
-                  testTrace[errorIndex].meta['error.msg'],
+                  testTrace[errorIndex].meta[ERROR_MESSAGE],
                   `error ${errorIndex} should start with "${msg}"`
                 ).to.satisfy(err => msg === undefined || err.startsWith(msg))
               })
