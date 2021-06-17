@@ -36,6 +36,7 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       tracer = require('../../dd-trace')
+      process.env.DD_TEST_SERVICE = 'jest'
       return agent.load(['jest', 'fs', 'http']).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
@@ -58,7 +59,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
-              service: 'test',
+              service: 'dd-trace',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
@@ -92,7 +93,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
-              service: 'test',
+              service: 'dd-trace',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
               [ORIGIN_KEY]: CI_APP_ORIGIN,
@@ -128,7 +129,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
-              service: 'test',
+              service: 'dd-trace',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
               [ORIGIN_KEY]: CI_APP_ORIGIN,
@@ -159,7 +160,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
-              service: 'test',
+              service: 'dd-trace',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
               [TEST_STATUS]: 'pass',
@@ -271,7 +272,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
-              service: 'test',
+              service: 'dd-trace',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME_FROM_EVENT,
               [TEST_STATUS]: 'pass',
@@ -574,6 +575,26 @@ describe('Plugin', () => {
         passingTestEvent.test.fn()
       })
 
+      it('should set service to service under test', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent.use(trace => {
+          expect(trace[0][0].service).to.equal('dd-trace')
+          expect(trace[0][0].meta.service).to.equal('dd-trace')
+        }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+            },
+            name: TEST_NAME
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {
@@ -589,7 +610,7 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
               language: 'javascript',
-              service: 'test',
+              service: 'dd-trace',
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME_TAG]: TEST_NAME,
               [TEST_STATUS]: 'fail',

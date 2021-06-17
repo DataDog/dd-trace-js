@@ -192,11 +192,11 @@ module.exports = [
   {
     name: 'jest-environment-node',
     versions: ['>=24.8.0'],
-    patch: function (NodeEnvironment, tracer) {
+    patch: function (NodeEnvironment, tracer, config) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
       // it if is the default service, we substitute it
       const serviceUnderTest = findPkg('package.json', process.cwd()).name
-      if (serviceUnderTest && (tracer._service === 'jest' || tracer._service === 'jest-worker')) {
+      if (serviceUnderTest && !config.service && (tracer._service === 'jest' || tracer._service === 'jest-worker')) {
         tracer._service = serviceUnderTest
         tracer._tags.service = serviceUnderTest
       }
@@ -216,9 +216,14 @@ module.exports = [
   {
     name: 'jest-environment-jsdom',
     versions: ['>=24.8.0'],
-    patch: function (JsdomEnvironment, tracer) {
+    patch: function (JsdomEnvironment, tracer, config) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
-
+      // it if is the default service, we substitute it
+      const serviceUnderTest = findPkg('package.json', process.cwd()).name
+      if (serviceUnderTest && !config.service && (tracer._service === 'jest' || tracer._service === 'jest-worker')) {
+        tracer._service = serviceUnderTest
+        tracer._tags.service = serviceUnderTest
+      }
       this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
       const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)

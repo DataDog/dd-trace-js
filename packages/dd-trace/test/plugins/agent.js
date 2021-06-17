@@ -52,7 +52,7 @@ module.exports = {
         })
 
         tracer.init({
-          service: 'test',
+          service: process.env.DD_TEST_SERVICE || 'test',
           port,
           flushInterval: 0,
           plugins: false
