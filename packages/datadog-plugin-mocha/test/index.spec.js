@@ -114,6 +114,18 @@ const TESTS = [
     testName: 'can do integration http',
     root: 'mocha-test-integration-http',
     status: 'pass'
+  },
+  {
+    fileName: 'mocha-fail-hook-sync.js',
+    testName: 'will not run but be reported as failed',
+    root: 'mocha-fail-hook-sync',
+    status: 'fail'
+  },
+  {
+    fileName: 'mocha-fail-hook-async.js',
+    testName: 'will not run but be reported as failed',
+    root: 'mocha-fail-hook-async',
+    status: 'fail'
   }
 ]
 
@@ -188,6 +200,25 @@ describe('Plugin', () => {
                 [TEST_FRAMEWORK]: 'mocha',
                 [TEST_SUITE]: testSuite
               })
+            }).then(done, done)
+          } else if (test.fileName === 'mocha-fail-hook-sync.js') {
+            agent.use(traces => {
+              const testSpan = traces[0][0]
+              expect(testSpan.meta).to.contain({
+                [ERROR_TYPE]: 'TypeError',
+                [ERROR_MESSAGE]: `"before each" hook for "will not run but be reported as failed": \
+Cannot set property 'error' of undefined`
+              })
+              expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
+            }).then(done, done)
+          } else if (test.fileName === 'mocha-fail-hook-async.js') {
+            agent.use(traces => {
+              const testSpan = traces[0][0]
+              expect(testSpan.meta[ERROR_MESSAGE].startsWith(
+                `"after each" hook for "will not run but be reported as failed": \
+Timeout of 100ms exceeded. For async tests and hooks, ensure "done()" is called;`)).to.equal(true)
+              expect(testSpan.meta[ERROR_TYPE]).to.equal('Error')
+              expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
             }).then(done, done)
           } else {
             agent
