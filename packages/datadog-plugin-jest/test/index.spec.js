@@ -574,6 +574,37 @@ describe('Plugin', () => {
         passingTestEvent.test.fn()
       })
 
+      it('handles errors in hooks', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const hookError = new Error('hook error')
+
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            expect(testSpan.meta).to.contain({
+              [TEST_STATUS]: 'fail',
+              [TEST_TYPE]: 'test',
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'hook failure',
+              [ERROR_STACK]: hookError.stack
+            })
+          }).then(done).catch(done)
+
+        const hookFailureEvent = {
+          name: 'hook_failure',
+          test: {
+            fn: () => {},
+            name: TEST_NAME,
+            errors: [[
+              'hook failure',
+              hookError
+            ]]
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(hookFailureEvent)
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {
