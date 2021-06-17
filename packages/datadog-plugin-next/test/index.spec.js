@@ -35,7 +35,14 @@ describe('Plugin', function () {
           // building in-process makes tests fail for an unknown reason
           execSync('node build', {
             cwd: __dirname,
-            env: { version },
+            env: {
+              version,
+              // needed for webpack 5
+              NODE_PATH: [
+                `${__dirname}/../../../versions/next@${version}/node_modules`,
+                `${__dirname}/../../../versions/node_modules`
+              ].join(':')
+            },
             stdio: ['pipe', 'ignore', 'pipe']
           })
 

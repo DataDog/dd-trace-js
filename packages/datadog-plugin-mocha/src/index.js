@@ -10,12 +10,10 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
-  ERROR_MESSAGE,
-  ERROR_STACK,
-  ERROR_TYPE,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
@@ -83,16 +81,10 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             }
           } catch (error) {
             activeSpan.setTag(TEST_STATUS, 'fail')
-            activeSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
-            activeSpan.setTag(ERROR_MESSAGE, error.message)
-            activeSpan.setTag(ERROR_STACK, error.stack)
+            activeSpan.setTag('error', error)
             throw error
           } finally {
-            activeSpan
-              .context()
-              ._trace.started.forEach((span) => {
-                span.finish()
-              })
+            finishAllTraceSpans(activeSpan)
           }
           return result
         }
