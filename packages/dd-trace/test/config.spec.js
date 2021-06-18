@@ -473,4 +473,12 @@ describe('Config', () => {
 
     expect(config.serviceMapping).to.deep.equal({})
   })
+  
+  it('should trim whitespace characters around keys', () => {
+    process.env.DD_TAGS = 'foo:bar, baz:qux'
+
+    const config = new Config()
+
+    expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
+  })
 })
