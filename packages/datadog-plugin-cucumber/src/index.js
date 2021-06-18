@@ -85,7 +85,7 @@ function createWrapRunStep (tracer) {
 module.exports = [
   {
     name: '@cucumber/cucumber',
-    versions: ['>=7.0.0'],
+    versions: ['7.0.0 - 7.2.1'],
     file: 'lib/runtime/pickle_runner.js',
     patch (PickleRunner, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber')
