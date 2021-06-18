@@ -479,6 +479,6 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
+    expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
   })
 })
