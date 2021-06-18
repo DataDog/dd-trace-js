@@ -93,7 +93,7 @@ describe('tagger', () => {
 
     expect(parsed).to.deep.equal({
       foo: 'bar',
-      fruit: 'banana
+      fruit: 'banana'
     })
   })
 })
