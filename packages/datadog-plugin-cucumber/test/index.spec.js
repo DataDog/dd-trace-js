@@ -272,7 +272,13 @@ describe('Plugin', () => {
             expect(testSpan.name).to.equal('cucumber.test')
             expect(testSpan.resource).to.equal('skip scenario based on tag')
           })
-          const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'skip scenario based on tag')
+          const result = await runCucumber(
+            version,
+            Cucumber,
+            'simple.js',
+            'simple.feature',
+            'skip scenario based on tag'
+          )
           expect(result.success).to.equal(true)
           await checkTraces
         })
@@ -303,7 +309,13 @@ describe('Plugin', () => {
               ).to.satisfy(err => msg === undefined || err.startsWith(msg))
             })
           })
-          const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'skip scenario based on tag')
+          const result = await runCucumber(
+            version,
+            Cucumber,
+            'simple.js',
+            'simple.feature',
+            'skip scenario based on tag'
+          )
           expect(result.success).to.equal(true)
           await checkTraces
         })
