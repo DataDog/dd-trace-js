@@ -21,16 +21,12 @@ const READABLE_ACTION_NAMES = {
   pu: 'presence-unsubscribe'
 };
 
-function createTraceName(action, collection) {
+function getReadableActionName(action) {
   let actionName = READABLE_ACTION_NAMES[action];
   if (actionName === undefined) {
-    actionName = action;
+    return action;
   }
-  let traceName = 'sharedb-request/' + actionName;
-  if (collection) {
-    traceName += '/' + collection;
-  }
-  return traceName;
+  return actionName;
 }
 
 function createWrapHandle(tracer, config) { // called once
@@ -47,25 +43,26 @@ function createWrapHandle(tracer, config) { // called once
       switch (action) {
         case 'receive':
           if (triggerContext.data && triggerContext.data.a) {
-            const scope = tracer.scope();
-            const childOf = scope.active();
-            return triggerFn.call(this, action, agent, triggerContext, function wrappedCallback(err) {
-              tracer.trace(
-                createTraceName(triggerContext.data.a, triggerContext.data.c),
-                { childOf },
-                (span, spanDoneCb) => {
-                  if (config.hooks && config.hooks.receive) {
-                    config.hooks.receive(span, agent, triggerContext);
-                  }
-                  if (span) {
-                    MessagesAwaitingResponse.set(triggerContext.data, {
-                      span,
-                      spanDoneCb
-                    });
-                  }
-                  callback(err);
-                });
-            });
+            // TODO this signature of wrap is used throughout dd-trace-js, but has no corresponding TS type?
+            return tracer.wrap('sharedb-request', function() {
+              return {
+                'resource.method': getReadableActionName(triggerContext.data.a),
+                'resource.name': triggerContext.data.c
+              };
+            }, function wrapped(span, spanDoneCb) {
+              return triggerFn.call(this, action, agent, triggerContext, function wrappedCallback(err) {
+                if (config.hooks && config.hooks.receive) {
+                  config.hooks.receive(span, agent, triggerContext);
+                }
+                if (span) {
+                  MessagesAwaitingResponse.set(triggerContext.data, {
+                    span,
+                    spanDoneCb
+                  });
+                }
+                callback(err);
+              });
+            }, true);
           } else {
             return triggerFn.apply(this, arguments);
           }
