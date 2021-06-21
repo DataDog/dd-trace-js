@@ -19,7 +19,6 @@ const {
 const TESTS = [
   {
     featureName: 'simple.feature',
-    featureLineNumber: ':3',
     requireName: 'simple.js',
     testName: 'pass scenario',
     testStatus: 'pass',
@@ -33,7 +32,6 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureLineNumber: ':8',
     requireName: 'simple.js',
     testName: 'fail scenario',
     testStatus: 'fail',
@@ -47,7 +45,6 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureLineNumber: ':13',
     requireName: 'simple.js',
     testName: 'skip scenario',
     testStatus: 'skip',
@@ -61,7 +58,6 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureLineNumber: ':19',
     requireName: 'simple.js',
     testName: 'skip scenario based on tag',
     testStatus: 'skip',
@@ -71,7 +67,6 @@ const TESTS = [
   },
   {
     featureName: 'simple.feature',
-    featureLineNumber: ':22',
     requireName: 'simple.js',
     testName: 'integration scenario',
     testStatus: 'pass',
@@ -87,7 +82,7 @@ const TESTS = [
 
 wrapIt()
 
-const runCucumber = (version, Cucumber, requireName, featureName, featureLineNumber) => {
+const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
   const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
   const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
@@ -96,7 +91,9 @@ const runCucumber = (version, Cucumber, requireName, featureName, featureLineNum
     cucumberJs,
     '--require',
     path.join(__dirname, 'features', requireName),
-    path.join(__dirname, 'features', `${featureName}${featureLineNumber}`)
+    path.join(__dirname, 'features', featureName),
+    '--name',
+    testName
   ]
   const cli = new Cucumber.Cli({
     argv,
@@ -134,10 +131,8 @@ describe('Plugin', () => {
       TESTS.forEach(test => {
         const testFilePath = path.join(__dirname, 'features', test.featureName)
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
-
         const {
           featureName,
-          featureLineNumber,
           requireName,
           testName,
           testStatus,
@@ -146,7 +141,7 @@ describe('Plugin', () => {
           errors
         } = test
 
-        describe(`for ${featureName}${featureLineNumber}`, () => {
+        describe(`for ${featureName}${testName}`, () => {
           it('should create a test span and spans for integrations', async function () {
             const checkTraces = agent.use(traces => {
               expect(traces.length).to.equal(1)
@@ -181,7 +176,7 @@ describe('Plugin', () => {
                 expect(httpSpan.parent_id.toString()).to.equal(parentCucumberStep.span_id.toString())
               }
             })
-            const result = await runCucumber(version, Cucumber, requireName, featureName, featureLineNumber)
+            const result = await runCucumber(version, Cucumber, requireName, featureName, testName)
             expect(result.success).to.equal(success)
             await checkTraces
           })
@@ -209,7 +204,7 @@ describe('Plugin', () => {
                 ).to.satisfy(err => msg === undefined || err.startsWith(msg))
               })
             })
-            const result = await runCucumber(version, Cucumber, requireName, featureName, featureLineNumber)
+            const result = await runCucumber(version, Cucumber, requireName, featureName, testName)
             expect(result.success).to.equal(success)
             await checkTraces
           })
