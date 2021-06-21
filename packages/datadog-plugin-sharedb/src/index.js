@@ -1,6 +1,6 @@
-'use strict';
+'use strict'
 
-const MessagesAwaitingResponse = new WeakMap();
+const MessagesAwaitingResponse = new WeakMap()
 const READABLE_ACTION_NAMES = {
   hs: 'handshake',
   qf: 'query-fetch',
@@ -19,24 +19,24 @@ const READABLE_ACTION_NAMES = {
   pr: 'presence-request',
   ps: 'presence-subscribe',
   pu: 'presence-unsubscribe'
-};
-
-function getReadableActionName(action) {
-  let actionName = READABLE_ACTION_NAMES[action];
-  if (actionName === undefined) {
-    return action;
-  }
-  return actionName;
 }
 
-function getReadableResourceName(readableActionName, collection, query) {
+function getReadableActionName (action) {
+  const actionName = READABLE_ACTION_NAMES[action]
+  if (actionName === undefined) {
+    return action
+  }
+  return actionName
+}
+
+function getReadableResourceName (readableActionName, collection, query) {
   if (collection) {
-    readableActionName += ' ' + collection;
+    readableActionName += ' ' + collection
   }
   if (query) {
-    readableActionName += ' ' + JSON.stringify(sanitize(query));
+    readableActionName += ' ' + JSON.stringify(sanitize(query))
   }
-  return readableActionName;
+  return readableActionName
 }
 
 function sanitize (input) {
@@ -57,9 +57,98 @@ function isObject (val) {
   return typeof val === 'object' && val !== null && !(val instanceof Array)
 }
 
-function createWrapHandle(tracer, config) { // called once
-  return function wrapTrigger(triggerFn) { // called once
-    return function handleMessageWithTrace(action, agent, triggerContext, callback) { // called for each trigger
+/**
+ * @description Handle a "receive" event. This will be a message to the server, from the client or the same server
+ * process.
+ * @param {Tracer} tracer DataDog Tracer.
+ * @param {sharedb} config sharedb plugin configuration.
+ * @param {string} action ShareDB Message action.
+ * @param {Object} agent ShareDB Agent
+ * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
+ * @param {Function} callback Callback to continue middleware execution.
+ * @param {Function} triggerFn Function to start middleware execution.
+ * @returns {*}
+ */
+function handleReceive (tracer, config, action, agent, triggerContext, callback, triggerFn) {
+  if (triggerContext.data && triggerContext.data.a) {
+    const scope = tracer.scope()
+    const childOf = scope.active()
+    // Call the trigger function to continue the middleware chain.
+    return triggerFn.call(this, action, agent, triggerContext, function wrappedCallback (err) {
+      // When the middleware calls back into us, start a trace.
+      const actionName = getReadableActionName(triggerContext.data.a)
+      tracer.trace(
+        'sharedb.request',
+        {
+          childOf,
+          tags: {
+            'service.name': config.service || `${tracer._service}-sharedb`,
+            'span.type': 'sharedb.request',
+            'span.kind': 'client',
+            'resource.method': actionName,
+            'resource.name': getReadableResourceName(actionName, triggerContext.data.c, triggerContext.data.q)
+          }
+        },
+        (span, spanDoneCb) => {
+          if (config.hooks && config.hooks.receive) {
+            config.hooks.receive(span, triggerContext)
+          }
+          if (span) {
+            MessagesAwaitingResponse.set(triggerContext.data, {
+              span,
+              spanDoneCb
+            })
+          }
+          callback(err)
+        })
+    })
+  } else {
+    return triggerFn.apply(this, arguments)
+  }
+}
+
+/**
+ * @description Handle a "reply" event. This will be a message to a client for a corresponding "receive" event.
+ * @param {sharedb} config sharedb plugin configuration.
+ * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
+ * @param {Function} triggerFn Function to start middleware execution.
+ * @returns {*}
+ */
+function handleReply (config, triggerContext, triggerFn) {
+  const replySpanInfo = MessagesAwaitingResponse.get(triggerContext.request)
+  if (replySpanInfo) {
+    if (config.hooks && config.hooks.reply) {
+      config.hooks.reply(replySpanInfo.span, triggerContext)
+    }
+    replySpanInfo.spanDoneCb()
+    MessagesAwaitingResponse.delete(triggerContext.request)
+  }
+  return triggerFn.apply(this, arguments)
+}
+
+/**
+ * @description Handle a "send" event. This is a "catch-all" for outbound events, in the case where
+ * an error may occur and ShareDB doesn't send a "reply" event.
+ * @param {sharedb} config sharedb plugin configuration.
+ * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
+ * @param {Function} triggerFn Function to start middleware execution.
+ * @returns {*}
+ */
+function handleSend (config, triggerContext, triggerFn) {
+  const sendSpanInfo = MessagesAwaitingResponse.get(triggerContext)
+  if (sendSpanInfo) {
+    if (config.hooks && config.hooks.reply) {
+      config.hooks.reply(sendSpanInfo.span, triggerContext)
+    }
+    sendSpanInfo.spanDoneCb()
+    MessagesAwaitingResponse.delete(triggerContext)
+  }
+  return triggerFn.apply(this, arguments)
+}
+
+function createWrapHandle (tracer, config) { // called once
+  return function wrapTrigger (triggerFn) { // called once
+    return function handleMessageWithTrace (action, agent, triggerContext, callback) { // called for each trigger
       /**
        * What we're doing here is tying ourselves into the ShareDB Backend middleware.
        * This allows us to create traces for all events that have triggers, like receiving a message and replying
@@ -70,76 +159,26 @@ function createWrapHandle(tracer, config) { // called once
        */
       switch (action) {
         case 'receive':
-          if (triggerContext.data && triggerContext.data.a) {
-            const scope = tracer.scope();
-            const childOf = scope.active();
-            // Call the trigger function to continue the middleware chain.
-            return triggerFn.call(this, action, agent, triggerContext, function wrappedCallback(err) {
-              // When the middleware calls back into us, start a trace.
-              const actionName = getReadableActionName(triggerContext.data.a);
-              tracer.trace(
-                'sharedb.request',
-                {
-                  childOf,
-                  tags: {
-                    'service.name': config.service || `${tracer._service}-sharedb`,
-                    'span.type': 'sharedb.request',
-                    'span.kind': 'client',
-                    'resource.method': actionName,
-                    'resource.name': getReadableResourceName(actionName, triggerContext.data.c, triggerContext.data.q)
-                  }
-                },
-                (span, spanDoneCb) => {
-                  if (config.hooks && config.hooks.receive) {
-                    config.hooks.receive(span, agent, triggerContext);
-                  }
-                  if (span) {
-                    MessagesAwaitingResponse.set(triggerContext.data, {
-                      span,
-                      spanDoneCb
-                    });
-                  }
-                  callback(err);
-                });
-            });
-          } else {
-            return triggerFn.apply(this, arguments);
-          }
+          return handleReceive(tracer, config, action, agent, triggerContext, callback, triggerFn)
         case 'reply':
-          const replySpanInfo = MessagesAwaitingResponse.get(triggerContext.request);
-          if (replySpanInfo) {
-            if (config.hooks && config.hooks.reply) {
-              config.hooks.reply(replySpanInfo.span, triggerContext);
-            }
-            replySpanInfo.spanDoneCb();
-            MessagesAwaitingResponse.delete(triggerContext.request);
-          }
-          return triggerFn.apply(this, arguments);
+          return handleReply(config, triggerContext, triggerFn)
         case 'send':
-          const sendSpanInfo = MessagesAwaitingResponse.get(triggerContext);
-          if (sendSpanInfo) {
-            if (config.hooks && config.hooks.reply) {
-              config.hooks.reply(sendSpanInfo.span, triggerContext);
-            }
-            sendSpanInfo.spanDoneCb();
-            MessagesAwaitingResponse.delete(triggerContext);
-          }
-          return triggerFn.apply(this, arguments);
+          return handleSend(config, triggerContext, triggerFn)
         default:
-          return triggerFn.apply(this, arguments);
+          return triggerFn.apply(this, arguments)
       }
-    };
-  };
+    }
+  }
 }
 
 module.exports = {
   name: 'sharedb',
   versions: ['>=1'],
   file: 'lib/backend.js',
-  patch(Backend, tracer, config) {
-    this.wrap(Backend.prototype, 'trigger', createWrapHandle(tracer, config));
+  patch (Backend, tracer, config) {
+    this.wrap(Backend.prototype, 'trigger', createWrapHandle(tracer, config))
   },
-  unpatch(Backend) {
-    this.unwrap(Backend.prototype, 'trigger');
+  unpatch (Backend) {
+    this.unwrap(Backend.prototype, 'trigger')
   }
-};
+}
