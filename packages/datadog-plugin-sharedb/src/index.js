@@ -58,7 +58,10 @@ function createWrapHandle(tracer, config) { // called once
                     config.hooks.receive(span, agent, triggerContext);
                   }
                   if (span) {
-                    MessagesAwaitingResponse.set(triggerContext.data, spanDoneCb);
+                    MessagesAwaitingResponse.set(triggerContext.data, {
+                      span,
+                      spanDoneCb
+                    });
                   }
                   callback(err);
                 });
@@ -67,16 +70,22 @@ function createWrapHandle(tracer, config) { // called once
             return triggerFn.apply(this, arguments);
           }
         case 'reply':
-          const replySpanCallBack = MessagesAwaitingResponse.get(triggerContext.request);
-          if (replySpanCallBack) {
-            replySpanCallBack();
+          const replySpanInfo = MessagesAwaitingResponse.get(triggerContext.request);
+          if (replySpanInfo) {
+            if (config.hooks && config.hooks.reply) {
+              config.hooks.reply(replySpanInfo.span, triggerContext);
+            }
+            replySpanInfo.spanDoneCb();
             MessagesAwaitingResponse.delete(triggerContext.request);
           }
           return triggerFn.apply(this, arguments);
         case 'send':
-          const sendSpanCallBack = MessagesAwaitingResponse.get(triggerContext);
-          if (sendSpanCallBack) {
-            sendSpanCallBack();
+          const sendSpanInfo = MessagesAwaitingResponse.get(triggerContext);
+          if (sendSpanInfo) {
+            if (config.hooks && config.hooks.reply) {
+              config.hooks.reply(sendSpanInfo.span, triggerContext);
+            }
+            sendSpanInfo.spanDoneCb();
             MessagesAwaitingResponse.delete(triggerContext);
           }
           return triggerFn.apply(this, arguments);
