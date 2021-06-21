@@ -29,11 +29,32 @@ function getReadableActionName(action) {
   return actionName;
 }
 
-function getReadableResourceName(readableActionName, collection) {
+function getReadableResourceName(readableActionName, collection, query) {
   if (collection) {
     readableActionName += ' ' + collection;
   }
+  if (query) {
+    readableActionName += ' ' + JSON.stringify(sanitize(query));
+  }
   return readableActionName;
+}
+
+function sanitize (input) {
+  const output = {}
+
+  if (!isObject(input) || Buffer.isBuffer(input)) return '?'
+
+  for (const key in input) {
+    if (typeof input[key] === 'function') continue
+
+    output[key] = sanitize(input[key])
+  }
+
+  return output
+}
+
+function isObject (val) {
+  return typeof val === 'object' && val !== null && !(val instanceof Array)
 }
 
 function createWrapHandle(tracer, config) { // called once
@@ -65,7 +86,7 @@ function createWrapHandle(tracer, config) { // called once
                     'span.type': 'sharedb.request',
                     'span.kind': 'client',
                     'resource.method': actionName,
-                    'resource.name': getReadableResourceName(actionName)
+                    'resource.name': getReadableResourceName(actionName, triggerContext.data.c, triggerContext.data.q)
                   }
                 },
                 (span, spanDoneCb) => {
