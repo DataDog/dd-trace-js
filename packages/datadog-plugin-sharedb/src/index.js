@@ -29,6 +29,13 @@ function getReadableActionName(action) {
   return actionName;
 }
 
+function getReadableResourceName(readableActionName, collection) {
+  if (collection) {
+    readableActionName += ' ' + collection;
+  }
+  return readableActionName;
+}
+
 function createWrapHandle(tracer, config) { // called once
   return function wrapTrigger(triggerFn) { // called once
     return function handleMessageWithTrace(action, agent, triggerContext, callback) { // called for each trigger
@@ -48,6 +55,7 @@ function createWrapHandle(tracer, config) { // called once
             // Call the trigger function to continue the middleware chain.
             return triggerFn.call(this, action, agent, triggerContext, function wrappedCallback(err) {
               // When the middleware calls back into us, start a trace.
+              const actionName = getReadableActionName(triggerContext.data.a);
               tracer.trace(
                 'sharedb.request',
                 {
@@ -56,8 +64,8 @@ function createWrapHandle(tracer, config) { // called once
                     'service.name': config.service || `${tracer._service}-sharedb`,
                     'span.type': 'sharedb.request',
                     'span.kind': 'client',
-                    'resource.method': getReadableActionName(triggerContext.data.a),
-                    'resource.name': triggerContext.data.c
+                    'resource.method': actionName,
+                    'resource.name': getReadableResourceName(actionName)
                   }
                 },
                 (span, spanDoneCb) => {
