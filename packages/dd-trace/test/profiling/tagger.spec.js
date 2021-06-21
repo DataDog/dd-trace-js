@@ -86,4 +86,14 @@ describe('tagger', () => {
 
     expect(parsed).to.deep.equal({})
   })
+
+  it('should trim whitespace around keys and values', () => {
+    const tags = 'foo:bar, fruit:banana'
+    const parsed = tagger.parse(tags)
+
+    expect(parsed).to.deep.equal({
+      foo: 'bar',
+      fruit: 'banana'
+    })
+  })
 })

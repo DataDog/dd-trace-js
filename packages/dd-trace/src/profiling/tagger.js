@@ -9,8 +9,8 @@ const tagger = {
         if (Array.isArray(tags)) {
           return tags.reduce((prev, next) => {
             const parts = next.split(':')
-            const key = parts.shift()
-            const value = parts.join(':')
+            const key = parts.shift().trim()
+            const value = parts.join(':').trim()
 
             if (!key || !value) return prev
 
