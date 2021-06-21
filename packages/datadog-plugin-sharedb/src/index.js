@@ -103,18 +103,21 @@ function handleReceive (tracer, config, action, agent, triggerContext, callback,
         })
     })
   } else {
-    return triggerFn.apply(this, arguments)
+    return triggerFn.call(this, action, agent, triggerContext, callback)
   }
 }
 
 /**
  * @description Handle a "reply" event. This will be a message to a client for a corresponding "receive" event.
  * @param {sharedb} config sharedb plugin configuration.
+ * @param {string} action ShareDB Message action.
+ * @param {Object} agent ShareDB Agent
  * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
+ * @param {Function} callback Callback to continue middleware execution.
  * @param {Function} triggerFn Function to start middleware execution.
  * @returns {*}
  */
-function handleReply (config, triggerContext, triggerFn) {
+function handleReply (config, action, agent, triggerContext, callback, triggerFn) {
   const replySpanInfo = MessagesAwaitingResponse.get(triggerContext.request)
   if (replySpanInfo) {
     if (config.hooks && config.hooks.reply) {
@@ -123,18 +126,21 @@ function handleReply (config, triggerContext, triggerFn) {
     replySpanInfo.spanDoneCb()
     MessagesAwaitingResponse.delete(triggerContext.request)
   }
-  return triggerFn.apply(this, arguments)
+  return triggerFn.call(this, action, agent, triggerContext, callback)
 }
 
 /**
  * @description Handle a "send" event. This is a "catch-all" for outbound events, in the case where
  * an error may occur and ShareDB doesn't send a "reply" event.
  * @param {sharedb} config sharedb plugin configuration.
+ * @param {string} action ShareDB Message action.
+ * @param {Object} agent ShareDB Agent
  * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
+ * @param {Function} callback Callback to continue middleware execution.
  * @param {Function} triggerFn Function to start middleware execution.
  * @returns {*}
  */
-function handleSend (config, triggerContext, triggerFn) {
+function handleSend (config, action, agent, triggerContext, callback, triggerFn) {
   const sendSpanInfo = MessagesAwaitingResponse.get(triggerContext)
   if (sendSpanInfo) {
     if (config.hooks && config.hooks.reply) {
@@ -143,12 +149,13 @@ function handleSend (config, triggerContext, triggerFn) {
     sendSpanInfo.spanDoneCb()
     MessagesAwaitingResponse.delete(triggerContext)
   }
-  return triggerFn.apply(this, arguments)
+  return triggerFn.call(this, action, agent, triggerContext, callback)
 }
 
 function createWrapHandle (tracer, config) { // called once
   return function wrapTrigger (triggerFn) { // called once
     return function handleMessageWithTrace (action, agent, triggerContext, callback) { // called for each trigger
+      const args = arguments;
       /**
        * What we're doing here is tying ourselves into the ShareDB Backend middleware.
        * This allows us to create traces for all events that have triggers, like receiving a message and replying
@@ -159,11 +166,11 @@ function createWrapHandle (tracer, config) { // called once
        */
       switch (action) {
         case 'receive':
-          return handleReceive(tracer, config, action, agent, triggerContext, callback, triggerFn)
+          return handleReceive.call(this, tracer, config, action, agent, triggerContext, callback, triggerFn)
         case 'reply':
-          return handleReply(config, triggerContext, triggerFn)
+          return handleReply.call(this, config, action, agent, triggerContext, callback, triggerFn)
         case 'send':
-          return handleSend(config, triggerContext, triggerFn)
+          return handleSend.call(this, config, action, agent, triggerContext, callback, triggerFn)
         default:
           return triggerFn.apply(this, arguments)
       }
