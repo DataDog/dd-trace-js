@@ -14,12 +14,13 @@ function uploadJUnitXMLReport () {
   }
   // we install @datadog/datadog-ci
   execSync('yarn global add @datadog/datadog-ci@0.13.2', { stdio: 'inherit' })
+  const service = process.env.PLUGINS ? 'plugins' : 'core'
   // we execute the upload command
   execSync(
     `DD_ENV=ci datadog-ci junit upload \
     --tags runtime.version:${process.version} \
-    --service dd-trace-js-core-tests \
-    ./core-test-results/mocha/test-results.xml`,
+    --service dd-trace-js-${service}-tests \
+    ./test-results/mocha/test-results.xml`,
     {
       stdio: 'inherit'
     }

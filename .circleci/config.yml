@@ -34,10 +34,12 @@ node-core-base: &node-core-base
         name: Unit tests
         command: yarn test:core:ci
     - store_test_results:
-        path: core-test-results
+        path: test-results
+        when: always
     - run:
         name: Upload JUnit XML Report
         command: yarn junit:upload
+        when: always
     - run:
         name: Merge coverage report
         command: yarn cover:merge
@@ -152,6 +154,13 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
+    - store_test_results:
+        path: test-results
+        when: always
+    - run:
+        name: Upload JUnit XML Report
+        command: yarn junit:upload
+        when: always
     - run:
         name: Merge coverage report
         command: yarn cover:merge
