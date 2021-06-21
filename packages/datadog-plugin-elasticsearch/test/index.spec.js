@@ -72,6 +72,41 @@ describe('Plugin', () => {
           }, () => {})
         })
 
+        it('should set the correct tags on msearch', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/_msearch')
+              expect(traces[0][0].meta).to.have.property(
+                'elasticsearch.body',
+                '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
+              )
+              expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"size":100}')
+            })
+            .then(done)
+            .catch(done)
+
+          client.msearch({
+            size: 100,
+            body: [
+              { index: 'docs' },
+              {
+                query: {
+                  match_all: {}
+                }
+              },
+              { index: 'docs2' },
+              {
+                query: {
+                  match_all: {}
+                }
+              }
+            ]
+          }, () => {})
+        })
+
         it('should skip tags for unavailable fields', done => {
           agent
             .use(traces => {

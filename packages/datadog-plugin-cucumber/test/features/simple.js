@@ -21,6 +21,15 @@ Given('datadog', function () {
 
 When('run', () => {})
 
+When('integration', function () {
+  const http = require('http')
+  return new Promise(resolve => {
+    http.request('http://test:123', () => {
+      resolve()
+    }).end()
+  })
+})
+
 Then('pass', function () {
   expect(this.datadog).to.eql('datadog')
 })

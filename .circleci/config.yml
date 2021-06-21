@@ -892,7 +892,7 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
-      - image: circleci/mongo
+      - image: circleci/mongo:3.4
 
   node-net:
     <<: *node-plugin-base
@@ -968,7 +968,7 @@ jobs:
   node-upstream-promise:
     <<: *node-upstream-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=promise
 
@@ -1532,7 +1532,7 @@ workflows:
             - node-bench-sirun-exporting-pipeline-latest
   upstream:
     jobs:
-      - node-upstream-node
+      # - node-upstream-node
       - node-upstream-amqp10
       - node-upstream-amqplib
       - node-upstream-bunyan
@@ -1792,7 +1792,7 @@ workflows:
               only:
                 - master
     jobs:
-      - node-upstream-node
+      # - node-upstream-node
       - node-upstream-amqp10
       - node-upstream-amqplib
       - node-upstream-bunyan

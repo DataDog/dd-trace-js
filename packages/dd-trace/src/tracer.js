@@ -4,6 +4,7 @@ const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
 const getScope = require('./scope')
+const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -128,7 +129,7 @@ class DatadogTracer extends Tracer {
 }
 
 function addError (span, error) {
-  if (error && error instanceof Error) {
+  if (isError(error)) {
     span.addTags({
       'error.type': error.name,
       'error.msg': error.message,

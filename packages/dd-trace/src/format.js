@@ -4,6 +4,7 @@ const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
 const id = require('./id')
+const { isError } = require('./util')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const ANALYTICS_KEY = constants.ANALYTICS_KEY
@@ -118,8 +119,7 @@ function extractRootTags (trace, span) {
 
 function extractError (trace, span) {
   const error = span.context()._tags['error']
-
-  if (error instanceof Error) {
+  if (isError(error)) {
     addTag(trace.meta, trace.metrics, 'error.msg', error.message)
     addTag(trace.meta, trace.metrics, 'error.type', error.name)
     addTag(trace.meta, trace.metrics, 'error.stack', error.stack)

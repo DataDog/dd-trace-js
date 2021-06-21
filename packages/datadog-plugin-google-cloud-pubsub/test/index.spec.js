@@ -23,8 +23,7 @@ describe('Plugin', () => {
       delete process.env.PUBSUB_EMULATOR_HOST
     })
     afterEach(() => {
-      agent.close()
-      agent.wipe()
+      return agent.close()
     })
     withVersions(plugin, '@google-cloud/pubsub', version => {
       let pubsub
@@ -34,8 +33,10 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
+          return agent.load('google-cloud-pubsub')
+        })
+        beforeEach(() => {
           tracer = require('../../dd-trace')
-          agent.load('google-cloud-pubsub')
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
@@ -65,8 +66,8 @@ describe('Plugin', () => {
                 'error.stack': error.stack
               }
             })
-            pubsub.getClient_ = function () {
-              throw error
+            pubsub.getClient_ = function (config, callback) {
+              callback(error)
             }
             try {
               await pubsub.createTopic(topicName)
@@ -110,18 +111,14 @@ describe('Plugin', () => {
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
-            pubsub.getClient_ = function () {
-              throw error
+            pubsub.getClient_ = function (config, callback) {
+              callback(error)
             }
-            const request = topic.request
-            topic.request = function () {
-              try {
-                request.apply(this, arguments)
-              } catch (e) {
-                // this is just to prevent mocha from crashing
-              }
+            try {
+              await publish(topic, { data: Buffer.from('hello') })
+            } catch (e) {
+              // this is just to prevent mocha from crashing
             }
-            publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
 
@@ -222,10 +219,13 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          tracer = require('../../dd-trace')
-          agent.load('google-cloud-pubsub', {
+          return agent.load('google-cloud-pubsub', {
             service: 'a_test_service'
           })
+        })
+
+        beforeEach(() => {
+          tracer = require('../../dd-trace')
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
