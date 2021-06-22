@@ -19,6 +19,11 @@ Given('datadog', function () {
   this.setTo('datadog')
 })
 
+Before('@hooks-fail', function () {
+  const unsafe = {}
+  unsafe.yeah.boom = 'crash'
+})
+
 When('run', () => {})
 
 When('integration', function () {
