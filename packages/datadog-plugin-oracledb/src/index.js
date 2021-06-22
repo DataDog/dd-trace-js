@@ -20,11 +20,13 @@ function createWrapExecute (tracer, config) {
         'service.name': service
       }
 
-      return tracer.trace('oracle.query', { tags }, span => {
+      return tracer.wrap('oracle.query', { tags }, function (...args) {
+        const span = tracer.scope().active()
+
         analyticsSampler.sample(span, config.measured)
 
-        return execute.apply(this, arguments)
-      })
+        return execute.apply(this, args)
+      }).apply(this, arguments)
     }
   }
 }
