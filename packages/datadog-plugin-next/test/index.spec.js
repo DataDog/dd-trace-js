@@ -10,7 +10,7 @@ const plugin = require('../src')
 wrapIt()
 
 describe('Plugin', function () {
-  this.timeout(30000) // Webpack builds on every test run
+  this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
   let next
   let app
