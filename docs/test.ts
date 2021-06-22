@@ -4,7 +4,6 @@ import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
 import { SERVER, CLIENT, PRODUCER, CONSUMER } from '../ext/kinds'
 import { USER_REJECT, AUTO_REJECT, AUTO_KEEP, USER_KEEP } from '../ext/priority'
 import {
-  ANALYTICS,
   ERROR,
   HTTP_METHOD,
   HTTP_REQUEST_HEADERS,
@@ -37,7 +36,6 @@ tracer.init({
   enabled: true,
   logInjection: true,
   startupLogs: false,
-  analytics: true,
   env: 'test',
   version: '1.0.0',
   url: 'http://localhost',
@@ -238,7 +236,7 @@ tracer.use('winston');
 tracer.use('express', false)
 tracer.use('express', { enabled: false })
 tracer.use('express', { service: 'name' });
-tracer.use('express', { analytics: true });
+tracer.use('express', { measured: true });
 
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
@@ -254,8 +252,7 @@ span = tracer.startSpan('test', {
 tracer.trace('test', () => {})
 tracer.trace('test', { tags: { foo: 'bar' }}, () => {})
 tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
-tracer.trace('test', { analytics: true }, () => {})
-tracer.trace('test', { analytics: 0.5 }, () => {})
+tracer.trace('test', { measured: true }, () => {})
 tracer.trace('test', (span: Span) => {})
 tracer.trace('test', (span: Span, fn: () => void) => {})
 tracer.trace('test', (span: Span, fn: (err: Error) => string) => {})
