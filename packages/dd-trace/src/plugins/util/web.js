@@ -408,9 +408,16 @@ function extractURL (req) {
   if (req.stream) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
   } else {
-    const protocol = req.socket.encrypted ? 'https' : 'http'
+    const protocol = getProtocol(req)
     return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
   }
+}
+
+function getProtocol (req) {
+  if (req.socket && req.socket.encrypted) return 'https'
+  if (req.connection && req.connection.encrypted) return 'https'
+
+  return 'http'
 }
 
 function getHeadersToRecord (config) {

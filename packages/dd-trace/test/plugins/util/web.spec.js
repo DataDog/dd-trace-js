@@ -33,13 +33,15 @@ describe('plugins/util/web', () => {
   let tags
 
   beforeEach(() => {
+    // `req` should only have common properties exposed and not things like
+    // `socket` or `connection` since some libraries rely on fake objects that
+    // may not have those.
     req = {
       method: 'GET',
       headers: {
         'host': 'localhost',
         'date': 'now'
-      },
-      socket: {}
+      }
     }
     end = sinon.stub()
     res = {
@@ -322,6 +324,24 @@ describe('plugins/util/web', () => {
         res.writeHead()
 
         expect(res.setHeader).to.not.have.been.called
+      })
+
+      it('should support https', () => {
+        req.url = '/user/123'
+        req.socket = { encrypted: true }
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.include({
+            [SPAN_TYPE]: WEB,
+            [HTTP_URL]: 'https://localhost/user/123',
+            [HTTP_METHOD]: 'GET',
+            [SPAN_KIND]: SERVER
+          })
+        })
       })
 
       it('should support HTTP2 compatibility API', () => {
