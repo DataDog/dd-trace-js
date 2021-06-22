@@ -76,10 +76,8 @@ describe('startup logging', () => {
       sample_rate: 1,
       dd_version: '1.2.3',
       log_injection_enabled: true,
-      runtime_metrics_enabled: true,
-      integration_semver_sample_rate: { a: 0.7 }
+      runtime_metrics_enabled: true
     })
-    expect(logObj.integration_semver_sample_rate).to.deep.equal({ a: 0.7 })
   })
 
   it('startupLog should correctly also output the diagnostic message', () => {
