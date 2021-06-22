@@ -7,12 +7,11 @@ wrapIt()
 
 describe('Plugin', () => {
   let ShareDB
-  let tracer
 
   describe('sharedb', () => {
     withVersions(plugin, 'sharedb', version => {
       beforeEach(() => {
-        tracer = require('../../dd-trace')
+        require('../../dd-trace')
       })
 
       describe('without configuration', () => {
@@ -30,8 +29,8 @@ describe('Plugin', () => {
         beforeEach(() => {
           ShareDB = require(`../../../versions/sharedb@${version}`).get()
 
-          backend = new ShareDB({ presence: true });
-          connection = backend.connect();
+          backend = new ShareDB({ presence: true })
+          connection = backend.connect()
         })
 
         afterEach(() => {
@@ -39,9 +38,9 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation', done => {
-          const doc = connection.get('some-collection', 'some-id');
+          const doc = connection.get('some-collection', 'some-id')
 
-          doc.fetch(function(err) {
+          doc.fetch(function (err) {
             if (err) { throw err }
 
             agent.use(traces => {
@@ -54,31 +53,31 @@ describe('Plugin', () => {
             })
               .then(done)
               .catch(done)
-          });
+          })
         })
 
         it('should be compatible with existing middleware', done => {
           const receiveSpy = sinon.spy((request, next) => {
-            next();
+            next()
           })
           const replySpy = sinon.spy((request, next) => {
-            next();
+            next()
           })
-          backend.use('receive', receiveSpy);
-          backend.use('reply', replySpy);
-          const doc = connection.get('some-collection', 'some-id');
+          backend.use('receive', receiveSpy)
+          backend.use('reply', replySpy)
+          const doc = connection.get('some-collection', 'some-id')
 
-          doc.fetch(function(err) {
+          doc.fetch(function (err) {
             if (err) { throw err }
 
             agent.use(traces => {
-              expect(receiveSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func);
-              expect(replySpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func);
+              expect(receiveSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
+              expect(replySpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
               expect(traces[0][0]).to.have.property('service', 'test-sharedb')
             })
               .then(done)
               .catch(done)
-          });
+          })
         })
 
         it('should sanitize queries', done => {
@@ -87,12 +86,16 @@ describe('Plugin', () => {
               property: 'query',
               one: 1
             }
-          }, {}, function(err) {
+          }, {}, function (err) {
             if (err) { throw err }
 
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-sharedb')
-              expect(traces[0][0]).to.have.property('resource', 'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
+              expect(traces[0][0])
+                .to
+                .have
+                .property('resource',
+                  'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
               expect(traces[0][0]).to.have.property('type', 'sharedb.request')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('service', 'test')
@@ -100,7 +103,7 @@ describe('Plugin', () => {
             })
               .then(done)
               .catch(done)
-          });
+          })
         })
       })
     })

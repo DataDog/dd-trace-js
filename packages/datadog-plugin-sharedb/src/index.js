@@ -155,7 +155,6 @@ function handleSend (config, action, agent, triggerContext, callback, triggerFn)
 function createWrapHandle (tracer, config) { // called once
   return function wrapTrigger (triggerFn) { // called once
     return function handleMessageWithTrace (action, agent, triggerContext, callback) { // called for each trigger
-      const args = arguments;
       /**
        * What we're doing here is tying ourselves into the ShareDB Backend middleware.
        * This allows us to create traces for all events that have triggers, like receiving a message and replying
