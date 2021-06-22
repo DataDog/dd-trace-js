@@ -93,7 +93,10 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       return
     }
 
-    if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
+    if (event.name !== 'test_skip' &&
+      event.name !== 'test_todo' &&
+      event.name !== 'test_start' &&
+      event.name !== 'hook_failure') {
       return
     }
     const childOf = tracer.extract('text_map', {
@@ -136,6 +139,28 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
         }
       )
       testSpan.context()._trace.origin = CI_APP_ORIGIN
+      testSpan.finish()
+      return
+    }
+    if (event.name === 'hook_failure') {
+      const testSpan = tracer.startSpan(
+        'jest.test',
+        {
+          childOf,
+          tags: {
+            ...commonSpanTags,
+            [SPAN_TYPE]: 'test',
+            [RESOURCE_NAME]: resource,
+            [TEST_STATUS]: 'fail'
+          }
+        }
+      )
+      testSpan.context()._trace.origin = CI_APP_ORIGIN
+      if (event.test.errors && event.test.errors.length) {
+        const error = new Error(event.test.errors[0][0])
+        error.stack = event.test.errors[0][1].stack
+        testSpan.setTag('error', error)
+      }
       testSpan.finish()
       return
     }
