@@ -33,7 +33,7 @@ const redis = {
 
     span.setTag('service.name', config.service || `${span.context()._tags['service.name']}-redis`)
 
-    analyticsSampler.sample(span, config.analytics)
+    analyticsSampler.sample(span, config.measured)
 
     return span
   }

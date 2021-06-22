@@ -333,7 +333,7 @@ function makeFSTags (resourceName, path, options, config, tracer) {
     'component': 'fs',
     'span.kind': 'internal',
     'resource.name': resourceName,
-    'service.name': config.service || `${tracer._service}-fs`
+    'service.name': config.service || tracer._service
   }
 
   switch (typeof path) {

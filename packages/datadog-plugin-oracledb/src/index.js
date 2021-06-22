@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+
 function createWrapExecute (tracer, config) {
   return function wrapExecute (execute) {
     return function executeWithTrace (dbQuery, ...args) {
@@ -18,7 +20,11 @@ function createWrapExecute (tracer, config) {
         'service.name': service
       }
 
-      return tracer.wrap('oracle.query', { tags }, execute).apply(this, arguments)
+      return tracer.trace('oracle.query', { tags }, span => {
+        analyticsSampler.sample(span, config.measured)
+
+        return execute.apply(this, arguments)
+      })
     }
   }
 }

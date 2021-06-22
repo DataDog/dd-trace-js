@@ -28,10 +28,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.lookup',
-            service: 'test-dns',
+            service: 'test',
             resource: 'localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.address': '127.0.0.1'
           })
@@ -47,10 +48,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.lookup_service',
-            service: 'test-dns',
+            service: 'test',
             resource: '127.0.0.1:22'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.address': '127.0.0.1'
           })
           expect(traces[0][0].metrics).to.deep.include({
@@ -68,10 +70,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
-            service: 'test-dns',
+            service: 'test',
             resource: 'A localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.rrtype': 'A'
           })
@@ -87,10 +90,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
-            service: 'test-dns',
+            service: 'test',
             resource: 'ANY localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.rrtype': 'ANY'
           })
@@ -106,10 +110,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.reverse',
-            service: 'test-dns',
+            service: 'test',
             resource: '127.0.0.1'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.ip': '127.0.0.1'
           })
         })
@@ -150,10 +155,11 @@ describe('Plugin', () => {
           .use(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.resolve',
-              service: 'test-dns',
+              service: 'test',
               resource: 'A localhost'
             })
             expect(traces[0][0].meta).to.deep.include({
+              'span.kind': 'client',
               'dns.hostname': 'localhost',
               'dns.rrtype': 'A'
             })

@@ -29,17 +29,6 @@ function getIntegrationsAndAnalytics () {
     } else {
       integrations.add(plugin.name)
     }
-
-    const pluginData = instrumenter._plugins.get(plugin.name)
-    if (pluginData) {
-      const pluginConfig = pluginData.config
-      if (pluginConfig && pluginConfig.analytics) {
-        extras[`integration_${plugin.name}_analytics_enabled`] = true
-        if (typeof pluginConfig.analytics !== 'boolean') {
-          extras[`integration_${plugin.name}_sample_rate`] = pluginConfig.analytics
-        }
-      }
-    }
   }
   extras.integrations_loaded = Array.from(integrations)
   return extras
@@ -87,7 +76,6 @@ function startupLog ({ agentError } = {}) {
     out.agent_error = agentError.message
   }
   out.debug = !!config.debug
-  out.analytics_enabled = !!config.analytics
   out.sample_rate = config.sampleRate
   out.sampling_rules = samplingRules
   out.tags = config.tags

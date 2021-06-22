@@ -12,7 +12,6 @@ describe('TracerProxy', () => {
   let Config
   let config
   let metrics
-  let analyticsSampler
   let log
   let profiler
 
@@ -68,10 +67,6 @@ describe('TracerProxy', () => {
       start: sinon.spy()
     }
 
-    analyticsSampler = {
-      enable: sinon.spy()
-    }
-
     profiler = {
       start: sinon.spy()
     }
@@ -81,7 +76,6 @@ describe('TracerProxy', () => {
       './noop/tracer': NoopTracer,
       './config': Config,
       './metrics': metrics,
-      './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,
       './log': log,
       './profiler': profiler
@@ -160,14 +154,6 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(metrics.start).to.have.been.called
-      })
-
-      it('should enable the analytics sampler when configured', () => {
-        config.analytics = true
-
-        proxy.init()
-
-        expect(analyticsSampler.enable).to.have.been.called
       })
     })
 
