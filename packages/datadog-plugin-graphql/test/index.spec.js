@@ -224,7 +224,6 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('name', 'graphql.execute')
               expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
               expect(spans[0]).to.have.property('type', 'graphql')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('graphql.source', source)
               expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
               expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
