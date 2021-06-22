@@ -66,7 +66,6 @@ describe('Plugin', () => {
 
               const record = stream.write.firstCall.args[0].toString()
 
-              expect(record).to.not.include('dd')
               expect(record).to.not.include('trace_id')
               expect(record).to.not.include('span_id')
               expect(record).to.include('message')
