@@ -23,3 +23,9 @@ Feature: Datadog integration
     Given datadog
     When integration
     Then pass
+
+  @hooks-fail
+  Scenario: hooks fail
+    Given datadog
+    When run
+    Then pass
