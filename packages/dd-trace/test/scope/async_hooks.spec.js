@@ -1,7 +1,6 @@
 'use strict'
 
 const { AsyncResource, executionAsyncId } = require('async_hooks')
-const semver = require('semver')
 const Scope = require('../../src/scope/async_hooks')
 const Span = require('opentracing').Span
 const metrics = require('../../src/metrics')
@@ -68,19 +67,6 @@ describe('Scope (async_hooks)', () => {
       done()
     })
   })
-
-  if (!semver.satisfies(process.version, '^8.13 || >=10.14.2')) {
-    it('should work around the HTTP keep-alive bug in Node', () => {
-      const resource = {}
-
-      sinon.spy(scope, '_destroy')
-
-      scope._init(1, 'TCPWRAP', 0, resource)
-      scope._init(1, 'TCPWRAP', 0, resource)
-
-      expect(scope._destroy).to.have.been.called
-    })
-  }
 
   describe('with a thenable', () => {
     let thenable

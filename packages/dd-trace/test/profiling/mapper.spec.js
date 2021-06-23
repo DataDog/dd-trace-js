@@ -2,11 +2,6 @@
 
 const { expect } = require('chai')
 const path = require('path')
-const semver = require('semver')
-
-if (!semver.satisfies(process.version, '>=10.12')) {
-  describe = describe.skip // eslint-disable-line no-global-assign
-}
 
 describe('mapper', () => {
   const { pathToFileURL } = require('url')
