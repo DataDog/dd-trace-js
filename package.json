@@ -100,7 +100,7 @@
     "int64-buffer": "^0.1.9",
     "jszip": "^3.5.0",
     "mkdirp": "^0.5.1",
-    "mocha": "^5.2.0",
+    "mocha": "8",
     "mocha-junit-reporter": "^2.0.0",
     "mocha-multi-reporters": "^1.5.1",
     "msgpack-lite": "^0.1.26",
