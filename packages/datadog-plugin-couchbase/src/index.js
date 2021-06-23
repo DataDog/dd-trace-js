@@ -128,7 +128,7 @@ function wrapCallback (span, callback) {
 module.exports = [
   {
     name: 'couchbase',
-    versions: ['^2.4.2'],
+    versions: ['^2.6.5'],
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       tracer.scope().bind(Bucket.prototype)
@@ -157,7 +157,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['^2.4.2'],
+    versions: ['^2.6.5'],
     file: 'lib/cluster.js',
     patch (Cluster, tracer, config) {
       this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
