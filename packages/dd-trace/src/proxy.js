@@ -44,6 +44,11 @@ class Tracer extends BaseTracer {
             analyticsSampler.enable()
           }
 
+          // dirty require for now so zero appsec code is executed unless explicitely enabled
+          if (config.appsec.enabled) {
+            require('../../dd-appsec').enable(config)
+          }
+
           this._tracer = new DatadogTracer(config)
           this._instrumenter.enable(config)
           setStartupLogInstrumenter(this._instrumenter)
