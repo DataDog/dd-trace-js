@@ -120,9 +120,12 @@ function wrapDeliveryUpdate (update) {
 function patchCircularBuffer (proto, instrumenter) {
   Object.defineProperty(proto, 'outgoing', {
     configurable: true,
-    get () {},
+    get () {
+      return undefined // TODO is this correct?
+    },
     set (outgoing) {
       delete proto.outgoing // removes the setter on the prototype
+      // TODO isn't this infinite loop?
       this.outgoing = outgoing // assigns on the instance, like normal
       if (outgoing) {
         let CircularBuffer
