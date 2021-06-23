@@ -265,13 +265,13 @@ function unpatch (grpc) {
 module.exports = [
   {
     name: 'grpc',
-    versions: ['>=1.13'],
+    versions: ['>=1.20.2'],
     patch,
     unpatch
   },
   {
     name: 'grpc',
-    versions: ['>=1.13'],
+    versions: ['>=1.20.2'],
     file: 'src/client.js',
     patch (client, tracer, config) {
       if (config.client === false) return

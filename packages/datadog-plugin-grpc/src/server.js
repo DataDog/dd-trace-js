@@ -162,7 +162,7 @@ function isEmitter (obj) {
 module.exports = [
   {
     name: 'grpc',
-    versions: ['>=1.13'],
+    versions: ['>=1.20.2'],
     file: 'src/server.js',
     patch (server, tracer, config) {
       if (config.server === false) return
