@@ -1,12 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const semver = require('semver')
 const proxyquire = require('proxyquire')
-
-if (!semver.satisfies(process.version, '>=10.12')) {
-  describe = describe.skip // eslint-disable-line no-global-assign
-}
 
 describe('profilers/inspector/heap', () => {
   let InspectorHeapProfiler

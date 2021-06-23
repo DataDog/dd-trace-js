@@ -1,6 +1,5 @@
 'use strict'
 
-const semver = require('semver')
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { SourceMapper } = require('./mapper')
@@ -15,11 +14,6 @@ class Profiler extends EventEmitter {
     if (!config.enabled) return
 
     this._logger = config.logger
-
-    if (!semver.satisfies(process.version, '>=10.12')) {
-      this._logger.error('Profiling could not be started because it requires Node >=10.12')
-      return this
-    }
 
     this._enabled = true
 
