@@ -1,10 +1,11 @@
 'use strict'
 
 const mainLogger = require('./log')
-const path = require('path')
+
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../lib/version')
+const requirePackageJson = require('./require-package-json')
 
 const logger = Object.create(mainLogger)
 logger._enabled = true
@@ -21,7 +22,7 @@ function getIntegrationsAndAnalytics () {
   for (const plugin of instrumenter._instrumented.keys()) {
     if (plugin.versions) {
       try {
-        const version = require(path.join(plugin.name, 'package.json')).version
+        const version = requirePackageJson(plugin.name, module).version
         integrations.add(`${plugin.name}@${version}`)
       } catch (e) {
         integrations.add(plugin.name)
