@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
+
 const axios = require('axios')
 const getPort = require('get-port')
 const { execSync } = require('child_process')
