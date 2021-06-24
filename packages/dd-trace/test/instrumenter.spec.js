@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable import/no-extraneous-dependencies */
+
 const proxyquire = require('proxyquire')
 const path = require('path')
 const shimmer = require('shimmer')
