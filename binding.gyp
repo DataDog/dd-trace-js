@@ -43,5 +43,45 @@
         ]
       }]
     ]
-  }]
+  },
+  {
+      "target_name": "libwaf",
+      "sources": [
+        "packages/appsec/native/src/main.cpp"
+      ],
+      "include_dirs": [
+        "<!@(node -p \"require('node-addon-api').include\")",
+        "<!(node -p \"require('./packages/appsec/native/lib/lib.js').include\")"
+      ],
+      "libraries": [
+        "<!(node -p \"require('./packages/appsec/native/lib/lib.js').lib\")"
+      ],
+      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
+      "xcode_settings": {
+        "MACOSX_DEPLOYMENT_TARGET": "10.10",
+        "OTHER_CFLAGS": [
+          "-std=c++14",
+          "-stdlib=libc++",
+          "-Wall",
+          "-Werror"
+        ]
+      },
+      "conditions": [
+        ["OS == 'linux'", {
+          "cflags": [
+            "-std=c++11",
+            "-Wall",
+            "-Werror"
+          ],
+          "cflags_cc": [
+            "-Wno-cast-function-type"
+          ]
+        }],
+        ["OS == 'win'", {
+          "cflags": [
+            "/WX"
+          ]
+        }]
+      ]
+    }]
 }
