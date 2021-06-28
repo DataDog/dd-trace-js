@@ -133,9 +133,8 @@ class Config {
       false
     )
     const DD_APPSEC_ENABLED = coalesce(
-      // TODO(simon-id): beta naming
-      options.appsec,
-      process.env.DD_APPSEC_ENABLED,
+      options.appsec && options.appsec.beta,
+      process.env.DD_APPSEC_BETA,
       false
     )
 
