@@ -190,7 +190,7 @@ node-upstream-base: &node-upstream-base
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
-    - image: node:12.0.0
+    - image: node:10.0.0 # glibc needs to be old enough for older distros
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
@@ -883,7 +883,6 @@ jobs:
         environment:
           - PLUGINS=next
 
-# does oracle actually need node 10?
   node-oracledb:
     <<: *node-plugin-base
     resource_class: large
