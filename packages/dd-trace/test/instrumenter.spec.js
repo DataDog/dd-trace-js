@@ -203,6 +203,10 @@ describe('Instrumenter', () => {
 
         expect(integrations.other.patch).to.have.been.called
       })
+
+      it('should not interfere with userland modules masking core modules', () => {
+        expect(require('http2/foo.js')).to.equal('Hello, World!')
+      })
     })
 
     describe('enable', () => {

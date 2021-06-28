@@ -60,7 +60,12 @@ module.exports = function hook (modules, onrequire) {
       if (modules && modules.indexOf(name) === -1) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
-      const res = Module._findPath(name, [basedir, ...Module._resolveLookupPaths(name, this, true)])
+      const paths = Module._resolveLookupPaths(name, this, true)
+      if (!paths) {
+        // abort if _resolveLookupPaths return null
+        return exports
+      }
+      const res = Module._findPath(name, [basedir, ...paths])
       if (res !== filename) {
         // this is a module-internal file
         // use the module-relative path to the file, prefixed by original module name
