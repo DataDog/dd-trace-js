@@ -270,6 +270,7 @@ prebuild-job: &prebuild-job
     branches:
       only:
         - master
+        - profiler
         - /v\d+\.\d+/
         - /v\d+\.x/
         - /.*native.*/
@@ -1530,6 +1531,7 @@ workflows:
             branches:
               only:
                 - master
+                - profiler
     jobs:
       - lint
       - node-core-12
@@ -1600,6 +1602,7 @@ workflows:
             branches:
               only:
                 - master
+                - profiler
     jobs:
       - node-bench-latest
       - node-bench-profiler-latest
@@ -1638,6 +1641,7 @@ workflows:
             branches:
               only:
                 - master
+                - profiler
     jobs:
       # - node-upstream-node
       - node-upstream-amqp10
