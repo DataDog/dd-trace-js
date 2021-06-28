@@ -348,6 +348,26 @@ Timeout of 100ms exceeded. For async tests and hooks, ensure "done()" is called;
         mocha.addFile(testFilePath)
         mocha.run()
       })
+
+      it('works with async tests with done fail', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        // necessary because we run mocha within mocha and mocha adds a handler for uncaughtExceptions
+        process.removeAllListeners('uncaughtException')
+        const testFilePath = path.join(__dirname, 'mocha-test-done-fail-badly.js')
+        agent.use(traces => {
+          const testSpan = traces[0][0]
+          expect(testSpan.meta[ERROR_TYPE]).to.equal('AssertionError')
+          expect(testSpan.meta[ERROR_MESSAGE]).to.equal('expected true to equal false')
+          expect(testSpan.meta[ERROR_STACK].startsWith('AssertionError: expected true to equal false')).to.equal(true)
+          expect(testSpan.meta[TEST_STATUS]).to.equal('fail')
+          expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-done-fail can do badly setup failed tests with done')
+        }).then(done, done)
+        const mocha = new Mocha({
+          reporter: function () {} // silent on internal tests
+        })
+        mocha.addFile(testFilePath)
+        mocha.run()
+      })
     })
   })
 })
