@@ -81,7 +81,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -112,7 +112,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -135,7 +135,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -156,7 +156,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -190,7 +190,7 @@ describe('Plugin', function () {
               const spans = traces[0]
 
               expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test-next')
+              expect(spans[0]).to.have.property('service', 'test')
               expect(spans[0]).to.have.property('type', 'web')
               expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
               expect(spans[0].meta).to.have.property('span.kind', 'server')

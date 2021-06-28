@@ -35,7 +35,7 @@ function createWrapMakeRequest (tracer, config) {
       addDatabaseTags(span, connectionConfig)
       addProcIdTags(span, request)
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
       request.callback = tx.wrap(span, request.callback)
 
       return scope.bind(makeRequest, span).apply(this, arguments)

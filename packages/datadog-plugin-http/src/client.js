@@ -70,7 +70,7 @@ function patch (http, methodName, tracer, config) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       callback = scope.bind(callback, childOf)
 

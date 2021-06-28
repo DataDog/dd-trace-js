@@ -48,7 +48,7 @@ function createWrapParse (tracer, config) {
     return function parseWithTrace (source) {
       const span = startSpan(tracer, config, 'parse')
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured, true)
 
       try {
         const document = parse.apply(this, arguments)
@@ -78,7 +78,7 @@ function createWrapValidate (tracer, config) {
     return function validateWithTrace (schema, document, rules, typeInfo) {
       const span = startSpan(tracer, config, 'validate')
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured, true)
 
       // skip for schema stitching nested validation
       if (document && document.loc) {
@@ -231,7 +231,7 @@ function startExecutionSpan (tracer, config, operation, args) {
   addDocumentTags(span, args.document)
   addVariableTags(tracer, config, span, args.variableValues)
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured, true)
 
   return span
 }
@@ -240,8 +240,7 @@ function addExecutionTags (span, config, operation, document, operationName) {
   const type = operation && operation.operation
   const name = operation && operation.name && operation.name.value
   const tags = {
-    'resource.name': getSignature(document, name, type, config.signature),
-    'span.kind': 'server'
+    'resource.name': getSignature(document, name, type, config.signature)
   }
 
   if (type) {
@@ -295,6 +294,8 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   const span = startSpan(tracer, config, 'resolve', { childOf })
   const document = contextValue._datadog_graphql.source
   const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
+
+  analyticsSampler.sample(span, config.measured)
 
   span.addTags({
     'resource.name': `${info.fieldName}:${info.returnType}`,
@@ -378,7 +379,7 @@ function assertField (tracer, config, contextValue, info, path) {
 }
 
 function getService (tracer, config) {
-  return config.service || `${tracer._service}-graphql`
+  return config.service || tracer._service
 }
 
 function getOperation (document, operationName) {

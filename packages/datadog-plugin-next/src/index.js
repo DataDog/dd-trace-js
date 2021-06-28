@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+
 function createWrapHandleRequest (tracer, config) {
   return function wrapHandleRequest (handleRequest) {
     return function handleRequestWithTrace (req, res, pathname, query) {
@@ -63,13 +65,15 @@ function trace (tracer, config, req, res, handler) {
 
   const childOf = scope.active()
   const tags = {
-    'service.name': config.service || `${tracer._service}-next`,
+    'service.name': config.service || tracer._service,
     'resource.name': req.method,
     'span.type': 'web',
     'span.kind': 'server',
     'http.method': req.method
   }
   const span = tracer.startSpan('next.request', { childOf, tags })
+
+  analyticsSampler.sample(span, config.measured, true)
 
   req._datadog_next = { span }
 

@@ -30,7 +30,7 @@ function createWrapDispatchMessage (tracer, config) {
 
       addTags(this, tracer, config, span, 'basic.deliver', fields)
 
-      analyticsSampler.sample(span, config.analytics, true)
+      analyticsSampler.sample(span, config.measured, true)
 
       tracer.scope().activate(span, () => {
         try {
@@ -54,7 +54,7 @@ function sendWithTrace (send, channel, args, tracer, config, method, fields) {
   addTags(channel, tracer, config, span, method, fields)
   tracer.inject(span, TEXT_MAP, fields.headers)
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured)
 
   return tracer.scope().activate(span, () => {
     try {
