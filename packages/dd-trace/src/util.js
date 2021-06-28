@@ -1,4 +1,6 @@
 'use strict'
+const path = require('path')
+const gypBuild = require('node-gyp-build')
 
 function isTrue (str) {
   str = String(str).toLowerCase()
@@ -22,8 +24,29 @@ function isError (value) {
   return false
 }
 
+// Taken from node-gyp-build
+const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require // eslint-disable-line
+function loadAddon (name) {
+  let addonPath = gypBuild.path(path.join(__dirname, '..', '..', '..'))
+  const file = path.basename(addonPath)
+  if (file !== name) {
+    addonPath = path.join(path.dirname(addonPath), name)
+  }
+  return runtimeRequire(addonPath)
+}
+
+function loadMetrics () {
+  return loadAddon('metrics.node')
+}
+
+function loadWAF () {
+  return loadAddon('appsec.node')
+}
+
 module.exports = {
   isTrue,
   isFalse,
-  isError
+  isError,
+  loadMetrics,
+  loadWAF
 }

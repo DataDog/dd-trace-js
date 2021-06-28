@@ -31,12 +31,15 @@ Napi::Value WAFInit(const Napi::CallbackInfo& info) {
   std::string id = info[0].ToString().Utf8Value();
   std::string rules = info[1].ToString().Utf8Value();
 
-  int result = pw_init(id.c_str(), rules.c_str(), nullptr, nullptr);
-  if (result != 1) {
-    // TODO(vdeturckheim): use feedback from the pw_init errors
-    Napi::Error::New(env, "Error loading rules")
+  char * errors = nullptr;
+  bool result = pw_init(id.c_str(), rules.c_str(), nullptr, &errors);
+  if (!result) {
+    std::string err(errors);
+    // TODO(vdeturckheim): use feedback from the pw_init errors (test with https://github.com/sqreen/PowerWAF/blob/256900f0198cf365ddbd18bcf63b469d1bf6bd62/tests/TestPWManifest.cpp#L11)
+    Napi::Error::New(env, err)
           .ThrowAsJavaScriptException();
   }
+  pw_freeDiagnotics(errors);
   return env.Null();
 }
 
@@ -63,8 +66,11 @@ Napi::Value ClearAll(const Napi::CallbackInfo& info) {
 
 PWArgs ToPWArgs(Napi::Value val, int depth);
 
-PWArgs FromArray(Napi::Array arr, int depth) {
-  uint32_t  len     = arr.Length(); // FIXME(vdeturckheim): there might be an error here (Env::IsExceptionPending)
+PWArgs FromArray(Napi::Env env, Napi::Array arr, int depth) {
+  uint32_t  len     = arr.Length();
+  if (env.IsExceptionPending()) {
+    return pw_getInvalid();
+  }
   PWArgs    result  = pw_createArray();
   for (uint32_t i = 0; i < len; ++i) {
     Napi::Value item  = arr.Get(i);
@@ -76,10 +82,13 @@ PWArgs FromArray(Napi::Array arr, int depth) {
   return result;
 }
 
-PWArgs FromObject(Napi::Object obj, int depth) {
+PWArgs FromObject(Napi::Env env, Napi::Object obj, int depth) {
   PWArgs      result      = pw_createMap();
   Napi::Array properties  = obj.GetPropertyNames();
-  uint32_t    len         = properties.Length(); // FIXME(vdeturckheim): check Env::IsExceptionPending
+  uint32_t    len         = properties.Length();
+  if (env.IsExceptionPending()) {
+    return pw_getInvalid();
+  }
   for (uint32_t i = 0; i < len; ++i) {
     Napi::Value keyV  = properties.Get(i);
     if (!obj.HasOwnProperty(keyV) || !keyV.IsString()) {
@@ -96,7 +105,7 @@ PWArgs FromObject(Napi::Object obj, int depth) {
   return result;
 }
 
-PWArgs ToPWArgs(Napi::Value val, int depth) {
+PWArgs ToPWArgs(napi_env env, Napi::Value val, int depth) {
   if (depth >= MAX_DEPTH) {
     return pw_getInvalid();
   }
@@ -107,13 +116,13 @@ PWArgs ToPWArgs(Napi::Value val, int depth) {
     return pw_createInt(val.ToNumber().Int64Value());
   }
   if (val.IsArray()) {
-    return FromArray(val.ToObject().As<Napi::Array>(), depth + 1);
+    return FromArray(env, val.ToObject().As<Napi::Array>(), depth + 1);
   }
   if (val.IsObject()) {
-    return FromObject(val.ToObject(), depth + 1);
+    return FromObject(env, val.ToObject(), depth + 1);
   }
 
-  // TODO(vdeturckheim): booleans and nulls?
+  // ATM, PW does not support booleans or other values. We will need to reconsider someday
 
   return pw_getInvalid();
 }
@@ -176,7 +185,6 @@ Napi::Value Run(const Napi::CallbackInfo& info) {
     return env.Null();
   }
   // when we drop support for node <= 12, this will have to be a BigInt
-  // TODO(vdeturckheim): check NaN behaviour's here
   if (!info[2].IsNumber()) {
     Napi::TypeError::New(env, "Wrong argument, expected budget as number").ThrowAsJavaScriptException();
     return env.Null();
@@ -184,8 +192,12 @@ Napi::Value Run(const Napi::CallbackInfo& info) {
 
   std::string   id        = info[0].ToString().Utf8Value();
   Napi::Object  rawInputs = info[1].ToObject();
-  uint64_t      budget    = static_cast<size_t>(info[2].ToNumber().DoubleValue());
-  PWArgs        inputs    = ToPWArgs(rawInputs, 0);
+  uint64_t      budget    = static_cast<size_t>(info[2].ToNumber().DoubleValue()); // NaN will be 0
+  PWArgs        inputs    = ToPWArgs(env, rawInputs, 0);
+  if (env.IsExceptionPending()) { // If an error happened during the building of the args, let's abort it all
+    pw_freeArg(&inputs);
+    return env.Null();
+  }
 
   PWRet         ret       = pw_run(id.c_str(), inputs, budget);
 

@@ -8,6 +8,7 @@ const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
+const util = require('./util')
 
 const INTERVAL = 10 * 1000
 
@@ -37,7 +38,7 @@ module.exports = {
       })
 
     try {
-      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
+      nativeMetrics = util.loadMetrics()
       nativeMetrics.start()
     } catch (e) {
       log.error(e)

@@ -45,7 +45,7 @@
     ]
   },
   {
-      "target_name": "libwaf",
+      "target_name": "appsec",
       "sources": [
         "packages/appsec/native/src/main.cpp"
       ],
