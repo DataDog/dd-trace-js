@@ -12,7 +12,6 @@ const { tagger } = require('./tagger')
 
 const {
   DD_PROFILING_ENABLED,
-  DD_PROFILING_INTERVAL,
   DD_ENV,
   DD_TAGS,
   DD_SERVICE,
@@ -29,8 +28,7 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const flushInterval = coalesce(options.interval, DD_PROFILING_INTERVAL,
-      60 * 1000)
+    const flushInterval = coalesce(options.interval, 60 * 1000)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
