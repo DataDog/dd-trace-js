@@ -45,7 +45,7 @@ class Tracer extends BaseTracer {
           }
 
           // dirty require for now so zero appsec code is executed unless explicitely enabled
-          if (config.appsec.enabled) {
+          if (config.appsec && config.appsec.enabled) {
             require('../../dd-appsec').enable(config)
           }
 
