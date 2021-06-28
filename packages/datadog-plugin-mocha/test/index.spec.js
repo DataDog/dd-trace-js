@@ -351,7 +351,9 @@ Timeout of 100ms exceeded. For async tests and hooks, ensure "done()" is called;
 
       it('works with async tests with done fail', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-        // necessary because we run mocha within mocha and mocha adds a handler for uncaughtExceptions
+        // necessary because we run mocha within mocha and mocha adds a handler for uncaughtExceptions.
+        // If we don't do this, the handler for the parent test (this test) will be called
+        // first and not the one for mocha-test-done-fail-badly.js (test we are testing).
         process.removeAllListeners('uncaughtException')
         const testFilePath = path.join(__dirname, 'mocha-test-done-fail-badly.js')
         agent.use(traces => {
