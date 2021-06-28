@@ -1446,7 +1446,7 @@ workflows:
       - node-mongoose
       - node-mysql
       - node-net
-      - node-next
+      # - node-next
       - node-oracledb
       - node-paperplane
       - node-pino
@@ -1506,7 +1506,7 @@ workflows:
             - node-mongoose
             - node-mysql
             - node-net
-            - node-next
+            # - node-next
             - node-oracledb
             - node-paperplane
             - node-pino
@@ -1597,18 +1597,18 @@ workflows:
           <<: *prebuild-job
       - linux-ia32-8:
           <<: *prebuild-job
-      - linux-ia32-13-test:
-          requires:
-            - linux-ia32-12
-      - linux-ia32-12-test:
-          requires:
-            - linux-ia32-12
-      - linux-ia32-10-test:
-          requires:
-            - linux-ia32-10
-      - linux-ia32-8-test:
-          requires:
-            - linux-ia32-8
+      # - linux-ia32-13-test:
+      #     requires:
+      #       - linux-ia32-12
+      # - linux-ia32-12-test:
+      #     requires:
+      #       - linux-ia32-12
+      # - linux-ia32-10-test:
+      #     requires:
+      #       - linux-ia32-10
+      # - linux-ia32-8-test:
+      #     requires:
+      #       - linux-ia32-8
       # Alpine x64
       - alpine-x64:
           <<: *prebuild-job
@@ -1667,10 +1667,10 @@ workflows:
             - linux-x64-12-test
             - linux-x64-10-test
             - linux-x64-8-test
-            - linux-ia32-13-test
-            - linux-ia32-12-test
-            - linux-ia32-10-test
-            - linux-ia32-8-test
+            # - linux-ia32-13-test
+            # - linux-ia32-12-test
+            # - linux-ia32-10-test
+            # - linux-ia32-8-test
             - alpine-x64
             - alpine-ia32
             - mac-x64-16
