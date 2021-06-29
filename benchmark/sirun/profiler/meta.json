@@ -1,0 +1,28 @@
+{
+  "name": "profiler",
+  "run": "node -r ../monitor index.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "control": {
+      "env": {
+        "PROFILER": ""
+      }
+    },
+    "with-cpu-profiler": {
+      "env": {
+        "PROFILER": "cpu"
+      }
+    },
+    "with-heap-profiler": {
+      "env": {
+        "PROFILER": "heap"
+      }
+    },
+    "with-all-profilers": {
+      "env": {
+        "PROFILER": "all"
+      }
+    }
+  }
+}

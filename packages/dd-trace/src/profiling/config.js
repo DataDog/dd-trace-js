@@ -5,9 +5,9 @@ const os = require('os')
 const { URL } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
-const { InspectorCpuProfiler } = require('./profilers/inspector/cpu')
-const { InspectorHeapProfiler } = require('./profilers/inspector/heap')
 const { ConsoleLogger } = require('./loggers/console')
+const CpuProfiler = require('./profilers/cpu')
+const HeapProfiler = require('./profilers/heap')
 const { tagger } = require('./tagger')
 
 const {
@@ -28,7 +28,7 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const flushInterval = 60 * 1000
+    const flushInterval = coalesce(options.interval, 60 * 1000)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
@@ -54,8 +54,8 @@ class Config {
     ], options)
 
     this.profilers = options.profilers || [
-      new InspectorCpuProfiler(),
-      new InspectorHeapProfiler()
+      new CpuProfiler(),
+      new HeapProfiler()
     ]
   }
 }

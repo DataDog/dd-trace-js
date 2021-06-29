@@ -1,28 +1,30 @@
 'use strict'
 
-const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const semver = require('semver')
+
+if (!semver.satisfies(process.version, '>=10.12')) {
+  describe = describe.skip // eslint-disable-line no-global-assign
+}
 
 describe('profilers/native/heap', () => {
   let NativeHeapProfiler
   let pprof
-  let maybeRequire
 
   beforeEach(() => {
     pprof = {
+      encode: sinon.stub().returns(Promise.resolve()),
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
         profile: sinon.stub()
       }
     }
-    maybeRequire = sinon.stub()
-    maybeRequire.withArgs('pprof').returns(pprof)
 
-    NativeHeapProfiler = proxyquire('../../../../src/profiling/profilers/native/heap', {
-      '../../util': { maybeRequire }
-    }).NativeHeapProfiler
+    NativeHeapProfiler = proxyquire('../../../src/profiling/profilers/heap', {
+      'pprof': pprof
+    })
   })
 
   it('should start the internal heap profiler', () => {
@@ -57,11 +59,8 @@ describe('profilers/native/heap', () => {
     const profiler = new NativeHeapProfiler()
 
     profiler.start()
+    profiler.profile(() => {})
 
-    pprof.heap.profile.returns('profile')
-
-    const profile = profiler.profile()
-
-    expect(profile).to.equal('profile')
+    sinon.assert.calledOnce(pprof.encode)
   })
 })

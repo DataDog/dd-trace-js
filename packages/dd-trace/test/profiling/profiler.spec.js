@@ -15,8 +15,10 @@ describe('profiler', () => {
   let profiler
   let cpuProfiler
   let cpuProfile
+  let cpuProfilePromise
   let heapProfiler
   let heapProfile
+  let heapProfilePromise
   let clock
   let exporter
   let exporters
@@ -24,10 +26,19 @@ describe('profiler', () => {
   let consoleLogger
   let logger
 
+  function waitForExport () {
+    return Promise.all([
+      cpuProfilePromise,
+      heapProfilePromise
+    // After all profiles resolve, need to wait another microtask
+    // tick until _collect method calls _submit to begin the export.
+    ]).then(() => Promise.resolve())
+  }
+
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     exporter = {
-      export: sinon.stub().yields()
+      export: sinon.stub().returns(Promise.resolve())
     }
     consoleLogger = {
       debug: sinon.spy(),
@@ -37,19 +48,21 @@ describe('profiler', () => {
     }
 
     cpuProfile = {}
+    cpuProfilePromise = Promise.resolve(cpuProfile)
     cpuProfiler = {
       type: 'cpu',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().yields(null, cpuProfile)
+      profile: sinon.stub().returns(cpuProfilePromise)
     }
 
     heapProfile = {}
+    heapProfilePromise = Promise.resolve(heapProfile)
     heapProfiler = {
       type: 'heap',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().yields(null, heapProfile)
+      profile: sinon.stub().returns(heapProfilePromise)
     }
 
     logger = consoleLogger
@@ -99,12 +112,15 @@ describe('profiler', () => {
     sinon.assert.calledOnce(consoleLogger.error)
   })
 
-  it('should stop when capturing failed', () => {
-    cpuProfiler.profile.yields(new Error('boom'))
+  it('should stop when capturing failed', async () => {
+    const rejected = Promise.reject(new Error('boom'))
+    cpuProfiler.profile.returns(rejected)
 
     profiler.start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
+
+    await rejected.catch(() => {})
 
     sinon.assert.calledOnce(cpuProfiler.stop)
     sinon.assert.calledOnce(heapProfiler.stop)
@@ -116,6 +132,8 @@ describe('profiler', () => {
 
     clock.tick(INTERVAL)
 
+    await waitForExport()
+
     sinon.assert.calledOnce(exporter.export)
   })
 
@@ -123,6 +141,8 @@ describe('profiler', () => {
     profiler.start({ profilers, exporters, tags: { foo: 'foo' } })
 
     clock.tick(INTERVAL)
+
+    await waitForExport()
 
     const { profiles, start, end, tags } = exporter.export.args[0][0]
 
@@ -147,6 +167,8 @@ describe('profiler', () => {
     profiler.start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
+
+    await waitForExport()
 
     sinon.assert.calledOnce(consoleLogger.error)
   })

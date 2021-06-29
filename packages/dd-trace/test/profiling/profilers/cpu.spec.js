@@ -1,28 +1,30 @@
 'use strict'
 
-const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const semver = require('semver')
+
+if (!semver.satisfies(process.version, '>=10.12')) {
+  describe = describe.skip // eslint-disable-line no-global-assign
+}
 
 describe('profilers/native/cpu', () => {
   let NativeCpuProfiler
   let pprof
   let stop
-  let maybeRequire
 
   beforeEach(() => {
     stop = sinon.stub().returns('profile')
     pprof = {
+      encode: sinon.stub().returns(Promise.resolve()),
       time: {
         start: sinon.stub().returns(stop)
       }
     }
-    maybeRequire = sinon.stub()
-    maybeRequire.withArgs('pprof').returns(pprof)
 
-    NativeCpuProfiler = proxyquire('../../../../src/profiling/profilers/native/cpu', {
-      '../../util': { maybeRequire }
-    }).NativeCpuProfiler
+    NativeCpuProfiler = proxyquire('../../../src/profiling/profilers/cpu', {
+      'pprof': pprof
+    })
   })
 
   it('should start the internal time profiler', () => {
@@ -56,10 +58,9 @@ describe('profilers/native/cpu', () => {
     const profiler = new NativeCpuProfiler()
 
     profiler.start()
+    profiler.profile(() => {})
 
-    const profile = profiler.profile()
-
-    expect(profile).to.equal('profile')
+    sinon.assert.calledOnce(pprof.encode)
 
     sinon.assert.calledOnce(stop)
     sinon.assert.calledTwice(pprof.time.start)
