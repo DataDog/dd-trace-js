@@ -1,6 +1,5 @@
 'use strict'
 
-const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
 
@@ -147,28 +146,25 @@ describe('Plugin', () => {
       })
     })
 
-    if (semver.gte(process.version, '8.3.0')) {
-      it('should instrument Resolver', done => {
-        const resolver = new dns.Resolver()
+    it('should instrument Resolver', done => {
+      const resolver = new dns.Resolver()
 
-        agent
-          .use(traces => {
-            expect(traces[0][0]).to.deep.include({
-              name: 'dns.resolve',
-              service: 'test',
-              resource: 'A localhost'
-            })
-            expect(traces[0][0].meta).to.deep.include({
-              'span.kind': 'client',
-              'dns.hostname': 'localhost',
-              'dns.rrtype': 'A'
-            })
+      agent
+        .use(traces => {
+          expect(traces[0][0]).to.deep.include({
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'A localhost'
           })
-          .then(done)
-          .catch(done)
+          expect(traces[0][0].meta).to.deep.include({
+            'dns.hostname': 'localhost',
+            'dns.rrtype': 'A'
+          })
+        })
+        .then(done)
+        .catch(done)
 
-        resolver.resolve('localhost', err => err && done(err))
-      })
-    }
+      resolver.resolve('localhost', err => err && done(err))
+    })
   })
 })

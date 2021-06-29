@@ -8,6 +8,8 @@ const exec = require('./helpers/exec')
 const plugins = require('../packages/dd-trace/src/plugins')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 
+const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
+
 const workspaces = new Set()
 
 run()
@@ -99,9 +101,11 @@ function assertPackage (name, version, dependency, external) {
 function assertIndex (name, version) {
   const index = `'use strict'
 
+const requirePackageJson = require('${requirePackageJsonPath}')
+
 module.exports = {
   get (id) { return require(id || '${name}') },
-  version () { return require('${name}/package.json').version }
+  version () { return requirePackageJson('${name}', module).version }
 }
 `
   fs.writeFileSync(filename(name, version, 'index.js'), index)

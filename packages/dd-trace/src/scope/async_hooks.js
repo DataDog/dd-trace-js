@@ -5,9 +5,6 @@ const Base = require('./base')
 const metrics = require('../metrics')
 const semver = require('semver')
 
-// https://github.com/nodejs/node/issues/19859
-const hasKeepAliveBug = !semver.satisfies(process.version, '^8.13 || >=10.14.2')
-
 // fixed in https://github.com/nodejs/node/pull/33801
 const hasThenableBug = !semver.satisfies(process.version, '>=14.5 || ^12.19.0')
 
@@ -106,11 +103,6 @@ class Scope extends Base {
 
     this._spans.set(asyncId, this._current)
     this._types.set(asyncId, type)
-
-    if (hasKeepAliveBug && (type === 'TCPWRAP' || type === 'HTTPPARSER')) {
-      this._destroy(this._weaks.get(resource))
-      this._weaks.set(resource, asyncId)
-    }
 
     if (this._debug) {
       metrics.increment('runtime.node.async.resources')

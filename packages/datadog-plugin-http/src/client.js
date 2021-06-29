@@ -1,7 +1,6 @@
 'use strict'
 
 const url = require('url')
-const semver = require('semver')
 const opentracing = require('opentracing')
 const log = require('../../dd-trace/src/log')
 const constants = require('../../dd-trace/src/constants')
@@ -338,13 +337,12 @@ module.exports = [
       if (config.client === false) return
 
       patch.call(this, http, 'request', tracer, config)
-      if (semver.satisfies(process.version, '>=8')) {
-        /**
-         * In newer Node versions references internal to modules, such as `http(s).get` calling `http(s).request`, do
-         * not use externally patched versions, which is why we need to also patch `get` here separately.
-         */
-        patch.call(this, http, 'get', tracer, config)
-      }
+      /**
+       * References internal to modules, such as `http(s).get` calling
+       * `http(s).request`, do not use externally patched versions, which is
+       * why we need to also patch `get` here separately.
+       */
+      patch.call(this, http, 'get', tracer, config)
     },
     unpatch
   },
@@ -353,16 +351,8 @@ module.exports = [
     patch: function (http, tracer, config) {
       if (config.client === false) return
 
-      if (semver.satisfies(process.version, '>=9')) {
-        patch.call(this, http, 'request', tracer, config)
-        patch.call(this, http, 'get', tracer, config)
-      } else {
-        /**
-         * Below Node v9 the `https` module invokes `http.request`, which would end up counting requests twice.
-         * So rather then patch the `https` module, we ensure the `http` module is patched and we count only there.
-         */
-        require('http')
-      }
+      patch.call(this, http, 'request', tracer, config)
+      patch.call(this, http, 'get', tracer, config)
     },
     unpatch
   }

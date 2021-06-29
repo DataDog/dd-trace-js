@@ -1,13 +1,8 @@
 /* eslint-disable no-console */
 
-const semver = require('semver')
 const { execSync } = require('child_process')
 
 function uploadJUnitXMLReport () {
-  if (semver.lt(process.version, '10.24.1')) {
-    console.log('Node version incompatible with @datadog/datadog-ci. Skipping step.')
-    return
-  }
   if (process.env.CIRCLE_PR_NUMBER) {
     console.log('Running in a fork. Skipping step.')
     return
