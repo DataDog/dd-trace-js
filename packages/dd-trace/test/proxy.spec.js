@@ -90,7 +90,7 @@ describe('TracerProxy', () => {
       './instrumenter': Instrumenter,
       './log': log,
       './profiler': profiler,
-      '../../dd-appsec': appsec
+      './appsec': appsec
     })
 
     proxy = new Proxy()
