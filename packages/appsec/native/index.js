@@ -30,7 +30,7 @@ class LibAppSec {
     return nativeLib.run(this.id, inputs, timeout)
   }
 
-  clear() {
+  clear () {
     nativeLib.clear(this.id)
     this.cleared = true
   }

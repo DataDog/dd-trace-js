@@ -17,6 +17,7 @@ Napi::Object Version(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value WAFInit(const Napi::CallbackInfo& info) {
+  mlog("Init WAF\n");
   Napi::Env env = info.Env();
 
   if (info.Length() < 2) {
@@ -64,8 +65,6 @@ Napi::Value ClearAll(const Napi::CallbackInfo& info) {
   return info.Env().Null();
 }
 
-PWArgs ToPWArgs(Napi::Value val, int depth);
-
 PWArgs FromArray(Napi::Env env, Napi::Array arr, int depth) {
   uint32_t  len     = arr.Length();
   if (env.IsExceptionPending()) {
@@ -74,7 +73,7 @@ PWArgs FromArray(Napi::Env env, Napi::Array arr, int depth) {
   PWArgs    result  = pw_createArray();
   for (uint32_t i = 0; i < len; ++i) {
     Napi::Value item  = arr.Get(i);
-    PWArgs      val   = ToPWArgs(item, depth);
+    PWArgs      val   = ToPWArgs(env, item, depth);
     if(!pw_addArray(&result, val)) {
       pw_freeArg(&val);
     }
@@ -83,13 +82,16 @@ PWArgs FromArray(Napi::Env env, Napi::Array arr, int depth) {
 }
 
 PWArgs FromObject(Napi::Env env, Napi::Object obj, int depth) {
+  mlog("Creating Map\n")
   PWArgs      result      = pw_createMap();
   Napi::Array properties  = obj.GetPropertyNames();
   uint32_t    len         = properties.Length();
   if (env.IsExceptionPending()) {
+    mlog("Exception pending\n")
     return pw_getInvalid();
   }
   for (uint32_t i = 0; i < len; ++i) {
+    mlog("Getting properties\n")
     Napi::Value keyV  = properties.Get(i);
     if (!obj.HasOwnProperty(keyV) || !keyV.IsString()) {
       // We avoid inherited properties here. If the key is not a String, well this is weird
@@ -97,7 +99,12 @@ PWArgs FromObject(Napi::Env env, Napi::Object obj, int depth) {
     }
     std::string key   = keyV.ToString().Utf8Value();
     Napi::Value valV  = obj.Get(keyV);
-    PWArgs      val   = ToPWArgs(valV, depth);
+    mlog("Looping into ToPWArgs\n")
+    PWArgs      val   = ToPWArgs(env, valV, depth);
+    mlog("adding\n")
+    logPWArgs(val);
+    mlog("to\n")
+    logPWArgs(result);
     if(!pw_addMap(&result, key.c_str(), key.length(), val)) {
       pw_freeArg(&val);
     }
@@ -107,18 +114,23 @@ PWArgs FromObject(Napi::Env env, Napi::Object obj, int depth) {
 
 PWArgs ToPWArgs(napi_env env, Napi::Value val, int depth) {
   if (depth >= MAX_DEPTH) {
+    mlog("Max depth reached\n");
     return pw_getInvalid();
   }
   if (val.IsString()) {
+    mlog("creating String\n");
     return pw_createString(val.ToString().Utf8Value().c_str());
   }
   if (val.IsNumber()) {
+    mlog("creating Number\n");
     return pw_createInt(val.ToNumber().Int64Value());
   }
   if (val.IsArray()) {
+    mlog("creating Array\n");
     return FromArray(env, val.ToObject().As<Napi::Array>(), depth + 1);
   }
   if (val.IsObject()) {
+    mlog("creating Object\n");
     return FromObject(env, val.ToObject(), depth + 1);
   }
 
@@ -191,8 +203,11 @@ Napi::Value Run(const Napi::CallbackInfo& info) {
   }
 
   std::string   id        = info[0].ToString().Utf8Value();
+  mlog("getting raw inputs\n");
   Napi::Object  rawInputs = info[1].ToObject();
+  mlog("building budget\n");
   uint64_t      budget    = static_cast<size_t>(info[2].ToNumber().DoubleValue()); // NaN will be 0
+  mlog("building PWArgs\n");
   PWArgs        inputs    = ToPWArgs(env, rawInputs, 0);
   if (env.IsExceptionPending()) { // If an error happened during the building of the args, let's abort it all
     pw_freeArg(&inputs);

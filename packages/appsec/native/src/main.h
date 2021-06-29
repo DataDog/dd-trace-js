@@ -3,6 +3,7 @@
 #include "PowerWAF.h"
 #include <stdlib.h> // TODO(vdeturckheim): check if this one is still needed
 
+PWArgs ToPWArgs(napi_env env, Napi::Value val, int depth);
 
 #if DEBUG == 1
 #include <stdio.h>
