@@ -1155,6 +1155,13 @@ declare namespace plugins {
      * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
      */
     service?: string | ((params: any) => string);
+    /**
+     * Whether to include query parameters. By default this is disabled and only query text with question marks will be logged.
+     * Note that this could expose sensitive data so use with caution.
+     *
+     * @default false
+     */
+     includeQueryParams?: boolean;
   }
 
   /**
