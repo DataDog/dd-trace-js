@@ -133,8 +133,8 @@ class Config {
       false
     )
     const DD_APPSEC_ENABLED = coalesce(
-      options.appsec && options.appsec.beta,
-      process.env.DD_APPSEC_BETA,
+      options.experimental && options.experimental.appsec,
+      process.env.DD_EXPERIMENTAL_APPSEC_ENABLED,
       false
     )
 
