@@ -165,8 +165,35 @@ function wrapMochaEach (mochaEach) {
 function createWrapFail (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapFail (fail) {
     return function failWithTrace (hook, err) {
-      // we deal with errors in tests differently
       if (hook.type !== 'hook') {
+        /**
+         * This clause is to cover errors that are uncaught, such as:
+         * it('will fail', done => {
+         *   setTimeout(() => {
+         *     // will throw but will not be caught by `runTestWithTrace`
+         *     expect(true).to.equal(false)
+         *     done()
+         *   }, 100)
+         * })
+         */
+        const testSpan = tracer.scope().active()
+        if (!testSpan) {
+          return fail.apply(this, arguments)
+        }
+        const {
+          [TEST_NAME]: testName,
+          [TEST_SUITE]: testSuite,
+          [TEST_STATUS]: testStatus
+        } = testSpan._spanContext._tags
+
+        const isActiveSpanFailing = hook.fullTitle() === testName && hook.file.endsWith(testSuite)
+
+        if (isActiveSpanFailing && !testStatus) {
+          testSpan.setTag(TEST_STATUS, 'fail')
+          testSpan.setTag('error', err)
+          // need to manually finish, as it will not be caught in `runTestWithTrace`
+          testSpan.finish()
+        }
         return fail.apply(this, arguments)
       }
       if (err && hook.ctx && hook.ctx.currentTest) {
@@ -211,6 +238,7 @@ module.exports = [
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
       this.unwrap(Runner.prototype, 'runTest')
+      this.unwrap(Runner.prototype, 'fail')
     }
   },
   {
