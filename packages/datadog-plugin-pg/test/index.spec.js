@@ -216,10 +216,10 @@ describe('Plugin', () => {
 
         it('should log query params when enabled in config', done => {
           agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('sql.params', ['Hello world!'])
+            expect(traces[0][0].meta).to.have.property('sql.params', ['Hello world!', 'It\'s me'])
           }).then(done, done)
 
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          client.query('SELECT $1::text as message, $2::text as message2', ['Hello world!', 'It\'s me'], (err, result) => {
             if (err) throw err
 
             client.end((err) => {
@@ -291,7 +291,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('sql.params', ['filtered'])
           }).then(done, done)
 
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          client.query('SELECT $1::text as message, $2::text as message2', ['Hello world!', 'It\'s me'], (err, result) => {
             if (err) throw err
 
             client.end((err) => {
