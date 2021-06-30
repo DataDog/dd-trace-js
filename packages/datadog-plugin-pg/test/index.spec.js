@@ -59,9 +59,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-
-              done()
-            })
+            }).then(done, done)
 
             client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
               if (err) throw err
@@ -75,9 +73,7 @@ describe('Plugin', () => {
           it('should not log query params by default when using callbacks', done => {
             agent.use(traces => {
               expect(traces[0][0].meta).to.not.have.property('sql.params')
-
-              done()
-            })
+            }).then(done, done)
 
             client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
               if (err) throw err
@@ -98,9 +94,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
                 expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
                 expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-
-                done()
-              })
+              }).then(done, done)
 
               client.query('SELECT $1::text as message', ['Hello world!'])
                 .then(() => client.end())
@@ -110,9 +104,7 @@ describe('Plugin', () => {
             it('should not log query params by default when using promises', done => {
               agent.use(traces => {
                 expect(traces[0][0].meta).to.not.have.property('sql.params')
-
-                done()
-              })
+              }).then(done, done)
 
               client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
                 if (err) throw err
@@ -131,9 +123,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('error.type', error.name)
               expect(traces[0][0].meta).to.have.property('error.msg', error.message)
               expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-
-              done()
-            })
+            }).then(done, done)
 
             client.query('INVALID', (err, result) => {
               error = err
@@ -151,9 +141,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('error.type', error.name)
               expect(traces[0][0].meta).to.have.property('error.msg', error.message)
               expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-
-              done()
-            })
+            }).then(done, done)
 
             const errorCallback = (err) => {
               error = err
@@ -191,44 +179,6 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with includeQueryParams callback in configuration', () => {
-        before(() => {
-          return agent.load('pg', { service: 'custom', includeQueryParams: p => ['filtered'] })
-        })
-
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(done => {
-          pg = require(`../../../versions/pg@${version}`).get()
-
-          client = new pg.Client({
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres'
-          })
-
-          client.connect(err => done(err))
-        })
-
-        it('should log query params when enabled with callback in config', done => {
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('sql.params', ['filtered'])
-
-            done()
-          })
-
-          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
-            if (err) throw err
-
-            client.end((err) => {
-              if (err) throw err
-            })
-          })
-        })
-      })
-
       describe('with configuration', () => {
         before(() => {
           return agent.load('pg', { service: 'custom', includeQueryParams: true })
@@ -253,9 +203,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
-
-            done()
-          })
+          }).then(done, done)
 
           client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
             if (err) throw err
@@ -269,9 +217,7 @@ describe('Plugin', () => {
         it('should log query params when enabled in config', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('sql.params', ['Hello world!'])
-
-            done()
-          })
+          }).then(done, done)
 
           client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
             if (err) throw err
@@ -306,14 +252,44 @@ describe('Plugin', () => {
 
         it('should be configured with the correct service', done => {
           agent.use(traces => {
-            try {
-              expect(traces[0][0]).to.have.property('service', 'localhost-postgres')
+            expect(traces[0][0]).to.have.property('service', 'localhost-postgres')
+          }).then(done, done)
 
-              done()
-            } catch (e) {
-              done(e)
-            }
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) throw err
+
+            client.end((err) => {
+              if (err) throw err
+            })
           })
+        })
+      })
+
+      describe('with includeQueryParams callback in configuration', () => {
+        before(() => {
+          return agent.load('pg', { service: 'custom', includeQueryParams: p => ['filtered'] })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+
+          client.connect(err => done(err))
+        })
+
+        it('should log query params when enabled with callback in config', done => {
+          agent.use(traces => {
+            expect(traces[0][0].meta).to.have.property('sql.params', ['filtered'])
+          }).then(done, done)
 
           client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
             if (err) throw err
