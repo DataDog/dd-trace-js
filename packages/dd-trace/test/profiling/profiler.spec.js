@@ -94,6 +94,14 @@ describe('profiler', () => {
     sinon.assert.calledOnce(heapProfiler.start)
   })
 
+  it('should allow configuring exporters by string name', () => {
+    profiler.start({ exporters: 'agent' })
+    expect(profiler._config.exporters[0].export).to.be.a('function')
+
+    profiler.start({ exporters: ['agent'] })
+    expect(profiler._config.exporters[0].export).to.be.a('function')
+  })
+
   it('should stop the internal profilers', () => {
     profiler.start({ profilers, exporters })
     profiler.stop()
