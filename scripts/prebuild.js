@@ -11,7 +11,7 @@ const checksum = require('checksum')
 const platform = os.platform()
 const arch = process.env.ARCH || os.arch()
 
-const { NODE_VERSIONS = '>=10' } = process.env
+const { NODE_VERSIONS = '>=12' } = process.env
 
 // https://nodejs.org/en/download/releases/
 const targets = [
