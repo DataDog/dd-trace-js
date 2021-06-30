@@ -24,12 +24,6 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
-    const DD_TRACE_ANALYTICS_ENABLED = coalesce(
-      options.analytics,
-      process.env.DD_TRACE_ANALYTICS_ENABLED,
-      process.env.DD_TRACE_ANALYTICS,
-      false
-    )
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
       // options.profiling,
@@ -167,7 +161,6 @@ class Config {
       DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
     ) : {}
     this.version = DD_VERSION
-    this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))

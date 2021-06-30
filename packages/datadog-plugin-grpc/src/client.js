@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Tags = require('../../../ext/tags')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { ERROR } = require('../../../ext/tags')
@@ -178,6 +179,7 @@ function startSpan (tracer, config, path, methodKind) {
     }
   })
 
+  analyticsSampler.sample(span, config.measured)
   addMethodTags(span, path, methodKind)
 
   return span
@@ -265,13 +267,13 @@ function unpatch (grpc) {
 module.exports = [
   {
     name: 'grpc',
-    versions: ['>=1.13'],
+    versions: ['>=1.20.2'],
     patch,
     unpatch
   },
   {
     name: 'grpc',
-    versions: ['>=1.13'],
+    versions: ['>=1.20.2'],
     file: 'src/client.js',
     patch (client, tracer, config) {
       if (config.client === false) return

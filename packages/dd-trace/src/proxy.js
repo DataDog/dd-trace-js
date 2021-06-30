@@ -9,7 +9,6 @@ const metrics = require('./metrics')
 const profiler = require('./profiler')
 const log = require('./log')
 const { setStartupLogInstrumenter } = require('./startup-log')
-const analyticsSampler = require('./analytics_sampler')
 
 const noop = new NoopTracer()
 
@@ -38,10 +37,6 @@ class Tracer extends BaseTracer {
         if (config.enabled) {
           if (config.runtimeMetrics) {
             metrics.start(config)
-          }
-
-          if (config.analytics) {
-            analyticsSampler.enable()
           }
 
           // dirty require for now so zero appsec code is executed unless explicitely enabled

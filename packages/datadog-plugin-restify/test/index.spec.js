@@ -18,7 +18,7 @@ describe('Plugin', () => {
       const pkgVersion = require(`../../../versions/restify@${version}`).version()
 
       // Some internal code of older versions is not compatible with Node >6
-      if (semver.intersects(pkgVersion, '<5') && semver.intersects(process.version, '>6')) return
+      if (semver.intersects(pkgVersion, '<5')) return
 
       beforeEach(() => {
         tracer = require('../../dd-trace')

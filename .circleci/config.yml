@@ -133,7 +133,7 @@ node-bench-profiler-base: &node-bench-profiler-base
 
 node-plugin-base: &node-plugin-base
   docker:
-    - image: node:8
+    - image: node:12
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
@@ -173,7 +173,7 @@ node-plugin-base: &node-plugin-base
 
 node-upstream-base: &node-upstream-base
   docker:
-    - image: node:8
+    - image: node:12
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
@@ -190,7 +190,7 @@ node-upstream-base: &node-upstream-base
 
 prebuild-linux-base: &prebuild-linux-base
   docker:
-    - image: node:10.0.0
+    - image: node:10.0.0 # glibc needs to be old enough for older distros
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
@@ -413,16 +413,6 @@ jobs:
 
   # Core tests
 
-  node-core-8:
-    <<: *node-core-base
-    docker:
-      - image: node:8
-
-  node-core-10:
-    <<: *node-core-base
-    docker:
-      - image: node:10
-
   node-core-12:
     <<: *node-core-base
     docker:
@@ -445,7 +435,7 @@ jobs:
 
   node-leaks:
     docker:
-      - image: node:8
+      - image: node:12
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
@@ -478,16 +468,6 @@ jobs:
 
   # Integration tests
 
-  node-integration-8:
-    <<: *node-integration-base
-    docker:
-      - image: node:8
-
-  node-integration-10:
-    <<: *node-integration-base
-    docker:
-      - image: node:10
-
   node-integration-12:
     <<: *node-integration-base
     docker:
@@ -513,7 +493,7 @@ jobs:
   node-amqplib:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=rabbitmq
           - PLUGINS=amqplib
@@ -522,7 +502,7 @@ jobs:
   node-upstream-amqplib:
     <<: *node-upstream-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=rabbitmq
           - PLUGINS=amqplib
@@ -531,7 +511,7 @@ jobs:
   node-amqp10:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10|rhea
@@ -544,7 +524,7 @@ jobs:
   node-upstream-amqp10:
     <<: *node-upstream-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10
@@ -557,7 +537,7 @@ jobs:
   node-aws-sdk:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=aws-sdk
           - SERVICES=localstack
@@ -581,28 +561,28 @@ jobs:
   node-bluebird:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=bluebird
 
   node-bunyan:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=bunyan
 
   node-upstream-bunyan:
     <<: *node-upstream-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=bunyan
 
   node-cassandra:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=cassandra
           - PLUGINS=cassandra-driver
@@ -613,28 +593,28 @@ jobs:
   node-connect:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=connect
 
   node-upstream-connect:
     <<: *node-upstream-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=connect
 
   node-cucumber:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=cucumber
 
   node-couchbase:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=couchbase
           - PLUGINS=couchbase
@@ -643,7 +623,7 @@ jobs:
   node-upstream-couchbase:
     <<: *node-upstream-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=couchbase
           - PLUGINS=couchbase
@@ -652,14 +632,14 @@ jobs:
   node-dns:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=dns
 
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - SERVICES=elasticsearch
           - PLUGINS=elasticsearch
@@ -671,30 +651,16 @@ jobs:
   node-express:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=express
 
   node-fastify:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=fastify
-
-  node-fs-8:
-    <<: *node-plugin-base
-    docker:
-      - image: node:8
-        environment:
-          - PLUGINS=fs
-
-  node-fs-10:
-    <<: *node-plugin-base
-    docker:
-      - image: node:10
-        environment:
-          - PLUGINS=fs
 
   node-fs-12:
     <<: *node-plugin-base
@@ -727,14 +693,14 @@ jobs:
   node-generic-pool:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=generic-pool
 
   node-google-cloud-pubsub:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - SERVICES=google-cloud-pubsub
           - PLUGINS=google-cloud-pubsub
@@ -743,7 +709,7 @@ jobs:
   node-kafkajs:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - SERVICES=kafka
           - PLUGINS=kafkajs
@@ -757,21 +723,21 @@ jobs:
   node-graphql:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=graphql
 
   node-upstream-graphql:
     <<: *node-upstream-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=graphql
 
   node-grpc:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=grpc
 
@@ -785,49 +751,49 @@ jobs:
   node-http:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=http
 
   node-http2:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=http2
 
   node-jest:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=jest
 
   node-knex:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=knex
 
   node-koa:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=koa
 
   node-upstream-koa:
     <<: *node-upstream-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=koa
 
   node-limitd-client:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=limitd
           - PLUGINS=limitd-client
@@ -840,7 +806,7 @@ jobs:
   node-memcached:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=memcached
           - PLUGINS=memcached
@@ -849,7 +815,7 @@ jobs:
   node-microgateway-core:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=microgateway-core
 
@@ -863,7 +829,7 @@ jobs:
   node-tedious:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - SERVICES=mssql
           - PLUGINS=tedious
@@ -876,7 +842,7 @@ jobs:
   node-mysql:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=mysql
           - PLUGINS=mysql|mysql2
@@ -888,7 +854,7 @@ jobs:
   node-mongodb-core:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
@@ -897,7 +863,7 @@ jobs:
   node-mongoose:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
@@ -906,7 +872,7 @@ jobs:
   node-net:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=net
 
@@ -921,7 +887,7 @@ jobs:
     <<: *node-plugin-base
     resource_class: large
     docker:
-      - image: bengl/node-10-with-oracle-client
+      - image: bengl/node-12-with-oracle-client
         environment:
           - SERVICES=oracledb
           - PLUGINS=oracledb
@@ -930,28 +896,28 @@ jobs:
   node-paperplane:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=paperplane
 
   node-pino:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=pino
 
   node-upstream-pino:
     <<: *node-upstream-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=pino
 
   node-postgres:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
@@ -963,14 +929,14 @@ jobs:
   node-promise-js:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=promise-js
 
   node-promise:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=promise
 
@@ -984,21 +950,21 @@ jobs:
   node-q:
     <<: *node-plugin-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=q
 
   node-upstream-q:
     <<: *node-upstream-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=q
 
   node-redis:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - SERVICES=redis
           - PLUGINS=redis|ioredis
@@ -1007,34 +973,34 @@ jobs:
   node-restify:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=restify
 
   node-router:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=router
 
   node-when:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=when
 
   node-winston:
     <<: *node-plugin-base
     docker:
-      - image: node:8
+      - image: node:12
         environment:
           - PLUGINS=winston
 
   typescript:
     docker:
-      - image: node:8
+      - image: node:12
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
@@ -1119,20 +1085,6 @@ jobs:
       - ARCH=x64
       - NODE_VERSIONS=12 - 13
 
-  linux-x64-10:
-    <<: *prebuild-linux-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=10 - 11
-
-  linux-x64-8:
-    <<: *prebuild-linux-base
-    docker:
-      - image: rochdev/holy-node-box
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=8 - 9
-
   ## Tests
 
   linux-x64-16-test:
@@ -1149,16 +1101,6 @@ jobs:
     <<: *test-prebuild-linux-base
     docker:
       - image: node:12
-
-  linux-x64-10-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: node:10
-
-  linux-x64-8-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: node:8
 
   # Prebuilds (alpine x64)
 
@@ -1194,20 +1136,6 @@ jobs:
       - ARCH=ia32
       - NODE_VERSIONS=12 - 13
 
-  linux-ia32-10:
-    <<: *prebuild-linux-ia32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=10 - 11
-
-  linux-ia32-8:
-    <<: *prebuild-linux-ia32-base
-    docker:
-      - image: rochdev/holy-node-box
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=8 - 9
-
   ## Tests
 
   linux-ia32-13-test:
@@ -1219,16 +1147,6 @@ jobs:
     <<: *test-prebuild-linux-base
     docker:
       - image: i386/node:12-alpine
-
-  linux-ia32-10-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: i386/node:10-alpine
-
-  linux-ia32-8-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: i386/node:8
 
   # Prebuilds (darwin x64)
 
@@ -1250,18 +1168,6 @@ jobs:
       - ARCH=x64
       - NODE_VERSIONS=12 - 13
 
-  mac-x64-10:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=10 - 11
-
-  mac-x64-8:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=8 - 9
-
   # Prebuilds (darwin ia32)
 
   mac-ia32-16:
@@ -1281,18 +1187,6 @@ jobs:
     environment:
       - ARCH=ia32
       - NODE_VERSIONS=12 - 13
-
-  mac-ia32-10:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=10 - 11
-
-  mac-ia32-8:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=8 - 9
 
   # Prebuilds (win32 x64)
 
@@ -1314,18 +1208,6 @@ jobs:
       - ARCH=x64
       - NODE_VERSIONS=12 - 13
 
-  win-x64-10:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=10 - 11
-
-  win-x64-8:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=8 - 9
-
   # Prebuilds (win32 ia32)
 
   win-ia32-16:
@@ -1345,18 +1227,6 @@ jobs:
     environment:
       - ARCH=ia32
       - NODE_VERSIONS=12 - 13
-
-  win-ia32-10:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=10 - 11
-
-  win-ia32-8:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=8 - 9
 
   # Prebuild Artifacts
 
@@ -1387,15 +1257,11 @@ workflows:
     jobs:
       - lint
       - typescript
-      - node-core-8
-      - node-core-10
       - node-core-12
       - node-core-14
       - node-core-16
       - node-core-latest
       - node-core-windows
-      - node-integration-8
-      - node-integration-10
       - node-integration-12
       - node-integration-14
       - node-integration-16
@@ -1413,8 +1279,6 @@ workflows:
       - node-elasticsearch
       - node-express
       - node-fastify
-      - node-fs-8
-      - node-fs-10
       - node-fs-12
       - node-fs-14
       - node-fs-16
@@ -1454,8 +1318,6 @@ workflows:
       - node-winston
       - codecov:
           requires:
-            - node-core-8
-            - node-core-10
             - node-core-12
             - node-core-14
             - node-core-16
@@ -1473,8 +1335,6 @@ workflows:
             - node-elasticsearch
             - node-express
             - node-fastify
-            - node-fs-8
-            - node-fs-10
             - node-fs-12
             - node-fs-14
             - node-fs-16
@@ -1561,10 +1421,6 @@ workflows:
           <<: *prebuild-job
       - linux-x64-12:
           <<: *prebuild-job
-      - linux-x64-10:
-          <<: *prebuild-job
-      - linux-x64-8:
-          <<: *prebuild-job
       - linux-x64-16-test:
           requires:
             - linux-x64-16
@@ -1574,18 +1430,8 @@ workflows:
       - linux-x64-12-test:
           requires:
             - linux-x64-12
-      - linux-x64-10-test:
-          requires:
-            - linux-x64-10
-      - linux-x64-8-test:
-          requires:
-            - linux-x64-8
       # Linux ia32
       - linux-ia32-12:
-          <<: *prebuild-job
-      - linux-ia32-10:
-          <<: *prebuild-job
-      - linux-ia32-8:
           <<: *prebuild-job
       - linux-ia32-13-test:
           requires:
@@ -1593,12 +1439,6 @@ workflows:
       - linux-ia32-12-test:
           requires:
             - linux-ia32-12
-      - linux-ia32-10-test:
-          requires:
-            - linux-ia32-10
-      - linux-ia32-8-test:
-          requires:
-            - linux-ia32-8
       # Alpine x64
       - alpine-x64:
           <<: *prebuild-job
@@ -1612,20 +1452,12 @@ workflows:
           <<: *prebuild-job
       - mac-x64-12:
           <<: *prebuild-job
-      - mac-x64-10:
-          <<: *prebuild-job
-      - mac-x64-8:
-          <<: *prebuild-job
       # Darwin ia32
       - mac-ia32-16:
           <<: *prebuild-job
       - mac-ia32-14:
           <<: *prebuild-job
       - mac-ia32-12:
-          <<: *prebuild-job
-      - mac-ia32-10:
-          <<: *prebuild-job
-      - mac-ia32-8:
           <<: *prebuild-job
       # Windows x64
       - win-x64-16:
@@ -1634,10 +1466,6 @@ workflows:
           <<: *prebuild-job
       - win-x64-12:
           <<: *prebuild-job
-      - win-x64-10:
-          <<: *prebuild-job
-      - win-x64-8:
-          <<: *prebuild-job
       # Windows ia32
       - win-ia32-16:
           <<: *prebuild-job
@@ -1645,44 +1473,28 @@ workflows:
           <<: *prebuild-job
       - win-ia32-12:
           <<: *prebuild-job
-      - win-ia32-10:
-          <<: *prebuild-job
-      - win-ia32-8:
-          <<: *prebuild-job
       # Artifacts
       - prebuilds:
           requires:
             - linux-x64-16-test
             - linux-x64-14-test
             - linux-x64-12-test
-            - linux-x64-10-test
-            - linux-x64-8-test
             - linux-ia32-13-test
             - linux-ia32-12-test
-            - linux-ia32-10-test
-            - linux-ia32-8-test
             - alpine-x64
             - alpine-ia32
             - mac-x64-16
             - mac-x64-14
             - mac-x64-12
-            - mac-x64-10
-            - mac-x64-8
             - mac-ia32-16
             - mac-ia32-14
             - mac-ia32-12
-            - mac-ia32-10
-            - mac-ia32-8
             - win-x64-16
             - win-x64-14
             - win-x64-12
-            - win-x64-10
-            - win-x64-8
             - win-ia32-16
             - win-ia32-14
             - win-ia32-12
-            - win-ia32-10
-            - win-ia32-8
   nightly:
     triggers:
       - schedule:
@@ -1692,15 +1504,11 @@ workflows:
               only:
                 - master
     jobs:
-      - node-core-8
-      - node-core-10
       - node-core-12
       - node-core-14
       - node-core-16
       - node-core-latest
       - node-core-windows
-      - node-integration-8
-      - node-integration-10
       - node-integration-12
       - node-integration-14
       - node-integration-16
@@ -1719,8 +1527,6 @@ workflows:
       - node-elasticsearch
       - node-express
       - node-fastify
-      - node-fs-8
-      - node-fs-10
       - node-fs-12
       - node-fs-14
       - node-fs-16

@@ -7,6 +7,7 @@ const os = require('os')
 const path = require('path')
 const https = require('https')
 const url = require('url')
+const { once } = require('events')
 const { expect } = require('chai')
 
 const mkdtemp = util.promisify(fs.mkdtemp)
@@ -171,13 +172,6 @@ module.exports = async function runWithOptions (options) {
     console.error(e)
     process.exitCode = 1
   }
-}
-
-function once (ee, event) {
-  // TODO remove this fn once we drop node 8 support
-  return new Promise(resolve => {
-    ee.once(event, resolve)
-  })
 }
 
 if (require.main === module) {
