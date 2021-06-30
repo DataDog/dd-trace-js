@@ -41,10 +41,9 @@ function createWrapQuery (tracer, config) {
       const values = pgQuery.values
 
       span.setTag('resource.name', statement)
-      span.setTag('sql.query', statement)
 
-      if (config.includeQueryParams) {
-        span.setTag('sql.params', values)
+      if (config.includeQueryParams !== undefined) {
+        span.setTag('sql.params', config.includeQueryParams(values))
       }
 
       if (params) {
@@ -81,7 +80,8 @@ function createWrapQuery (tracer, config) {
 
 function normalizeConfig (config) {
   return Object.assign({}, config, {
-    includeQueryParams: config.includeQueryParams === true
+    includeQueryParams: typeof config.includeQueryParams === 'function' ? config.includeQueryParams
+      : config.includeQueryParams === true ? p => p : undefined
   })
 }
 

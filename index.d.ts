@@ -1161,7 +1161,7 @@ declare namespace plugins {
      *
      * @default false
      */
-     includeQueryParams?: boolean;
+     includeQueryParams?: boolean | ((params: any[]) => any[]);
   }
 
   /**

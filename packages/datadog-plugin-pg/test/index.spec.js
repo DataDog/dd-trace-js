@@ -59,7 +59,6 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'SELECT $1::text as message')
 
               done()
             })
@@ -99,7 +98,6 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
                 expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
                 expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-                expect(traces[0][0].meta).to.have.property('sql.query', 'SELECT $1::text as message')
 
                 done()
               })
@@ -188,6 +186,44 @@ describe('Plugin', () => {
               client.end((err) => {
                 if (err) throw err
               })
+            })
+          })
+        })
+      })
+
+      describe('with includeQueryParams callback in configuration', () => {
+        before(() => {
+          return agent.load('pg', { service: 'custom', includeQueryParams: p => ['filtered'] })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+
+          client.connect(err => done(err))
+        })
+
+        it('should log query params when enabled with callback in config', done => {
+          agent.use(traces => {
+            expect(traces[0][0].meta).to.have.property('sql.params', ['filtered'])
+
+            done()
+          })
+
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) throw err
+
+            client.end((err) => {
+              if (err) throw err
             })
           })
         })
