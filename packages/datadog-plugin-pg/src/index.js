@@ -43,7 +43,7 @@ function createWrapQuery (tracer, config) {
       span.setTag('resource.name', statement)
 
       if (config.includeQueryParams !== undefined) {
-        span.setTag('sql.params', config.includeQueryParams(values))
+        span.addTags('sql.params', config.includeQueryParams(values))
       }
 
       if (params) {
