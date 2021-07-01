@@ -13,6 +13,7 @@
     "client-with-tracer": {
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
+      "baseline": "client-control",
       "env": {
         "CLIENT_USE_TRACER": "1"
       }
@@ -27,6 +28,7 @@
     "server-with-tracer": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node server.js",
+      "baseline": "server-control",
       "env": {
         "SERVER_USE_TRACER": "1"
       }

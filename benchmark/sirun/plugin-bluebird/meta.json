@@ -11,6 +11,7 @@
       }
     },
     "with-tracer": {
+      "baseline": "control",
       "env": {
         "USE_TRACER": "1",
         "COUNT": "50000"
