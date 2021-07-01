@@ -47,14 +47,14 @@
   {
     "target_name": "appsec",
     "sources": [
-      "packages/appsec/native/src/main.cpp"
+      "packages/dd-trace/src/appsec/native/src/main.cpp"
     ],
     "include_dirs": [
       "<!@(node -p \"require('node-addon-api').include\")",
-      "<!(node -p \"require('./packages/appsec/native/lib/lib.js').include\")"
+      "<!(node -p \"require('./packages/dd-trace/src/appsec/native/lib/lib.js').include\")"
     ],
     "libraries": [
-      "<!(node -p \"require('./packages/appsec/native/lib/lib.js').lib\")"
+      "<!(node -p \"require('./packages/dd-trace/src/appsec/native/lib/lib.js').lib\")"
     ],
     "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
     "xcode_settings": {
