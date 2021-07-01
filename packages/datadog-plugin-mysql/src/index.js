@@ -26,7 +26,7 @@ function createWrapQuery (tracer, config) {
         span.setTag('db.name', this.config.database)
       }
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       const sequence = scope.bind(query, span).call(this, sql, values, cb)
 

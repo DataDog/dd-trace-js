@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+
 function createWrapProducer (tracer, config) {
   return function wrapProducer (createProducer) {
     return function producerWithTrace () {
@@ -17,6 +19,8 @@ function createWrapProducer (tracer, config) {
       producer.send = tracer.wrap('kafka.produce', { tags }, function (...args) {
         const { topic, messages = [] } = args[0]
         const currentSpan = tracer.scope().active()
+
+        analyticsSampler.sample(currentSpan, config.measured)
 
         currentSpan.addTags({
           'resource.name': topic,
@@ -61,6 +65,8 @@ function createWrapConsumer (tracer, config) {
 
             return tracer.trace('kafka.consume', { childOf, tags }, () => {
               const currentSpan = tracer.scope().active()
+
+              analyticsSampler.sample(currentSpan, config.measured, true)
 
               currentSpan.addTags({
                 'resource.name': topic,

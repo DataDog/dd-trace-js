@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Tags = require('../../../ext/tags')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { ERROR } = require('../../../ext/tags')
@@ -42,6 +43,7 @@ function createWrapHandler (tracer, config, handler) {
         }
       })
 
+      analyticsSampler.sample(span, config.measured, true)
       addMethodTags(span, handler, kinds[type])
       addMetadataTags(span, metadata, filter, 'request')
 

@@ -5,8 +5,6 @@ const tags = require('../../../ext/tags')
 const id = require('../src/id')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const ANALYTICS_KEY = constants.ANALYTICS_KEY
-const ANALYTICS = tags.ANALYTICS
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
@@ -488,42 +486,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta['circularTag']).to.equal('[object Object],[object Object]')
-    })
-
-    it('should include the analytics sample rate', () => {
-      spanContext._tags[ANALYTICS] = 0.5
-      trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0.5)
-    })
-
-    it('should limit the min analytics sample rate', () => {
-      spanContext._tags[ANALYTICS] = -1
-      trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0)
-    })
-
-    it('should limit the max analytics sample rate', () => {
-      spanContext._tags[ANALYTICS] = 2
-      trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.equal(1)
-    })
-
-    it('should accept boolean true for analytics', () => {
-      spanContext._tags[ANALYTICS] = true
-      trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.equal(1)
-    })
-
-    it('should accept boolean false for analytics', () => {
-      spanContext._tags[ANALYTICS] = false
-      trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.be.undefined
-    })
-
-    it('should accept strings for analytics', () => {
-      spanContext._tags[ANALYTICS] = '0.5'
-      trace = format(span)
-      expect(trace.metrics[ANALYTICS_KEY]).to.equal(0.5)
     })
 
     it('should accept a boolean for measured', () => {

@@ -101,8 +101,6 @@ function assertPackage (name, version, dependency, external) {
 function assertIndex (name, version) {
   const index = `'use strict'
 
-const fs = require('fs')
-const path = require('path')
 const requirePackageJson = require('${requirePackageJsonPath}')
 
 module.exports = {

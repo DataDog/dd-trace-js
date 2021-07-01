@@ -17,7 +17,7 @@ function startSpan (tracer, config, operation, resource) {
     }
   })
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured)
 
   return span
 }

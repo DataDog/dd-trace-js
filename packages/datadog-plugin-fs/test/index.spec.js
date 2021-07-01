@@ -1784,7 +1784,7 @@ function mkExpected (props) {
   const expected = Object.assign({
     name: 'fs.operation',
     error: 0,
-    service: 'test-fs'
+    service: 'test'
   }, props)
   expected.meta = meta
   return expected

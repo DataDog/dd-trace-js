@@ -10,7 +10,7 @@ const { setStartupLogConfig } = require('./startup-log')
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
-const ANALYTICS = tags.ANALYTICS
+const MEASURED = tags.MEASURED
 const NOOP = scopes.NOOP
 
 class DatadogTracer extends Tracer {
@@ -145,7 +145,7 @@ function addTags (span, options) {
   if (options.service) tags[SERVICE_NAME] = options.service
   if (options.resource) tags[RESOURCE_NAME] = options.resource
 
-  tags[ANALYTICS] = options.analytics
+  tags[MEASURED] = options.measured
 
   span.addTags(tags)
 }

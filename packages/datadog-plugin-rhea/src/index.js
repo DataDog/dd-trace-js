@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+
 const dd = Symbol('datadog')
 const circularBufferConstructor = Symbol('circularBufferConstructor')
 const inFlightDeliveries = Symbol('inFlightDeliveries')
@@ -25,6 +27,7 @@ function createWrapSend (tracer, config, instrumenter) {
           'out.port': port
         }
       }, (span, done) => {
+        analyticsSampler.sample(span, config.measured)
         addDeliveryAnnotations(msg, tracer, span)
         const delivery = send.apply(this, arguments)
         delivery[dd] = { done, span }
@@ -75,6 +78,7 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
           },
           childOf
         }, (span, done) => {
+          analyticsSampler.sample(span, config.measured, true)
           if (msgObj.delivery) {
             msgObj.delivery[dd] = { done, span }
             msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery.update)

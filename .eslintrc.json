@@ -15,13 +15,6 @@
     "no-console": 2,
     "prefer-const": 2,
     "object-curly-spacing": [2, "always"],
-    "no-prototype-builtins": 0,
-    "quote-props": 0,
-    "dot-notation": 0,
-    "multiline-ternary": 0,
-    "quotes": 0,
-    "node/handle-callback-err": 0,
-    "node/no-deprecated-api": 0,
-    "node/no-path-concat": 0
+    "import/no-extraneous-dependencies": 2
   }
 }

@@ -55,7 +55,7 @@ function startSendSpan (tracer, config, link) {
 
   addTags(tracer, config, span, link)
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured)
 
   return span
 }
@@ -74,7 +74,7 @@ function startReceiveSpan (tracer, config, link) {
 
   addTags(tracer, config, span, link)
 
-  analyticsSampler.sample(span, config.analytics, true)
+  analyticsSampler.sample(span, config.measured, true)
 
   return span
 }

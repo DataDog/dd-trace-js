@@ -61,7 +61,7 @@ describe('Plugin', () => {
     it('should instrument connect with a path', done => {
       expectSomeSpan(agent, {
         name: 'ipc.connect',
-        service: 'test-ipc',
+        service: 'test',
         resource: '/tmp/dd-trace.sock',
         meta: {
           'span.kind': 'client',
@@ -82,7 +82,7 @@ describe('Plugin', () => {
         socket.on('connect', () => {
           expectSomeSpan(agent, {
             name: 'tcp.connect',
-            service: 'test-tcp',
+            service: 'test',
             resource: `localhost:${port}`,
             meta: {
               'span.kind': 'client',
@@ -112,7 +112,7 @@ describe('Plugin', () => {
         socket.on('connect', () => {
           expectSomeSpan(agent, {
             name: 'tcp.connect',
-            service: 'test-tcp',
+            service: 'test',
             resource: `localhost:${port}`,
             meta: {
               'span.kind': 'client',
@@ -135,7 +135,7 @@ describe('Plugin', () => {
     it('should instrument connect with IPC options', done => {
       expectSomeSpan(agent, {
         name: 'ipc.connect',
-        service: 'test-ipc',
+        service: 'test',
         resource: '/tmp/dd-trace.sock',
         meta: {
           'span.kind': 'client',
@@ -160,7 +160,7 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'tcp.connect',
-            service: 'test-tcp',
+            service: 'test',
             resource: `localhost:${port}`
           })
           expect(traces[0][0].meta).to.deep.include({

@@ -69,7 +69,7 @@ function patch (http, methodName, tracer, config) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       callback = scope.bind(callback, childOf)
 
@@ -338,8 +338,9 @@ module.exports = [
 
       patch.call(this, http, 'request', tracer, config)
       /**
-       * In newer Node versions references internal to modules, such as `http(s).get` calling `http(s).request`, do
-       * not use externally patched versions, which is why we need to also patch `get` here separately.
+       * References internal to modules, such as `http(s).get` calling
+       * `http(s).request`, do not use externally patched versions, which is
+       * why we need to also patch `get` here separately.
        */
       patch.call(this, http, 'get', tracer, config)
     },
