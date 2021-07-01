@@ -245,7 +245,6 @@ class TestResult {
     this.isPass = null
     this.isIgnore = null
   }
-
   async init () {
     this.isPass = this.rc === 0
 
@@ -259,7 +258,6 @@ class TestResult {
 
     return this
   }
-
   errorMessage () {
     let message = ''
     message += `Test output: rc ${this.rc}\n`

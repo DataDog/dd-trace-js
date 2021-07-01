@@ -106,7 +106,7 @@ describe('Plugin', () => {
           friends: {
             type: new graphql.GraphQLList(Human),
             resolve () {
-              return [{ name: 'alice' }, { name: 'bob' }]
+              return [ { name: 'alice' }, { name: 'bob' } ]
             }
           }
         }

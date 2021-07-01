@@ -174,8 +174,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
     }
     event.test.fn = tracer.wrap(
       'jest.test',
-      {
-        type: 'test',
+      { type: 'test',
         childOf,
         resource,
         tags: commonSpanTags

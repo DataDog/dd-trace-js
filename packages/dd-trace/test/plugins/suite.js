@@ -133,7 +133,7 @@ ${withTracer.stderr}
 
 function getOpts (args) {
   args = Array.from(args)
-  const [modName, repoUrl, commitish, runner, timeout, testCmd] = args
+  const [ modName, repoUrl, commitish, runner, timeout, testCmd ] = args
   const options = {
     modName,
     repoUrl,

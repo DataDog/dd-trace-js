@@ -252,11 +252,9 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('elasticsearch', {
             service: 'test',
-            hooks: {
-              query: (span, params) => {
-                span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
-              }
-            }
+            hooks: { query: (span, params) => {
+              span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
+            } }
           })
         })
 

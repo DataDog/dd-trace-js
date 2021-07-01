@@ -39,7 +39,7 @@ describe('format', () => {
       tracer: sinon.stub().returns({
         _service: 'test'
       }),
-      _startTime: 1500000000.123456,
+      _startTime: 1500000000000.123456,
       _duration: 100
     }
 
