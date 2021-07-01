@@ -21,9 +21,9 @@ if (os.platform() === 'win32') {
 }
 if (os.platform() === 'linux') {
   if (family === GLIBC) {
-    module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-glibc`, 'lib', 'libsqreen.a')
+    module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-glibc`, 'lib64', 'libsqreen.a')
   }
   if (family === MUSL) {
-    module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-muslc`, 'lib', 'libsqreen.a')
+    module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-muslc`, 'lib64', 'libsqreen.a')
   }
 }
