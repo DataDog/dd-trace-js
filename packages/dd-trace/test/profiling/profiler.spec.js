@@ -3,7 +3,7 @@
 const expect = require('chai').expect
 const sinon = require('sinon')
 
-const INTERVAL = 60 * 1000
+const INTERVAL = 65 * 1000
 
 describe('profiler', () => {
   let Profiler
@@ -153,7 +153,7 @@ describe('profiler', () => {
     expect(profiles).to.have.property('heap', heapProfile)
     expect(start).to.be.a('date')
     expect(end).to.be.a('date')
-    expect(end - start).to.equal(60000)
+    expect(end - start).to.equal(65000)
     expect(tags).to.have.property('foo', 'foo')
   })
 

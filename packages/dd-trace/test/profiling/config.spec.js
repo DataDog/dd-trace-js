@@ -20,7 +20,7 @@ describe('config', () => {
     expect(config).to.deep.include({
       enabled: true,
       service: 'node',
-      flushInterval: 60 * 1000
+      flushInterval: 65 * 1000
     })
 
     expect(config.tags).to.deep.equal({
@@ -60,7 +60,7 @@ describe('config', () => {
     expect(config.tags.host).to.be.a('string')
     expect(config.tags.service).to.equal(options.service)
     expect(config.tags.version).to.equal(options.version)
-    expect(config.flushInterval).to.equal(60 * 1000)
+    expect(config.flushInterval).to.equal(65 * 1000)
     expect(config.exporters).to.be.an('array')
     expect(config.exporters.length).to.equal(1)
     expect(config.exporters[0]._url.toString()).to.equal(options.url)

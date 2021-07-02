@@ -24,7 +24,8 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const flushInterval = coalesce(options.interval, 60 * 1000)
+    // Must be longer than one minute so pad with five seconds
+    const flushInterval = coalesce(options.interval, 65 * 1000)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
