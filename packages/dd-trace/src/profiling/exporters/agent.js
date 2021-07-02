@@ -66,6 +66,8 @@ class AgentExporter {
       }
 
       form.submit(options, (err, res) => {
+        res.resume()
+
         if (err) return reject(err)
         if (res.statusCode >= 400) {
           return reject(new Error(`Error from the agent: ${res.statusCode}`))
