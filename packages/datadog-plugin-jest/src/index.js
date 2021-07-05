@@ -218,9 +218,9 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   }
 }
 
-function createIt (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
-  return function itWithTrace (it) {
-    return function (description, specFunction, timeout) {
+function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
+  return function wrapIt (it) {
+    return function itWithTrace (description, specFunction, timeout) {
       let oldSpecFunction = specFunction
 
       if (specFunction.length) {
@@ -254,6 +254,7 @@ function createIt (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
           const resource = `${testSuite}.${currentTestName}`
           testSpan.setTag(TEST_NAME, currentTestName)
           testSpan.setTag(RESOURCE_NAME, resource)
+          testSpan.context()._trace.origin = CI_APP_ORIGIN
           let result
           globalInput.jasmine.testSpanByTestName[currentTestName] = testSpan
 
@@ -284,40 +285,100 @@ function createIt (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
   }
 }
 
+function createWrapOnException (tracer, globalInput) {
+  return function wrapOnException (onException) {
+    return function onExceptionWithTrace (err) {
+      let activeTestSpan = tracer.scope().active()
+      if (!activeTestSpan) {
+        activeTestSpan = globalInput.jasmine.testSpanByTestName[this.getFullName()]
+      }
+      if (!activeTestSpan) {
+        return onException.apply(this, arguments)
+      }
+      const {
+        [TEST_NAME]: testName,
+        [TEST_SUITE]: testSuite,
+        [TEST_STATUS]: testStatus
+      } = activeTestSpan._spanContext._tags
+
+      const isActiveSpanFailing = this.getFullName() === testName &&
+        this.result.testPath.endsWith(testSuite)
+
+      if (isActiveSpanFailing && !testStatus) {
+        activeTestSpan.setTag(TEST_STATUS, 'fail')
+        // If we don't do this, jest will show this file on its error message
+        const stackFrames = err.stack.split('\n')
+        const filteredStackFrames = stackFrames.filter(frame => !frame.includes(__dirname)).join('\n')
+        err.stack = filteredStackFrames
+        activeTestSpan.setTag('error', err)
+        // need to manually finish, as it will not be caught in `itWithTrace`
+        activeTestSpan.finish()
+      }
+
+      return onException.apply(this, arguments)
+    }
+  }
+}
+
+function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
+  return function wrapItSkip (it) {
+    return function itSkipWithTrace () {
+      const childOf = tracer.extract('text_map', {
+        'x-datadog-trace-id': id().toString(10),
+        'x-datadog-parent-id': '0000000000000000',
+        'x-datadog-sampled': 1
+      })
+
+      const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
+
+      const commonSpanTags = {
+        [TEST_TYPE]: 'test',
+        [TEST_SUITE]: testSuite,
+        [SAMPLING_RULE_DECISION]: 1,
+        [SAMPLING_PRIORITY]: AUTO_KEEP,
+        ...testEnvironmentMetadata
+      }
+
+      const spec = it.apply(this, arguments)
+
+      const testName = spec.getFullName()
+      const resource = `${testSuite}.${testName}`
+
+      const testSpan = tracer.startSpan(
+        'jest.test',
+        {
+          childOf,
+          tags: {
+            ...commonSpanTags,
+            [SPAN_TYPE]: 'test',
+            [RESOURCE_NAME]: resource,
+            [TEST_NAME]: testName,
+            [TEST_STATUS]: 'skip'
+          }
+        }
+      )
+      testSpan.context()._trace.origin = CI_APP_ORIGIN
+      testSpan.finish()
+
+      return spec
+    }
+  }
+}
+
 function createJasmineAsyncInstall (tracer, instrumenter, testEnvironmentMetadata) {
   return function jasmineAsyncInstallWithTrace (jasmineAsyncInstall) {
     return function (globalConfig, globalInput) {
       globalInput.jasmine.testSpanByTestName = {}
-      instrumenter.wrap(globalInput.jasmine.Spec.prototype, 'onException', function (onException) {
-        return function (err) {
-          let activeTestSpan = tracer.scope().active()
-          if (!activeTestSpan) {
-            activeTestSpan = globalInput.jasmine.testSpanByTestName[this.getFullName()]
-          }
-          if (!activeTestSpan) {
-            return onException.apply(this, arguments)
-          }
-          const {
-            [TEST_NAME]: testName,
-            [TEST_SUITE]: testSuite,
-            [TEST_STATUS]: testStatus
-          } = activeTestSpan._spanContext._tags
-
-          const isActiveSpanFailing = this.getFullName() === testName &&
-            this.result.testPath.endsWith(testSuite)
-
-          if (isActiveSpanFailing && !testStatus) {
-            activeTestSpan.setTag(TEST_STATUS, 'fail')
-            activeTestSpan.setTag('error', err)
-            // need to manually finish, as it will not be caught in `itWithTrace`
-            activeTestSpan.finish()
-          }
-
-          return onException.apply(this, arguments)
-        }
-      })
-      instrumenter.wrap(globalInput, 'it', createIt(tracer, globalConfig, globalInput, testEnvironmentMetadata))
-      instrumenter.wrap(globalInput, 'fit', createIt(tracer, globalConfig, globalInput, testEnvironmentMetadata))
+      instrumenter.wrap(globalInput.jasmine.Spec.prototype, 'onException', createWrapOnException(tracer, globalInput))
+      instrumenter.wrap(globalInput, 'it', createWrapIt(tracer, globalConfig, globalInput, testEnvironmentMetadata))
+      // instruments 'it.only'
+      instrumenter.wrap(globalInput, 'fit', createWrapIt(tracer, globalConfig, globalInput, testEnvironmentMetadata))
+      // instruments 'it.skip
+      instrumenter.wrap(
+        globalInput,
+        'xit',
+        createWrapItSkip(tracer, globalConfig, globalInput, testEnvironmentMetadata)
+      )
       // missing at least xit
       return jasmineAsyncInstall(globalConfig, globalInput)
     }
