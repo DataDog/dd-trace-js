@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('crypto');
+const crypto = require('crypto')
 const util = require('../../util')
 const nativeLib = util.loadWAF()
 
@@ -9,7 +9,7 @@ class LibAppSec {
     nativeLib.clearAll()
   }
 
-  static version() {
+  static version () {
     nativeLib.version()
   }
 
