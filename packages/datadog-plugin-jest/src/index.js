@@ -222,7 +222,6 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
   return function wrapIt (it) {
     return function itWithTrace (description, specFunction, timeout) {
       let oldSpecFunction = specFunction
-
       if (specFunction.length) {
         oldSpecFunction = promisify(oldSpecFunction)
       }
@@ -272,12 +271,16 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
           } catch (error) {
             testSpan.setTag(TEST_STATUS, 'fail')
             testSpan.setTag('error', error)
-            done(error)
+            if (done) {
+              done(error)
+            }
             throw error
           } finally {
             finishAllTraceSpans(testSpan)
           }
-          done(result)
+          if (done) {
+            done(result)
+          }
         }
       )
       return it(description, newSpecFunction, timeout)
