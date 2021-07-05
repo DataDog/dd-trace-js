@@ -22,7 +22,8 @@ describe('Plugin', () => {
     reporters: [],
     testRunner: 'jest-jasmine2',
     silent: true,
-    testEnvironment: 'node'
+    testEnvironment: 'node',
+    cache: false
   }
 
   withVersions(plugin, ['jest-jasmine2'], (version, moduleName) => {
@@ -35,7 +36,7 @@ describe('Plugin', () => {
       })
     })
     describe('jest with jasmine', function () {
-      this.timeout(30000)
+      this.timeout(60000)
       it('instruments passing tests', function (done) {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
