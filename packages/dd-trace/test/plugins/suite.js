@@ -104,12 +104,20 @@ async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   return result
 }
 
-async function run (modName, repoUrl, commitish, testCmd) {
-  const [withoutTracer, withTracer] = await Promise.all([
-    runOne(modName, repoUrl, commitish, false, testCmd),
-    runOne(modName, repoUrl, commitish, true, testCmd)
-  ])
-  return { withoutTracer, withTracer }
+async function run (modName, repoUrl, commitish, testCmd, parallel) {
+  if (parallel) {
+    const [withoutTracer, withTracer] = await Promise.all([
+      runOne(modName, repoUrl, commitish, false, testCmd),
+      runOne(modName, repoUrl, commitish, true, testCmd)
+    ])
+
+    return { withoutTracer, withTracer }
+  } else {
+    const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
+    const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
+
+    return { withoutTracer, withTracer }
+  }
 }
 
 function defaultRunner ({ withoutTracer, withTracer }) {
@@ -164,9 +172,10 @@ module.exports = async function runWithOptions (options) {
       repoUrl,
       commitish,
       testCmd = 'npm test',
-      runner = defaultRunner
+      runner = defaultRunner,
+      parallel = true
     } = options
-    return runner(await run(modName, repoUrl, commitish, testCmd))
+    return runner(await run(modName, repoUrl, commitish, testCmd, parallel))
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e)
