@@ -1,6 +1,4 @@
 'use strict'
-const nock = require('nock')
-
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -19,7 +17,7 @@ describe('Plugin', () => {
 
   const jestCommonOptions = {
     projects: [__dirname],
-    testPathIgnorePatterns: ['/node_modules/', 'e2e.test.js', 'cypress'],
+    testPathIgnorePatterns: ['/node_modules/'],
     useStderr: true,
     coverageReporters: [],
     reporters: [],
@@ -32,11 +30,6 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
-      // for http integration tests
-      nock('http://test:123')
-        .get('/')
-        .reply(200, 'OK')
-
       return agent.load(['jest']).then(() => {
         jestExecutable = require(`../../../versions/jest@${version}`).get()
       })
