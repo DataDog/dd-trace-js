@@ -1,7 +1,7 @@
 'use strict'
 
 const crypto = require('crypto');
-const util = require('../../dd-trace/src/util')
+const util = require('../../util')
 const nativeLib = util.loadWAF()
 
 class LibAppSec {
