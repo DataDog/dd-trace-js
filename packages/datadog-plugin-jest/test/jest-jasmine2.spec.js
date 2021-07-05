@@ -35,7 +35,7 @@ describe('Plugin', () => {
       })
     })
     describe('jest with jasmine', function () {
-      this.timeout(20000)
+      this.timeout(30000)
       it('instruments passing tests', function (done) {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
