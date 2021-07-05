@@ -14,6 +14,7 @@ describe('TracerProxy', () => {
   let metrics
   let log
   let profiler
+  let appsec
 
   beforeEach(() => {
     tracer = {
@@ -59,7 +60,8 @@ describe('TracerProxy', () => {
       enabled: true,
       experimental: {},
       logger: 'logger',
-      debug: true
+      debug: true,
+      appsec: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -71,6 +73,10 @@ describe('TracerProxy', () => {
       start: sinon.spy()
     }
 
+    appsec = {
+      enable: sinon.spy()
+    }
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
@@ -78,7 +84,8 @@ describe('TracerProxy', () => {
       './metrics': metrics,
       './instrumenter': Instrumenter,
       './log': log,
-      './profiler': profiler
+      './profiler': profiler,
+      './appsec': appsec
     })
 
     proxy = new Proxy()
@@ -154,6 +161,14 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(metrics.start).to.have.been.called
+      })
+
+      it('should enable appsec when configured', () => {
+        config.appsec = { enabled: true }
+
+        proxy.init()
+
+        expect(appsec.enable).to.have.been.called
       })
     })
 
