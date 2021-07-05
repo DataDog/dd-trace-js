@@ -1,4 +1,5 @@
 'use strict'
+
 const path = require('path')
 const gypBuild = require('node-gyp-build')
 
