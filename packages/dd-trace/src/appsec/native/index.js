@@ -28,6 +28,7 @@ class LibAppSec {
     if (this.cleared) {
       throw new Error('calling a cleared instance of appsecLib')
     }
+
     return nativeLib.run(this.id, inputs, timeout)
   }
 
