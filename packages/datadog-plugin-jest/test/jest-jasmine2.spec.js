@@ -18,11 +18,11 @@ describe('Plugin', () => {
   const jestCommonOptions = {
     projects: [__dirname],
     testPathIgnorePatterns: ['/node_modules/'],
-    useStderr: true,
     coverageReporters: [],
     reporters: [],
     testRunner: 'jest-jasmine2',
-    silent: true
+    silent: true,
+    testEnvironment: 'node'
   }
 
   withVersions(plugin, ['jest-jasmine2'], (version, moduleName) => {
