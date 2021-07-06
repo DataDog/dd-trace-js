@@ -271,6 +271,7 @@ prebuild-job: &prebuild-job
       only:
         - master
         - /v\d+\.\d+/
+        - /v\d+\.x/
         - /.*native.*/
         - /^node-\d+/
 
