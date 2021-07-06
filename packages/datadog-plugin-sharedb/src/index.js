@@ -87,9 +87,9 @@ function handleReceive (tracer, config, action, agent, triggerContext, callback,
         {
           childOf,
           tags: {
-            'service.name': config.service || `${tracer._service}-sharedb`,
+            'service.name': config.service || tracer._service,
             'span.type': 'sharedb.request',
-            'span.kind': 'client',
+            'span.kind': 'server',
             'resource.method': actionName,
             'resource.name': getReadableResourceName(actionName, triggerContext.data.c, triggerContext.data.q)
           }
