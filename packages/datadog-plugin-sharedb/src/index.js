@@ -82,10 +82,10 @@ function wrapCallback (config, tracer, request, span, done) {
   })
 }
 
-function createAgentWrapHandle(tracer, config) {
+function createAgentWrapHandle (tracer, config) {
   return function wrapHandleMessage (origHandleMessageFn) { // called once
     return function handleMessageWithTrace (request, callback) { // called for each trigger
-      const action = request.a;
+      const action = request.a
 
       const actionName = getReadableActionName(action)
 
@@ -93,12 +93,12 @@ function createAgentWrapHandle(tracer, config) {
       const childOf = scope.active()
       const span = tracer.startSpan('sharedb.request', {
         childOf,
-          tags: {
-            'service.name': config.service || tracer._service,
-            'span.kind': 'server',
-            'resource.method': actionName,
-            'resource.name': getReadableResourceName(actionName, request.c, request.q)
-          }
+        tags: {
+          'service.name': config.service || tracer._service,
+          'span.kind': 'server',
+          'resource.method': actionName,
+          'resource.name': getReadableResourceName(actionName, request.c, request.q)
+        }
       })
 
       if (config.hooks && config.hooks.receive) {

@@ -193,7 +193,11 @@ describe('Plugin', () => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-sharedb')
               expect(receiveHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object)
-              expect(replyHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object, sinon.match.object)
+              expect(replyHookSpy).to.have.been.calledWithMatch(
+                sinon.match.object,
+                sinon.match.object,
+                sinon.match.object
+              )
             })
               .then(done)
               .catch(done)
@@ -227,8 +231,8 @@ describe('Plugin', () => {
 
           backend = new ShareDB({ presence: true })
 
-          backend.db.getSnapshot = function(collection, id, fields, options, callback) {
-            callback(new Error('Snapshot Fetch Failure'));
+          backend.db.getSnapshot = function (collection, id, fields, options, callback) {
+            callback(new Error('Snapshot Fetch Failure'))
           }
 
           connection = backend.connect()
