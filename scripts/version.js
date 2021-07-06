@@ -18,13 +18,15 @@ title(`Bumping version to v${version} in a new branch`)
 
 pkg.version = version
 
-if (isNewBranch) {
-  exec(`git checkout master`)
-  exec(`git pull`)
-  exec(`git checkout -b ${branch}`)
-} else {
-  exec(`git checkout ${branch}`)
-  exec('git pull')
+if (process.argv[3] !== 'ignore-branch') {
+  if (isNewBranch) {
+    exec(`git checkout master`)
+    exec(`git pull`)
+    exec(`git checkout -b ${branch}`)
+  } else {
+    exec(`git checkout ${branch}`)
+    exec('git pull')
+  }
 }
 
 write('package.json', JSON.stringify(pkg, null, 2) + '\n')
