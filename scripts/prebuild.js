@@ -47,7 +47,9 @@ function prebuildify () {
 
     execSync(cmd, { stdio: [0, 1, 2] })
 
-    const sum = checksum(fs.readFileSync('build/Release/metrics.node'))
+    const sum = checksum(fs.readFileSync('build/Release/metrics.node'), {
+      algorithm: 'sha256'
+    })
 
     fs.writeFileSync(`${output}.sha1`, sum)
     fs.copyFileSync('build/Release/metrics.node', output)
