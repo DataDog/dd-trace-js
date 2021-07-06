@@ -65,7 +65,7 @@ class AgentExporter {
         options.port = this._url.port
       }
 
-      form.submit(options, (err, res) => {
+      const req = form.submit(options, (err, res) => {
         res.resume()
 
         if (err) return reject(err)
@@ -75,6 +75,12 @@ class AgentExporter {
 
         resolve()
       })
+
+      // There is a temporal deadzone while computing content-length where
+      // an error handler has not yet been attached. If an error response is
+      // received quickly enough, this will trigger a crash because Node.js
+      // special-cases the error event to crash when there are no listeners.
+      req.on('error', reject)
     })
   }
 }
