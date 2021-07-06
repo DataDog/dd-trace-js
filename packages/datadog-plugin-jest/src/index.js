@@ -43,6 +43,26 @@ function createWrapTeardown (tracer, instrumenter) {
   }
 }
 
+function getTestSpanTags (tracer, testEnvironmentMetadata) {
+  const childOf = tracer.extract('text_map', {
+    'x-datadog-trace-id': id().toString(10),
+    'x-datadog-parent-id': '0000000000000000',
+    'x-datadog-sampled': 1
+  })
+
+  const commonSpanTags = {
+    [TEST_TYPE]: 'test',
+    [SAMPLING_RULE_DECISION]: 1,
+    [SAMPLING_PRIORITY]: AUTO_KEEP,
+    [SPAN_TYPE]: 'test',
+    ...testEnvironmentMetadata
+  }
+  return {
+    childOf,
+    commonSpanTags
+  }
+}
+
 let nameToParams = {}
 
 const isTimeout = (event) => {
@@ -105,29 +125,23 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       return
     }
 
-    const childOf = tracer.extract('text_map', {
-      'x-datadog-trace-id': id().toString(10),
-      'x-datadog-parent-id': '0000000000000000',
-      'x-datadog-sampled': 1
-    })
+    const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
+
     let testName = event.test.name
     const context = this.getVmContext()
     if (context) {
       const { currentTestName } = context.expect.getState()
       testName = currentTestName
     }
-    const commonSpanTags = {
-      [TEST_TYPE]: 'test',
+    const spanTags = {
+      ...commonSpanTags,
       [TEST_NAME]: testName,
-      [TEST_SUITE]: this.testSuite,
-      [SAMPLING_RULE_DECISION]: 1,
-      [SAMPLING_PRIORITY]: AUTO_KEEP,
-      ...testEnvironmentMetadata
+      [TEST_SUITE]: this.testSuite
     }
 
     const testParametersString = getTestParametersString(nameToParams, event.test.name)
     if (testParametersString) {
-      commonSpanTags[TEST_PARAMETERS] = testParametersString
+      spanTags[TEST_PARAMETERS] = testParametersString
     }
 
     const resource = `${this.testSuite}.${testName}`
@@ -137,8 +151,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
         {
           childOf,
           tags: {
-            ...commonSpanTags,
-            [SPAN_TYPE]: 'test',
+            ...spanTags,
             [RESOURCE_NAME]: resource,
             [TEST_STATUS]: 'skip'
           }
@@ -154,8 +167,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
         {
           childOf,
           tags: {
-            ...commonSpanTags,
-            [SPAN_TYPE]: 'test',
+            ...spanTags,
             [RESOURCE_NAME]: resource,
             [TEST_STATUS]: 'fail'
           }
@@ -180,10 +192,11 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
     }
     event.test.fn = tracer.wrap(
       'jest.test',
-      { type: 'test',
+      {
+        type: 'test',
         childOf,
         resource,
-        tags: commonSpanTags
+        tags: spanTags
       },
       async () => {
         let result
@@ -226,26 +239,16 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
         oldSpecFunction = promisify(oldSpecFunction)
       }
 
-      const childOf = tracer.extract('text_map', {
-        'x-datadog-trace-id': id().toString(10),
-        'x-datadog-parent-id': '0000000000000000',
-        'x-datadog-sampled': 1
-      })
+      const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
 
       const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
 
-      const commonSpanTags = {
-        [TEST_TYPE]: 'test',
-        [TEST_SUITE]: testSuite,
-        [SAMPLING_RULE_DECISION]: 1,
-        [SAMPLING_PRIORITY]: AUTO_KEEP,
-        ...testEnvironmentMetadata
-      }
       const newSpecFunction = tracer.wrap(
         'jest.test',
-        { type: 'test',
+        {
+          type: 'test',
           childOf,
-          tags: commonSpanTags
+          tags: { ...commonSpanTags, [TEST_SUITE]: testSuite }
         },
         async (done) => {
           const testSpan = tracer.scope().active()
@@ -326,21 +329,9 @@ function createWrapOnException (tracer, globalInput) {
 function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
   return function wrapItSkip (it) {
     return function itSkipWithTrace () {
-      const childOf = tracer.extract('text_map', {
-        'x-datadog-trace-id': id().toString(10),
-        'x-datadog-parent-id': '0000000000000000',
-        'x-datadog-sampled': 1
-      })
+      const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
 
       const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
-
-      const commonSpanTags = {
-        [TEST_TYPE]: 'test',
-        [TEST_SUITE]: testSuite,
-        [SAMPLING_RULE_DECISION]: 1,
-        [SAMPLING_PRIORITY]: AUTO_KEEP,
-        ...testEnvironmentMetadata
-      }
 
       const spec = it.apply(this, arguments)
 
@@ -353,9 +344,9 @@ function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMet
           childOf,
           tags: {
             ...commonSpanTags,
-            [SPAN_TYPE]: 'test',
             [RESOURCE_NAME]: resource,
             [TEST_NAME]: testName,
+            [TEST_SUITE]: testSuite,
             [TEST_STATUS]: 'skip'
           }
         }
