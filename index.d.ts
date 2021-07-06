@@ -1258,12 +1258,12 @@ declare namespace plugins {
       /**
        * Hook to execute just when the span is created.
        */
-      receive?: (span?: opentracing.Span, context?: any) => any;
+      receive?: (span?: opentracing.Span, request?: any) => any;
 
       /**
        * Hook to execute just when the span is finished.
        */
-      reply?: (span?: opentracing.Span, context?: any) => any;
+      reply?: (span?: opentracing.Span, request?: any, response?: any) => any;
     };
   }
 

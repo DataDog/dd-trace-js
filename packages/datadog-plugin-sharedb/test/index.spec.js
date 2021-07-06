@@ -44,10 +44,9 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-sharedb')
+              expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('resource', 'fetch some-collection')
-              expect(traces[0][0]).to.have.property('type', 'sharedb.request')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('resource.method', 'fetch')
             })
@@ -73,7 +72,7 @@ describe('Plugin', () => {
             agent.use(traces => {
               expect(receiveSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
               expect(replySpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
-              expect(traces[0][0]).to.have.property('service', 'test-sharedb')
+              expect(traces[0][0]).to.have.property('service', 'test')
             })
               .then(done)
               .catch(done)
@@ -90,14 +89,13 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-sharedb')
+              expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0])
                 .to
                 .have
                 .property('resource',
                   'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
-              expect(traces[0][0]).to.have.property('type', 'sharedb.request')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('resource.method', 'query-fetch')
             })
@@ -182,7 +180,67 @@ describe('Plugin', () => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-sharedb')
               expect(receiveHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object)
-              expect(replyHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object)
+              expect(replyHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object, sinon.match.object)
+            })
+              .then(done)
+              .catch(done)
+          })
+        })
+      })
+
+      describe('when the datastore throws an exception', () => {
+        let backend
+        let connection
+        let receiveHookSpy
+        let replyHookSpy
+
+        before(() => {
+          receiveHookSpy = sinon.spy()
+          replyHookSpy = sinon.spy()
+          return agent.load('sharedb', {
+            hooks: {
+              receive: receiveHookSpy,
+              reply: replyHookSpy
+            }
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          ShareDB = require(`../../../versions/sharedb@${version}`).get()
+
+          backend = new ShareDB({ presence: true })
+
+          backend.db.getSnapshot = function(collection, id, fields, options, callback) {
+            callback(new Error('Snapshot Fetch Failure'));
+          }
+
+          connection = backend.connect()
+        })
+
+        afterEach(() => {
+          connection.close()
+        })
+
+        it('should do automatic instrumentation & handle errors', done => {
+          const doc = connection.get('some-collection', 'some-id')
+
+          doc.fetch(function (err) {
+            expect(err).not.to.be.null
+            expect(err.message).to.equal('Snapshot Fetch Failure')
+
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0]).to.have.property('resource', 'fetch some-collection')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+              expect(traces[0][0].meta).to.have.property('service', 'test')
+              expect(traces[0][0].meta).to.have.property('resource.method', 'fetch')
+              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta).to.have.property('error.msg', 'Snapshot Fetch Failure')
+              expect(traces[0][0].meta).to.have.property('error.stack')
             })
               .then(done)
               .catch(done)

@@ -60,7 +60,7 @@ function isObject (val) {
   return typeof val === 'object' && val !== null && !(val instanceof Array)
 }
 
-function wrapCallback (tracer, span, done) {
+function wrapCallback (config, tracer, request, span, done) {
   return tracer.scope().bind((err, res) => {
     if (err) {
       span.addTags({
@@ -71,6 +71,10 @@ function wrapCallback (tracer, span, done) {
     }
 
     span.finish()
+
+    if (config.hooks && config.hooks.reply) {
+      config.hooks.reply(span, request, res)
+    }
 
     if (done) {
       done(err, res)
@@ -84,6 +88,7 @@ function createAgentWrapHandle(tracer, config) {
       const action = request.a;
 
       const actionName = getReadableActionName(action)
+
       const scope = tracer.scope()
       const childOf = scope.active()
       const span = tracer.startSpan('sharedb.request', {
@@ -95,7 +100,12 @@ function createAgentWrapHandle(tracer, config) {
             'resource.name': getReadableResourceName(actionName, request.c, request.q)
           }
       })
-      const wrappedCallback = wrapCallback(tracer, span, callback)
+
+      if (config.hooks && config.hooks.receive) {
+        config.hooks.receive(span, request)
+      }
+
+      const wrappedCallback = wrapCallback(config, tracer, request, span, callback)
 
       return tracer.scope().bind(origHandleMessageFn, span).call(this, request, wrappedCallback)
     }
