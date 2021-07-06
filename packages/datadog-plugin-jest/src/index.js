@@ -368,7 +368,7 @@ function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMet
   }
 }
 
-function createJasmineAsyncInstall (tracer, instrumenter, testEnvironmentMetadata) {
+function createWrapJasmineAsyncInstall (tracer, instrumenter, testEnvironmentMetadata) {
   return function jasmineAsyncInstallWithTrace (jasmineAsyncInstall) {
     return function (globalConfig, globalInput) {
       globalInput.jasmine.testSpanByTestName = {}
@@ -376,13 +376,12 @@ function createJasmineAsyncInstall (tracer, instrumenter, testEnvironmentMetadat
       instrumenter.wrap(globalInput, 'it', createWrapIt(tracer, globalConfig, globalInput, testEnvironmentMetadata))
       // instruments 'it.only'
       instrumenter.wrap(globalInput, 'fit', createWrapIt(tracer, globalConfig, globalInput, testEnvironmentMetadata))
-      // instruments 'it.skip
+      // instruments 'it.skip'
       instrumenter.wrap(
         globalInput,
         'xit',
         createWrapItSkip(tracer, globalConfig, globalInput, testEnvironmentMetadata)
       )
-      // missing at least xit
       return jasmineAsyncInstall(globalConfig, globalInput)
     }
   }
@@ -434,7 +433,7 @@ module.exports = [
     patch: function (jasmineAsyncInstallExport, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
 
-      return createJasmineAsyncInstall(tracer, this, testEnvironmentMetadata)(jasmineAsyncInstallExport.default)
+      return createWrapJasmineAsyncInstall(tracer, this, testEnvironmentMetadata)(jasmineAsyncInstallExport.default)
     }
   }
 ]
