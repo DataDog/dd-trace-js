@@ -1,7 +1,8 @@
 'use strict'
-const { family, GLIBC, MUSL } = require('detect-libc')
+
 const os = require('os')
 const path = require('path')
+const { family, GLIBC, MUSL } = require('detect-libc')
 
 const LIB_VERSION = '1.1.2'
 
@@ -10,20 +11,23 @@ const LIB_VERSION = '1.1.2'
 module.exports = {
   // include is the same for all platform
   include: path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Darwin-x86_64`, 'include'),
-  lib: ''
+  lib: getLibPath()
 }
 
-if (os.platform() === 'darwin') {
-  module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Darwin-x86_64`, 'lib', 'libsqreen.a')
-}
-if (os.platform() === 'win32') {
-  module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Windows-AMD64`, 'lib', 'SqreenStatic.lib')
-}
-if (os.platform() === 'linux') {
-  if (family === GLIBC) {
-    module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-glibc`, 'lib64', 'libsqreen.a')
-  }
-  if (family === MUSL) {
-    module.exports.lib = path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-muslc`, 'lib64', 'libsqreen.a')
+function getLibPath () {
+  switch (os.platform()) {
+    case 'linux':
+      if (family === GLIBC) {
+        return path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-glibc`, 'lib64', 'libsqreen.a')
+      } else if (family === MUSL) {
+        return path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Linux-x86_64-muslc`, 'lib64', 'libsqreen.a')
+      }
+      break
+    case 'win32':
+      return path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Windows-AMD64`, 'lib', 'SqreenStatic.lib')
+    case 'darwin':
+      return path.join(__dirname, `SqreenLibrary-${LIB_VERSION}-Darwin-x86_64`, 'lib', 'libsqreen.a')
+    default:
+      return ''
   }
 }
