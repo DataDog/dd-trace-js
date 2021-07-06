@@ -1,7 +1,5 @@
 'use strict'
 
-const MessagesAwaitingResponse = new WeakMap()
-
 /**
  * @description The enum values in this map are not exposed from ShareDB, so the keys are hard-coded here.
  * The values were derived from: https://github.com/share/sharedb/blob/master/lib/client/connection.js#L196
@@ -62,96 +60,44 @@ function isObject (val) {
   return typeof val === 'object' && val !== null && !(val instanceof Array)
 }
 
-/**
- * @description Handle a "receive" event. This will be a message to the server, from the client or the same server
- * process.
- * @param {Tracer} tracer DataDog Tracer.
- * @param {sharedb} config sharedb plugin configuration.
- * @param {string} action ShareDB Message action.
- * @param {Object} agent ShareDB Agent
- * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
- * @param {Function} callback Callback to continue middleware execution.
- * @param {Function} triggerFn Function to start middleware execution.
- * @returns {*}
- */
-function handleReceive (tracer, config, action, agent, triggerContext, callback, triggerFn) {
-  if (triggerContext.data && triggerContext.data.a) {
-    const scope = tracer.scope()
-    const childOf = scope.active()
-    // Call the trigger function to continue the middleware chain.
-    return triggerFn.call(this, action, agent, triggerContext, function wrappedCallback (err) {
-      // When the middleware calls back into us, start a trace.
-      const actionName = getReadableActionName(triggerContext.data.a)
-      tracer.trace(
-        'sharedb.request',
-        {
-          childOf,
+function wrapCallback (tracer, span, done) {
+  return tracer.scope().bind((err, res) => {
+    if (err) {
+      span.addTags({
+        'error.type': err.name,
+        'error.msg': err.message,
+        'error.stack': err.stack
+      })
+    }
+
+    span.finish()
+
+    if (done) {
+      done(err, res)
+    }
+  })
+}
+
+function createAgentWrapHandle(tracer, config) {
+  return function wrapHandleMessage (origHandleMessageFn) { // called once
+    return function handleMessageWithTrace (request, callback) { // called for each trigger
+      const action = request.a;
+
+      const actionName = getReadableActionName(action)
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const span = tracer.startSpan('sharedb.request', {
+        childOf,
           tags: {
             'service.name': config.service || tracer._service,
             'span.kind': 'server',
             'resource.method': actionName,
-            'resource.name': getReadableResourceName(actionName, triggerContext.data.c, triggerContext.data.q)
+            'resource.name': getReadableResourceName(actionName, request.c, request.q)
           }
-        },
-        (span, spanDoneCb) => {
-          if (config.hooks && config.hooks.receive) {
-            config.hooks.receive(span, triggerContext)
-          }
-          if (span) {
-            MessagesAwaitingResponse.set(triggerContext.data, {
-              span,
-              spanDoneCb
-            })
-          }
-          callback(err)
-        })
-    })
-  } else {
-    return triggerFn.call(this, action, agent, triggerContext, callback)
-  }
-}
+      })
+      const wrappedCallback = wrapCallback(tracer, span, callback)
 
-/**
- * @description Handle a "reply" event. This will be a message to a client for a corresponding "receive" event.
- * @param {sharedb} config sharedb plugin configuration.
- * @param {string} action ShareDB Message action.
- * @param {Object} agent ShareDB Agent
- * @param {Object} triggerContext ShareDB trigger context (internal middleware concept).
- * @param {Function} callback Callback to continue middleware execution.
- * @param {Function} triggerFn Function to start middleware execution.
- * @returns {*}
- */
-function handleReply (config, action, agent, triggerContext, callback, triggerFn) {
-  const replySpanInfo = MessagesAwaitingResponse.get(triggerContext.request)
-  if (replySpanInfo) {
-    if (config.hooks && config.hooks.reply) {
-      config.hooks.reply(replySpanInfo.span, triggerContext)
-    }
-    replySpanInfo.spanDoneCb() // TODO get error?
-    MessagesAwaitingResponse.delete(triggerContext.request)
-  }
-  return triggerFn.call(this, action, agent, triggerContext, callback)
-}
-
-function createWrapHandle (tracer, config) { // called once
-  return function wrapTrigger (triggerFn) { // called once
-    return function handleMessageWithTrace (action, agent, triggerContext, callback) { // called for each trigger
-      /**
-       * What we're doing here is tying ourselves into the ShareDB Backend middleware.
-       * This allows us to create traces for all events that have triggers, like receiving a message and replying
-       * to it. The benefit of doing this over wrapping the connection class is that both the receive and reply
-       * triggers have access to a reference of the original request object. This allows us to use a WeakMap to
-       * store the span call backs to help prevent memory leaks.
-       *
-       */
-      switch (action) {
-        case 'receive':
-          return handleReceive.call(this, tracer, config, action, agent, triggerContext, callback, triggerFn)
-        case 'reply':
-          return handleReply.call(this, config, action, agent, triggerContext, callback, triggerFn)
-        default:
-          return triggerFn.apply(this, arguments)
-      }
+      return tracer.scope().bind(origHandleMessageFn, span).call(this, request, wrappedCallback)
     }
   }
 }
@@ -159,11 +105,11 @@ function createWrapHandle (tracer, config) { // called once
 module.exports = {
   name: 'sharedb',
   versions: ['>=1'],
-  file: 'lib/backend.js',
-  patch (Backend, tracer, config) {
-    this.wrap(Backend.prototype, 'trigger', createWrapHandle(tracer, config))
+  file: 'lib/agent.js',
+  patch (Agent, tracer, config) {
+    this.wrap(Agent.prototype, '_handleMessage', createAgentWrapHandle(tracer, config))
   },
-  unpatch (Backend) {
-    this.unwrap(Backend.prototype, 'trigger')
+  unpatch (Agent) {
+    this.unwrap(Agent.prototype, '_handleMessage')
   }
 }
