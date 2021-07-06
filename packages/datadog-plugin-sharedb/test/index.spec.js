@@ -136,6 +136,19 @@ describe('Plugin', () => {
           const message = {}
           backend.trigger(backend.MIDDLEWARE_ACTIONS.receive, {}, message, function noop () {})
         })
+
+        it('should propagate the parent tracing context', (done) => {
+          const doc = connection.get('some-collection', 'some-id')
+
+          const tracer = require('../../dd-trace')
+          const firstSpan = tracer.scope().active()
+          doc.fetch(function (err) {
+            if (err) { throw err }
+
+            expect(tracer.scope().active()).to.equal(firstSpan)
+            done()
+          })
+        })
       })
 
       describe('with configuration', () => {
