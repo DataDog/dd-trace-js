@@ -14,6 +14,14 @@ describe('LibAppSec', () => {
     expect(badInit).to.throw()
   })
 
+  it('should return the WAF version', () => {
+    const version = LibAppSec.version()
+
+    expect(typeof version.major).to.equal('number')
+    expect(typeof version.minor).to.equal('number')
+    expect(typeof version.patch).to.equal('number')
+  })
+
   describe('running the WAF', () => {
     let lib
 
@@ -45,6 +53,14 @@ describe('LibAppSec', () => {
 
       expect(run.status).to.equal(undefined)
       expect(run.record).to.have.string('security_scanner-monitoring')
+    })
+
+    it('should throw when called after being cleared', () => {
+      lib.clear()
+
+      const badRun = () => lib.run({}, 10000)
+
+      expect(badRun).to.throw('calling a cleared instance of appsecLib')
     })
   })
 })

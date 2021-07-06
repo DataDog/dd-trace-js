@@ -10,7 +10,7 @@ class LibAppSec {
   }
 
   static version () {
-    nativeLib.version()
+    return nativeLib.version()
   }
 
   constructor (wafRule) {
