@@ -1156,8 +1156,9 @@ declare namespace plugins {
      */
     service?: string | ((params: any) => string);
     /**
-     * Whether to include query parameters. By default this is disabled and only query text with question marks will be logged.
+     * Whether to include query parameters. By default this is disabled and only query text will be logged.
      * Note that this could expose sensitive data so use with caution.
+     * Instead of setting this to true a callback to filter the parameter values can be used. The input of the function is an array of parameter values. The output is a filtered array of values.
      *
      * @default false
      */

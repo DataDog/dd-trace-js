@@ -80,7 +80,8 @@ function createWrapQuery (tracer, config) {
 
 function normalizeConfig (config) {
   return Object.assign({}, config, {
-    includeQueryParams: typeof config.includeQueryParams === 'function' ? config.includeQueryParams
+    includeQueryParams: typeof config.includeQueryParams === 'function'
+      ? config.includeQueryParams
       : config.includeQueryParams === true ? p => p : undefined
   })
 }
