@@ -1,6 +1,11 @@
 'use strict'
 
 const MessagesAwaitingResponse = new WeakMap()
+
+/**
+ * @description The enum values in this map are not exposed from ShareDB, so the keys are hard-coded here.
+ * The values were derived from: https://github.com/share/sharedb/blob/master/lib/client/connection.js#L196
+ */
 const READABLE_ACTION_NAMES = {
   hs: 'handshake',
   qf: 'query-fetch',
