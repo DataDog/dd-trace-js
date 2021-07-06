@@ -19,7 +19,6 @@ title(`Bumping version to v${version} in a new branch`)
 pkg.version = version
 
 if (isNewBranch) {
-  exec(`git checkout master`)
   exec(`git pull`)
   exec(`git checkout -b ${branch}`)
 } else {
