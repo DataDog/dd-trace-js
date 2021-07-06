@@ -54,8 +54,7 @@
       "<!(node -p \"require('./packages/dd-trace/src/appsec/native/lib/lib.js').include\")"
     ],
     "libraries": [
-      "<!(node -p \"require('./packages/dd-trace/src/appsec/native/lib/lib.js').lib\")",
-      "Ws2_32.lib"
+      "<!(node -p \"require('./packages/dd-trace/src/appsec/native/lib/lib.js').lib\")"
     ],
     "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
     "xcode_settings": {
@@ -79,6 +78,9 @@
         ]
       }],
       ["OS == 'win'", {
+        "libraries": [
+          "Ws2_32.lib"
+        ],
         "cflags": [
           "/WX"
         ]
