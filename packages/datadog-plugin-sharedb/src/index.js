@@ -88,7 +88,6 @@ function handleReceive (tracer, config, action, agent, triggerContext, callback,
           childOf,
           tags: {
             'service.name': config.service || tracer._service,
-            'span.type': 'sharedb.request',
             'span.kind': 'server',
             'resource.method': actionName,
             'resource.name': getReadableResourceName(actionName, triggerContext.data.c, triggerContext.data.q)
@@ -128,7 +127,7 @@ function handleReply (config, action, agent, triggerContext, callback, triggerFn
     if (config.hooks && config.hooks.reply) {
       config.hooks.reply(replySpanInfo.span, triggerContext)
     }
-    replySpanInfo.spanDoneCb()
+    replySpanInfo.spanDoneCb() // TODO get error?
     MessagesAwaitingResponse.delete(triggerContext.request)
   }
   return triggerFn.call(this, action, agent, triggerContext, callback)
