@@ -8,7 +8,8 @@
       "run": "node client.js"
     },
     "with-tracer": {
-      "run": "node -r ../../../init.js client.js"
+      "run": "node -r ../../../init.js client.js",
+      "baseline": "control"
     }
   }
 }
