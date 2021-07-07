@@ -84,14 +84,6 @@ function patch (http, methodName, tracer, config) {
 
             scope.bind(res)
 
-            span.setTag(HTTP_STATUS_CODE, res.statusCode)
-
-            addResponseHeaders(res, span, config)
-
-            if (!config.validateStatus(res.statusCode)) {
-              span.setTag('error', 1)
-            }
-
             res.on('end', () => finish(req, res, span, config))
 
             break
@@ -99,7 +91,7 @@ function patch (http, methodName, tracer, config) {
           case 'error':
             addError(span, arg)
           case 'abort': // eslint-disable-line no-fallthrough
-          case 'close': // eslint-disable-line no-fallthrough
+          case 'timeout': // eslint-disable-line no-fallthrough
             finish(req, null, span, config)
         }
 
@@ -113,6 +105,18 @@ function patch (http, methodName, tracer, config) {
   }
 
   function finish (req, res, span, config) {
+    if (res) {
+      span.setTag(HTTP_STATUS_CODE, res.statusCode)
+
+      if (!config.validateStatus(res.statusCode)) {
+        span.setTag('error', 1)
+      }
+
+      addResponseHeaders(res, span, config)
+    } else {
+      span.setTag('error', 1)
+    }
+
     addRequestHeaders(req, span, config)
 
     config.hooks.request(span, req, res)
