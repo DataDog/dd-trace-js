@@ -11,18 +11,21 @@
       }
     },
     "async_hooks": {
+      "baseline": "base",
       "env": {
         "SCOPE_MANAGER": "async_hooks",
         "COUNT": "10000"
       }
     },
     "async_local_storage": {
+      "baseline": "base",
       "env": {
         "SCOPE_MANAGER": "async_local_storage",
         "COUNT": "10000"
       }
     },
     "async_resource": {
+      "baseline": "base",
       "env": {
         "SCOPE_MANAGER": "async_resource",
         "COUNT": "10000"
