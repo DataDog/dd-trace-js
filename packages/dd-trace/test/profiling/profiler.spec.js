@@ -2,13 +2,8 @@
 
 const expect = require('chai').expect
 const sinon = require('sinon')
-const semver = require('semver')
 
 const INTERVAL = 60 * 1000
-
-if (!semver.satisfies(process.version, '>=10.12')) {
-  describe = describe.skip // eslint-disable-line no-global-assign
-}
 
 describe('profiler', () => {
   let Profiler
@@ -30,6 +25,9 @@ describe('profiler', () => {
       export: sinon.stub().yields()
     }
     consoleLogger = {
+      debug: sinon.spy(),
+      info: sinon.spy(),
+      warn: sinon.spy(),
       error: sinon.spy()
     }
 

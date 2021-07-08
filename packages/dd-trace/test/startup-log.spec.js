@@ -25,9 +25,9 @@ describe('startup logging', () => {
         }
       },
       _plugins: new Map([
-        ['fs', { config: { analytics: 0.5 } }],
-        ['http', { config: { analytics: true } }],
-        ['semver', { config: { analytics: { a: 0.7 } } }]
+        ['fs', { config: {} }],
+        ['http', { config: {} }],
+        ['semver', { config: {} }]
       ])
     })
     setStartupLogConfig({
@@ -38,7 +38,6 @@ describe('startup logging', () => {
       hostname: 'example.com',
       port: 4321,
       debug: true,
-      analytics: true,
       sampleRate: 1,
       tags: { version: '1.2.3' },
       logInjection: true,
@@ -74,18 +73,11 @@ describe('startup logging', () => {
       agent_url: 'http://example.com:4321',
       agent_error: 'Error: fake error',
       debug: true,
-      analytics_enabled: true,
       sample_rate: 1,
       dd_version: '1.2.3',
       log_injection_enabled: true,
-      runtime_metrics_enabled: true,
-      integration_http_analytics_enabled: true,
-      integration_fs_analytics_enabled: true,
-      integration_fs_sample_rate: 0.5,
-      integration_semver_analytics_enabled: true,
-      integration_semver_sample_rate: { a: 0.7 }
+      runtime_metrics_enabled: true
     })
-    expect(logObj.integration_semver_sample_rate).to.deep.equal({ a: 0.7 })
   })
 
   it('startupLog should correctly also output the diagnostic message', () => {

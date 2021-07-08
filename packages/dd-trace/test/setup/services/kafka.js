@@ -18,7 +18,7 @@ function waitForKafka () {
     operation.attempt(async currentAttempt => {
       try {
         await consumer.connect()
-        await consumer.subscribe({ topic })
+        await consumer.subscribe({ topic, fromBeginning: true })
         await consumer.run({
           eachMessage: () => {
             setTimeout(async () => {

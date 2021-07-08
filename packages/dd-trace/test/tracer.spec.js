@@ -7,7 +7,6 @@ const tags = require('../../../ext/tags')
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
-const ANALYTICS = tags.ANALYTICS
 
 wrapIt()
 
@@ -68,12 +67,6 @@ describe('Tracer', () => {
           [RESOURCE_NAME]: 'resource',
           [SPAN_TYPE]: 'type'
         })
-      })
-    })
-
-    it('should support analytics', () => {
-      tracer.trace('name', { analytics: 0.5 }, (span) => {
-        expect(span.context()._tags).to.have.property(ANALYTICS, 0.5)
       })
     })
 

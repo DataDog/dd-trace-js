@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable import/no-extraneous-dependencies */
+
 const proxyquire = require('proxyquire')
 const path = require('path')
 const shimmer = require('shimmer')
@@ -200,6 +202,10 @@ describe('Instrumenter', () => {
         require('other')
 
         expect(integrations.other.patch).to.have.been.called
+      })
+
+      it('should not interfere with userland modules masking core modules', () => {
+        expect(require('http2/foo.js')).to.equal('Hello, World!')
       })
     })
 
@@ -416,6 +422,31 @@ describe('Instrumenter', () => {
     })
   })
 
+  describe('with service mapping', () => {
+    it('should change the service name in plugin config', () => {
+      instrumenter.enable({ serviceMapping: { 'express-mock': 'something-else' } })
+
+      const express = require('express-mock')
+
+      expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {
+        service: 'something-else'
+      })
+    })
+
+    it('should defer to programmatic plugin config', () => {
+      instrumenter.enable({ serviceMapping: { 'express-mock': 'something-else' } })
+      instrumenter.use('express-mock', {
+        service: 'something-else-entirely'
+      })
+
+      const express = require('express-mock')
+
+      expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {
+        service: 'something-else-entirely'
+      })
+    })
+  })
+
   describe('with the instrumenter disabled', () => {
     describe('use', () => {
       it('should not patch if the tracer is disabled', () => {
@@ -452,8 +483,6 @@ describe('Instrumenter', () => {
 
     afterEach(() => {
       delete process.env.DD_TRACE_MYSQL_MOCK_ENABLED
-      delete process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED
-      delete process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE
     })
 
     it('should use _ENABLED', () => {
@@ -463,44 +492,6 @@ describe('Instrumenter', () => {
       const plugins = [...instrumenter._plugins.values()]
       expect(plugins[0].name).to.equal('mysql-mock')
       expect(plugins[0].config.enabled).to.equal(false)
-    })
-
-    it('should use _ANALYTICS_ENABLED', () => {
-      instrumenter = new Instrumenter(tracer)
-      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED = false
-      instrumenter.enable()
-      const plugins = [...instrumenter._plugins.values()]
-      expect(plugins[0].name).to.equal('mysql-mock')
-      expect(plugins[0].config.analytics).to.equal(false)
-    })
-
-    it('should use _ANALYTICS_SAMPLE_RATE when _ANALYTICS_ENABLED is true', () => {
-      instrumenter = new Instrumenter(tracer)
-      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED = true
-      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE = '0.25'
-      instrumenter.enable()
-      const plugins = [...instrumenter._plugins.values()]
-      expect(plugins[0].name).to.equal('mysql-mock')
-      expect(plugins[0].config.analytics).to.equal(0.25)
-    })
-
-    it('should not use _ANALYTICS_SAMPLE_RATE when _ANALYTICS_ENABLED is false', () => {
-      instrumenter = new Instrumenter(tracer)
-      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_ENABLED = false
-      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE = '0.25'
-      instrumenter.enable()
-      const plugins = [...instrumenter._plugins.values()]
-      expect(plugins[0].name).to.equal('mysql-mock')
-      expect(plugins[0].config.analytics).to.equal(false)
-    })
-
-    it('should use _ANALYTICS_SAMPLE_RATE', () => {
-      instrumenter = new Instrumenter(tracer)
-      process.env.DD_TRACE_MYSQL_MOCK_ANALYTICS_SAMPLE_RATE = '0.25'
-      instrumenter.enable()
-      const plugins = [...instrumenter._plugins.values()]
-      expect(plugins[0].name).to.equal('mysql-mock')
-      expect(plugins[0].config.analytics).to.equal(0.25)
     })
   })
 
