@@ -360,6 +360,14 @@ jobs:
           - PLUGINS=bluebird
           - SIRUN_TEST_DIR=plugin-bluebird
 
+  node-bench-sirun-plugin-bunyan-latest:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - PLUGINS=bunyan
+          - SIRUN_TEST_DIR=plugin-bunyan
+
   node-bench-sirun-plugin-http-latest:
     <<: *node-bench-sirun-base
     docker:
@@ -1391,6 +1399,7 @@ workflows:
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
       - node-bench-sirun-plugin-bluebird-latest
+      - node-bench-sirun-plugin-bunyan-latest
       - node-bench-sirun-plugin-http-latest
       - node-bench-sirun-plugin-net-latest
       - node-bench-sirun-scope-latest
@@ -1403,6 +1412,7 @@ workflows:
             - node-bench-sirun-encoders-latest
             - node-bench-sirun-plugin-q-latest
             - node-bench-sirun-plugin-bluebird-latest
+            - node-bench-sirun-plugin-bunyan-latest
             - node-bench-sirun-plugin-http-latest
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
@@ -1591,6 +1601,7 @@ workflows:
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
       - node-bench-sirun-plugin-bluebird-latest
+      - node-bench-sirun-plugin-bunyan-latest
       - node-bench-sirun-plugin-http-latest
       - node-bench-sirun-plugin-net-latest
       - node-bench-sirun-scope-latest
@@ -1603,6 +1614,7 @@ workflows:
             - node-bench-sirun-encoders-latest
             - node-bench-sirun-plugin-q-latest
             - node-bench-sirun-plugin-bluebird-latest
+            - node-bench-sirun-plugin-bunyan-latest
             - node-bench-sirun-plugin-http-latest
             - node-bench-sirun-plugin-net-latest
             - node-bench-sirun-scope-latest
