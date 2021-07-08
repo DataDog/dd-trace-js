@@ -23,7 +23,7 @@ function createWrapQuery (tracer, config) {
         }
       })
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       const retval = scope.bind(query, span).apply(this, arguments)
       const queryQueue = this.queryQueue || this._queryQueue

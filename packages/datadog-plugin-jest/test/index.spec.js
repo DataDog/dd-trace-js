@@ -1,5 +1,5 @@
 'use strict'
-const { expect } = require('chai')
+const nock = require('nock')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -30,8 +30,13 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
+      // for http integration tests
+      nock('http://test:123')
+        .get('/')
+        .reply(200, 'OK')
+
       tracer = require('../../dd-trace')
-      return agent.load(['jest', 'fs']).then(() => {
+      return agent.load(['jest', 'fs', 'http']).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
@@ -183,6 +188,7 @@ describe('Plugin', () => {
 
       it('should call wrap on test_start event', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+        const originalWrap = tracer._tracer.wrap
         tracer._tracer.wrap = sinon.spy(() => {})
 
         const testEvent = {
@@ -198,10 +204,12 @@ describe('Plugin', () => {
         }
         datadogJestEnv.handleTestEvent(testEvent)
         expect(tracer._tracer.wrap).to.have.been.called
+        tracer._tracer.wrap = originalWrap
       })
 
       it('should not call wrap on events other than test_start or test_skip', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+        const originalWrap = tracer._tracer.wrap
         tracer._tracer.wrap = sinon.spy(() => {})
 
         const testFnStartEvent = {
@@ -209,6 +217,7 @@ describe('Plugin', () => {
         }
         datadogJestEnv.handleTestEvent(testFnStartEvent)
         expect(tracer._tracer.wrap).not.to.have.been.called
+        tracer._tracer.wrap = originalWrap
       })
 
       it('should call startSpan and span finish on skipped tests', () => {
@@ -369,6 +378,7 @@ describe('Plugin', () => {
         const testStartEvent = {
           name: 'test_start',
           test: {
+            invocations: 1,
             fn: () => {},
             name: TEST_NAME
           }
@@ -378,6 +388,9 @@ describe('Plugin', () => {
 
         const timedoutTestEvent = {
           name: 'test_fn_failure',
+          test: {
+            invocations: 1
+          },
           error: 'Exceeded timeout of 100ms'
         }
         datadogJestEnv.handleTestEvent(timedoutTestEvent)
@@ -389,6 +402,56 @@ describe('Plugin', () => {
               [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
             })
           }).then(done).catch(done)
+      })
+
+      it('should work with timed out retries', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            invocations: 1,
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        const timedoutTestEvent = {
+          name: 'test_fn_failure',
+          test: {
+            invocations: 1
+          },
+          error: 'Exceeded timeout of 100ms'
+        }
+        datadogJestEnv.handleTestEvent(timedoutTestEvent)
+
+        const testRetryEvent = {
+          name: 'test_retry',
+          test: {
+            invocations: 1,
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.handleTestEvent(testRetryEvent)
+
+        testStartEvent.test.invocations++
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        agent.use(trace => {
+          const failedTest = trace[0].find(span => span.meta[TEST_STATUS] === 'fail')
+          const passedTest = trace[0].find(span => span.meta[TEST_STATUS] === 'pass')
+          expect(failedTest.meta).to.contain({
+            [TEST_STATUS]: 'fail',
+            [ERROR_TYPE]: 'Timeout',
+            [ERROR_MESSAGE]: 'Exceeded timeout of 100ms'
+          })
+          expect(passedTest.meta).to.contain({
+            [TEST_STATUS]: 'pass'
+          })
+        }).then(() => done()).catch(done)
       })
 
       it('should not consider other errors as timeout', (done) => {
@@ -450,6 +513,96 @@ describe('Plugin', () => {
 
         datadogJestEnv.handleTestEvent(passingTestEvent)
         passingTestEvent.test.fn()
+      })
+
+      it('should detect snapshot errors', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.getVmContext = () => ({
+          expect: {
+            getState: () =>
+              ({
+                currentTestName: TEST_NAME,
+                suppressedErrors: [new Error('snapshot error message')]
+              })
+          }
+        })
+
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.contain({
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'snapshot error message'
+            })
+          }).then(done).catch(done)
+      })
+
+      it('works with http integration', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            const httpSpan = trace[0].find(span => span.name === 'http.request')
+            expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+          }).then(done).catch(done)
+
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+              const http = require('http')
+              http.request('http://test:123')
+            },
+            name: TEST_NAME
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+
+      it('handles errors in hooks', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const hookError = new Error('hook error')
+
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            expect(testSpan.meta).to.contain({
+              [TEST_STATUS]: 'fail',
+              [TEST_TYPE]: 'test',
+              [ERROR_TYPE]: 'Error',
+              [ERROR_MESSAGE]: 'hook failure',
+              [ERROR_STACK]: hookError.stack
+            })
+          }).then(done).catch(done)
+
+        const hookFailureEvent = {
+          name: 'hook_failure',
+          test: {
+            fn: () => {},
+            name: TEST_NAME,
+            errors: [[
+              'hook failure',
+              hookError
+            ]]
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(hookFailureEvent)
       })
 
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`

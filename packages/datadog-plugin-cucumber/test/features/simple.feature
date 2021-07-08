@@ -18,3 +18,14 @@ Feature: Datadog integration
   @skip
   Scenario: skip scenario based on tag
     Given datadog
+
+  Scenario: integration scenario
+    Given datadog
+    When integration
+    Then pass
+
+  @hooks-fail
+  Scenario: hooks fail
+    Given datadog
+    When run
+    Then pass

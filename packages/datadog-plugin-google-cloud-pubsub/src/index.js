@@ -1,5 +1,7 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (cfg = { reqOpts: {} }, cb) {
@@ -18,6 +20,8 @@ function createWrapRequest (tracer, config) {
       }
       cb = tracer.scope().bind(cb)
       return tracer.trace('pubsub.request', { tags }, (span, done) => {
+        analyticsSampler.sample(span, config.measured)
+
         if (cfg.reqOpts && cfg.method === 'publish') {
           for (const msg of cfg.reqOpts.messages) {
             if (!msg.attributes) {
@@ -76,6 +80,8 @@ function createWrapLeaseDispense (tracer, config) {
 
       const childOf = tracer.extract('text_map', message.attributes)
       const span = tracer.startSpan('pubsub.receive', { tags, childOf })
+
+      analyticsSampler.sample(span, config.measured, true)
 
       message._datadog_span = span
 

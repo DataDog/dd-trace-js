@@ -3,18 +3,17 @@
 const Tags = require('opentracing').Tags
 
 const services = {
-  cloudwatchlogs: getService('cloudwatchlogs'),
-  dynamodb: getService('dynamodb'),
-  kinesis: getService('kinesis'),
-  lambda: getService('lambda'),
-  s3: getService('s3'),
-  redshift: getService('redshift'),
-  sns: getService('sns'),
-  sqs: getService('sqs')
+  cloudwatchlogs: getService(require('./services/cloudwatchlogs')),
+  dynamodb: getService(require('./services/dynamodb')),
+  kinesis: getService(require('./services/kinesis')),
+  lambda: getService(require('./services/lambda')),
+  s3: getService(require('./services/s3')),
+  redshift: getService(require('./services/redshift')),
+  sns: getService(require('./services/sns')),
+  sqs: getService(require('./services/sqs'))
 }
 
-function getService (serviceName) {
-  const Service = require(`./services/${serviceName}`)
+function getService (Service) {
   return new Service()
 }
 

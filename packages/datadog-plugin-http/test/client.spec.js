@@ -2,10 +2,10 @@
 
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
-const semver = require('semver')
 const fs = require('fs')
 const path = require('path')
 const tags = require('../../../ext/tags')
+const { expect } = require('chai')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
@@ -168,80 +168,78 @@ describe('Plugin', () => {
           })
         })
 
-        if (semver.satisfies(process.version, '>=10')) {
-          it('should support a string URL and an options object, which merges and takes precedence', done => {
-            const app = express()
+        it('should support a string URL and an options object, which merges and takes precedence', done => {
+          const app = express()
 
-            app.get('/user', (req, res) => {
-              res.status(200).send()
-            })
-
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-                  expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
-                })
-                .then(done)
-                .catch(done)
-
-              appListener = server(app, port, () => {
-                const req = http.request(`${protocol}://localhost:${port}/another-path`, { path: '/user' })
-
-                req.end()
-              })
-            })
+          app.get('/user', (req, res) => {
+            res.status(200).send()
           })
 
-          it('should support a URL object and an options object, which merges and takes precedence', done => {
-            const app = express()
-
-            app.get('/user', (req, res) => {
-              res.status(200).send()
-            })
-
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-                  expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
-                })
-                .then(done)
-                .catch(done)
-
-              const uri = {
-                protocol: `${protocol}:`,
-                hostname: 'localhost',
-                port,
-                pathname: '/another-path'
-              }
-
-              appListener = server(app, port, () => {
-                const req = http.request(uri, { path: '/user' })
-
-                req.end()
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
-            })
-          })
-
-          it('should support configuration as an WHATWG URL object', async () => {
-            const app = express()
-            const port = await getPort()
-            const url = new URL(`${protocol}://localhost:${port}/user`)
-
-            app.get('/user', (req, res) => res.status(200).send())
+              .then(done)
+              .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(url)
+              const req = http.request(`${protocol}://localhost:${port}/another-path`, { path: '/user' })
+
               req.end()
             })
+          })
+        })
 
-            await agent.use(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+        it('should support a URL object and an options object, which merges and takes precedence', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            const uri = {
+              protocol: `${protocol}:`,
+              hostname: 'localhost',
+              port,
+              pathname: '/another-path'
+            }
+
+            appListener = server(app, port, () => {
+              const req = http.request(uri, { path: '/user' })
+
+              req.end()
             })
           })
-        }
+        })
+
+        it('should support configuration as an WHATWG URL object', async () => {
+          const app = express()
+          const port = await getPort()
+          const url = new URL(`${protocol}://localhost:${port}/user`)
+
+          app.get('/user', (req, res) => res.status(200).send())
+
+          appListener = server(app, port, () => {
+            const req = http.request(url)
+            req.end()
+          })
+
+          await agent.use(traces => {
+            expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+          })
+        })
 
         it('should use the correct defaults when not specified', done => {
           const app = express()
@@ -571,6 +569,92 @@ describe('Plugin', () => {
                 res.on('data', () => { })
               })
 
+              req.end()
+            })
+          })
+        })
+
+        it('should record destroyed requests as errors', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {})
+
+          getPort().then(port => {
+            let error
+
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+                expect(traces[0][0].meta).to.have.property('error.type', error.name)
+                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', err => {
+                error = err
+              })
+
+              req.destroy()
+            })
+          })
+        })
+
+        it('should record aborted requests as errors', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {})
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('abort', () => {})
+
+              req.abort()
+            })
+          })
+        })
+
+        it('should record timeouts as errors', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {})
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+
+              req.setTimeout(1)
               req.end()
             })
           })

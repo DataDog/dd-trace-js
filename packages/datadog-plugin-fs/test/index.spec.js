@@ -10,7 +10,6 @@ const semver = require('semver')
 const rimraf = require('rimraf')
 const util = require('util')
 
-const implicitFlag = semver.satisfies(process.versions.node, '>=11.1.0')
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
@@ -69,22 +68,20 @@ describe('Plugin', () => {
           }
         })
 
-        if (implicitFlag) {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'open',
-              meta: {
-                'file.flag': 'r',
-                'file.path': __filename
-              }
-            })
-
-            fs.open(__filename, (err, _fd) => {
-              fd = _fd
-              if (err) done(err)
-            })
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'open',
+            meta: {
+              'file.flag': 'r',
+              'file.path': __filename
+            }
           })
-        }
+
+          fs.open(__filename, (err, _fd) => {
+            fd = _fd
+            if (err) done(err)
+          })
+        })
 
         it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
@@ -129,21 +126,19 @@ describe('Plugin', () => {
             }
           })
 
-          if (implicitFlag) {
-            it('should be instrumented', (done) => {
-              expectOneSpan(agent, done, {
-                resource: 'promises.open',
-                meta: {
-                  'file.flag': 'r',
-                  'file.path': __filename
-                }
-              })
-
-              fs.promises.open(__filename).then(_fd => {
-                fd = _fd
-              }, done)
+          it('should be instrumented', (done) => {
+            expectOneSpan(agent, done, {
+              resource: 'promises.open',
+              meta: {
+                'file.flag': 'r',
+                'file.path': __filename
+              }
             })
-          }
+
+            fs.promises.open(__filename).then(_fd => {
+              fd = _fd
+            }, done)
+          })
 
           it('should be instrumented with flags', (done) => {
             expectOneSpan(agent, done, {
@@ -187,19 +182,17 @@ describe('Plugin', () => {
           }
         })
 
-        if (implicitFlag) {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource: 'openSync',
-              meta: {
-                'file.flag': 'r',
-                'file.path': __filename
-              }
-            })
-
-            fd = fs.openSync(__filename)
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'openSync',
+            meta: {
+              'file.flag': 'r',
+              'file.path': __filename
+            }
           })
-        }
+
+          fd = fs.openSync(__filename)
+        })
 
         it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
@@ -251,19 +244,17 @@ describe('Plugin', () => {
       })
 
       describeThreeWays('readFile', (resource, tested) => {
-        if (implicitFlag) {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource,
-              meta: {
-                'file.flag': 'r',
-                'file.path': __filename
-              }
-            })
-
-            tested(fs, [__filename], done)
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.flag': 'r',
+              'file.path': __filename
+            }
           })
-        }
+
+          tested(fs, [__filename], done)
+        })
 
         it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
@@ -304,19 +295,17 @@ describe('Plugin', () => {
           } catch (e) { /* */ }
         })
 
-        if (implicitFlag) {
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource,
-              meta: {
-                'file.flag': 'w',
-                'file.path': filename
-              }
-            })
-
-            tested(fs, [filename, 'test'], done)
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.flag': 'w',
+              'file.path': filename
+            }
           })
-        }
+
+          tested(fs, [filename, 'test'], done)
+        })
 
         it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
@@ -1795,7 +1784,7 @@ function mkExpected (props) {
   const expected = Object.assign({
     name: 'fs.operation',
     error: 0,
-    service: 'test-fs'
+    service: 'test'
   }, props)
   expected.meta = meta
   return expected

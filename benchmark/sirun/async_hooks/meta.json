@@ -5,7 +5,13 @@
   "iterations": 5,
   "variants": {
     "no-hooks": { "env": { "ASYNC_HOOKS": "" } },
-    "init-only": { "env": { "ASYNC_HOOKS": "init" } },
-    "all-hooks": { "env": { "ASYNC_HOOKS": "init,before,after,destroy,promiseResolve" } }
+    "init-only": {
+      "baseline": "no-hooks",
+      "env": { "ASYNC_HOOKS": "init" }
+    },
+    "all-hooks": {
+      "baseline": "no-hooks",
+      "env": { "ASYNC_HOOKS": "init,before,after,destroy,promiseResolve" }
+    }
   }
 }

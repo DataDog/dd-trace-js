@@ -1,7 +1,6 @@
 'use strict'
 
 const url = require('url')
-const semver = require('semver')
 const opentracing = require('opentracing')
 const log = require('../../dd-trace/src/log')
 const constants = require('../../dd-trace/src/constants')
@@ -70,7 +69,7 @@ function patch (http, methodName, tracer, config) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       callback = scope.bind(callback, childOf)
 
@@ -84,14 +83,6 @@ function patch (http, methodName, tracer, config) {
 
             scope.bind(res)
 
-            span.setTag(HTTP_STATUS_CODE, res.statusCode)
-
-            addResponseHeaders(res, span, config)
-
-            if (!config.validateStatus(res.statusCode)) {
-              span.setTag('error', 1)
-            }
-
             res.on('end', () => finish(req, res, span, config))
 
             break
@@ -99,7 +90,7 @@ function patch (http, methodName, tracer, config) {
           case 'error':
             addError(span, arg)
           case 'abort': // eslint-disable-line no-fallthrough
-          case 'close': // eslint-disable-line no-fallthrough
+          case 'timeout': // eslint-disable-line no-fallthrough
             finish(req, null, span, config)
         }
 
@@ -113,6 +104,18 @@ function patch (http, methodName, tracer, config) {
   }
 
   function finish (req, res, span, config) {
+    if (res) {
+      span.setTag(HTTP_STATUS_CODE, res.statusCode)
+
+      if (!config.validateStatus(res.statusCode)) {
+        span.setTag('error', 1)
+      }
+
+      addResponseHeaders(res, span, config)
+    } else {
+      span.setTag('error', 1)
+    }
+
     addRequestHeaders(req, span, config)
 
     config.hooks.request(span, req, res)
@@ -338,13 +341,12 @@ module.exports = [
       if (config.client === false) return
 
       patch.call(this, http, 'request', tracer, config)
-      if (semver.satisfies(process.version, '>=8')) {
-        /**
-         * In newer Node versions references internal to modules, such as `http(s).get` calling `http(s).request`, do
-         * not use externally patched versions, which is why we need to also patch `get` here separately.
-         */
-        patch.call(this, http, 'get', tracer, config)
-      }
+      /**
+       * References internal to modules, such as `http(s).get` calling
+       * `http(s).request`, do not use externally patched versions, which is
+       * why we need to also patch `get` here separately.
+       */
+      patch.call(this, http, 'get', tracer, config)
     },
     unpatch
   },
@@ -353,16 +355,8 @@ module.exports = [
     patch: function (http, tracer, config) {
       if (config.client === false) return
 
-      if (semver.satisfies(process.version, '>=9')) {
-        patch.call(this, http, 'request', tracer, config)
-        patch.call(this, http, 'get', tracer, config)
-      } else {
-        /**
-         * Below Node v9 the `https` module invokes `http.request`, which would end up counting requests twice.
-         * So rather then patch the `https` module, we ensure the `http` module is patched and we count only there.
-         */
-        require('http')
-      }
+      patch.call(this, http, 'request', tracer, config)
+      patch.call(this, http, 'get', tracer, config)
     },
     unpatch
   }

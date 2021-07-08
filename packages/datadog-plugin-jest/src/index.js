@@ -10,12 +10,12 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   ERROR_MESSAGE,
-  ERROR_STACK,
   ERROR_TYPE,
   TEST_PARAMETERS,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 const { getFormattedJestTestParameters } = require('./util')
 
@@ -25,6 +25,7 @@ function wrapEnvironment (BaseEnvironment) {
       super(config, context)
       this.testSuite = context.testPath.replace(`${config.rootDir}/`, '')
       this.testSpansByTestName = {}
+      this.originalTestFnByTestName = {}
     }
   }
 }
@@ -52,6 +53,15 @@ const isTimeout = (event) => {
 
 function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
+    if (event.name === 'test_retry') {
+      const context = this.getVmContext()
+      const { currentTestName } = context.expect.getState()
+      // If it's a retry, we restore the original test function so that it is not wrapped again
+      if (this.originalTestFnByTestName[currentTestName]) {
+        event.test.fn = this.originalTestFnByTestName[currentTestName]
+      }
+      return
+    }
     if (event.name === 'test_fn_failure') {
       if (!isTimeout(event)) {
         return
@@ -59,13 +69,14 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       const context = this.getVmContext()
       if (context) {
         const { currentTestName } = context.expect.getState()
-        const testSpan = this.testSpansByTestName[currentTestName]
+        const testSpan = this.testSpansByTestName[`${currentTestName}_${event.test.invocations}`]
         if (testSpan) {
           testSpan.setTag(ERROR_TYPE, 'Timeout')
           testSpan.setTag(ERROR_MESSAGE, event.error)
           testSpan.setTag(TEST_STATUS, 'fail')
         }
       }
+      return
     }
     if (event.name === 'setup') {
       instrumenter.wrap(this.global.test, 'each', function (original) {
@@ -79,9 +90,13 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           }
         }
       })
+      return
     }
 
-    if (event.name !== 'test_skip' && event.name !== 'test_todo' && event.name !== 'test_start') {
+    if (event.name !== 'test_skip' &&
+      event.name !== 'test_todo' &&
+      event.name !== 'test_start' &&
+      event.name !== 'hook_failure') {
       return
     }
     const childOf = tracer.extract('text_map', {
@@ -127,8 +142,32 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       testSpan.finish()
       return
     }
+    if (event.name === 'hook_failure') {
+      const testSpan = tracer.startSpan(
+        'jest.test',
+        {
+          childOf,
+          tags: {
+            ...commonSpanTags,
+            [SPAN_TYPE]: 'test',
+            [RESOURCE_NAME]: resource,
+            [TEST_STATUS]: 'fail'
+          }
+        }
+      )
+      testSpan.context()._trace.origin = CI_APP_ORIGIN
+      if (event.test.errors && event.test.errors.length) {
+        const error = new Error(event.test.errors[0][0])
+        error.stack = event.test.errors[0][1].stack
+        testSpan.setTag('error', error)
+      }
+      testSpan.finish()
+      return
+    }
     // event.name === test_start at this point
     const environment = this
+    environment.originalTestFnByTestName[testName] = event.test.fn
+
     let specFunction = event.test.fn
     if (specFunction.length) {
       specFunction = promisify(specFunction)
@@ -143,24 +182,29 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       async () => {
         let result
         const testSpan = tracer.scope().active()
-        environment.testSpansByTestName[testName] = testSpan
+        environment.testSpansByTestName[`${testName}_${event.test.invocations}`] = testSpan
         testSpan.context()._trace.origin = CI_APP_ORIGIN
         try {
           result = await specFunction()
           // it may have been set already if the test timed out
-          if (!testSpan._spanContext._tags['test.status']) {
+          let suppressedErrors = []
+          const context = environment.getVmContext()
+          if (context) {
+            suppressedErrors = context.expect.getState().suppressedErrors
+          }
+          if (suppressedErrors && suppressedErrors.length) {
+            testSpan.setTag('error', suppressedErrors[0])
+            testSpan.setTag(TEST_STATUS, 'fail')
+          }
+          if (!testSpan._spanContext._tags[TEST_STATUS]) {
             testSpan.setTag(TEST_STATUS, 'pass')
           }
         } catch (error) {
           testSpan.setTag(TEST_STATUS, 'fail')
-          testSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
-          testSpan.setTag(ERROR_MESSAGE, error.message)
-          testSpan.setTag(ERROR_STACK, error.stack)
+          testSpan.setTag('error', error)
           throw error
         } finally {
-          testSpan.context()._trace.started.forEach((span) => {
-            span.finish()
-          })
+          finishAllTraceSpans(testSpan)
         }
         return result
       }

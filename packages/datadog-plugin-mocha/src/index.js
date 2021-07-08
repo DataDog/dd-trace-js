@@ -10,12 +10,10 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
-  ERROR_MESSAGE,
-  ERROR_STACK,
-  ERROR_TYPE,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
@@ -34,7 +32,6 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
     [TEST_TYPE]: 'test',
     [TEST_NAME]: fullTestName,
     [TEST_SUITE]: strippedTestSuite,
-    [TEST_STATUS]: 'skip',
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP
   }
@@ -83,16 +80,10 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             }
           } catch (error) {
             activeSpan.setTag(TEST_STATUS, 'fail')
-            activeSpan.setTag(ERROR_TYPE, error.constructor ? error.constructor.name : error.name)
-            activeSpan.setTag(ERROR_MESSAGE, error.message)
-            activeSpan.setTag(ERROR_STACK, error.stack)
+            activeSpan.setTag('error', error)
             throw error
           } finally {
-            activeSpan
-              .context()
-              ._trace.started.forEach((span) => {
-                span.finish()
-              })
+            finishAllTraceSpans(activeSpan)
           }
           return result
         }
@@ -143,7 +134,8 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
               [SPAN_TYPE]: 'test',
               [RESOURCE_NAME]: resource,
               ...testSpanMetadata,
-              ...testEnvironmentMetadata
+              ...testEnvironmentMetadata,
+              [TEST_STATUS]: 'skip'
             }
           })
         testSpan.context()._trace.origin = CI_APP_ORIGIN
@@ -170,6 +162,67 @@ function wrapMochaEach (mochaEach) {
   }
 }
 
+function createWrapFail (tracer, testEnvironmentMetadata, sourceRoot) {
+  return function wrapFail (fail) {
+    return function failWithTrace (hook, err) {
+      if (hook.type !== 'hook') {
+        /**
+         * This clause is to cover errors that are uncaught, such as:
+         * it('will fail', done => {
+         *   setTimeout(() => {
+         *     // will throw but will not be caught by `runTestWithTrace`
+         *     expect(true).to.equal(false)
+         *     done()
+         *   }, 100)
+         * })
+         */
+        const testSpan = tracer.scope().active()
+        if (!testSpan) {
+          return fail.apply(this, arguments)
+        }
+        const {
+          [TEST_NAME]: testName,
+          [TEST_SUITE]: testSuite,
+          [TEST_STATUS]: testStatus
+        } = testSpan._spanContext._tags
+
+        const isActiveSpanFailing = hook.fullTitle() === testName && hook.file.endsWith(testSuite)
+
+        if (isActiveSpanFailing && !testStatus) {
+          testSpan.setTag(TEST_STATUS, 'fail')
+          testSpan.setTag('error', err)
+          // need to manually finish, as it will not be caught in `runTestWithTrace`
+          testSpan.finish()
+        }
+        return fail.apply(this, arguments)
+      }
+      if (err && hook.ctx && hook.ctx.currentTest) {
+        err.message = `${hook.title}: ${err.message}`
+        const {
+          childOf,
+          resource,
+          ...testSpanMetadata
+        } = getTestSpanMetadata(tracer, hook.ctx.currentTest, sourceRoot)
+        const testSpan = tracer
+          .startSpan('mocha.test', {
+            childOf,
+            tags: {
+              [SPAN_TYPE]: 'test',
+              [RESOURCE_NAME]: resource,
+              ...testSpanMetadata,
+              ...testEnvironmentMetadata,
+              [TEST_STATUS]: 'fail'
+            }
+          })
+        testSpan.setTag('error', err)
+        testSpan.context()._trace.origin = CI_APP_ORIGIN
+        testSpan.finish()
+      }
+      return fail.apply(this, arguments)
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'mocha',
@@ -180,10 +233,12 @@ module.exports = [
       const sourceRoot = process.cwd()
       this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, testEnvironmentMetadata, sourceRoot))
       this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, testEnvironmentMetadata, sourceRoot))
+      this.wrap(Runner.prototype, 'fail', createWrapFail(tracer, testEnvironmentMetadata, sourceRoot))
     },
     unpatch (Runner) {
       this.unwrap(Runner.prototype, 'runTests')
       this.unwrap(Runner.prototype, 'runTest')
+      this.unwrap(Runner.prototype, 'fail')
     }
   },
   {
