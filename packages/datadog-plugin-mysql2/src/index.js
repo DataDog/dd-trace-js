@@ -42,7 +42,7 @@ function wrapExecute (tracer, config, execute) {
       }
     })
 
-    analyticsSampler.sample(span, config.analytics)
+    analyticsSampler.sample(span, config.measured)
 
     if (typeof this.onResult === 'function') {
       this.onResult = wrapCallback(tracer, span, childOf, this.onResult)

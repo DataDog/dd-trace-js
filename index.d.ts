@@ -212,12 +212,6 @@ export declare interface TracerOptions {
   startupLogs?: boolean,
 
   /**
-   * Enable Trace Analytics.
-   * @default false
-   */
-  analytics?: boolean;
-
-  /**
    * The service name to be used for this program. If not set, the service name
    * will attempted to be inferred from package.json
    */
@@ -535,11 +529,10 @@ interface Plugins {
 /** @hidden */
 interface Analyzable {
   /**
-   * Whether to enable App Analytics. Can also be set to a number instead to
-   * control the sample rate, or to an key-value pair with span names as keys
-   * and booleans or sample rates as values for more granular control.
+   * Whether to measure the span. Can also be set to a key-value pair with span
+   * names as keys and booleans as values for more granular control.
    */
-  analytics?: boolean | number | { [key: string]: boolean | number };
+  measured?: boolean | { [key: string]: boolean };
 }
 
 declare namespace plugins {

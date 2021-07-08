@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
+
 const axios = require('axios')
 const getPort = require('get-port')
 const { execSync } = require('child_process')
@@ -10,7 +12,7 @@ const plugin = require('../src')
 wrapIt()
 
 describe('Plugin', function () {
-  this.timeout(30000) // Webpack builds on every test run
+  this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
   let next
   let app
@@ -35,7 +37,14 @@ describe('Plugin', function () {
           // building in-process makes tests fail for an unknown reason
           execSync('node build', {
             cwd: __dirname,
-            env: { version },
+            env: {
+              version,
+              // needed for webpack 5
+              NODE_PATH: [
+                `${__dirname}/../../../versions/next@${version}/node_modules`,
+                `${__dirname}/../../../versions/node_modules`
+              ].join(':')
+            },
             stdio: ['pipe', 'ignore', 'pipe']
           })
 
@@ -72,7 +81,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -103,7 +112,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -126,7 +135,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -147,7 +156,7 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test-next')
+                expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
                 expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -181,7 +190,7 @@ describe('Plugin', function () {
               const spans = traces[0]
 
               expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test-next')
+              expect(spans[0]).to.have.property('service', 'test')
               expect(spans[0]).to.have.property('type', 'web')
               expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
               expect(spans[0].meta).to.have.property('span.kind', 'server')

@@ -12,7 +12,7 @@ function instrument (command, ctx, args, server, ns, ops, tracer, config, option
   const span = startSpan(tracer, config, ns, ops, server, name)
 
   if (name !== 'getMore' && name !== 'killCursors') {
-    analyticsSampler.sample(span, config.analytics)
+    analyticsSampler.sample(span, config.measured)
   }
 
   args[index] = wrapCallback(tracer, span, callback)

@@ -6,6 +6,7 @@ const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
 const log = require('./log')
+const requirePackageJson = require('./require-package-json')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
@@ -51,11 +52,11 @@ class Loader {
 
         const basedir = getBasedir(ids[i])
 
-        pkg = require(`${basedir}/package.json`)
+        pkg = requirePackageJson(basedir, module)
       } else {
         const basedir = getBasedir(ids[i])
 
-        pkg = require(`${basedir}/package.json`)
+        pkg = requirePackageJson(basedir, module)
 
         const mainFile = path.posix.normalize(pkg.main || 'index.js')
         if (!id.endsWith(`/node_modules/${instrumentation.name}/${mainFile}`)) continue
@@ -140,8 +141,7 @@ function matchVersion (version, ranges) {
 
 function getVersion (moduleBaseDir) {
   if (moduleBaseDir) {
-    const packageJSON = `${moduleBaseDir}/package.json`
-    return require(packageJSON).version
+    return requirePackageJson(moduleBaseDir, module).version
   }
 }
 

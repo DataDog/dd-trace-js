@@ -3,6 +3,7 @@
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
+const semver = require('semver')
 
 wrapIt()
 
@@ -12,7 +13,7 @@ describe('Plugin', () => {
   let stream
   let span
 
-  function setup (version) {
+  function setup (version, options) {
     const pino = require(`../../../versions/pino@${version}`).get()
 
     span = tracer.startSpan('test')
@@ -22,7 +23,7 @@ describe('Plugin', () => {
 
     sinon.spy(stream, 'write')
 
-    logger = pino(stream)
+    logger = pino(options, stream)
   }
 
   describe('pino', () => {
@@ -53,6 +54,24 @@ describe('Plugin', () => {
             expect(record).to.have.deep.property('msg', 'message')
           })
         })
+
+        if (semver.intersects(version, '>=5')) {
+          it('should not alter the default behavior with pretty print', () => {
+            setup(version, { prettyPrint: true })
+
+            tracer.scope().activate(span, () => {
+              logger.info('message')
+
+              expect(stream.write).to.have.been.called
+
+              const record = stream.write.firstCall.args[0].toString()
+
+              expect(record).to.not.include('trace_id')
+              expect(record).to.not.include('span_id')
+              expect(record).to.include('message')
+            })
+          })
+        }
       })
 
       describe('with configuration', () => {
@@ -103,6 +122,55 @@ describe('Plugin', () => {
             expect(record).to.not.have.property('dd')
           })
         })
+
+        if (semver.intersects(version, '>=5.14.0')) {
+          it('should not alter pino mixin behavior', () => {
+            const opts = { mixin: () => ({ addedMixin: true }) }
+
+            sinon.spy(opts, 'mixin')
+
+            setup(version, opts)
+
+            tracer.scope().activate(span, () => {
+              logger.info('message')
+
+              expect(opts.mixin).to.have.been.called
+
+              expect(stream.write).to.have.been.called
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              expect(record.dd).to.deep.include({
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              })
+
+              expect(record).to.have.deep.property('msg', 'message')
+              expect(record).to.have.deep.property('addedMixin', true)
+            })
+          })
+        }
+
+        // TODO: test with a version matrix against pino. externals.json doesn't allow that
+        //       and we cannot control the version of pino-pretty internally required by pino
+        if (semver.intersects(version, '>=5')) {
+          it('should add the trace identifiers to logger instances with pretty print', () => {
+            setup(version, { prettyPrint: true })
+
+            tracer.scope().activate(span, () => {
+              logger.info('message')
+
+              expect(stream.write).to.have.been.called
+
+              const record = stream.write.firstCall.args[0].toString()
+
+              expect(record).to.match(new RegExp(`trace_id\\W+?${span.context().toTraceId()}`))
+              expect(record).to.match(new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
+
+              expect(record).to.include('message')
+            })
+          })
+        }
       })
     })
   })

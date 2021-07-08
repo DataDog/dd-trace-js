@@ -10,6 +10,9 @@ const { isTrue, isFalse } = require('./util')
 
 const runtimeId = `${id().toString()}${id().toString()}`
 
+const fromEntries = Object.fromEntries || (entries =>
+  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
+
 class Config {
   constructor (options) {
     options = options || {}
@@ -21,12 +24,6 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
-    const DD_TRACE_ANALYTICS_ENABLED = coalesce(
-      options.analytics,
-      process.env.DD_TRACE_ANALYTICS_ENABLED,
-      process.env.DD_TRACE_ANALYTICS,
-      false
-    )
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
       // options.profiling,
@@ -74,7 +71,12 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       pkg.name ||
       'node'
-    const DD_ENV = coalesce(options.env, process.env.DD_ENV, this.tags.env)
+    const DD_SERVICE_MAPPING = process.env.DD_SERVICE_MAPPING || ''
+    const DD_ENV = coalesce(
+      options.env,
+      process.env.DD_ENV,
+      this.tags.env
+    )
     const DD_VERSION = coalesce(
       options.version,
       process.env.DD_VERSION,
@@ -100,6 +102,37 @@ class Config {
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
       '0.4'
+    )
+    const DD_TRACE_B3_ENABLED = coalesce(
+      options.experimental && options.experimental.b3,
+      process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+      false
+    )
+    const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
+      options.experimental && options.experimental.runtimeId,
+      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      false
+    )
+    const DD_TRACE_EXPORTER = coalesce(
+      options.experimental && options.experimental.exporter,
+      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
+    )
+    const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
+      options.experimental && options.experimental.enableGetRumData,
+      process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
+      false
+    )
+    const DD_TRACE_INTERNAL_ERRORS_ENABLED = coalesce(
+      options.experimental && options.experimental.internalErrors,
+      process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
+      false
+    )
+    // TODO(simon-id): add documentation for appsec config when we release it in public beta
+    const DD_APPSEC_ENABLED = coalesce(
+      options.experimental && options.experimental.appsec,
+      process.env.DD_EXPERIMENTAL_APPSEC_ENABLED,
+      process.env.DD_APPSEC_ENABLED,
+      false
     )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
@@ -138,8 +171,10 @@ class Config {
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
+    this.serviceMapping = DD_SERVICE_MAPPING.length ? fromEntries(
+      DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+    ) : {}
     this.version = DD_VERSION
-    this.analytics = isTrue(DD_TRACE_ANALYTICS_ENABLED)
     this.dogstatsd = {
       hostname: coalesce(
         dogstatsd.hostname,
@@ -185,6 +220,9 @@ class Config {
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
+    this.appsec = {
+      enabled: isTrue(DD_APPSEC_ENABLED)
+    }
 
     tagger.add(this.tags, {
       service: this.service,

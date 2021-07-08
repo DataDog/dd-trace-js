@@ -4,7 +4,7 @@ const shimmer = require('shimmer')
 const log = require('./log')
 const metrics = require('./metrics')
 const Loader = require('./loader')
-const { isTrue, isFalse } = require('./util')
+const { isTrue } = require('./util')
 const plugins = require('./plugins')
 
 shimmer({ logger: () => {} })
@@ -27,17 +27,6 @@ function getConfig (name, config = {}) {
   const enabled = cleanEnv(`${name}_ENABLED`)
   if (enabled !== undefined) {
     config.enabled = isTrue(enabled)
-  }
-
-  const analyticsEnabled = cleanEnv(`${name}_ANALYTICS_ENABLED`)
-  const analyticsSampleRate = Math.min(Math.max(cleanEnv(`${name}_ANALYTICS_SAMPLE_RATE`), 0), 1)
-
-  if (isFalse(analyticsEnabled)) {
-    config.analytics = false
-  } else if (!Number.isNaN(analyticsSampleRate)) {
-    config.analytics = analyticsSampleRate
-  } else if (isTrue(analyticsEnabled)) {
-    config.analytics = true
   }
 
   return config
@@ -74,6 +63,7 @@ class Instrumenter {
 
   enable (config) {
     config = config || {}
+    const serviceMapping = config.serviceMapping
 
     this._enabled = true
 
@@ -81,7 +71,11 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
-          this._set(plugins[name], { name, config: getConfig(name) })
+          const pluginConfig = {}
+          if (serviceMapping && serviceMapping[name]) {
+            pluginConfig.service = serviceMapping[name]
+          }
+          this._set(plugins[name], { name, config: getConfig(name, pluginConfig) })
         })
     }
 

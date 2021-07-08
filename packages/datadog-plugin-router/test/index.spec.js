@@ -54,9 +54,15 @@ describe('Plugin', () => {
           Router = require(`../../../versions/router@${version}`).get()
         })
 
-        it('should expose router handle properties', () => {
+        it('should copy custom prototypes on routers', () => {
           const router = Router()
-          const childRouter = Router()
+          class ChildRouter extends Router {
+            get foo () {
+              return 'bar'
+            }
+          }
+          const childRouter = new ChildRouter()
+          childRouter.hello = 'goodbye'
 
           childRouter.use('/child/:id', (req, res) => {
             res.writeHead(200)
@@ -64,10 +70,8 @@ describe('Plugin', () => {
           })
 
           router.use('/parent', childRouter)
-          expect(router.stack[0].handle.stack.length).to.equal(1)
-          // Next two lines are to test the setter.
-          router.stack[0].handle.stack = 5
-          expect(router.stack[0].handle.stack).to.equal(5)
+          expect(router.stack[0].handle.hello).to.equal('goodbye')
+          expect(router.stack[0].handle.foo).to.equal('bar')
         })
 
         it('should add the route to the request span', done => {

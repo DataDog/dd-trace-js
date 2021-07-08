@@ -10,7 +10,20 @@ function isFalse (str) {
   return str === 'false' || str === '0'
 }
 
+function isError (value) {
+  if (value instanceof Error) {
+    return true
+  }
+  if (value && value.constructor) {
+    return value.constructor.name === 'JestAssertionError' ||
+      value.constructor.name === 'Error' ||
+      value.constructor.name === 'ErrorWithStack'
+  }
+  return false
+}
+
 module.exports = {
   isTrue,
-  isFalse
+  isFalse,
+  isError
 }

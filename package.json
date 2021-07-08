@@ -1,6 +1,6 @@
 {
   "name": "@chatlayer/tracer",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "description": "Tracing client for Node.js",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -23,7 +23,8 @@
     "test:core": "mocha --exit --expose-gc --file packages/dd-trace/test/setup/core.js \"packages/dd-trace/test/**/*.spec.js\"",
     "test:core:ci": "nyc --include \"packages/dd-trace/src/**/*.js\" -- npm run test:core --  --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter-config.json",
     "test:plugins": "mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
-    "test:plugins:ci": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
+    "test:plugins:ci": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins -- --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter-config.json",
+    "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:integration": "mocha --timeout 30000 \"integration-tests/**/*.spec.js\"",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
@@ -51,7 +52,7 @@
   },
   "homepage": "https://github.com/chatlayerai/tracer#readme",
   "engines": {
-    "node": ">=8"
+    "node": ">=12"
   },
   "dependencies": {
     "@opentelemetry/api": "v1.0.0-rc.0",
@@ -75,6 +76,7 @@
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
     "protobufjs": "^6.9.0",
+    "resolve": "^1.20.0",
     "semver": "^5.5.0",
     "shimmer": "1.2.1",
     "source-map": "^0.7.3",
@@ -86,7 +88,9 @@
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
     "chai": "^4.2.0",
+    "chalk": "^3.0.0",
     "checksum": "^0.1.1",
+    "cli-table3": "^0.5.1",
     "codecov": "3.8.1",
     "dotenv": "8.2.0",
     "eslint": "^4.15.0",
@@ -102,7 +106,7 @@
     "int64-buffer": "^0.1.9",
     "jszip": "^3.5.0",
     "mkdirp": "^0.5.1",
-    "mocha": "^5.2.0",
+    "mocha": "8",
     "mocha-junit-reporter": "^2.0.0",
     "mocha-multi-reporters": "^1.5.1",
     "msgpack-lite": "^0.1.26",

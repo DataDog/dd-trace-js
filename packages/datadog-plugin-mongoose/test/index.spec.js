@@ -14,6 +14,20 @@ describe('Plugin', () => {
     withVersions(plugin, ['mongoose'], (version) => {
       let mongoose
 
+      // This needs to be called synchronously right before each test to make
+      // sure a connection is not already established and the request is added
+      // to the queue.
+      function connect () {
+        mongoose.connect(`mongodb://localhost:27017/${collection}`, {
+          useNewUrlParser: true,
+          useUnifiedTopology: true
+        })
+      }
+
+      beforeEach(() => {
+        return agent.load(['mongoose', 'mongodb-core'])
+      })
+
       beforeEach(() => {
         id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
@@ -21,9 +35,10 @@ describe('Plugin', () => {
         collection = id().toString()
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
-        mongoose.connect(`mongodb://localhost:27017/${collection}`, { useNewUrlParser: true, useUnifiedTopology: true })
+      })
 
-        return agent.load(['mongoose', 'mongodb-core'])
+      afterEach(() => {
+        return mongoose.disconnect()
       })
 
       afterEach(() => {
@@ -36,6 +51,8 @@ describe('Plugin', () => {
         const span = {}
         const kitty = new Cat({ name: 'Zildjian' })
 
+        connect()
+
         return tracer.scope().activate(span, () => {
           return kitty.save().then(() => {
             expect(tracer.scope().active()).to.equal(span)
@@ -43,26 +60,40 @@ describe('Plugin', () => {
         })
       })
 
-      it('should propagate context with queries', () => {
+      it('should propagate context with queries', done => {
         const Cat = mongoose.model('Cat', { name: String })
 
         const span = {}
 
-        return tracer.scope().activate(span, () => {
+        connect()
+
+        tracer.scope().activate(span, () => {
           Cat.find({ name: 'Zildjian' }).exec(() => {
-            expect(tracer.scope().active()).to.equal(span)
+            try {
+              expect(tracer.scope().active()).to.equal(span)
+              done()
+            } catch (e) {
+              done(e)
+            }
           })
         })
       })
 
-      it('should propagate context with aggregations', () => {
+      it('should propagate context with aggregations', done => {
         const Cat = mongoose.model('Cat', { name: String })
 
         const span = {}
 
-        return tracer.scope().activate(span, () => {
-          Cat.aggregate([{ $match: { name: 'Zildjian' } }]).then(() => {
-            expect(tracer.scope().active()).to.equal(span)
+        connect()
+
+        tracer.scope().activate(span, () => {
+          Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
+            try {
+              expect(tracer.scope().active()).to.equal(span)
+              done()
+            } catch (e) {
+              done(e)
+            }
           })
         })
       })

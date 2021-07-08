@@ -6,8 +6,8 @@ const { Encoder } = require('../encoders/pprof')
 const { eachOfSeries } = require('../util')
 
 class AgentExporter {
-  constructor ({ url, hostname, port } = {}) {
-    this._url = new URL(url || `http://${hostname || 'localhost'}:${port || 8126}`)
+  constructor ({ url } = {}) {
+    this._url = typeof url === 'string' ? new URL(url) : url
     this._encoder = new Encoder()
   }
 

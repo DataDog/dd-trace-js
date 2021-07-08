@@ -31,14 +31,14 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
   mongo:
-    image: circleci/mongo
+    image: circleci/mongo:3.4
     ports:
       - "127.0.0.1:27017:27017"
   oracledb:
     image: quillbuilduser/oracle-18-xe
     ports:
-      - '32118:1521'
-      - '35518:5500'
+      - '127.0.0.1:1521:1521'
+      - '127.0.0.1:5500:5500'
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
     environment:

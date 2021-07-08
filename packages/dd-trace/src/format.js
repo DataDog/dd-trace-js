@@ -4,13 +4,12 @@ const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const log = require('./log')
 const id = require('./id')
+const { isError } = require('./util')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const ANALYTICS_KEY = constants.ANALYTICS_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
 const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
 const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
-const ANALYTICS = tags.ANALYTICS
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
@@ -27,7 +26,6 @@ function format (span) {
   extractError(formatted, span)
   extractRootTags(formatted, span)
   extractTags(formatted, span)
-  extractAnalytics(formatted, span)
 
   return formatted
 }
@@ -73,8 +71,6 @@ function extractTags (trace, span) {
         addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
         break
       case HOSTNAME_KEY:
-      case ANALYTICS:
-        break
       case MEASURED:
         addTag({}, trace.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
@@ -118,25 +114,10 @@ function extractRootTags (trace, span) {
 
 function extractError (trace, span) {
   const error = span.context()._tags['error']
-
-  if (error instanceof Error) {
+  if (isError(error)) {
     addTag(trace.meta, trace.metrics, 'error.msg', error.message)
     addTag(trace.meta, trace.metrics, 'error.type', error.name)
     addTag(trace.meta, trace.metrics, 'error.stack', error.stack)
-  }
-}
-
-function extractAnalytics (trace, span) {
-  let analytics = span.context()._tags[ANALYTICS]
-
-  if (analytics === true) {
-    analytics = 1
-  } else {
-    analytics = parseFloat(analytics)
-  }
-
-  if (!isNaN(analytics)) {
-    trace.metrics[ANALYTICS_KEY] = Math.max(Math.min(analytics, 1), 0)
   }
 }
 

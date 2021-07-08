@@ -4,21 +4,32 @@ const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
 
-const orig = Module.prototype.require
-
 module.exports = function hook (modules, onrequire) {
+  if (!hook.orig) {
+    hook.orig = Module.prototype.require
+
+    Module.prototype.require = function (request) {
+      return hook.require.apply(this, arguments)
+    }
+  }
+
   hook.cache = {}
 
   const patching = {}
 
-  Module.prototype.require = function (request) {
+  hook.require = function (request) {
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
     let name, basedir
 
     // return known patched modules immediately
     if (hook.cache.hasOwnProperty(filename)) {
-      return hook.cache[filename]
+      // require.cache was potentially altered externally
+      if (require.cache[filename] && require.cache[filename].exports !== hook.cache[filename].original) {
+        return require.cache[filename].exports
+      }
+
+      return hook.cache[filename].exports
     }
 
     // Check if this module has a patcher in-progress already.
@@ -28,7 +39,7 @@ module.exports = function hook (modules, onrequire) {
       patching[filename] = true
     }
 
-    const exports = orig.apply(this, arguments)
+    const exports = hook.orig.apply(this, arguments)
 
     // If it's already patched, just return it as-is.
     if (patched) return exports
@@ -49,7 +60,12 @@ module.exports = function hook (modules, onrequire) {
       if (modules && modules.indexOf(name) === -1) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
-      const res = Module._findPath(name, [basedir, ...Module._resolveLookupPaths(name, this, true)])
+      const paths = Module._resolveLookupPaths(name, this, true)
+      if (!paths) {
+        // abort if _resolveLookupPaths return null
+        return exports
+      }
+      const res = Module._findPath(name, [basedir, ...paths])
       if (res !== filename) {
         // this is a module-internal file
         // use the module-relative path to the file, prefixed by original module name
@@ -57,14 +73,12 @@ module.exports = function hook (modules, onrequire) {
       }
     }
 
-    // only call onrequire the first time a module is loaded
-    if (!hook.cache.hasOwnProperty(filename)) {
-      // ensure that the cache entry is assigned a value before calling
-      // onrequire, in case calling onrequire requires the same module.
-      hook.cache[filename] = exports
-      hook.cache[filename] = onrequire(exports, name, basedir)
-    }
+    // ensure that the cache entry is assigned a value before calling
+    // onrequire, in case calling onrequire requires the same module.
+    hook.cache[filename] = { exports }
+    hook.cache[filename].original = exports
+    hook.cache[filename].exports = onrequire(exports, name, basedir)
 
-    return hook.cache[filename]
+    return hook.cache[filename].exports
   }
 }

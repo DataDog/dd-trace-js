@@ -1,4 +1,13 @@
-const { getGitMetadata, GIT_BRANCH, GIT_COMMIT_SHA, GIT_REPOSITORY_URL, GIT_TAG } = require('./git')
+const {
+  getGitMetadata,
+  GIT_BRANCH,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_MESSAGE
+} = require('./git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 
@@ -10,7 +19,7 @@ const TEST_STATUS = 'test.status'
 const TEST_PARAMETERS = 'test.parameters'
 
 const ERROR_TYPE = 'error.type'
-const ERROR_MESSAGE = 'error.message'
+const ERROR_MESSAGE = 'error.msg'
 const ERROR_STACK = 'error.stack'
 
 const CI_APP_ORIGIN = 'ciapp-test'
@@ -27,7 +36,8 @@ module.exports = {
   ERROR_STACK,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  getTestParametersString
+  getTestParametersString,
+  finishAllTraceSpans
 }
 
 function getTestEnvironmentMetadata (testFramework) {
@@ -37,10 +47,21 @@ function getTestEnvironmentMetadata (testFramework) {
     [GIT_COMMIT_SHA]: commitSHA,
     [GIT_BRANCH]: branch,
     [GIT_REPOSITORY_URL]: repositoryUrl,
-    [GIT_TAG]: tag
+    [GIT_TAG]: tag,
+    [GIT_COMMIT_AUTHOR_NAME]: authorName,
+    [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
+    [GIT_COMMIT_MESSAGE]: commitMessage
   } = ciMetadata
 
-  const gitMetadata = getGitMetadata({ commitSHA, branch, repositoryUrl, tag })
+  const gitMetadata = getGitMetadata({
+    commitSHA,
+    branch,
+    repositoryUrl,
+    tag,
+    authorName,
+    authorEmail,
+    commitMessage
+  })
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
@@ -65,4 +86,12 @@ function getTestParametersString (parametersByTestName, testName) {
     // so we ignore the test parameters and move on
     return ''
   }
+}
+
+function finishAllTraceSpans (span) {
+  span.context()._trace.started.forEach(traceSpan => {
+    if (traceSpan !== span) {
+      traceSpan.finish()
+    }
+  })
 }

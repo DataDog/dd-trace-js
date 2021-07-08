@@ -10,8 +10,8 @@ const metrics = require('./metrics')
 const profiler = require('./profiler')
 const log = require('./log')
 const { setStartupLogInstrumenter } = require('./startup-log')
-const analyticsSampler = require('./analytics_sampler')
 const NoopSpan = require('./noop/span')
+
 
 const noop = new NoopTracer()
 
@@ -46,8 +46,9 @@ class Tracer extends BaseTracer {
             metrics.start(config)
           }
 
-          if (config.analytics) {
-            analyticsSampler.enable()
+          // dirty require for now so zero appsec code is executed unless explicitely enabled
+          if (config.appsec.enabled) {
+            require('./appsec').enable(config)
           }
 
           this._tracer = new DatadogTracer(config)

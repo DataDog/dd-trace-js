@@ -62,7 +62,7 @@ const web = {
       span.setTag(SERVICE_NAME, config.service)
     }
 
-    analyticsSampler.sample(span, config.analytics, true)
+    analyticsSampler.sample(span, config.measured, true)
 
     if (!req._datadog.instrumented) {
       wrapEnd(req)
@@ -97,10 +97,13 @@ const web = {
 
     const tracer = req._datadog.tracer
     const childOf = this.active(req)
+    const config = req._datadog.config
 
-    if (req._datadog.config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
+    if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
     const span = tracer.startSpan(name, { childOf })
+
+    analyticsSampler.sample(span, config.measured)
 
     span.addTags({
       [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
@@ -408,9 +411,16 @@ function extractURL (req) {
   if (req.stream) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
   } else {
-    const protocol = req.socket.encrypted ? 'https' : 'http'
+    const protocol = getProtocol(req)
     return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
   }
+}
+
+function getProtocol (req) {
+  if (req.socket && req.socket.encrypted) return 'https'
+  if (req.connection && req.connection.encrypted) return 'https'
+
+  return 'http'
 }
 
 function getHeadersToRecord (config) {

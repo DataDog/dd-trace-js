@@ -50,12 +50,8 @@ function wrapLayerHandle (layer, handle) {
   // that contains the real handle function
   wrapCallHandle._datadog_orig = handle
 
-  // TODO(bengl) copying props like this when wrapping should be done in a centralized place.
-  const props = Object.getOwnPropertyDescriptors(handle)
-  for (const key in props) {
-    if (wrapCallHandle.hasOwnProperty(key)) delete props[key]
-  }
-  Object.defineProperties(wrapCallHandle, props)
+  // TODO(bengl) assigning prototypes like this when wrapping should be done in a centralized place.
+  Object.setPrototypeOf(wrapCallHandle, handle)
 
   return wrapCallHandle
 }

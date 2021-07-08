@@ -118,3 +118,4 @@ acmeair-nodejs
 !packages/*/test/**/node_modules
 core-test-results/mocha/test-results.xml
 .nyc_merge/.json
+test-results.xml

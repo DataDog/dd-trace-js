@@ -13,8 +13,8 @@ function add (carrier, keyValuePairs) {
         .filter(tag => tag.indexOf(':') !== -1)
         .reduce((prev, next) => {
           const tag = next.split(':')
-          const key = tag[0]
-          const value = tag.slice(1).join(':')
+          const key = tag[0].trim()
+          const value = tag.slice(1).join(':').trim()
 
           prev[key] = value
 

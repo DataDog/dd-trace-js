@@ -21,7 +21,7 @@ function createWrapConnect (tracer, config) {
         ? wrapIpc(tracer, config, this, options)
         : wrapTcp(tracer, config, this, options)
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       return scope.bind(connect, span).apply(this, arguments)
     }
@@ -64,7 +64,7 @@ function startSpan (tracer, config, protocol, tags) {
     childOf,
     tags: Object.assign({
       'span.kind': 'client',
-      'service.name': config.service || `${tracer._service}-${protocol}`
+      'service.name': config.service || tracer._service
     }, tags)
   })
 
