@@ -1,0 +1,8 @@
+  node-google-cloud-pubsub:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=google-cloud-pubsub
+          - PLUGINS=google-cloud-pubsub
+      - image: knarz/pubsub-emulator

@@ -1,0 +1,8 @@
+  node-mongodb-core:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=mongo
+          - PLUGINS=mongodb-core
+      - image: circleci/mongo

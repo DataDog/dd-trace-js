@@ -1,0 +1,13 @@
+  node-kafkajs:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=kafka
+          - PLUGINS=kafkajs
+      - image: wurstmeister/zookeeper
+      - image: wurstmeister/kafka
+        environment:
+          KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+          KAFKA_CREATE_TOPICS: "test-topic:1:1"
+          KAFKA_ZOOKEEPER_CONNECT: 127.0.0.1:2181

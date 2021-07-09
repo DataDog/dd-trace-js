@@ -1,0 +1,10 @@
+  node-cassandra-driver:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=cassandra
+          - PLUGINS=cassandra-driver
+      - image: spotify/cassandra
+        environment:
+          - CASSANDRA_TOKEN=-9223372036854775808

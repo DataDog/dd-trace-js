@@ -1,0 +1,12 @@
+  node-amqp10:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=qpid
+          - PLUGINS=amqp10|rhea
+      - image: scholzj/qpid-cpp:1.38.0
+        command: -p 5673
+        environment:
+          - QPIDD_ADMIN_USERNAME=admin
+          - QPIDD_ADMIN_PASSWORD=admin

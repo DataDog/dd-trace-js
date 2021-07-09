@@ -1,0 +1,8 @@
+  node-memcached:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=memcached
+          - PLUGINS=memcached
+      - image: memcached:1.5-alpine

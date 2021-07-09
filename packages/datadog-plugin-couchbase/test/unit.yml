@@ -1,0 +1,8 @@
+  node-couchbase:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=couchbase
+          - PLUGINS=couchbase
+      - image: rishabhdev/couchbase-server-sandbox:latest

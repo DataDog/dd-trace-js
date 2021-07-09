@@ -1,0 +1,8 @@
+  node-mongoose:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=mongo
+          - PLUGINS=mongoose
+      - image: circleci/mongo:3.4

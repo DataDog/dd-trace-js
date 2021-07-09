@@ -1,0 +1,9 @@
+  node-oracledb:
+    <<: *node-plugin-base
+    resource_class: large
+    docker:
+      - image: bengl/node-12-with-oracle-client
+        environment:
+          - SERVICES=oracledb
+          - PLUGINS=oracledb
+      - image: quillbuilduser/oracle-18-xe

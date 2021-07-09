@@ -1,0 +1,8 @@
+  node-amqplib:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=rabbitmq
+          - PLUGINS=amqplib
+      - image: rabbitmq:3.6-alpine

@@ -1,0 +1,12 @@
+  node-tedious:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=mssql
+          - PLUGINS=tedious
+      - image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+        environment:
+          - "ACCEPT_EULA=Y"
+          - "SA_PASSWORD=DD_HUNTER2"
+          - "MSSQL_PID=Express"

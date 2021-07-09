@@ -1,0 +1,11 @@
+  node-pg:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - SERVICES=postgres
+          - PLUGINS=pg
+          - PG_TEST_NATIVE=true
+      - image: postgres:9.5
+        environment:
+          - POSTGRES_PASSWORD=postgres
