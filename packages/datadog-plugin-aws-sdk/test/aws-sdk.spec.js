@@ -180,6 +180,7 @@ describe('Plugin', () => {
           tracer = require('../../dd-trace')
 
           return agent.load('aws-sdk', {
+            service: 'test',
             s3: false
           })
         })
@@ -196,7 +197,8 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'listBuckets'
+              resource: 'listBuckets',
+              service: 'test'
             })
 
             total++
@@ -207,7 +209,8 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'listQueues'
+              resource: 'listQueues',
+              service: 'test'
             })
 
             total++
