@@ -5,6 +5,7 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
+    "preinstall": "node scripts/preinstall.js",
     "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
     "rebuild": "node-gyp rebuild --jobs=max",
     "prebuild": "node scripts/prebuild.js",
