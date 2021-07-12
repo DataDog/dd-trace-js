@@ -32,36 +32,6 @@
   [
     {
       "APPVEYOR": "true",
-      "APPVEYOR_BUILD_FOLDER": "/foo/bar",
-      "APPVEYOR_BUILD_ID": "appveyor-build-id",
-      "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
-      "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
-      "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
-      "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
-      "APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED": "appveyor-commit-message",
-      "APPVEYOR_REPO_NAME": "appveyor-repo-name",
-      "APPVEYOR_REPO_PROVIDER": "github"
-    },
-    {
-      "ci.job.url": "https://ci.appveyor.com/project/appveyor-repo-name/builds/appveyor-build-id",
-      "ci.pipeline.id": "appveyor-build-id",
-      "ci.pipeline.name": "appveyor-repo-name",
-      "ci.pipeline.number": "appveyor-pipeline-number",
-      "ci.pipeline.url": "https://ci.appveyor.com/project/appveyor-repo-name/builds/appveyor-build-id",
-      "ci.provider.name": "appveyor",
-      "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
-      "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
-      "git.commit.author.name": "appveyor-commit-author-name",
-      "git.commit.message": "appveyor-commit-message",
-      "git.commit.sha": "appveyor-repo-commit",
-      "git.repository_url": "https://github.com/appveyor-repo-name.git"
-    }
-  ],
-  [
-    {
-      "APPVEYOR": "true",
       "APPVEYOR_BUILD_FOLDER": "foo/bar",
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",

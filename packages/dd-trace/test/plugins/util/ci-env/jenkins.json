@@ -6,6 +6,30 @@
       "BUILD_URL": "jenkins-pipeline-url",
       "GIT_BRANCH": "origin/master",
       "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_URL_1": "sample",
+      "GIT_URL_2": "otherSample",
+      "JENKINS_URL": "jenkins",
+      "JOB_NAME": "jobName",
+      "JOB_URL": "jenkins-job-url"
+    },
+    {
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.name": "jobName",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "ci.provider.name": "jenkins",
+      "git.branch": "master",
+      "git.commit.sha": "jenkins-git-commit",
+      "git.repository_url": "sample"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "GIT_BRANCH": "origin/master",
+      "GIT_COMMIT": "jenkins-git-commit",
       "GIT_URL": "sample",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
