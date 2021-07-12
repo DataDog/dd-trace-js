@@ -62,9 +62,13 @@ function downloadAppSecBinaries () {
 }
 
 function extractAppSecBinaries (outputPath) {
+  const extractPath = path.join(__dirname, '..', 'lib')
+
+  mkdirp.sync(extractPath)
+
   return tar.extract({
     file: outputPath,
-    cwd: path.join(__dirname, '..', 'lib'),
+    cwd: extractPath,
     strip: 1
   })
 }
