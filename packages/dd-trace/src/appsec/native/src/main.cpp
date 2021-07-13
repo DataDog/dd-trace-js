@@ -36,7 +36,6 @@ Napi::Value WAFInit(const Napi::CallbackInfo& info) {
   bool result = pw_init(id.c_str(), rules.c_str(), nullptr, &errors);
   if (!result) {
     std::string err(errors);
-    // TODO(vdeturckheim): use feedback from the pw_init errors (test with https://github.com/sqreen/PowerWAF/blob/256900f0198cf365ddbd18bcf63b469d1bf6bd62/tests/TestPWManifest.cpp#L11)
     Napi::Error::New(env, err)
           .ThrowAsJavaScriptException();
   }
