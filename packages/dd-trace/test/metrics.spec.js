@@ -22,7 +22,8 @@ describe('metrics', () => {
     }
 
     metrics = proxyquire('../src/metrics', {
-      './dogstatsd': Client
+      './dogstatsd': Client,
+      'worker_threads': null
     })
 
     config = {
