@@ -3,6 +3,8 @@
 /* global BigInt */
 
 const express = require('express')
+const path = require('path')
+const fs = require('fs')
 const diffRecent = require('./diff-recent')
 const {
   getBuildNumsFromGithub,
@@ -23,6 +25,60 @@ function cleanName (commitish) {
   return isHex(commitish) ? commitish.substr(0, 8) : commitish
 }
 
+let metas
+
+function getMetas () {
+  if (metas) return metas
+
+  metas = {}
+  const dir = fs.readdirSync(__dirname, { withFileTypes: true })
+  for (const dirent of dir) {
+    if (dirent.isDirectory()) {
+      try {
+        const meta = require(path.join(__dirname, dirent.name, 'meta.json'))
+        metas[meta.name] = meta
+      } catch (e) {
+        // just keep going
+      }
+    }
+  }
+  return metas
+}
+
+function subtractBaselines (summary) {
+  const metas = getMetas()
+  for (const [name, variants] of Object.entries(summary)) {
+    const baselines = []
+    for (const [variant, metrics] of Object.entries(variants)) {
+      if (
+        metas[name] &&
+        metas[name].variants &&
+        metas[name].variants[variant] &&
+        metas[name].variants[variant].baseline
+      ) {
+        const { baseline } = metas[name].variants[variant]
+        const baselineMetrics = variants[baseline]
+        variants[`${variant}-over-${baseline}`] = {
+          instructions: metrics.instructions - baselineMetrics.instructions,
+          nodeVersion: metrics.nodeVersion,
+          summary: Object.keys(metrics.summary).reduce((acc, metric) => {
+            acc[metric] = {
+              mean: metrics.summary[metric].mean - baselineMetrics.summary[metric].mean
+            }
+            return acc
+          }, {})
+        }
+        delete variants[variant]
+        baselines.push(baseline)
+      }
+    }
+    for (const variant of baselines) {
+      delete variants[variant]
+    }
+  }
+  return summary
+}
+
 const summaryCache = {}
 
 async function getSummary (commitish) {
@@ -33,7 +89,7 @@ async function getSummary (commitish) {
   const builds = await getBuildNumsFromGithub(commitish)
   const build = builds[Object.keys(builds).find(n => n.includes('sirun-all'))]
   if (!build) {
-    const result = getResults(commitish)
+    const result = subtractBaselines(getResults(commitish))
     summaryCache[commitish] = result
     return result
   }
@@ -41,12 +97,12 @@ async function getSummary (commitish) {
   artifacts = JSON.parse(artifacts)
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) {
-    const result = getResults(commitish)
+    const result = subtractBaselines(getResults(commitish))
     summaryCache[commitish] = result
     return result
   }
 
-  const result = JSON.parse(await get(artifact.url, circleHeaders))
+  const result = subtractBaselines(JSON.parse(await get(artifact.url, circleHeaders)))
   summaryCache[commitish] = result
   return result
 }

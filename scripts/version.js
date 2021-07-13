@@ -8,31 +8,34 @@ const title = require('./helpers/title')
 
 const pkg = require('../package.json')
 const increment = getIncrement()
-const version = semver.inc(pkg.version, increment)
-const branch = `v${semver.major(version)}.${semver.minor(version)}`
-const tag = `v${version}`
-const isNewBranch = semver.major(pkg.version) !== semver.major(version) ||
-  semver.minor(pkg.version) !== semver.minor(version)
+const version = semver.inc(pkg.version, increment, 'pre')
 
-title(`Bumping version to v${version} in a new branch`)
+title(`Bumping version to v${version}.`)
 
-pkg.version = version
+const currentBranch = exec.pipe(`git branch --show-current`)
 
-if (isNewBranch) {
-  exec(`git checkout master`)
-  exec(`git pull`)
-  exec(`git checkout -b ${branch}`)
-} else {
-  exec(`git checkout ${branch}`)
-  exec('git pull')
+if (currentBranch === 'master') {
+  exec(`git checkout -b v${semver.major(pkg.version)}.x`)
+  exec(`git push -u origin HEAD`)
+
+  const nextMajor = semver.major(pkg.version) + 1
+
+  bump(`v${nextMajor}.0.0-pre`)
 }
 
-write('package.json', JSON.stringify(pkg, null, 2) + '\n')
-write('packages/dd-trace/lib/version.js', `module.exports = '${version}'\n`)
-add('package.json')
-add('packages/dd-trace/lib/version.js')
-exec(`git commit -m "${tag}"`)
-exec(`git push -u origin HEAD`)
+bump(version)
+
+function bump (newVersion) {
+  pkg.version = newVersion
+
+  exec(`git checkout -b v${newVersion}`)
+  write('package.json', JSON.stringify(pkg, null, 2) + '\n')
+  write('packages/dd-trace/lib/version.js', `module.exports = '${newVersion}'\n`)
+  add('package.json')
+  add('packages/dd-trace/lib/version.js')
+  exec(`git commit -m v"${newVersion}"`)
+  exec(`git push -u origin HEAD`)
+}
 
 function getIncrement () {
   const increments = ['major', 'premajor', 'minor', 'preminor', 'patch', 'prepatch', 'prerelease']

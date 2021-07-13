@@ -271,6 +271,7 @@ prebuild-job: &prebuild-job
       only:
         - master
         - /v\d+\.\d+/
+        - /v\d+\.x/
         - /.*native.*/
         - /^node-\d+/
 
@@ -557,6 +558,13 @@ jobs:
           - FORCE_NONINTERACTIVE=true
           - LAMBDA_EXECUTOR=local
           - START_WEB=0
+
+  node-upstream-axios:
+    <<: *node-upstream-base
+    docker:
+      - image: node:12
+        environment:
+          - PLUGINS=axios
 
   node-bluebird:
     <<: *node-plugin-base
@@ -1404,6 +1412,7 @@ workflows:
       # - node-upstream-node
       - node-upstream-amqp10
       - node-upstream-amqplib
+      - node-upstream-axios
       - node-upstream-bunyan
       - node-upstream-connect
       - node-upstream-graphql
@@ -1610,6 +1619,7 @@ workflows:
       # - node-upstream-node
       - node-upstream-amqp10
       - node-upstream-amqplib
+      - node-upstream-axios
       - node-upstream-bunyan
       - node-upstream-connect
       - node-upstream-graphql

@@ -5,6 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const fs = require('fs')
 const path = require('path')
 const tags = require('../../../ext/tags')
+const { expect } = require('chai')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
@@ -568,6 +569,92 @@ describe('Plugin', () => {
                 res.on('data', () => { })
               })
 
+              req.end()
+            })
+          })
+        })
+
+        it('should record destroyed requests as errors', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {})
+
+          getPort().then(port => {
+            let error
+
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+                expect(traces[0][0].meta).to.have.property('error.type', error.name)
+                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', err => {
+                error = err
+              })
+
+              req.destroy()
+            })
+          })
+        })
+
+        it('should record aborted requests as errors', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {})
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('abort', () => {})
+
+              req.abort()
+            })
+          })
+        })
+
+        it('should record timeouts as errors', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {})
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+
+              req.setTimeout(1)
               req.end()
             })
           })
