@@ -125,6 +125,8 @@ const graphqlOptions = {
   signature: false,
   hooks: {
     execute: (span, args, res) => {},
+    validate: (span, document, errors) => {},
+    parse: (span, document, operation) => {}
   }
 };
 
