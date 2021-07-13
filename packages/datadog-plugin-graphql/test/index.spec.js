@@ -1403,7 +1403,8 @@ describe('Plugin', () => {
         })
 
         it('should run the validate hook before graphql.validate span is finished', done => {
-          graphql.parse(source)
+          const document = graphql.parse(source)
+
           agent
             .use(traces => {
               const spans = sort(traces[0])
