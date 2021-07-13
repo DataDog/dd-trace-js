@@ -1,5 +1,4 @@
 const { relative } = require('path')
-const resolve = require('resolve')
 
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 
@@ -132,7 +131,7 @@ module.exports = [
       const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber')
       const sourceRoot = process.cwd()
       const getTestSuiteName = (pickleUri) => {
-        return relative(sourceRoot, resolve.sync(pickleUri, { basedir: __dirname }))
+        return relative(sourceRoot, pickleUri)
       }
       const pl = TestCaseRunner.default
       this.wrap(
