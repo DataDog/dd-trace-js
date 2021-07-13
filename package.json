@@ -5,9 +5,9 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
-    "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
-    "rebuild": "node-gyp rebuild --jobs=max",
-    "prebuild": "node scripts/prebuild.js",
+    "install": "(node scripts/should_rebuild && node scripts/download_lib.js && node-gyp-build) || exit 0",
+    "rebuild": "node scripts/download_lib.js && node-gyp rebuild --jobs=max",
+    "prebuild": "node scripts/download_lib.js && node scripts/prebuild.js",
     "prebuilds": "node scripts/prebuilds.js",
     "protobuf": "pbjs -t static-module -w commonjs -o protobuf/profile.js protobuf/profile.proto && pbts -o protobuf/profile.d.ts protobuf/profile.js",
     "prepublishOnly": "node scripts/prepublish.js",
