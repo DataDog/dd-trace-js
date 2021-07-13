@@ -50,9 +50,11 @@ function createWrapParse (tracer, config) {
 
       analyticsSampler.sample(span, config.measured, true)
 
+      let document
+      let operation
       try {
-        const document = parse.apply(this, arguments)
-        const operation = getOperation(document)
+        document = parse.apply(this, arguments)
+        operation = getOperation(document)
 
         if (!operation) return document // skip schema parsing
 
@@ -67,6 +69,7 @@ function createWrapParse (tracer, config) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.parse(span, document, operation)
         finish(span)
       }
     }
@@ -85,8 +88,9 @@ function createWrapValidate (tracer, config) {
         addDocumentTags(span, document)
       }
 
+      let errors
       try {
-        const errors = validate.apply(this, arguments)
+        errors = validate.apply(this, arguments)
 
         setError(span, errors && errors[0])
 
@@ -95,6 +99,7 @@ function createWrapValidate (tracer, config) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.validate(span, document, errors)
         finish(span)
       }
     }
@@ -384,7 +389,7 @@ function getService (tracer, config) {
 
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
-    return
+    return null
   }
 
   const definitions = document.definitions.filter(def => def)
@@ -460,8 +465,10 @@ function pathToArray (path) {
 function getHooks (config) {
   const noop = () => {}
   const execute = (config.hooks && config.hooks.execute) || noop
+  const parse = (config.hooks && config.hooks.parse) || noop
+  const validate = (config.hooks && config.hooks.validate) || noop
 
-  return { execute }
+  return { execute, parse, validate }
 }
 
 module.exports = [
