@@ -15,15 +15,20 @@ title(`Bumping version to v${version}.`)
 const currentBranch = exec.pipe(`git branch --show-current`)
 
 if (currentBranch === 'master') {
-  exec(`git checkout -b v${semver.major(pkg.version)}.x`)
-  exec(`git push -u origin HEAD`)
-
+  const major = semver.major(pkg.version)
   const nextMajor = semver.major(pkg.version) + 1
 
-  bump(`v${nextMajor}.0.0-pre`)
+  exec(`git checkout -b v${major}.x`)
+  exec(`git push -u origin HEAD`)
+
+  bump(`${nextMajor}.0.0-pre`)
+
+  exec(`git checkout v${major}.x`)
 }
 
 bump(version)
+
+exec(`git checkout ${currentBranch}`)
 
 function bump (newVersion) {
   pkg.version = newVersion
