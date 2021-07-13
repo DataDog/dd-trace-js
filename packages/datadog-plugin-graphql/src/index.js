@@ -389,7 +389,7 @@ function getService (tracer, config) {
 
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
-    return null
+    return
   }
 
   const definitions = document.definitions.filter(def => def)
