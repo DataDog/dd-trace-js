@@ -61,8 +61,6 @@ describe('Plugin', () => {
         Cucumber = require(`../../../versions/@cucumber/cucumber@${version}`).get()
       })
     })
-    const testFilePath = path.join(__dirname, 'features', 'simple.feature')
-    const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
     describe('cucumber', () => {
       describe('passing test', () => {
@@ -82,7 +80,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'pass scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'pass'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -138,7 +135,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'fail scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'fail'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -201,7 +197,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'skip scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'skip'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -264,7 +259,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'skip scenario based on tag',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'skip'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -337,7 +331,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'integration scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'pass'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -398,7 +391,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'hooks fail',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'fail'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
