@@ -154,6 +154,13 @@ const redisOptions = {
   blocklist: ['info', /auth/i, command => true],
 };
 
+const sharedbOptions = {
+  service: 'test',
+  hooks: {
+    receive: (span, triggerContext) => {},
+  },
+};
+
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('aws-sdk', awsSdkOptions);
@@ -229,6 +236,7 @@ tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
 tracer.use('when');
 tracer.use('winston');

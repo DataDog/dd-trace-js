@@ -992,6 +992,13 @@ jobs:
         environment:
           - PLUGINS=router
 
+  node-sharedb:
+    <<: *node-plugin-base
+    docker:
+      - image: node:12
+        environment:
+          - PLUGINS=sharedb
+
   node-when:
     <<: *node-plugin-base
     docker:
@@ -1321,6 +1328,7 @@ workflows:
       - node-redis
       - node-restify
       - node-router
+      - node-sharedb
       - node-tedious
       - node-when
       - node-winston
@@ -1377,6 +1385,7 @@ workflows:
             - node-redis
             - node-restify
             - node-router
+            - node-sharedb
             - node-tedious
             - node-when
             - node-winston
@@ -1570,6 +1579,7 @@ workflows:
       - node-redis
       - node-restify
       - node-router
+      - node-sharedb
       - node-tedious
       - node-when
       - node-winston
