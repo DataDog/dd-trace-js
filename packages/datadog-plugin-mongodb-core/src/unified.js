@@ -5,7 +5,7 @@ const { instrument } = require('./util')
 function createWrapConnectionCommand (tracer, config, name) {
   return function wrapCommand (command) {
     return function commandWithTrace (ns, ops) {
-      const hostParts = this.address && this.address.split(':')
+      const hostParts = typeof this.address === 'string' ? this.address.split(':') : ''
       const options = hostParts.length === 2
         ? { host: hostParts[0], port: hostParts[1] }
         : {} // no port means the address is a random UUID so no host either
