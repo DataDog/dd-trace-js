@@ -7,7 +7,7 @@ const plugin = require('../src')
 wrapIt()
 
 const withTopologies = fn => {
-  withVersions(plugin, ['mongodb-core', 'mongodb'], (version, moduleName) => {
+  withVersions(plugin, ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
     describe('using the server topology', () => {
       fn(() => {
         const { CoreServer, Server } = require(`../../../versions/${moduleName}@${version}`).get()
