@@ -476,7 +476,7 @@ jobs:
       - checkout
       - *yarn-versions
       - *restore-yarn-cache
-      - *yarn-install
+      - *yarn-installc
       - *save-yarn-cache
       - *yarn-rebuild
       - *yarn-test-core
@@ -1394,7 +1394,7 @@ workflows:
             - node-tedious
             - node-when
             - node-winston
-  bench:
+  bench: &bench-jobs
     jobs:
       - node-bench-latest
       - node-bench-profiler-latest
@@ -1425,7 +1425,7 @@ workflows:
             - node-bench-sirun-scope-latest
             - node-bench-sirun-exporting-pipeline-latest
             - node-bench-sirun-profiler-latest
-  upstream:
+  upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
       - node-upstream-amqp10
@@ -1602,36 +1602,8 @@ workflows:
               only:
                 - master
                 - profiler
-    jobs:
-      - node-bench-latest
-      - node-bench-profiler-latest
-      - node-bench-e2e-latest
-      - node-bench-sirun-startup-latest
-      - node-bench-sirun-spans-latest
-      - node-bench-sirun-async-hooks
-      - node-bench-sirun-log
-      - node-bench-sirun-encoders-latest
-      - node-bench-sirun-plugin-q-latest
-      - node-bench-sirun-plugin-bluebird-latest
-      - node-bench-sirun-plugin-http-latest
-      - node-bench-sirun-plugin-net-latest
-      - node-bench-sirun-scope-latest
-      - node-bench-sirun-exporting-pipeline-latest
-      - node-bench-sirun-profiler-latest
-      - node-bench-sirun-all:
-          requires:
-            - node-bench-sirun-startup-latest
-            - node-bench-sirun-spans-latest
-            - node-bench-sirun-async-hooks
-            - node-bench-sirun-log
-            - node-bench-sirun-encoders-latest
-            - node-bench-sirun-plugin-q-latest
-            - node-bench-sirun-plugin-bluebird-latest
-            - node-bench-sirun-plugin-http-latest
-            - node-bench-sirun-plugin-net-latest
-            - node-bench-sirun-scope-latest
-            - node-bench-sirun-exporting-pipeline-latest
-            - node-bench-sirun-profiler-latest
+    <<: *bench-jobs
+
   nightly-upstream:
     triggers:
       - schedule:
@@ -1641,15 +1613,4 @@ workflows:
               only:
                 - master
                 - profiler
-    jobs:
-      # - node-upstream-node
-      - node-upstream-amqp10
-      - node-upstream-amqplib
-      - node-upstream-axios
-      - node-upstream-bunyan
-      - node-upstream-connect
-      - node-upstream-graphql
-      - node-upstream-koa
-      - node-upstream-pino
-      - node-upstream-promise
-      - node-upstream-q
+    <<: *upstream-jobs
