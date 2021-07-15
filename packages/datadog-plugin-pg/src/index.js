@@ -6,6 +6,8 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const OPERATION_NAME = 'pg.query'
 
 function createWrapQuery (tracer, config) {
+  config = normalizeConfig(config)
+
   return function wrapQuery (query) {
     return function queryWithTrace () {
       const scope = tracer.scope()
@@ -36,8 +38,13 @@ function createWrapQuery (tracer, config) {
 
       const originalCallback = pgQuery.callback
       const statement = pgQuery.text
+      const values = pgQuery.values
 
       span.setTag('resource.name', statement)
+
+      if (config.includeQueryParams !== undefined) {
+        span.setTag('sql.params', config.includeQueryParams(values))
+      }
 
       if (params) {
         span.addTags({
@@ -69,6 +76,14 @@ function createWrapQuery (tracer, config) {
       return retval
     }
   }
+}
+
+function normalizeConfig (config) {
+  return Object.assign({}, config, {
+    includeQueryParams: typeof config.includeQueryParams === 'function'
+      ? config.includeQueryParams
+      : config.includeQueryParams === true ? p => p : undefined
+  })
 }
 
 function getServiceName (tracer, config, params) {
