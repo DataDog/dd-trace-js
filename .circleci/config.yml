@@ -62,6 +62,8 @@ node-core-base: &node-core-base
 node-bench-base: &node-bench-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  docker:
+    - image: node
   steps:
     - checkout-and-yarn-install
     - run:
@@ -71,6 +73,7 @@ node-bench-base: &node-bench-base
 node-bench-e2e-base: &node-bench-e2e-base
   resource_class: medium
   working_directory: ~/dd-trace-js
+
   steps:
     - checkout-and-yarn-install
     - run:
@@ -80,6 +83,8 @@ node-bench-e2e-base: &node-bench-e2e-base
 node-bench-sirun-base: &node-bench-sirun-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  docker:
+    - image: node
   steps:
     - checkout-and-yarn-install
     - run:
@@ -113,6 +118,8 @@ node-integration-base: &node-integration-base
 node-bench-profiler-base: &node-bench-profiler-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  docker:
+    - image: node
   steps:
     - checkout-and-yarn-install
     - run:
@@ -246,13 +253,9 @@ jobs:
 
   node-bench-latest:
     <<: *node-bench-base
-    docker:
-      - image: node
 
   node-bench-profiler-latest:
     <<: *node-bench-profiler-base
-    docker:
-      - image: node
 
   node-bench-e2e-latest:
     <<: *node-bench-e2e-base
@@ -265,24 +268,18 @@ jobs:
 
   node-bench-sirun-startup-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=startup
+    environment:
+      - SIRUN_TEST_DIR=startup
 
   node-bench-sirun-spans-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=spans
+    environment:
+      - SIRUN_TEST_DIR=spans
 
   node-bench-sirun-async-hooks:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=async_hooks
+    environment:
+      - SIRUN_TEST_DIR=async_hooks
 
   node-bench-sirun-log:
     <<: *node-bench-sirun-base
@@ -293,55 +290,41 @@ jobs:
 
   node-bench-sirun-encoders-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=encoding
+    environment:
+      - SIRUN_TEST_DIR=encoding
 
   node-bench-sirun-plugin-q-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=q
-          - SIRUN_TEST_DIR=plugin-q
+    environment:
+      - PLUGINS=q
+      - SIRUN_TEST_DIR=plugin-q
 
   node-bench-sirun-plugin-bluebird-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=bluebird
-          - SIRUN_TEST_DIR=plugin-bluebird
+    environment:
+      - PLUGINS=bluebird
+      - SIRUN_TEST_DIR=plugin-bluebird
 
   node-bench-sirun-plugin-http-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=http
-          - SIRUN_TEST_DIR=plugin-http
+    environment:
+      - PLUGINS=http
+      - SIRUN_TEST_DIR=plugin-http
 
   node-bench-sirun-scope-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=scope
+    environment:
+      - SIRUN_TEST_DIR=scope
 
   node-bench-sirun-exporting-pipeline-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=exporting-pipeline
+    environment:
+      - SIRUN_TEST_DIR=exporting-pipeline
 
   node-bench-sirun-plugin-net-latest:
     <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=plugin-net
+    environment:
+      - SIRUN_TEST_DIR=plugin-net
 
   node-bench-sirun-profiler-latest:
     <<: *node-bench-sirun-base
