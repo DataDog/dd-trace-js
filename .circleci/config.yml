@@ -103,7 +103,7 @@ node-bench-sirun-base: &node-bench-sirun-base
     - run:
         name: Run sirun
         command: |
-          cd benchmark/sirun/$(node -p "process.env.CIRLCE_JOB.replace('node-bench-sirun-', '').replace('-latest', '')")
+          cd benchmark/sirun/$(node -p "process.env.CIRCLE_JOB.replace('node-bench-sirun-', '').replace('-latest', '')")
           node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee ../$CIRCLE_JOB-sirun-output.ndjson
     - persist_to_workspace:
         root: ~/dd-trace-js
