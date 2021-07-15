@@ -428,25 +428,13 @@ jobs:
 
   # Core tests
 
-  node-core-12:
+  node-core:
+    parameters:
+      node-version:
+        type: string
     <<: *node-core-base
     docker:
-      - image: node:12
-
-  node-core-14:
-    <<: *node-core-base
-    docker:
-      - image: node:14
-
-  node-core-16:
-    <<: *node-core-base
-    docker:
-      - image: node:16
-
-  node-core-latest:
-    <<: *node-core-base
-    docker:
-      - image: node
+      - image: node:<< parameters.node-version >>
 
   node-leaks:
     docker:
@@ -476,7 +464,7 @@ jobs:
       - checkout
       - *yarn-versions
       - *restore-yarn-cache
-      - *yarn-installc
+      - *yarn-install
       - *save-yarn-cache
       - *yarn-rebuild
       - *yarn-test-core
@@ -1279,10 +1267,10 @@ workflows:
     jobs:
       - lint
       - typescript
-      - node-core-12
-      - node-core-14
-      - node-core-16
-      - node-core-latest
+      - node-core:
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16", "latest"]
       - node-core-windows
       - node-integration-12
       - node-integration-14
@@ -1340,10 +1328,7 @@ workflows:
       - node-winston
       - codecov:
           requires:
-            - node-core-12
-            - node-core-14
-            - node-core-16
-            - node-core-latest
+            - node-core
             - node-amqplib
             - node-amqp10
             - node-aws-sdk
@@ -1533,10 +1518,10 @@ workflows:
                 - profiler
     jobs:
       - lint
-      - node-core-12
-      - node-core-14
-      - node-core-16
-      - node-core-latest
+      - node-core:
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16", "latest"]
       - node-core-windows
       - node-integration-12
       - node-integration-14
