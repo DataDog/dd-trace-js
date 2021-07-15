@@ -135,8 +135,12 @@ node-plugin-base: &node-plugin-base
     - checkout-and-yarn-install:
         yarn-args: ""
     - run:
+        name: Get plugin name
+        command: |
+          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-')" > /tmp/dd_plugins_var
+    - run:
         name: Unit tests
-        command: yarn test:plugins:ci
+        command: PLUGINS=$(cat /tmp/dd_plugins_var) yarn test:plugins:ci
     - store_test_results:
         path: test-results
         when: always
@@ -473,19 +477,9 @@ jobs:
         environment:
           - PLUGINS=axios
 
-  node-bluebird:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=bluebird
+  node-bluebird: *node-plugin-base
 
-  node-bunyan:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=bunyan
+  node-bunyan: *node-plugin-base
 
   node-upstream-bunyan:
     <<: *node-upstream-base
@@ -505,12 +499,7 @@ jobs:
         environment:
           - CASSANDRA_TOKEN=-9223372036854775808
 
-  node-connect:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=connect
+  node-connect: *node-plugin-base
 
   node-upstream-connect:
     <<: *node-upstream-base
@@ -519,12 +508,7 @@ jobs:
         environment:
           - PLUGINS=connect
 
-  node-cucumber:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=cucumber
+  node-cucumber: *node-plugin-base
 
   node-couchbase:
     <<: *node-plugin-base
@@ -544,12 +528,7 @@ jobs:
           - PLUGINS=couchbase
       - image: rishabhdev/couchbase-server-sandbox:latest
 
-  node-dns:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=dns
+  node-dns: *node-plugin-base
 
   node-elasticsearch:
     <<: *node-plugin-base
@@ -563,19 +542,9 @@ jobs:
           - discovery.type=single-node
           - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
 
-  node-express:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=express
+  node-express: *node-plugin-base
 
-  node-fastify:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=fastify
+  node-fastify: *node-plugin-base
 
   node-fs:
     parameters:
@@ -587,12 +556,7 @@ jobs:
         environment:
           - PLUGINS=fs
 
-  node-generic-pool:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=generic-pool
+  node-generic-pool: *node-plugin-base
 
   node-google-cloud-pubsub:
     <<: *node-plugin-base
@@ -617,12 +581,7 @@ jobs:
           KAFKA_CREATE_TOPICS: "test-topic:1:1"
           KAFKA_ZOOKEEPER_CONNECT: 127.0.0.1:2181
 
-  node-graphql:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=graphql
+  node-graphql: *node-plugin-base
 
   node-upstream-graphql:
     <<: *node-upstream-base
@@ -631,54 +590,19 @@ jobs:
         environment:
           - PLUGINS=graphql
 
-  node-grpc:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=grpc
+  node-grpc: *node-plugin-base
 
-  node-hapi:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=hapi
+  node-hapi: *node-plugin-base
 
-  node-http:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=http
+  node-http: *node-plugin-base
 
-  node-http2:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=http2
+  node-http2: *node-plugin-base
 
-  node-jest:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=jest
+  node-jest: *node-plugin-base
 
-  node-knex:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=knex
+  node-knex: *node-plugin-base
 
-  node-koa:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=koa
+  node-koa: *node-plugin-base
 
   node-upstream-koa:
     <<: *node-upstream-base
@@ -709,19 +633,9 @@ jobs:
           - PLUGINS=memcached
       - image: memcached:1.5-alpine
 
-  node-microgateway-core:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=microgateway-core
+  node-microgateway-core: *node-plugin-base
 
-  node-mocha:
-    <<: *node-plugin-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=mocha
+  node-mocha: *node-plugin-base
 
   node-tedious:
     <<: *node-plugin-base
@@ -766,19 +680,9 @@ jobs:
           - PLUGINS=mongoose
       - image: circleci/mongo:3.4
 
-  node-net:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=net
+  node-net: *node-plugin-base
 
-  node-next:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=next
+  node-next: *node-plugin-base
 
   node-oracledb:
     <<: *node-plugin-base
@@ -790,19 +694,9 @@ jobs:
           - PLUGINS=oracledb
       - image: quillbuilduser/oracle-18-xe
 
-  node-paperplane:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=paperplane
+  node-paperplane: *node-plugin-base
 
-  node-pino:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=pino
+  node-pino: *node-plugin-base
 
   node-upstream-pino:
     <<: *node-upstream-base
@@ -823,19 +717,9 @@ jobs:
         environment:
           - POSTGRES_PASSWORD=postgres
 
-  node-promise-js:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=promise-js
+  node-promise-js: *node-plugin-base
 
-  node-promise:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=promise
+  node-promise: *node-plugin-base
 
   node-upstream-promise:
     <<: *node-upstream-base
@@ -844,12 +728,7 @@ jobs:
         environment:
           - PLUGINS=promise
 
-  node-q:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=q
+  node-q: *node-plugin-base
 
   node-upstream-q:
     <<: *node-upstream-base
@@ -867,33 +746,13 @@ jobs:
           - PLUGINS=redis|ioredis
       - image: redis:4.0-alpine
 
-  node-restify:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=restify
+  node-restify: *node-plugin-base
 
-  node-router:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=router
+  node-router: *node-plugin-base
 
-  node-when:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=when
+  node-when: *node-plugin-base
 
-  node-winston:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=winston
+  node-winston: *node-plugin-base
 
   typescript:
     docker:
