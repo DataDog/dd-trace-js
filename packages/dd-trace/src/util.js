@@ -17,7 +17,8 @@ function isError (value) {
   if (value && value.constructor) {
     return value.constructor.name === 'JestAssertionError' ||
       value.constructor.name === 'Error' ||
-      value.constructor.name === 'ErrorWithStack'
+      value.constructor.name === 'ErrorWithStack' ||
+      value.constructor.name === 'AssertionError'
   }
   return false
 }

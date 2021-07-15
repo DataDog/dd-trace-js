@@ -35,6 +35,10 @@
   ],
   "jest": [
     {
+      "name": "jest",
+      "versions": [">=24.8.0"]
+    },
+    {
       "name": "jest-environment-jsdom",
       "versions": [">=24.8.0"]
     },

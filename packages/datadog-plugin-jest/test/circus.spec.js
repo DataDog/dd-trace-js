@@ -51,7 +51,7 @@ describe('Plugin', () => {
       })
     })
 
-    describe('jest', () => {
+    describe('jest with jest-circus', () => {
       it('should create a test span for a passing test', (done) => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
