@@ -3,28 +3,37 @@ version: 2.1
 orbs:
   win: circleci/windows@2.2.0
 
+commands:
+  checkout-and-yarn-install:
+    parameters:
+      yarn-args:
+        type: string
+        default: --ignore-engines
+    steps:
+      - checkout
+      - &yarn-versions
+        run:
+          name: Versions
+          command: yarn versions
+      - &restore-yarn-cache
+        restore_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+      - &yarn-install
+        run:
+          name: Install dependencies
+          command: yarn install << parameters.yarn-args >>
+      - &save-yarn-cache
+        save_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+            - ./yarn.lock
+
 node-core-base: &node-core-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - &yarn-versions
-      run:
-        name: Versions
-        command: yarn versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - &yarn-install
-      run:
-        name: Install dependencies
-        command: yarn install --ignore-engines
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
+    - checkout-and-yarn-install
     - &yarn-rebuild
       run:
         name: Compile native code
@@ -54,11 +63,7 @@ node-bench-base: &node-bench-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Benchmark Tracer
         command: yarn bench
@@ -67,11 +72,7 @@ node-bench-e2e-base: &node-bench-e2e-base
   resource_class: medium
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: E2E Benchmark
         command: yarn bench:e2e
@@ -80,11 +81,7 @@ node-bench-sirun-base: &node-bench-sirun-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Install dependencies
         command: "[[ -n $PLUGINS ]] && node ./scripts/install_plugin_modules || exit 0"
@@ -108,11 +105,7 @@ node-integration-base: &node-integration-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Integration Tests
         command: yarn test:integration
@@ -121,11 +114,7 @@ node-bench-profiler-base: &node-bench-profiler-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Benchmark Profiler
         command: yarn bench:profiler
@@ -136,20 +125,8 @@ node-plugin-base: &node-plugin-base
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
-    - *yarn-versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - run:
-        name: Install dependencies
-        command: yarn install
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
+    - checkout-and-yarn-install:
+        yarn-args: ""
     - run:
         name: Unit tests
         command: yarn test:plugins:ci
@@ -176,13 +153,8 @@ node-upstream-base: &node-upstream-base
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - run:
-        name: Install dependencies
-        command: yarn install
-    - *save-yarn-cache
+    - checkout-and-yarn-install:
+        yarn-args: ""
     - run:
         name: Library test suite
         command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
@@ -193,11 +165,7 @@ prebuild-linux-base: &prebuild-linux-base
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - &yarn-prebuild
       run:
         name: Compile prebuilt binaries
@@ -214,11 +182,7 @@ prebuild-linux-ia32-base: &prebuild-linux-ia32-base
     - run:
         name: Install job dependencies
         command: apt-get update && apt-get install -y g++-multilib
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - *yarn-prebuild
     - *persist-prebuilds
 
@@ -228,13 +192,9 @@ test-prebuild-linux-base: &test-prebuild-linux-base
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
+    - checkout-and-yarn-install
     - attach_workspace:
         at: ~/dd-trace-js
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
     - *yarn-test-core
 
 prebuild-darwin-base: &prebuild-darwin-base
@@ -242,11 +202,7 @@ prebuild-darwin-base: &prebuild-darwin-base
     xcode: "10.2.0"
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - *yarn-prebuild
     - *persist-prebuilds
 
@@ -256,11 +212,7 @@ prebuild-win32-base: &prebuild-win32-base
     size: medium
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - *yarn-prebuild
     - *persist-prebuilds
 
@@ -284,13 +236,8 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - *save-yarn-cache
+      - checkout-and-yarn-install:
+          yarn-args: ""
       - run:
           name: Lint
           command: yarn lint
@@ -409,13 +356,9 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
+      - checkout-and-yarn-install
       - attach_workspace:
           at: ~/dd-trace-js
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
       - run:
           name: Aggregate sirun output
           command: |
@@ -442,13 +385,8 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - *save-yarn-cache
+      - checkout-and-yarn-install:
+          yarn-args: ""
       - run:
           name: Memory leak tests
           command: yarn leak:core
@@ -461,35 +399,19 @@ jobs:
       size: medium
     working_directory: ~/dd-trace-js
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - *yarn-rebuild
       - *yarn-test-core
 
   # Integration tests
 
-  node-integration-12:
+  node-integration:
+    parameters:
+      node-version:
+        type: string
     <<: *node-integration-base
     docker:
-      - image: node:12
-
-  node-integration-14:
-    <<: *node-integration-base
-    docker:
-      - image: node:14
-
-  node-integration-16:
-    <<: *node-integration-base
-    docker:
-      - image: node:16
-
-  node-integration-latest:
-    <<: *node-integration-base
-    docker:
-      - image: node:latest
+      - image: node:<< parameters.node-version >>
 
   # Plugin tests
 
@@ -672,31 +594,13 @@ jobs:
         environment:
           - PLUGINS=fastify
 
-  node-fs-12:
+  node-fs:
+    parameters:
+      node-version:
+        type: string
     <<: *node-plugin-base
     docker:
-      - image: node:12
-        environment:
-          - PLUGINS=fs
-
-  node-fs-14:
-    <<: *node-plugin-base
-    docker:
-      - image: node:14
-        environment:
-          - PLUGINS=fs
-
-  node-fs-16:
-    <<: *node-plugin-base
-    docker:
-      - image: node:16
-        environment:
-          - PLUGINS=fs
-
-  node-fs-latest:
-    <<: *node-plugin-base
-    docker:
-      - image: node
+      - image: node:<< parameters.node-version >>
         environment:
           - PLUGINS=fs
 
@@ -1014,11 +918,7 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - run:
           name: Test API documentation
           command: yarn type:test
@@ -1036,11 +936,7 @@ jobs:
     docker:
       - image: node:14
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - run:
           name: Pull the NodeJS repository
           command: "git clone --depth 1 --branch v14.x https://github.com/nodejs/node.git ~/node"
@@ -1059,11 +955,7 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - attach_workspace:
           at: ~/dd-trace-js
       - run:
@@ -1123,11 +1015,7 @@ jobs:
       - run:
           name: Install job dependencies
           command: apk add g++ git make python3
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - *yarn-rebuild
       - *yarn-test-core
 
@@ -1246,13 +1134,9 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
+      - checkout-and-yarn-install
       - attach_workspace:
           at: ~/dd-trace-js
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
       - run:
           name: Create prebuilds archive
           command: yarn prebuilds
@@ -1267,15 +1151,12 @@ workflows:
     jobs:
       - lint
       - typescript
-      - node-core:
+      - node-core: &matrix-supported-node-versions
           matrix:
             parameters:
               node-version: ["12", "14", "16", "latest"]
       - node-core-windows
-      - node-integration-12
-      - node-integration-14
-      - node-integration-16
-      - node-integration-latest
+      - node-integration: *matrix-supported-node-versions
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1289,10 +1170,7 @@ workflows:
       - node-elasticsearch
       - node-express
       - node-fastify
-      - node-fs-12
-      - node-fs-14
-      - node-fs-16
-      - node-fs-latest
+      - node-fs: *matrix-supported-node-versions
       - node-generic-pool
       - node-google-cloud-pubsub
       - node-graphql
@@ -1342,10 +1220,7 @@ workflows:
             - node-elasticsearch
             - node-express
             - node-fastify
-            - node-fs-12
-            - node-fs-14
-            - node-fs-16
-            - node-fs-latest
+            - node-fs
             - node-generic-pool
             - node-google-cloud-pubsub
             - node-graphql
@@ -1518,15 +1393,9 @@ workflows:
                 - profiler
     jobs:
       - lint
-      - node-core:
-          matrix:
-            parameters:
-              node-version: ["12", "14", "16", "latest"]
+      - node-core: *matrix-supported-node-versions
       - node-core-windows
-      - node-integration-12
-      - node-integration-14
-      - node-integration-16
-      - node-integration-latest
+      - node-integration: *matrix-supported-node-versions
       - node-amqplib
       - node-amqp10
       - node-aws-sdk
@@ -1541,10 +1410,7 @@ workflows:
       - node-elasticsearch
       - node-express
       - node-fastify
-      - node-fs-12
-      - node-fs-14
-      - node-fs-16
-      - node-fs-latest
+      - node-fs: *matrix-supported-node-versions
       - node-generic-pool
       - node-google-cloud-pubsub
       - node-graphql
