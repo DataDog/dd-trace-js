@@ -280,11 +280,11 @@ jobs:
 
   node-bench-sirun-spans-latest: *node-bench-sirun-base
 
-  node-bench-sirun-async-hooks: *node-bench-sirun-base
+  node-bench-sirun-async_hooks-latest: *node-bench-sirun-base
 
   node-bench-sirun-log-latest: *node-bench-sirun-base
 
-  node-bench-sirun-encoders-latest: *node-bench-sirun-base
+  node-bench-sirun-encoding-latest: *node-bench-sirun-base
 
   node-bench-sirun-plugin-q-latest: *node-bench-sirun-base
 
