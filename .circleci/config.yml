@@ -81,16 +81,20 @@ node-bench-e2e-base: &node-bench-e2e-base
         command: yarn bench:e2e
 
 node-bench-sirun-base: &node-bench-sirun-base
+  parameters:
+    node-version:
+      type: string
+      default: "latest"
+  docker:
+    - image: node:<< parameters.node-version >>
   resource_class: small
   working_directory: ~/dd-trace-js
-  docker:
-    - image: node
   steps:
     - checkout-and-yarn-install
     - run:
         name: Get plugin name
         command: |
-          node -p "process.env.CIRCLE_JOB.includes('plugin') ? process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '') : ''" > /tmp/dd_plugins_var
+          node -p "process.env.CIRCLE_JOB.includes('plugin') ? process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '') : ''" > /tmp/dd_plugins_var
     - run:
         name: Install dependencies
         command: "PLUGINS=$(cat /tmp/dd_plugins_var) node ./scripts/install_plugin_modules"
@@ -103,7 +107,7 @@ node-bench-sirun-base: &node-bench-sirun-base
     - run:
         name: Run sirun
         command: |
-          cd benchmark/sirun/$(node -p "process.env.CIRCLE_JOB.replace('node-bench-sirun-', '').replace('-latest', '')")
+          cd benchmark/sirun/$(node -p "process.env.CIRCLE_JOB.replace('node-bench-sirun-', '').replace('-latest', '').replace(/-\d*$/, '')")
           node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee ../$CIRCLE_JOB-sirun-output.ndjson
     - persist_to_workspace:
         root: ~/dd-trace-js
@@ -276,27 +280,27 @@ jobs:
           - PLUGINS=mongodb-core
       - image: circleci/mongo
 
-  node-bench-sirun-startup-latest: *node-bench-sirun-base
+  node-bench-sirun-startup: *node-bench-sirun-base
 
-  node-bench-sirun-spans-latest: *node-bench-sirun-base
+  node-bench-sirun-spans: *node-bench-sirun-base
 
-  node-bench-sirun-async_hooks-latest: *node-bench-sirun-base
+  node-bench-sirun-async_hooks: *node-bench-sirun-base
 
-  node-bench-sirun-log-latest: *node-bench-sirun-base
+  node-bench-sirun-log: *node-bench-sirun-base
 
-  node-bench-sirun-encoding-latest: *node-bench-sirun-base
+  node-bench-sirun-encoding: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-q-latest: *node-bench-sirun-base
+  node-bench-sirun-plugin-q: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-bluebird-latest: *node-bench-sirun-base
+  node-bench-sirun-plugin-bluebird: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-http-latest: *node-bench-sirun-base
+  node-bench-sirun-plugin-http: *node-bench-sirun-base
 
-  node-bench-sirun-scope-latest: *node-bench-sirun-base
+  node-bench-sirun-scope: *node-bench-sirun-base
 
-  node-bench-sirun-exporting-pipeline-latest: *node-bench-sirun-base
+  node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-net-latest: *node-bench-sirun-base
+  node-bench-sirun-plugin-net: *node-bench-sirun-base
 
   node-bench-sirun-profiler-latest:
     <<: *node-bench-sirun-base
@@ -1031,32 +1035,33 @@ workflows:
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
-      - node-bench-sirun-startup-latest
-      - node-bench-sirun-spans-latest
-      - node-bench-sirun-async-hooks
-      - node-bench-sirun-log
-      - node-bench-sirun-encoders-latest
-      - node-bench-sirun-plugin-q-latest
-      - node-bench-sirun-plugin-bluebird-latest
-      - node-bench-sirun-plugin-http-latest
-      - node-bench-sirun-plugin-net-latest
-      - node-bench-sirun-scope-latest
-      - node-bench-sirun-exporting-pipeline-latest
-      - node-bench-sirun-profiler-latest
+      - node-bench-sirun-startup: &matrix-exact-supported-node-versions
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16"]
+      - node-bench-sirun-spans: *matrix-exact-supported-node-versions
+      - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
+      - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
+      - node-bench-sirun-scope: *matrix-exact-supported-node-versions
+      - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
+      - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
-            - node-bench-sirun-startup-latest
-            - node-bench-sirun-spans-latest
-            - node-bench-sirun-async-hooks
-            - node-bench-sirun-log
-            - node-bench-sirun-encoders-latest
-            - node-bench-sirun-plugin-q-latest
-            - node-bench-sirun-plugin-bluebird-latest
-            - node-bench-sirun-plugin-http-latest
-            - node-bench-sirun-plugin-net-latest
-            - node-bench-sirun-scope-latest
-            - node-bench-sirun-exporting-pipeline-latest
-            - node-bench-sirun-profiler-latest
+            - node-bench-sirun-startup
+            - node-bench-sirun-spans
+            - node-bench-sirun-async_hooks
+            - node-bench-sirun-encoding
+            - node-bench-sirun-plugin-q
+            - node-bench-sirun-plugin-bluebird
+            - node-bench-sirun-plugin-http
+            - node-bench-sirun-plugin-net
+            - node-bench-sirun-scope
+            - node-bench-sirun-exporting-pipeline
+            - node-bench-sirun-profiler
   upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
