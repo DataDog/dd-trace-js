@@ -88,8 +88,12 @@ node-bench-sirun-base: &node-bench-sirun-base
   steps:
     - checkout-and-yarn-install
     - run:
+        name: Get plugin name
+        command: |
+          node -p "process.env.CIRCLE_JOB.includes('plugin') ? process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '') : ''" > /tmp/dd_plugins_var
+    - run:
         name: Install dependencies
-        command: "[[ -n $PLUGINS ]] && node ./scripts/install_plugin_modules || exit 0"
+        command: "PLUGINS=$(cat /tmp/dd_plugins_var) node ./scripts/install_plugin_modules"
     - run:
         name: Install system deps
         command: apt-get update && apt-get install -y valgrind wget
@@ -99,7 +103,7 @@ node-bench-sirun-base: &node-bench-sirun-base
     - run:
         name: Run sirun
         command: |
-          cd benchmark/sirun/$SIRUN_TEST_DIR
+          cd benchmark/sirun/$(node -p "process.env.CIRLCE_JOB.replace('node-bench-sirun-', '').replace('-latest', '')")
           node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee ../$CIRCLE_JOB-sirun-output.ndjson
     - persist_to_workspace:
         root: ~/dd-trace-js
@@ -255,11 +259,9 @@ jobs:
 
   # Benchmarks
 
-  node-bench-latest:
-    <<: *node-bench-base
+  node-bench-latest: *node-bench-base
 
-  node-bench-profiler-latest:
-    <<: *node-bench-profiler-base
+  node-bench-profiler-latest: *node-bench-profiler-base
 
   node-bench-e2e-latest:
     <<: *node-bench-e2e-base
@@ -270,65 +272,27 @@ jobs:
           - PLUGINS=mongodb-core
       - image: circleci/mongo
 
-  node-bench-sirun-startup-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=startup
+  node-bench-sirun-startup-latest: *node-bench-sirun-base
 
-  node-bench-sirun-spans-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=spans
+  node-bench-sirun-spans-latest: *node-bench-sirun-base
 
-  node-bench-sirun-async-hooks:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=async_hooks
+  node-bench-sirun-async-hooks: *node-bench-sirun-base
 
-  node-bench-sirun-log:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=log
+  node-bench-sirun-log-latest: *node-bench-sirun-base
 
-  node-bench-sirun-encoders-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=encoding
+  node-bench-sirun-encoders-latest: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-q-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - PLUGINS=q
-      - SIRUN_TEST_DIR=plugin-q
+  node-bench-sirun-plugin-q-latest: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-bluebird-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - PLUGINS=bluebird
-      - SIRUN_TEST_DIR=plugin-bluebird
+  node-bench-sirun-plugin-bluebird-latest: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-http-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - PLUGINS=http
-      - SIRUN_TEST_DIR=plugin-http
+  node-bench-sirun-plugin-http-latest: *node-bench-sirun-base
 
-  node-bench-sirun-scope-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=scope
+  node-bench-sirun-scope-latest: *node-bench-sirun-base
 
-  node-bench-sirun-exporting-pipeline-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=exporting-pipeline
+  node-bench-sirun-exporting-pipeline-latest: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-net-latest:
-    <<: *node-bench-sirun-base
-    environment:
-      - SIRUN_TEST_DIR=plugin-net
+  node-bench-sirun-plugin-net-latest: *node-bench-sirun-base
 
   node-bench-sirun-profiler-latest:
     <<: *node-bench-sirun-base
@@ -470,23 +434,13 @@ jobs:
           - LAMBDA_EXECUTOR=local
           - START_WEB=0
 
-  node-upstream-axios:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=axios
+  node-upstream-axios: *node-upstream-base
 
   node-bluebird: *node-plugin-base
 
   node-bunyan: *node-plugin-base
 
-  node-upstream-bunyan:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=bunyan
+  node-upstream-bunyan: *node-upstream-base
 
   node-cassandra:
     <<: *node-plugin-base
@@ -501,12 +455,7 @@ jobs:
 
   node-connect: *node-plugin-base
 
-  node-upstream-connect:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=connect
+  node-upstream-connect: *node-upstream-base
 
   node-cucumber: *node-plugin-base
 
@@ -583,12 +532,7 @@ jobs:
 
   node-graphql: *node-plugin-base
 
-  node-upstream-graphql:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=graphql
+  node-upstream-graphql: *node-upstream-base
 
   node-grpc: *node-plugin-base
 
@@ -604,12 +548,7 @@ jobs:
 
   node-koa: *node-plugin-base
 
-  node-upstream-koa:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=koa
+  node-upstream-koa: *node-upstream-base
 
   node-limitd-client:
     <<: *node-plugin-base
@@ -698,12 +637,7 @@ jobs:
 
   node-pino: *node-plugin-base
 
-  node-upstream-pino:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=pino
+  node-upstream-pino: *node-upstream-base
 
   node-postgres:
     <<: *node-plugin-base
@@ -721,21 +655,11 @@ jobs:
 
   node-promise: *node-plugin-base
 
-  node-upstream-promise:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=promise
+  node-upstream-promise: *node-upstream-base
 
   node-q: *node-plugin-base
 
-  node-upstream-q:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=q
+  node-upstream-q: *node-upstream-base
 
   node-redis:
     <<: *node-plugin-base
