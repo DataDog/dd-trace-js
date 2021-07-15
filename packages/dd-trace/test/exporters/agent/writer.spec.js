@@ -103,6 +103,27 @@ function describeWriter (protocolVersion) {
       writer.flush(done)
     })
 
+    it('should enqueue flushes', (done) => {
+      encoder.count.returns(1)
+      request.onFirstCall().callsFake((options, fn) => setTimeout(fn, 1))
+
+      const spy1 = sinon.spy()
+      const spy2 = sinon.spy()
+
+      writer.flush(spy1)
+      writer.flush(spy2)
+
+      expect(spy1).not.to.have.been.called
+      expect(spy2).not.to.have.been.called
+
+      writer.flush(() => {
+        expect(spy1).to.have.been.called
+        expect(spy2).to.have.been.called
+
+        done()
+      })
+    })
+
     it('should flush its traces to the agent, and call callback', (done) => {
       const expectedData = Buffer.from('prefixed')
 

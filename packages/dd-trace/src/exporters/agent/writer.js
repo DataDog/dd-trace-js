@@ -17,6 +17,7 @@ class Writer {
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._encoderForVersion = new AgentEncoder(this)
+    this._pendingFlush = []
   }
 
   append (spans) {
@@ -71,15 +72,25 @@ class Writer {
     this._encoderForVersion.encode(trace)
   }
 
+  _flushQueue () {
+    for (const fn of this._pendingFlush) {
+      fn()
+    }
+
+    this._pendingFlush = []
+  }
+
   flush (done = () => {}) {
     const count = this._encoderForVersion.count()
+
+    this._pendingFlush.push(done)
 
     if (count > 0) {
       const payload = this._encoderForVersion.makePayload()
 
-      this._sendPayload(payload, count, done)
+      this._sendPayload(payload, count, () => this._flushQueue())
     } else {
-      done()
+      this._flushQueue()
     }
   }
 }

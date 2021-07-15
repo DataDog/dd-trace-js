@@ -41,6 +41,14 @@ describe('NoopTracer', () => {
     })
   })
 
+  describe('flush', () => {
+    it('should return the function', () => {
+      const fn = () => {}
+
+      expect(tracer.flush(fn)).to.equal(fn)
+    })
+  })
+
   describe('startSpan', () => {
     it('should return a span with a valid context', () => {
       const span = tracer.startSpan()
