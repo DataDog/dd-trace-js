@@ -171,8 +171,12 @@ node-plugin-base: &node-plugin-base
           - .nyc_merge/*
 
 node-upstream-base: &node-upstream-base
+  parameters:
+    node-version:
+      type: string
+      default: "12"
   docker:
-    - image: node:12
+    - image: node:<< parameters.node-version >>
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
@@ -377,7 +381,7 @@ jobs:
   node-amqplib:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=rabbitmq
           - PLUGINS=amqplib
@@ -386,7 +390,7 @@ jobs:
   node-amqp10:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10|rhea
@@ -399,7 +403,7 @@ jobs:
   node-aws-sdk:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - PLUGINS=aws-sdk
           - SERVICES=localstack
@@ -427,7 +431,7 @@ jobs:
   node-cassandra:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=cassandra
           - PLUGINS=cassandra-driver
@@ -442,7 +446,7 @@ jobs:
   node-couchbase:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=couchbase
           - PLUGINS=couchbase
@@ -453,7 +457,7 @@ jobs:
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=elasticsearch
           - PLUGINS=elasticsearch
@@ -481,7 +485,7 @@ jobs:
   node-google-cloud-pubsub:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=google-cloud-pubsub
           - PLUGINS=google-cloud-pubsub
@@ -490,7 +494,7 @@ jobs:
   node-kafkajs:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=kafka
           - PLUGINS=kafkajs
@@ -520,7 +524,7 @@ jobs:
   node-limitd-client:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=limitd
           - PLUGINS=limitd-client
@@ -533,7 +537,7 @@ jobs:
   node-memcached:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=memcached
           - PLUGINS=memcached
@@ -546,7 +550,7 @@ jobs:
   node-tedious:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mssql
           - PLUGINS=tedious
@@ -559,7 +563,7 @@ jobs:
   node-mysql:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mysql
           - PLUGINS=mysql|mysql2
@@ -571,7 +575,7 @@ jobs:
   node-mongodb-core:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
@@ -580,7 +584,7 @@ jobs:
   node-mongoose:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
@@ -607,7 +611,7 @@ jobs:
   node-postgres:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
@@ -625,7 +629,7 @@ jobs:
   node-redis:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=redis
           - PLUGINS=redis|ioredis
@@ -660,7 +664,7 @@ jobs:
   node-upstream-amqp10:
     <<: *node-upstream-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10
@@ -673,7 +677,7 @@ jobs:
   node-upstream-amqplib:
     <<: *node-upstream-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=rabbitmq
           - PLUGINS=amqplib
@@ -688,7 +692,7 @@ jobs:
   node-upstream-couchbase:
     <<: *node-upstream-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=couchbase
           - PLUGINS=couchbase
@@ -1065,16 +1069,16 @@ workflows:
   upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
-      - node-upstream-amqp10
-      - node-upstream-amqplib
-      - node-upstream-axios
-      - node-upstream-bunyan
-      - node-upstream-connect
-      - node-upstream-graphql
-      - node-upstream-koa
-      - node-upstream-pino
-      - node-upstream-promise
-      - node-upstream-q
+      - node-upstream-amqp10: *matrix-supported-node-versions
+      - node-upstream-amqplib: *matrix-supported-node-versions
+      - node-upstream-axios: *matrix-supported-node-versions
+      - node-upstream-bunyan: *matrix-supported-node-versions
+      - node-upstream-connect: *matrix-supported-node-versions
+      - node-upstream-graphql: *matrix-supported-node-versions
+      - node-upstream-koa: *matrix-supported-node-versions
+      - node-upstream-pino: *matrix-supported-node-versions
+      - node-upstream-promise: *matrix-supported-node-versions
+      - node-upstream-q: *matrix-supported-node-versions
 
   prebuild:
     jobs:
