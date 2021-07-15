@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
+const { expect } = require('chai')
 
 wrapIt()
 
@@ -40,6 +41,23 @@ describe('Plugin', () => {
         .catch(done)
 
       dns.lookup('localhost', 4, (err, address, family) => err && done(err))
+    })
+    
+    it('should not record lookup traces when the hostname is an IP address', done => {
+      let traceRecorded = false
+      agent
+        .use((traces) => {
+          traceRecorded = true
+        })
+        .catch(done);
+      
+      dns.lookup('127.0.0.1', 4, (err, address, family) => {
+        if (err) return done(err)
+        setTimeout(() => {
+          expect(traceRecorded).to.be.false;
+          done();
+        }, 10)
+      })
     })
 
     it('should instrument lookupService', done => {
