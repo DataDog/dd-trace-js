@@ -605,6 +605,15 @@ describe('Plugin', () => {
         datadogJestEnv.handleTestEvent(hookFailureEvent)
       })
 
+      it('does not crash when there is an error in a hook outside a test', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
+
+        const hookFailureEvent = {
+          name: 'hook_failure'
+        }
+        datadogJestEnv.handleTestEvent(hookFailureEvent).then(done).catch(done)
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {

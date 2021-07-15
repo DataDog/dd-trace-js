@@ -99,6 +99,12 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       event.name !== 'hook_failure') {
       return
     }
+    // for hook_failure events the test entry might not be defined, because the hook
+    // is not necessarily associated to a test:
+    if (!event.test) {
+      return
+    }
+
     const childOf = tracer.extract('text_map', {
       'x-datadog-trace-id': id().toString(10),
       'x-datadog-parent-id': '0000000000000000',
