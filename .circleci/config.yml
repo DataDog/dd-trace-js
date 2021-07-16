@@ -944,7 +944,11 @@ workflows:
       - node-bunyan: *matrix-supported-node-versions
       - node-cassandra: *matrix-supported-node-versions
       - node-connect: *matrix-supported-node-versions
-      - node-couchbase: *matrix-supported-node-versions
+      # The couchbase version range we support only supports up to Node 12
+      - node-couchbase:
+          matrix:
+            parameters:
+              node-version: ["12"]
       - node-cucumber: *matrix-supported-node-versions
       - node-dns: *matrix-supported-node-versions
       - node-elasticsearch: *matrix-supported-node-versions
