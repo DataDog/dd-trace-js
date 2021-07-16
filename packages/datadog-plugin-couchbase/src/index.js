@@ -125,10 +125,17 @@ function wrapCallback (span, callback) {
   }
 }
 
+const versions = [
+  // Support for Node.js 13 and up was added in couchbase@3
+  Number(process.versions.node.split('.')[0]) >= 13
+    ? '^3.0.0'
+    : '^2.6.5'
+]
+
 module.exports = [
   {
     name: 'couchbase',
-    versions: ['^2.6.5'],
+    versions,
     file: 'lib/bucket.js',
     patch (Bucket, tracer, config) {
       tracer.scope().bind(Bucket.prototype)
@@ -157,7 +164,7 @@ module.exports = [
   },
   {
     name: 'couchbase',
-    versions: ['^2.6.5'],
+    versions,
     file: 'lib/cluster.js',
     patch (Cluster, tracer, config) {
       this.wrap(Cluster.prototype, '_maybeInvoke', createWrapMaybeInvoke(tracer, config))
