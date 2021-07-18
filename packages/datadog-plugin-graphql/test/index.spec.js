@@ -1439,14 +1439,13 @@ describe('Plugin', () => {
               expect(config.hooks.parse).to.have.been.calledOnce
 
               const span = config.hooks.parse.firstCall.args[0]
-              const hookDocument = config.hooks.parse.firstCall.args[1]
-              const operation = config.hooks.parse.firstCall.args[2]
+              const hookSource = config.hooks.parse.firstCall.args[1]
+              const hookDocument = config.hooks.parse.firstCall.args[2]
 
               expect(span.context()._name).to.equal('graphql.parse')
 
+              expect(hookSource).to.equal(source)
               expect(hookDocument).to.equal(document)
-              expect(operation.operation).to.equal('query')
-              expect(operation.name.value).to.equal('MyQuery')
             })
             .then(done)
             .catch(done)

@@ -51,10 +51,9 @@ function createWrapParse (tracer, config) {
       analyticsSampler.sample(span, config.measured, true)
 
       let document
-      let operation
       try {
         document = parse.apply(this, arguments)
-        operation = getOperation(document)
+        const operation = getOperation(document)
 
         if (!operation) return document // skip schema parsing
 
@@ -69,7 +68,7 @@ function createWrapParse (tracer, config) {
         setError(span, e)
         throw e
       } finally {
-        config.hooks.parse(span, document, operation)
+        config.hooks.parse(span, source, document)
         finish(span)
       }
     }
