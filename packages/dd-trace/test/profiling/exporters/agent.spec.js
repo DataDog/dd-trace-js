@@ -9,6 +9,7 @@ const getPort = require('get-port')
 const { gunzipSync } = require('zlib')
 const CpuProfiler = require('../../../src/profiling/profilers/cpu')
 const HeapProfiler = require('../../../src/profiling/profilers/heap')
+const logger = require('../../../src/log')
 const { perftools } = require('pprof/proto/profile')
 const semver = require('semver')
 
@@ -74,7 +75,7 @@ describe('exporters/agent', () => {
     })
 
     it('should send profiles as pprof to the intake', async () => {
-      const exporter = new AgentExporter({ url })
+      const exporter = new AgentExporter({ url, logger })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
@@ -153,7 +154,7 @@ describe('exporters/agent', () => {
     })
 
     it('should support Unix domain sockets', async () => {
-      const exporter = new AgentExporter({ url: `unix://${url}` })
+      const exporter = new AgentExporter({ url: `unix://${url}`, logger })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }
