@@ -18,29 +18,43 @@ class AgentExporter {
       `http://${hostname || 'localhost'}:${port || 8126}`))
 
     this._url = url
+    this._logger = options.logger
   }
 
   export ({ profiles, start, end, tags }) {
     const form = new FormData()
     const types = Object.keys(profiles)
 
-    form.append('recording-start', start.toISOString())
-    form.append('recording-end', end.toISOString())
-    form.append('language', 'javascript')
-    form.append('runtime', 'nodejs')
-    form.append('format', 'pprof')
+    const fields = [
+      ['recording-start', start.toISOString()],
+      ['recording-end', end.toISOString()],
+      ['language', 'javascript'],
+      ['runtime', 'nodejs'],
+      ['format', 'pprof'],
 
-    form.append('tags[]', 'language:javascript')
-    form.append('tags[]', 'runtime:nodejs')
-    form.append('tags[]', 'format:pprof')
+      ['tags[]', 'language:javascript'],
+      ['tags[]', 'runtime:nodejs'],
+      ['tags[]', 'format:pprof'],
+      ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
+    ]
 
-    for (const key in tags) {
-      form.append('tags[]', `${key}:${tags[key]}`)
+    for (const [key, value] of fields) {
+      form.append(key, value)
     }
+
+    this._logger.debug(() => {
+      const body = fields.map(([key, value]) => `  ${key}: ${value}`).join('\n')
+      return `Building agent export report: ${'\n' + body}`
+    })
 
     for (let index = 0; index < types.length; index++) {
       const type = types[index]
       const buffer = profiles[type]
+
+      this._logger.debug(() => {
+        const bytes = buffer.toString('hex').match(/../g).join(' ')
+        return `Adding ${type} profile to agent export: ` + bytes
+      })
 
       form.append(`types[${index}]`, type)
       form.append(`data[${index}]`, buffer, {
@@ -64,6 +78,8 @@ class AgentExporter {
         options.hostname = this._url.hostname
         options.port = this._url.port
       }
+
+      this._logger.debug(`Submitting agent report to: ${JSON.stringify(options)}`)
 
       form.submit(options, (err, res) => {
         res.resume()

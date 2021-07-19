@@ -33,6 +33,7 @@ class Profiler extends EventEmitter {
           logger: this._logger,
           mapper
         })
+        this._logger.debug(`Started ${profiler.type} profiler`)
       }
     } catch (e) {
       this._logger.error(e)
@@ -51,6 +52,7 @@ class Profiler extends EventEmitter {
 
     for (const profiler of this._config.profilers) {
       profiler.stop()
+      this._logger.debug(`Stopped ${profiler.type} profiler`)
     }
 
     clearTimeout(this._timer)
@@ -81,10 +83,12 @@ class Profiler extends EventEmitter {
         if (!profile) continue
 
         profiles[profiler.type] = profile
+        this._logger.debug(`Collected ${profiler.type} profile`)
       }
 
       this._capture(this._config.flushInterval)
       await this._submit(profiles, start, end)
+      this._logger.debug(`Submitted profiles`)
     } catch (err) {
       this._logger.error(err)
       this.stop()
