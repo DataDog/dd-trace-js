@@ -911,6 +911,8 @@ declare namespace plugins {
      */
     hooks?: {
       execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
+      validate?: (span?: Span, document?: any, errors?: any) => void;
+      parse?: (span?: Span, source?: any, document?: any) => void;
     }
   }
 
