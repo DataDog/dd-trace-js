@@ -77,6 +77,7 @@
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
+    "pprof": "^3.0.0",
     "resolve": "^1.20.0",
     "semver": "^5.5.0",
     "shimmer": "1.2.1",
@@ -121,8 +122,5 @@
     "tape": "^4.9.1",
     "tar": "^4.4.8",
     "wait-on": "^5.0.0"
-  },
-  "optionalDependencies": {
-    "pprof": "^3.0.0"
   }
 }
