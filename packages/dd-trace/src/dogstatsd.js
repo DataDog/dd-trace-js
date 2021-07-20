@@ -1,7 +1,8 @@
 'use strict'
 
-const dgram = require('dgram')
 const lookup = require('dns').lookup // cache to avoid instrumentation
+const dgram = require('dgram')
+const isIP = require('net').isIP
 const log = require('./log')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
@@ -11,6 +12,7 @@ class Client {
     options = options || {}
 
     this._host = options.host || 'localhost'
+    this.__family = isIP(this._host)
     this._port = options.port || 8125
     this._prefix = options.prefix || ''
     this._tags = options.tags || []
@@ -36,11 +38,17 @@ class Client {
 
     this._queue = []
 
-    lookup(this._host, (err, address, family) => {
-      if (err) return log.error(err)
+    const send = (address, family) =>
+      queue.forEach((buffer) => this._send(address, family, buffer));
 
-      queue.forEach(buffer => this._send(address, family, buffer))
-    })
+    if (this._family !== 0) {
+      send(this._host, this._family)
+    } else {
+      lookup(this._host, (err, address, family) => {
+        if (err) return log.error(err)
+        send(address, family)
+      })
+    }
   }
 
   _send (address, family, buffer) {
