@@ -58,11 +58,24 @@ describe('profilers/native/cpu', () => {
     const profiler = new NativeCpuProfiler()
 
     profiler.start()
-    profiler.profile(() => {})
 
-    sinon.assert.calledOnce(pprof.encode)
+    const profile = profiler.profile()
+
+    expect(profile).to.equal('profile')
 
     sinon.assert.calledOnce(stop)
     sinon.assert.calledTwice(pprof.time.start)
+  })
+
+  it('should encode profiles from the pprof time profiler', () => {
+    const profiler = new NativeCpuProfiler()
+
+    profiler.start()
+
+    const profile = profiler.profile()
+
+    profiler.encode(profile)
+
+    sinon.assert.calledOnce(pprof.encode)
   })
 })

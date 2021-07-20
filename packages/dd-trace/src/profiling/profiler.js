@@ -29,18 +29,15 @@ class Profiler extends EventEmitter {
 
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
-        profiler.start({
-          logger: this._logger,
-          mapper
-        })
+        profiler.start({ mapper })
         this._logger.debug(`Started ${profiler.type} profiler`)
       }
+
+      this._capture(config.flushInterval)
     } catch (e) {
       this._logger.error(e)
       this.stop()
     }
-
-    this._capture(config.flushInterval)
 
     return this
   }
@@ -79,16 +76,16 @@ class Profiler extends EventEmitter {
 
     try {
       for (const profiler of this._config.profilers) {
-        const profile = await profiler.profile()
+        const profile = profiler.profile()
         if (!profile) continue
 
-        profiles[profiler.type] = profile
-        this._logger.debug(`Collected ${profiler.type} profile`)
+        profiles[profiler.type] = await profiler.encode(profile)
+        this._logger.debug(`Collected ${profiler.type} profile: ` + JSON.stringify(profile))
       }
 
       this._capture(this._config.flushInterval)
       await this._submit(profiles, start, end)
-      this._logger.debug(`Submitted profiles`)
+      this._logger.debug('Submitted profiles')
     } catch (err) {
       this._logger.error(err)
       this.stop()
@@ -96,6 +93,9 @@ class Profiler extends EventEmitter {
   }
 
   _submit (profiles, start, end) {
+    if (!Object.keys(profiles).length) {
+      return Promise.reject(new Error('No profiles to submit'))
+    }
     const { tags } = this._config
     const tasks = []
 

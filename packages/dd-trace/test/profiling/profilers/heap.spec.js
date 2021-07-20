@@ -55,11 +55,24 @@ describe('profilers/native/heap', () => {
     sinon.assert.calledOnce(pprof.heap.stop)
   })
 
-  it('should collect profiles from the internal heap profiler', () => {
+  it('should collect profiles from the pprof heap profiler', () => {
     const profiler = new NativeHeapProfiler()
 
     profiler.start()
-    profiler.profile(() => {})
+
+    pprof.heap.profile.returns('profile')
+
+    const profile = profiler.profile()
+
+    expect(profile).to.equal('profile')
+  })
+
+  it('should encode profiles from the pprof heap profiler', () => {
+    const profiler = new NativeHeapProfiler()
+
+    profiler.start()
+    const profile = profiler.profile()
+    profiler.encode(profile)
 
     sinon.assert.calledOnce(pprof.encode)
   })
