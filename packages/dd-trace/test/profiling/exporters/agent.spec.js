@@ -39,9 +39,9 @@ async function createProfile (periodType) {
 
   await wait(50)
 
-  const profile = await profiler.profile()
+  const profile = profiler.profile()
   profiler.stop()
-  return profile
+  return profiler.encode(profile)
 }
 
 const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
@@ -134,6 +134,55 @@ describe('exporters/agent', () => {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
+      })
+    })
+
+    it('should log exports and handle http errors gracefully', async () => {
+      const expectedLogs = [
+        /^Building agent export report: (\n {2}[a-z-]+(\[\])?: [a-z0-9-TZ:.]+)+$/,
+        /^Adding cpu profile to agent export:( [0-9a-f]{2})+$/,
+        /^Adding heap profile to agent export:( [0-9a-f]{2})+$/,
+        /^Submitting agent report to: {"[a-z]+":"[a-z0-9/.:]+"(,"[a-z]+":([0-9]+|"[a-z0-9/.:]+"))*}$/i,
+        /^Agent export response: {"error":"some error"}$/
+      ]
+      const exporter = new AgentExporter({
+        url,
+        logger: {
+          debug (message) {
+            expect(typeof message === 'function' ? message() : message)
+              .to.match(expectedLogs.shift())
+          }
+        }
+      })
+      const start = new Date()
+      const end = new Date()
+      const tags = { foo: 'bar' }
+
+      const [ cpu, heap ] = await Promise.all([
+        createProfile(['wall', 'microseconds']),
+        createProfile(['space', 'bytes'])
+      ])
+
+      const profiles = {
+        cpu,
+        heap
+      }
+
+      await new Promise((resolve, reject) => {
+        const json = JSON.stringify({ error: 'some error' })
+        app.post('/profiling/v1/input', upload.any(), (req, res) => {
+          const data = Buffer.from(json)
+          res.writeHead(400, {
+            'content-type': 'application/json',
+            'content-length': data.length
+          })
+          res.end(data)
+        })
+
+        exporter.export({ profiles, start, end, tags }).catch(error => {
+          expect(error.message).to.equal('Error from the agent: 400')
+          resolve()
+        })
       })
     })
   })

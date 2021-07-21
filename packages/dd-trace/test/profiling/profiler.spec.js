@@ -48,7 +48,8 @@ describe('profiler', () => {
       type: 'cpu',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().returns(cpuProfilePromise)
+      profile: sinon.stub().returns('profile'),
+      encode: sinon.stub().returns(cpuProfilePromise)
     }
 
     heapProfile = {}
@@ -57,7 +58,8 @@ describe('profiler', () => {
       type: 'heap',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().returns(heapProfilePromise)
+      profile: sinon.stub().returns('profile'),
+      encode: sinon.stub().returns(heapProfilePromise)
     }
 
     logger = consoleLogger
@@ -117,7 +119,7 @@ describe('profiler', () => {
 
   it('should stop when capturing failed', async () => {
     const rejected = Promise.reject(new Error('boom'))
-    cpuProfiler.profile.returns(rejected)
+    cpuProfiler.encode.returns(rejected)
 
     profiler.start({ profilers, exporters, logger })
 
