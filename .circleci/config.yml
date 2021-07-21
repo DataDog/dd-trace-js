@@ -945,7 +945,7 @@ jobs:
   node-upstream-pino:
     <<: *node-upstream-base
     docker:
-      - image: node:10
+      - image: node:12
         environment:
           - PLUGINS=pino
 
