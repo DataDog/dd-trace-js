@@ -944,7 +944,7 @@ workflows:
       - node-bunyan: *matrix-supported-node-versions
       - node-cassandra: *matrix-supported-node-versions
       - node-connect: *matrix-supported-node-versions
-      # The couchbase version range we support only supports up to Node 12
+      # The couchbase version range we support only supports up to Node 12. TODO fix this.
       - node-couchbase:
           matrix:
             parameters:
@@ -978,7 +978,11 @@ workflows:
       - node-oracledb: *matrix-supported-node-versions
       - node-paperplane: *matrix-supported-node-versions
       - node-pino: *matrix-supported-node-versions
-      - node-postgres: *matrix-supported-node-versions
+      # The pg version range we support doesn't work beyond Node 12. TODO fix this.
+      - node-postgres:
+          matrix:
+            parameters:
+              node-version: ["12"]
       - node-promise-js: *matrix-supported-node-versions
       - node-promise: *matrix-supported-node-versions
       - node-q: *matrix-supported-node-versions
