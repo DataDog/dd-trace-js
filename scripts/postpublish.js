@@ -8,7 +8,7 @@ const betaExpr = /\d+\.\d+\.\d+-.*/
 const legacyExpr = /0\.\d+\.\d+/
 
 if (!betaExpr.test(pkg.version) && !legacyExpr.test(pkg.version)) {
-  const releaseBranches = exec.pipe('git branch | grep -E "v\\d+\\.x"')
+  const releaseBranches = exec.pipe('git fetch && git branch -a | grep -E "/v\\d+\\.x"')
     .trim()
     .split(/\s+/)
   const releaseMajors = releaseBranches
