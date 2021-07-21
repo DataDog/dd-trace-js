@@ -5,21 +5,12 @@ class NativeCpuProfiler {
     this.type = 'wall'
     this._samplingInterval = options.samplingInterval || 10 * 1000
     this._mapper = undefined
-    this._logger = undefined
     this._pprof = undefined
   }
 
-  start ({ mapper, logger } = {}) {
+  start ({ mapper } = {}) {
     this._mapper = mapper
-    this._logger = logger
-
-    try {
-      this._pprof = require('pprof')
-    } catch (err) {
-      if (this._logger) {
-        this._logger.error(err)
-      }
-    }
+    this._pprof = require('pprof')
 
     // pprof otherwise crashes in worker threads
     if (!process._startProfilerIdleNotifier) {
@@ -33,18 +24,22 @@ class NativeCpuProfiler {
   }
 
   profile () {
-    if (!this._pprof) return
+    if (!this._stop) return
     const profile = this._stop()
     this._record()
+    return profile
+  }
+
+  encode (profile) {
     return this._pprof.encode(profile)
   }
 
   stop () {
+    if (!this._stop) return
     this._stop()
   }
 
   _record () {
-    if (!this._pprof) return
     this._stop = this._pprof.time.start(this._samplingInterval, null,
       this._mapper)
   }
