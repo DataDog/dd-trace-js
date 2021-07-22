@@ -7,25 +7,28 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 let tools
 
 function createWrapExecute (tracer, config, defaultFieldResolver) {
+  const wrappedDefaultFieldResolver = wrapResolve(defaultFieldResolver, tracer, config)
   return function wrapExecute (execute) {
     return function executeWithTrace () {
       const args = normalizeArgs(arguments)
       const schema = args.schema
       const document = args.document
       const source = document && document._datadog_source
-      const fieldResolver = args.fieldResolver || defaultFieldResolver
       const contextValue = args.contextValue = args.contextValue || {}
       const operation = getOperation(document, args.operationName)
 
-      if (contextValue._datadog_graphql) {
-        return execute.apply(this, arguments)
+      args.fieldResolver = args.fieldResolver || wrappedDefaultFieldResolver
+      if (!args.fieldResolver._datadog_patched) {
+        args.fieldResolver = wrapResolve(args.fieldResolver, tracer, config)
       }
-
-      args.fieldResolver = wrapResolve(fieldResolver, tracer, config)
 
       if (schema) {
         wrapFields(schema._queryType, tracer, config)
         wrapFields(schema._mutationType, tracer, config)
+      }
+
+      if (contextValue._datadog_graphql) {
+        return execute.call(this, args)
       }
 
       const span = startExecutionSpan(tracer, config, operation, args)
@@ -98,7 +101,6 @@ function createWrapValidate (tracer, config) {
         setError(span, e)
         throw e
       } finally {
-        config.hooks.validate(span, document, errors)
         finish(span)
       }
     }
@@ -352,7 +354,7 @@ function finishResolvers (contextValue) {
 
 function updateField (field, error) {
   // TODO: update this to also work with no-op spans without a hack
-  field.finishTime = field.span._getTime ? field.span._getTime() : 0
+  field.finishTime = field.finishTime || (field.span._getTime ? field.span._getTime() : 0)
   field.error = field.error || error
 }
 
