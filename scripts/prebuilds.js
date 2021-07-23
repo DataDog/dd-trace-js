@@ -50,7 +50,7 @@ function validatePrebuilds () {
           const content = fs.readFileSync(path.join('prebuilds', platform, file))
           const sum = fs.readFileSync(path.join('prebuilds', platform, `${file}.sha1`), 'ascii')
 
-          if (sum !== checksum(content)) {
+          if (sum !== checksum(content, { algorithm: 'sha256' })) {
             throw new Error(`Invalid checksum for "prebuilds/${platform}/${file}".`)
           }
         })
@@ -62,7 +62,7 @@ function validatePrebuilds () {
 
 function createChecksum () {
   const file = path.join(os.tmpdir(), 'prebuilds.tgz')
-  const sum = checksum(fs.readFileSync(file))
+  const sum = checksum(fs.readFileSync(file), { algorithm: 'sha256' })
 
   fs.writeFileSync(`${file}.sha1`, sum)
 }
