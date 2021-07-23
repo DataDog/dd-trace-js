@@ -18,7 +18,8 @@ module.exports = {
 
     config.externals = {
       'react': `commonjs2 ${react}`,
-      'react-dom': `commonjs2 ${reactDom}`
+      'react-dom': `commonjs2 ${reactDom}`,
+      '@mapbox/node-pre-gyp': '@mapbox/node-pre-gyp'
     }
 
     // TODO: drop support for Next <10.1, enable webpack5 above, and uncomment:
