@@ -104,7 +104,6 @@ node-bench-sirun-base: &node-bench-sirun-base
         paths:
           - benchmark/sirun/*-sirun-output.ndjson
 
-
 node-integration-base: &node-integration-base
   resource_class: small
   working_directory: ~/dd-trace-js

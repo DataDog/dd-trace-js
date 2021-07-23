@@ -93,6 +93,10 @@
     {
       "name": "react-dom",
       "versions": ["17.0.2"]
+    },
+    {
+      "name": "@mapbox/node-pre-gyp",
+      "versions": [">=1"]
     }
   ],
   "pg": [
