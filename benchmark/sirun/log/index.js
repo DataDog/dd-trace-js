@@ -1,13 +1,13 @@
 'use strict'
 
-const log = require('../../../../packages/dd-trace/src/log')
+const log = require('../../../packages/dd-trace/src/log')
 
 const {
   ITERATIONS = 1000,
   TEST_LEVEL = 'debug'
 } = process.env
 
-require('../../../..').init()
+require('../../..').init()
 
 log.use({
   debug () {},
