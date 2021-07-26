@@ -24,6 +24,7 @@ const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
 const metrics = require('../packages/dd-trace/src/metrics')
+const log = require('../packages/dd-trace/src/log')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
 const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
@@ -150,6 +151,57 @@ suite
   .add('metrics#decrement', {
     fn () {
       metrics.boolean('test')
+    }
+  })
+  .add('log (debug)', {
+    onStart () {
+      log.use({
+        debug: () => {},
+        error: () => {}
+      })
+      log.toggle(true, 'debug')
+    },
+
+    onComplete () {
+      log.toggle(false)
+    },
+
+    fn () {
+      log.debug('hello')
+    }
+  })
+  .add('log (error)', {
+    onStart () {
+      log.use({
+        debug: () => {},
+        error: () => {}
+      })
+      log.toggle(true, 'error')
+    },
+
+    onComplete () {
+      log.toggle(false)
+    },
+
+    fn () {
+      log.error('boom')
+    }
+  })
+  .add('log (none)', {
+    onStart () {
+      log.use({
+        debug: () => {},
+        error: () => {}
+      })
+      log.toggle(true, 'error')
+    },
+
+    onComplete () {
+      log.toggle(false)
+    },
+
+    fn () {
+      log.debug(() => (new Error('boom')).message)
     }
   })
 
