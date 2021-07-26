@@ -1,5 +1,14 @@
 'use strict'
 
+// TODO: remove direct usage of the logger across the tracer
+// TODO: refactor this and move to core
+
+const {
+  debugChannel,
+  errorChannel,
+  infoChannel,
+  warningChannel
+} = require('../../datadog-core')
 const NoopSpan = require('./noop/span')
 
 const _default = {
@@ -70,6 +79,8 @@ const log = {
     this._logLevel = _checkLogLevel(logLevel)
     this._tracer = tracer
 
+    this._resetListeners()
+
     return this
   },
 
@@ -86,64 +97,107 @@ const log = {
     delete this._tracer
     delete this.__noopSpan
     this._deprecate = memoize((code, message) => {
-      withNoop(() => this._logger.error(message))
-      return this
+      return this.warn(message)
     })
     this._logLevel = _checkLogLevel()
+    this._resetListeners()
 
     return this
   },
 
   debug (message) {
-    if (this._enabled && this._isLogLevelEnabled('debug')) {
-      withNoop(() => this._logger.debug(processMsg(message)))
-    }
-
-    return this
+    return this._log(debugChannel, message)
   },
 
   info (message) {
-    if (!this._logger.info) return this.debug(message)
-    if (this._enabled && this._isLogLevelEnabled('info')) {
-      withNoop(() => this._logger.info(processMsg(message)))
-    }
-
-    return this
+    return this._log(infoChannel, message)
   },
 
   warn (message) {
-    if (!this._logger.warn) return this.debug(message)
-    if (this._enabled && this._isLogLevelEnabled('warn')) {
-      withNoop(() => this._logger.warn(processMsg(message)))
-    }
-
-    return this
+    return this._log(warningChannel, message)
   },
 
   error (err) {
-    if (this._enabled && this._isLogLevelEnabled('error')) {
-      if (err instanceof Function) {
-        err = err()
-      }
-
-      if (typeof err !== 'object' || !err) {
-        err = String(err)
-      } else if (!err.stack) {
-        err = String(err.message || err)
-      }
-
-      if (typeof err === 'string') {
-        err = new Error(err)
-      }
-
-      withNoop(() => this._logger.error(err))
-    }
-
-    return this
+    return this._log(errorChannel, err)
   },
 
   deprecate (code, message) {
     return this._deprecate(code, message)
+  },
+
+  _log (logChannel, message) {
+    if (logChannel.hasSubscribers) {
+      logChannel.publish(processMsg(message))
+    }
+
+    return this
+  },
+
+  _onDebug (message) {
+    withNoop(() => log._logger.debug(message))
+
+    return this
+  },
+
+  _onInfo (message) {
+    if (!log._logger.info) return log._onDebug(message)
+
+    withNoop(() => log._logger.info(message))
+
+    return this
+  },
+
+  _onWarning (message) {
+    if (!log._logger.warn) return log._onDebug(message)
+
+    withNoop(() => log._logger.warn(message))
+
+    return this
+  },
+
+  _onError (err) {
+    if (err instanceof Function) {
+      err = err()
+    }
+
+    if (typeof err !== 'object' || !err) {
+      err = String(err)
+    } else if (!err.stack) {
+      err = String(err.message || err)
+    }
+
+    if (typeof err === 'string') {
+      err = new Error(err)
+    }
+
+    withNoop(() => log._logger.error(err))
+
+    return this
+  },
+
+  _resetListeners () {
+    debugChannel.hasSubscribers && debugChannel.unsubscribe(this._onDebug)
+    infoChannel.hasSubscribers && infoChannel.unsubscribe(this._onInfo)
+    warningChannel.hasSubscribers && warningChannel.unsubscribe(this._onWarning)
+    errorChannel.hasSubscribers && errorChannel.unsubscribe(this._onError)
+
+    if (!this._enabled) return
+
+    if (this._isLogLevelEnabled('debug')) {
+      debugChannel.subscribe(this._onDebug)
+    }
+
+    if (this._isLogLevelEnabled('info')) {
+      infoChannel.subscribe(this._onInfo)
+    }
+
+    if (this._isLogLevelEnabled('warn')) {
+      warningChannel.subscribe(this._onWarning)
+    }
+
+    if (this._isLogLevelEnabled('error')) {
+      errorChannel.subscribe(this._onError)
+    }
   }
 }
 

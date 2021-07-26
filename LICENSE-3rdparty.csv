@@ -1,6 +1,7 @@
 Component,Origin,License,Copyright
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
+require,diagnostics_channel,MIT,Copyright 2021 Simon D.
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman

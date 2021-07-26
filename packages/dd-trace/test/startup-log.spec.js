@@ -2,12 +2,14 @@
 
 const os = require('os')
 const tracerVersion = require('../lib/version')
+const log = require('../src/log')
 
 describe('startup logging', () => {
   let semverVersion
   let firstStderrCall
   let secondStderrCall
   before(() => {
+    log.toggle(true, 'debug')
     sinon.stub(console, 'info')
     sinon.stub(console, 'warn')
     semverVersion = require('semver/package.json').version
@@ -50,6 +52,10 @@ describe('startup logging', () => {
     secondStderrCall = console.warn.firstCall /* eslint-disable-line no-console */
     console.info.restore() /* eslint-disable-line no-console */
     console.warn.restore() /* eslint-disable-line no-console */
+  })
+
+  after(() => {
+    log.toggle(false)
   })
 
   it('startupLog should be formatted correctly', () => {

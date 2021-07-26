@@ -3,6 +3,49 @@ version: 2.1
 orbs:
   win: circleci/windows@2.2.0
 
+core-base: &core-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout
+    - &yarn-versions
+      run:
+        name: Versions
+        command: yarn versions
+    - &restore-yarn-cache
+      restore_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - &yarn-install
+      run:
+        name: Install dependencies
+        command: yarn install --ignore-engines
+    - &save-yarn-cache
+      save_cache:
+        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+        paths:
+          - ./node_modules
+          - ./yarn.lock
+    - &yarn-test-core
+      run:
+        name: Unit tests
+        command: yarn test:core:ci
+    - store_test_results:
+        path: test-results
+        when: always
+    - run:
+        name: Upload JUnit XML Report
+        command: yarn junit:upload
+        when: always
+    - run:
+        name: Merge coverage report
+        command: yarn cover:merge
+    - store_artifacts:
+        path: ./coverage
+    - persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - .nyc_merge/*
+
 node-core-base: &node-core-base
   resource_class: small
   working_directory: ~/dd-trace-js
@@ -29,10 +72,10 @@ node-core-base: &node-core-base
       run:
         name: Compile native code
         command: yarn rebuild
-    - &yarn-test-core
+    - &yarn-test-trace-core
       run:
         name: Unit tests
-        command: yarn test:core:ci
+        command: yarn test:trace:core:ci
     - store_test_results:
         path: test-results
         when: always
@@ -236,7 +279,7 @@ test-prebuild-linux-base: &test-prebuild-linux-base
     - *restore-yarn-cache
     - *yarn-install
     - *save-yarn-cache
-    - *yarn-test-core
+    - *yarn-test-trace-core
 
 prebuild-darwin-base: &prebuild-darwin-base
   macos:
@@ -421,6 +464,28 @@ jobs:
 
   # Core tests
 
+  core-12:
+    <<: *core-base
+    docker:
+      - image: node:12
+
+  core-14:
+    <<: *core-base
+    docker:
+      - image: node:14
+
+  core-16:
+    <<: *core-base
+    docker:
+      - image: node:16
+
+  core-latest:
+    <<: *core-base
+    docker:
+      - image: node
+
+  # Trace core tests
+
   node-core-12:
     <<: *node-core-base
     docker:
@@ -472,7 +537,7 @@ jobs:
       - *yarn-install
       - *save-yarn-cache
       - *yarn-rebuild
-      - *yarn-test-core
+      - *yarn-test-trace-core
 
   # Integration tests
 
@@ -1134,7 +1199,7 @@ jobs:
       - *yarn-install
       - *save-yarn-cache
       - *yarn-rebuild
-      - *yarn-test-core
+      - *yarn-test-trace-core
 
   # Prebuilds (alpine ia32)
 
@@ -1272,6 +1337,10 @@ workflows:
     jobs:
       - lint
       - typescript
+      - core-12
+      - core-14
+      - core-16
+      - core-latest
       - node-core-12
       - node-core-14
       - node-core-16
@@ -1333,6 +1402,10 @@ workflows:
       - node-winston
       - codecov:
           requires:
+            - core-12
+            - core-14
+            - core-16
+            - core-latest
             - node-core-12
             - node-core-14
             - node-core-16
@@ -1523,6 +1596,10 @@ workflows:
                 - master
     jobs:
       - lint
+      - core-12
+      - core-14
+      - core-16
+      - core-latest
       - node-core-12
       - node-core-14
       - node-core-16
