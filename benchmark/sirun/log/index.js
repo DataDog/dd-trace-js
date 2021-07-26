@@ -3,11 +3,14 @@
 const log = require('../../../packages/dd-trace/src/log')
 
 const {
+  DD_TRACE_DEBUG = 'true',
   ITERATIONS = 1000,
   TEST_LEVEL = 'debug'
 } = process.env
 
-require('../../..').init()
+require('../../..').init({
+  debug: DD_TRACE_DEBUG
+})
 
 log.use({
   debug () {},
