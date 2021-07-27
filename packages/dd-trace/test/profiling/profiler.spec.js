@@ -167,7 +167,7 @@ describe('profiler', () => {
   })
 
   it('should log exporter errors', async () => {
-    exporter.export.yields(new Error('boom'))
+    exporter.export.rejects(new Error('boom'))
 
     profiler.start({ profilers, exporters, logger })
 
@@ -176,5 +176,16 @@ describe('profiler', () => {
     await waitForExport()
 
     sinon.assert.calledOnce(consoleLogger.error)
+  })
+
+  it('should skip submit with no profiles', async () => {
+    const start = new Date()
+    const end = new Date()
+    try {
+      await profiler._submit({}, start, end)
+      throw new Error('should have got exception from _submit')
+    } catch (err) {
+      expect(err.message).to.equal('No profiles to submit')
+    }
   })
 })
