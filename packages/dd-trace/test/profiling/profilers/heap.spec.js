@@ -23,7 +23,7 @@ describe('profilers/native/heap', () => {
     }
 
     NativeHeapProfiler = proxyquire('../../../src/profiling/profilers/heap', {
-      'pprof': pprof
+      '@datadog/pprof': pprof
     })
   })
 

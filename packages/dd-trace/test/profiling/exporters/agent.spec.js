@@ -10,7 +10,7 @@ const { gunzipSync } = require('zlib')
 const CpuProfiler = require('../../../src/profiling/profilers/cpu')
 const HeapProfiler = require('../../../src/profiling/profilers/heap')
 const logger = require('../../../src/log')
-const { perftools } = require('pprof/proto/profile')
+const { perftools } = require('@datadog/pprof/proto/profile')
 const semver = require('semver')
 
 if (!semver.satisfies(process.version, '>=10.12')) {
