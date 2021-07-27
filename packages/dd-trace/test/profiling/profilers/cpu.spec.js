@@ -23,7 +23,7 @@ describe('profilers/native/cpu', () => {
     }
 
     NativeCpuProfiler = proxyquire('../../../src/profiling/profilers/cpu', {
-      'pprof': pprof
+      '@datadog/pprof': pprof
     })
   })
 
