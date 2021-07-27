@@ -10,7 +10,7 @@ class NativeCpuProfiler {
 
   start ({ mapper } = {}) {
     this._mapper = mapper
-    this._pprof = require('pprof')
+    this._pprof = require('@datadog/pprof')
 
     // pprof otherwise crashes in worker threads
     if (!process._startProfilerIdleNotifier) {
