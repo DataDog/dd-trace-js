@@ -63,11 +63,7 @@ function isObject (val) {
 function wrapCallback (config, tracer, request, span, done) {
   return tracer.scope().bind((err, res) => {
     if (err) {
-      span.addTags({
-        'error.type': err.name,
-        'error.msg': err.message,
-        'error.stack': err.stack
-      })
+      span.setTag('error', err)
     }
 
     span.finish()
