@@ -159,7 +159,8 @@ const redisOptions = {
 const sharedbOptions = {
   service: 'test',
   hooks: {
-    receive: (span, triggerContext) => {},
+    receive: (span, request) => {},
+    reply: (span, request, reply) => {},
   },
 };
 
