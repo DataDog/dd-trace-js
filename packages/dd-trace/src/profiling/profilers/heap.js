@@ -9,7 +9,7 @@ class NativeHeapProfiler {
   }
 
   start () {
-    this._pprof = require('pprof')
+    this._pprof = require('@datadog/pprof')
     this._pprof.heap.start(this._samplingInterval, this._stackDepth)
   }
 
