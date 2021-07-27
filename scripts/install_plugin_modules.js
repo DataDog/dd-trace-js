@@ -25,10 +25,7 @@ function assertVersions () {
   let filter = []
   let names = Object.keys(plugins)
 
-  if (process.env.PLUGINS && process.env.PLUGINS.trim().length === 0) {
-    delete process.env.PLUGINS
-  }
-  if (process.env.hasOwnProperty('PLUGINS')) {
+  if (process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.trim().length > 0) {
     filter = process.env.PLUGINS.split('|')
     names = names.filter(name => ~filter.indexOf(name))
   }
