@@ -3,6 +3,7 @@
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const semver = require('semver')
+const { expect } = require('chai')
 
 if (!semver.satisfies(process.version, '>=10.12')) {
   describe = describe.skip // eslint-disable-line no-global-assign
@@ -30,7 +31,21 @@ describe('profilers/native/cpu', () => {
   it('should start the internal time profiler', () => {
     const profiler = new NativeCpuProfiler()
 
+    // Verify start/stop profiler idle notifiers are created if not present.
+    // These functions may not exist in worker threads.
+    const start = process._startProfilerIdleNotifier
+    const stop = process._stopProfilerIdleNotifier
+
+    delete process._startProfilerIdleNotifier
+    delete process._stopProfilerIdleNotifier
+
     profiler.start()
+
+    expect(process._startProfilerIdleNotifier).to.be.a('function')
+    expect(process._stopProfilerIdleNotifier).to.be.a('function')
+
+    process._startProfilerIdleNotifier = start
+    process._stopProfilerIdleNotifier = stop
 
     sinon.assert.calledOnce(pprof.time.start)
     sinon.assert.calledWith(pprof.time.start, 10000)

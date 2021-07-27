@@ -3,6 +3,7 @@
 const { expect } = require('chai')
 const os = require('os')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
+const { FileExporter } = require('../../src/profiling/exporters/file')
 const CpuProfiler = require('../../src/profiling/profilers/cpu')
 const HeapProfiler = require('../../src/profiling/profilers/heap')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
@@ -45,7 +46,7 @@ describe('config', () => {
         warn () {},
         error () {}
       },
-      exporters: ['agent'],
+      exporters: 'agent,file',
       profilers: [new CpuProfiler()],
       url: 'http://localhost:1234/'
     }
@@ -62,8 +63,10 @@ describe('config', () => {
     expect(config.tags.version).to.equal(options.version)
     expect(config.flushInterval).to.equal(65 * 1000)
     expect(config.exporters).to.be.an('array')
-    expect(config.exporters.length).to.equal(1)
+    expect(config.exporters.length).to.equal(2)
+    expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
+    expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(CpuProfiler)
