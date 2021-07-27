@@ -66,11 +66,11 @@ function wrapCallback (config, tracer, request, span, done) {
       span.setTag('error', err)
     }
 
-    span.finish()
-
     if (config.hooks && config.hooks.reply) {
       config.hooks.reply(span, request, res)
     }
+
+    span.finish()
 
     if (done) {
       done(err, res)
