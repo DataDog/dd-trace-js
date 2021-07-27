@@ -12,9 +12,9 @@ describe('TracerProxy', () => {
   let Config
   let config
   let metrics
-  let analyticsSampler
   let log
   let profiler
+  let appsec
 
   beforeEach(() => {
     tracer = {
@@ -60,7 +60,8 @@ describe('TracerProxy', () => {
       enabled: true,
       experimental: {},
       logger: 'logger',
-      debug: true
+      debug: true,
+      appsec: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -68,12 +69,12 @@ describe('TracerProxy', () => {
       start: sinon.spy()
     }
 
-    analyticsSampler = {
-      enable: sinon.spy()
-    }
-
     profiler = {
       start: sinon.spy()
+    }
+
+    appsec = {
+      enable: sinon.spy()
     }
 
     Proxy = proxyquire('../src/proxy', {
@@ -81,10 +82,10 @@ describe('TracerProxy', () => {
       './noop/tracer': NoopTracer,
       './config': Config,
       './metrics': metrics,
-      './analytics_sampler': analyticsSampler,
       './instrumenter': Instrumenter,
       './log': log,
-      './profiler': profiler
+      './profiler': profiler,
+      './appsec': appsec
     })
 
     proxy = new Proxy()
@@ -162,12 +163,12 @@ describe('TracerProxy', () => {
         expect(metrics.start).to.have.been.called
       })
 
-      it('should enable the analytics sampler when configured', () => {
-        config.analytics = true
+      it('should enable appsec when configured', () => {
+        config.appsec = { enabled: true }
 
         proxy.init()
 
-        expect(analyticsSampler.enable).to.have.been.called
+        expect(appsec.enable).to.have.been.called
       })
     })
 

@@ -185,7 +185,7 @@ function startSpan (tracer, config, headers, sessionDetails) {
     tracer.inject(span, HTTP_HEADERS, headers)
   }
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured)
   return span
 }
 

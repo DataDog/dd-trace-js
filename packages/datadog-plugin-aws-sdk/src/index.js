@@ -40,7 +40,7 @@ function createWrapRequest (tracer, config) {
         awsHelpers.finish(span, response.error)
       })
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       awsHelpers.requestInject(span, this, serviceIdentifier, tracer)
 
@@ -89,11 +89,9 @@ function getHooks (config) {
 
 // TODO: test splitByAwsService when the test suite is fixed
 function getServiceName (serviceIdentifier, tracer, config) {
-  const service = config.service || tracer._service
-
-  return config.splitByAwsService
-    ? `${service}-aws-${serviceIdentifier}`
-    : service
+  return config.service
+    ? config.service
+    : `${tracer._service}-aws-${serviceIdentifier}`
 }
 
 // <2.1.35 has breaking changes for instrumentation

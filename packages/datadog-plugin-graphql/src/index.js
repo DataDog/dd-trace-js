@@ -48,10 +48,11 @@ function createWrapParse (tracer, config) {
     return function parseWithTrace (source) {
       const span = startSpan(tracer, config, 'parse')
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured, true)
 
+      let document
       try {
-        const document = parse.apply(this, arguments)
+        document = parse.apply(this, arguments)
         const operation = getOperation(document)
 
         if (!operation) return document // skip schema parsing
@@ -67,6 +68,7 @@ function createWrapParse (tracer, config) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.parse(span, source, document)
         finish(span)
       }
     }
@@ -78,15 +80,16 @@ function createWrapValidate (tracer, config) {
     return function validateWithTrace (schema, document, rules, typeInfo) {
       const span = startSpan(tracer, config, 'validate')
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured, true)
 
       // skip for schema stitching nested validation
       if (document && document.loc) {
         addDocumentTags(span, document)
       }
 
+      let errors
       try {
-        const errors = validate.apply(this, arguments)
+        errors = validate.apply(this, arguments)
 
         setError(span, errors && errors[0])
 
@@ -95,6 +98,7 @@ function createWrapValidate (tracer, config) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.validate(span, document, errors)
         finish(span)
       }
     }
@@ -231,7 +235,7 @@ function startExecutionSpan (tracer, config, operation, args) {
   addDocumentTags(span, args.document)
   addVariableTags(tracer, config, span, args.variableValues)
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured, true)
 
   return span
 }
@@ -240,8 +244,7 @@ function addExecutionTags (span, config, operation, document, operationName) {
   const type = operation && operation.operation
   const name = operation && operation.name && operation.name.value
   const tags = {
-    'resource.name': getSignature(document, name, type, config.signature),
-    'span.kind': 'server'
+    'resource.name': getSignature(document, name, type, config.signature)
   }
 
   if (type) {
@@ -295,6 +298,8 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   const span = startSpan(tracer, config, 'resolve', { childOf })
   const document = contextValue._datadog_graphql.source
   const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
+
+  analyticsSampler.sample(span, config.measured)
 
   span.addTags({
     'resource.name': `${info.fieldName}:${info.returnType}`,
@@ -378,7 +383,7 @@ function assertField (tracer, config, contextValue, info, path) {
 }
 
 function getService (tracer, config) {
-  return config.service || `${tracer._service}-graphql`
+  return config.service || tracer._service
 }
 
 function getOperation (document, operationName) {
@@ -459,8 +464,10 @@ function pathToArray (path) {
 function getHooks (config) {
   const noop = () => {}
   const execute = (config.hooks && config.hooks.execute) || noop
+  const parse = (config.hooks && config.hooks.parse) || noop
+  const validate = (config.hooks && config.hooks.validate) || noop
 
-  return { execute }
+  return { execute, parse, validate }
 }
 
 module.exports = [

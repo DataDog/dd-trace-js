@@ -1,6 +1,5 @@
 'use strict'
 
-const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
 
@@ -28,10 +27,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.lookup',
-            service: 'test-dns',
+            service: 'test',
             resource: 'localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.address': '127.0.0.1'
           })
@@ -47,10 +47,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.lookup_service',
-            service: 'test-dns',
+            service: 'test',
             resource: '127.0.0.1:22'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.address': '127.0.0.1'
           })
           expect(traces[0][0].metrics).to.deep.include({
@@ -68,10 +69,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
-            service: 'test-dns',
+            service: 'test',
             resource: 'A localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.rrtype': 'A'
           })
@@ -87,10 +89,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
-            service: 'test-dns',
+            service: 'test',
             resource: 'ANY localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.rrtype': 'ANY'
           })
@@ -106,10 +109,11 @@ describe('Plugin', () => {
         .use(traces => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.reverse',
-            service: 'test-dns',
+            service: 'test',
             resource: '127.0.0.1'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
             'dns.ip': '127.0.0.1'
           })
         })
@@ -142,27 +146,25 @@ describe('Plugin', () => {
       })
     })
 
-    if (semver.gte(process.version, '8.3.0')) {
-      it('should instrument Resolver', done => {
-        const resolver = new dns.Resolver()
+    it('should instrument Resolver', done => {
+      const resolver = new dns.Resolver()
 
-        agent
-          .use(traces => {
-            expect(traces[0][0]).to.deep.include({
-              name: 'dns.resolve',
-              service: 'test-dns',
-              resource: 'A localhost'
-            })
-            expect(traces[0][0].meta).to.deep.include({
-              'dns.hostname': 'localhost',
-              'dns.rrtype': 'A'
-            })
+      agent
+        .use(traces => {
+          expect(traces[0][0]).to.deep.include({
+            name: 'dns.resolve',
+            service: 'test',
+            resource: 'A localhost'
           })
-          .then(done)
-          .catch(done)
+          expect(traces[0][0].meta).to.deep.include({
+            'dns.hostname': 'localhost',
+            'dns.rrtype': 'A'
+          })
+        })
+        .then(done)
+        .catch(done)
 
-        resolver.resolve('localhost', err => err && done(err))
-      })
-    }
+      resolver.resolve('localhost', err => err && done(err))
+    })
   })
 })

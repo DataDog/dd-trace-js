@@ -16,7 +16,7 @@ function createWrapCommand (tracer, config) {
         }
       })
 
-      analyticsSampler.sample(span, config.analytics)
+      analyticsSampler.sample(span, config.measured)
 
       queryCompiler = wrapQueryCompiler(queryCompiler, this, server, scope, span)
 

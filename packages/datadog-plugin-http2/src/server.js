@@ -82,7 +82,7 @@ function instrumentStream (tracer, config, stream, headers, name, callback) {
     span.setTag(SERVICE_NAME, config.service)
   }
 
-  analyticsSampler.sample(span, config.analytics, true)
+  analyticsSampler.sample(span, config.measured, true)
 
   wrapStreamEnd(stream)
 

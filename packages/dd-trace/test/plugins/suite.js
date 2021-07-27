@@ -7,6 +7,7 @@ const os = require('os')
 const path = require('path')
 const https = require('https')
 const url = require('url')
+const { once } = require('events')
 const { expect } = require('chai')
 
 const mkdtemp = util.promisify(fs.mkdtemp)
@@ -103,12 +104,20 @@ async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   return result
 }
 
-async function run (modName, repoUrl, commitish, testCmd) {
-  const [withoutTracer, withTracer] = await Promise.all([
-    runOne(modName, repoUrl, commitish, false, testCmd),
-    runOne(modName, repoUrl, commitish, true, testCmd)
-  ])
-  return { withoutTracer, withTracer }
+async function run (modName, repoUrl, commitish, testCmd, parallel) {
+  if (parallel) {
+    const [withoutTracer, withTracer] = await Promise.all([
+      runOne(modName, repoUrl, commitish, false, testCmd),
+      runOne(modName, repoUrl, commitish, true, testCmd)
+    ])
+
+    return { withoutTracer, withTracer }
+  } else {
+    const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
+    const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
+
+    return { withoutTracer, withTracer }
+  }
 }
 
 function defaultRunner ({ withoutTracer, withTracer }) {
@@ -163,21 +172,15 @@ module.exports = async function runWithOptions (options) {
       repoUrl,
       commitish,
       testCmd = 'npm test',
-      runner = defaultRunner
+      runner = defaultRunner,
+      parallel = true
     } = options
-    return runner(await run(modName, repoUrl, commitish, testCmd))
+    return runner(await run(modName, repoUrl, commitish, testCmd, parallel))
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error(e)
     process.exitCode = 1
   }
-}
-
-function once (ee, event) {
-  // TODO remove this fn once we drop node 8 support
-  return new Promise(resolve => {
-    ee.once(event, resolve)
-  })
 }
 
 if (require.main === module) {

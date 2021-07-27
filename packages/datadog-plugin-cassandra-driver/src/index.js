@@ -1,5 +1,6 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
 
 function createWrapInnerExecute (tracer, config) {
@@ -132,6 +133,8 @@ function start (tracer, config, client = {}, query) {
       'cassandra.keyspace': client.keyspace
     }
   })
+
+  analyticsSampler.sample(span, config.measured)
 
   return span
 }

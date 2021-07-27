@@ -104,11 +104,12 @@ function startSpan (tracer, config, operation, tags) {
   const span = tracer.startSpan(operation, {
     childOf,
     tags: Object.assign({
-      'service.name': config.service || `${tracer._service}-dns`
+      'service.name': config.service || tracer._service,
+      'span.kind': 'client'
     }, tags)
   })
 
-  analyticsSampler.sample(span, config.analytics)
+  analyticsSampler.sample(span, config.measured)
 
   return span
 }
