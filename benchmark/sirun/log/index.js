@@ -5,7 +5,7 @@ const log = require('../../../packages/dd-trace/src/log')
 const {
   DD_TRACE_DEBUG = 'true',
   ITERATIONS = 1000,
-  TEST_LEVEL = 'debug'
+  WITH_LEVEL = 'debug'
 } = process.env
 
 require('../../..').init({
@@ -20,5 +20,5 @@ log.use({
 })
 
 for (let i = 0; i < ITERATIONS; i++) {
-  log[TEST_LEVEL](() => 'message')
+  log[WITH_LEVEL](() => 'message')
 }
