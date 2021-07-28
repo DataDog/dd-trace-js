@@ -62,7 +62,7 @@ describe('exporters/agent', () => {
   describe('using HTTP', () => {
     beforeEach(done => {
       getPort().then(port => {
-        url = `http://127.0.0.1:${port}`
+        url = new URL(`http://127.0.0.1:${port}`)
 
         listener = app.listen(port, '127.0.0.1', done)
         listener.on('connection', socket => sockets.push(socket))
@@ -203,7 +203,7 @@ describe('exporters/agent', () => {
     })
 
     it('should support Unix domain sockets', async () => {
-      const exporter = new AgentExporter({ url: `unix://${url}`, logger })
+      const exporter = new AgentExporter({ url: new URL(`unix://${url}`), logger })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }

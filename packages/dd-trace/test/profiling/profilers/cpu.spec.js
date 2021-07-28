@@ -1,13 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const semver = require('semver')
-const { expect } = require('chai')
-
-if (!semver.satisfies(process.version, '>=10.12')) {
-  describe = describe.skip // eslint-disable-line no-global-assign
-}
 
 describe('profilers/native/cpu', () => {
   let NativeCpuProfiler

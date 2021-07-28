@@ -1,24 +1,11 @@
 'use strict'
 
-const coalesce = require('koalas')
 const FormData = require('form-data')
-const { URL } = require('url')
-
-const {
-  DD_TRACE_AGENT_URL,
-  DD_AGENT_HOST,
-  DD_TRACE_AGENT_PORT
-} = process.env
 
 class AgentExporter {
-  constructor (options = {}) {
-    const hostname = coalesce(options.hostname, DD_AGENT_HOST, 'localhost')
-    const port = coalesce(options.port, DD_TRACE_AGENT_PORT, 8126)
-    const url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL,
-      `http://${hostname || 'localhost'}:${port || 8126}`))
-
+  constructor ({ url, logger } = {}) {
     this._url = url
-    this._logger = options.logger
+    this._logger = logger
   }
 
   export ({ profiles, start, end, tags }) {
