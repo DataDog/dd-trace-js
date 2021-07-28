@@ -29,26 +29,18 @@ class Lambda {
           const _datadog = {}
           tracer.inject(span, 'text_map', _datadog)
           let clientContext = {}
-          // eslint-disable-next-line no-console
-          console.log('AGOCS! on lambda.js line 33, request.params is ' + JSON.stringify(request.params))
           if (request.params.ClientContext) {
             const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
             clientContext = JSON.parse(clientContextJson)
           }
-          // eslint-disable-next-line no-console
-          console.log('AGOCS! on lambda.js line 39, clientContext is ' + JSON.stringify(clientContext))
           if (clientContext.custom) {
             clientContext.custom._datadog = _datadog
           } else {
             clientContext.custom = { _datadog }
           }
-          // eslint-disable-next-line no-console
-          console.log('AGOCS! on lambda.js line 46, the mutated clientContext is ' + JSON.stringify(clientContext))
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.log('AGOCS! We\'ve hit an error! ' + err + '\n' + err.stack)
           log.error(err)
         }
       }
