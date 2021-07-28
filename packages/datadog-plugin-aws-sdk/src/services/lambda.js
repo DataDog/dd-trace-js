@@ -33,11 +33,10 @@ class Lambda {
             const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
             clientContext = JSON.parse(clientContextJson)
           }
-          if (clientContext.custom) {
-            clientContext.custom._datadog = _datadog
-          } else {
-            clientContext.custom = { _datadog }
+          if (!clientContext.custom) {
+            clientContext.custom = {}
           }
+          clientContext.custom._datadog = _datadog
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {
