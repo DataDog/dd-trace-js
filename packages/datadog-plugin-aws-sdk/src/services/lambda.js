@@ -26,22 +26,23 @@ class Lambda {
 
       if (isSyncInvocation) {
         try {
-          const traceContext = {}
-          tracer.inject(span, 'text_map', traceContext)
+          const _datadog = {}
+          tracer.inject(span, 'text_map', _datadog)
+          if (!request.params.ClientContext) {
+            const context = { custom: { _datadog } }
+            request.params.ClientContext = Buffer.from(JSON.stringify(context)).toString('base64')
+          } else {
+            const existingContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
+            const existingContext = JSON.parse(existingContextJson)
 
-          let ClientContextObject = {}
-          if (request.params.ClientContext) {
-            ClientContextObject = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
+            if (existingContext.custom) {
+              existingContext.custom._datadog = _datadog
+            } else {
+              existingContext.custom = { _datadog }
+            }
+            const newContextBase64 = Buffer.from(JSON.stringify(existingContext)).toString('base64')
+            request.params.ClientContext = newContextBase64
           }
-          if (!ClientContextObject.custom) {
-            ClientContextObject.custom = {}
-          }
-
-          // Check for legacy compatability here.
-          ClientContextObject.custom = { '_datadog': traceContext }
-
-          const updatedContextBase64 = Buffer.from(JSON.stringify(ClientContextObject)).toString('base64')
-          request.params.ClientContext = updatedContextBase64
         } catch (err) {
           log.error(err)
         }
