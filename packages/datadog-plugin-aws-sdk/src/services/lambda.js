@@ -25,6 +25,9 @@ class Lambda {
       const isSyncInvocation = !request.params.InvocationType ||
         request.params.InvocationType === 'RequestResponse'
 
+      const config = awsHelpers.getConfig()
+      // eslint-disable-next-line no-console
+      console.log('AGOCS! Got a config!', config)
       if (isSyncInvocation) {
         try {
           // Check to see if there's already a config on the request
@@ -36,9 +39,6 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
-          const config = awsHelpers.getConfig()
-          // eslint-disable-next-line no-console
-          console.log('AGOCS! Got a config!', config)
           if (config.invokeWithLegacyContext) {
             clientContext.custom._datadog = {}
             tracer.inject(span, 'text_map', clientContext.custom._datadog)
