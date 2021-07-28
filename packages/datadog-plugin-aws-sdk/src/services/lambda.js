@@ -26,6 +26,9 @@ class Lambda {
 
       if (isSyncInvocation) {
         try {
+          // Check to see if there's already a config on the request
+          // eslint-disable-next-line no-console
+          console.log('AGOCS! Here is the request: ', JSON.stringify(request))
           let clientContext = {}
           if (request.params.ClientContext) {
             const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
@@ -34,6 +37,7 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
+          // Check the new config parameter here
           clientContext.custom._datadog = {}
           tracer.inject(span, 'text_map', clientContext.custom._datadog)
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
