@@ -61,6 +61,10 @@ describe('Plugin', () => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
+            // eslint-disable-next-line no-console
+            console.log('AGOCS! injectedTraceData is ' + JSON.stringify(injectedTraceData))
+            // eslint-disable-next-line no-console
+            console.log('AGOCS! clientContextSent is ' + clientContextSent)
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
