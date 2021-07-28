@@ -32,7 +32,7 @@ class Lambda {
           // eslint-disable-next-line no-console
           console.log('AGOCS! on lambda.js line 33, request.params is ' + JSON.stringify(request.params))
           if (request.params.ClientContext) {
-            const clientContextJson = Buffer.from(request.params.clientContext, 'base64').toString('utf-8')
+            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
             clientContext = JSON.parse(clientContextJson)
           }
           // eslint-disable-next-line no-console
