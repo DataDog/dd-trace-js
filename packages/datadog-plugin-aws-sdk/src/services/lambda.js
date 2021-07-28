@@ -48,7 +48,7 @@ class Lambda {
           request.params.ClientContext = newContextBase64
         } catch (err) {
           // eslint-disable-next-line no-console
-          console.log('AGOCS! We\'ve hit an error!' + err)
+          console.log('AGOCS! We\'ve hit an error! ' + err + '\n' + err.stack)
           log.error(err)
         }
       }
