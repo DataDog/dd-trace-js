@@ -149,7 +149,7 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Get plugin name
         command: |
-          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-')" > /tmp/dd_plugins_var
+          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
     - run:
         name: Unit tests
         command: PLUGINS=$(cat /tmp/dd_plugins_var) yarn test:plugins:ci
@@ -184,7 +184,9 @@ node-upstream-base: &node-upstream-base
         yarn-args: ""
     - run:
         name: Library test suite
-        command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
+        command: |
+          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace(/-\d*$/, '')")
+          node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
 
 prebuild-linux-base: &prebuild-linux-base
   docker:

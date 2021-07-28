@@ -184,9 +184,8 @@ module.exports = async function runWithOptions (options) {
 }
 
 if (require.main === module) {
-  const { PLUGINS, CIRCLE_JOB } = process.env
-  const pluginNames = PLUGINS || CIRCLE_JOB.replace('node-upstream-', '')
-  const plugins = pluginNames.split('|')
+  const { PLUGINS } = process.env
+  const plugins = PLUGINS.split('|')
   ;(async () => {
     for (const plugin of plugins) {
       const suitePath = path.join(__dirname, `../../../datadog-plugin-${plugin}/test/suite.js`)
