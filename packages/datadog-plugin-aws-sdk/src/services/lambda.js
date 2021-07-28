@@ -1,6 +1,6 @@
 'use strict'
 
-const awsHelpers = require('./helpers')
+const awsHelpers = require('../helpers')
 const log = require('../../../dd-trace/src/log')
 
 class Lambda {
