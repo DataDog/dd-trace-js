@@ -26,8 +26,6 @@ class Lambda {
 
       if (isSyncInvocation) {
         try {
-          const _datadog = {}
-          tracer.inject(span, 'text_map', _datadog)
           let clientContext = {}
           if (request.params.ClientContext) {
             const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
@@ -36,7 +34,7 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
-          clientContext.custom._datadog = _datadog
+          tracer.inject(span, 'text_map', clientContext.custom._datadog)
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {
