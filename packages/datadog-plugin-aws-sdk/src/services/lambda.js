@@ -1,5 +1,6 @@
 'use strict'
 
+const awsHelpers = require('./helpers')
 const log = require('../../../dd-trace/src/log')
 
 class Lambda {
@@ -25,8 +26,6 @@ class Lambda {
         request.params.InvocationType === 'RequestResponse'
 
       if (isSyncInvocation) {
-        // eslint-disable-next-line no-console
-        console.log('AGOCS! Here is the request: ', request)
         try {
           // Check to see if there's already a config on the request
           let clientContext = {}
@@ -37,9 +36,15 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
-          // Check the new config parameter here
-          clientContext.custom._datadog = {}
-          tracer.inject(span, 'text_map', clientContext.custom._datadog)
+          const config = awsHelpers.getConfig()
+          // eslint-disable-next-line no-console
+          console.log('AGOCS! Got a config!', config)
+          if (config.invokeWithLegacyContext) {
+            clientContext.custom._datadog = {}
+            tracer.inject(span, 'text_map', clientContext.custom._datadog)
+          } else {
+            tracer.inject(span, 'text_map', clientContext.custom)
+          }
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {

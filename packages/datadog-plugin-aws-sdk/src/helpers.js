@@ -13,11 +13,21 @@ const services = {
   sqs: getService(require('./services/sqs'))
 }
 
+let globalConfig = {}
+
 function getService (Service) {
   return new Service()
 }
 
 const helpers = {
+  setConfig (config) {
+    globalConfig = config
+  },
+
+  getConfig () {
+    return globalConfig
+  },
+
   finish (span, err) {
     if (err) {
       span.setTag('error', err)

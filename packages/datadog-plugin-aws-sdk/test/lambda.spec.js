@@ -45,7 +45,9 @@ describe('Plugin', () => {
           }, (err, res) => {
             if (err) return done(err)
 
-            agent.load('aws-sdk').then(done, done)
+            agent.load('aws-sdk', {
+              invokeWithLegacyContext: true
+            }).then(done, done)
           })
           tracer = require('../../dd-trace')
         })
