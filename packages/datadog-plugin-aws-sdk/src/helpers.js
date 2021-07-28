@@ -13,21 +13,11 @@ const services = {
   sqs: getService(require('./services/sqs'))
 }
 
-let globalConfig = {}
-
 function getService (Service) {
   return new Service()
 }
 
 const helpers = {
-  setConfig (config) {
-    globalConfig = config
-  },
-
-  getConfig () {
-    return globalConfig
-  },
-
   finish (span, err) {
     if (err) {
       span.setTag('error', err)
@@ -85,11 +75,11 @@ const helpers = {
     }
   },
 
-  requestInject (span, request, serviceName, tracer) {
+  requestInject (span, request, serviceName, tracer, config) {
     if (!span) return
 
     const inject = services[serviceName] && services[serviceName].requestInject
-    if (inject) inject(span, request, tracer)
+    if (inject) inject(span, request, tracer, config)
   },
 
   wrapCb (cb, serviceName, tags, request, tracer, childOf) {

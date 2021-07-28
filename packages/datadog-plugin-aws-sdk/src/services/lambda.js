@@ -1,6 +1,5 @@
 'use strict'
 
-const awsHelpers = require('../helpers')
 const log = require('../../../dd-trace/src/log')
 
 class Lambda {
@@ -15,7 +14,7 @@ class Lambda {
     })
   }
 
-  requestInject (span, request, tracer) {
+  requestInject (span, request, tracer, config) {
     const operation = request.operation
     if (operation === 'invoke') {
       if (!request.params) {
@@ -25,7 +24,6 @@ class Lambda {
       const isSyncInvocation = !request.params.InvocationType ||
         request.params.InvocationType === 'RequestResponse'
 
-      const config = awsHelpers.getConfig()
       // eslint-disable-next-line no-console
       console.log('AGOCS! Got a config!', config)
       if (isSyncInvocation) {
