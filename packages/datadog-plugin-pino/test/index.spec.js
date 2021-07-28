@@ -105,9 +105,15 @@ describe('Plugin', () => {
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.have.property('msg', error.message)
-            expect(record).to.have.property('type', 'Error')
-            expect(record).to.have.property('stack', error.stack)
+            if (record.err) { // pino >=7
+              expect(record.err).to.have.property('message', error.message)
+              expect(record.err).to.have.property('type', 'Error')
+              expect(record.err).to.have.property('stack', error.stack)
+            } else { // pino <7
+              expect(record).to.have.property('msg', error.message)
+              expect(record).to.have.property('type', 'Error')
+              expect(record).to.have.property('stack', error.stack)
+            }
           })
         })
 
