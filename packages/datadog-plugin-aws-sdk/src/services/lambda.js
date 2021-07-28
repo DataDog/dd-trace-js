@@ -47,6 +47,8 @@ class Lambda {
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {
+          // eslint-disable-next-line no-console
+          console.log('AGOCS! We\'ve hit an error!' + err)
           log.error(err)
         }
       }
