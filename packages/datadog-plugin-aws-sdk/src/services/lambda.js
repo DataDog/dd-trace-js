@@ -25,10 +25,10 @@ class Lambda {
         request.params.InvocationType === 'RequestResponse'
 
       if (isSyncInvocation) {
+        // eslint-disable-next-line no-console
+        console.log('AGOCS! Here is the request: ', request)
         try {
           // Check to see if there's already a config on the request
-          // eslint-disable-next-line no-console
-          console.log('AGOCS! Here is the request: ', JSON.stringify(request))
           let clientContext = {}
           if (request.params.ClientContext) {
             const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
