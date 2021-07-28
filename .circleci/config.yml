@@ -92,12 +92,12 @@ node-bench-sirun-base: &node-bench-sirun-base
   steps:
     - checkout-and-yarn-install
     - run:
-        name: Get plugin name
-        command: |
-          node -p "process.env.CIRCLE_JOB.includes('plugin') ? process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '') : ''" > /tmp/dd_plugins_var
-    - run:
         name: Install dependencies
-        command: "PLUGINS=$(cat /tmp/dd_plugins_var) node ./scripts/install_plugin_modules"
+        command: |
+          if [[ $CIRLE_JOB == *"plugin"* ]]; then
+            export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '')")
+            node ./scripts/install_plugin_modules
+          fi
     - run:
         name: Install system deps
         command: apt-get update && apt-get install -y valgrind wget
