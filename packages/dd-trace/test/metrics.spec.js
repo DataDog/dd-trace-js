@@ -149,7 +149,7 @@ describe('metrics', () => {
       expect(client.increment).to.have.been.calledWith('test.count', 3)
     })
 
-    it('should fail to add a record to a histogram since lazy loading has failed', () => {
+    it('does not add a record to a histogram when lazy loading has failed', () => {
       metrics = proxyquire('../src/metrics', {
         './dogstatsd': Client,
         './histogram': null // make histogram lazy-loading fail
