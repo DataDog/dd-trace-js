@@ -7,11 +7,11 @@ const path = require('path')
 const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('./log')
-const Histogram = require('./histogram')
 
 const INTERVAL = 10 * 1000
 
 let nativeMetrics = null
+let Histogram = null
 
 let interval
 let client
@@ -38,10 +38,12 @@ module.exports = {
 
     try {
       nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
+      Histogram = require('./histogram')
       nativeMetrics.start()
     } catch (e) {
       log.error(e)
       nativeMetrics = null
+      Histogram = null
     }
 
     client = new Client({
@@ -98,7 +100,7 @@ module.exports = {
   },
 
   histogram (name, value, tag) {
-    if (!client) return
+    if (!client || !Histogram) return
 
     histograms[name] = histograms[name] || new Map()
 

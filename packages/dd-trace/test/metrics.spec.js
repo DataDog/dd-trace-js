@@ -148,6 +148,23 @@ describe('metrics', () => {
       expect(client.gauge).to.have.been.calledWith('test.95percentile', 3)
       expect(client.increment).to.have.been.calledWith('test.count', 3)
     })
+
+    it('should fail to add a record to a histogram since lazy loading has failed', () => {
+      metrics = proxyquire('../src/metrics', {
+        './dogstatsd': Client,
+        './histogram': null // make histogram lazy-loading fail
+      })
+
+      metrics.start(config)
+
+      metrics.histogram('test', 1)
+      metrics.histogram('test', 2)
+      metrics.histogram('test', 3)
+
+      clock.tick(10000)
+
+      expect(client.gauge).not.have.been.calledWith('test.max', 3)
+    })
   })
 
   describe('increment', () => {
