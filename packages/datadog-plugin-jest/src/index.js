@@ -54,11 +54,15 @@ const isTimeout = (event) => {
 function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
     if (event.name === 'test_retry') {
-      const context = this.getVmContext()
-      const { currentTestName } = context.expect.getState()
+      let testName = event.test && event.test.name
+      if (typeof this.getVmContext === 'function') {
+        const context = this.getVmContext()
+        const { currentTestName } = context.expect.getState()
+        testName = currentTestName
+      }
       // If it's a retry, we restore the original test function so that it is not wrapped again
-      if (this.originalTestFnByTestName[currentTestName]) {
-        event.test.fn = this.originalTestFnByTestName[currentTestName]
+      if (this.originalTestFnByTestName[testName]) {
+        event.test.fn = this.originalTestFnByTestName[testName]
       }
       return
     }
@@ -66,14 +70,16 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       if (!isTimeout(event)) {
         return
       }
-      const context = this.getVmContext()
-      if (context) {
-        const { currentTestName } = context.expect.getState()
-        const testSpan = this.testSpansByTestName[`${currentTestName}_${event.test.invocations}`]
-        if (testSpan) {
-          testSpan.setTag(ERROR_TYPE, 'Timeout')
-          testSpan.setTag(ERROR_MESSAGE, event.error)
-          testSpan.setTag(TEST_STATUS, 'fail')
+      if (typeof this.getVmContext === 'function') {
+        const context = this.getVmContext()
+        if (context) {
+          const { currentTestName } = context.expect.getState()
+          const testSpan = this.testSpansByTestName[`${currentTestName}_${event.test.invocations}`]
+          if (testSpan) {
+            testSpan.setTag(ERROR_TYPE, 'Timeout')
+            testSpan.setTag(ERROR_MESSAGE, event.error)
+            testSpan.setTag(TEST_STATUS, 'fail')
+          }
         }
       }
       return
@@ -111,10 +117,13 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       'x-datadog-sampled': 1
     })
     let testName = event.test.name
-    const context = this.getVmContext()
-    if (context) {
-      const { currentTestName } = context.expect.getState()
-      testName = currentTestName
+    let context
+    if (typeof this.getVmContext === 'function') {
+      context = this.getVmContext()
+      if (context) {
+        const { currentTestName } = context.expect.getState()
+        testName = currentTestName
+      }
     }
     const commonSpanTags = {
       [TEST_TYPE]: 'test',
