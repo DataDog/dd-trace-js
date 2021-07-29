@@ -1,6 +1,6 @@
 describe('jest-test-suite async', () => {
   // eslint-disable-next-line
-  jest.setTimeout(1000)
+  jest.setTimeout(200)
   it('done', (done) => {
     setTimeout(() => {
       expect(100).toEqual(100)
@@ -44,7 +44,19 @@ describe('jest-test-suite async', () => {
       setTimeout(() => {
         expect(100).toEqual(100)
         resolve()
-      }, 1200)
+      }, 300)
     )
+  })
+  it('passes', () => {
+    expect(true).toEqual(true)
+  })
+  it('fails', () => {
+    expect(true).toEqual(false)
+  })
+  it.skip('skips', () => {
+    expect(100).toEqual(100)
+  })
+  test.skip('skips with test too', () => {
+    expect(100).toEqual(100)
   })
 })
