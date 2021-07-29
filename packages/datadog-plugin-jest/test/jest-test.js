@@ -1,4 +1,4 @@
-describe('jest-test-suite async', () => {
+describe('jest-test-suite', () => {
   // eslint-disable-next-line
   jest.setTimeout(200)
   it('done', (done) => {

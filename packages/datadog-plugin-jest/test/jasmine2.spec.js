@@ -39,12 +39,12 @@ describe('Plugin', () => {
         if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
 
         const tests = [
-          { name: 'jest-test-suite async done', status: 'pass' },
-          { name: 'jest-test-suite async done fail', status: 'fail' },
-          { name: 'jest-test-suite async done fail uncaught', status: 'fail' },
-          { name: 'jest-test-suite async promise passes', status: 'pass' },
-          { name: 'jest-test-suite async promise fails', status: 'fail' },
-          { name: 'jest-test-suite async timeout', status: 'fail' },
+          { name: 'jest-test-suite done', status: 'pass' },
+          { name: 'jest-test-suite done fail', status: 'fail' },
+          { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+          { name: 'jest-test-suite promise passes', status: 'pass' },
+          { name: 'jest-test-suite promise fails', status: 'fail' },
+          { name: 'jest-test-suite timeout', status: 'fail' },
           { name: 'jest-test-suite passes', status: 'pass' },
           { name: 'jest-test-suite fails', status: 'fail' },
           { name: 'jest-test-suite skips', status: 'skip' },
