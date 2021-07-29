@@ -57,9 +57,9 @@ function createWrapAddHook (tracer, config) {
             const promise = fn.apply(this, arguments)
 
             if (promise && typeof promise.catch === 'function') {
-              promise.catch(err => {
+              return promise.catch(err => {
                 web.addError(req, err)
-                return err
+                throw err
               })
             }
 
