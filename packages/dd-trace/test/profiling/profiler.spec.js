@@ -188,4 +188,31 @@ describe('profiler', () => {
       expect(err.message).to.equal('No profiles to submit')
     }
   })
+
+  it('should have a new start time for each capture', async () => {
+    profiler.start({ profilers, exporters })
+
+    clock.tick(INTERVAL)
+    await waitForExport()
+
+    const { start, end } = exporter.export.args[0][0]
+    expect(start).to.be.a('date')
+    expect(end).to.be.a('date')
+    expect(end - start).to.equal(65000)
+
+    sinon.assert.calledOnce(exporter.export)
+
+    exporter.export.resetHistory()
+
+    clock.tick(INTERVAL)
+    await waitForExport()
+
+    const { start: start2, end: end2 } = exporter.export.args[0][0]
+    expect(start2).to.be.greaterThanOrEqual(end)
+    expect(start2).to.be.a('date')
+    expect(end2).to.be.a('date')
+    expect(end2 - start2).to.equal(65000)
+
+    sinon.assert.calledOnce(exporter.export)
+  })
 })
