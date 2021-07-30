@@ -203,9 +203,11 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           result = await specFunction()
           // it may have been set already if the test timed out
           let suppressedErrors = []
-          const context = environment.getVmContext()
-          if (context) {
-            suppressedErrors = context.expect.getState().suppressedErrors
+          if (typeof environment.getVmContext === 'function') {
+            const context = environment.getVmContext()
+            if (context) {
+              suppressedErrors = context.expect.getState().suppressedErrors
+            }
           }
           if (suppressedErrors && suppressedErrors.length) {
             testSpan.setTag('error', suppressedErrors[0])
