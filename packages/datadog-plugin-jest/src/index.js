@@ -19,6 +19,13 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { getFormattedJestTestParameters } = require('./util')
 
+function getVmContext (environment) {
+  if (typeof environment.getVmContext === 'function') {
+    return environment.getVmContext()
+  }
+  return null
+}
+
 function wrapEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -55,8 +62,8 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   return async function handleTestEventWithTrace (event) {
     if (event.name === 'test_retry') {
       let testName = event.test && event.test.name
-      if (typeof this.getVmContext === 'function') {
-        const context = this.getVmContext()
+      const context = getVmContext(this)
+      if (context) {
         const { currentTestName } = context.expect.getState()
         testName = currentTestName
       }
@@ -70,16 +77,14 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       if (!isTimeout(event)) {
         return
       }
-      if (typeof this.getVmContext === 'function') {
-        const context = this.getVmContext()
-        if (context) {
-          const { currentTestName } = context.expect.getState()
-          const testSpan = this.testSpansByTestName[`${currentTestName}_${event.test.invocations}`]
-          if (testSpan) {
-            testSpan.setTag(ERROR_TYPE, 'Timeout')
-            testSpan.setTag(ERROR_MESSAGE, event.error)
-            testSpan.setTag(TEST_STATUS, 'fail')
-          }
+      const context = getVmContext(this)
+      if (context) {
+        const { currentTestName } = context.expect.getState()
+        const testSpan = this.testSpansByTestName[`${currentTestName}_${event.test.invocations}`]
+        if (testSpan) {
+          testSpan.setTag(ERROR_TYPE, 'Timeout')
+          testSpan.setTag(ERROR_MESSAGE, event.error)
+          testSpan.setTag(TEST_STATUS, 'fail')
         }
       }
       return
@@ -117,14 +122,13 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
       'x-datadog-sampled': 1
     })
     let testName = event.test.name
-    let context
-    if (typeof this.getVmContext === 'function') {
-      context = this.getVmContext()
-      if (context) {
-        const { currentTestName } = context.expect.getState()
-        testName = currentTestName
-      }
+    const context = getVmContext(this)
+
+    if (context) {
+      const { currentTestName } = context.expect.getState()
+      testName = currentTestName
     }
+
     const commonSpanTags = {
       [TEST_TYPE]: 'test',
       [TEST_NAME]: testName,
@@ -203,11 +207,9 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           result = await specFunction()
           // it may have been set already if the test timed out
           let suppressedErrors = []
-          if (typeof environment.getVmContext === 'function') {
-            const context = environment.getVmContext()
-            if (context) {
-              suppressedErrors = context.expect.getState().suppressedErrors
-            }
+          const context = getVmContext(environment)
+          if (context) {
+            suppressedErrors = context.expect.getState().suppressedErrors
           }
           if (suppressedErrors && suppressedErrors.length) {
             testSpan.setTag('error', suppressedErrors[0])
