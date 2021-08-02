@@ -614,6 +614,27 @@ describe('Plugin', () => {
         datadogJestEnv.handleTestEvent(hookFailureEvent).then(done).catch(done)
       })
 
+      it('should not crash when getVmContext is not a function', (done) => {
+        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
+        const testStartEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {},
+            name: TEST_NAME
+          }
+        }
+        datadogJestEnv.getVmContext = undefined
+
+        datadogJestEnv.handleTestEvent(testStartEvent)
+        testStartEvent.test.fn()
+
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta[ERROR_TYPE]).to.be.undefined
+            expect(traces[0][0].meta[TEST_NAME_TAG]).to.equal(TEST_NAME)
+          }).then(done).catch(done)
+      })
+
       // TODO: allow the plugin consumer to define their own jest's `testEnvironment`
       it.skip('should allow the customer to use their own environment', (done) => {
         class CustomerCustomEnv extends DatadogJestEnvironment {
