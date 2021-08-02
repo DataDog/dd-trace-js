@@ -27,12 +27,15 @@ function parseEmailAndName (emailAndName) {
   if (!emailAndName) {
     return { name: '', email: '' }
   }
+  let name = ''
   let email = ''
-  const matchEmail = emailAndName.match(/[^@<\s]+@[^@\s>]+/g)
-  if (matchEmail) {
-    email = matchEmail[0]
+  const matchNameAndEmail = emailAndName.match(/(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)/)
+  if (matchNameAndEmail) {
+    name = matchNameAndEmail[1]
+    email = matchNameAndEmail[2]
   }
-  return { name: emailAndName.replace(`<${email}>`, '').trim(), email }
+
+  return { name, email }
 }
 
 function removeEmptyValues (tags) {
