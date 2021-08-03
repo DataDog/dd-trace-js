@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: either instrument all or none of the render functions
+
 function createWrapHandleRequest (tracer, config) {
   return function wrapHandleRequest (handleRequest) {
     return function handleRequestWithTrace (req, res, pathname, query) {
@@ -84,6 +86,8 @@ function trace (tracer, config, req, res, handler) {
 }
 
 function addPage (req, page) {
+  if (!req._datadog_next) return
+
   req._datadog_next.span.addTags({
     'resource.name': `${req.method} ${page}`.trim(),
     'next.page': page
