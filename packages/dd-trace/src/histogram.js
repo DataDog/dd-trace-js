@@ -1,15 +1,9 @@
 'use strict'
 
-const hdr = require('hdr-histogram-js')
-
-const highestTrackableValue = 3.6e12 // 1 hour
+const { DDSketch } = require('@datadog/sketches-js')
 
 class Histogram {
   constructor () {
-    this._histogram = hdr.build({
-      highestTrackableValue
-    })
-
     this.reset()
   }
 
@@ -22,7 +16,7 @@ class Histogram {
   get p95 () { return this.percentile(95) }
 
   percentile (percentile) {
-    return this._histogram.getValueAtPercentile(percentile)
+    return this._histogram.getValueAtQuantile(percentile / 100) || 0
   }
 
   record (value) {
@@ -36,7 +30,7 @@ class Histogram {
     this._count++
     this._sum += value
 
-    this._histogram.recordValue(value)
+    this._histogram.accept(value)
   }
 
   reset () {
@@ -45,7 +39,7 @@ class Histogram {
     this._sum = 0
     this._count = 0
 
-    this._histogram.reset()
+    this._histogram = new DDSketch()
   }
 }
 

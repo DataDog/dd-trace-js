@@ -1,7 +1,7 @@
 Component,Origin,License,Copyright
+require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
-require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
