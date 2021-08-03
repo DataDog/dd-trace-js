@@ -88,6 +88,8 @@ function startupLog ({ agentError } = {}) {
   out.runtime_metrics_enabled = !!config.runtimeMetrics
   Object.assign(out, getIntegrationsAndAnalytics())
 
+  out.appsec_enabled = !!config.appsec.enabled
+
   // // This next bunch is for features supported by other tracers, but not this
   // // one. They may be implemented in the future.
 
