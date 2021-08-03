@@ -7,11 +7,11 @@ class SyncStorage {
 
   disable () {
     this._stack = []
-    this._current = null
+    this._current = undefined
   }
 
   getStore () {
-    return this._current || null
+    return this._current
   }
 
   run (store, callback, ...args) {

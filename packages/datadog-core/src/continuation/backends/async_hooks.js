@@ -39,7 +39,7 @@ class AsyncHooksStorage {
   }
 
   _reset () {
-    this._current = null
+    this._current = undefined
     this._stores = new Map()
     this._types = new Map()
     this._weaks = new WeakMap()
@@ -58,12 +58,12 @@ class AsyncHooksStorage {
   _exit (store) {
     this._await(store)
     this._current = store
-    this._stack[this._depth] = null
+    this._stack[this._depth] = undefined
     this._depth--
   }
 
   _exitNative () {
-    this._current = null
+    this._current = undefined
     this._promises[0] = false
   }
 

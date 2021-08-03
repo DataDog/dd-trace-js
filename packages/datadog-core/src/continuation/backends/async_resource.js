@@ -21,7 +21,7 @@ class AsyncResourceStorage {
   getStore () {
     const resource = this._activeResource()
 
-    return resource[this._ddResourceStore] || null
+    return resource[this._ddResourceStore]
   }
 
   run (store, callback, ...args) {
