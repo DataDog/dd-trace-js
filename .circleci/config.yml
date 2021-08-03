@@ -337,6 +337,13 @@ jobs:
         environment:
           - SIRUN_TEST_DIR=async_hooks
 
+  node-bench-sirun-log:
+    <<: *node-bench-sirun-base
+    docker:
+      - image: node
+        environment:
+          - SIRUN_TEST_DIR=log
+
   node-bench-sirun-encoders-latest:
     <<: *node-bench-sirun-base
     docker:
@@ -1521,6 +1528,7 @@ workflows:
       - node-bench-sirun-startup-latest
       - node-bench-sirun-spans-latest
       - node-bench-sirun-async-hooks
+      - node-bench-sirun-log
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
       - node-bench-sirun-plugin-bluebird-latest
@@ -1533,6 +1541,7 @@ workflows:
             - node-bench-sirun-startup-latest
             - node-bench-sirun-spans-latest
             - node-bench-sirun-async-hooks
+            - node-bench-sirun-log
             - node-bench-sirun-encoders-latest
             - node-bench-sirun-plugin-q-latest
             - node-bench-sirun-plugin-bluebird-latest
@@ -1774,6 +1783,7 @@ workflows:
       - node-bench-sirun-startup-latest
       - node-bench-sirun-spans-latest
       - node-bench-sirun-async-hooks
+      - node-bench-sirun-log
       - node-bench-sirun-encoders-latest
       - node-bench-sirun-plugin-q-latest
       - node-bench-sirun-plugin-bluebird-latest
@@ -1786,6 +1796,7 @@ workflows:
             - node-bench-sirun-startup-latest
             - node-bench-sirun-spans-latest
             - node-bench-sirun-async-hooks
+            - node-bench-sirun-log
             - node-bench-sirun-encoders-latest
             - node-bench-sirun-plugin-q-latest
             - node-bench-sirun-plugin-bluebird-latest
