@@ -65,7 +65,6 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
 
           try {
             result = await oldSpecFunction()
-            // it may have been set already if the test timed out
             const suppressedErrors = globalInput.expect.getState().suppressedErrors
             if (suppressedErrors && suppressedErrors.length) {
               testSpan.setTag('error', suppressedErrors[0])
@@ -188,7 +187,13 @@ module.exports = [
     file: 'build/jasmineAsyncInstall.js',
     patch: function (jasmineAsyncInstallExport, tracer) {
       const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
-      return createWrapJasmineAsyncInstall(tracer, this, testEnvironmentMetadata)(jasmineAsyncInstallExport.default)
+      return this.wrapExport(
+        jasmineAsyncInstallExport.default,
+        createWrapJasmineAsyncInstall(tracer, this, testEnvironmentMetadata)(jasmineAsyncInstallExport.default)
+      )
+    },
+    unpatch: function (jasmineAsyncInstallExport) {
+      this.unwrapExport(jasmineAsyncInstallExport.default)
     }
   }
 ]
