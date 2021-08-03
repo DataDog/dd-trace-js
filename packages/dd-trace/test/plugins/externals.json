@@ -7,6 +7,10 @@
   ],
   "fastify": [
     {
+      "name": "fastify",
+      "versions": ["3.0.0", "3.9.2"]
+    },
+    {
       "name": "middie",
       "versions": ["5.1.0"]
     }
