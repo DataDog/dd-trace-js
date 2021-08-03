@@ -17,6 +17,7 @@ function createWrapFastify (tracer, config) {
       if (typeof app.addHook === 'function') {
         app.addHook('onRequest', createOnRequest(tracer, config))
         app.addHook('preHandler', preHandler)
+        app.addHook = createWrapAddHook(tracer, config)(app.addHook)
       }
 
       methods.forEach(method => {
@@ -26,6 +27,51 @@ function createWrapFastify (tracer, config) {
       app.route = wrapRoute(app.route)
 
       return app
+    }
+  }
+}
+
+function createWrapAddHook (tracer, config) {
+  return function wrapAddHook (addHook) {
+    return function addHookWithTrace (name, fn) {
+      fn = arguments[arguments.length - 1]
+
+      if (typeof fn !== 'function') return addHook.apply(this, arguments)
+
+      arguments[arguments.length - 1] = function (request, reply, done) {
+        const req = getReq(request)
+
+        if (!req) return fn.apply(this, arguments)
+
+        done = arguments[arguments.length - 1]
+
+        try {
+          if (typeof done === 'function') {
+            arguments[arguments.length - 1] = function (err) {
+              web.addError(req, err)
+              return done.apply(this, arguments)
+            }
+
+            return fn.apply(this, arguments)
+          } else {
+            const promise = fn.apply(this, arguments)
+
+            if (promise && typeof promise.catch === 'function') {
+              return promise.catch(err => {
+                web.addError(req, err)
+                throw err
+              })
+            }
+
+            return promise
+          }
+        } catch (e) {
+          web.addError(req, e)
+          throw e
+        }
+      }
+
+      return addHook.apply(this, arguments)
     }
   }
 }
