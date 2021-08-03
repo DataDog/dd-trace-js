@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: either instrument all or none of the render functions
+
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 function createWrapHandleRequest (tracer, config) {
@@ -88,6 +90,8 @@ function trace (tracer, config, req, res, handler) {
 }
 
 function addPage (req, page) {
+  if (!req._datadog_next) return
+
   req._datadog_next.span.addTags({
     'resource.name': `${req.method} ${page}`.trim(),
     'next.page': page
