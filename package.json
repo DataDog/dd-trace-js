@@ -58,6 +58,7 @@
   "dependencies": {
     "@types/node": "^10.12.18",
     "detect-libc": "^1.0.3",
+    "diagnostics_channel": "^1.0.0",
     "form-data": "^3.0.0",
     "hdr-histogram-js": "^2.0.1",
     "koalas": "^1.0.2",
