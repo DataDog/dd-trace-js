@@ -33,12 +33,12 @@ exec(`git checkout ${currentBranch}`)
 function bump (newVersion) {
   pkg.version = newVersion
 
-  exec(`git checkout -b v${newVersion}`)
+  exec(`git checkout -b v${newVersion}-bump`)
   write('package.json', JSON.stringify(pkg, null, 2) + '\n')
   write('packages/dd-trace/lib/version.js', `module.exports = '${newVersion}'\n`)
   add('package.json')
   add('packages/dd-trace/lib/version.js')
-  exec(`git commit -m v"${newVersion}"`)
+  exec(`git commit -m "v${newVersion}"`)
   exec(`git push -u origin HEAD`)
 }
 
