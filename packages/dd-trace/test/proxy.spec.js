@@ -180,7 +180,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not load the profiler when profiling config does not exist', () => {
-        config.pro_fil_ing = 'invalidConfig';
+        config.pro_fil_ing = 'invalidConfig'
 
         proxy.init()
 
