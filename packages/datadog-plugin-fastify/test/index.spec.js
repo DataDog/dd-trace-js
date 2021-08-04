@@ -310,6 +310,36 @@ describe('Plugin', () => {
           })
         })
 
+        // fastify doesn't have all application hooks in older versions
+        if (semver.intersects(version, '>=2.15')) {
+          it('should support hooks with a single parameter', done => {
+            app.addHook('onReady', done => done())
+
+            app.get('/user', (request, reply) => {
+              reply.send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'fastify.request')
+                  expect(spans[0]).to.have.property('resource', 'GET /user')
+                  expect(spans[0]).to.have.property('error', 0)
+                })
+                .then(done)
+                .catch(done)
+
+              app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
+              })
+            })
+          })
+        }
+
         // fastify crashes the process on reply exceptions in older versions
         if (semver.intersects(version, '>=3')) {
           it('should handle reply rejections', done => {
