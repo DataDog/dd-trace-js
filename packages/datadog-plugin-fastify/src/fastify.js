@@ -149,28 +149,9 @@ function wrapHandler (handler) {
 
 // TODO: move this to a common util
 function safeWrap (fn, wrapper) {
-  switch (fn.length) {
-    case 1:
-      return function (a) { return wrapper.apply(this, arguments) }
-    case 2:
-      return function (a, b) { return wrapper.apply(this, arguments) }
-    case 3:
-      return function (a, b, c) { return wrapper.apply(this, arguments) }
-    case 4:
-      return function (a, b, c, d) { return wrapper.apply(this, arguments) }
-    case 5:
-      return function (a, b, c, d, e) { return wrapper.apply(this, arguments) }
-    case 6:
-      return function (a, b, c, d, e, f) { return wrapper.apply(this, arguments) }
-    case 7:
-      return function (a, b, c, d, e, f, g) { return wrapper.apply(this, arguments) }
-    case 8:
-      return function (a, b, c, d, e, f, g, h) { return wrapper.apply(this, arguments) }
-    case 9:
-      return function (a, b, c, d, e, f, g, h, i) { return wrapper.apply(this, arguments) }
-    default:
-      return function () { return wrapper.apply(this, arguments) }
-  }
+  Object.defineProperty(wrapper, 'length', Object.getOwnPropertyDescriptor(fn, 'length'))
+
+  return wrapper
 }
 
 function getReq (request) {
