@@ -38,7 +38,7 @@ function createWrapAddHook (tracer, config) {
 
       if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-      arguments[arguments.length - 1] = function (request, reply, done) {
+      arguments[arguments.length - 1] = safeWrap(fn, function (request, reply, done) {
         const req = getReq(request)
 
         if (!req) return fn.apply(this, arguments)
@@ -69,7 +69,7 @@ function createWrapAddHook (tracer, config) {
           web.addError(req, e)
           throw e
         }
-      }
+      })
 
       return addHook.apply(this, arguments)
     }
@@ -144,6 +144,32 @@ function wrapHandler (handler) {
     const req = getReq(request)
 
     return web.reactivate(req, () => handler.apply(this, arguments))
+  }
+}
+
+// TODO: move this to a common util
+function safeWrap (fn, wrapper) {
+  switch (fn.length) {
+    case 1:
+      return function (a) { return wrapper.apply(this, arguments) }
+    case 2:
+      return function (a, b) { return wrapper.apply(this, arguments) }
+    case 3:
+      return function (a, b, c) { return wrapper.apply(this, arguments) }
+    case 4:
+      return function (a, b, c, d) { return wrapper.apply(this, arguments) }
+    case 5:
+      return function (a, b, c, d, e) { return wrapper.apply(this, arguments) }
+    case 6:
+      return function (a, b, c, d, e, f) { return wrapper.apply(this, arguments) }
+    case 7:
+      return function (a, b, c, d, e, f, g) { return wrapper.apply(this, arguments) }
+    case 8:
+      return function (a, b, c, d, e, f, g, h) { return wrapper.apply(this, arguments) }
+    case 9:
+      return function (a, b, c, d, e, f, g, h, i) { return wrapper.apply(this, arguments) }
+    default:
+      return function () { return wrapper.apply(this, arguments) }
   }
 }
 
