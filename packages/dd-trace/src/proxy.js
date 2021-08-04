@@ -31,7 +31,7 @@ class Tracer extends BaseTracer {
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
-        if(config.hasOwnProperty("profiling") && config.profiling.enabled) {
+        if(config.hasOwnProperty('profiling') && config.profiling.enabled) {
           //do not stop tracer initialization if the profiler fails to be imported
           try {
             const profiler = require('./profiler')
