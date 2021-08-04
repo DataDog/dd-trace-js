@@ -1,11 +1,7 @@
 const { promisify } = require('util')
 
-const id = require('../../dd-trace/src/id')
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
-const { AUTO_KEEP } = require('../../../ext/priority')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const {
-  TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
@@ -13,26 +9,7 @@ const {
   getTestEnvironmentMetadata,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
-
-function getTestSpanTags (tracer, testEnvironmentMetadata) {
-  const childOf = tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-    'x-datadog-sampled': 1
-  })
-
-  const commonSpanTags = {
-    [TEST_TYPE]: 'test',
-    [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [SPAN_TYPE]: 'test',
-    ...testEnvironmentMetadata
-  }
-  return {
-    childOf,
-    commonSpanTags
-  }
-}
+const { getTestSpanTags, setSuppressedErrors } = require('./util')
 
 function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadata) {
   return function wrapIt (it) {
@@ -66,10 +43,7 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
           try {
             result = await oldSpecFunction()
             const suppressedErrors = globalInput.expect.getState().suppressedErrors
-            if (suppressedErrors && suppressedErrors.length) {
-              testSpan.setTag('error', suppressedErrors[0])
-              testSpan.setTag(TEST_STATUS, 'fail')
-            }
+            setSuppressedErrors(suppressedErrors, testSpan)
             if (!testSpan._spanContext._tags[TEST_STATUS]) {
               testSpan.setTag(TEST_STATUS, 'pass')
             }

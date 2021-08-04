@@ -36,8 +36,6 @@ describe('Plugin', () => {
     describe('jest with jasmine', function () {
       this.timeout(60000)
       it('instruments async and sync tests', function (done) {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         const tests = [
           { name: 'jest-test-suite done', status: 'pass' },
           { name: 'jest-test-suite done fail', status: 'fail' },
@@ -84,8 +82,6 @@ describe('Plugin', () => {
       })
 
       it('instruments test suites with focused tests', function (done) {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         agent.use(trace => {
           const testSpan = trace[0][0]
           expect(testSpan.parent_id.toString()).to.equal('0')
@@ -106,8 +102,6 @@ describe('Plugin', () => {
       })
 
       it('works with jsdom too', function (done) {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         agent.use(trace => {
           const testSpan = trace[0][0]
           expect(testSpan.parent_id.toString()).to.equal('0')
