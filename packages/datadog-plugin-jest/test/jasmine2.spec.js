@@ -1,4 +1,7 @@
 'use strict'
+const fs = require('fs')
+const path = require('path')
+
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -27,6 +30,10 @@ describe('Plugin', () => {
 
   withVersions(plugin, ['jest-jasmine2'], (version, moduleName) => {
     afterEach(() => {
+      const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
+      jestTestFile.forEach((testFile) => {
+        delete require.cache[require.resolve(path.join(__dirname, testFile))]
+      })
       return agent.close()
     })
     beforeEach(() => {
