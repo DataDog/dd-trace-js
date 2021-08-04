@@ -312,7 +312,7 @@ describe('Plugin', () => {
 
         // fastify doesn't have all application hooks in older versions
         if (semver.intersects(version, '>=2.15')) {
-          it('should support hooks with a single argument', done => {
+          it('should support hooks with a single parameter', done => {
             app.addHook('onReady', done => done())
 
             app.get('/user', (request, reply) => {
