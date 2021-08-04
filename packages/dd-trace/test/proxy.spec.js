@@ -170,6 +170,30 @@ describe('TracerProxy', () => {
 
         expect(appsec.enable).to.have.been.called
       })
+
+      it('should not load the profiler when not configured', () => {
+        config.profiling = { enabled: false }
+
+        proxy.init()
+
+        expect(profiler.start).to.not.have.been.called
+      })
+
+      it('should not load the profiler when profiling config does not exist', () => {
+        config.pro_fil_ing = 'invalidConfig';
+
+        proxy.init()
+
+        expect(profiler.start).to.not.have.been.called
+      })
+
+      it('should load profiler when configured', () => {
+        config.profiling = { enabled: true }
+
+        proxy.init()
+
+        expect(profiler.start).to.have.been.called
+      })
     })
 
     describe('trace', () => {
