@@ -1522,6 +1522,7 @@ workflows:
               only:
                 - master
     jobs:
+      - lint
       - node-core-12
       - node-core-14
       - node-core-16
