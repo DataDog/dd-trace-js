@@ -43,7 +43,8 @@ describe('TracerProxy', () => {
 
     log = {
       use: sinon.spy(),
-      toggle: sinon.spy()
+      toggle: sinon.spy(),
+      error: sinon.spy()
     }
 
     instrumenter = {
@@ -168,6 +169,51 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(analyticsSampler.enable).to.have.been.called
+      })
+
+      it('should not load the profiler when not configured', () => {
+        config.profiling = { enabled: false }
+
+        proxy.init()
+
+        expect(profiler.start).to.not.have.been.called
+      })
+
+      it('should not load the profiler when profiling config does not exist', () => {
+        config.pro_fil_ing = 'invalidConfig'
+
+        proxy.init()
+
+        expect(profiler.start).to.not.have.been.called
+      })
+
+      it('should load profiler when configured', () => {
+        config.profiling = { enabled: true }
+
+        proxy.init()
+
+        expect(profiler.start).to.have.been.called
+      })
+
+      it('should throw an error since profiler fails to be imported', () => {
+        config.profiling = { enabled: true }
+
+        const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './noop/tracer': NoopTracer,
+          './config': Config,
+          './metrics': metrics,
+          './instrumenter': Instrumenter,
+          './log': log,
+          './profiler': null, // this will cause the import failure error
+          './appsec': appsec
+        })
+
+        const profilerImportFailureProxy = new ProfilerImportFailureProxy()
+        profilerImportFailureProxy.init()
+
+        const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
+        sinon.assert.calledWith(log.error, sinon.match(expectedErr))
       })
     })
 

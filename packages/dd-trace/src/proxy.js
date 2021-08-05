@@ -6,7 +6,6 @@ const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const Instrumenter = require('./instrumenter')
 const metrics = require('./metrics')
-const profiler = require('./profiler')
 const log = require('./log')
 const { setStartupLogInstrumenter } = require('./startup-log')
 const analyticsSampler = require('./analytics_sampler')
@@ -33,7 +32,15 @@ class Tracer extends BaseTracer {
         log.use(config.logger)
         log.toggle(config.debug, config.logLevel, this)
 
-        profiler.start(config)
+        if (config.hasOwnProperty('profiling') && config.profiling.enabled) {
+          // do not stop tracer initialization if the profiler fails to be imported
+          try {
+            const profiler = require('./profiler')
+            profiler.start(config)
+          } catch (e) {
+            log.error(e)
+          }
+        }
 
         if (config.enabled) {
           if (config.runtimeMetrics) {
