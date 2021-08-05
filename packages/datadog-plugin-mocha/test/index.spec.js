@@ -165,7 +165,8 @@ describe('Plugin', () => {
         const testNames = [
           'mocha-test-skip can skip',
           'mocha-test-skip-different can skip too',
-          'mocha-test-skip-different can skip twice'
+          'mocha-test-skip-different can skip twice',
+          'mocha-test-programmatic-skip can skip too'
         ]
         const assertionPromises = testNames.map(testName => {
           return agent.use(trace => {

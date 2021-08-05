@@ -79,8 +79,13 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
               activeSpan.setTag(TEST_STATUS, 'fail')
             }
           } catch (error) {
-            activeSpan.setTag(TEST_STATUS, 'fail')
-            activeSpan.setTag('error', error)
+            // this.skip has been called
+            if (error.constructor.name === 'Pending' && !this.forbidPending) {
+              activeSpan.setTag(TEST_STATUS, 'skip')
+            } else {
+              activeSpan.setTag(TEST_STATUS, 'fail')
+              activeSpan.setTag('error', error)
+            }
             throw error
           } finally {
             finishAllTraceSpans(activeSpan)
