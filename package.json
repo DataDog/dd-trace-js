@@ -17,7 +17,7 @@
     "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
-    "lint": "node scripts/check_licenses.js && eslint .",
+    "lint": "node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "tdd": "node scripts/tdd.js",
     "test": "SERVICES=* yarn services && mocha --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
@@ -55,7 +55,7 @@
     "node": ">=8"
   },
   "dependencies": {
-    "@datadog/sketches-js": "^1.0.2",
+    "@datadog/sketches-js": "^1.0.4",
     "@types/node": "^10.12.18",
     "form-data": "^3.0.0",
     "koalas": "^1.0.2",
