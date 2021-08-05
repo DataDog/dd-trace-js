@@ -14,3 +14,9 @@ describe('mocha-test-skip-different', () => {
     expect(true).to.equal(false)
   })
 })
+
+describe('mocha-test-programmatic-skip', () => {
+  it('can skip too', function () {
+    this.skip()
+  })
+})
