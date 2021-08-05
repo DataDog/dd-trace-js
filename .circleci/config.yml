@@ -960,8 +960,16 @@ workflows:
       - node-generic-pool: *matrix-supported-node-versions
       - node-google-cloud-pubsub: *matrix-supported-node-versions
       - node-graphql: *matrix-supported-node-versions
-      - node-grpc: *matrix-supported-node-versions
-      - node-hapi: *matrix-supported-node-versions
+      # The grpc version ranges we support only support up to Node 12. TODO fix this.
+      - node-grpc:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      # The hapi version ranges we support only support up to Node 12. TODO fix this.
+      - node-hapi:
+          matrix:
+            parameters:
+              node-version: ["12"]
       - node-http: *matrix-supported-node-versions
       - node-http2: *matrix-supported-node-versions
       - node-jest: *matrix-supported-node-versions
