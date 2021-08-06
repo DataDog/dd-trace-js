@@ -41,7 +41,7 @@ function createWrapRequest (tracer, config) {
 
       analyticsSampler.sample(span, config.measured)
 
-      awsHelpers.requestInject(span, this, serviceIdentifier, tracer, config)
+      awsHelpers.requestInject(span, this, serviceIdentifier, tracer)
 
       const request = this
 

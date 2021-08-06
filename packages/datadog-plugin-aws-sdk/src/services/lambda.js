@@ -14,8 +14,7 @@ class Lambda {
     })
   }
 
-  requestInject (span, request, tracer, config) {
-    const useLegacyContext = (config.invokeWithLegacyContext !== undefined ? config.invokeWithLegacyContext : true)
+  requestInject (span, request, tracer) {
     const operation = request.operation
     if (operation === 'invoke') {
       if (!request.params) {
@@ -36,12 +35,7 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
-          if (useLegacyContext) {
-            clientContext.custom._datadog = {}
-            tracer.inject(span, 'text_map', clientContext.custom._datadog)
-          } else {
-            tracer.inject(span, 'text_map', clientContext.custom)
-          }
+          tracer.inject(span, 'text_map', clientContext.custom)
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {

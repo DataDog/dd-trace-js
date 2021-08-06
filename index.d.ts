@@ -735,13 +735,6 @@ declare namespace plugins {
     };
 
     /**
-     * Whether to use the legacy trace context propagation when instrumenting
-     * a direct Lambda function invocation.
-     * @default true
-     */
-    invokeWithLegacyContext?: boolean;
-
-    /**
      * Configuration for individual services to enable/disable them. Message
      * queue services can also configure the producer and consumer individually
      * by passing an object with a `producer` and `consumer` properties. The

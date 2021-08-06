@@ -75,11 +75,11 @@ const helpers = {
     }
   },
 
-  requestInject (span, request, serviceName, tracer, config) {
+  requestInject (span, request, serviceName, tracer) {
     if (!span) return
 
     const inject = services[serviceName] && services[serviceName].requestInject
-    if (inject) inject(span, request, tracer, config)
+    if (inject) inject(span, request, tracer)
   },
 
   wrapCb (cb, serviceName, tags, request, tracer, childOf) {
