@@ -66,7 +66,9 @@ class AgentExporter {
         options.port = this._url.port
       }
 
-      this._logger.debug(`Submitting agent report to: ${JSON.stringify(options)}`)
+      this._logger.debug(() => {
+        return `Submitting agent report to: ${JSON.stringify(options)}`
+      })
 
       form.submit(options, (err, res) => {
         if (err || !res) return reject(err)
@@ -74,7 +76,9 @@ class AgentExporter {
         const chunks = []
         res.on('data', chunk => chunks.push(chunk))
         res.on('end', () => {
-          this._logger.debug(`Agent export response: ${Buffer.concat(chunks)}`)
+          this._logger.debug(() => {
+            return `Agent export response: ${Buffer.concat(chunks)}`
+          })
         })
 
         if (res.statusCode >= 400) {
