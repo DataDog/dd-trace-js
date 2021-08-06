@@ -1,16 +1,15 @@
 'use strict'
 
-const { maybeRequire } = require('../../util')
-
 class NativeHeapProfiler {
   constructor (options = {}) {
     this.type = 'space'
-    this._pprof = maybeRequire('pprof')
     this._samplingInterval = options.samplingInterval || 512 * 1024
     this._stackDepth = options.stackDepth || 64
+    this._pprof = undefined
   }
 
   start () {
+    this._pprof = require('@datadog/pprof')
     this._pprof.heap.start(this._samplingInterval, this._stackDepth)
   }
 
@@ -18,9 +17,13 @@ class NativeHeapProfiler {
     return this._pprof.heap.profile()
   }
 
+  encode (profile) {
+    return this._pprof.encode(profile)
+  }
+
   stop () {
     this._pprof.heap.stop()
   }
 }
 
-module.exports = { NativeHeapProfiler }
+module.exports = NativeHeapProfiler
