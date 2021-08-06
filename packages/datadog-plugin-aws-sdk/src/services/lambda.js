@@ -15,6 +15,7 @@ class Lambda {
   }
 
   requestInject (span, request, tracer, config) {
+    const useLegacyContext = (config.invokeWithLegacyContext !== undefined ? config.invokeWithLegacyContext : true)
     const operation = request.operation
     if (operation === 'invoke') {
       if (!request.params) {
@@ -35,7 +36,7 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
-          if (config.invokeWithLegacyContext) {
+          if (useLegacyContext) {
             clientContext.custom._datadog = {}
             tracer.inject(span, 'text_map', clientContext.custom._datadog)
           } else {

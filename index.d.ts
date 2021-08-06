@@ -737,7 +737,7 @@ declare namespace plugins {
     /**
      * Whether to use the legacy trace context propagation when instrumenting
      * a direct Lambda function invocation.
-     * @default false
+     * @default true
      */
     invokeWithLegacyContext?: boolean;
 
