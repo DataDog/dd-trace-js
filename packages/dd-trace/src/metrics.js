@@ -42,7 +42,7 @@ module.exports = {
       })
 
     try {
-      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
+      nativeMetrics = require('@datadog/native-metrics')
       nativeMetrics.start()
     } catch (e) {
       log.error(e)
@@ -282,9 +282,6 @@ function captureNativeMetrics () {
     }
   })
 
-  client.gauge('runtime.node.spans.finished', stats.spans.total.finished)
-  client.gauge('runtime.node.spans.unfinished', stats.spans.total.unfinished)
-
   for (let i = 0, l = spaces.length; i < l; i++) {
     const tags = [`heap_space:${spaces[i].space_name}`]
 
@@ -292,18 +289,6 @@ function captureNativeMetrics () {
     client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
     client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
     client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
-  }
-
-  if (stats.spans.operations) {
-    const operations = stats.spans.operations
-
-    Object.keys(operations.finished).forEach(name => {
-      client.gauge('runtime.node.spans.finished.by.name', operations.finished[name], [`span_name:${name}`])
-    })
-
-    Object.keys(operations.unfinished).forEach(name => {
-      client.gauge('runtime.node.spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
-    })
   }
 }
 
