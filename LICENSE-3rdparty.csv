@@ -1,4 +1,5 @@
 Component,Origin,License,Copyright
+require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
@@ -16,7 +17,6 @@ require,node-gyp-build,MIT,Copyright 2017 Mathias Buus
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
-require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contributors

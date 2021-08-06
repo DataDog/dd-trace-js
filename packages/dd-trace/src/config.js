@@ -26,9 +26,9 @@ class Config {
 
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
-      // options.profiling,
-      // process.env.DD_PROFILING_ENABLED,
+      options.profiling,
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
+      process.env.DD_PROFILING_ENABLED,
       false
     )
     const DD_PROFILING_EXPORTERS = coalesce(
