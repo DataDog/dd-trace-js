@@ -155,16 +155,6 @@ describe('Span', () => {
     expect(span.context()._tags).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
   })
 
-  it('should keep track of its memory lifecycle in debug mode', () => {
-    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' }, true)
-
-    expect(metrics.track).to.have.been.calledWith(span)
-
-    span.finish()
-
-    expect(handle.finish).to.have.been.called
-  })
-
   describe('tracer', () => {
     it('should return its parent tracer', () => {
       span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
