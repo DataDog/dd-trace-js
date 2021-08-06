@@ -308,12 +308,7 @@ jobs:
 
   node-bench-sirun-plugin-net: *node-bench-sirun-base
 
-  node-bench-sirun-profiler-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=profiler
+  node-bench-sirun-profiler: *node-bench-sirun-base
 
   node-bench-sirun-all:
     docker:
