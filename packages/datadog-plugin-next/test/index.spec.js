@@ -38,6 +38,7 @@ describe('Plugin', function () {
           execSync('node build', {
             cwd: __dirname,
             env: {
+              ...process.env,
               version,
               // needed for webpack 5
               NODE_PATH: [
