@@ -11,6 +11,7 @@ class Profiler extends EventEmitter {
     this._logger = undefined
     this._config = undefined
     this._timer = undefined
+    this._lastStart = undefined
   }
 
   start (options) {
@@ -60,17 +61,18 @@ class Profiler extends EventEmitter {
 
   _capture (timeout) {
     if (!this._enabled) return
-    const start = new Date()
+    this._lastStart = new Date()
 
     if (!this._timer || timeout !== this._config.flushInterval) {
-      this._timer = setTimeout(() => this._collect(start), timeout)
+      this._timer = setTimeout(() => this._collect(), timeout)
       this._timer.unref()
     } else {
       this._timer.refresh()
     }
   }
 
-  async _collect (start) {
+  async _collect () {
+    const start = this._lastStart
     const end = new Date()
     const profiles = {}
 
