@@ -94,7 +94,7 @@ node-bench-sirun-base: &node-bench-sirun-base
     - run:
         name: Install dependencies
         command: |
-          if [[ $CIRLE_JOB == *"plugin"* ]]; then
+          if [[ $CIRCLE_JOB == *"plugin"* ]]; then
             export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '')")
             node ./scripts/install_plugin_modules
           fi
