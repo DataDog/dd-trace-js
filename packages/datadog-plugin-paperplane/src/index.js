@@ -53,10 +53,13 @@ const wrapRoutes = tracer => routes => handlers => {
   return routes(traced)
 }
 
+const nodeMajor = Number(process.versions.node.split('.')[0])
+const mainVersionRange = nodeMajor <= 12 ? ['>=2.3.2'] : nodeMajor <= 14 ? ['>=3.1.1'] : []
+
 module.exports = [
   {
     name: 'paperplane',
-    versions: ['>=2.3.2'],
+    versions: mainVersionRange,
     file: 'lib/logger.js',
     patch (exports, tracer) {
       if (tracer._logInjection) {
@@ -69,7 +72,7 @@ module.exports = [
   },
   {
     name: 'paperplane',
-    versions: ['>=2.3.2'],
+    versions: mainVersionRange,
     file: 'lib/mount.js',
     patch (exports, tracer, config) {
       config = web.normalizeConfig(config)
@@ -81,7 +84,7 @@ module.exports = [
   },
   {
     name: 'paperplane',
-    versions: ['>=2.3.2'],
+    versions: mainVersionRange,
     file: 'lib/routes.js',
     patch (exports, tracer) {
       this.wrap(exports, 'routes', wrapRoutes(tracer))
@@ -89,8 +92,11 @@ module.exports = [
     unpatch (exports) {
       this.unwrap(exports, 'routes')
     }
-  },
-  {
+  }
+]
+
+if (nodeMajor <= 12) {
+  module.exports.push({
     name: 'paperplane',
     versions: ['2.3.0 - 2.3.1'],
     patch (paperplane, tracer, config) {
@@ -101,5 +107,5 @@ module.exports = [
     unpatch (paperplane) {
       this.unwrap(paperplane, ['mount', 'routes'])
     }
-  }
-]
+  })
+}

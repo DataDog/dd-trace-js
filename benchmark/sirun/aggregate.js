@@ -14,10 +14,23 @@ const ndjsons = fs.readdirSync(__dirname)
 
 fs.writeFileSync('all-sirun-output.ndjson', ndjsons)
 
-const buildData = {}
-const testResults = ndjsons
-  .trim().split('\n').map(x => JSON.parse(x))
-summarizeResults(buildData, testResults)
+const versionResults = {}
+ndjsons.trim().split('\n').forEach(x => {
+  const results = JSON.parse(x)
+  const nodeVersion = results.nodeVersion.split('.')[0]
+  if (!versionResults[nodeVersion]) {
+    versionResults[nodeVersion] = []
+  }
+  versionResults[nodeVersion].push(results)
+})
+
+const buildData = {
+  byVersion: true
+}
+for (const version in versionResults) {
+  buildData[version] = {}
+  summarizeResults(buildData[version], versionResults[version])
+}
 
 // eslint-disable-next-line no-console
 console.log(JSON.stringify(buildData, null, 2))
