@@ -8,7 +8,14 @@ const {
 
 const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
+const {
+  SAMPLING_PRIORITY,
+  SPAN_TYPE,
+  RESOURCE_NAME,
+  SPAN_KIND,
+  HTTP_METHOD,
+  HTTP_URL
+} = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
@@ -67,7 +74,7 @@ module.exports = (on, config) => {
       return null
     },
     afterEach: (test) => {
-      const { state, error } = test
+      const { state, error, httpRequests } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
@@ -75,6 +82,25 @@ module.exports = (on, config) => {
           activeSpan.setTag('error.type', error.name)
           activeSpan.setTag('error.stack', error.stack)
         }
+        // Add http spans
+        if (httpRequests) {
+          httpRequests.forEach((httpRequest) => {
+            const httpSpan = tracer.startSpan('http.request', {
+              childOf: activeSpan,
+              tags: {
+                [SPAN_KIND]: 'client',
+                [RESOURCE_NAME]: httpRequest.method,
+                [SPAN_TYPE]: 'http',
+                [HTTP_METHOD]: httpRequest.method,
+                [HTTP_URL]: httpRequest.url
+              }
+            })
+            // We have to hack timestamps because we can't generate spans as the requests happen
+            httpSpan._startTime = httpRequest.startClocks.timeStamp
+            httpSpan.finish(httpRequest.startClocks.timeStamp + httpRequest.duration)
+          })
+        }
+
         activeSpan.finish()
       }
       activeSpan = null
