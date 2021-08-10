@@ -29,6 +29,11 @@ module.exports = {
 
     Object.keys(config.tags)
       .filter(key => typeof config.tags[key] === 'string')
+      .filter(key => {
+        // Skip runtime-id unless enabled as cardinality may be too high
+        if (key !== 'runtime-id') return true
+        return (config.experimental && config.experimental.runtimeId)
+      })
       .forEach(key => {
         // https://docs.datadoghq.com/tagging/#defining-tags
         const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')

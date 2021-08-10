@@ -78,7 +78,9 @@ describe('exporters/agent', () => {
       const exporter = new AgentExporter({ url, logger })
       const start = new Date()
       const end = new Date()
-      const tags = { foo: 'bar' }
+      const tags = {
+        'runtime-id': 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
+      }
 
       const [ cpu, heap ] = await Promise.all([
         createProfile(['wall', 'microseconds']),
@@ -100,7 +102,7 @@ describe('exporters/agent', () => {
               'language:javascript',
               'runtime:nodejs',
               'format:pprof',
-              'foo:bar'
+              'runtime-id:a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
             ])
             expect(req.body).to.have.deep.property('types', ['cpu', 'heap'])
             expect(req.body).to.have.property('recording-start', start.toISOString())

@@ -2,6 +2,7 @@ Component,Origin,License,Copyright
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
+require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
