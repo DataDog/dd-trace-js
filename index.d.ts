@@ -321,7 +321,7 @@ export declare interface TracerOptions {
     b3?: boolean
 
     /**
-     * Whether to add an auto-generated `runtime-id` tag to spans and metrics.
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
      * @default false
      */
     runtimeId?: boolean
