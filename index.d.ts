@@ -236,6 +236,11 @@ export declare interface TracerOptions {
   port?: number | string;
 
   /**
+   * Whether to enable profiling.
+   */
+  profiling?: boolean
+
+  /**
    * Options specific for the Dogstatsd agent.
    */
   dogstatsd?: {
