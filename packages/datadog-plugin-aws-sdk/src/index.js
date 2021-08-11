@@ -6,7 +6,6 @@ const awsHelpers = require('./helpers')
 
 function createWrapRequest (tracer, config) {
   config = normalizeConfig(config)
-
   return function wrapRequest (send) {
     return function requestWithTrace (cb) {
       if (!this.service) return send.apply(this, arguments)
