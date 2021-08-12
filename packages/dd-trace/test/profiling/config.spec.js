@@ -41,13 +41,13 @@ describe('config', () => {
       service: 'test',
       version: '1.2.3-test.0',
       logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
+        debug () { },
+        info () { },
+        warn () { },
+        error () { }
       },
       exporters: 'agent,file',
-      profilers: [new CpuProfiler()],
+      profilers: 'cpu',
       url: 'http://localhost:1234/'
     }
 
@@ -70,6 +70,30 @@ describe('config', () => {
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(CpuProfiler)
+  })
+
+  it('should filter out invalid profilers', () => {
+    const errors = []
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error (error) {
+          errors.push(error)
+        }
+      },
+      profilers: 'nope,also_nope'
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(0)
+
+    expect(errors.length).to.equal(2)
+    expect(errors[0]).to.equal('Unknown profiler "nope"')
+    expect(errors[1]).to.equal('Unknown profiler "also_nope"')
   })
 
   it('should support tags', () => {
