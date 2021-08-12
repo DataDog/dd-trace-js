@@ -1027,7 +1027,7 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it.only('should be configured with the correct values', done => {
+        it('should be configured with the correct values', done => {
           const source = `{ hello(name: "world") }`
 
           agent
