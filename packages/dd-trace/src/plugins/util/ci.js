@@ -7,19 +7,18 @@ const {
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
-  GIT_COMMIT_AUTHOR_DATE
-} = require('./git')
-
-const CI_PIPELINE_ID = 'ci.pipeline.id'
-const CI_PIPELINE_NAME = 'ci.pipeline.name'
-const CI_PIPELINE_NUMBER = 'ci.pipeline.number'
-const CI_PIPELINE_URL = 'ci.pipeline.url'
-const CI_PROVIDER_NAME = 'ci.provider.name'
-const CI_WORKSPACE_PATH = 'ci.workspace_path'
-const GIT_REPOSITORY_URL = 'git.repository_url'
-const CI_JOB_URL = 'ci.job.url'
-const CI_JOB_NAME = 'ci.job.name'
-const CI_STAGE_NAME = 'ci.stage.name'
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_REPOSITORY_URL,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH,
+  CI_JOB_URL,
+  CI_JOB_NAME,
+  CI_STAGE_NAME
+} = require('./tags')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -89,12 +88,6 @@ function resolveTilde (filePath) {
 }
 
 module.exports = {
-  CI_PIPELINE_ID,
-  CI_PIPELINE_NAME,
-  CI_PIPELINE_NUMBER,
-  CI_PIPELINE_URL,
-  CI_PROVIDER_NAME,
-  CI_WORKSPACE_PATH,
   getCIMetadata () {
     const { env } = process
 

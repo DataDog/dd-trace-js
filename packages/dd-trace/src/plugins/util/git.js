@@ -1,16 +1,19 @@
 const { sanitizedExec } = require('./exec')
 
-const GIT_COMMIT_SHA = 'git.commit.sha'
-const GIT_BRANCH = 'git.branch'
-const GIT_REPOSITORY_URL = 'git.repository_url'
-const GIT_TAG = 'git.tag'
-const GIT_COMMIT_MESSAGE = 'git.commit.message'
-const GIT_COMMIT_COMMITTER_DATE = 'git.commit.committer.date'
-const GIT_COMMIT_COMMITTER_EMAIL = 'git.commit.committer.email'
-const GIT_COMMIT_COMMITTER_NAME = 'git.commit.committer.name'
-const GIT_COMMIT_AUTHOR_DATE = 'git.commit.author.date'
-const GIT_COMMIT_AUTHOR_EMAIL = 'git.commit.author.email'
-const GIT_COMMIT_AUTHOR_NAME = 'git.commit.author.name'
+const {
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_AUTHOR_NAME,
+  CI_WORKSPACE_PATH
+} = require('./tags')
 
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
@@ -21,7 +24,8 @@ function getGitMetadata (ciMetadata) {
     tag,
     commitMessage,
     authorName: ciAuthorName,
-    authorEmail: ciAuthorEmail
+    authorEmail: ciAuthorEmail,
+    ciWorkspacePath
   } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -46,21 +50,9 @@ function getGitMetadata (ciMetadata) {
     [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
     [GIT_BRANCH]: branch || sanitizedExec('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' }),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git rev-parse HEAD', { stdio: 'pipe' }),
-    [GIT_TAG]: tag
+    [GIT_TAG]: tag,
+    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git rev-parse --show-toplevel', { stdio: 'pipe' })
   }
 }
 
-module.exports = {
-  getGitMetadata,
-  GIT_COMMIT_SHA,
-  GIT_BRANCH,
-  GIT_REPOSITORY_URL,
-  GIT_TAG,
-  GIT_COMMIT_MESSAGE,
-  GIT_COMMIT_COMMITTER_DATE,
-  GIT_COMMIT_COMMITTER_EMAIL,
-  GIT_COMMIT_COMMITTER_NAME,
-  GIT_COMMIT_AUTHOR_DATE,
-  GIT_COMMIT_AUTHOR_EMAIL,
-  GIT_COMMIT_AUTHOR_NAME
-}
+module.exports = { getGitMetadata }
