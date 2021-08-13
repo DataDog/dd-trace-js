@@ -30,6 +30,22 @@ function createWrapHandleApiRequest (tracer, config) {
   }
 }
 
+function createWrapRenderToResponse (tracer, config) {
+  return function wrapRenderToResponse (renderToResponse) {
+    return function renderToResponseWithTrace (ctx) {
+      return trace(tracer, config, ctx.req, ctx.res, () => renderToResponse.apply(this, arguments))
+    }
+  }
+}
+
+function createWrapRenderErrorToResponse (tracer, config) {
+  return function wrapRenderErrorToResponse (renderErrorToResponse) {
+    return function renderErrorToResponseWithTrace (ctx) {
+      return trace(tracer, config, ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments))
+    }
+  }
+}
+
 function createWrapRenderToHTML (tracer, config) {
   return function wrapRenderToHTML (renderToHTML) {
     return function renderToHTMLWithTrace (req, res, pathname, query, parsedUrl) {
@@ -38,12 +54,26 @@ function createWrapRenderToHTML (tracer, config) {
   }
 }
 
-function createWrapRenderToHTMLWithComponents (tracer, config) {
-  return function wrapHandleRenderToHTMLWithComponents (renderToHTMLWithComponents) {
-    return function renderToHTMLWithComponentsWithTrace (req, res, page) {
-      addPage(req, page)
+function createWrapRenderErrorToHTML (tracer, config) {
+  return function wrapRenderErrorToHTML (renderErrorToHTML) {
+    return function renderErrorToHTMLWithTrace (err, req, res, pathname, query) {
+      return trace(tracer, config, req, res, () => renderErrorToHTML.apply(this, arguments))
+    }
+  }
+}
 
-      return renderToHTMLWithComponents.apply(this, arguments)
+function createWrapFindPageComponents (tracer, config) {
+  return function wrapFindPageComponents (findPageComponents) {
+    return function findPageComponentsWithTrace (pathname, query) {
+      const result = findPageComponents.apply(this, arguments)
+      const span = tracer.scope().active()
+      const req = span && span._nextReq
+
+      if (result) {
+        addPage(req, pathname)
+      }
+
+      return result
     }
   }
 }
@@ -77,6 +107,10 @@ function trace (tracer, config, req, res, handler) {
 
   const promise = scope.activate(span, handler)
 
+  // HACK: Store the request object on the span for findPageComponents.
+  // TODO: Use CLS when it will be available in core.
+  span._nextReq = req
+
   promise.then(() => finish(span, config, req, res), err => {
     span.setTag('error', err)
     finish(span, config, req, res)
@@ -86,7 +120,7 @@ function trace (tracer, config, req, res, handler) {
 }
 
 function addPage (req, page) {
-  if (!req._datadog_next) return
+  if (!req || !req._datadog_next) return
 
   req._datadog_next.span.addTags({
     'resource.name': `${req.method} ${page}`.trim(),
@@ -118,7 +152,7 @@ function getHooks (config) {
 module.exports = [
   {
     name: 'next',
-    versions: ['>=9.5'],
+    versions: ['>=9.5 <11.1'],
     file: 'dist/next-server/server/next-server.js',
     patch ({ default: Server }, tracer, config) {
       config = normalizeConfig(config)
@@ -126,13 +160,37 @@ module.exports = [
       this.wrap(Server.prototype, 'handleRequest', createWrapHandleRequest(tracer, config))
       this.wrap(Server.prototype, 'handleApiRequest', createWrapHandleApiRequest(tracer, config))
       this.wrap(Server.prototype, 'renderToHTML', createWrapRenderToHTML(tracer, config))
-      this.wrap(Server.prototype, 'renderToHTMLWithComponents', createWrapRenderToHTMLWithComponents(tracer, config))
+      this.wrap(Server.prototype, 'renderErrorToHTML', createWrapRenderErrorToHTML(tracer, config))
+      this.wrap(Server.prototype, 'findPageComponents', createWrapFindPageComponents(tracer, config))
     },
     unpatch ({ default: Server }) {
       this.unwrap(Server.prototype, 'handleRequest')
       this.unwrap(Server.prototype, 'handleApiRequest')
       this.unwrap(Server.prototype, 'renderToHTML')
-      this.unwrap(Server.prototype, 'renderToHTMLWithComponents')
+      this.unwrap(Server.prototype, 'renderErrorToHTML')
+      this.unwrap(Server.prototype, 'findPageComponents')
+    }
+  },
+
+  {
+    name: 'next',
+    versions: ['>=11.1'],
+    file: 'dist/server/next-server.js',
+    patch ({ default: Server }, tracer, config) {
+      config = normalizeConfig(config)
+
+      this.wrap(Server.prototype, 'handleRequest', createWrapHandleRequest(tracer, config))
+      this.wrap(Server.prototype, 'handleApiRequest', createWrapHandleApiRequest(tracer, config))
+      this.wrap(Server.prototype, 'renderToResponse', createWrapRenderToResponse(tracer, config))
+      this.wrap(Server.prototype, 'renderErrorToResponse', createWrapRenderErrorToResponse(tracer, config))
+      this.wrap(Server.prototype, 'findPageComponents', createWrapFindPageComponents(tracer, config))
+    },
+    unpatch ({ default: Server }) {
+      this.unwrap(Server.prototype, 'handleRequest')
+      this.unwrap(Server.prototype, 'handleApiRequest')
+      this.unwrap(Server.prototype, 'renderToResponse')
+      this.unwrap(Server.prototype, 'renderErrorToResponse')
+      this.unwrap(Server.prototype, 'findPageComponents')
     }
   }
 ]
