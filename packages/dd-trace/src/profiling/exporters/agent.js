@@ -3,10 +3,6 @@
 const { request } = require('http')
 const FormData = require('form-data')
 
-function wait (ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 function * times (base, timeout) {
   let attempt = 0
   let n
@@ -19,24 +15,39 @@ function * times (base, timeout) {
   }
 }
 
-async function backoff (base, overallTimeout, task) {
-  for (const timeout of times(base, overallTimeout)) {
-    const start = Date.now()
-    if (await task(timeout)) return
-    const remaining = timeout - (Date.now() - start)
-    if (remaining > 0) await wait(remaining)
-  }
+function backoff (base, overallTimeout, task) {
+  return new Promise((resolve, reject) => {
+    const t = times(base, overallTimeout)
 
-  throw new Error('Profiler agent export back-off period expired without send')
+    function step () {
+      const next = t.next()
+      if (next.done) {
+        reject(new Error('Profiler agent export back-off period expired'))
+      }
+      const timeout = next.value
+
+      const start = Date.now()
+      task(timeout, (done) => {
+        if (done) return resolve()
+
+        const remaining = timeout - (Date.now() - start)
+        if (remaining > 0) {
+          setTimeout(step, remaining)
+        } else {
+          step()
+        }
+      })
+    }
+
+    step()
+  })
 }
 
-function sendRequest (options, body) {
-  return new Promise((resolve, reject) => {
-    const req = request(options, resolve)
-    req.on('error', reject)
-    if (body) req.write(body)
-    req.end()
-  })
+function sendRequest (options, body, callback) {
+  const req = request(options, res => callback(null, res))
+  req.on('error', callback)
+  if (body) req.write(body)
+  req.end()
 }
 
 function getBody (stream, callback) {
@@ -118,32 +129,31 @@ class AgentExporter {
       return `Submitting agent report to: ${JSON.stringify(options)}`
     })
 
-    return backoff(this._backoffBase, this._uploadTimeout, async (timeout) => {
-      let response
-      try {
-        response = await sendRequest({ ...options, timeout }, body)
-      } catch (err) {
-        this._logger.debug(err.stack)
-      }
-      if (!response) return false
-
-      const { statusCode } = response
-      if (statusCode >= 400) {
-        this._logger.debug(`Error from the agent: ${statusCode}`)
-      }
-
-      getBody(response, (err, body) => {
+    return backoff(this._backoffBase, this._uploadTimeout, (timeout, done) => {
+      sendRequest({ ...options, timeout }, body, (err, response) => {
         if (err) {
-          this._logger.debug(`Error reading agent response: ${err.message}`)
-        } else {
-          this._logger.debug(() => {
-            const bytes = body.toString('hex').match(/../g).join(' ')
-            return `Agent export response: ${bytes}`
-          })
+          this._logger.debug(err.stack)
         }
-      })
+        if (!response) return done(false)
 
-      return statusCode < 500
+        const { statusCode } = response
+        if (statusCode >= 400) {
+          this._logger.debug(`Error from the agent: ${statusCode}`)
+        }
+
+        getBody(response, (err, body) => {
+          if (err) {
+            this._logger.debug(`Error reading agent response: ${err.message}`)
+          } else {
+            this._logger.debug(() => {
+              const bytes = body.toString('hex').match(/../g).join(' ')
+              return `Agent export response: ${bytes}`
+            })
+          }
+        })
+
+        done(statusCode < 500)
+      })
     })
   }
 }

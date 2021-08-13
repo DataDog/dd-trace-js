@@ -176,7 +176,7 @@ describe('exporters/agent', () => {
       try {
         await exporter.export({ profiles, start, end, tags })
       } catch (err) {
-        expect(err.message).to.match(/^Profiler agent export back-off failed$/)
+        expect(err.message).to.match(/^Profiler agent export back-off period expired$/)
         failed = true
       }
       expect(failed).to.be.true
