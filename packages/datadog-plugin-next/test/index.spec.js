@@ -12,8 +12,6 @@ const plugin = require('../src')
 wrapIt()
 
 describe('Plugin', function () {
-  this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
-
   let next
   let app
   let listener
@@ -31,7 +29,9 @@ describe('Plugin', function () {
           return agent.close()
         })
 
-        before(async () => {
+        before(async function () {
+          this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+
           const { createServer } = require('http')
 
           // building in-process makes tests fail for an unknown reason
