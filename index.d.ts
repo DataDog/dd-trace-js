@@ -887,6 +887,16 @@ declare namespace plugins {
     depth?: number;
 
     /**
+     * Whether to include the source of the operation within the query as a tag
+     * on every span. This may contain sensitive information and sould only be
+     * enabled if sensitive data is always sent as variables and not in the
+     * query text.
+     *
+     * @default false
+     */
+    source?: boolean;
+
+    /**
      * An array of variable names to record. Can also be a callback that returns
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
