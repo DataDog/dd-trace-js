@@ -136,6 +136,7 @@ describe('git', () => {
       .onCall(2).returns('this is a commit message')
       .onCall(3).returns('gitBranch')
       .onCall(4).returns('gitCommitSHA')
+      .onCall(5).returns('ciWorkspacePath')
 
     const ciMetadata = {
       commitSHA: 'ciSHA',
@@ -170,6 +171,7 @@ describe('git', () => {
       .onCall(2).returns('this is a commit message')
       .onCall(3).returns('gitBranch')
       .onCall(4).returns('gitCommitSHA')
+      .onCall(5).returns('ciWorkspacePath')
 
     const metadata = getGitMetadata({ tag: 'ciTag' })
     expect(metadata).to.eql({
@@ -183,7 +185,8 @@ describe('git', () => {
       [GIT_COMMIT_AUTHOR_NAME]: 'git author',
       [GIT_COMMIT_COMMITTER_EMAIL]: 'DD_GIT_COMMIT_COMMITTER_EMAIL',
       [GIT_COMMIT_COMMITTER_DATE]: '1973',
-      [GIT_COMMIT_COMMITTER_NAME]: 'DD_GIT_COMMIT_COMMITTER_NAME'
+      [GIT_COMMIT_COMMITTER_NAME]: 'DD_GIT_COMMIT_COMMITTER_NAME',
+      [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
   })
 })
