@@ -118,11 +118,6 @@ suite
       histogram.record(Math.round(Math.random() * 3.6e12))
     }
   })
-  .add('metrics#track', {
-    fn () {
-      metrics.track(spanStub).finish()
-    }
-  })
   .add('metrics#boolean', {
     fn () {
       metrics.boolean('test', Math.random() < 0.5)
