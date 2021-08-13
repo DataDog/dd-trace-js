@@ -3,7 +3,6 @@ const proxyquire = require('proxyquire')
 const sanitizedExecStub = sinon.stub().returns('')
 
 const {
-  getGitMetadata,
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   GIT_TAG,
@@ -14,8 +13,11 @@ const {
   GIT_COMMIT_COMMITTER_NAME,
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
-  GIT_COMMIT_AUTHOR_NAME
-} = proxyquire('../../../src/plugins/util/git',
+  GIT_COMMIT_AUTHOR_NAME,
+  CI_WORKSPACE_PATH
+} = require('../../../src/plugins/util/tags')
+
+const { getGitMetadata } = proxyquire('../../../src/plugins/util/git',
   {
     './exec': {
       'sanitizedExec': sanitizedExecStub
@@ -32,7 +34,8 @@ describe('git', () => {
       commitSHA: 'ciSHA',
       branch: 'myBranch',
       commitMessage: 'myCommitMessage',
-      authorName: 'ciAuthorName'
+      authorName: 'ciAuthorName',
+      ciWorkspacePath: 'ciWorkspacePath'
     }
     const metadata = getGitMetadata(ciMetadata)
 
@@ -41,7 +44,8 @@ describe('git', () => {
         [GIT_COMMIT_SHA]: 'ciSHA',
         [GIT_BRANCH]: 'myBranch',
         [GIT_COMMIT_MESSAGE]: 'myCommitMessage',
-        [GIT_COMMIT_AUTHOR_NAME]: 'ciAuthorName'
+        [GIT_COMMIT_AUTHOR_NAME]: 'ciAuthorName',
+        [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
       }
     )
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
@@ -50,6 +54,7 @@ describe('git', () => {
     expect(sanitizedExecStub).not.to.have.been.calledWith('git show -s --format=%s', { stdio: 'pipe' })
     expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
+    expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse --show-toplevel', { stdio: 'pipe' })
   })
   it('does not crash if git is not available', () => {
     sanitizedExecStub.returns('')
@@ -66,7 +71,8 @@ describe('git', () => {
       [GIT_COMMIT_COMMITTER_NAME]: undefined,
       [GIT_COMMIT_AUTHOR_EMAIL]: undefined,
       [GIT_COMMIT_AUTHOR_DATE]: undefined,
-      [GIT_COMMIT_AUTHOR_NAME]: ''
+      [GIT_COMMIT_AUTHOR_NAME]: '',
+      [CI_WORKSPACE_PATH]: ''
     })
   })
   it('returns all git metadata is git is available', () => {
@@ -76,6 +82,7 @@ describe('git', () => {
       .onCall(2).returns('this is a commit message')
       .onCall(3).returns('gitBranch')
       .onCall(4).returns('gitCommitSHA')
+      .onCall(5).returns('ciWorkspacePath')
 
     const metadata = getGitMetadata({ tag: 'ciTag' })
     expect(metadata).to.eql({
@@ -89,12 +96,14 @@ describe('git', () => {
       [GIT_COMMIT_AUTHOR_NAME]: 'git author',
       [GIT_COMMIT_COMMITTER_EMAIL]: 'git.committer@email.com',
       [GIT_COMMIT_COMMITTER_DATE]: '1973',
-      [GIT_COMMIT_COMMITTER_NAME]: 'git committer'
+      [GIT_COMMIT_COMMITTER_NAME]: 'git committer',
+      [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
     expect(sanitizedExecStub).to.have.been.calledWith('git ls-remote --get-url', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%s', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%an,%ae,%ad,%cn,%ce,%cd', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
+    expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --show-toplevel', { stdio: 'pipe' })
   })
 })
