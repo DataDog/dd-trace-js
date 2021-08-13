@@ -3,7 +3,6 @@
 !packages/*/lib/**/*
 !packages/*/src/**/*
 !packages/*/index.js
-!protobuf/**/*
 !scripts/**/*
 !vendor/**/*
 !CONTRIBUTING.md

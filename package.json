@@ -6,8 +6,6 @@
   "typings": "index.d.ts",
   "scripts": {
     "preinstall": "node scripts/preinstall.js",
-    "protobuf": "pbjs -t static-module -w commonjs -o protobuf/profile.js protobuf/profile.proto && pbts -o protobuf/profile.d.ts protobuf/profile.js",
-    "prepublishOnly": "node scripts/prepublish.js",
     "postpublish": "node scripts/postpublish.js",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",
