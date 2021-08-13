@@ -14,10 +14,8 @@ function isError (value) {
   if (value instanceof Error) {
     return true
   }
-  if (value && value.constructor) {
-    return value.constructor.name === 'JestAssertionError' ||
-      value.constructor.name === 'Error' ||
-      value.constructor.name === 'ErrorWithStack'
+  if (value && value.message && value.stack) {
+    return true
   }
   return false
 }
