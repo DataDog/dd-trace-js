@@ -40,10 +40,10 @@ services:
       - '127.0.0.1:1521:1521'
       - '127.0.0.1:5500:5500'
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
     environment:
       - discovery.type=single-node
-      - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
+      - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
     ports:
       - "127.0.0.1:9200:9200"
   rabbitmq:
