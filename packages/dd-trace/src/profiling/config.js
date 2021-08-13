@@ -12,6 +12,7 @@ const { tagger } = require('./tagger')
 
 const {
   DD_PROFILING_ENABLED,
+  DD_PROFILING_PROFILERS,
   DD_ENV,
   DD_TAGS,
   DD_SERVICE,
@@ -54,10 +55,12 @@ class Config {
       new AgentExporter(this)
     ], this)
 
-    this.profilers = options.profilers || [
+    const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
       new CpuProfiler(),
       new HeapProfiler()
-    ]
+    ])
+
+    this.profilers = ensureProfilers(profilers, this)
   }
 }
 
@@ -85,6 +88,33 @@ function ensureExporters (exporters, options) {
   }
 
   return exporters
+}
+
+function getProfiler (name, options) {
+  switch (name) {
+    case 'cpu':
+      return new CpuProfiler(options)
+    case 'heap':
+      return new HeapProfiler(options)
+    default:
+      options.logger.error(`Unknown profiler "${name}"`)
+  }
+}
+
+function ensureProfilers (profilers, options) {
+  if (typeof profilers === 'string') {
+    profilers = profilers.split(',')
+  }
+
+  for (let i = 0; i < profilers.length; i++) {
+    const profiler = profilers[i]
+    if (typeof profiler === 'string') {
+      profilers[i] = getProfiler(profiler, options)
+    }
+  }
+
+  // Filter out any invalid profilers
+  return profilers.filter(v => v)
 }
 
 function ensureLogger (logger) {
