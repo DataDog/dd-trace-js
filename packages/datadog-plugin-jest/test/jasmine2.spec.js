@@ -25,7 +25,8 @@ describe('Plugin', () => {
     testRunner: 'jest-jasmine2',
     silent: true,
     testEnvironment: 'node',
-    cache: false
+    cache: false,
+    maxWorkers: '50%'
   }
 
   withVersions(plugin, ['jest-jasmine2'], (version, moduleName) => {
