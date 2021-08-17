@@ -92,7 +92,7 @@ function createAgentWrapHandle (tracer, config) {
         tags: {
           'service.name': config.service || tracer._service,
           'span.kind': 'server',
-          'resource.method': actionName,
+          'sharedb.action': actionName,
           'resource.name': getReadableResourceName(actionName, request.c, request.q)
         }
       })

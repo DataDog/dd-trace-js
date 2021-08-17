@@ -1,52 +1,57 @@
 'use strict'
 
 const FormData = require('form-data')
-const { URL } = require('url')
-const { Encoder } = require('../encoders/pprof')
-const { eachOfSeries } = require('../util')
 
 class AgentExporter {
-  constructor ({ url } = {}) {
-    this._url = typeof url === 'string' ? new URL(url) : url
-    this._encoder = new Encoder()
+  constructor ({ url, logger } = {}) {
+    this._url = url
+    this._logger = logger
   }
 
-  export ({ profiles, start, end, tags }, callback) {
+  export ({ profiles, start, end, tags }) {
     const form = new FormData()
     const types = Object.keys(profiles)
 
-    form.append('recording-start', start.toISOString())
-    form.append('recording-end', end.toISOString())
-    form.append('language', 'javascript')
-    form.append('runtime', 'nodejs')
-    form.append('format', 'pprof')
+    const fields = [
+      ['recording-start', start.toISOString()],
+      ['recording-end', end.toISOString()],
+      ['language', 'javascript'],
+      ['runtime', 'nodejs'],
+      ['format', 'pprof'],
 
-    form.append('tags[]', 'language:javascript')
-    form.append('tags[]', `runtime:nodejs`)
-    form.append('tags[]', 'format:pprof')
+      ['tags[]', 'language:javascript'],
+      ['tags[]', 'runtime:nodejs'],
+      ['tags[]', 'format:pprof'],
+      ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
+    ]
 
-    for (const key in tags) {
-      form.append('tags[]', `${key}:${tags[key]}`)
+    for (const [key, value] of fields) {
+      form.append(key, value)
     }
 
-    eachOfSeries(types, (type, index, callback) => {
-      const profile = profiles[type]
+    this._logger.debug(() => {
+      const body = fields.map(([key, value]) => `  ${key}: ${value}`).join('\n')
+      return `Building agent export report: ${'\n' + body}`
+    })
 
-      this._encoder.encode(profile, (err, buffer) => {
-        if (err) return callback(err)
+    for (let index = 0; index < types.length; index++) {
+      const type = types[index]
+      const buffer = profiles[type]
 
-        form.append(`types[${index}]`, type)
-        form.append(`data[${index}]`, buffer, {
-          filename: `${type}.pb.gz`,
-          contentType: 'application/octet-stream',
-          knownLength: buffer.length
-        })
-
-        callback(null, buffer)
+      this._logger.debug(() => {
+        const bytes = buffer.toString('hex').match(/../g).join(' ')
+        return `Adding ${type} profile to agent export: ` + bytes
       })
-    }, err => {
-      if (err) return callback(err)
 
+      form.append(`types[${index}]`, type)
+      form.append(`data[${index}]`, buffer, {
+        filename: `${type}.pb.gz`,
+        contentType: 'application/octet-stream',
+        knownLength: buffer.length
+      })
+    }
+
+    return new Promise((resolve, reject) => {
       const options = {
         method: 'POST',
         path: '/profiling/v1/input',
@@ -61,13 +66,26 @@ class AgentExporter {
         options.port = this._url.port
       }
 
+      this._logger.debug(() => {
+        return `Submitting agent report to: ${JSON.stringify(options)}`
+      })
+
       form.submit(options, (err, res) => {
-        if (err) return callback(err)
+        if (err || !res) return reject(err)
+
+        const chunks = []
+        res.on('data', chunk => chunks.push(chunk))
+        res.on('end', () => {
+          this._logger.debug(() => {
+            return `Agent export response: ${Buffer.concat(chunks)}`
+          })
+        })
+
         if (res.statusCode >= 400) {
-          return callback(new Error(`Error from the agent: ${res.statusCode}`))
+          return reject(new Error(`Error from the agent: ${res.statusCode}`))
         }
 
-        callback()
+        resolve()
       })
     })
   }

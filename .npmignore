@@ -3,15 +3,12 @@
 !packages/*/lib/**/*
 !packages/*/src/**/*
 !packages/*/index.js
-!prebuilds/**/*
-!protobuf/**/*
 !scripts/**/*
 !vendor/**/*
 !CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
 !README.md
-!binding.gyp
 !index.d.ts
 !index.js
 !init.js

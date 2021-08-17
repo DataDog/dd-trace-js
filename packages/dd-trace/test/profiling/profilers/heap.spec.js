@@ -7,22 +7,20 @@ const sinon = require('sinon')
 describe('profilers/native/heap', () => {
   let NativeHeapProfiler
   let pprof
-  let maybeRequire
 
   beforeEach(() => {
     pprof = {
+      encode: sinon.stub().returns(Promise.resolve()),
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
         profile: sinon.stub()
       }
     }
-    maybeRequire = sinon.stub()
-    maybeRequire.withArgs('pprof').returns(pprof)
 
-    NativeHeapProfiler = proxyquire('../../../../src/profiling/profilers/native/heap', {
-      '../../util': { maybeRequire }
-    }).NativeHeapProfiler
+    NativeHeapProfiler = proxyquire('../../../src/profiling/profilers/heap', {
+      '@datadog/pprof': pprof
+    })
   })
 
   it('should start the internal heap profiler', () => {
@@ -53,7 +51,7 @@ describe('profilers/native/heap', () => {
     sinon.assert.calledOnce(pprof.heap.stop)
   })
 
-  it('should collect profiles from the internal heap profiler', () => {
+  it('should collect profiles from the pprof heap profiler', () => {
     const profiler = new NativeHeapProfiler()
 
     profiler.start()
@@ -63,5 +61,15 @@ describe('profilers/native/heap', () => {
     const profile = profiler.profile()
 
     expect(profile).to.equal('profile')
+  })
+
+  it('should encode profiles from the pprof heap profiler', () => {
+    const profiler = new NativeHeapProfiler()
+
+    profiler.start()
+    const profile = profiler.profile()
+    profiler.encode(profile)
+
+    sinon.assert.calledOnce(pprof.encode)
   })
 })

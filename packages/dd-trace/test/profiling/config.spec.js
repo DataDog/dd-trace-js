@@ -3,8 +3,9 @@
 const { expect } = require('chai')
 const os = require('os')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
-const { InspectorCpuProfiler } = require('../../src/profiling/profilers/inspector/cpu')
-const { InspectorHeapProfiler } = require('../../src/profiling/profilers/inspector/heap')
+const { FileExporter } = require('../../src/profiling/exporters/file')
+const CpuProfiler = require('../../src/profiling/profilers/cpu')
+const HeapProfiler = require('../../src/profiling/profilers/heap')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 describe('config', () => {
@@ -20,7 +21,7 @@ describe('config', () => {
     expect(config).to.deep.include({
       enabled: true,
       service: 'node',
-      flushInterval: 60 * 1000
+      flushInterval: 65 * 1000
     })
 
     expect(config.tags).to.deep.equal({
@@ -30,8 +31,8 @@ describe('config', () => {
 
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.profilers[0]).to.be.an.instanceof(InspectorCpuProfiler)
-    expect(config.profilers[1]).to.be.an.instanceof(InspectorHeapProfiler)
+    expect(config.profilers[0]).to.be.an.instanceof(CpuProfiler)
+    expect(config.profilers[1]).to.be.an.instanceof(HeapProfiler)
   })
 
   it('should support configuration options', () => {
@@ -40,13 +41,13 @@ describe('config', () => {
       service: 'test',
       version: '1.2.3-test.0',
       logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
+        debug () { },
+        info () { },
+        warn () { },
+        error () { }
       },
-      exporters: ['agent'],
-      profilers: [new InspectorCpuProfiler()],
+      exporters: 'agent,file',
+      profilers: 'cpu',
       url: 'http://localhost:1234/'
     }
 
@@ -60,13 +61,39 @@ describe('config', () => {
     expect(config.tags.host).to.be.a('string')
     expect(config.tags.service).to.equal(options.service)
     expect(config.tags.version).to.equal(options.version)
-    expect(config.flushInterval).to.equal(60 * 1000)
+    expect(config.flushInterval).to.equal(65 * 1000)
     expect(config.exporters).to.be.an('array')
-    expect(config.exporters.length).to.equal(1)
+    expect(config.exporters.length).to.equal(2)
+    expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
+    expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(InspectorCpuProfiler)
+    expect(config.profilers[0]).to.be.an.instanceOf(CpuProfiler)
+  })
+
+  it('should filter out invalid profilers', () => {
+    const errors = []
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error (error) {
+          errors.push(error)
+        }
+      },
+      profilers: 'nope,also_nope'
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(0)
+
+    expect(errors.length).to.equal(2)
+    expect(errors[0]).to.equal('Unknown profiler "nope"')
+    expect(errors[1]).to.equal('Unknown profiler "also_nope"')
   })
 
   it('should support tags', () => {

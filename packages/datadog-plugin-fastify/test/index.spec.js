@@ -275,6 +275,172 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should handle hook errors', done => {
+          let error
+
+          app.addHook('onRequest', (request, reply, next) => {
+            next(error = new Error('boom'))
+          })
+
+          app.get('/user', (request, reply) => {
+            reply.send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'fastify.request')
+                expect(spans[0]).to.have.property('resource', 'GET /user')
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
+              })
+              .then(done)
+              .catch(done)
+
+            app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(() => {})
+            })
+          })
+        })
+
+        // fastify doesn't have all application hooks in older versions
+        if (semver.intersects(version, '>=2.15')) {
+          it('should support hooks with a single parameter', done => {
+            app.addHook('onReady', done => done())
+
+            app.get('/user', (request, reply) => {
+              reply.send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'fastify.request')
+                  expect(spans[0]).to.have.property('resource', 'GET /user')
+                  expect(spans[0]).to.have.property('error', 0)
+                })
+                .then(done)
+                .catch(done)
+
+              app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
+              })
+            })
+          })
+        }
+
+        // fastify crashes the process on reply exceptions in older versions
+        if (semver.intersects(version, '>=3')) {
+          it('should handle reply rejections', done => {
+            let error
+
+            app.get('/user', (request, reply) => {
+              return Promise.reject(error = new Error('boom'))
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'fastify.request')
+                  expect(spans[0]).to.have.property('resource', 'GET /user')
+                  expect(spans[0].meta).to.have.property('error.type', error.name)
+                  expect(spans[0].meta).to.have.property('error.msg', error.message)
+                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                })
+                .then(done)
+                .catch(done)
+
+              app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
+              })
+            })
+          })
+
+          it('should handle reply exceptions', done => {
+            let error
+
+            app.setErrorHandler((error, request, reply) => {
+              reply.send()
+            })
+            app.get('/user', (request, reply) => {
+              throw (error = new Error('boom'))
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'fastify.request')
+                  expect(spans[0]).to.have.property('resource', 'GET /user')
+                  expect(spans[0].meta).to.have.property('error.type', error.name)
+                  expect(spans[0].meta).to.have.property('error.msg', error.message)
+                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                })
+                .then(done)
+                .catch(done)
+
+              app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
+              })
+            })
+          })
+        }
+
+        // fastify crashes the process on hook exceptions in older versions
+        // which was fixed in https://github.com/fastify/fastify/pull/2695
+        if (semver.intersects(version, '>=3.9.2')) {
+          it('should handle hook exceptions', done => {
+            let error
+
+            app.addHook('onRequest', (request, reply, next) => {
+              throw (error = new Error('boom'))
+            })
+
+            app.get('/user', (request, reply) => {
+              reply.send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'fastify.request')
+                  expect(spans[0]).to.have.property('resource', 'GET /user')
+                  expect(spans[0]).to.have.property('error', 1)
+                  expect(spans[0].meta).to.have.property('error.type', error.name)
+                  expect(spans[0].meta).to.have.property('error.msg', error.message)
+                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                })
+                .then(done)
+                .catch(done)
+
+              app.listen(port, 'localhost', () => {
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
+              })
+            })
+          })
+        }
       })
     })
   })

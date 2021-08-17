@@ -219,7 +219,7 @@ describe('Config', () => {
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config.tags).to.have.property('runtime-id')
-    expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{32}$/)
+    expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     expect(config).to.have.nested.property('experimental.b3', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')

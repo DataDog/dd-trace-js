@@ -1,9 +1,11 @@
 [
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -24,6 +26,9 @@
       "ci.provider.name": "gitlab",
       "ci.stage.name": "gitlab-stage-name",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -31,9 +36,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -56,6 +63,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -63,9 +73,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -88,6 +100,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar~",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -95,9 +110,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -120,6 +137,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/~/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -127,9 +147,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -154,6 +176,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/not-my-home/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -161,9 +186,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -188,6 +215,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "~foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -195,9 +225,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -222,6 +254,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/not-my-home",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -229,9 +264,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -254,6 +291,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -261,9 +301,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -284,6 +326,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -291,9 +336,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "refs/heads/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -316,6 +363,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -323,9 +373,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "refs/heads/feature/one",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -348,6 +400,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "feature/one",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample"
@@ -355,9 +410,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
       "CI_COMMIT_TAG": "origin/tags/0.1.0",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -379,6 +436,9 @@
       "ci.provider.name": "gitlab",
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample",
@@ -387,9 +447,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
       "CI_COMMIT_TAG": "refs/heads/tags/0.1.0",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -411,6 +473,9 @@
       "ci.provider.name": "gitlab",
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample",
@@ -419,9 +484,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
       "CI_COMMIT_TAG": "0.1.0",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -443,6 +510,9 @@
       "ci.provider.name": "gitlab",
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "sample",
@@ -451,9 +521,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -476,6 +548,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "http://hostname.com/repo.git"
@@ -483,9 +558,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -508,6 +585,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "http://hostname.com/repo.git"
@@ -515,9 +595,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -540,6 +622,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "http://hostname.com/repo.git"
@@ -547,9 +632,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -572,6 +659,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "http://hostname.com/repo.git"
@@ -579,9 +669,11 @@
   ],
   [
     {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_BRANCH": "origin/master",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_NAME": "gitlab-job-name",
       "CI_JOB_STAGE": "gitlab-stage-name",
       "CI_JOB_URL": "gitlab-job-url",
@@ -604,6 +696,9 @@
       "ci.stage.name": "gitlab-stage-name",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
       "git.commit.sha": "gitlab-git-commit",
       "git.repository_url": "git@hostname.com:org/repo.git"

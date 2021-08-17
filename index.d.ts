@@ -236,6 +236,11 @@ export declare interface TracerOptions {
   port?: number | string;
 
   /**
+   * Whether to enable profiling.
+   */
+  profiling?: boolean
+
+  /**
    * Options specific for the Dogstatsd agent.
    */
   dogstatsd?: {
@@ -321,7 +326,7 @@ export declare interface TracerOptions {
     b3?: boolean
 
     /**
-     * Whether to add an auto-generated `runtime-id` tag to spans and metrics.
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
      * @default false
      */
     runtimeId?: boolean
@@ -879,6 +884,16 @@ declare namespace plugins {
      * @default -1
      */
     depth?: number;
+
+    /**
+     * Whether to include the source of the operation within the query as a tag
+     * on every span. This may contain sensitive information and sould only be
+     * enabled if sensitive data is always sent as variables and not in the
+     * query text.
+     *
+     * @default false
+     */
+    source?: boolean;
 
     /**
      * An array of variable names to record. Can also be a callback that returns

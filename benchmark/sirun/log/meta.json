@@ -1,0 +1,12 @@
+{
+  "name": "log",
+  "run": "node index.js",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "without-log": { "env": { "DD_TRACE_DEBUG": "false" } },
+    "skip-log": { "env": { "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "error" } },
+    "with-debug": { "env": { "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "debug" } },
+    "with-error": { "env": { "WITH_LEVEL": "error", "DD_TRACE_LOG_LEVEL": "error"  } }
+  }
+}

@@ -5,10 +5,8 @@ const pkg = require('./pkg')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
-const id = require('./id')
 const { isTrue, isFalse } = require('./util')
-
-const runtimeId = `${id().toString()}${id().toString()}`
+const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -26,9 +24,9 @@ class Config {
 
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
-      // options.profiling,
-      // process.env.DD_PROFILING_ENABLED,
+      options.profiling,
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
+      process.env.DD_PROFILING_ENABLED,
       false
     )
     const DD_PROFILING_EXPORTERS = coalesce(
@@ -198,13 +196,12 @@ class Config {
       enabled: isTrue(DD_APPSEC_ENABLED)
     }
 
-    tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
-
-    if (this.experimental.runtimeId) {
-      tagger.add(this.tags, {
-        'runtime-id': runtimeId
-      })
-    }
+    tagger.add(this.tags, {
+      service: this.service,
+      env: this.env,
+      version: this.version,
+      'runtime-id': uuid()
+    })
   }
 }
 
