@@ -20,7 +20,7 @@ const {
   DD_TRACE_AGENT_URL,
   DD_AGENT_HOST,
   DD_TRACE_AGENT_PORT,
-  DD_PROFILER_UPLOAD_TIMEOUT
+  DD_PROFILING_UPLOAD_TIMEOUT
 } = process.env
 
 class Config {
@@ -33,7 +33,7 @@ class Config {
     // Must be longer than one minute so pad with five seconds
     const flushInterval = coalesce(options.interval, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
-      DD_PROFILER_UPLOAD_TIMEOUT, 60 * 1000)
+      DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service

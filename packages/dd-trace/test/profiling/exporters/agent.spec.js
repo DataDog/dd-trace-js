@@ -75,7 +75,7 @@ describe('exporters/agent', () => {
     })
 
     it('should send profiles as pprof to the intake', async () => {
-      const exporter = new AgentExporter({ url, logger })
+      const exporter = new AgentExporter({ url, logger, uploadTimeout: 100 })
       const start = new Date()
       const end = new Date()
       const tags = {
@@ -143,8 +143,7 @@ describe('exporters/agent', () => {
       const exporter = new AgentExporter({
         url,
         logger,
-        uploadTimeout: 1e3,
-        backoffBase: 10
+        uploadTimeout: 100
       })
 
       const start = new Date()
@@ -183,14 +182,15 @@ describe('exporters/agent', () => {
       expect(attempt).to.be.greaterThan(0)
     })
 
-    it('should log exports and handle http errors gracefully', async () => {
+    it('should log exports and handle http errors gracefully', async function () {
+      this.timeout(10000)
       const expectedLogs = [
         /^Building agent export report: (\n {2}[a-z-]+(\[\])?: [a-z0-9-TZ:.]+)+$/,
         /^Adding cpu profile to agent export:( [0-9a-f]{2})+$/,
         /^Adding heap profile to agent export:( [0-9a-f]{2})+$/,
         /^Submitting agent report to:/i,
-        /^Error from the agent: 400$/,
-        /^Agent export response:( [0-9a-f]{2})*$/
+        /^Error from the agent: HTTP Error 400$/,
+        /^Agent export response: ([0-9a-f]{2}( |$))*/
       ]
 
       let doneLogs
@@ -198,16 +198,20 @@ describe('exporters/agent', () => {
         doneLogs = resolve
       })
 
+      function onMessage (message) {
+        const expected = expectedLogs[index++ % expectedLogs.length]
+        expect(typeof message === 'function' ? message() : message)
+          .to.match(expected)
+        if (index >= expectedLogs.length) doneLogs()
+      }
+
       let index = 0
       const exporter = new AgentExporter({
         url,
+        uploadTimeout: 100,
         logger: {
-          debug (message) {
-            const expected = expectedLogs[index++ % expectedLogs.length]
-            expect(typeof message === 'function' ? message() : message)
-              .to.match(expected)
-            if (index >= expectedLogs.length) doneLogs()
-          }
+          debug: onMessage,
+          error: onMessage
         }
       })
       const start = new Date()
@@ -224,8 +228,13 @@ describe('exporters/agent', () => {
         heap
       }
 
+      let tries = 0
       const json = JSON.stringify({ error: 'some error' })
       app.post('/profiling/v1/input', upload.any(), (req, res) => {
+        if (++tries > 1) {
+          res.end()
+          return
+        }
         const data = Buffer.from(json)
         res.writeHead(400, {
           'content-type': 'application/json',
@@ -257,7 +266,7 @@ describe('exporters/agent', () => {
     })
 
     it('should support Unix domain sockets', async () => {
-      const exporter = new AgentExporter({ url: new URL(`unix://${url}`), logger })
+      const exporter = new AgentExporter({ url: new URL(`unix://${url}`), logger, uploadTimeout: 100 })
       const start = new Date()
       const end = new Date()
       const tags = { foo: 'bar' }

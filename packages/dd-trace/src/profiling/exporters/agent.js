@@ -1,50 +1,19 @@
 'use strict'
 
+const retry = require('retry')
 const { request } = require('http')
 const FormData = require('form-data')
 
-function * times (base, timeout) {
-  let attempt = 0
-  let n
-
-  // base * n is the current stride length
-  // base * (n - 1) is the sum prior steps
-  // therefore, base * n + base * (n - 1) is the final total
-  while (timeout > base * ((n = 2 ** attempt++) - 1) + base * n) {
-    yield base * n * Math.random()
-  }
-}
-
-function backoff (base, overallTimeout, task) {
-  return new Promise((resolve, reject) => {
-    const t = times(base, overallTimeout)
-
-    function step () {
-      const next = t.next()
-      if (next.done) {
-        reject(new Error('Profiler agent export back-off period expired'))
-      }
-      const timeout = next.value
-
-      const start = Date.now()
-      task(timeout, (done) => {
-        if (done) return resolve()
-
-        const remaining = timeout - (Date.now() - start)
-        if (remaining > 0) {
-          setTimeout(step, remaining)
-        } else {
-          step()
-        }
-      })
-    }
-
-    step()
-  })
-}
-
 function sendRequest (options, body, callback) {
-  const req = request(options, res => callback(null, res))
+  const req = request(options, res => {
+    if (res.statusCode >= 400) {
+      const error = new Error(`HTTP Error ${res.statusCode}`)
+      error.status = res.statusCode
+      callback(error)
+    } else {
+      callback(null, res)
+    }
+  })
   req.on('error', callback)
   if (body) req.write(body)
   req.end()
@@ -59,12 +28,24 @@ function getBody (stream, callback) {
   })
 }
 
+function computeRetries (uploadTimeout) {
+  let tries = 0
+  while (tries < 2 || uploadTimeout > 1000) {
+    tries++
+    uploadTimeout /= 2
+  }
+  return [tries, uploadTimeout]
+}
+
 class AgentExporter {
-  constructor ({ url, logger, uploadTimeout, backoffBase } = {}) {
+  constructor ({ url, logger, uploadTimeout } = {}) {
     this._url = url
     this._logger = logger
-    this._uploadTimeout = uploadTimeout || 60 * 1000
-    this._backoffBase = backoffBase || 1000
+
+    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+
+    this._backoffTime = backoffTime
+    this._backoffTries = backoffTries
   }
 
   export ({ profiles, start, end, tags }) {
@@ -129,30 +110,37 @@ class AgentExporter {
       return `Submitting agent report to: ${JSON.stringify(options)}`
     })
 
-    return backoff(this._backoffBase, this._uploadTimeout, (timeout, done) => {
-      sendRequest({ ...options, timeout }, body, (err, response) => {
-        if (err) {
-          this._logger.debug(err.stack)
-        }
-        if (!response) return done(false)
+    return new Promise((resolve, reject) => {
+      const operation = retry.operation({
+        randomize: true,
+        minTimeout: this._backoffTime,
+        retries: this._backoffTries
+      })
 
-        const { statusCode } = response
-        if (statusCode >= 400) {
-          this._logger.debug(`Error from the agent: ${statusCode}`)
-        }
-
-        getBody(response, (err, body) => {
-          if (err) {
-            this._logger.debug(`Error reading agent response: ${err.message}`)
-          } else {
-            this._logger.debug(() => {
-              const bytes = body.toString('hex').match(/../g).join(' ')
-              return `Agent export response: ${bytes}`
-            })
+      operation.attempt((attempt) => {
+        const timeout = Math.pow(this._backoffTime, attempt)
+        sendRequest({ ...options, timeout }, body, (err, response) => {
+          if (operation.retry(err)) {
+            this._logger.error(`Error from the agent: ${err.message}`)
+            return
+          } else if (err) {
+            reject(new Error('Profiler agent export back-off period expired'))
+            return
           }
-        })
 
-        done(statusCode < 500)
+          getBody(response, (err, body) => {
+            if (err) {
+              this._logger.error(`Error reading agent response: ${err.message}`)
+            } else {
+              this._logger.debug(() => {
+                const bytes = (body.toString('hex').match(/../g) || []).join(' ')
+                return `Agent export response: ${bytes}`
+              })
+            }
+          })
+
+          resolve()
+        })
       })
     })
   }
