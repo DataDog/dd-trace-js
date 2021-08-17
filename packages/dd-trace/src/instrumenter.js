@@ -1,6 +1,6 @@
 'use strict'
 
-const shimmer = require('shimmer')
+const shimmer = require('./shimmer')
 const log = require('./log')
 const metrics = require('./metrics')
 const Loader = require('./loader')
