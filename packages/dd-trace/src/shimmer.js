@@ -8,8 +8,8 @@
 //
 // `wrap` and `masswrap` here are straight copies of their counterparts in
 // shimmer, with logging and arg checking removed (since we know exactly what
-// we're giving to it, and that it's correct. `defineProperty` is altered as
-// described above.
+// we're giving to it, and that it's correct), and unused code paths removed.
+// `defineProperty` is altered as described above.
 
 const shimmer = require('shimmer')
 
@@ -42,10 +42,6 @@ function wrap (nodule, name, wrapper) {
 }
 
 function massWrap (nodules, names, wrapper) {
-  if (!Array.isArray(nodules)) {
-    nodules = [nodules]
-  }
-
   nodules.forEach(function (nodule) {
     names.forEach(function (name) {
       wrap(nodule, name, wrapper)
