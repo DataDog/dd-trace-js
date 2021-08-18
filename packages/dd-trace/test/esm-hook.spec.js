@@ -11,7 +11,11 @@ describe('esm-hook', () => {
   let output
   context('with loader hook', () => {
     before(() => {
-      output = JSON.parse(execSync(`node --no-warnings --loader=${loaderHook} ${testFile}`).toString())
+      output = JSON.parse(
+        execSync(
+          `node --experimental-modules --no-warnings --loader=${loaderHook} ${testFile}`
+        ).toString()
+      )
     })
 
     it('should replace default exports', () => {
