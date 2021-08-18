@@ -12,7 +12,7 @@ class Client {
     options = options || {}
 
     this._host = options.host || 'localhost'
-    this.__family = isIP(this._host)
+    this._family = isIP(this._host)
     this._port = options.port || 8125
     this._prefix = options.prefix || ''
     this._tags = options.tags || []
@@ -38,15 +38,12 @@ class Client {
 
     this._queue = []
 
-    const send = (address, family) =>
-      queue.forEach((buffer) => this._send(address, family, buffer));
-
     if (this._family !== 0) {
-      send(this._host, this._family)
+      this._sendAll(queue, this._host, this._family)
     } else {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error(err)
-        send(address, family)
+        this._sendAll(queue, address, family)
       })
     }
   }
@@ -57,6 +54,10 @@ class Client {
     log.debug(`Sending to DogStatsD: ${buffer}`)
 
     socket.send(buffer, 0, buffer.length, this._port, address)
+  }
+
+  _sendAll (queue, address, family) {
+    queue.forEach((buffer) => this._send(address, family, buffer))
   }
 
   _add (stat, value, type, tags) {

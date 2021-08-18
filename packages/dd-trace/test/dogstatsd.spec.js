@@ -134,8 +134,33 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 1)
     client.flush()
 
+    expect(dns.lookup).to.have.been.called
     expect(udp4.send).to.not.have.been.called
     expect(udp6.send).to.not.have.been.called
+  })
+
+  it('should not call DNS if the host is an IPv4 address', () => {
+    client = new Client({
+      host: '127.0.0.1'
+    })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    expect(udp4.send).to.have.been.called
+    expect(dns.lookup).to.not.have.been.called
+  })
+
+  it('should not call DNS if the host is an IPv6 address', () => {
+    client = new Client({
+      host: '2001:db8:3333:4444:5555:6666:7777:8888'
+    })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    expect(udp6.send).to.have.been.called
+    expect(dns.lookup).to.not.have.been.called
   })
 
   it('should support configuration', () => {
