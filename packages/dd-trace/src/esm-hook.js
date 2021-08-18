@@ -17,10 +17,6 @@ function esmHook (instrumentedModules, hookFn) {
     return
   }
 
-  if (!iitm.enabled()) {
-    return
-  }
-
   iitm.addHook((name, namespace) => {
     const isBuiltin = name.startsWith('node:')
     let baseDir
