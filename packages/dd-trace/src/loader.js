@@ -72,7 +72,7 @@ class Loader {
     return modules
   }
 
-  _hookModule (moduleExports, moduleName, moduleBaseDir) {
+  _hookModule (moduleExports, moduleName, moduleBaseDir, isESM) {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     if (!this._names.has(moduleName)) {
@@ -84,6 +84,8 @@ class Loader {
     }
 
     const moduleVersion = getVersion(moduleBaseDir)
+
+    let newModuleExports = moduleExports
 
     Array.from(this._plugins.keys())
       .filter(plugin => [].concat(plugin).some(instrumentation =>
@@ -101,7 +103,7 @@ class Loader {
               const config = this._plugins.get(plugin).config
 
               if (config.enabled !== false) {
-                moduleExports = this._instrumenter.patch(instrumentation, moduleExports, config) || moduleExports
+                newModuleExports = this._instrumenter.patch(instrumentation, moduleExports, config) || moduleExports
               }
             })
         } catch (e) {
@@ -111,7 +113,9 @@ class Loader {
         }
       })
 
-    return moduleExports
+    if (!isESM || newModuleExports !== moduleExports) {
+      return newModuleExports
+    }
   }
 
   _validate (plugin, moduleName, moduleBaseDir, moduleVersion) {

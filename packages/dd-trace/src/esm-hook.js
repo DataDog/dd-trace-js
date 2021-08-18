@@ -2,21 +2,9 @@
 
 const parse = require('module-details-from-path')
 
-let iitm
+const iitm = require('import-in-the-middle')
 
 function esmHook (instrumentedModules, hookFn) {
-  if (!iitm) {
-    import('import-in-the-middle').then(iitmModule => {
-      iitm = iitmModule
-      esmHook(instrumentedModules, hookFn)
-    }, (_err) => {
-      // ESM isn't supported
-      // TODO log this in debug mode?
-      iitm = { enabled: () => false }
-    })
-    return
-  }
-
   iitm.addHook((name, namespace) => {
     const isBuiltin = name.startsWith('node:')
     let baseDir
@@ -34,7 +22,7 @@ function esmHook (instrumentedModules, hookFn) {
 
     for (const moduleName of instrumentedModules) {
       if (moduleName === name) {
-        const newDefault = hookFn(namespace, moduleName, baseDir)
+        const newDefault = hookFn(namespace, moduleName, baseDir, true)
         if (newDefault) {
           namespace.default = newDefault
         }
