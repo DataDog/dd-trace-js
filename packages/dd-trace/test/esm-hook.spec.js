@@ -1,49 +1,51 @@
 'use strict'
 
-const esmHook = require('../src/esm-hook')
 const { execSync } = require('child_process')
 const path = require('path')
 const { expect } = require('chai')
 
 const loaderHook = path.join(__dirname, '..', '..', '..', 'loader-hook.mjs')
+const testFile = path.join(__dirname, 'fixtures', 'esm', 'esm-hook-test.mjs')
 
-const testing = process.env.ESM_HOOK_TEST
-
-if (testing) {
-  esmHook(['express', 'os'], (exports, name, baseDir) => {
-    if (name === 'express') {
-      return function express () {
-        return {
-          typeofExportsDefault: typeof exports.default,
-          name,
-          baseDir
-        }
-      }
-    }
-    if (name === 'os') {
-      exports.freemem = () => 42
-    }
-  })
-  ;(async () => {
-    const { default: expressDefault } = await import('express')
-    const { freemem } = await import('os')
-    console.log({
-      express: expressDefault(),
-      freemem: freemem()
+describe('esm-hook', () => {
+  let output
+  context('with loader hook', () => {
+    before(() => {
+      output = JSON.parse(execSync(`node --no-warnings --loader=${loaderHook} ${testFile}`).toString())
     })
-  })()
-} else {
-  describe.only('esm-hook', () => {
-    let output
-    context('with loader hook', () => {
-      before(() => {
-        output = JSON.parse(execSync(`node --no-warnings --loader=${loaderHook} ${__filename}`, {
-          env: Object.assign({}, process.env, { ESM_HOOK_TEST: 'yes' })
-        }).toString())
-      })
-      it('should receive exports from instrumented module', () => {
-        expect(output.express.typeofExportsDefault).to.equal('function')
-      })
+
+    it('should replace default exports', () => {
+      expect(typeof output.express).to.equal('object')
+    })
+
+    it('should receive exports from instrumented module', () => {
+      expect(output.express.typeofExportsDefault).to.equal('function')
+    })
+
+    it('should receive module name', () => {
+      expect(output.express.name).to.equal('express')
+    })
+
+    it('should receive module baseDir', () => {
+      expect(output.express.baseDir).to.equal(path.dirname(require.resolve('express')))
+    })
+
+    it('should replace non-default exports', () => {
+      expect(output.freemem).to.equal(42)
     })
   })
-}
+
+  context('without loader hook', () => {
+    before(() => {
+      output = JSON.parse(execSync(`node ${testFile}`).toString())
+    })
+
+    it('should not replace default exports', () => {
+      expect(output.express).to.equal('express()')
+    })
+
+    it('should not replace non-default exports', () => {
+      expect(output.freemem).to.not.equal(42)
+    })
+  })
+})
