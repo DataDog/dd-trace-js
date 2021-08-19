@@ -159,6 +159,7 @@ describe('Plugin', () => {
         return a.start.toString() >= b.start.toString() ? 1 : -1
       })
     })
+
     withVersions(plugin, 'graphql', version => {
 
       describe('without configuration', () => {
@@ -1635,7 +1636,9 @@ describe('Plugin', () => {
             Child: {
               word: () => new Promise((resolve) => setTimeout(() => resolve('hello'), 20)),
               fancyWord: async () => {
-                await tracer.trace('findFancyWord', () => new Promise((resolve) => setTimeout(() => resolve('world'), 40)))
+                await tracer.trace('findFancyWord', () =>
+                  new Promise((resolve) => setTimeout(() => resolve('world'), 40))
+                )
               }
             }
           }
@@ -1654,7 +1657,6 @@ describe('Plugin', () => {
 
         runQuery(params)
           .catch(done)
-
       })
     })
   })
