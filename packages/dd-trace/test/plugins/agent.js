@@ -74,6 +74,7 @@ module.exports = {
     })
 
     const timeoutMs = options && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+    const raiseLastError = options && typeof options === 'object' && options.raiseLastError
 
     const timeout = setTimeout(() => {
       if (error) {
@@ -90,7 +91,7 @@ module.exports = {
         clearTimeout(timeout)
         deferred.resolve()
       } catch (e) {
-        error = error || e
+        error = raiseLastError ? (e || error) : (error || e)
       }
     }
 

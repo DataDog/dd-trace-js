@@ -1502,7 +1502,7 @@ describe('Plugin', () => {
 
               expect(spans[2]).to.have.property('name', 'graphql.validate')
               expect(spans[2].meta).to.not.have.property('graphql.source')
-            })
+            }, { raiseLastError: true })
             .then(done)
             .catch(done)
 
@@ -1609,7 +1609,7 @@ describe('Plugin', () => {
             expect(spans[6]).to.have.property('resource', 'findFancyWord')
             expect(spans[6].duration.toNumber()).gte(40 * 1e6)
             expect(spans[6].meta).to.not.have.property('graphql.source')
-          })
+          }, { raiseLastError: true })
           .catch(done)
           .then(done)
 
