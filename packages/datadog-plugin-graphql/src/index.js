@@ -101,6 +101,7 @@ function createWrapValidate (tracer, config) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.validate(span, document, errors)
         finish(span)
       }
     }
