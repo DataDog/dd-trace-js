@@ -161,7 +161,6 @@ describe('Plugin', () => {
     })
 
     withVersions(plugin, 'graphql', version => {
-
       describe('without configuration', () => {
         before(() => {
           return agent.load('graphql')
