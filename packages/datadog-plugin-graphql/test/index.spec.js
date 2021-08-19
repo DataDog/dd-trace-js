@@ -139,27 +139,27 @@ describe('Plugin', () => {
   }
 
   describe('graphql', () => {
-    withVersions(plugin, 'graphql', version => {
-      before(() => {
-        sort = spans => spans.sort((a, b) => {
-          const order = [
-            'graphql.query',
-            'graphql.mutation',
-            'graphql.subscription',
-            'graphql.parse',
-            'graphql.validate',
-            'graphql.execute',
-            'graphql.field',
-            'graphql.resolve'
-          ]
+    before(() => {
+      sort = spans => spans.sort((a, b) => {
+        const order = [
+          'graphql.query',
+          'graphql.mutation',
+          'graphql.subscription',
+          'graphql.parse',
+          'graphql.validate',
+          'graphql.execute',
+          'graphql.field',
+          'graphql.resolve'
+        ]
 
-          if (a.start.toString() === b.start.toString()) {
-            return order.indexOf(a.name) - order.indexOf(b.name)
-          }
+        if (a.start.toString() === b.start.toString()) {
+          return order.indexOf(a.name) - order.indexOf(b.name)
+        }
 
-          return a.start.toString() >= b.start.toString() ? 1 : -1
-        })
+        return a.start.toString() >= b.start.toString() ? 1 : -1
       })
+    })
+    withVersions(plugin, 'graphql', version => {
 
       describe('without configuration', () => {
         before(() => {
@@ -1473,7 +1473,7 @@ describe('Plugin', () => {
               graphql = require(`../../../versions/graphql@${version}`).get()
 
               const apolloCore = require(`../../../versions/apollo-server-core@${apolloVersion}`).get()
-              const graphqlTools = require(`../../../versions/graphql-tools@3.1.1`).get()
+              const graphqlTools = require(`../../../versions/graphql-tools@4.0.7`).get()
 
               runQuery = apolloCore.runQuery
               mergeSchemas = graphqlTools.mergeSchemas
@@ -1543,6 +1543,118 @@ describe('Plugin', () => {
           runQuery(params)
             .catch(done)
         })
+      })
+    })
+
+    withVersions(plugin, 'graphql', '>10.0.0', toolsVersion => {
+      let runQuery
+      let makeExecutableSchema
+      let wrapSchema
+      let FilterTypes
+
+      before(() => {
+        tracer = require('../../dd-trace')
+
+        return agent.load('graphql')
+          .then(() => {
+            graphql = require(`../../../versions/graphql@15.5.1`).get()
+
+            const apolloCore = require(`../../../versions/apollo-server-core@1.3.6`).get()
+            const graphqlTools = require(`../../../versions/graphql-tools@7.0.4`).get()
+
+            runQuery = apolloCore.runQuery
+            makeExecutableSchema = graphqlTools.makeExecutableSchema
+            wrapSchema = graphqlTools.wrapSchema
+            FilterTypes = graphqlTools.FilterTypes
+          })
+      })
+
+      after(() => {
+        return agent.close()
+      })
+
+      it('should support graphql-tools wrapSchema', done => {
+        agent
+          .use(traces => {
+            const spans = sort(traces[0])
+            expect(spans).to.have.length(7)
+
+            expect(spans[0]).to.have.property('name', 'graphql.execute')
+            expect(spans[0]).to.have.property('resource', 'query MyQuery{parent{child{fancyWord word}}}')
+            expect(spans[0].duration.toNumber()).gte(60 * 1e6)
+            expect(spans[0].meta).to.not.have.property('graphql.source')
+
+            expect(spans[1]).to.have.property('name', 'graphql.resolve')
+            expect(spans[1]).to.have.property('resource', 'parent:Parent')
+            expect(spans[1].duration.toNumber()).gte(10 * 1e6)
+            expect(spans[1].meta).to.not.have.property('graphql.source')
+
+            expect(spans[3]).to.have.property('name', 'graphql.resolve')
+            expect(spans[3]).to.have.property('resource', 'child:Child')
+            expect(spans[3].duration.toNumber()).gte(10 * 1e6)
+            expect(spans[3].meta).to.not.have.property('graphql.source')
+
+            expect(spans[4]).to.have.property('name', 'graphql.resolve')
+            expect(spans[4]).to.have.property('resource', 'word:String')
+            expect(spans[4].duration.toNumber()).gte(10 * 1e6)
+            expect(spans[4].meta).to.not.have.property('graphql.source')
+
+            expect(spans[5]).to.have.property('name', 'graphql.resolve')
+            expect(spans[5]).to.have.property('resource', 'fancyWord:String')
+            expect(spans[5].duration.toNumber()).gte(20 * 1e6)
+            expect(spans[5].meta).to.not.have.property('graphql.source')
+
+            expect(spans[6]).to.have.property('name', 'findFancyWord')
+            expect(spans[6]).to.have.property('resource', 'findFancyWord')
+            expect(spans[6].duration.toNumber()).gte(40 * 1e6)
+            expect(spans[6].meta).to.not.have.property('graphql.source')
+          })
+          .catch(done)
+          .then(done)
+
+        schema = makeExecutableSchema({
+          typeDefs: `
+            type Query {
+              parent: Parent
+            }
+            type Parent {
+              child: Child
+            }
+            type Child {
+              word: String
+              fancyWord: String
+            }
+          `,
+          resolvers: {
+            Query: {
+              parent: () => new Promise((resolve) => setTimeout(() => resolve({}), 10))
+            },
+            Parent: {
+              child: () => new Promise((resolve) => setTimeout(() => resolve({}), 10))
+            },
+            Child: {
+              word: () => new Promise((resolve) => setTimeout(() => resolve('hello'), 20)),
+              fancyWord: async () => {
+                await tracer.trace('findFancyWord', () => new Promise((resolve) => setTimeout(() => resolve('world'), 40)))
+              }
+            }
+          }
+        })
+
+        const wrappedSchema = wrapSchema({
+          schema,
+          transforms: [ new FilterTypes(() => true) ]
+        })
+
+        const params = {
+          schema: wrappedSchema,
+          query: 'query MyQuery { parent { child { word fancyWord } } }',
+          operationName: 'MyQuery'
+        }
+
+        runQuery(params)
+          .catch(done)
+
       })
     })
   })
