@@ -4,14 +4,39 @@ stages:
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
+variables:
+  DOWNSTREAM_REL_BRANCH:
+    value: "master"
+    description: "Run a specific datadog-reliability-env branch downstream"
+  DOWNSTREAM_SYS_TEST_BRANCH:
+    value: "master"
+    description: "Run a specific system test branch downstream"
+  FORCE_TRIGGER:
+    value: "false"
+    description: "Set to true to override rules in the reliability-env pipeline (e.g. override 'only deploy master')"
+
 deploy_to_reliability_env:
   stage: deploy
   when: on_success
   trigger:
     project: DataDog/datadog-reliability-env
+    branch: $DOWNSTREAM_REL_BRANCH
   variables:
     UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
     UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
     FORCE_TRIGGER: $FORCE_TRIGGER
+
+deploy_to_system_test:
+  stage: deploy
+  when: on_success
+  trigger:
+    project: DataDog/system-tests
+    branch: $DOWNSTREAM_SYS_TEST_BRANCH
+  variables:
+    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
+    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
