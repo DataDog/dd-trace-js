@@ -563,6 +563,13 @@ jobs:
 
   node-router: *node-plugin-base
 
+  node-sharedb:
+    <<: *node-plugin-base
+    docker:
+      - image: node:<< parameters.node-version >>
+        environment:
+          - PLUGINS=sharedb
+
   node-when: *node-plugin-base
 
   node-winston: *node-plugin-base
@@ -741,6 +748,7 @@ workflows:
       - node-redis: *matrix-supported-node-versions
       - node-restify: *matrix-supported-node-versions
       - node-router: *matrix-supported-node-versions
+      - node-sharedb: *matrix-supported-node-versions
       - node-tedious: *matrix-supported-node-versions
       - node-when: *matrix-supported-node-versions
       - node-winston: *matrix-supported-node-versions
@@ -791,6 +799,7 @@ workflows:
             - node-redis
             - node-restify
             - node-router
+            - node-sharedb
             - node-tedious
             - node-when
             - node-winston

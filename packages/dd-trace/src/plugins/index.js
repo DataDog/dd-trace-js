@@ -48,6 +48,7 @@ module.exports = {
   'restify': require('../../../datadog-plugin-restify/src'),
   'rhea': require('../../../datadog-plugin-rhea/src'),
   'router': require('../../../datadog-plugin-router/src'),
+  'sharedb': require('../../../datadog-plugin-sharedb/src'),
   'tedious': require('../../../datadog-plugin-tedious/src'),
   'when': require('../../../datadog-plugin-when/src'),
   'winston': require('../../../datadog-plugin-winston/src')

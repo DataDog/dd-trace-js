@@ -526,6 +526,7 @@ interface Plugins {
   "restify": plugins.restify;
   "rhea": plugins.rhea;
   "router": plugins.router;
+  "sharedb": plugins.sharedb;
   "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
@@ -629,7 +630,7 @@ declare namespace plugins {
     };
 
     /**
-     * Whether to enable instrumention of <plugin>.middleware spans
+     * Whether to enable instrumentation of <plugin>.middleware spans
      *
      * @default true
      */
@@ -1254,6 +1255,27 @@ declare namespace plugins {
    * [router](https://github.com/pillarjs/router) module.
    */
   interface router extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [sharedb](https://github.com/share/sharedb) module.
+   */
+  interface sharedb extends Integration {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just when the span is created.
+       */
+      receive?: (span?: opentracing.Span, request?: any) => any;
+
+      /**
+       * Hook to execute just when the span is finished.
+       */
+      reply?: (span?: opentracing.Span, request?: any, response?: any) => any;
+    };
+  }
 
   /**
    * This plugin automatically instruments the
