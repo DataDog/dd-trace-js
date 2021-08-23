@@ -17,10 +17,8 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       const contextValue = args.contextValue = args.contextValue || {}
       const operation = getOperation(document, args.operationName)
 
-      args.fieldResolver = args.fieldResolver || wrappedDefaultFieldResolver
-      if (!args.fieldResolver._datadog_patched) {
-        args.fieldResolver = wrapResolve(args.fieldResolver, tracer, config)
-      }
+      args.fieldResolver = wrapResolve(args.fieldResolver, tracer, config) ||
+        wrappedDefaultFieldResolver
 
       if (schema) {
         wrapFields(schema._queryType, tracer, config)
@@ -142,7 +140,9 @@ function wrapFieldType (field, tracer, config) {
 }
 
 function wrapResolve (resolve, tracer, config) {
-  if (resolve._datadog_patched || typeof resolve !== 'function') return resolve
+  if (!resolve || resolve._datadog_patched || typeof resolve !== 'function') {
+    return resolve
+  }
 
   const responsePathAsArray = config.collapse
     ? withCollapse(pathToArray)
