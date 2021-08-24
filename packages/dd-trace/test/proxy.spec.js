@@ -205,8 +205,7 @@ describe('TracerProxy', () => {
           './metrics': metrics,
           './instrumenter': Instrumenter,
           './log': log,
-          './profiler': null, // this will cause the import failure error
-          './appsec': appsec
+          './profiler': null // this will cause the import failure error
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
