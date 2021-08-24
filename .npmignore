@@ -13,3 +13,4 @@
 !index.js
 !init.js
 !package.json
+!plugins/**/*
