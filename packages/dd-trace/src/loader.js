@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const hook = require('./ritm')
+const esmHook = require('./iitm')
 const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
@@ -28,6 +29,7 @@ class Loader {
       .map(instrumentation => filename(instrumentation)))
 
     hook(instrumentedModules, this._hookModule.bind(this))
+    esmHook(instrumentedModules, this._hookModule.bind(this))
   }
 
   load (instrumentation, config) {
