@@ -2,7 +2,7 @@
 
 const semver = require('semver')
 const hook = require('./ritm')
-const esmHook = require('./esm-hook')
+const esmHook = require('./iitm')
 const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
