@@ -145,7 +145,7 @@ function validatePrebuilds () {
   const content = fs.readFileSync(file)
   const sum = fs.readFileSync(path.join(`${file}.sha1`), 'ascii')
 
-  if (sum !== checksum(content)) {
+  if (sum !== checksum(content, { algorithm: 'sha256' })) {
     throw new Error('Invalid checksum for "prebuilds.tgz".')
   }
 }
