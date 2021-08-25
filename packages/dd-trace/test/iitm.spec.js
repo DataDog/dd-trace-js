@@ -1,23 +1,26 @@
 'use strict'
 
 const { expect } = require('chai')
+const semver = require('semver')
 
 describe('iitm.js', () => {
   const iitm = () => true
   let iitmjs
 
-  context('with a supported nodejs version', () => {
-    before(() => {
-      iitmjs = proxyquire('../src/iitm', {
-        'import-in-the-middle': iitm
+  if (semver.satisfies(process.versions.node, '^12.20.0 || >=14.13.1')) {
+    context('with a supported nodejs version', () => {
+      before(() => {
+        iitmjs = proxyquire('../src/iitm', {
+          'import-in-the-middle': iitm
+        })
+      })
+
+      it('should export iitm', () => {
+        expect(iitmjs).to.equal(iitm)
+        expect(iitmjs()).to.be.true
       })
     })
-
-    it('should export iitm', () => {
-      expect(iitmjs).to.equal(iitm)
-      expect(iitmjs()).to.be.true
-    })
-  })
+  }
 
   context('with an unsupported nodejs version', () => {
     let desc
