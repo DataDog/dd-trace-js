@@ -376,6 +376,8 @@ jobs:
           - PLUGINS=couchbase
       - image: rishabhdev/couchbase-server-sandbox:latest
 
+  node-cypress: *node-plugin-base
+
   node-dns: *node-plugin-base
 
   node-elasticsearch:
@@ -701,6 +703,7 @@ workflows:
             parameters:
               node-version: ["12"]
       - node-cucumber: *matrix-supported-node-versions
+      - node-cypress: *matrix-supported-node-versions
       - node-dns: *matrix-supported-node-versions
       - node-elasticsearch: *matrix-supported-node-versions
       - node-express: *matrix-supported-node-versions
@@ -764,6 +767,7 @@ workflows:
             - node-connect
             - node-couchbase
             - node-cucumber
+            - node-cypress
             - node-dns
             - node-elasticsearch
             - node-express

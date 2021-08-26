@@ -1,6 +1,6 @@
 module.exports = [
   {
     name: 'cypress',
-    versions: ['>=5.0.0']
+    versions: ['>=6.7.0']
   }
 ]
