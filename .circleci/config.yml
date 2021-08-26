@@ -2,7 +2,6 @@ version: 2.1
 
 orbs:
   win: circleci/windows@2.2.0
-  cypress: cypress-io/cypress@1.29.0
 
 commands:
   checkout-and-yarn-install:
@@ -707,7 +706,11 @@ workflows:
             parameters:
               node-version: ["12"]
       - node-cucumber: *matrix-supported-node-versions
-      - node-cypress: *matrix-supported-node-versions
+      # There's no cypress/base image for node 16
+      - node-cypress:
+          matrix:
+              parameters:
+                node-version: ["12", "14"]
       - node-dns: *matrix-supported-node-versions
       - node-elasticsearch: *matrix-supported-node-versions
       - node-express: *matrix-supported-node-versions
