@@ -31,7 +31,12 @@ describe('Plugin', () => {
       })
     })
     afterEach(() => {
-      return Promise.all([agent.close(), new Promise(resolve => appServer.close(resolve))])
+      return agent.close().then(() => {
+        return new Promise(resolve => appServer.close(() => resolve()))
+      })
+    })
+    after(() => {
+      return new Promise(resolve => appServer.close(() => resolve()))
     })
     describe('cypress', function () {
       this.timeout(60000)
