@@ -24,19 +24,17 @@ describe('Plugin', () => {
       return agent.load(['cypress']).then((agentPort) => {
         agentListenPort = agentPort
         cypressExecutable = require(`../../../versions/cypress@${version}`).get()
-        return getPort({ port: getPort.makeRange(3000, 3100) }).then(port => {
+        return getPort().then(port => {
           appPort = port
           appServer.listen(appPort)
         })
       })
     })
     afterEach(() => {
-      return agent.close().then(() => {
-        return new Promise(resolve => appServer.close(() => resolve()))
-      })
-    })
-    after(() => {
-      return new Promise(resolve => appServer.close(() => resolve()))
+      return Promise.all([
+        agent.close(),
+        new Promise(resolve => appServer.close(() => resolve()))
+      ])
     })
     describe('cypress', function () {
       this.timeout(60000)
