@@ -377,7 +377,10 @@ jobs:
           - PLUGINS=couchbase
       - image: rishabhdev/couchbase-server-sandbox:latest
 
-  node-cypress: *node-plugin-base
+  node-cypress:
+    <<: *node-plugin-base
+    docker:
+      - image: cypress/base:<< parameters.node-version >>
 
   node-dns: *node-plugin-base
 
