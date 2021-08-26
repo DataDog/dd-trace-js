@@ -41,7 +41,7 @@ module.exports = {
         server = http.createServer(agent)
         server.on('connection', socket => sockets.push(socket))
 
-        listener = server.listen(port, 'localhost', resolve)
+        listener = server.listen(port, 'localhost', () => resolve(port))
 
         pluginName = [].concat(pluginName)
         config = [].concat(config)

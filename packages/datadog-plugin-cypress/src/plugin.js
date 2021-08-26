@@ -3,11 +3,12 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  CI_APP_ORIGIN
 } = require('../../dd-trace/src/plugins/util/test')
 
 const id = require('../../dd-trace/src/id')
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
+const { SAMPLING_RULE_DECISION, ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
@@ -40,6 +41,11 @@ module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
   const testEnvironmentMetadata = getTestEnvironmentMetadata('cypress')
   let activeSpan = null
+  on('after:run', () => {
+    return new Promise(resolve => {
+      tracer._tracer._exporter._writer.flush(() => resolve(null))
+    })
+  })
   on('task', {
     beforeEach: (test) => {
       const { testName, testSuite } = test
@@ -56,6 +62,7 @@ module.exports = (on, config) => {
           tags: {
             [SPAN_TYPE]: 'test',
             [RESOURCE_NAME]: resource,
+            [ORIGIN_KEY]: CI_APP_ORIGIN,
             ...testSpanMetadata,
             ...testEnvironmentMetadata
           }
