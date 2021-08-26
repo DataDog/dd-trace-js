@@ -1,11 +1,51 @@
 'use strict'
 
+const retry = require('retry')
+const { request } = require('http')
 const FormData = require('form-data')
 
+function sendRequest (options, body, callback) {
+  const req = request(options, res => {
+    if (res.statusCode >= 400) {
+      const error = new Error(`HTTP Error ${res.statusCode}`)
+      error.status = res.statusCode
+      callback(error)
+    } else {
+      callback(null, res)
+    }
+  })
+  req.on('error', callback)
+  if (body) req.write(body)
+  req.end()
+}
+
+function getBody (stream, callback) {
+  const chunks = []
+  stream.on('error', callback)
+  stream.on('data', chunk => chunks.push(chunk))
+  stream.on('end', () => {
+    callback(null, Buffer.concat(chunks))
+  })
+}
+
+function computeRetries (uploadTimeout) {
+  let tries = 0
+  while (tries < 2 || uploadTimeout > 1000) {
+    tries++
+    uploadTimeout /= 2
+  }
+  return [tries, uploadTimeout]
+}
+
 class AgentExporter {
-  constructor ({ url, logger } = {}) {
+  constructor ({ url, logger, uploadTimeout } = {}) {
     this._url = url
     this._logger = logger
+
+    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+
+    this._backoffTime = backoffTime
+    this._backoffTries = backoffTries
   }
 
   export ({ profiles, start, end, tags }) {
@@ -51,41 +91,56 @@ class AgentExporter {
       })
     }
 
+    const body = form.getBuffer()
+    const options = {
+      method: 'POST',
+      path: '/profiling/v1/input',
+      headers: form.getHeaders()
+    }
+
+    if (this._url.protocol === 'unix:') {
+      options.socketPath = this._url.pathname
+    } else {
+      options.protocol = this._url.protocol
+      options.hostname = this._url.hostname
+      options.port = this._url.port
+    }
+
+    this._logger.debug(() => {
+      return `Submitting agent report to: ${JSON.stringify(options)}`
+    })
+
     return new Promise((resolve, reject) => {
-      const options = {
-        method: 'POST',
-        path: '/profiling/v1/input',
-        timeout: 10 * 1000
-      }
-
-      if (this._url.protocol === 'unix:') {
-        options.socketPath = this._url.pathname
-      } else {
-        options.protocol = this._url.protocol
-        options.hostname = this._url.hostname
-        options.port = this._url.port
-      }
-
-      this._logger.debug(() => {
-        return `Submitting agent report to: ${JSON.stringify(options)}`
+      const operation = retry.operation({
+        randomize: true,
+        minTimeout: this._backoffTime,
+        retries: this._backoffTries
       })
 
-      form.submit(options, (err, res) => {
-        if (err || !res) return reject(err)
+      operation.attempt((attempt) => {
+        const timeout = Math.pow(this._backoffTime, attempt)
+        sendRequest({ ...options, timeout }, body, (err, response) => {
+          if (operation.retry(err)) {
+            this._logger.error(`Error from the agent: ${err.message}`)
+            return
+          } else if (err) {
+            reject(new Error('Profiler agent export back-off period expired'))
+            return
+          }
 
-        const chunks = []
-        res.on('data', chunk => chunks.push(chunk))
-        res.on('end', () => {
-          this._logger.debug(() => {
-            return `Agent export response: ${Buffer.concat(chunks)}`
+          getBody(response, (err, body) => {
+            if (err) {
+              this._logger.error(`Error reading agent response: ${err.message}`)
+            } else {
+              this._logger.debug(() => {
+                const bytes = (body.toString('hex').match(/../g) || []).join(' ')
+                return `Agent export response: ${bytes}`
+              })
+            }
           })
+
+          resolve()
         })
-
-        if (res.statusCode >= 400) {
-          return reject(new Error(`Error from the agent: ${res.statusCode}`))
-        }
-
-        resolve()
       })
     })
   }
