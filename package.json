@@ -96,7 +96,7 @@
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.16.2",
-    "get-port": "^3.2.0",
+    "get-port": "^5.1.1",
     "glob": "^7.1.6",
     "graphql": "0.13.2",
     "int64-buffer": "^0.1.9",
