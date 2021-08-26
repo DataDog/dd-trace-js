@@ -24,7 +24,7 @@ describe('Plugin', () => {
       return agent.load(['cypress']).then((agentPort) => {
         agentListenPort = agentPort
         cypressExecutable = require(`../../../versions/cypress@${version}`).get()
-        return getPort().then(port => {
+        return getPort({ port: getPort.makeRange(3000, 3100) }).then(port => {
           appPort = port
           appServer.listen(appPort)
         })
