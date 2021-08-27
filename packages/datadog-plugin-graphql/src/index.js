@@ -149,7 +149,9 @@ function wrapResolve (resolve, tracer, config) {
     : pathToArray
 
   function resolveWithTrace (source, args, contextValue, info) {
-    if (!contextValue._datadog_graphql) return resolve.apply(this, arguments)
+    if (!contextValue._datadog_graphql || resolve._datadog_do_not_trace) {
+      return resolve.apply(this, arguments)
+    }
 
     const path = responsePathAsArray(info && info.path)
 
@@ -355,7 +357,7 @@ function finishResolvers (contextValue) {
 
 function updateField (field, error) {
   // TODO: update this to also work with no-op spans without a hack
-  field.finishTime = field.finishTime || (field.span._getTime ? field.span._getTime() : 0)
+  field.finishTime = field.span._getTime ? field.span._getTime() : 0
   field.error = field.error || error
 }
 
@@ -473,6 +475,27 @@ function getHooks (config) {
   return { execute, parse, validate }
 }
 
+function createWrapDefaultMergedResolver () {
+  return function (defaultMergedResolver) {
+    function wrappedDefaultMergedResolver (parent, args, context, info) {
+      return defaultMergedResolver(parent, args, context, info)
+    }
+    wrappedDefaultMergedResolver._datadog_do_not_trace = true
+    return wrappedDefaultMergedResolver
+  }
+}
+
+// This doesn't seem to work!!!
+function createWrapDefaultCreateProxyingResolver () {
+  return function (defaultCreateProxyingResolver) {
+    return function wrappedDefaultCreateProxyingResolver (options) {
+      const resolverFn = defaultCreateProxyingResolver(options)
+      resolverFn._datadog_do_not_trace = true
+      return resolverFn
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'graphql',
@@ -509,6 +532,27 @@ module.exports = [
     },
     unpatch (validate) {
       this.unwrap(validate, 'validate')
+    }
+  },
+  {
+    name: '@graphql-tools/delegate',
+    versions: ['>=6.0.0'],
+    patch (delegate, tracer, config) {
+      this.wrap(delegate, 'defaultMergedResolver', createWrapDefaultMergedResolver())
+    },
+    unpatch (delegate, tracer, config) {
+      this.unwrap(delegate, 'defaultMergedResolver')
+    }
+  },
+  {
+    name: '@graphql-tools/wrap',
+    versions: ['>=6.0.0'],
+    patch (wrap, tracer, config) {
+      // Not working!!
+      this.wrap(wrap, 'defaultCreateProxyingResolver', createWrapDefaultCreateProxyingResolver())
+    },
+    unpatch (wrap, tracer, config) {
+      this.unwrap(wrap, 'defaultCreateProxyingResolver')
     }
   }
 ]
