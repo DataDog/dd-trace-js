@@ -1,6 +1,6 @@
 'use strict'
 
-const methods = require('methods').concat('all')
+const methods = require('http').METHODS.map(m => m.toLowerCase()).concat('all')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 function createWrapFastify (tracer, config) {

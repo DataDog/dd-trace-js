@@ -65,7 +65,6 @@
     "limiter": "^1.1.4",
     "lodash.kebabcase": "^4.1.1",
     "lodash.sortby": "^4.7.0",
-    "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",

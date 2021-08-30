@@ -1,6 +1,6 @@
 'use strict'
 
-const METHODS = require('methods').concat('all')
+const METHODS = require('http').METHODS.map(m => m.toLowerCase()).concat('all')
 const pathToRegExp = require('path-to-regexp')
 const web = require('../../dd-trace/src/plugins/util/web')
 
