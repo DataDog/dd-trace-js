@@ -1,6 +1,5 @@
 'use strict'
 
-const pick = require('lodash.pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const NoopSpanContext = require('../../noop/span_context')
@@ -26,6 +25,14 @@ const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const logKeys = ddKeys.concat(b3Keys)
+
+function pick (obj, keys) {
+  const retVal = {}
+  for (const key of keys) {
+    retVal[key] = obj[key]
+  }
+  return retVal
+}
 
 class TextMapPropagator {
   constructor (config) {

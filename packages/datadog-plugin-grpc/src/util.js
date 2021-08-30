@@ -1,6 +1,5 @@
 'use strict'
 
-const pick = require('lodash.pick')
 const log = require('../../dd-trace/src/log')
 
 module.exports = {
@@ -49,7 +48,13 @@ module.exports = {
     }
 
     if (config[filter] instanceof Array) {
-      return element => pick(element, config[filter])
+      return element => {
+        const newElement = {}
+        for (const item of config[filter]) {
+          newElement[item] = element[item]
+        }
+        return newElement
+      }
     }
 
     if (config.hasOwnProperty(filter)) {

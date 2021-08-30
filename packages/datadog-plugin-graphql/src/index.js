@@ -1,6 +1,5 @@
 'use strict'
 
-const pick = require('lodash.pick')
 const log = require('../../dd-trace/src/log')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
@@ -425,7 +424,13 @@ function getVariablesFilter (config) {
   if (typeof config.variables === 'function') {
     return config.variables
   } else if (config.variables instanceof Array) {
-    return variables => pick(variables, config.variables)
+    return variables => {
+      const newVariables = {}
+      for (const key in config.variables) {
+        newVariables[key] = config.variables[key]
+      }
+      return newVariables
+    }
   } else if (config.hasOwnProperty('variables')) {
     log.error('Expected `variables` to be an array or function.')
   }
