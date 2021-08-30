@@ -2,10 +2,9 @@
 
 const URL = require('url').URL
 const pkg = require('./pkg')
-const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
-const { isTrue, isFalse } = require('./util')
+const { isTrue, isFalse, coalesce } = require('./util')
 const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>

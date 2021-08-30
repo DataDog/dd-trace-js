@@ -20,8 +20,21 @@ function isError (value) {
   return false
 }
 
+// Inspired by https://github.com/doowb/koalas
+function coalesce (...args) {
+  let arg
+  for (const nextArg of args) {
+    arg = nextArg
+    if (arg !== null && arg !== undefined && !Number.isNaN(arg)) {
+      return arg
+    }
+  }
+  return arg
+}
+
 module.exports = {
   isTrue,
   isFalse,
-  isError
+  isError,
+  coalesce
 }

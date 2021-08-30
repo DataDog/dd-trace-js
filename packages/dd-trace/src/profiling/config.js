@@ -1,6 +1,6 @@
 'use strict'
 
-const coalesce = require('koalas')
+const { coalesce } = require('../util')
 const os = require('os')
 const { URL } = require('url')
 const { AgentExporter } = require('./exporters/agent')

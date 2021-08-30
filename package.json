@@ -61,7 +61,6 @@
     "crypto-randomuuid": "^1.0.0",
     "form-data": "^3.0.0",
     "import-in-the-middle": "^1.1.0",
-    "koalas": "^1.0.2",
     "limiter": "^1.1.4",
     "lodash.kebabcase": "^4.1.1",
     "lodash.sortby": "^4.7.0",
