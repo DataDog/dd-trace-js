@@ -1,6 +1,5 @@
 'use strict'
 
-const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
@@ -319,7 +318,7 @@ function addAllowHeaders (req, headers) {
   }
 
   if (allowHeaders.length > 0) {
-    res.setHeader('access-control-allow-headers', uniq(allowHeaders).join(','))
+    res.setHeader('access-control-allow-headers', Array.from(new Set(allowHeaders)).join(','))
   }
 }
 

@@ -5,7 +5,6 @@ const hook = require('./ritm')
 const esmHook = require('./iitm')
 const parse = require('module-details-from-path')
 const path = require('path')
-const uniq = require('lodash.uniq')
 const log = require('./log')
 const requirePackageJson = require('./require-package-json')
 
@@ -22,8 +21,9 @@ class Loader {
     const instrumentations = Array.from(this._plugins.keys())
       .reduce((prev, current) => prev.concat(current), [])
 
-    const instrumentedModules = uniq(instrumentations
-      .map(instrumentation => instrumentation.name))
+    const instrumentedModules = Array.from(
+      new Set(instrumentations.map(instrumentation => instrumentation.name))
+    )
 
     this._names = new Set(instrumentations
       .map(instrumentation => filename(instrumentation)))
