@@ -38,7 +38,10 @@ describe('Plugin', () => {
       tracer = require('../../dd-trace')
       return agent.load(['jest', 'fs', 'http']).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
-        datadogJestEnv = new DatadogJestEnvironment({ rootDir: BUILD_SOURCE_ROOT }, { testPath: TEST_SUITE })
+        datadogJestEnv = new DatadogJestEnvironment({
+          rootDir: BUILD_SOURCE_ROOT,
+          testEnvironmentOptions: { userAgent: null }
+        }, { testPath: TEST_SUITE })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
         datadogJestEnv.getVmContext = () => ({
           expect: {
