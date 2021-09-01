@@ -2,17 +2,19 @@
 
 const tracerVersion = require('../lib/version')
 const pkg = require('./pkg')
-const util = require('util')
-const fs = require('fs')
+const containerId = require('./exporters/agent/docker').id()
+const requirePackageJson = require('./require-package-json')
 const path = require('path')
 const http = require('http')
+const os = require('os')
 
 let config
 let instrumenter
 
-const data = {
-  seq_id: -1
-}
+let seqId = -1
+let application
+let host
+let interval
 
 function getIntegrations () {
   return [...new Set(instrumenter._instrumented.keys())].map(plugin => ({
@@ -22,34 +24,25 @@ function getIntegrations () {
   }))
 }
 
-function recursiveGetDeps (nmDir, results = []) {
-  let deps
-  try {
-    deps = fs.readdirSync(nmDir, 'utf8')
-  } catch (e) {
-    return results
-  }
-  for (const dir of deps) {
-    const moduleDir = path.join(nmDir, dir)
-    if (dir.startsWith('@')) {
-      recursiveGetDeps(moduleDir, results)
-    } else {
-      const pkgPath = path.join(moduleDir, 'package.json')
-      try {
-        const { name, version } = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-        results.push({ name, version })
-      } catch (e) { /* skip */ }
-      const newNmDir = path.join(moduleDir, 'node_modules')
-      recursiveGetDeps(newNmDir, results)
-    }
-  }
-  return results
-}
-
 function getDependencies () {
-  const cwd = pkg.findRoot()
-  const dirPath = pkg.findUp('node_modules', cwd)
-  return recursiveGetDeps(dirPath)
+  const deps = []
+  const { dependencies } = pkg
+  if (!dependencies) {
+    return deps
+  }
+  const rootDir = pkg.findRoot()
+  for (const [name, version] of Object.entries(dependencies)) {
+    const dep = { name }
+    try {
+      dep.version = requirePackageJson(
+        path.join(rootDir, 'node_modules', name.replace('/', path.sep))
+      ).version
+    } catch (e) {
+      dep.version = version
+    }
+    deps.push(dep)
+  }
+  return deps
 }
 
 function flatten (input, result = {}, prefix = []) {
@@ -63,74 +56,44 @@ function flatten (input, result = {}, prefix = []) {
   return result
 }
 
-function sendTelemetry () {
-  if (!config || !instrumenter) {
-    return
+function appStarted () {
+  return {
+    integrations: getIntegrations(),
+    dependencies: getDependencies(),
+    configuration: flatten(config),
+    additional_payload: {}
   }
-
-  const integrations = getIntegrations()
-  if (util.isDeepStrictEqual(integrations, data.integrations)) {
-    return
-  }
-
-  if (!data.runtime_id) {
-    data.runtime_id = config.experimental.runtimeIdValue // TODO
-  }
-
-  data.seq_id++
-
-  if (!data.service_name) {
-    data.service_name = config.service
-  }
-
-  if (!data.env) {
-    data.env = config.env
-  }
-
-  if (!data.started_at) {
-    data.started_at = Math.floor(Date.now() / 1000) - Math.floor(process.uptime()) // seconds since epoch?
-  }
-
-  if (!data.tracer_version) {
-    data.tracer_version = tracerVersion
-  }
-
-  if (!data.language_name) {
-    data.language_name = 'node_js'
-  }
-
-  data.integrations = integrations
-
-  if (!data.depenencies && pkg.dependencies) {
-    const deps = []
-    for (const [name, version] of Object.entries(pkg.dependencies)) {
-      deps.push({ name, version })
-    }
-    data.dependencies = getDependencies()
-  }
-
-  if (!data.service_version) {
-    data.service_version = config.version
-  }
-
-  if (!data.language_version) {
-    data.language_version = process.versions.node
-  }
-
-  if (!data.configuration) {
-    data.configuration = flatten(config)
-  }
-
-  sendData(data)
 }
 
-function sendData (data) {
+function onBeforeExit () {
+  sendData('app-closing')
+}
+
+function createAppObject () {
+  return {
+    service_name: config.service,
+    env: config.env,
+    service_version: config.version,
+    tracer_version: tracerVersion,
+    language_name: 'nodejs',
+    language_version: process.versions.node
+  }
+}
+
+function createHostObject () {
+  return {
+    hostname: os.hostname(), // TODO is this enough?
+    container_id: containerId
+  }
+}
+
+function sendData (reqType, payload = {}) {
   const {
     hostname,
     port
   } = config
   const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-  const backendUrl = `https://${backendHost}/api/v1/intake/apm-app-env`
+  const backendUrl = `https://${backendHost}/api/v2/apmtelemetry`
   const req = http.request({
     hostname,
     port,
@@ -139,23 +102,49 @@ function sendData (data) {
     headers: {
       host: backendHost,
       'content-type': 'application/json',
-      'dd-tracer-timestamp': Math.floor(Date.now() / 1000)
+      'dd-telemetry-api-version': 'v1',
+      'dd-telemetry-request-type': reqType
     }
   })
-  req.on('error', () => {
-    // Ignore errors
-  })
-  req.write(JSON.stringify(data))
+  req.on('error', () => {}) // Ignore errors
+  req.write(JSON.stringify({
+    api_version: 'v1',
+    request_type: reqType,
+    tracer_time: Math.floor(Date.now() / 1000),
+    runtime_id: config.tags['runtime-id'],
+    seqId: ++seqId,
+    payload,
+    application,
+    host
+  }))
   req.end()
 }
 
-function startTelemetry (aConfig, theInstrumenter) {
+function start (aConfig, theInstrumenter) {
   if (!aConfig.telemetryEnabled) {
     return
   }
   config = aConfig
   instrumenter = theInstrumenter
-  return setInterval(sendTelemetry, 60 * 1000)
+  application = createAppObject()
+  host = createHostObject()
+  sendData('app-started', appStarted())
+  interval = setInterval(() => sendData('app-heartbeat'), 60000)
+  interval.unref()
+  process.on('beforeExit', onBeforeExit)
 }
 
-module.exports = startTelemetry
+function stop () {
+  clearInterval(interval)
+  process.removeListener('beforeExit', onBeforeExit)
+}
+
+function updateIntegrations () {
+  sendData('app-integrations-change', { integrations: getIntegrations() })
+}
+
+module.exports = {
+  start,
+  stop,
+  updateIntegrations
+}

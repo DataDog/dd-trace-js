@@ -7,6 +7,7 @@ const Loader = require('./loader')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
 const Plugin = require('./plugins/plugin')
+const telemetry = require('./telemetry')
 
 const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
@@ -54,6 +55,7 @@ class Instrumenter {
 
     try {
       this._set(plugin, { name, config })
+      telemetry.updateIntegrations()
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }
