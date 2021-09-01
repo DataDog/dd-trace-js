@@ -635,6 +635,11 @@ declare namespace plugins {
      * @default true
      */
     middleware?: boolean;
+
+    /**
+     * List of urls to which propagation headers should not be injected
+     */
+    propagationBlockList?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
   }
 
   /** @hidden */
