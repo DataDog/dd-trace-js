@@ -664,6 +664,11 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
     };
+
+    /**
+     * List of urls to which propagation headers should not be injected
+     */
+    propagationBlocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
   }
 
   /** @hidden */
