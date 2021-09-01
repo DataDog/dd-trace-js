@@ -65,7 +65,7 @@ function patch (http, methodName, tracer, config) {
         }
       })
 
-      if (!hasAmazonSignature(options)) {
+      if (!(hasAmazonSignature(options) || !config.propagationFilter(uri))) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
       }
 
@@ -308,12 +308,14 @@ function normalizeConfig (tracer, config) {
 
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
+  const propagationFilter = getFilter(tracer, { blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
   return Object.assign({}, config, {
     validateStatus,
     filter,
+    propagationFilter,
     headers,
     hooks
   })

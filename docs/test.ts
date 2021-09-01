@@ -103,6 +103,7 @@ const httpServerOptions = {
 const httpClientOptions = {
   ...httpOptions,
   splitByDomain: true,
+  propagationBlocklist: ['url', /url/, url => true],
   hooks: {
     request: (span, req, res) => {}
   }
