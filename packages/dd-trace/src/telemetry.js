@@ -150,6 +150,9 @@ function sendData (data) {
 }
 
 function startTelemetry (aConfig, theInstrumenter) {
+  if (!aConfig.telemetryEnabled) {
+    return
+  }
   config = aConfig
   instrumenter = theInstrumenter
   return setInterval(sendTelemetry, 60 * 1000)
