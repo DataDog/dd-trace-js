@@ -1040,6 +1040,53 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with propagationBlocklist configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              propagationBlocklist: [/\/users/]
+            }
+          }
+
+          return agent.load('http', config)
+            .then(() => {
+              http = require(protocol)
+              express = require('express')
+            })
+        })
+
+        it('should skip injecting if the url matches an item in the propagationBlacklist', done => {
+          const app = express()
+
+          app.get('/users', (req, res) => {
+            try {
+              expect(req.get('x-datadog-trace-id')).to.be.undefined
+              expect(req.get('x-datadog-parent-id')).to.be.undefined
+
+              res.status(200).send()
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request({
+                port,
+                path: '/users'
+              })
+
+              req.end()
+            })
+          })
+        })
+      })
     })
   })
 })
