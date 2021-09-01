@@ -1,42 +1,36 @@
 'use strict'
 
 const tracerVersion = require('../../../package.json').version
-const telemetry = require('../src/telemetry')
+const proxyquire = require('proxyquire')
+const requirePackageJson = require('../src/require-package-json')
 const http = require('http')
+const { once } = require('events')
+
+let traceAgent
 
 describe('telemetry', () => {
-  let traceAgent
   let origSetInterval
+  let telemetry
+  let instrumentedMap
 
-  beforeEach(done => {
+  before(done => {
     origSetInterval = setInterval
-    let expectedRequests
-    let resolveDoneIntervals
-    const doneIntervals = new Promise((resolve, reject) => {
-      resolveDoneIntervals = resolve
-    })
+
     global.setInterval = (fn, interval) => {
       expect(interval).to.equal(60000)
-      let intervals = 0
-      return origSetInterval(() => {
-        fn()
-        // we want a few more intervals than requests
-        if (++intervals === expectedRequests + 3) {
-          resolveDoneIntervals()
-        }
-      }, 0)
+      // we only want one of these
+      return setImmediate(fn)
     }
-    let requestCount = 0
+
     traceAgent = http.createServer(async (req, res) => {
       try {
-        if (++requestCount > expectedRequests) {
-          throw new Error(`expected only ${expectedRequests} requests`)
-        }
         const chunks = []
         for await (const chunk of req) {
           chunks.push(chunk)
         }
         req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        traceAgent.reqs.push(req)
+        traceAgent.emit('handled-req')
         await traceAgent.handlers.shift()(req)
         res.end(() => {
           if (traceAgent.handlers.length === 0) {
@@ -48,81 +42,160 @@ describe('telemetry', () => {
       }
     }).listen(0, done)
 
-    // Only call this once per test
-    traceAgent.handle = function (...handlers) {
-      expectedRequests = handlers.length
-      this.handlers = handlers
-      return Promise.all([
-        doneIntervals,
-        new Promise((resolve, reject) => {
-          this.resolveHandled = resolve
-          this.rejectHandled = reject
-        })
-      ])
-    }
-  })
+    traceAgent.reqs = []
 
-  afterEach(() => {
-    traceAgent.close()
-    global.setInterval = origSetInterval
-  })
+    telemetry = proxyquire('../src/telemetry', {
+      './exporters/agent/docker': {
+        id () {
+          return 'test docker id'
+        }
+      },
+      os: {
+        hostname () {
+          return 'test hostname'
+        }
+      }
+    })
 
-  it('should work', async () => {
-    const instrumentedMap = new Map([
+    instrumentedMap = new Map([
       [{ name: 'foo' }, {}],
       [{ name: 'bar' }, {}]
     ])
-    const interval = telemetry({
+
+    telemetry.start({
+      telemetryEnabled: true,
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
       version: '1.2.3-beta4',
       env: 'preprod',
-      experimental: {
-        runtimeIdValue: '1a2b3c'
+      tags: {
+        'runtime-id': '1a2b3c'
       }
     }, {
       _instrumented: instrumentedMap
     })
+  })
 
-    const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-    const backendUrl = `https://${backendHost}/api/v1/intake/apm-app-env`
-    const testSeq = (seqId, ...instrumented) => req => {
-      expect(req.method).to.equal('POST')
-      expect(req.url).to.equal(backendUrl)
-      expect(req.headers.host).to.equal(backendHost)
-      expect(Math.floor(Date.now() / 1000 - req.headers['dd-tracer-timestamp'])).to.equal(0)
-      expect(req.headers['content-type']).to.equal('application/json')
+  after(() => {
+    telemetry.stop()
+    traceAgent.close()
+    global.setInterval = origSetInterval
+  })
 
-      expect(req.body.runtime_id).to.equal('1a2b3c')
-      expect(req.body.seq_id).to.equal(seqId)
-      expect(req.body.service_name).to.equal('test service')
-      expect(req.body.env).to.equal('preprod')
-      expect(req.body.started_at).to.equal(Math.floor(Date.now() / 1000) - Math.floor(process.uptime()))
-      expect(req.body.tracer_version).to.equal(tracerVersion)
-      expect(req.body.language_name).to.equal('node_js')
-      expect(req.body.integrations).to.deep.equal(instrumented.map(name => ({
-        name, enabled: true, auto_enabled: true
-      })))
-      // TODO dependencies
-      expect(req.body.service_version).to.equal('1.2.3-beta4')
-      expect(req.body.language_version).to.equal(process.versions.node)
-      expect(req.body.configuration).to.deep.equal({
+  it('should send app-started', () => {
+    return testSeq(0, 'app-started', payload => {
+      expect(payload).to.deep.include({
+        integrations: [
+          { name: 'foo', enabled: true, auto_enabled: true },
+          { name: 'bar', enabled: true, auto_enabled: true }
+        ],
+        dependencies: getMochaDeps(),
+        configuration: {
+          telemetryEnabled: true,
+          hostname: 'localhost',
+          port: traceAgent.address().port,
+          service: 'test service',
+          version: '1.2.3-beta4',
+          env: 'preprod',
+          'tags.runtime-id': '1a2b3c'
+        }
+      })
+    })
+  })
+
+  it('should send app-heartbeat', () => {
+    return testSeq(1, 'app-heartbeat', payload => {
+      expect(payload).to.deep.equal({})
+    })
+  })
+
+  it('should send app-integrations-change', () => {
+    instrumentedMap.set({ name: 'baz' }, {})
+    telemetry.updateIntegrations()
+
+    return testSeq(2, 'app-integrations-change', payload => {
+      expect(payload).to.deep.equal({
+        integrations: [
+          { name: 'foo', enabled: true, auto_enabled: true },
+          { name: 'bar', enabled: true, auto_enabled: true },
+          { name: 'baz', enabled: true, auto_enabled: true }
+        ]
+      })
+    })
+  })
+
+  it('should send app-closing', () => {
+    process.emit('beforeExit')
+
+    return testSeq(3, 'app-closing', payload => {
+      expect(payload).to.deep.equal({})
+    })
+  })
+
+  it('should do nothing when not enabled', (done) => {
+    telemetry.stop()
+
+    const server = http.createServer(() => {
+      expect.fail('server should not be called')
+    }).listen(0, () => {
+      telemetry.start({
+        telemetryEnabled: false,
         hostname: 'localhost',
-        port: traceAgent.address().port,
-        service: 'test service',
-        env: 'preprod',
-        version: '1.2.3-beta4',
-        'experimental.runtimeIdValue': '1a2b3c'
+        port: server.address().port
       })
 
-      // Next iteration, baz will be set
-      instrumentedMap.set({ name: 'baz' }, {})
-    }
-    await traceAgent.handle(
-      testSeq(0, 'foo', 'bar'),
-      testSeq(1, 'foo', 'bar', 'baz')
-    )
-    clearInterval(interval)
+      setTimeout(done, 10)
+    })
   })
 })
+
+async function testSeq (seqId, reqType, validatePayload) {
+  while (traceAgent.reqs.length < seqId + 1) {
+    await once(traceAgent, 'handled-req')
+  }
+  const req = traceAgent.reqs[seqId]
+  const backendHost = 'tracer-telemetry-edge.datadoghq.com'
+  const backendUrl = `https://${backendHost}/api/v2/apmtelemetry`
+  expect(req.method).to.equal('POST')
+  expect(req.url).to.equal(backendUrl)
+  expect(req.headers).to.include({
+    host: backendHost,
+    'content-type': 'application/json',
+    'dd-telemetry-api-version': 'v1',
+    'dd-telemetry-request-type': reqType
+  })
+  expect(req.body).to.deep.include({
+    api_version: 'v1',
+    request_type: reqType,
+    runtime_id: '1a2b3c',
+    seqId,
+    application: {
+      service_name: 'test service',
+      env: 'preprod',
+      service_version: '1.2.3-beta4',
+      tracer_version: tracerVersion,
+      language_name: 'nodejs',
+      language_version: process.versions.node
+    },
+    host: {
+      hostname: 'test hostname',
+      container_id: 'test docker id'
+    }
+  })
+  expect(Math.floor(Date.now() / 1000 - req.body.tracer_time)).to.equal(0)
+
+  validatePayload(req.body.payload)
+}
+
+// Since the entrypoint file is actually a mocha script, the deps will be mocha's deps
+function getMochaDeps () {
+  const mochaPkgJsonFile = require.resolve('mocha/package.json')
+  require('mocha') // ensure mocha is cached so we have a module to grab
+  const mochaModule = require.cache[require.resolve('mocha')]
+  const mochaDeps = require(mochaPkgJsonFile).dependencies
+  return Object.keys(mochaDeps).map(name => ({
+    name,
+    version: requirePackageJson(name, mochaModule).version
+  }))
+}

@@ -174,7 +174,6 @@ class Config {
     this.experimental = {
       b3: isTrue(DD_TRACE_B3_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
-      runtimeIdValue: runtimeId,
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
       sampler,

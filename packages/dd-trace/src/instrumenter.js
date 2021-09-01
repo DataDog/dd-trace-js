@@ -6,6 +6,7 @@ const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
+const telemetry = require('./telemetry')
 
 shimmer({ logger: () => {} })
 
@@ -52,6 +53,7 @@ class Instrumenter {
 
     try {
       this._set(plugins[name.toLowerCase()], { name, config })
+      telemetry.updateIntegrations()
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }
