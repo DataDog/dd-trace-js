@@ -4,7 +4,6 @@
 
 const proxyquire = require('proxyquire')
 const path = require('path')
-const shimmer = require('shimmer')
 const { expect } = require('chai')
 
 describe('Instrumenter', () => {
@@ -455,7 +454,6 @@ describe('Instrumenter', () => {
   describe('with plugins configured via DD_TRACE_<INTEGRATION>', () => {
     beforeEach(() => {
       Instrumenter = proxyquire('../src/instrumenter', {
-        'shimmer': shimmer,
         './plugins': {
           'mysql-mock': integrations.mysql
         },
@@ -482,7 +480,6 @@ describe('Instrumenter', () => {
       process.env.DD_TRACE_DISABLED_PLUGINS = 'http,mysql-mock'
 
       Instrumenter = proxyquire('../src/instrumenter', {
-        'shimmer': shimmer,
         './plugins': {
           'http': integrations.http,
           'express-mock': integrations.express,
