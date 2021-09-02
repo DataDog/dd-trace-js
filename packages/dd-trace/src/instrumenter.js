@@ -1,13 +1,11 @@
 'use strict'
 
-const shimmer = require('./shimmer')
+const shimmer = require('../../datadog-shimmer')
 const log = require('./log')
 const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
-
-shimmer({ logger: () => {} })
 
 const disabldPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
@@ -93,74 +91,19 @@ class Instrumenter {
   }
 
   wrap (nodules, names, wrapper) {
-    nodules = [].concat(nodules)
-    names = [].concat(names)
-
-    nodules.forEach(nodule => {
-      names.forEach(name => {
-        if (typeof nodule[name] !== 'function') {
-          throw new Error(`Expected object ${nodule} to contain method ${name}.`)
-        }
-
-        Object.defineProperty(nodule[name], '_datadog_patched', {
-          value: true,
-          configurable: true
-        })
-      })
-    })
-
-    shimmer.massWrap.call(this, nodules, names, function (original, name) {
-      const wrapped = wrapper(original, name)
-      const props = Object.getOwnPropertyDescriptors(original)
-      const keys = Reflect.ownKeys(props)
-
-      // https://github.com/othiym23/shimmer/issues/19
-      for (const key of keys) {
-        if (typeof key !== 'symbol' || wrapped.hasOwnProperty(key)) continue
-
-        Object.defineProperty(wrapped, key, props[key])
-      }
-
-      return wrapped
-    })
+    shimmer.massWrap(nodules, names, wrapper)
   }
 
   unwrap (nodules, names, wrapper) {
-    nodules = [].concat(nodules)
-    names = [].concat(names)
-
-    shimmer.massUnwrap.call(this, nodules, names, wrapper)
-
-    nodules.forEach(nodule => {
-      names.forEach(name => {
-        nodule[name] && delete nodule[name]._datadog_patched
-      })
-    })
+    shimmer.massUnwrap(nodules, names, wrapper)
   }
 
   wrapExport (moduleExports, wrapper) {
-    if (typeof moduleExports !== 'function') return moduleExports
-
-    const props = Object.keys(moduleExports)
-    const shim = function () {
-      return moduleExports._datadog_wrapper.apply(this, arguments)
-    }
-
-    for (const prop of props) {
-      shim[prop] = moduleExports[prop]
-    }
-
-    moduleExports._datadog_wrapper = wrapper
-
-    return shim
+    return shimmer.wrap(moduleExports, wrapper)
   }
 
   unwrapExport (moduleExports) {
-    if (moduleExports && moduleExports._datadog_wrapper) {
-      moduleExports._datadog_wrapper = moduleExports
-    }
-
-    return moduleExports
+    return shimmer.unwrap(moduleExports)
   }
 
   load (plugin, meta) {
@@ -209,8 +152,13 @@ class Instrumenter {
     }
 
     if (!instrumented.has(moduleExports)) {
-      instrumented.add(moduleExports)
-      return instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config)
+      try {
+        moduleExports = instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config) || moduleExports
+        return moduleExports
+      } finally {
+        // add even on error since `unpatch` will take care of removing it.
+        instrumented.add(moduleExports)
+      }
     }
   }
 

@@ -313,7 +313,7 @@ describe('Instrumenter', () => {
 
         instrumenter.wrap(obj, 'method', wrapper)
 
-        expect(wrapper).to.have.been.calledWith(method, 'method')
+        expect(wrapper).to.have.been.calledWith(method)
         expect(obj.method()).to.equal('test')
       })
 
@@ -329,18 +329,18 @@ describe('Instrumenter', () => {
         expect(obj.method).to.have.property(sym, 'bar')
       })
 
-      it('should not override existing symbols on the shim', () => {
+      it('should override existing symbols on the shim', () => {
         const sym = Symbol('foo')
         const obj = { method: () => {} }
         const shim = () => {}
         const wrapper = () => shim
 
-        shim[sym] = 'invalid'
+        shim[sym] = 'override'
         obj.method[sym] = 'bar'
 
         instrumenter.wrap(obj, 'method', wrapper)
 
-        expect(obj.method).to.have.property(sym, 'invalid')
+        expect(obj.method).to.have.property(sym, 'bar')
       })
 
       it('should throw if the method does not exist', () => {
@@ -372,14 +372,6 @@ describe('Instrumenter', () => {
         expect(shim).to.not.equal(fn)
         expect(shim()).to.equal('foobar')
       })
-
-      it('should leave non-functions untouched', () => {
-        const obj = {}
-        const wrapper = () => {}
-        const shim = instrumenter.wrapExport(obj, wrapper)
-
-        expect(shim).to.equal(obj)
-      })
     })
 
     describe('unwrapExport', () => {
@@ -388,19 +380,9 @@ describe('Instrumenter', () => {
         const wrapper = () => fn() + 'bar'
         const shim = instrumenter.wrapExport(fn, wrapper)
 
-        instrumenter.unwrapExport(fn)
+        instrumenter.unwrapExport(shim)
 
         expect(shim()).to.equal('foo')
-      })
-
-      it('should leave non-functions untouched', () => {
-        const obj = {}
-        const wrapper = () => {}
-        const shim = instrumenter.wrapExport(obj, wrapper)
-
-        instrumenter.unwrapExport(obj)
-
-        expect(shim).to.equal(obj)
       })
     })
   })

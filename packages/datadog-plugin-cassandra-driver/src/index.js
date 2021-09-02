@@ -15,18 +15,13 @@ function createWrapInnerExecute (tracer, config) {
       }
 
       const scope = tracer.scope()
-      const childOf = scope.active()
       const span = start(tracer, config, this, query)
 
-      callback = scope.bind(callback, childOf)
-
-      return scope.bind(_innerExecute, span).call(this, query, params, execOptions, function (err) {
-        finish(span, err)
-        return callback.apply(this, arguments)
-      })
+      return scope.bind(_innerExecute, span).apply(this, tx.wrap(span, arguments))
     }
   }
 }
+
 function createWrapExecute (tracer, config) {
   return function wrapExecute (_execute) {
     return function _executeWithTrace (query, params, execOptions, callback) {
@@ -48,10 +43,12 @@ function createWrapExecutionStart (tracer, config) {
         return start.apply(this, arguments)
       }
 
-      return start.call(this, function () {
+      arguments[0] = function () {
         addHost(span, execution._connection)
         return getHostCallback.apply(this, arguments)
-      })
+      }
+
+      return start.apply(this, arguments)
     }
   }
 }
@@ -78,10 +75,12 @@ function createWrapSend (tracer, config) {
         return send.apply(this, arguments)
       }
 
-      return send.call(this, request, options, function () {
+      arguments[2] = function () {
         addHost(span, handler.connection)
         return callback.apply(this, arguments)
-      })
+      }
+
+      return send.apply(this, arguments)
     }
   }
 }
@@ -94,14 +93,8 @@ function createWrapBatch (tracer, config) {
       const scope = tracer.scope()
       const fn = scope.bind(batch, span)
 
-      callback = arguments[arguments.length - 1]
-
-      if (typeof callback === 'function') {
-        arguments[arguments.length - 1] = tx.wrap(span, callback)
-      }
-
       try {
-        return tx.wrap(span, fn.apply(this, arguments))
+        return tx.wrap(span, fn.apply(this, tx.wrap(span, arguments)))
       } catch (e) {
         finish(span, e)
         throw e
