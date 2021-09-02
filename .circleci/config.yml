@@ -28,12 +28,11 @@ commands:
           paths:
             - ./node_modules
             - ./yarn.lock
-
   store-test-results-and-coverage:
     steps:
       - store_test_results:
-        path: test-results
-        when: always
+          path: test-results
+          when: always
       - run:
           name: Upload JUnit XML Report
           command: yarn junit:upload
@@ -688,12 +687,12 @@ workflows:
     jobs:
       - lint
       - typescript
-      - shimmer: &matrix-supported-node-versions
       - node-core: &matrix-supported-node-versions
           matrix:
             parameters:
               node-version: ["12", "14", "16", "latest"]
       - node-core-windows
+      - shimmer: *matrix-supported-node-versions
       - node-integration: *matrix-supported-node-versions
       - node-amqplib: *matrix-supported-node-versions
       - node-amqp10: *matrix-supported-node-versions
