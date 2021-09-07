@@ -66,19 +66,17 @@ function wrap (target, name, wrapper) {
 }
 
 function unwrapFn (target) {
-  assertFunction(target)
-  assertWrapped(target)
-
-  defineProperty(target, DELEGATE, target[ORIGINAL])
+  if (target && target[ORIGINAL]) {
+    defineProperty(target, DELEGATE, target[ORIGINAL])
+  }
 
   return target[ORIGINAL]
 }
 
 function unwrapMethod (target, name) {
-  assertMethod(target, name)
-  assertWrapped(target[name])
-
-  defineProperty(target, name, target[name][ORIGINAL])
+  if (target && target[name] && target[name][ORIGINAL]) {
+    defineProperty(target, name, target[name][ORIGINAL])
+  }
 
   return target
 }
@@ -132,12 +130,6 @@ function assertFunction (target) {
 
   if (typeof target !== 'function') {
     throw new Error('Target is not a function.')
-  }
-}
-
-function assertWrapped (target) {
-  if (!target[ORIGINAL]) {
-    throw new Error('Trying to unwrap target that is not wrapped.')
   }
 }
 
