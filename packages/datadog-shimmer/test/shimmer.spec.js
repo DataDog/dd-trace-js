@@ -14,6 +14,17 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(2)
     })
 
+    it('should wrap the method on functions', () => {
+      const count = inc => inc
+      const obj = () => {}
+
+      obj.count = count
+
+      shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
+
+      expect(obj.count(1)).to.equal(2)
+    })
+
     it('should preserve property descriptors from the original', () => {
       const obj = { count: () => {} }
       const sym = Symbol('sym')
@@ -91,12 +102,16 @@ describe('shimmer', () => {
       expect(() => shimmer.wrap({ a: 1234 }, 'a', () => () => {})).to.throw()
     })
 
-    it('should validate that the method wrapper is a function', () => {
+    it('should validate that the method wrapper is passed', () => {
       expect(() => shimmer.wrap({ a: () => {} }, 'a')).to.throw()
     })
 
-    it('should validate that the unwrap target method is wrapped', () => {
-      expect(() => shimmer.unwrap({ a: () => {} }, 'a')).to.throw()
+    it('should validate that the method wrapper is a function', () => {
+      expect(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction')).to.throw()
+    })
+
+    it('should never throw when unwrapping', () => {
+      expect(() => shimmer.unwrap({ a: () => {} }, 'a')).to.not.throw()
     })
   })
 
@@ -207,8 +222,8 @@ describe('shimmer', () => {
       expect(() => shimmer.wrap(() => {}, 'a')).to.throw()
     })
 
-    it('should validate that the unwrap target function is wrapped', () => {
-      expect(() => shimmer.unwrap(() => {})).to.throw()
+    it('should never throw when unwrapping', () => {
+      expect(() => shimmer.unwrap(() => {})).to.not.throw()
     })
   })
 })

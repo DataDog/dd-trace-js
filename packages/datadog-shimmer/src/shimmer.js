@@ -60,7 +60,7 @@ function wrapMethod (target, name, wrapper) {
 }
 
 function wrap (target, name, wrapper) {
-  return typeof target === 'function'
+  return typeof name === 'function'
     ? wrapFn(target, name)
     : wrapMethod(target, name, wrapper)
 }
@@ -82,9 +82,7 @@ function unwrapMethod (target, name) {
 }
 
 function unwrap (target, name) {
-  return typeof target === 'function'
-    ? unwrapFn(target)
-    : unwrapMethod(target, name)
+  return name ? unwrapMethod(target, name) : unwrapFn(target)
 }
 
 function massWrap (targets, names, wrapper) {
