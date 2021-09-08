@@ -47,7 +47,7 @@ module.exports = (on, config) => {
     })
   })
   on('task', {
-    beforeEach: (test) => {
+    'dd:beforeEach': (test) => {
       const { testName, testSuite } = test
 
       const {
@@ -70,14 +70,12 @@ module.exports = (on, config) => {
       }
       return null
     },
-    afterEach: (test) => {
+    'dd:afterEach': (test) => {
       const { state, error } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
-          activeSpan.setTag('error.msg', error.message)
-          activeSpan.setTag('error.type', error.name)
-          activeSpan.setTag('error.stack', error.stack)
+          activeSpan.setTag('error', error)
         }
         activeSpan.finish()
       }

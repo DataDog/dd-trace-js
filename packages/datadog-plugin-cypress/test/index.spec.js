@@ -21,7 +21,7 @@ describe('Plugin', () => {
   let agentListenPort
   withVersions(plugin, ['cypress'], (version, moduleName) => {
     beforeEach(() => {
-      return agent.load(['cypress']).then((agentPort) => {
+      return agent.load().then((agentPort) => {
         agentListenPort = agentPort
         cypressExecutable = require(`../../../versions/cypress@${version}`).get()
         return getPort().then(port => {
@@ -30,22 +30,17 @@ describe('Plugin', () => {
         })
       })
     })
-    afterEach(() => {
-      return Promise.all([
-        agent.close(),
-        new Promise(resolve => appServer.close(() => resolve()))
-      ])
-    })
+    afterEach(() => agent.close())
+    afterEach(done => appServer.close(done))
+
     describe('cypress', function () {
       this.timeout(60000)
       it('instruments tests', function (done) {
+        process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
           project: './packages/datadog-plugin-cypress/test/app',
           config: {
             baseUrl: `http://localhost:${appPort}`
-          },
-          env: {
-            agent_port: agentListenPort
           },
           quiet: true
         })

@@ -1,6 +1,5 @@
 require('../..').init({
-  startupLogs: false,
-  plugins: false
+  startupLogs: false
 })
 
 module.exports = require('../../packages/datadog-plugin-cypress/src/plugin')
