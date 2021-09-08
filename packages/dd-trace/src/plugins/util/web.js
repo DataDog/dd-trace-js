@@ -8,6 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
+const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -70,6 +71,8 @@ const web = {
 
       req._datadog.instrumented = true
     }
+
+    if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.publish({ req, res })
 
     return callback && tracer.scope().activate(span, () => callback(span))
   },
@@ -265,6 +268,8 @@ function wrapEnd (req) {
     }
 
     finishMiddleware(req, res)
+
+    if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.publish({ req, res })
 
     const returnValue = end.apply(res, arguments)
 
