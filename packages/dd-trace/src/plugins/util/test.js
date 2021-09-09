@@ -18,6 +18,7 @@ const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
 const TEST_PARAMETERS = 'test.parameters'
+const TEST_SKIP_REASON = 'test.skip_reason'
 
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.msg'
@@ -32,6 +33,7 @@ module.exports = {
   TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
+  TEST_SKIP_REASON,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
