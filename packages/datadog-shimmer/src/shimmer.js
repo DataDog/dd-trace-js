@@ -5,7 +5,7 @@ const DELEGATE = Symbol('delegate')
 
 function defineProperty (obj, name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(obj, name)
-  const enumerable = !!obj[name] && descriptor.enumerable
+  const enumerable = name in obj && descriptor && descriptor.enumerable
 
   Object.defineProperty(obj, name, {
     configurable: true,

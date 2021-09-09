@@ -25,6 +25,15 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(2)
     })
 
+    it('should wrap the method from the prototype', () => {
+      const count = inc => inc
+      const obj = Object.create({ count })
+
+      shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
+
+      expect(obj.count(1)).to.equal(2)
+    })
+
     it('should preserve property descriptors from the original', () => {
       const obj = { count: () => {} }
       const sym = Symbol('sym')
