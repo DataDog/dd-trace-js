@@ -7,12 +7,16 @@ function defineProperty (obj, name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(obj, name)
   const enumerable = name in obj && descriptor && descriptor.enumerable
 
-  Object.defineProperty(obj, name, {
-    configurable: true,
-    enumerable,
-    writable: true,
-    value: value
-  })
+  if (enumerable) {
+    obj[name] = value
+  } else {
+    Object.defineProperty(obj, name, {
+      configurable: true,
+      enumerable: false,
+      writable: true,
+      value: value
+    })
+  }
 }
 
 function copyProperties (original, wrapped) {
