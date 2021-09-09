@@ -4,6 +4,7 @@
   "test.framework",
   "test.suite",
   "test.name",
+  "test.skip_reason",
   "ci.pipeline.id",
   "ci.pipeline.name",
   "ci.pipeline.number",
