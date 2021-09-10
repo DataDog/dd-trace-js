@@ -21,8 +21,8 @@ describe('Plugin', () => {
   let agentListenPort
   withVersions(plugin, ['cypress'], (version, moduleName) => {
     beforeEach(() => {
-      return agent.load().then((agentPort) => {
-        agentListenPort = agentPort
+      return agent.load().then((server) => {
+        agentListenPort = server.address().port
         cypressExecutable = require(`../../../versions/cypress@${version}`).get()
         return getPort().then(port => {
           appPort = port
