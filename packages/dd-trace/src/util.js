@@ -40,14 +40,9 @@ function loadMetrics () {
   return loadAddon('metrics.node')
 }
 
-function loadWAF () {
-  return loadAddon('appsec.node')
-}
-
 module.exports = {
   isTrue,
   isFalse,
   isError,
-  loadMetrics,
-  loadWAF
+  loadMetrics
 }

@@ -1,6 +1,5 @@
 Component,Origin,License,Copyright
 require,@types/node,MIT,Copyright Authors
-require,detect-libc,Apache license 2.0,Copyright Lovell Fuller
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
 require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
@@ -13,7 +12,6 @@ require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,multer,MIT,Copyright 2014 Hage Yaapa
 require,nan,MIT,Copyright 2018 NAN contributors
-require,node-addon-api,MIT,Copyright 2017 Node.js API collaborators
 require,node-gyp-build,MIT,Copyright 2017 Mathias Buus
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey

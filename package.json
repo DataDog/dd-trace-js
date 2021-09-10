@@ -6,9 +6,9 @@
   "typings": "index.d.ts",
   "scripts": {
     "preinstall": "node scripts/preinstall.js",
-    "install": "(node scripts/should_rebuild && node scripts/download_lib.js && node-gyp-build) || exit 0",
-    "rebuild": "node scripts/download_lib.js && node-gyp rebuild --jobs=max",
-    "prebuild": "node scripts/download_lib.js && node scripts/prebuild.js",
+    "install": "(node scripts/should_rebuild && node-gyp-build) || exit 0",
+    "rebuild": "node-gyp rebuild --jobs=max",
+    "prebuild": "node scripts/prebuild.js",
     "prebuilds": "node scripts/prebuilds.js",
     "protobuf": "pbjs -t static-module -w commonjs -o protobuf/profile.js protobuf/profile.proto && pbts -o protobuf/profile.d.ts protobuf/profile.js",
     "prepublishOnly": "node scripts/prepublish.js",
@@ -57,7 +57,6 @@
   },
   "dependencies": {
     "@types/node": "^10.12.18",
-    "detect-libc": "^1.0.3",
     "diagnostics_channel": "^1.0.0",
     "form-data": "^3.0.0",
     "hdr-histogram-js": "^2.0.1",
@@ -71,7 +70,6 @@
     "module-details-from-path": "^1.0.3",
     "multer": "^1.4.2",
     "nan": "^2.12.1",
-    "node-addon-api": "^4.0.0",
     "node-gyp-build": "^3.8.0",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
