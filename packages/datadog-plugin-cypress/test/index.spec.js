@@ -12,7 +12,9 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  ERROR_TYPE,
+  ERROR_MESSAGE
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -44,7 +46,7 @@ describe('Plugin', () => {
           },
           quiet: true
         })
-        agent
+        const passingTestPromise = agent
           .use(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.name).to.equal('cypress.test')
@@ -61,7 +63,30 @@ describe('Plugin', () => {
               [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN
             })
-          }).then(done).catch(done)
+          })
+        const failingTestPromise = agent
+          .use(traces => {
+            const testSpan = traces[0][0]
+            expect(testSpan.name).to.equal('cypress.test')
+            expect(testSpan.resource).to.equal(
+              'cypress/integration/integration-test.js.can visit a page will fail'
+            )
+            expect(testSpan.type).to.equal('test')
+            expect(testSpan.meta).to.contain({
+              language: 'javascript',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_NAME]: 'can visit a page will fail',
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE]: 'cypress/integration/integration-test.js',
+              [TEST_TYPE]: 'test',
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [ERROR_TYPE]: 'AssertionError'
+            })
+            expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
+              "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
+            )
+          })
+        Promise.all([passingTestPromise, failingTestPromise]).then(() => done()).catch(done)
       })
     })
   })

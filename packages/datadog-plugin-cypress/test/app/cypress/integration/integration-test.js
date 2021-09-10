@@ -7,4 +7,8 @@ context('can visit a page', () => {
     cy.get('.hello-world')
       .should('have.text', 'Hello World')
   })
+  it('will fail', () => {
+    cy.get('.hello-world')
+      .should('have.text', 'Bye World')
+  })
 })
