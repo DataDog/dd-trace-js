@@ -11,6 +11,7 @@ const {
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH
 } = require('./tags')
+const id = require('../../id')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_TYPE = 'test.type'
@@ -38,7 +39,8 @@ module.exports = {
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestParentSpan
 }
 
 function getTestEnvironmentMetadata (testFramework) {
@@ -96,5 +98,13 @@ function finishAllTraceSpans (span) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
+  })
+}
+
+function getTestParentSpan (tracer) {
+  return tracer.extract('text_map', {
+    'x-datadog-trace-id': id().toString(10),
+    'x-datadog-parent-id': '0000000000000000',
+    'x-datadog-sampled': 1
   })
 }

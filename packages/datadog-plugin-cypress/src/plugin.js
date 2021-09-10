@@ -4,10 +4,10 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   getTestEnvironmentMetadata,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  getTestParentSpan
 } = require('../../dd-trace/src/plugins/util/test')
 
-const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION, ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
@@ -20,11 +20,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 }
 
 function getTestSpanMetadata (tracer, testName, testSuite) {
-  const childOf = tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-    'x-datadog-sampled': 1
-  })
+  const childOf = getTestParentSpan(tracer)
 
   return {
     childOf,
