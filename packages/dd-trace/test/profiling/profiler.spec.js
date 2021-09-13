@@ -16,6 +16,7 @@ describe('profiler', () => {
   let heapProfilePromise
   let clock
   let exporter
+  let exporterPromise
   let exporters
   let profilers
   let consoleLogger
@@ -24,7 +25,8 @@ describe('profiler', () => {
   function waitForExport () {
     return Promise.all([
       cpuProfilePromise,
-      heapProfilePromise
+      heapProfilePromise,
+      exporterPromise
     // After all profiles resolve, need to wait another microtask
     // tick until _collect method calls _submit to begin the export.
     ]).then(() => Promise.resolve())
@@ -32,8 +34,9 @@ describe('profiler', () => {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
+    exporterPromise = Promise.resolve()
     exporter = {
-      export: sinon.stub().returns(Promise.resolve())
+      export: sinon.stub().returns(exporterPromise)
     }
     consoleLogger = {
       debug: sinon.spy(),
