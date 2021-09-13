@@ -4,6 +4,8 @@ const retry = require('retry')
 const { request } = require('http')
 const FormData = require('form-data')
 
+const version = require('../../../lib/version')
+
 function sendRequest (options, body, callback) {
   const req = request(options, res => {
     if (res.statusCode >= 400) {
@@ -57,10 +59,14 @@ class AgentExporter {
       ['recording-end', end.toISOString()],
       ['language', 'javascript'],
       ['runtime', 'nodejs'],
+      ['runtime_version', process.version],
+      ['profiler_version', version],
       ['format', 'pprof'],
 
       ['tags[]', 'language:javascript'],
       ['tags[]', 'runtime:nodejs'],
+      ['tags[]', `runtime_version:${process.version}`],
+      ['tags[]', `profiler_version:${version}`],
       ['tags[]', 'format:pprof'],
       ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
     ]
