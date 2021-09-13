@@ -112,7 +112,7 @@
   "pino": [
     {
       "name": "pino-pretty",
-      "versions": [">=3"]
+      "dep": true
     }
   ]
 }
