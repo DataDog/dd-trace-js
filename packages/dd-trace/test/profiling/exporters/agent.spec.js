@@ -12,6 +12,7 @@ const HeapProfiler = require('../../../src/profiling/profilers/heap')
 const logger = require('../../../src/log')
 const { perftools } = require('@datadog/pprof/proto/profile')
 const semver = require('semver')
+const version = require('../../../lib/version')
 
 if (!semver.satisfies(process.version, '>=10.12')) {
   describe = describe.skip // eslint-disable-line no-global-assign
@@ -97,10 +98,14 @@ describe('exporters/agent', () => {
           try {
             expect(req.body).to.have.property('language', 'javascript')
             expect(req.body).to.have.property('runtime', 'nodejs')
+            expect(req.body).to.have.property('runtime_version', process.version)
+            expect(req.body).to.have.property('profiler_version', version)
             expect(req.body).to.have.property('format', 'pprof')
             expect(req.body).to.have.deep.property('tags', [
               'language:javascript',
               'runtime:nodejs',
+              `runtime_version:${process.version}`,
+              `profiler_version:${version}`,
               'format:pprof',
               'runtime-id:a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
             ])
@@ -185,7 +190,7 @@ describe('exporters/agent', () => {
     it('should log exports and handle http errors gracefully', async function () {
       this.timeout(10000)
       const expectedLogs = [
-        /^Building agent export report: (\n {2}[a-z-]+(\[\])?: [a-z0-9-TZ:.]+)+$/,
+        /^Building agent export report: (\n {2}[a-z-_]+(\[\])?: [a-z0-9-TZ:.]+)+$/m,
         /^Adding cpu profile to agent export:( [0-9a-f]{2})+$/,
         /^Adding heap profile to agent export:( [0-9a-f]{2})+$/,
         /^Submitting agent report to:/i,
@@ -286,10 +291,14 @@ describe('exporters/agent', () => {
           try {
             expect(req.body).to.have.property('language', 'javascript')
             expect(req.body).to.have.property('runtime', 'nodejs')
+            expect(req.body).to.have.property('runtime_version', process.version)
+            expect(req.body).to.have.property('profiler_version', version)
             expect(req.body).to.have.property('format', 'pprof')
             expect(req.body).to.have.deep.property('tags', [
               'language:javascript',
               'runtime:nodejs',
+              `runtime_version:${process.version}`,
+              `profiler_version:${version}`,
               'format:pprof',
               'foo:bar'
             ])
