@@ -9,6 +9,8 @@ const Addresses = require('./addresses')
 
 function enable (config) {
   try {
+    // TODO: enable dc_blocking: config.blocking === true
+
     let rules = fs.readFileSync('./recommended.json')
     rules = JSON.parse(rules)
 
