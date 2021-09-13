@@ -1,23 +1,11 @@
 'use strict'
 
-const ORIGINAL = Symbol('original')
 const DELEGATE = Symbol('delegate')
 
-function defineProperty (obj, name, value) {
-  const descriptor = Object.getOwnPropertyDescriptor(obj, name)
-  const enumerable = name in obj && descriptor && descriptor.enumerable
-
-  if (enumerable) {
-    obj[name] = value
-  } else {
-    Object.defineProperty(obj, name, {
-      configurable: true,
-      enumerable: false,
-      writable: true,
-      value: value
-    })
-  }
-}
+// Use weak maps to avoid polluting the wrapped function/method.
+const originals = new WeakMap()
+const wrappers = new WeakMap()
+const descriptors = new WeakMap()
 
 function copyProperties (original, wrapped) {
   Object.setPrototypeOf(wrapped, original)
@@ -37,11 +25,13 @@ function wrapFn (original, wrapped) {
   assertFunction(wrapped)
 
   const shim = function () {
-    return shim[DELEGATE].apply(this, arguments)
+    return wrapped[DELEGATE].apply(this, arguments)
   }
 
-  defineProperty(shim, ORIGINAL, original)
-  defineProperty(shim, DELEGATE, wrapped)
+  originals.set(shim, original)
+  wrappers.set(shim, wrapped)
+
+  wrapped[DELEGATE] = wrapped // store as property to make access faster
 
   copyProperties(original, shim)
 
@@ -54,9 +44,17 @@ function wrapMethod (target, name, wrapper) {
 
   const original = target[name]
   const wrapped = wrapper(original)
+  const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
-  defineProperty(wrapped, ORIGINAL, original)
-  defineProperty(target, name, wrapped)
+  descriptors.set(wrapped, descriptor)
+
+  Object.defineProperty(target, name, {
+    configurable: true,
+    writable: true,
+    enumerable: false,
+    ...descriptor,
+    value: wrapped
+  })
 
   copyProperties(original, wrapped)
 
@@ -70,23 +68,37 @@ function wrap (target, name, wrapper) {
 }
 
 function unwrapFn (target) {
-  if (target && target[ORIGINAL]) {
-    defineProperty(target, DELEGATE, target[ORIGINAL])
+  const original = originals.get(target)
+  const wrapper = wrappers.get(target)
+
+  // Keep the wrapper but restore the original as a delegate. This is needed
+  // because there might be references to the function that cannot be updated,
+  // so the only way to restore the original behaviour is with delegation.
+  if (original && wrapper) {
+    wrapper[DELEGATE] = original
   }
 
-  return target[ORIGINAL]
+  return original || target
 }
 
 function unwrapMethod (target, name) {
-  if (target && target[name] && target[name][ORIGINAL]) {
-    defineProperty(target, name, target[name][ORIGINAL])
+  const descriptor = descriptors.get(target[name])
+
+  if (descriptor) {
+    Object.defineProperty(target, name, descriptor)
+  } else {
+    delete target[name] // no descriptor means original was on the prototype
   }
 
   return target
 }
 
 function unwrap (target, name) {
-  return name ? unwrapMethod(target, name) : unwrapFn(target)
+  if (!target) return target // no target to unwrap
+
+  return name
+    ? unwrapMethod(target, name)
+    : unwrapFn(target)
 }
 
 function massWrap (targets, names, wrapper) {

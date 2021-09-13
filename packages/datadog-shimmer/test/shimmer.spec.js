@@ -119,7 +119,19 @@ describe('shimmer', () => {
       expect(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction')).to.throw()
     })
 
-    it('should never throw when unwrapping', () => {
+    it('should not throw when unwrapping without a target', () => {
+      expect(() => shimmer.unwrap(null, 'a')).to.not.throw()
+    })
+
+    it('should not throw when unwrapping without a method', () => {
+      expect(() => shimmer.unwrap({}, 'a')).to.not.throw()
+    })
+
+    it('should not throw when unwrapping an invalid type', () => {
+      expect(() => shimmer.unwrap({ a: 'b' }, 'a')).to.not.throw()
+    })
+
+    it('should not throw when unwrapping a method that was not wrapped', () => {
       expect(() => shimmer.unwrap({ a: () => {} }, 'a')).to.not.throw()
     })
   })
@@ -232,6 +244,14 @@ describe('shimmer', () => {
     })
 
     it('should never throw when unwrapping', () => {
+      expect(() => shimmer.unwrap(() => {})).to.not.throw()
+    })
+
+    it('should not throw when unwrapping an invalid type', () => {
+      expect(() => shimmer.unwrap('foo')).to.not.throw()
+    })
+
+    it('should not throw when unwrapping a function that was not wrapped', () => {
       expect(() => shimmer.unwrap(() => {})).to.not.throw()
     })
   })
