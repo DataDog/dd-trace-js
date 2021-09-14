@@ -159,7 +159,7 @@ describe('Plugin', () => {
 
         // TODO: test with a version matrix against pino. externals.json doesn't allow that
         //       and we cannot control the version of pino-pretty internally required by pino
-        if (semver.intersects(version, '>=5.0.0')) {
+        if (semver.intersects(version, '>=5')) {
           it('should add the trace identifiers to logger instances with pretty print', () => {
             setup(version, { prettyPrint: true })
 
