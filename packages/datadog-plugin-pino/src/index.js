@@ -67,6 +67,22 @@ function createWrapPrettifyObject (tracer, config) {
   }
 }
 
+function createWrapPrettyFactory (tracer, config) {
+  return function wrapPrettyFactory (prettyFactory) {
+    return function prettyFactoryWithTrace () {
+      const pretty = prettyFactory.apply(this, arguments)
+
+      return function prettyWithTrace (obj) {
+        const span = tracer.scope().active()
+
+        tracer.inject(span, LOG, obj)
+
+        return pretty.apply(this, arguments)
+      }
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'pino',
@@ -107,6 +123,18 @@ module.exports = [
     },
     unpatch (utils) {
       this.unwrap(utils, 'prettifyObject')
+    }
+  },
+  {
+    name: 'pino-pretty',
+    versions: ['1 - 2'],
+    patch (prettyFactory, tracer, config) {
+      if (!tracer._logInjection) return
+
+      return this.wrapExport(prettyFactory, createWrapPrettyFactory(tracer, config)(prettyFactory))
+    },
+    unpatch (prettyFactory) {
+      return this.unwrapExport(prettyFactory)
     }
   }
 ]
