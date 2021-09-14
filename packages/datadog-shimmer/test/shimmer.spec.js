@@ -34,6 +34,35 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(2)
     })
 
+    it('should wrap a constructor', () => {
+      const Counter = function (start) {
+        this.value = start
+      }
+      const obj = { Counter }
+
+      shimmer.wrap(obj, 'Counter', Counter => function () {
+        Counter.apply(this, arguments)
+        this.value++
+      })
+
+      const counter = new obj.Counter(1)
+
+      expect(counter.value).to.equal(2)
+      expect(counter).to.be.an.instanceof(Counter)
+    })
+
+    it('should not wrap a class constructor', () => {
+      class Counter {
+        constructor (start) {
+          this.value = start
+        }
+      }
+
+      const obj = { Counter }
+
+      expect(() => shimmer.wrap(obj, 'Counter', function () {})).to.throw()
+    })
+
     it('should preserve property descriptors from the original', () => {
       const obj = { count: () => {} }
       const sym = Symbol('sym')
@@ -99,6 +128,18 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(1)
     })
 
+    it('should unwrap a method from the prototype', () => {
+      const count = inc => inc
+      const obj = {}
+
+      Object.setPrototypeOf(obj, { count })
+
+      shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
+      shimmer.unwrap(obj, 'count')
+
+      expect(obj).to.not.have.ownProperty('count')
+    })
+
     it('should validate that there is a target object', () => {
       expect(() => shimmer.wrap()).to.throw()
     })
@@ -146,6 +187,32 @@ describe('shimmer', () => {
       expect(wrapped(1)).to.equal(2)
     })
 
+    it('should wrap the constructor', () => {
+      const Counter = function (start) {
+        this.value = start
+      }
+
+      const WrappedCounter = shimmer.wrap(Counter, function (...args) {
+        Counter.apply(this, arguments)
+        this.value++
+      })
+
+      const counter = new WrappedCounter(1)
+
+      expect(counter.value).to.equal(2)
+      expect(counter).to.be.an.instanceof(Counter)
+    })
+
+    it('should not wrap the class constructor', () => {
+      class Counter {
+        constructor (start) {
+          this.value = start
+        }
+      }
+
+      expect(() => shimmer.wrap(Counter, function () {})).to.throw()
+    })
+
     it('should preserve property descriptors from the original', () => {
       const count = () => {}
       const sym = Symbol('sym')
@@ -189,11 +256,28 @@ describe('shimmer', () => {
       const count = inc => inc
 
       const wrapped = shimmer.wrap(count, inc => count(inc) + 1)
-      const original = shimmer.unwrap(wrapped)
 
-      expect(wrapped).to.not.equal(count)
-      expect(original).to.equal(count)
+      shimmer.unwrap(wrapped)
+
       expect(wrapped(1)).to.equal(1)
+    })
+
+    it('should unwrap a constructor', () => {
+      const Counter = function (start) {
+        this.value = start
+      }
+
+      const WrappedCounter = shimmer.wrap(Counter, function (...args) {
+        Counter.apply(this, arguments)
+        this.value++
+      })
+
+      shimmer.unwrap(WrappedCounter)
+
+      const counter = new WrappedCounter(1)
+
+      expect(counter.value).to.equal(1)
+      expect(counter).to.be.an.instanceof(Counter)
     })
 
     it('should mass wrap methods on objects', () => {

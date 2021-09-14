@@ -1,37 +1,30 @@
 'use strict'
 
-const DELEGATE = Symbol('delegate')
-
-// Use weak maps to avoid polluting the wrapped function/method.
-const originals = new WeakMap()
-const wrappers = new WeakMap()
-const descriptors = new WeakMap()
+// Use a weak map to avoid polluting the wrapped function/method.
+const unwrappers = new WeakMap()
 
 function copyProperties (original, wrapped) {
   Object.setPrototypeOf(wrapped, original)
 
   const props = Object.getOwnPropertyDescriptors(original)
-  const names = Object.getOwnPropertyNames(props)
-  const symbols = Object.getOwnPropertySymbols(props)
-  const keys = names.concat(symbols)
+  const keys = Reflect.ownKeys(props)
 
   for (const key of keys) {
-    if (key === 'name') continue
     Object.defineProperty(wrapped, key, props[key])
   }
 }
 
-function wrapFn (original, wrapped) {
-  assertFunction(wrapped)
+function wrapFn (original, delegate) {
+  assertFunction(delegate)
+  assertNotClass(original) // TODO: support constructors of native classes
 
-  const shim = function () {
-    return wrapped[DELEGATE].apply(this, arguments)
+  const shim = function shim () {
+    return delegate.apply(this, arguments)
   }
 
-  originals.set(shim, original)
-  wrappers.set(shim, wrapped)
-
-  wrapped[DELEGATE] = wrapped // store as property to make access faster
+  unwrappers.set(shim, () => {
+    delegate = original
+  })
 
   copyProperties(original, shim)
 
@@ -40,13 +33,18 @@ function wrapFn (original, wrapped) {
 
 function wrapMethod (target, name, wrapper) {
   assertMethod(target, name)
+  assertNotClass(target[name]) // TODO: support constructors of native classes
   assertFunction(wrapper)
 
   const original = target[name]
   const wrapped = wrapper(original)
   const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
-  descriptors.set(wrapped, descriptor)
+  if (descriptor) {
+    unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor))
+  } else { // no descriptor means original was on the prototype
+    unwrappers.set(wrapped, () => delete target[name])
+  }
 
   Object.defineProperty(target, name, {
     configurable: true,
@@ -67,38 +65,16 @@ function wrap (target, name, wrapper) {
     : wrapMethod(target, name, wrapper)
 }
 
-function unwrapFn (target) {
-  const original = originals.get(target)
-  const wrapper = wrappers.get(target)
-
-  // Keep the wrapper but restore the original as a delegate. This is needed
-  // because there might be references to the function that cannot be updated,
-  // so the only way to restore the original behaviour is with delegation.
-  if (original && wrapper) {
-    wrapper[DELEGATE] = original
-  }
-
-  return original || target
-}
-
-function unwrapMethod (target, name) {
-  const descriptor = descriptors.get(target[name])
-
-  if (descriptor) {
-    Object.defineProperty(target, name, descriptor)
-  } else {
-    delete target[name] // no descriptor means original was on the prototype
-  }
-
-  return target
-}
-
 function unwrap (target, name) {
   if (!target) return target // no target to unwrap
 
-  return name
-    ? unwrapMethod(target, name)
-    : unwrapFn(target)
+  const unwrapper = unwrappers.get(name ? target[name] : target)
+
+  if (!unwrapper) return target // target is already unwrapped or isn't wrapped
+
+  unwrapper()
+
+  return target
 }
 
 function massWrap (targets, names, wrapper) {
@@ -144,6 +120,12 @@ function assertFunction (target) {
 
   if (typeof target !== 'function') {
     throw new Error('Target is not a function.')
+  }
+}
+
+function assertNotClass (target) {
+  if (target.toString && target.toString().startsWith('class')) {
+    throw new Error('Target is a native class constructor and cannot be wrapped.')
   }
 }
 
