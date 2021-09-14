@@ -6,15 +6,22 @@ const sinon = require('sinon')
 
 describe('profilers/native/heap', () => {
   let NativeHeapProfiler
+  let profileData
   let pprof
 
   beforeEach(() => {
+    profileData = {
+      sample: [{
+        value: [1, 512 * 1024 * 60 * 99]
+      }]
+    }
+
     pprof = {
       encode: sinon.stub().returns(Promise.resolve()),
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
-        profile: sinon.stub()
+        profile: sinon.stub().returns(profileData)
       }
     }
 
@@ -56,11 +63,68 @@ describe('profilers/native/heap', () => {
 
     profiler.start()
 
-    pprof.heap.profile.returns('profile')
-
     const profile = profiler.profile()
 
-    expect(profile).to.equal('profile')
+    expect(profile).to.equal(profileData)
+  })
+
+  it('should adjust heap profiler sample rate dynamically', () => {
+    let profileData
+    let profile
+
+    const profiler = new NativeHeapProfiler({
+      samplingInterval: 1024,
+      samplingThreshold: 0.5
+    })
+
+    profiler.start()
+
+    // Check sample rate adjusts up
+    pprof.heap.start.resetHistory()
+
+    profileData = {
+      sample: [{
+        value: [1, 1024 * 2 * 60 * 99]
+      }]
+    }
+
+    pprof.heap.profile.returns(profileData)
+    profile = profiler.profile()
+    expect(profile).to.equal(profileData)
+
+    sinon.assert.calledOnce(pprof.heap.start)
+    sinon.assert.calledWith(pprof.heap.start, 1024 * 2, 64)
+
+    // Check sample rate adjusts down
+    pprof.heap.start.resetHistory()
+
+    profileData = {
+      sample: [{
+        value: [1, (1024 - 1) * 60 * 99]
+      }]
+    }
+
+    pprof.heap.profile.returns(profileData)
+    profile = profiler.profile()
+    expect(profile).to.equal(profileData)
+
+    sinon.assert.calledOnce(pprof.heap.start)
+    sinon.assert.calledWith(pprof.heap.start, 1023, 64)
+
+    // Check sample rate does not adjust below threshold
+    pprof.heap.start.resetHistory()
+
+    profileData = {
+      sample: [{
+        value: [1, 1024 * 60 * 99]
+      }]
+    }
+
+    pprof.heap.profile.returns(profileData)
+    profile = profiler.profile()
+    expect(profile).to.equal(profileData)
+
+    sinon.assert.notCalled(pprof.heap.start)
   })
 
   it('should encode profiles from the pprof heap profiler', () => {
