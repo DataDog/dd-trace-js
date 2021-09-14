@@ -414,8 +414,10 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
             expect(testSpan.resource).to.equal('hooks fail')
-            expect(testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`))
-              .to.equal(true)
+            expect(
+              testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`) ||
+              testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set properties of undefined (setting 'boom')`)
+            ).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'hooks fail')
           expect(result.success).to.equal(false)
