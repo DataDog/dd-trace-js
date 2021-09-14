@@ -96,11 +96,11 @@
   "next": [
     {
       "name": "react",
-      "versions": ["17.0.2"]
+      "dep": true
     },
     {
       "name": "react-dom",
-      "versions": ["17.0.2"]
+      "dep": true
     }
   ],
   "pg": [
