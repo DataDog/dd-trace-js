@@ -14,4 +14,4 @@
 !init.js
 !loader-hook.mjs
 !package.json
-!plugins/**/*
+!cypress/**/*
