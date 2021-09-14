@@ -3,7 +3,6 @@ const getPort = require('get-port')
 const { expect } = require('chai')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const appServer = require('./app/app-server')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const {
@@ -21,7 +20,10 @@ describe('Plugin', () => {
   let cypressExecutable
   let appPort
   let agentListenPort
-  withVersions(plugin, ['cypress'], (version, moduleName) => {
+  withVersions({
+    name: 'cypress',
+    versions: ['>=6.7.0']
+  }, ['cypress'], (version, moduleName) => {
     beforeEach(() => {
       return agent.load().then((server) => {
         agentListenPort = server.address().port
