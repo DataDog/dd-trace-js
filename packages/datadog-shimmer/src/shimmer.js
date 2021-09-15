@@ -78,8 +78,8 @@ function unwrap (target, name) {
 }
 
 function massWrap (targets, names, wrapper) {
-  targets = [].concat(targets)
-  names = [].concat(names)
+  targets = toArray(targets)
+  names = toArray(names)
 
   for (const target of targets) {
     for (const name of names) {
@@ -89,14 +89,18 @@ function massWrap (targets, names, wrapper) {
 }
 
 function massUnwrap (targets, names) {
-  targets = [].concat(targets)
-  names = [].concat(names)
+  targets = toArray(targets)
+  names = toArray(names)
 
   for (const target of targets) {
     for (const name of names) {
       unwrap(target, name)
     }
   }
+}
+
+function toArray (maybeArray) {
+  return Array.isArray(maybeArray) ? maybeArray : [maybeArray]
 }
 
 function assertMethod (target, name) {
