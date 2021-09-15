@@ -14,6 +14,27 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(2)
     })
 
+    it('should mass wrap targets', () => {
+      const count = inc => inc
+      const foo = { count }
+      const bar = { count }
+
+      shimmer.massWrap([foo, bar], 'count', count => inc => count(inc) + 1)
+
+      expect(foo.count(1)).to.equal(2)
+      expect(bar.count(1)).to.equal(2)
+    })
+
+    it('should mass wrap methods', () => {
+      const count = inc => inc
+      const obj = { count, increment: count }
+
+      shimmer.massWrap(obj, ['count', 'increment'], count => inc => count(inc) + 1)
+
+      expect(obj.count(1)).to.equal(2)
+      expect(obj.increment(1)).to.equal(2)
+    })
+
     it('should wrap the method on functions', () => {
       const count = inc => inc
       const obj = () => {}
