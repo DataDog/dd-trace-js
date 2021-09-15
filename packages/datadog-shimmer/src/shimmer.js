@@ -108,6 +108,10 @@ function assertMethod (target, name) {
     throw new Error('No target object provided.')
   }
 
+  if (typeof target !== 'object' && typeof target !== 'function') {
+    throw new Error('Invalid target.')
+  }
+
   if (!target[name]) {
     throw new Error(`No original method ${name}.`)
   }

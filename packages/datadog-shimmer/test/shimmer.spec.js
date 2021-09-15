@@ -144,6 +144,10 @@ describe('shimmer', () => {
       expect(() => shimmer.wrap()).to.throw()
     })
 
+    it('should validate that the target object is valid', () => {
+      expect(() => shimmer.wrap('invalid')).to.throw()
+    })
+
     it('should validate that a method exists on the target object', () => {
       expect(() => shimmer.wrap({}, 'invalid', () => () => {})).to.throw()
     })
