@@ -6,6 +6,11 @@ describe('Config', () => {
   let Config
   let pkg
   let env
+  let fs
+  let os
+  let existsSyncParam
+  let existsSyncReturn
+  let osType
 
   beforeEach(() => {
     pkg = {
@@ -15,14 +20,29 @@ describe('Config', () => {
 
     env = process.env
     process.env = {}
+    fs = {
+      existsSync: (param) => {
+        existsSyncParam = param
+        return existsSyncReturn
+      }
+    }
+    os = {
+      type () {
+        return osType
+      }
+    }
+    osType = 'Linux'
 
     Config = proxyquire('../src/config', {
-      './pkg': pkg
+      './pkg': pkg,
+      fs,
+      os
     })
   })
 
   afterEach(() => {
     process.env = env
+    existsSyncParam = undefined
   })
 
   it('should initialize with the correct defaults', () => {
@@ -471,5 +491,93 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
+  })
+
+  context('auto configuration w/ unix domain sockets', () => {
+    context('on windows', () => {
+      it('should not be used', () => {
+        osType = 'Windows_NT'
+        const config = new Config()
+
+        expect(config.url).to.be.undefined
+      })
+    })
+    context('socket does not exist', () => {
+      it('should not be used', () => {
+        const config = new Config()
+
+        expect(config.url).to.be.undefined
+      })
+    })
+    context('socket exists', () => {
+      beforeEach(() => {
+        existsSyncReturn = true
+      })
+
+      it('should be used when no options and no env vars', () => {
+        const config = new Config()
+
+        expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
+        expect(config.url.toString()).to.equal('file:///var/run/datadog/apm.socket')
+      })
+
+      it('should not be used when DD_TRACE_AGENT_URL provided', () => {
+        process.env.DD_TRACE_AGENT_URL = 'https://example.com/'
+
+        const config = new Config()
+
+        expect(config.url.toString()).to.equal('https://example.com/')
+      })
+
+      it('should not be used when DD_TRACE_URL provided', () => {
+        process.env.DD_TRACE_URL = 'https://example.com/'
+
+        const config = new Config()
+
+        expect(config.url.toString()).to.equal('https://example.com/')
+      })
+
+      it('should not be used when options.url provided', () => {
+        const config = new Config({ url: 'https://example.com/' })
+
+        expect(config.url.toString()).to.equal('https://example.com/')
+      })
+
+      it('should not be used when DD_TRACE_AGENT_PORT provided', () => {
+        process.env.DD_TRACE_AGENT_PORT = 12345
+
+        const config = new Config()
+
+        expect(config.url).to.be.undefined
+      })
+
+      it('should not be used when options.port provided', () => {
+        const config = new Config({ port: 12345 })
+
+        expect(config.url).to.be.undefined
+      })
+
+      it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
+        process.env.DD_TRACE_AGENT_HOSTNAME = 'example.com'
+
+        const config = new Config()
+
+        expect(config.url).to.be.undefined
+      })
+
+      it('should not be used when DD_AGENT_HOST provided', () => {
+        process.env.DD_AGENT_HOST = 'example.com'
+
+        const config = new Config()
+
+        expect(config.url).to.be.undefined
+      })
+
+      it('should not be used when options.hostname provided', () => {
+        const config = new Config({ hostname: 'example.com' })
+
+        expect(config.url).to.be.undefined
+      })
+    })
   })
 })

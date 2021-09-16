@@ -1,5 +1,7 @@
 'use strict'
 
+const fs = require('fs')
+const os = require('os')
 const URL = require('url').URL
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -148,7 +150,7 @@ class Config {
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
-    this.url = DD_TRACE_AGENT_URL && new URL(DD_TRACE_AGENT_URL)
+    this.url = getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
@@ -202,6 +204,23 @@ class Config {
       version: this.version,
       'runtime-id': uuid()
     })
+  }
+}
+
+function getAgentUrl (url, options) {
+  if (url) return new URL(url)
+
+  if (os.type() === 'Windows_NT') return
+
+  if (
+    !options.hostname &&
+    !options.port &&
+    !process.env.DD_AGENT_HOST &&
+    !process.env.DD_TRACE_AGENT_HOSTNAME &&
+    !process.env.DD_TRACE_AGENT_PORT &&
+    fs.existsSync('/var/run/datadog/apm.socket')
+  ) {
+    return new URL('file:///var/run/datadog/apm.socket')
   }
 }
 
