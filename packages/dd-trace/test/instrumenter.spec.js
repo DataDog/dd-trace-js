@@ -102,6 +102,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
+        expect(integrations.express.patch).to.have.been.calledOnce
         expect(integrations.express.patch).to.have.been.calledWith(express, 'tracer', config)
       })
 
@@ -111,6 +112,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
+        expect(integrations.express.patch).to.have.been.calledOnce
         expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
 
@@ -121,7 +123,7 @@ describe('Instrumenter', () => {
 
         require('express-mock')
 
-        expect(integrations.express.patch).to.have.been.called
+        expect(integrations.express.patch).to.have.been.calledOnce
       })
 
       it('should handle errors', () => {
@@ -135,6 +137,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
+        expect(integrations.express.unpatch).to.have.been.calledOnce
         expect(integrations.express.unpatch).to.have.been.calledWith(express)
       })
 
@@ -166,7 +169,7 @@ describe('Instrumenter', () => {
 
         instrumenter.use('express-mock')
 
-        expect(integrations.express.patch).to.have.been.called
+        expect(integrations.express.patch).to.have.been.calledOnce
         expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
 
@@ -185,7 +188,7 @@ describe('Instrumenter', () => {
 
         require('express-mock')
 
-        expect(integrations.express.patch).to.not.have.been.called
+        expect(integrations.express.patch).to.not.have.been.calledOnce
       })
 
       it('should not patch disabled plugins using shorthand', () => {
@@ -193,14 +196,14 @@ describe('Instrumenter', () => {
 
         require('express-mock')
 
-        expect(integrations.express.patch).to.not.have.been.called
+        expect(integrations.express.patch).to.not.have.been.calledOnce
       })
 
       it('should patch modules without declared entrypoint', () => {
         instrumenter.use('other', true)
         require('other')
 
-        expect(integrations.other.patch).to.have.been.called
+        expect(integrations.other.patch).to.have.been.calledOnce
       })
 
       it('should not interfere with userland modules masking core modules', () => {
@@ -214,6 +217,7 @@ describe('Instrumenter', () => {
 
         const express = require('express-mock')
 
+        expect(integrations.express.patch).to.have.been.calledOnce
         expect(integrations.express.patch).to.have.been.calledWithMatch(express, 'tracer', {})
       })
 
@@ -231,7 +235,7 @@ describe('Instrumenter', () => {
 
         const http = require('http')
 
-        expect(integrations.http.patch).to.have.been.called
+        expect(integrations.http.patch).to.have.been.calledOnce
         expect(integrations.http.patch).to.have.been.calledWithMatch(http, 'tracer', {})
       })
 
@@ -245,6 +249,8 @@ describe('Instrumenter', () => {
 
         expect(mysql).to.deep.equal({ name: 'mysql' })
 
+        expect(integrations.mysql[0].patch).to.have.been.calledOnce
+        expect(integrations.mysql[1].patch).to.have.been.calledOnce
         expect(integrations.mysql[0].patch).to.have.been.calledWithMatch(Connection, 'tracer', {})
         expect(integrations.mysql[1].patch).to.have.been.calledWithMatch(Pool, 'tracer', {})
       })
@@ -261,6 +267,7 @@ describe('Instrumenter', () => {
 
         expect(mysql).to.deep.equal({ name: 'mysql' })
 
+        expect(integrations.mysql[0].patch).to.have.been.calledOnce
         expect(integrations.mysql[0].patch).to.have.been.calledWithMatch(Connection, 'tracer', {})
       })
 
@@ -281,6 +288,7 @@ describe('Instrumenter', () => {
 
         instrumenter.disable()
 
+        expect(integrations.express.unpatch).to.have.been.calledOnce
         expect(integrations.express.unpatch).to.have.been.calledWith(express, tracer)
       })
 
@@ -300,6 +308,7 @@ describe('Instrumenter', () => {
         require('mysql-mock')
 
         expect(() => instrumenter.disable()).to.not.throw()
+        expect(integrations.mysql[1].unpatch).to.have.been.calledOnce
         expect(integrations.mysql[1].unpatch).to.have.been.called
       })
     })

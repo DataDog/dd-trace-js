@@ -151,13 +151,13 @@ class Instrumenter {
       this._instrumented.set(instrumentation, instrumented = new Set())
     }
 
-    if (!instrumented.has(moduleExports)) {
+    if (!instrumented.has(this._defaultExport(moduleExports))) {
       try {
         moduleExports = instrumentation.patch.call(this, moduleExports, this._tracer._tracer, config) || moduleExports
         return moduleExports
       } finally {
         // add even on error since `unpatch` will take care of removing it.
-        instrumented.add(moduleExports)
+        instrumented.add(this._defaultExport(moduleExports))
       }
     }
   }
@@ -183,6 +183,12 @@ class Instrumenter {
       this._plugins.set(plugin, meta)
       this.load(plugin, meta)
     }
+  }
+
+  // ESM modules have a different export between `import` and `require` so we
+  // use the default export instead when available.
+  _defaultExport (moduleExports) {
+    return moduleExports && (moduleExports.default || moduleExports)
   }
 }
 
