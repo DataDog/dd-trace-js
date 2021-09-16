@@ -19,6 +19,11 @@ Feature: Datadog integration
   Scenario: skip scenario based on tag
     Given datadog
 
+  Scenario: not implemented scenario
+    Given datadog
+    When not-implemented
+    Then pass
+
   Scenario: integration scenario
     Given datadog
     When integration

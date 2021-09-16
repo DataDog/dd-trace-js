@@ -42,8 +42,7 @@ describe('Plugin', function () {
               version,
               // needed for webpack 5
               NODE_PATH: [
-                `${__dirname}/../../../versions/next@${version}/node_modules`,
-                `${__dirname}/../../../versions/node_modules`
+                `${__dirname}/../../../versions/next@${version}/node_modules`
               ].join(':')
             },
             stdio: ['pipe', 'ignore', 'pipe']
@@ -61,6 +60,10 @@ describe('Plugin', function () {
 
             handle(req, res, parsedUrl)
           })
+        })
+
+        after(() => {
+          execSync(`rm -rf ${__dirname}/.next`)
         })
 
         before(done => {
