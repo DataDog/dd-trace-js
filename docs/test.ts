@@ -174,6 +174,7 @@ tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
+tracer.use('cypress');
 tracer.use('dns');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('express');
