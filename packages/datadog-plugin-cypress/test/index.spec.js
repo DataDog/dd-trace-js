@@ -3,6 +3,7 @@ const getPort = require('get-port')
 const { expect } = require('chai')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const plugin = require('../src')
 const getAppServer = require('./app/app-server')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const {
@@ -21,10 +22,7 @@ describe('Plugin', () => {
   let appPort
   let agentListenPort
   let appServer
-  withVersions({
-    name: 'cypress',
-    versions: ['>=6.7.0']
-  }, ['cypress'], (version, moduleName) => {
+  withVersions(plugin, ['cypress'], (version, moduleName) => {
     before(() => {
       appServer = getAppServer()
     })

@@ -10,7 +10,7 @@ module.exports = {
   'connect': require('../../../datadog-plugin-connect/src'),
   'couchbase': require('../../../datadog-plugin-couchbase/src'),
   'cucumber': require('../../../datadog-plugin-cucumber/src'),
-  'cypress': require('../../../datadog-plugin-cucumber/src'),
+  'cypress': require('../../../datadog-plugin-cypress/src'),
   'dns': require('../../../datadog-plugin-dns/src'),
   'elasticsearch': require('../../../datadog-plugin-elasticsearch/src'),
   'express': require('../../../datadog-plugin-express/src'),
