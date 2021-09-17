@@ -488,6 +488,7 @@ interface Plugins {
   "connect": plugins.connect;
   "couchbase": plugins.couchbase;
   "cucumber": plugins.cucumber;
+  "cypress": plugins.cypress;
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
@@ -792,6 +793,12 @@ declare namespace plugins {
    * [cucumber](https://www.npmjs.com/package/@cucumber/cucumber) module.
    */
   interface cucumber extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [cypress](https://github.com/cypress-io/cypress) module.
+   */
+  interface cypress extends Integration {}
 
   /**
    * This plugin automatically instruments the

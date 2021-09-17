@@ -1,6 +1,5 @@
 const { promisify } = require('util')
 
-const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
@@ -13,15 +12,13 @@ const {
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestParentSpan
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
-  const childOf = tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-    'x-datadog-sampled': 1
-  })
+  const childOf = getTestParentSpan(tracer)
+
   const { file: testSuite } = test
   const fullTestName = test.fullTitle()
   const strippedTestSuite = testSuite ? testSuite.replace(`${sourceRoot}/`, '') : ''

@@ -1,8 +1,7 @@
-const id = require('../../dd-trace/src/id')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY, SPAN_TYPE } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
-const { TEST_TYPE, TEST_STATUS } = require('../../dd-trace/src/plugins/util/test')
+const { TEST_TYPE, TEST_STATUS, getTestParentSpan } = require('../../dd-trace/src/plugins/util/test')
 
 /**
  * There are two ways to call `test.each` in `jest`:
@@ -40,11 +39,7 @@ function getFormattedJestTestParameters (testParameters) {
 }
 
 function getTestSpanTags (tracer, testEnvironmentMetadata) {
-  const childOf = tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-    'x-datadog-sampled': 1
-  })
+  const childOf = getTestParentSpan(tracer)
 
   const commonSpanTags = {
     [TEST_TYPE]: 'test',
