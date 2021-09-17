@@ -1,4 +1,10 @@
 {
+  "cypress": [
+    {
+      "name": "cypress",
+      "versions": [">=6.7.0"]
+    }
+  ],
   "express": [
     {
       "name": "loopback",
