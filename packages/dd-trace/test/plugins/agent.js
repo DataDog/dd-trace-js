@@ -37,7 +37,7 @@ module.exports = {
 
     return getPort().then(port => {
       return new Promise((resolve, reject) => {
-        const server = exports.server = http.createServer(agent)
+        const server = this.server = http.createServer(agent)
 
         server.on('connection', socket => sockets.push(socket))
 
@@ -141,8 +141,8 @@ module.exports = {
     delete global._ddtrace
 
     return new Promise((resolve, reject) => {
-      exports.server.on('close', () => {
-        exports.server = null
+      this.server.on('close', () => {
+        this.server = null
 
         resolve()
       })
