@@ -45,7 +45,7 @@ describe('Plugin', () => {
           }, (err, res) => {
             if (err) return done(err)
 
-            agent.load('aws-sdk').then(done, done)
+            agent.load('aws-sdk').then(() => done(), done)
           })
           tracer = require('../../dd-trace')
         })
@@ -69,7 +69,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }).then(() => done(), done)
 
           const lambdaReq = lambda.invoke({
             FunctionName: 'ironmaiden',
@@ -91,7 +91,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }).then(() => done(), done)
 
           const lambdaReq = lambda.invoke({
             FunctionName: 'ironmaiden',
@@ -113,7 +113,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }).then(() => done(), done)
 
           const lambdaReq = lambda.invoke({
             FunctionName: 'ironmaiden',
