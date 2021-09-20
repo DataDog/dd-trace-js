@@ -95,5 +95,53 @@ describe('plugins/util/tx', () => {
         })
       })
     })
+
+    describe('with arguments', () => {
+      it('should replace a callback with a wrapper that finishes the span', () => {
+        const callback = sinon.spy()
+        const args = [1, 2, callback]
+
+        expect(tx.wrap(span, args)).to.equal(args)
+
+        args[2](null, 'foo', 'bar')
+
+        expect(callback).to.have.been.calledWith(null, 'foo', 'bar')
+        expect(span.finish).to.have.been.called
+      })
+
+      it('should replace a callback with a wrapper that sets error tags', () => {
+        const callback = sinon.spy()
+        const args = [1, 2, callback]
+        const error = new Error('boom')
+        const tags = span.context()._tags
+
+        tx.wrap(span, args)
+
+        args[2](error)
+
+        expect(tags).to.have.property('error.msg', error.message)
+        expect(tags).to.have.property('error.type', error.name)
+        expect(tags).to.have.property('error.stack', error.stack)
+      })
+
+      it('should replace a callback with a wrapper that runs in the current scope', done => {
+        const parent = {}
+        const child = {}
+
+        tracer.scope().activate(parent, () => {
+          const callback = () => {
+            expect(tracer.scope().active()).to.equal(parent)
+            done()
+          }
+          const args = [1, 2, callback]
+
+          tx.wrap(span, args)
+
+          tracer.scope().activate(child, () => {
+            args[2]()
+          })
+        })
+      })
+    })
   })
 })

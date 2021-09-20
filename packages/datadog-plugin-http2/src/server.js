@@ -1,7 +1,7 @@
 'use strict'
 
 const web = require('../../dd-trace/src/plugins/util/web')
-const shimmer = require('shimmer')
+const shimmer = require('../../datadog-shimmer')
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tags = require('../../../ext/tags')

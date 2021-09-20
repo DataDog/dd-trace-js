@@ -12,7 +12,7 @@ function createWrapInternalSendCommand (tracer, config) {
 
       options.callback = scope.bind(tx.wrap(span, options.callback))
 
-      return scope.bind(internalSendCommand, span).call(this, options)
+      return scope.bind(internalSendCommand, span).apply(this, arguments)
     }
   }
 }
@@ -26,14 +26,14 @@ function createWrapSendCommand (tracer, config) {
       const span = startSpan(tracer, config, this, command, args)
 
       if (typeof callback === 'function') {
-        callback = scope.bind(tx.wrap(span, callback))
+        arguments[2] = scope.bind(tx.wrap(span, callback))
       } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
         args[args.length - 1] = scope.bind(tx.wrap(span, args[args.length - 1]))
       } else {
-        callback = tx.wrap(span)
+        arguments[2] = tx.wrap(span)
       }
 
-      return scope.bind(sendCommand, span).call(this, command, args, callback)
+      return scope.bind(sendCommand, span).apply(this, arguments)
     }
   }
 }

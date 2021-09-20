@@ -9,7 +9,7 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const shimmer = require('shimmer')
+const shimmer = require('../../datadog-shimmer')
 
 const Reference = opentracing.Reference
 
