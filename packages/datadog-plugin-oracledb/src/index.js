@@ -35,14 +35,16 @@ function createWrapGetConnection (tracer, config) {
   return function wrapGetConnection (getConnection) {
     return function getConnectionWithTrace (connAttrs, callback) {
       if (callback) {
-        getConnection.call(this, connAttrs, (err, connection) => {
+        arguments[1] = (err, connection) => {
           if (connection) {
             connection._dd_connAttrs = connAttrs
           }
           callback(err, connection)
-        })
+        }
+
+        getConnection.apply(this, arguments)
       } else {
-        return getConnection.call(this, connAttrs).then((connection) => {
+        return getConnection.apply(this, arguments).then((connection) => {
           connection._dd_connAttrs = connAttrs
           return connection
         })
@@ -55,14 +57,16 @@ function createWrapCreatePool (tracer, config) {
   return function wrapCreatePool (createPool) {
     return function createPoolWithTrace (poolAttrs, callback) {
       if (callback) {
-        createPool.call(this, poolAttrs, (err, pool) => {
+        arguments[1] = (err, pool) => {
           if (pool) {
             pool._dd_poolAttrs = poolAttrs
           }
           callback(err, pool)
-        })
+        }
+
+        createPool.apply(this, arguments)
       } else {
-        return createPool.call(this, poolAttrs).then((pool) => {
+        return createPool.apply(this, arguments).then((pool) => {
           pool._dd_poolAttrs = poolAttrs
           return pool
         })

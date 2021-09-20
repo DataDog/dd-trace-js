@@ -2,13 +2,14 @@
 
 const METHODS = require('methods').concat('all')
 const pathToRegExp = require('path-to-regexp')
+const shimmer = require('../../datadog-shimmer')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const regexpCache = Object.create(null)
 
 function createWrapHandle (tracer, config) {
   return function wrapHandle (handle) {
-    return function handleWithTracer (req, res, done) {
+    return function handleWithTrace (req, res, done) {
       web.patch(req)
 
       return handle.apply(this, arguments)
@@ -37,21 +38,18 @@ function wrapLayerHandle (layer, handle) {
   let wrapCallHandle
 
   if (handle.length === 4) {
-    wrapCallHandle = function (error, req, res, next) {
+    wrapCallHandle = shimmer.wrap(handle, function (error, req, res, next) {
       return callHandle(layer, handle, req, [error, req, res, wrapNext(layer, req, next)])
-    }
+    })
   } else {
-    wrapCallHandle = function (req, res, next) {
+    wrapCallHandle = shimmer.wrap(handle, function (req, res, next) {
       return callHandle(layer, handle, req, [req, res, wrapNext(layer, req, next)])
-    }
+    })
   }
 
   // This is a workaround for the `loopback` library so that it can find the correct express layer
   // that contains the real handle function
   wrapCallHandle._datadog_orig = handle
-
-  // TODO(bengl) assigning prototypes like this when wrapping should be done in a centralized place.
-  Object.setPrototypeOf(wrapCallHandle, handle)
 
   return wrapCallHandle
 }

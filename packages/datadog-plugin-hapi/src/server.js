@@ -56,12 +56,12 @@ function createWrapExt () {
   return function wrapExt (ext) {
     return function extWithTrace (events, method, options) {
       if (typeof events === 'object') {
-        events = wrapEvents(events)
+        arguments[0] = wrapEvents(events)
       } else {
-        method = wrapExtension(method)
+        arguments[1] = wrapExtension(method)
       }
 
-      return ext.call(this, events, method, options)
+      return ext.apply(this, arguments)
     }
   }
 }

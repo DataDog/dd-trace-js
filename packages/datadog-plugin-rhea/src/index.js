@@ -96,7 +96,7 @@ function createWrapReceiverDispatch (tracer, config, instrumenter) {
 function createWrapCircularBufferPopIf () {
   return function wrapCircularBufferPopIf (popIf) {
     return function wrappedPopIf (fn) {
-      const wrappedFn = entry => {
+      arguments[0] = entry => {
         const shouldPop = fn(entry)
         if (shouldPop && entry[dd]) {
           const remoteState = entry.remote_state
@@ -106,7 +106,7 @@ function createWrapCircularBufferPopIf () {
         }
         return shouldPop
       }
-      return popIf.call(this, wrappedFn)
+      return popIf.apply(this, arguments)
     }
   }
 }
@@ -133,8 +133,9 @@ function patchCircularBuffer (proto, instrumenter) {
         if (outgoing.deliveries) {
           CircularBuffer = outgoing.deliveries.constructor
         }
-        if (CircularBuffer && !CircularBuffer.prototype.pop_if._datadog_patched) {
+        if (CircularBuffer && !CircularBuffer.prototype._datadog_patched) {
           instrumenter.wrap(CircularBuffer.prototype, 'pop_if', createWrapCircularBufferPopIf())
+          CircularBuffer.prototype._datadog_patched = true
           const Session = proto.constructor
           if (Session) {
             Session[circularBufferConstructor] = CircularBuffer
@@ -260,6 +261,7 @@ module.exports = [
     },
     unpatch (Session, tracer) {
       if (Session[circularBufferConstructor]) {
+        delete Session[circularBufferConstructor].prototype._datadog_patched
         this.unwrap(Session[circularBufferConstructor].prototype, 'pop_if')
       }
     }
