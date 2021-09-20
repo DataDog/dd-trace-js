@@ -28,6 +28,24 @@ commands:
           paths:
             - ./node_modules
             - ./yarn.lock
+  store-test-results-and-coverage:
+    steps:
+      - store_test_results:
+          path: test-results
+          when: always
+      - run:
+          name: Upload JUnit XML Report
+          command: yarn junit:upload
+          when: always
+      - run:
+          name: Merge coverage report
+          command: yarn cover:merge
+      - store_artifacts:
+          path: ./coverage
+      - persist_to_workspace:
+          root: ~/dd-trace-js
+          paths:
+            - .nyc_merge/*
 
 node-core-base: &node-core-base
   resource_class: small
@@ -38,22 +56,7 @@ node-core-base: &node-core-base
       run:
         name: Unit tests
         command: yarn test:core:ci
-    - store_test_results:
-        path: test-results
-        when: always
-    - run:
-        name: Upload JUnit XML Report
-        command: yarn junit:upload
-        when: always
-    - run:
-        name: Merge coverage report
-        command: yarn cover:merge
-    - store_artifacts:
-        path: ./coverage
-    - persist_to_workspace:
-        root: ~/dd-trace-js
-        paths:
-          - .nyc_merge/*
+    - store-test-results-and-coverage
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -149,22 +152,7 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Unit tests
         command: PLUGINS=$(cat /tmp/dd_plugins_var) yarn test:plugins:ci
-    - store_test_results:
-        path: test-results
-        when: always
-    - run:
-        name: Upload JUnit XML Report
-        command: yarn junit:upload
-        when: always
-    - run:
-        name: Merge coverage report
-        command: yarn cover:merge
-    - store_artifacts:
-        path: ./coverage
-    - persist_to_workspace:
-        root: ~/dd-trace-js
-        paths:
-          - .nyc_merge/*
+    - store-test-results-and-coverage
 
 node-upstream-base: &node-upstream-base
   parameters:
@@ -256,6 +244,23 @@ jobs:
             node ~/dd-trace-js/benchmark/sirun/diff-recent | tee /tmp/artifacts/diff.json
       - store_artifacts:
           path: /tmp/artifacts
+
+  # Shimmer tests
+
+  shimmer:
+    parameters:
+      node-version:
+        type: string
+    docker:
+      - image: node:<< parameters.node-version >>
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: Unit tests
+          command: yarn test:shimmer:ci
+      - store-test-results-and-coverage
 
   # Core tests
 
@@ -692,6 +697,7 @@ workflows:
             parameters:
               node-version: ["12", "14", "16", "latest"]
       - node-core-windows
+      - shimmer: *matrix-supported-node-versions
       - node-integration: *matrix-supported-node-versions
       - node-amqplib: *matrix-supported-node-versions
       - node-amqp10: *matrix-supported-node-versions
@@ -764,6 +770,7 @@ workflows:
       - node-winston: *matrix-supported-node-versions
       - codecov:
           requires:
+            - shimmer
             - node-core
             - node-amqplib
             - node-amqp10

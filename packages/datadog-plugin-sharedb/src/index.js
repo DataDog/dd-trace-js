@@ -101,9 +101,9 @@ function createAgentWrapHandle (tracer, config) {
         config.hooks.receive(span, request)
       }
 
-      const wrappedCallback = wrapCallback(config, tracer, request, span, callback)
+      arguments[1] = wrapCallback(config, tracer, request, span, callback)
 
-      return tracer.scope().bind(origHandleMessageFn, span).call(this, request, wrappedCallback)
+      return tracer.scope().bind(origHandleMessageFn, span).apply(this, arguments)
     }
   }
 }

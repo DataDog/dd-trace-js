@@ -13,6 +13,8 @@ const tx = {
       return wrapCallback(span, done)
     } else if (isPromise(done)) {
       return wrapPromise(span, done)
+    } else if (done && done.length) {
+      return wrapArguments(span, done)
     }
   }
 }
@@ -37,6 +39,17 @@ function wrapPromise (span, promise) {
   )
 
   return promise
+}
+
+function wrapArguments (span, args) {
+  const lastIndex = args.length - 1
+  const callback = args[lastIndex]
+
+  if (typeof callback === 'function') {
+    args[lastIndex] = wrapCallback(span, args[lastIndex])
+  }
+
+  return args
 }
 
 function finish (span, error) {

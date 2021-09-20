@@ -21,7 +21,8 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        appListener.close()
+        appListener && appListener.close()
+        appListener = null
       })
 
       describe('without configuration', () => {
@@ -854,6 +855,21 @@ describe('Plugin', () => {
                 .catch(done)
             })
           })
+        })
+
+        it('should keep the properties untouched on nested router handlers', () => {
+          const router = express.Router()
+          const childRouter = express.Router()
+
+          childRouter.get('/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          router.use('/users', childRouter)
+
+          const layer = router.stack.find(layer => layer.regexp.test('/users'))
+
+          expect(layer.handle).to.have.ownProperty('stack')
         })
 
         withVersions(plugin, 'loopback', loopbackVersion => {
