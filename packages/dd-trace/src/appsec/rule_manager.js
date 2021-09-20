@@ -8,11 +8,11 @@ function applyRules (rules) {
   // for now there is only WAF
   const callback = new callbacks.DDWAF(rules)
 
-  appliedCallbacks.add(rules, callback)
+  appliedCallbacks.set(rules, callback)
 }
 
 function clearAllRules () {
-  for (const callback of appliedCallbacks) {
+  for (const [, callback] of appliedCallbacks) {
     callback.clear()
   }
 }

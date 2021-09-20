@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const { INCOMING_HTTP_REQUEST_START } = require('../gateway/channels')
@@ -11,7 +12,7 @@ function enable (config) {
   try {
     // TODO: enable dc_blocking: config.blocking === true
 
-    let rules = fs.readFileSync('./recommended.json')
+    let rules = fs.readFileSync(path.join(__dirname, 'recommended.json'))
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules)
@@ -32,9 +33,11 @@ function incomingHttpTranslator (data) {
 
   context.setValue(Addresses.HTTP_INCOMING_URL, data.req.url)
 
-  const headers = data.req.headers
+  const headers = Object.assign({}, data.req.headers)
   delete headers.cookie
   context.setValue(Addresses.HTTP_INCOMING_HEADERS, headers)
+
+  context.dispatch()
 }
 
 function disable () {
