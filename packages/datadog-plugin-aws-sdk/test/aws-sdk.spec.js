@@ -51,7 +51,7 @@ describe('Plugin', () => {
               'aws.service': 'S3',
               'aws.operation': 'listBuckets'
             })
-          }).then(() => done(), done)
+          }).then(done, done)
 
           s3.listBuckets(e => e && done(e))
         })
@@ -73,7 +73,7 @@ describe('Plugin', () => {
               'error.msg': error.message,
               'error.stack': error.stack
             })
-          }).then(() => done(), done)
+          }).then(done, done)
 
           s3.listBuckets({ 'BadParam': 'badvalue' }, e => {
             error = e
@@ -90,7 +90,7 @@ describe('Plugin', () => {
                 resource: 'listBuckets',
                 service: 'test-aws-s3'
               })
-            }).then(() => done(), done)
+            }).then(done, done)
 
             s3.listBuckets().promise().catch(done)
           })
@@ -106,7 +106,7 @@ describe('Plugin', () => {
                 resource: 'listBuckets',
                 service: 'test-aws-s3'
               })
-            }).then(() => done(), done)
+            }).then(done, done)
 
             s3.listBuckets().promise().catch(done)
           })
@@ -165,7 +165,7 @@ describe('Plugin', () => {
             expect(span.meta).to.include({
               'hook.operation': 'listBuckets'
             })
-          }).then(() => done(), done)
+          }).then(done, done)
 
           s3.listBuckets(() => {})
         })

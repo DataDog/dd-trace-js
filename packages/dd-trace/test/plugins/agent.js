@@ -11,7 +11,6 @@ const path = require('path')
 const handlers = new Set()
 let sockets = []
 let agent = null
-let server = null
 let listener = null
 let tracer = null
 
@@ -38,10 +37,11 @@ module.exports = {
 
     return getPort().then(port => {
       return new Promise((resolve, reject) => {
-        server = http.createServer(agent)
+        const server = exports.server = http.createServer(agent)
+
         server.on('connection', socket => sockets.push(socket))
 
-        listener = server.listen(port, 'localhost', () => resolve(server))
+        listener = server.listen(port, 'localhost', () => resolve())
 
         pluginName = [].concat(pluginName)
         config = [].concat(config)
@@ -141,8 +141,8 @@ module.exports = {
     delete global._ddtrace
 
     return new Promise((resolve, reject) => {
-      server.on('close', () => {
-        server = null
+      exports.server.on('close', () => {
+        exports.server = null
 
         resolve()
       })
