@@ -5,6 +5,8 @@ const callbacks = require('./callbacks')
 const appliedCallbacks = new Map()
 
 function applyRules (rules) {
+  if (appliedCallbacks.has(rules)) return
+
   // for now there is only WAF
   const callback = new callbacks.DDWAF(rules)
 
