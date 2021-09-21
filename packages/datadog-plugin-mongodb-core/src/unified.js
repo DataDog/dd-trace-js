@@ -98,7 +98,7 @@ module.exports = [
   },
   {
     name: 'mongodb',
-    versions: ['>=3.5'],
+    versions: ['>=3.5.4'],
     file: 'lib/utils.js',
     patch (util, tracer, config) {
       this.wrap(util, 'maybePromise', createWrapMaybePromise(tracer, config))
