@@ -26,6 +26,22 @@ function createWrapCommand (tracer, config, name) {
   }
 }
 
+function createWrapMaybePromise (tracer, config) {
+  return function wrapMaybePromise (maybePromise) {
+    return function maybePromiseWithTrace (parent, callback, fn) {
+      const callbackIndex = arguments.length - 2
+
+      callback = arguments[callbackIndex]
+
+      if (typeof callback === 'function') {
+        arguments[callbackIndex] = tracer.scope().bind(callback)
+      }
+
+      return maybePromise.apply(this, arguments)
+    }
+  }
+}
+
 function patch (wp, tracer, config) {
   this.wrap(wp, 'command', createWrapCommand(tracer, config))
   this.wrap(wp, 'insert', createWrapCommand(tracer, config, 'insert'))
@@ -79,6 +95,17 @@ module.exports = [
     file: 'lib/cmap/connection.js',
     patch: patchConnection,
     unpatch: unpatchConnection
+  },
+  {
+    name: 'mongodb',
+    versions: ['>=3.5.4'],
+    file: 'lib/utils.js',
+    patch (util, tracer, config) {
+      this.wrap(util, 'maybePromise', createWrapMaybePromise(tracer, config))
+    },
+    unpatch (util) {
+      this.unwrap(util, 'maybePromise')
+    }
   },
   {
     name: 'mongodb',
