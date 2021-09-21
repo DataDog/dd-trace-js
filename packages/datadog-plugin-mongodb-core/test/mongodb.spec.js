@@ -20,7 +20,7 @@ const withTopologies = fn => {
     })
 
     // unified topology is now the only topology and thus the default since 4.x
-    if (semver.intersects(version, '<4')) {
+    if (!semver.intersects(version, '>=4')) {
       describe('using the unified topology', () => {
         fn(async () => {
           const { MongoClient, Server } = require(`../../../versions/${moduleName}@${version}`).get()
