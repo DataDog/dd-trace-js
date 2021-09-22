@@ -1,26 +1,33 @@
 'use strict'
 
+const als = require('../als')
 const lockName = 'ddRunnerLock'
 
 function runSubscriptions (subscriptions, params) {
-  if (!subscriptions.length || process[lockName]) return []
-  process[lockName] = true
-
   const results = []
 
-  for (let i = 0; i < subscriptions.length; ++i) {
-    const subscription = subscriptions[i]
+  if (!subscriptions.size || process[lockName]) return results
+  process[lockName] = true
+
+  const store = als.getStore()
+
+  const executedCallbacks = new Set()
+
+  subscriptions.forEach((subscription) => {
+    if (executedCallbacks.has(subscription.callback)) return
+    executedCallbacks.add(subscription.callback)
+
     let result
 
     try {
-      result = subscription.callback.method(params, subscription)
+      result = subscription.callback.method(params, store)
     } catch (err) {
-      // log ?
+      // TODO: log ?
       result = {}
     }
 
     results.push(result)
-  }
+  })
 
   process[lockName] = false
 
