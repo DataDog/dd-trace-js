@@ -71,14 +71,23 @@ class WAFCallback {
   }
 
   action (params, store) {
-    const key = store.get('context')
-
     let wafContext
-    if (this.wafContextCache.has(key)) {
-      wafContext = this.wafContextCache.get(key)
-    } else {
+
+    if (store) {
+      const key = store.get('context')
+
+      if (key) {
+        if (this.wafContextCache.has(key)) {
+          wafContext = this.wafContextCache.get(key)
+        } else {
+          wafContext = this.ddwaf.createContext()
+          this.wafContextCache.set(key, wafContext)
+        }
+      }
+    }
+
+    if (!wafContext) {
       wafContext = this.ddwaf.createContext()
-      this.wafContextCache.set(key, wafContext)
     }
 
     try {
