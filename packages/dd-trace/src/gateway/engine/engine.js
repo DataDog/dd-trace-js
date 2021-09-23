@@ -127,6 +127,8 @@ class Context {
   }
 
   dispatch () {
+    if (this.newAddresses.length === 0) return []
+
     const result = Context.manager.dispatch(this.newAddresses, this.allAddresses, this)
 
     this.newAddresses = []
