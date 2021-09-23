@@ -103,6 +103,7 @@ const httpServerOptions = {
 const httpClientOptions = {
   ...httpOptions,
   splitByDomain: true,
+  propagationBlocklist: ['url', /url/, url => true],
   hooks: {
     request: (span, req, res) => {}
   }
@@ -125,6 +126,8 @@ const graphqlOptions = {
   signature: false,
   hooks: {
     execute: (span, args, res) => {},
+    validate: (span, document, errors) => {},
+    parse: (span, source, document) => {}
   }
 };
 
@@ -154,6 +157,14 @@ const redisOptions = {
   blocklist: ['info', /auth/i, command => true],
 };
 
+const sharedbOptions = {
+  service: 'test',
+  hooks: {
+    receive: (span, request) => {},
+    reply: (span, request, reply) => {},
+  },
+};
+
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('aws-sdk', awsSdkOptions);
@@ -163,6 +174,7 @@ tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
+tracer.use('cypress');
 tracer.use('dns');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('express');
@@ -229,6 +241,7 @@ tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
 tracer.use('when');
 tracer.use('winston');

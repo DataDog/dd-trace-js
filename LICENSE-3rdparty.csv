@@ -1,7 +1,11 @@
 Component,Origin,License,Copyright
+require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
+require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
+require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
-require,hdr-histogram-js,BSD-2-Clause,Copyright 2016 Alexandre Victoor
+require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
@@ -11,15 +15,10 @@ require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,multer,MIT,Copyright 2014 Hage Yaapa
-require,nan,MIT,Copyright 2018 NAN contributors
-require,node-gyp-build,MIT,Copyright 2017 Mathias Buus
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
-require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
-require,resolve,MIT,Copyright 2012 James Halliday
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
-require,shimmer,BSD-2-Clause,Copyright Forrest L Norvell
 require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contributors
 require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
@@ -57,7 +56,5 @@ dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
-dev,tar,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,wait-on,MIT,Copyright 2015 Jeff Barczewski
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
-file,TDigest.h,Apache license 2.0,Copyright Derrick R. Burns

@@ -3,62 +3,68 @@ version: 2.1
 orbs:
   win: circleci/windows@2.2.0
 
+commands:
+  checkout-and-yarn-install:
+    parameters:
+      yarn-args:
+        type: string
+        default: --ignore-engines
+    steps:
+      - checkout
+      - &yarn-versions
+        run:
+          name: Versions
+          command: yarn versions
+      - &restore-yarn-cache
+        restore_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+      - &yarn-install
+        run:
+          name: Install dependencies
+          command: yarn install << parameters.yarn-args >>
+      - &save-yarn-cache
+        save_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+            - ./yarn.lock
+  store-test-results-and-coverage:
+    steps:
+      - store_test_results:
+          path: test-results
+          when: always
+      - run:
+          name: Upload JUnit XML Report
+          command: yarn junit:upload
+          when: always
+      - run:
+          name: Merge coverage report
+          command: yarn cover:merge
+      - store_artifacts:
+          path: ./coverage
+      - persist_to_workspace:
+          root: ~/dd-trace-js
+          paths:
+            - .nyc_merge/*
+
 node-core-base: &node-core-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - &yarn-versions
-      run:
-        name: Versions
-        command: yarn versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-    - &yarn-install
-      run:
-        name: Install dependencies
-        command: yarn install --ignore-engines
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
-    - &yarn-rebuild
-      run:
-        name: Compile native code
-        command: yarn rebuild
+    - checkout-and-yarn-install
     - &yarn-test-core
       run:
         name: Unit tests
         command: yarn test:core:ci
-    - store_test_results:
-        path: test-results
-        when: always
-    - run:
-        name: Upload JUnit XML Report
-        command: yarn junit:upload
-        when: always
-    - run:
-        name: Merge coverage report
-        command: yarn cover:merge
-    - store_artifacts:
-        path: ./coverage
-    - persist_to_workspace:
-        root: ~/dd-trace-js
-        paths:
-          - .nyc_merge/*
+    - store-test-results-and-coverage
 
 node-bench-base: &node-bench-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  docker:
+    - image: node
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Benchmark Tracer
         command: yarn bench
@@ -66,28 +72,31 @@ node-bench-base: &node-bench-base
 node-bench-e2e-base: &node-bench-e2e-base
   resource_class: medium
   working_directory: ~/dd-trace-js
+
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: E2E Benchmark
         command: yarn bench:e2e
 
 node-bench-sirun-base: &node-bench-sirun-base
+  parameters:
+    node-version:
+      type: string
+      default: "latest"
+  docker:
+    - image: node:<< parameters.node-version >>
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Install dependencies
-        command: "[[ -n $PLUGINS ]] && node ./scripts/install_plugin_modules || exit 0"
+        command: |
+          if [[ $CIRCLE_JOB == *"plugin"* ]]; then
+            export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '')")
+            node ./scripts/install_plugin_modules
+          fi
     - run:
         name: Install system deps
         command: apt-get update && apt-get install -y valgrind wget
@@ -97,23 +106,18 @@ node-bench-sirun-base: &node-bench-sirun-base
     - run:
         name: Run sirun
         command: |
-          cd benchmark/sirun/$SIRUN_TEST_DIR
+          cd benchmark/sirun/$(node -p "process.env.CIRCLE_JOB.replace('node-bench-sirun-', '').replace('-latest', '').replace(/-\d*$/, '')")
           node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee ../$CIRCLE_JOB-sirun-output.ndjson
     - persist_to_workspace:
         root: ~/dd-trace-js
         paths:
           - benchmark/sirun/*-sirun-output.ndjson
 
-
 node-integration-base: &node-integration-base
   resource_class: small
   working_directory: ~/dd-trace-js
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Integration Tests
         command: yarn test:integration
@@ -121,159 +125,52 @@ node-integration-base: &node-integration-base
 node-bench-profiler-base: &node-bench-profiler-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  docker:
+    - image: node
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
+    - checkout-and-yarn-install
     - run:
         name: Benchmark Profiler
         command: yarn bench:profiler
 
 node-plugin-base: &node-plugin-base
+  parameters:
+    node-version:
+      type: string
+      default: "12"
   docker:
-    - image: node:12
+    - image: node:<< parameters.node-version >>
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
-    - *yarn-versions
-    - &restore-yarn-cache
-      restore_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+    - checkout-and-yarn-install:
+        yarn-args: ""
     - run:
-        name: Install dependencies
-        command: yarn install
-    - &save-yarn-cache
-      save_cache:
-        key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
-        paths:
-          - ./node_modules
-          - ./yarn.lock
+        name: Get plugin name
+        command: |
+          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
     - run:
         name: Unit tests
-        command: yarn test:plugins:ci
-    - store_test_results:
-        path: test-results
-        when: always
-    - run:
-        name: Upload JUnit XML Report
-        command: yarn junit:upload
-        when: always
-    - run:
-        name: Merge coverage report
-        command: yarn cover:merge
-    - store_artifacts:
-        path: ./coverage
-    - persist_to_workspace:
-        root: ~/dd-trace-js
-        paths:
-          - .nyc_merge/*
+        command: PLUGINS=$(cat /tmp/dd_plugins_var) yarn test:plugins:ci
+    - store-test-results-and-coverage
 
 node-upstream-base: &node-upstream-base
+  parameters:
+    node-version:
+      type: string
+      default: "12"
   docker:
-    - image: node:12
+    - image: node:<< parameters.node-version >>
   working_directory: ~/dd-trace-js
   resource_class: small
   steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - run:
-        name: Install dependencies
-        command: yarn install
-    - *save-yarn-cache
+    - checkout-and-yarn-install:
+        yarn-args: ""
     - run:
         name: Library test suite
-        command: node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
-
-prebuild-linux-base: &prebuild-linux-base
-  docker:
-    - image: node:10.0.0 # glibc needs to be old enough for older distros
-  working_directory: ~/dd-trace-js
-  resource_class: small
-  steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - &yarn-prebuild
-      run:
-        name: Compile prebuilt binaries
-        command: yarn prebuild
-    - &persist-prebuilds
-      persist_to_workspace:
-        root: ~/dd-trace-js
-        paths:
-          - prebuilds
-
-prebuild-linux-ia32-base: &prebuild-linux-ia32-base
-  <<: *prebuild-linux-base
-  steps:
-    - run:
-        name: Install job dependencies
-        command: apt-get update && apt-get install -y g++-multilib
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - *yarn-prebuild
-    - *persist-prebuilds
-
-test-prebuild-linux-base: &test-prebuild-linux-base
-  docker:
-    - image: node
-  working_directory: ~/dd-trace-js
-  resource_class: small
-  steps:
-    - checkout
-    - attach_workspace:
-        at: ~/dd-trace-js
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - *yarn-test-core
-
-prebuild-darwin-base: &prebuild-darwin-base
-  macos:
-    xcode: "10.2.0"
-  working_directory: ~/dd-trace-js
-  steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - *yarn-prebuild
-    - *persist-prebuilds
-
-prebuild-win32-base: &prebuild-win32-base
-  executor:
-    name: win/default
-    size: medium
-  working_directory: ~/dd-trace-js
-  steps:
-    - checkout
-    - *yarn-versions
-    - *restore-yarn-cache
-    - *yarn-install
-    - *save-yarn-cache
-    - *yarn-prebuild
-    - *persist-prebuilds
-
-prebuild-job: &prebuild-job
-  filters:
-    branches:
-      only:
-        - master
-        - /v\d+\.\d+/
-        - /v\d+\.x/
-        - /.*native.*/
-        - /^node-\d+/
+        command: |
+          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace(/-\d*$/, '')")
+          node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
 
 jobs:
   # Linting
@@ -284,28 +181,17 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - *save-yarn-cache
+      - checkout-and-yarn-install:
+          yarn-args: ""
       - run:
           name: Lint
           command: yarn lint
 
   # Benchmarks
 
-  node-bench-latest:
-    <<: *node-bench-base
-    docker:
-      - image: node
+  node-bench-latest: *node-bench-base
 
-  node-bench-profiler-latest:
-    <<: *node-bench-profiler-base
-    docker:
-      - image: node
+  node-bench-profiler-latest: *node-bench-profiler-base
 
   node-bench-e2e-latest:
     <<: *node-bench-e2e-base
@@ -316,78 +202,29 @@ jobs:
           - PLUGINS=mongodb-core
       - image: circleci/mongo
 
-  node-bench-sirun-startup-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=startup
+  node-bench-sirun-startup: *node-bench-sirun-base
 
-  node-bench-sirun-spans-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=spans
+  node-bench-sirun-spans: *node-bench-sirun-base
 
-  node-bench-sirun-async-hooks:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=async_hooks
+  node-bench-sirun-async_hooks: *node-bench-sirun-base
 
-  node-bench-sirun-encoders-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=encoding
+  node-bench-sirun-log: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-q-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=q
-          - SIRUN_TEST_DIR=plugin-q
+  node-bench-sirun-encoding: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-bluebird-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=bluebird
-          - SIRUN_TEST_DIR=plugin-bluebird
+  node-bench-sirun-plugin-q: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-http-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=http
-          - SIRUN_TEST_DIR=plugin-http
+  node-bench-sirun-plugin-bluebird: *node-bench-sirun-base
 
-  node-bench-sirun-scope-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=scope
+  node-bench-sirun-plugin-http: *node-bench-sirun-base
 
-  node-bench-sirun-exporting-pipeline-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=exporting-pipeline
+  node-bench-sirun-scope: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-net-latest:
-    <<: *node-bench-sirun-base
-    docker:
-      - image: node
-        environment:
-          - SIRUN_TEST_DIR=plugin-net
+  node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-net: *node-bench-sirun-base
+
+  node-bench-sirun-profiler: *node-bench-sirun-base
 
   node-bench-sirun-all:
     docker:
@@ -395,13 +232,9 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
+      - checkout-and-yarn-install
       - attach_workspace:
           at: ~/dd-trace-js
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
       - run:
           name: Aggregate sirun output
           command: |
@@ -412,27 +245,32 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
 
+  # Shimmer tests
+
+  shimmer:
+    parameters:
+      node-version:
+        type: string
+    docker:
+      - image: node:<< parameters.node-version >>
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: Unit tests
+          command: yarn test:shimmer:ci
+      - store-test-results-and-coverage
+
   # Core tests
 
-  node-core-12:
+  node-core:
+    parameters:
+      node-version:
+        type: string
     <<: *node-core-base
     docker:
-      - image: node:12
-
-  node-core-14:
-    <<: *node-core-base
-    docker:
-      - image: node:14
-
-  node-core-16:
-    <<: *node-core-base
-    docker:
-      - image: node:16
-
-  node-core-latest:
-    <<: *node-core-base
-    docker:
-      - image: node
+      - image: node:<< parameters.node-version >>
 
   node-leaks:
     docker:
@@ -440,13 +278,8 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - run:
-          name: Install dependencies
-          command: yarn install
-      - *save-yarn-cache
+      - checkout-and-yarn-install:
+          yarn-args: ""
       - run:
           name: Memory leak tests
           command: yarn leak:core
@@ -459,51 +292,25 @@ jobs:
       size: medium
     working_directory: ~/dd-trace-js
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-rebuild
+      - checkout-and-yarn-install
       - *yarn-test-core
 
   # Integration tests
 
-  node-integration-12:
+  node-integration:
+    parameters:
+      node-version:
+        type: string
     <<: *node-integration-base
     docker:
-      - image: node:12
-
-  node-integration-14:
-    <<: *node-integration-base
-    docker:
-      - image: node:14
-
-  node-integration-16:
-    <<: *node-integration-base
-    docker:
-      - image: node:16
-
-  node-integration-latest:
-    <<: *node-integration-base
-    docker:
-      - image: node:latest
+      - image: node:<< parameters.node-version >>
 
   # Plugin tests
 
   node-amqplib:
     <<: *node-plugin-base
     docker:
-      - image: node:12
-        environment:
-          - SERVICES=rabbitmq
-          - PLUGINS=amqplib
-      - image: rabbitmq:3.6-alpine
-
-  node-upstream-amqplib:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=rabbitmq
           - PLUGINS=amqplib
@@ -512,7 +319,7 @@ jobs:
   node-amqp10:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=qpid
           - PLUGINS=amqp10|rhea
@@ -522,23 +329,10 @@ jobs:
           - QPIDD_ADMIN_USERNAME=admin
           - QPIDD_ADMIN_PASSWORD=admin
 
-  node-upstream-amqp10:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - SERVICES=qpid
-          - PLUGINS=amqp10
-      - image: scholzj/qpid-cpp:1.38.0
-        command: -p 5673
-        environment:
-          - QPIDD_ADMIN_USERNAME=admin
-          - QPIDD_ADMIN_PASSWORD=admin
-
   node-aws-sdk:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - PLUGINS=aws-sdk
           - SERVICES=localstack
@@ -559,38 +353,14 @@ jobs:
           - LAMBDA_EXECUTOR=local
           - START_WEB=0
 
-  node-upstream-axios:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=axios
+  node-bluebird: *node-plugin-base
 
-  node-bluebird:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=bluebird
-
-  node-bunyan:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=bunyan
-
-  node-upstream-bunyan:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=bunyan
+  node-bunyan: *node-plugin-base
 
   node-cassandra:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=cassandra
           - PLUGINS=cassandra-driver
@@ -598,117 +368,58 @@ jobs:
         environment:
           - CASSANDRA_TOKEN=-9223372036854775808
 
-  node-connect:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=connect
+  node-connect: *node-plugin-base
 
-  node-upstream-connect:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=connect
-
-  node-cucumber:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=cucumber
+  node-cucumber: *node-plugin-base
 
   node-couchbase:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=couchbase
           - PLUGINS=couchbase
       - image: rishabhdev/couchbase-server-sandbox:latest
 
-  node-upstream-couchbase:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - SERVICES=couchbase
-          - PLUGINS=couchbase
-      - image: rishabhdev/couchbase-server-sandbox:latest
-
-  node-dns:
+  node-cypress:
     <<: *node-plugin-base
     docker:
-      - image: node:12
-        environment:
-          - PLUGINS=dns
+      - image: cypress/base:<< parameters.node-version >>
+
+  node-dns: *node-plugin-base
 
   node-elasticsearch:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=elasticsearch
           - PLUGINS=elasticsearch
-      - image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.4
+      - image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
         environment:
           - discovery.type=single-node
-          - "ES_JAVA_OPTS=-Xms64m -Xmx64m"
+          - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
 
-  node-express:
+  node-express: *node-plugin-base
+
+  node-fastify: *node-plugin-base
+
+  node-fs:
+    parameters:
+      node-version:
+        type: string
     <<: *node-plugin-base
     docker:
-      - image: node:12
-        environment:
-          - PLUGINS=express
-
-  node-fastify:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=fastify
-
-  node-fs-12:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - PLUGINS=fs
 
-  node-fs-14:
-    <<: *node-plugin-base
-    docker:
-      - image: node:14
-        environment:
-          - PLUGINS=fs
-
-  node-fs-16:
-    <<: *node-plugin-base
-    docker:
-      - image: node:16
-        environment:
-          - PLUGINS=fs
-
-  node-fs-latest:
-    <<: *node-plugin-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=fs
-
-  node-generic-pool:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=generic-pool
+  node-generic-pool: *node-plugin-base
 
   node-google-cloud-pubsub:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=google-cloud-pubsub
           - PLUGINS=google-cloud-pubsub
@@ -717,7 +428,7 @@ jobs:
   node-kafkajs:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=kafka
           - PLUGINS=kafkajs
@@ -728,80 +439,26 @@ jobs:
           KAFKA_CREATE_TOPICS: "test-topic:1:1"
           KAFKA_ZOOKEEPER_CONNECT: 127.0.0.1:2181
 
-  node-graphql:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=graphql
+  node-graphql: *node-plugin-base
 
-  node-upstream-graphql:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=graphql
+  node-grpc: *node-plugin-base
 
-  node-grpc:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=grpc
+  node-hapi: *node-plugin-base
 
-  node-hapi:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=hapi
+  node-http: *node-plugin-base
 
-  node-http:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=http
+  node-http2: *node-plugin-base
 
-  node-http2:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=http2
+  node-jest: *node-plugin-base
 
-  node-jest:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=jest
+  node-knex: *node-plugin-base
 
-  node-knex:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=knex
-
-  node-koa:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=koa
-
-  node-upstream-koa:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=koa
+  node-koa: *node-plugin-base
 
   node-limitd-client:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=limitd
           - PLUGINS=limitd-client
@@ -814,30 +471,20 @@ jobs:
   node-memcached:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=memcached
           - PLUGINS=memcached
       - image: memcached:1.5-alpine
 
-  node-microgateway-core:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=microgateway-core
+  node-microgateway-core: *node-plugin-base
 
-  node-mocha:
-    <<: *node-plugin-base
-    docker:
-      - image: node
-        environment:
-          - PLUGINS=mocha
+  node-mocha: *node-plugin-base
 
   node-tedious:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mssql
           - PLUGINS=tedious
@@ -850,7 +497,7 @@ jobs:
   node-mysql:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mysql
           - PLUGINS=mysql|mysql2
@@ -862,7 +509,7 @@ jobs:
   node-mongodb-core:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
@@ -871,25 +518,15 @@ jobs:
   node-mongoose:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
       - image: circleci/mongo:3.4
 
-  node-net:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=net
+  node-net: *node-plugin-base
 
-  node-next:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=next
+  node-next: *node-plugin-base
 
   node-oracledb:
     <<: *node-plugin-base
@@ -901,31 +538,14 @@ jobs:
           - PLUGINS=oracledb
       - image: quillbuilduser/oracle-18-xe
 
-  node-paperplane:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=paperplane
+  node-paperplane: *node-plugin-base
 
-  node-pino:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=pino
-
-  node-upstream-pino:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=pino
+  node-pino: *node-plugin-base
 
   node-postgres:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=postgres
           - PLUGINS=pg
@@ -934,77 +554,35 @@ jobs:
         environment:
           - POSTGRES_PASSWORD=postgres
 
-  node-promise-js:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=promise-js
+  node-promise-js: *node-plugin-base
 
-  node-promise:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=promise
+  node-promise: *node-plugin-base
 
-  node-upstream-promise:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=promise
-
-  node-q:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=q
-
-  node-upstream-q:
-    <<: *node-upstream-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=q
+  node-q: *node-plugin-base
 
   node-redis:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=redis
           - PLUGINS=redis|ioredis
       - image: redis:4.0-alpine
 
-  node-restify:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=restify
+  node-restify: *node-plugin-base
 
-  node-router:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=router
+  node-router: *node-plugin-base
 
-  node-when:
+  node-sharedb:
     <<: *node-plugin-base
     docker:
-      - image: node:12
+      - image: node:<< parameters.node-version >>
         environment:
-          - PLUGINS=when
+          - PLUGINS=sharedb
 
-  node-winston:
-    <<: *node-plugin-base
-    docker:
-      - image: node:12
-        environment:
-          - PLUGINS=winston
+  node-when: *node-plugin-base
+
+  node-winston: *node-plugin-base
 
   typescript:
     docker:
@@ -1012,11 +590,7 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - run:
           name: Test API documentation
           command: yarn type:test
@@ -1026,6 +600,55 @@ jobs:
       - store_artifacts:
           path: ./docs/out
 
+  # Plugin upstream tests
+
+  node-upstream-amqp10:
+    <<: *node-upstream-base
+    docker:
+      - image: node:<< parameters.node-version >>
+        environment:
+          - SERVICES=qpid
+          - PLUGINS=amqp10
+      - image: scholzj/qpid-cpp:1.38.0
+        command: -p 5673
+        environment:
+          - QPIDD_ADMIN_USERNAME=admin
+          - QPIDD_ADMIN_PASSWORD=admin
+
+  node-upstream-amqplib:
+    <<: *node-upstream-base
+    docker:
+      - image: node:<< parameters.node-version >>
+        environment:
+          - SERVICES=rabbitmq
+          - PLUGINS=amqplib
+      - image: rabbitmq:3.6-alpine
+
+  node-upstream-axios: *node-upstream-base
+
+  node-upstream-bunyan: *node-upstream-base
+
+  node-upstream-connect: *node-upstream-base
+
+  node-upstream-couchbase:
+    <<: *node-upstream-base
+    docker:
+      - image: node:<< parameters.node-version >>
+        environment:
+          - SERVICES=couchbase
+          - PLUGINS=couchbase
+      - image: rishabhdev/couchbase-server-sandbox:latest
+
+  node-upstream-graphql: *node-upstream-base
+
+  node-upstream-koa: *node-upstream-base
+
+  node-upstream-pino: *node-upstream-base
+
+  node-upstream-promise: *node-upstream-base
+
+  node-upstream-q: *node-upstream-base
+
   # Node upstream tests
 
   node-upstream-node:
@@ -1034,11 +657,7 @@ jobs:
     docker:
       - image: node:14
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - run:
           name: Pull the NodeJS repository
           command: "git clone --depth 1 --branch v14.x https://github.com/nodejs/node.git ~/node"
@@ -1057,11 +676,7 @@ jobs:
     working_directory: ~/dd-trace-js
     resource_class: small
     steps:
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
+      - checkout-and-yarn-install
       - attach_workspace:
           at: ~/dd-trace-js
       - run:
@@ -1071,265 +686,92 @@ jobs:
           name: Submit code coverage report
           command: yarn codecov
 
-  # Prebuilds (linux x64)
-
-  linux-x64-16:
-    <<: *prebuild-linux-base
-    docker:
-      - image: node:12.0.0
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=15 - 16
-
-  linux-x64-14:
-    <<: *prebuild-linux-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=14
-
-  linux-x64-12:
-    <<: *prebuild-linux-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=12 - 13
-
-  ## Tests
-
-  linux-x64-16-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: node:16
-
-  linux-x64-14-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: node:14
-
-  linux-x64-12-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: node:12
-
-  # Prebuilds (alpine x64)
-
-  alpine-x64: &alpine-base
-    docker:
-      - image: node:alpine
-    working_directory: ~/dd-trace-js
-    resource_class: small
-    steps:
-      - run:
-          name: Install job dependencies
-          command: apk add g++ git make python3
-      - checkout
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - *yarn-rebuild
-      - *yarn-test-core
-
-  # Prebuilds (alpine ia32)
-
-  alpine-ia32:
-    <<: *alpine-base
-    docker:
-      - image: i386/node:alpine
-
-  # Prebuilds (linux ia32)
-
-  linux-ia32-12:
-    <<: *prebuild-linux-ia32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=12 - 13
-
-  ## Tests
-
-  linux-ia32-13-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: i386/node:13-alpine
-
-  linux-ia32-12-test:
-    <<: *test-prebuild-linux-base
-    docker:
-      - image: i386/node:12-alpine
-
-  # Prebuilds (darwin x64)
-
-  mac-x64-16:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=16
-
-  mac-x64-14:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=14 - 15
-
-  mac-x64-12:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=12 - 13
-
-  # Prebuilds (darwin ia32)
-
-  mac-ia32-16:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=16
-
-  mac-ia32-14:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=14 - 15
-
-  mac-ia32-12:
-    <<: *prebuild-darwin-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=12 - 13
-
-  # Prebuilds (win32 x64)
-
-  win-x64-16:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=16
-
-  win-x64-14:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=14 - 15
-
-  win-x64-12:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=x64
-      - NODE_VERSIONS=12 - 13
-
-  # Prebuilds (win32 ia32)
-
-  win-ia32-16:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=16
-
-  win-ia32-14:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=14 - 15
-
-  win-ia32-12:
-    <<: *prebuild-win32-base
-    environment:
-      - ARCH=ia32
-      - NODE_VERSIONS=12 - 13
-
-  # Prebuild Artifacts
-
-  prebuilds:
-    docker:
-      - image: node
-    working_directory: ~/dd-trace-js
-    resource_class: small
-    steps:
-      - checkout
-      - attach_workspace:
-          at: ~/dd-trace-js
-      - *yarn-versions
-      - *restore-yarn-cache
-      - *yarn-install
-      - *save-yarn-cache
-      - run:
-          name: Create prebuilds archive
-          command: yarn prebuilds
-      - store_artifacts:
-          path: ./prebuilds.tgz
-      - store_artifacts:
-          path: ./prebuilds.tgz.sha1
-
 workflows:
   version: 2
-  build:
+  build: &build-jobs
     jobs:
       - lint
       - typescript
-      - node-core-12
-      - node-core-14
-      - node-core-16
-      - node-core-latest
+      - node-core: &matrix-supported-node-versions
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16", "latest"]
       - node-core-windows
-      - node-integration-12
-      - node-integration-14
-      - node-integration-16
-      - node-integration-latest
-      - node-amqplib
-      - node-amqp10
-      - node-aws-sdk
-      - node-bluebird
-      - node-bunyan
-      - node-cassandra
-      - node-connect
-      - node-couchbase
-      - node-cucumber
-      - node-dns
-      - node-elasticsearch
-      - node-express
-      - node-fastify
-      - node-fs-12
-      - node-fs-14
-      - node-fs-16
-      - node-fs-latest
-      - node-generic-pool
-      - node-google-cloud-pubsub
-      - node-graphql
-      - node-grpc
-      - node-hapi
-      - node-http
-      - node-http2
-      - node-jest
-      - node-kafkajs
-      - node-knex
-      - node-koa
+      - shimmer: *matrix-supported-node-versions
+      - node-integration: *matrix-supported-node-versions
+      - node-amqplib: *matrix-supported-node-versions
+      - node-amqp10: *matrix-supported-node-versions
+      - node-aws-sdk: *matrix-supported-node-versions
+      - node-bluebird: *matrix-supported-node-versions
+      - node-bunyan: *matrix-supported-node-versions
+      - node-cassandra: *matrix-supported-node-versions
+      - node-connect: *matrix-supported-node-versions
+      # The couchbase version range we support only supports up to Node 12. TODO fix this.
+      - node-couchbase:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      - node-cucumber: *matrix-supported-node-versions
+      # There's no cypress/base image for node 16
+      - node-cypress:
+          matrix:
+              parameters:
+                node-version: ["12", "14"]
+      - node-dns: *matrix-supported-node-versions
+      - node-elasticsearch: *matrix-supported-node-versions
+      - node-express: *matrix-supported-node-versions
+      - node-fastify: *matrix-supported-node-versions
+      - node-fs: *matrix-supported-node-versions
+      - node-generic-pool: *matrix-supported-node-versions
+      - node-google-cloud-pubsub: *matrix-supported-node-versions
+      - node-graphql: *matrix-supported-node-versions
+      # The grpc version ranges we support only support up to Node 12. TODO fix this.
+      - node-grpc:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      # The hapi version ranges we support only support up to Node 12. TODO fix this.
+      - node-hapi:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      - node-http: *matrix-supported-node-versions
+      - node-http2: *matrix-supported-node-versions
+      - node-jest: *matrix-supported-node-versions
+      - node-kafkajs: *matrix-supported-node-versions
+      - node-knex: *matrix-supported-node-versions
+      - node-koa: *matrix-supported-node-versions
       # - node-limitd-client
-      - node-memcached
-      - node-microgateway-core
-      - node-mocha
-      - node-mongodb-core
-      - node-mongoose
-      - node-mysql
-      - node-net
-      - node-next
-      - node-oracledb
-      - node-paperplane
-      - node-pino
-      - node-postgres
-      - node-promise-js
-      - node-promise
-      - node-q
-      - node-redis
-      - node-restify
-      - node-router
-      - node-tedious
-      - node-when
-      - node-winston
+      - node-memcached: *matrix-supported-node-versions
+      - node-microgateway-core: *matrix-supported-node-versions
+      - node-mocha: *matrix-supported-node-versions
+      - node-mongodb-core: *matrix-supported-node-versions
+      - node-mongoose: *matrix-supported-node-versions
+      - node-mysql: *matrix-supported-node-versions
+      - node-net: *matrix-supported-node-versions
+      - node-next: *matrix-supported-node-versions
+      - node-oracledb: *matrix-supported-node-versions
+      - node-paperplane: *matrix-supported-node-versions
+      - node-pino: *matrix-supported-node-versions
+      # The pg version range we support doesn't work beyond Node 12. TODO fix this.
+      - node-postgres:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      - node-promise-js: *matrix-supported-node-versions
+      - node-promise: *matrix-supported-node-versions
+      - node-q: *matrix-supported-node-versions
+      - node-redis: *matrix-supported-node-versions
+      - node-restify: *matrix-supported-node-versions
+      - node-router: *matrix-supported-node-versions
+      - node-sharedb: *matrix-supported-node-versions
+      - node-tedious: *matrix-supported-node-versions
+      - node-when: *matrix-supported-node-versions
+      - node-winston: *matrix-supported-node-versions
       - codecov:
           requires:
-            - node-core-12
-            - node-core-14
-            - node-core-16
-            - node-core-latest
+            - shimmer
+            - node-core
             - node-amqplib
             - node-amqp10
             - node-aws-sdk
@@ -1339,14 +781,12 @@ workflows:
             - node-connect
             - node-couchbase
             - node-cucumber
+            - node-cypress
             - node-dns
             - node-elasticsearch
             - node-express
             - node-fastify
-            - node-fs-12
-            - node-fs-14
-            - node-fs-16
-            - node-fs-latest
+            - node-fs
             - node-generic-pool
             - node-google-cloud-pubsub
             - node-graphql
@@ -1377,133 +817,58 @@ workflows:
             - node-redis
             - node-restify
             - node-router
+            - node-sharedb
             - node-tedious
             - node-when
             - node-winston
-  bench:
+  bench: &bench-jobs
     jobs:
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
-      - node-bench-sirun-startup-latest
-      - node-bench-sirun-spans-latest
-      - node-bench-sirun-async-hooks
-      - node-bench-sirun-encoders-latest
-      - node-bench-sirun-plugin-q-latest
-      - node-bench-sirun-plugin-bluebird-latest
-      - node-bench-sirun-plugin-http-latest
-      - node-bench-sirun-plugin-net-latest
-      - node-bench-sirun-scope-latest
-      - node-bench-sirun-exporting-pipeline-latest
+      - node-bench-sirun-startup: &matrix-exact-supported-node-versions
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16"]
+      - node-bench-sirun-spans: *matrix-exact-supported-node-versions
+      - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
+      - node-bench-sirun-log: *matrix-exact-supported-node-versions
+      - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
+      - node-bench-sirun-scope: *matrix-exact-supported-node-versions
+      - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
+      - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
-            - node-bench-sirun-startup-latest
-            - node-bench-sirun-spans-latest
-            - node-bench-sirun-async-hooks
-            - node-bench-sirun-encoders-latest
-            - node-bench-sirun-plugin-q-latest
-            - node-bench-sirun-plugin-bluebird-latest
-            - node-bench-sirun-plugin-http-latest
-            - node-bench-sirun-plugin-net-latest
-            - node-bench-sirun-scope-latest
-            - node-bench-sirun-exporting-pipeline-latest
-  upstream:
+            - node-bench-sirun-startup
+            - node-bench-sirun-spans
+            - node-bench-sirun-async_hooks
+            - node-bench-sirun-log
+            - node-bench-sirun-encoding
+            - node-bench-sirun-plugin-q
+            - node-bench-sirun-plugin-bluebird
+            - node-bench-sirun-plugin-http
+            - node-bench-sirun-plugin-net
+            - node-bench-sirun-scope
+            - node-bench-sirun-exporting-pipeline
+            - node-bench-sirun-profiler
+  upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
-      - node-upstream-amqp10
-      - node-upstream-amqplib
-      - node-upstream-axios
-      - node-upstream-bunyan
-      - node-upstream-connect
-      - node-upstream-graphql
-      - node-upstream-koa
-      - node-upstream-pino
-      - node-upstream-promise
-      - node-upstream-q
+      - node-upstream-amqp10: *matrix-supported-node-versions
+      - node-upstream-amqplib: *matrix-supported-node-versions
+      - node-upstream-axios: *matrix-supported-node-versions
+      - node-upstream-bunyan: *matrix-supported-node-versions
+      - node-upstream-connect: *matrix-supported-node-versions
+      - node-upstream-graphql: *matrix-supported-node-versions
+      - node-upstream-koa: *matrix-supported-node-versions
+      - node-upstream-pino: *matrix-supported-node-versions
+      - node-upstream-promise: *matrix-supported-node-versions
+      - node-upstream-q: *matrix-supported-node-versions
 
-  prebuild:
-    jobs:
-      # Linux x64
-      - linux-x64-16:
-          <<: *prebuild-job
-      - linux-x64-14:
-          <<: *prebuild-job
-      - linux-x64-12:
-          <<: *prebuild-job
-      - linux-x64-16-test:
-          requires:
-            - linux-x64-16
-      - linux-x64-14-test:
-          requires:
-            - linux-x64-14
-      - linux-x64-12-test:
-          requires:
-            - linux-x64-12
-      # Linux ia32
-      - linux-ia32-12:
-          <<: *prebuild-job
-      - linux-ia32-13-test:
-          requires:
-            - linux-ia32-12
-      - linux-ia32-12-test:
-          requires:
-            - linux-ia32-12
-      # Alpine x64
-      - alpine-x64:
-          <<: *prebuild-job
-      # Alpine ia32
-      - alpine-ia32:
-          <<: *prebuild-job
-      # Darwin x64
-      - mac-x64-16:
-          <<: *prebuild-job
-      - mac-x64-14:
-          <<: *prebuild-job
-      - mac-x64-12:
-          <<: *prebuild-job
-      # Darwin ia32
-      - mac-ia32-16:
-          <<: *prebuild-job
-      - mac-ia32-14:
-          <<: *prebuild-job
-      - mac-ia32-12:
-          <<: *prebuild-job
-      # Windows x64
-      - win-x64-16:
-          <<: *prebuild-job
-      - win-x64-14:
-          <<: *prebuild-job
-      - win-x64-12:
-          <<: *prebuild-job
-      # Windows ia32
-      - win-ia32-16:
-          <<: *prebuild-job
-      - win-ia32-14:
-          <<: *prebuild-job
-      - win-ia32-12:
-          <<: *prebuild-job
-      # Artifacts
-      - prebuilds:
-          requires:
-            - linux-x64-16-test
-            - linux-x64-14-test
-            - linux-x64-12-test
-            - linux-ia32-13-test
-            - linux-ia32-12-test
-            - alpine-x64
-            - alpine-ia32
-            - mac-x64-16
-            - mac-x64-14
-            - mac-x64-12
-            - mac-ia32-16
-            - mac-ia32-14
-            - mac-ia32-12
-            - win-x64-16
-            - win-x64-14
-            - win-x64-12
-            - win-ia32-16
-            - win-ia32-14
-            - win-ia32-12
   nightly:
     triggers:
       - schedule:
@@ -1512,67 +877,9 @@ workflows:
             branches:
               only:
                 - master
-    jobs:
-      - node-core-12
-      - node-core-14
-      - node-core-16
-      - node-core-latest
-      - node-core-windows
-      - node-integration-12
-      - node-integration-14
-      - node-integration-16
-      - node-integration-latest
-      - node-amqplib
-      - node-amqp10
-      - node-aws-sdk
-      - node-bluebird
-      - node-http
-      - node-bunyan
-      - node-cassandra
-      - node-connect
-      - node-couchbase
-      - node-cucumber
-      - node-dns
-      - node-elasticsearch
-      - node-express
-      - node-fastify
-      - node-fs-12
-      - node-fs-14
-      - node-fs-16
-      - node-fs-latest
-      - node-generic-pool
-      - node-google-cloud-pubsub
-      - node-graphql
-      - node-grpc
-      - node-hapi
-      - node-http
-      - node-http2
-      - node-jest
-      - node-kafkajs
-      - node-knex
-      - node-koa
-      # - node-limitd-client
-      - node-memcached
-      - node-microgateway-core
-      - node-mocha
-      - node-mongodb-core
-      - node-mongoose
-      - node-mysql
-      - node-net
-      - node-next
-      - node-oracledb
-      - node-paperplane
-      - node-pino
-      - node-postgres
-      - node-promise-js
-      - node-promise
-      - node-q
-      - node-redis
-      - node-restify
-      - node-router
-      - node-tedious
-      - node-when
-      - node-winston
+                - profiler
+    <<: *build-jobs
+
   nightly-bench:
     triggers:
       - schedule:
@@ -1581,32 +888,9 @@ workflows:
             branches:
               only:
                 - master
-    jobs:
-      - node-bench-latest
-      - node-bench-profiler-latest
-      - node-bench-e2e-latest
-      - node-bench-sirun-startup-latest
-      - node-bench-sirun-spans-latest
-      - node-bench-sirun-async-hooks
-      - node-bench-sirun-encoders-latest
-      - node-bench-sirun-plugin-q-latest
-      - node-bench-sirun-plugin-bluebird-latest
-      - node-bench-sirun-plugin-http-latest
-      - node-bench-sirun-plugin-net-latest
-      - node-bench-sirun-scope-latest
-      - node-bench-sirun-exporting-pipeline-latest
-      - node-bench-sirun-all:
-          requires:
-            - node-bench-sirun-startup-latest
-            - node-bench-sirun-spans-latest
-            - node-bench-sirun-async-hooks
-            - node-bench-sirun-encoders-latest
-            - node-bench-sirun-plugin-q-latest
-            - node-bench-sirun-plugin-bluebird-latest
-            - node-bench-sirun-plugin-http-latest
-            - node-bench-sirun-plugin-net-latest
-            - node-bench-sirun-scope-latest
-            - node-bench-sirun-exporting-pipeline-latest
+                - profiler
+    <<: *bench-jobs
+
   nightly-upstream:
     triggers:
       - schedule:
@@ -1615,15 +899,5 @@ workflows:
             branches:
               only:
                 - master
-    jobs:
-      # - node-upstream-node
-      - node-upstream-amqp10
-      - node-upstream-amqplib
-      - node-upstream-axios
-      - node-upstream-bunyan
-      - node-upstream-connect
-      - node-upstream-graphql
-      - node-upstream-koa
-      - node-upstream-pino
-      - node-upstream-promise
-      - node-upstream-q
+                - profiler
+    <<: *upstream-jobs

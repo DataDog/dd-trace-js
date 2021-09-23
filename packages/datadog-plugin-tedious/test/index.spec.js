@@ -29,7 +29,7 @@ describe('Plugin', () => {
         })
       })
 
-      after(() => {
+      afterEach(() => {
         return agent.close()
       })
 
@@ -119,13 +119,12 @@ describe('Plugin', () => {
       it('should do automatic instrumentation', done => {
         const query = 'SELECT 1 + 1 AS solution'
 
-        agent
+        const promise = agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('tds.proc.name', 'sp_executesql')
             expect(traces[0][0].meta).to.have.property('component', 'tedious')
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
@@ -134,11 +133,10 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].metrics).to.have.property('out.port', 1433)
           })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(query, (err) => {
-          if (err) done(err)
+          if (err) return done(err)
+          promise.then(done, done)
         })
         connection.execSql(request)
       })
@@ -146,18 +144,16 @@ describe('Plugin', () => {
       it('should handle parameterized queries', done => {
         const query = 'SELECT 1 + @num AS solution'
 
-        agent
+        const promise = agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('tds.proc.name', 'sp_executesql')
           })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(query, (err) => {
-          if (err) done(err)
+          if (err) return done(err)
+          promise.then(done, done)
         })
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.execSql(request)
@@ -167,18 +163,16 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + 1 AS solution1;\n' +
                       'SELECT 1 + 2 AS solution2'
 
-        agent
+        const promise = agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.not.have.property('tds.proc.name')
           })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(query, (err) => {
-          if (err) done(err)
+          if (err) return done(err)
+          promise.then(done, done)
         })
         connection.execSqlBatch(request)
       })
@@ -191,14 +185,11 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('tds.proc.name', 'sp_prepare')
           })
           .then(done)
           .catch(done)
 
-        const request = new tds.Request(query, (err) => {
-          if (err) done(err)
-        })
+        const request = new tds.Request(query)
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.prepare(request)
@@ -207,18 +198,16 @@ describe('Plugin', () => {
       it('should handle execute requests', done => {
         const query = 'SELECT 1 + @num AS solution'
 
-        agent
+        const promise = agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('tds.proc.name', 'sp_execute')
           })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(query, (err) => {
-          if (err) done(err)
+          if (err) return done(err)
+          promise.then(done, done)
         }).on('prepared', () => {
           connection.execute(request, { num: 5 })
         })
@@ -230,18 +219,16 @@ describe('Plugin', () => {
       it('should handle unprepare requests', done => {
         const query = 'SELECT 1 + @num AS solution'
 
-        agent
+        const promise = agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0].meta).to.have.property('tds.proc.name', 'sp_unprepare')
           })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(query, (err) => {
-          if (err) done(err)
+          if (err) return done(err)
+          promise.then(done, done)
         }).on('prepared', () => {
           connection.unprepare(request)
         })
@@ -253,17 +240,16 @@ describe('Plugin', () => {
       it('should handle stored procedure calls', done => {
         const procedure = 'dbo.ddTestProc'
 
-        agent
+        const promise = agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'tedious.request')
             expect(traces[0][0]).to.have.property('service', 'test-mssql')
             expect(traces[0][0]).to.have.property('resource', procedure)
           })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(procedure, (err) => {
-          if (err) done(err)
+          if (err) return done(err)
+          promise.then(done, done)
         })
 
         request.addParameter('num', tds.TYPES.Int, 1)
@@ -331,7 +317,7 @@ describe('Plugin', () => {
 
           beforeEach(done => {
             const dropTestTable = new tds.Request(`DROP TABLE IF EXISTS ${tableName}`, (err) => {
-              if (err) done(err)
+              if (err) return done(err)
 
               const tableCreationSql = `CREATE TABLE ${tableName} ([num] int NOT NULL)`
               const createTestTable = new tds.Request(tableCreationSql, done)
@@ -348,7 +334,6 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'tedious.request')
                 expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
-                expect(traces[0][0].meta).to.not.have.property('tds.proc.name')
               })
               .then(done)
               .catch(done)
@@ -361,19 +346,17 @@ describe('Plugin', () => {
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
 
-              agent
+              const promise = agent
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('name', 'tedious.request')
                   expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
-                  expect(traces[0][0].meta).to.not.have.property('tds.proc.name')
                 })
-                .then(done)
-                .catch(done)
 
               connection.execBulkLoad(bulkLoad)
               rowStream.write([5], (err) => {
-                if (err) done(err)
+                if (err) return done(err)
                 rowStream.end()
+                promise.then(done, done)
               })
             })
 

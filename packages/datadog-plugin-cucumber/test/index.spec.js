@@ -14,7 +14,8 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   CI_APP_ORIGIN,
-  ERROR_MESSAGE
+  ERROR_MESSAGE,
+  TEST_SKIP_REASON
 } = require('../../dd-trace/src/plugins/util/test')
 
 wrapIt()
@@ -61,8 +62,6 @@ describe('Plugin', () => {
         Cucumber = require(`../../../versions/@cucumber/cucumber@${version}`).get()
       })
     })
-    const testFilePath = path.join(__dirname, 'features', 'simple.feature')
-    const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
     describe('cucumber', () => {
       describe('passing test', () => {
@@ -82,7 +81,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'pass scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'pass'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -138,7 +136,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'fail scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'fail'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -201,7 +198,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'skip scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'skip'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -219,7 +215,6 @@ describe('Plugin', () => {
             { name: 'run', stepStatus: 'pass' },
             { name: 'skip', stepStatus: 'skip' }
           ]
-          const errors = [undefined, undefined, 'skipped', 'skipped']
           const checkTraces = agent.use(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
@@ -234,12 +229,6 @@ describe('Plugin', () => {
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
               expect(stepSpan.type).not.to.equal('test')
-            })
-            errors.forEach((msg, errorIndex) => {
-              expect(
-                testTrace[errorIndex].meta[ERROR_MESSAGE],
-                `error ${errorIndex} should start with "${msg}"`
-              ).to.satisfy(err => msg === undefined || err.startsWith(msg))
             })
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'skip scenario')
@@ -264,7 +253,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'skip scenario based on tag',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'skip'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -286,7 +274,6 @@ describe('Plugin', () => {
           const steps = [
             { name: 'datadog', stepStatus: 'skip' }
           ]
-          const errors = ['skipped', 'skipped']
           const checkTraces = agent.use(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
@@ -302,12 +289,6 @@ describe('Plugin', () => {
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
               expect(stepSpan.type).not.to.equal('test')
             })
-            errors.forEach((msg, errorIndex) => {
-              expect(
-                testTrace[errorIndex].meta[ERROR_MESSAGE],
-                `error ${errorIndex} should start with "${msg}"`
-              ).to.satisfy(err => msg === undefined || err.startsWith(msg))
-            })
           })
           const result = await runCucumber(
             version,
@@ -317,6 +298,36 @@ describe('Plugin', () => {
             'skip scenario based on tag'
           )
           expect(result.success).to.equal(true)
+          await checkTraces
+        })
+      })
+      describe('not implemented step', () => {
+        it('should create a test span with a skip reason', async () => {
+          const checkTraces = agent.use(traces => {
+            expect(traces.length).to.equal(1)
+            const testTrace = traces[0]
+            expect(testTrace.length).to.equal(4)
+            const testSpan = testTrace.find(span => span.name === 'cucumber.test')
+            expect(testSpan.meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              [TEST_NAME]: 'not implemented scenario',
+              [TEST_TYPE]: 'test',
+              [TEST_FRAMEWORK]: 'cucumber',
+              [TEST_STATUS]: 'skip',
+              [TEST_SKIP_REASON]: 'not implemented'
+            })
+            const notImplementedStepSpan = testTrace.find(span => span.meta['cucumber.step'] === 'not-implemented')
+            expect(notImplementedStepSpan.meta).to.contain({
+              [TEST_SKIP_REASON]: 'not implemented'
+            })
+            const implementedAndSkippedTestSpan = testTrace.find(span => span.meta['cucumber.step'] === 'pass')
+            expect(implementedAndSkippedTestSpan.meta).not.to.contain({
+              [TEST_SKIP_REASON]: 'not implemented'
+            })
+          })
+          const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'not implemented scenario')
+          expect(result.success).to.equal(false)
           await checkTraces
         })
       })
@@ -337,7 +348,6 @@ describe('Plugin', () => {
               [TEST_NAME]: 'integration scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'pass'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -398,15 +408,16 @@ describe('Plugin', () => {
               [TEST_NAME]: 'hooks fail',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_SUITE]: testSuite,
               [TEST_STATUS]: 'fail'
             })
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
             expect(testSpan.resource).to.equal('hooks fail')
-            expect(testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`))
-              .to.equal(true)
+            expect(
+              testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`) ||
+              testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set properties of undefined (setting 'boom')`)
+            ).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'hooks fail')
           expect(result.success).to.equal(false)
@@ -418,7 +429,6 @@ describe('Plugin', () => {
             { name: 'run', stepStatus: 'skip' },
             { name: 'pass', stepStatus: 'skip' }
           ]
-          const errors = ['skipped', 'skipped', 'skipped']
           const checkTraces = agent.use(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
@@ -433,12 +443,6 @@ describe('Plugin', () => {
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
               expect(stepSpan.type).not.to.equal('test')
-            })
-            errors.forEach((msg, errorIndex) => {
-              expect(
-                testTrace[errorIndex].meta[ERROR_MESSAGE],
-                `error ${errorIndex} should start with "${msg}"`
-              ).to.satisfy(err => msg === undefined || err.startsWith(msg))
             })
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'hooks fail')

@@ -5,7 +5,7 @@ const { profiler } = require('./profiling')
 
 module.exports = {
   start: config => {
-    const { service, version, env, url, hostname, port } = config
+    const { service, version, env, url, hostname, port, tags } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
@@ -24,7 +24,8 @@ module.exports = {
       exporters,
       url,
       hostname,
-      port
+      port,
+      tags
     })
   },
 

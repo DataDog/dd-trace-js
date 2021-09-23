@@ -5,8 +5,6 @@ const Kinds = require('../../../ext/kinds')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
 
-const procnameRegex = /^sp_[a-z]+$/
-
 function createWrapMakeRequest (tracer, config) {
   return function wrapMakeRequest (makeRequest) {
     return function makeRequestWithTrace (request) {
@@ -33,7 +31,6 @@ function createWrapMakeRequest (tracer, config) {
 
       addConnectionTags(span, connectionConfig)
       addDatabaseTags(span, connectionConfig)
-      addProcIdTags(span, request)
 
       analyticsSampler.sample(span, config.measured)
       request.callback = tx.wrap(span, request.callback)
@@ -75,11 +72,6 @@ function addDatabaseTags (span, connectionConfig) {
   span.setTag('db.user', connectionConfig.userName || connectionConfig.authentication.options.userName)
   span.setTag('db.name', connectionConfig.options.database)
   span.setTag('db.instance', connectionConfig.options.instanceName)
-}
-
-function addProcIdTags (span, request) {
-  if (!procnameRegex.test(request.sqlTextOrProcedure)) return
-  span.setTag('tds.proc.name', request.sqlTextOrProcedure)
 }
 
 module.exports = [

@@ -9,6 +9,8 @@ function createWrapRequest (tracer, config) {
     return function requestWithTrace (params, options, cb) {
       if (!params) return request.apply(this, arguments)
 
+      const lastIndex = arguments.length - 1
+      const body = getBody(params.body || params.bulkBody)
       const childOf = tracer.scope().active()
       const span = tracer.startSpan('elasticsearch.query', {
         childOf,
@@ -20,48 +22,39 @@ function createWrapRequest (tracer, config) {
           'span.type': 'elasticsearch',
           'elasticsearch.url': params.path,
           'elasticsearch.method': params.method,
+          'elasticsearch.body': body,
           'elasticsearch.params': JSON.stringify(params.querystring || params.query)
         }
       })
 
-      if (params.body || params.bulkBody) {
-        span.setTag('elasticsearch.body', JSON.stringify(params.body || params.bulkBody))
-      }
-
       analyticsSampler.sample(span, config.measured)
 
-      cb = request.length === 2 || typeof options === 'function'
-        ? tracer.scope().bind(options, childOf)
-        : tracer.scope().bind(cb, childOf)
+      cb = arguments[lastIndex]
 
-      return tracer.scope().activate(span, () => {
-        if (typeof cb === 'function') {
-          if (request.length === 2) {
-            return request.call(this, params, wrapCallback(tracer, span, params, config, cb))
-          } else {
-            return request.call(this, params, options, wrapCallback(tracer, span, params, config, cb))
-          }
+      if (typeof cb === 'function') {
+        arguments[lastIndex] = wrapCallback(tracer, span, params, config, cb)
+
+        return tracer.scope().activate(span, () => request.apply(this, arguments))
+      } else {
+        const promise = request.apply(this, arguments)
+
+        if (promise && typeof promise.then === 'function') {
+          promise.then(() => finish(span, params, config), e => finish(span, params, config, e))
         } else {
-          const promise = request.apply(this, arguments)
-
-          if (promise && typeof promise.then === 'function') {
-            promise.then(() => finish(span, params, config), e => finish(span, params, config, e))
-          } else {
-            finish(span, params, config)
-          }
-
-          return promise
+          finish(span, params, config)
         }
-      })
+
+        return promise
+      }
     }
   }
 }
 
 function wrapCallback (tracer, span, params, config, done) {
-  return function (err) {
+  return tracer.scope().bind(function (err) {
     finish(span, params, config, err)
     done.apply(null, arguments)
-  }
+  })
 }
 
 function finish (span, params, config, err) {
@@ -80,6 +73,10 @@ function finish (span, params, config, err) {
 
 function quantizePath (path) {
   return path && path.replace(/[0-9]+/g, '?')
+}
+
+function getBody (body) {
+  return body && JSON.stringify(body)
 }
 
 function normalizeConfig (config) {

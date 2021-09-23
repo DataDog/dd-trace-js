@@ -6,19 +6,36 @@ const {
   GIT_TAG,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
-  GIT_COMMIT_MESSAGE
-} = require('./git')
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_REPOSITORY_URL,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH,
+  CI_JOB_URL,
+  CI_JOB_NAME,
+  CI_STAGE_NAME
+} = require('./tags')
 
-const CI_PIPELINE_ID = 'ci.pipeline.id'
-const CI_PIPELINE_NAME = 'ci.pipeline.name'
-const CI_PIPELINE_NUMBER = 'ci.pipeline.number'
-const CI_PIPELINE_URL = 'ci.pipeline.url'
-const CI_PROVIDER_NAME = 'ci.provider.name'
-const CI_WORKSPACE_PATH = 'ci.workspace_path'
-const GIT_REPOSITORY_URL = 'git.repository_url'
-const CI_JOB_URL = 'ci.job.url'
-const CI_JOB_NAME = 'ci.job.name'
-const CI_STAGE_NAME = 'ci.stage.name'
+// Receives a string with the form 'John Doe <john.doe@gmail.com>'
+// and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
+function parseEmailAndName (emailAndName) {
+  if (!emailAndName) {
+    return { name: '', email: '' }
+  }
+  let name = ''
+  let email = ''
+  const matchNameAndEmail = emailAndName.match(/(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)/)
+  if (matchNameAndEmail) {
+    name = matchNameAndEmail[1]
+    email = matchNameAndEmail[2]
+  }
+
+  return { name, email }
+}
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -71,12 +88,6 @@ function resolveTilde (filePath) {
 }
 
 module.exports = {
-  CI_PIPELINE_ID,
-  CI_PIPELINE_NAME,
-  CI_PIPELINE_NUMBER,
-  CI_PIPELINE_URL,
-  CI_PROVIDER_NAME,
-  CI_WORKSPACE_PATH,
   getCIMetadata () {
     const { env } = process
 
@@ -138,8 +149,12 @@ module.exports = {
         CI_JOB_URL: GITLAB_CI_JOB_URL,
         CI_JOB_STAGE,
         CI_JOB_NAME: GITLAB_CI_JOB_NAME,
-        CI_COMMIT_MESSAGE
+        CI_COMMIT_MESSAGE,
+        CI_COMMIT_TIMESTAMP,
+        CI_COMMIT_AUTHOR
       } = env
+
+      const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
 
       tags = {
         [CI_PIPELINE_ID]: GITLAB_PIPELINE_ID,
@@ -155,7 +170,10 @@ module.exports = {
         [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL && GITLAB_PIPELINE_URL.replace('/-/pipelines/', '/pipelines/'),
         [CI_STAGE_NAME]: CI_JOB_STAGE,
         [CI_JOB_NAME]: GITLAB_CI_JOB_NAME,
-        [GIT_COMMIT_MESSAGE]: CI_COMMIT_MESSAGE
+        [GIT_COMMIT_MESSAGE]: CI_COMMIT_MESSAGE,
+        [GIT_COMMIT_AUTHOR_NAME]: name,
+        [GIT_COMMIT_AUTHOR_EMAIL]: email,
+        [GIT_COMMIT_AUTHOR_DATE]: CI_COMMIT_TIMESTAMP
       }
     }
 

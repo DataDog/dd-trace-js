@@ -255,6 +255,7 @@ describe('plugins/util/web', () => {
 
       it('should handle CORS preflight', () => {
         const headers = [
+          'x-datadog-origin',
           'x-datadog-parent-id',
           'x-datadog-sampled',
           'x-datadog-sampling-priority',

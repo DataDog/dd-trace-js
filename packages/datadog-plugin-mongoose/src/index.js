@@ -18,6 +18,15 @@ function createWrapCollectionAddQueue (tracer, config) {
   }
 }
 
+function createWrapWrapCallback (tracer, config) {
+  return function wrapWrapCallback ($wrapCallback) {
+    return function $wrapCallbackWithTrace (cb) {
+      arguments[0] = tracer.scope().bind(cb)
+      return $wrapCallback.apply(this, arguments)
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'mongoose',
@@ -28,6 +37,7 @@ module.exports = [
       }
 
       this.wrap(mongoose.Collection.prototype, 'addQueue', createWrapCollectionAddQueue(tracer, config))
+      this.wrap(mongoose.Model, '$wrapCallback', createWrapWrapCallback(tracer, config))
     },
     unpatch (mongoose) {
       if (mongoose.Promise !== global.Promise) {
@@ -35,6 +45,7 @@ module.exports = [
       }
 
       this.unwrap(mongoose.Collection.prototype, 'addQueue')
+      this.unwrap(mongoose.Model, '$wrapCallback')
     }
   }
 ]

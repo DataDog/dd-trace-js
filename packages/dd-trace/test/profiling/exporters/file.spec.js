@@ -6,38 +6,27 @@ const sinon = require('sinon')
 describe('exporters/file', () => {
   let FileExporter
   let fs
-  let encoder
 
   beforeEach(() => {
     fs = {
       writeFile: sinon.stub().yields()
     }
 
-    encoder = {
-      encode: sinon.stub()
-    }
-
     FileExporter = proxyquire('../../../src/profiling/exporters/file', {
-      fs,
-      '../encoders/pprof': {
-        Encoder: sinon.stub().returns(encoder)
-      }
+      fs
     }).FileExporter
   })
 
-  it('should export to a file per profile type', done => {
+  it('should export to a file per profile type', async () => {
     const exporter = new FileExporter()
+    const buffer = Buffer.from('profile')
     const profiles = {
-      test: 'profile'
+      test: buffer
     }
 
-    encoder.encode.withArgs('profile').yields(null, 'buffer')
+    await exporter.export({ profiles })
 
-    exporter.export({ profiles }, () => {
-      sinon.assert.calledOnce(fs.writeFile)
-      sinon.assert.calledWith(fs.writeFile, 'test.pb.gz', 'buffer')
-
-      done()
-    })
+    sinon.assert.calledOnce(fs.writeFile)
+    sinon.assert.calledWith(fs.writeFile, 'test.pb.gz', buffer)
   })
 })

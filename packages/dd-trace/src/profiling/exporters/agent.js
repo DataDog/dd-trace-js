@@ -1,73 +1,152 @@
 'use strict'
 
+const retry = require('retry')
+const { request } = require('http')
 const FormData = require('form-data')
-const { URL } = require('url')
-const { Encoder } = require('../encoders/pprof')
-const { eachOfSeries } = require('../util')
+
+const version = require('../../../lib/version')
+
+function sendRequest (options, body, callback) {
+  const req = request(options, res => {
+    if (res.statusCode >= 400) {
+      const error = new Error(`HTTP Error ${res.statusCode}`)
+      error.status = res.statusCode
+      callback(error)
+    } else {
+      callback(null, res)
+    }
+  })
+  req.on('error', callback)
+  if (body) req.write(body)
+  req.end()
+}
+
+function getBody (stream, callback) {
+  const chunks = []
+  stream.on('error', callback)
+  stream.on('data', chunk => chunks.push(chunk))
+  stream.on('end', () => {
+    callback(null, Buffer.concat(chunks))
+  })
+}
+
+function computeRetries (uploadTimeout) {
+  let tries = 0
+  while (tries < 2 || uploadTimeout > 1000) {
+    tries++
+    uploadTimeout /= 2
+  }
+  return [tries, uploadTimeout]
+}
 
 class AgentExporter {
-  constructor ({ url } = {}) {
-    this._url = typeof url === 'string' ? new URL(url) : url
-    this._encoder = new Encoder()
+  constructor ({ url, logger, uploadTimeout } = {}) {
+    this._url = url
+    this._logger = logger
+
+    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+
+    this._backoffTime = backoffTime
+    this._backoffTries = backoffTries
   }
 
-  export ({ profiles, start, end, tags }, callback) {
+  export ({ profiles, start, end, tags }) {
     const form = new FormData()
     const types = Object.keys(profiles)
 
-    form.append('recording-start', start.toISOString())
-    form.append('recording-end', end.toISOString())
-    form.append('language', 'javascript')
-    form.append('runtime', 'nodejs')
-    form.append('format', 'pprof')
+    const fields = [
+      ['recording-start', start.toISOString()],
+      ['recording-end', end.toISOString()],
+      ['language', 'javascript'],
+      ['runtime', 'nodejs'],
+      ['runtime_version', process.version],
+      ['profiler_version', version],
+      ['format', 'pprof'],
 
-    form.append('tags[]', 'language:javascript')
-    form.append('tags[]', `runtime:nodejs`)
-    form.append('tags[]', 'format:pprof')
+      ['tags[]', 'language:javascript'],
+      ['tags[]', 'runtime:nodejs'],
+      ['tags[]', `runtime_version:${process.version}`],
+      ['tags[]', `profiler_version:${version}`],
+      ['tags[]', 'format:pprof'],
+      ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
+    ]
 
-    for (const key in tags) {
-      form.append('tags[]', `${key}:${tags[key]}`)
+    for (const [key, value] of fields) {
+      form.append(key, value)
     }
 
-    eachOfSeries(types, (type, index, callback) => {
-      const profile = profiles[type]
+    this._logger.debug(() => {
+      const body = fields.map(([key, value]) => `  ${key}: ${value}`).join('\n')
+      return `Building agent export report: ${'\n' + body}`
+    })
 
-      this._encoder.encode(profile, (err, buffer) => {
-        if (err) return callback(err)
+    for (let index = 0; index < types.length; index++) {
+      const type = types[index]
+      const buffer = profiles[type]
 
-        form.append(`types[${index}]`, type)
-        form.append(`data[${index}]`, buffer, {
-          filename: `${type}.pb.gz`,
-          contentType: 'application/octet-stream',
-          knownLength: buffer.length
-        })
-
-        callback(null, buffer)
+      this._logger.debug(() => {
+        const bytes = buffer.toString('hex').match(/../g).join(' ')
+        return `Adding ${type} profile to agent export: ` + bytes
       })
-    }, err => {
-      if (err) return callback(err)
 
-      const options = {
-        method: 'POST',
-        path: '/profiling/v1/input',
-        timeout: 10 * 1000
-      }
+      form.append(`types[${index}]`, type)
+      form.append(`data[${index}]`, buffer, {
+        filename: `${type}.pb.gz`,
+        contentType: 'application/octet-stream',
+        knownLength: buffer.length
+      })
+    }
 
-      if (this._url.protocol === 'unix:') {
-        options.socketPath = this._url.pathname
-      } else {
-        options.protocol = this._url.protocol
-        options.hostname = this._url.hostname
-        options.port = this._url.port
-      }
+    const body = form.getBuffer()
+    const options = {
+      method: 'POST',
+      path: '/profiling/v1/input',
+      headers: form.getHeaders()
+    }
 
-      form.submit(options, (err, res) => {
-        if (err) return callback(err)
-        if (res.statusCode >= 400) {
-          return callback(new Error(`Error from the agent: ${res.statusCode}`))
-        }
+    if (this._url.protocol === 'unix:') {
+      options.socketPath = this._url.pathname
+    } else {
+      options.protocol = this._url.protocol
+      options.hostname = this._url.hostname
+      options.port = this._url.port
+    }
 
-        callback()
+    this._logger.debug(() => {
+      return `Submitting agent report to: ${JSON.stringify(options)}`
+    })
+
+    return new Promise((resolve, reject) => {
+      const operation = retry.operation({
+        randomize: true,
+        minTimeout: this._backoffTime,
+        retries: this._backoffTries
+      })
+
+      operation.attempt((attempt) => {
+        const timeout = Math.pow(this._backoffTime, attempt)
+        sendRequest({ ...options, timeout }, body, (err, response) => {
+          if (operation.retry(err)) {
+            this._logger.error(`Error from the agent: ${err.message}`)
+            return
+          } else if (err) {
+            reject(new Error('Profiler agent export back-off period expired'))
+            return
+          }
+
+          getBody(response, (err, body) => {
+            if (err) {
+              this._logger.error(`Error reading agent response: ${err.message}`)
+            } else {
+              this._logger.debug(() => {
+                const bytes = (body.toString('hex').match(/../g) || []).join(' ')
+                return `Agent export response: ${bytes}`
+              })
+            }
+          })
+
+          resolve()
+        })
       })
     })
   }

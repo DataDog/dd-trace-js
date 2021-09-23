@@ -18,9 +18,9 @@ function createWrapCommand (tracer, config) {
 
       analyticsSampler.sample(span, config.measured)
 
-      queryCompiler = wrapQueryCompiler(queryCompiler, this, server, scope, span)
+      arguments[0] = wrapQueryCompiler(queryCompiler, this, server, scope, span)
 
-      return scope.bind(command, span).call(this, queryCompiler, server)
+      return scope.bind(command, span).apply(this, arguments)
     }
   }
 }

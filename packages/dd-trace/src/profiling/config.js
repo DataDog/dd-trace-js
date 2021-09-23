@@ -5,20 +5,22 @@ const os = require('os')
 const { URL } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
-const { InspectorCpuProfiler } = require('./profilers/inspector/cpu')
-const { InspectorHeapProfiler } = require('./profilers/inspector/heap')
 const { ConsoleLogger } = require('./loggers/console')
+const CpuProfiler = require('./profilers/cpu')
+const HeapProfiler = require('./profilers/heap')
 const { tagger } = require('./tagger')
 
 const {
   DD_PROFILING_ENABLED,
+  DD_PROFILING_PROFILERS,
   DD_ENV,
   DD_TAGS,
   DD_SERVICE,
   DD_VERSION,
   DD_TRACE_AGENT_URL,
   DD_AGENT_HOST,
-  DD_TRACE_AGENT_PORT
+  DD_TRACE_AGENT_PORT,
+  DD_PROFILING_UPLOAD_TIMEOUT
 } = process.env
 
 class Config {
@@ -28,7 +30,10 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const flushInterval = 60 * 1000
+    // Must be longer than one minute so pad with five seconds
+    const flushInterval = coalesce(options.interval, 65 * 1000)
+    const uploadTimeout = coalesce(options.uploadTimeout,
+      DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
@@ -43,20 +48,23 @@ class Config {
     )
     this.logger = ensureLogger(options.logger)
     this.flushInterval = flushInterval
+    this.uploadTimeout = uploadTimeout
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST, 'localhost')
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT, 8126)
-    const url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL,
+    this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL,
       `http://${hostname || 'localhost'}:${port || 8126}`))
 
     this.exporters = ensureExporters(options.exporters || [
-      new AgentExporter({ url })
-    ], options)
+      new AgentExporter(this)
+    ], this)
 
-    this.profilers = options.profilers || [
-      new InspectorCpuProfiler(),
-      new InspectorHeapProfiler()
-    ]
+    const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
+      new CpuProfiler(),
+      new HeapProfiler()
+    ])
+
+    this.profilers = ensureProfilers(profilers, this)
   }
 }
 
@@ -84,6 +92,33 @@ function ensureExporters (exporters, options) {
   }
 
   return exporters
+}
+
+function getProfiler (name, options) {
+  switch (name) {
+    case 'cpu':
+      return new CpuProfiler(options)
+    case 'heap':
+      return new HeapProfiler(options)
+    default:
+      options.logger.error(`Unknown profiler "${name}"`)
+  }
+}
+
+function ensureProfilers (profilers, options) {
+  if (typeof profilers === 'string') {
+    profilers = profilers.split(',')
+  }
+
+  for (let i = 0; i < profilers.length; i++) {
+    const profiler = profilers[i]
+    if (typeof profiler === 'string') {
+      profilers[i] = getProfiler(profiler, options)
+    }
+  }
+
+  // Filter out any invalid profilers
+  return profilers.filter(v => v)
 }
 
 function ensureLogger (logger) {

@@ -3,7 +3,6 @@
 // TODO: capture every second and flush every 10 seconds
 
 const v8 = require('v8')
-const path = require('path')
 const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('./log')
@@ -29,6 +28,11 @@ module.exports = {
 
     Object.keys(config.tags)
       .filter(key => typeof config.tags[key] === 'string')
+      .filter(key => {
+        // Skip runtime-id unless enabled as cardinality may be too high
+        if (key !== 'runtime-id') return true
+        return (config.experimental && config.experimental.runtimeId)
+      })
       .forEach(key => {
         // https://docs.datadoghq.com/tagging/#defining-tags
         const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
@@ -37,7 +41,7 @@ module.exports = {
       })
 
     try {
-      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
+      nativeMetrics = require('@datadog/native-metrics')
       nativeMetrics.start()
     } catch (e) {
       log.error(e)
@@ -277,9 +281,6 @@ function captureNativeMetrics () {
     }
   })
 
-  client.gauge('runtime.node.spans.finished', stats.spans.total.finished)
-  client.gauge('runtime.node.spans.unfinished', stats.spans.total.unfinished)
-
   for (let i = 0, l = spaces.length; i < l; i++) {
     const tags = [`heap_space:${spaces[i].space_name}`]
 
@@ -287,18 +288,6 @@ function captureNativeMetrics () {
     client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
     client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
     client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
-  }
-
-  if (stats.spans.operations) {
-    const operations = stats.spans.operations
-
-    Object.keys(operations.finished).forEach(name => {
-      client.gauge('runtime.node.spans.finished.by.name', operations.finished[name], [`span_name:${name}`])
-    })
-
-    Object.keys(operations.unfinished).forEach(name => {
-      client.gauge('runtime.node.spans.unfinished.by.name', operations.unfinished[name], [`span_name:${name}`])
-    })
   }
 }
 

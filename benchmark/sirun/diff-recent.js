@@ -44,6 +44,17 @@ function diff (beforeSummary, afterSummary, prev = 'master', curr = 'this commit
   return { diffTree, html }
 }
 
+function latestVersionResults (jsonStr) {
+  let json = JSON.parse(jsonStr)
+  if (json.byVersion) {
+    // TODO we want to eventually include all of them, but for now, we can just take the latest one
+    // so that it's compatible with previous commits
+    delete json.byVersion
+    json = json[Object.keys(json).sort((a, b) => Number(b) - Number(a))[0]]
+  }
+  return json
+}
+
 const main = async () => {
   const prev = execSync('git rev-parse master').toString().trim()
   const builds = await getBuildNumsFromGithub(prev)
@@ -61,8 +72,8 @@ const main = async () => {
     console.error('artifacts', JSON.stringify(artifacts, null, 2))
     return
   }
-  const prevSummary = JSON.parse(await get(artifact.url, circleHeaders))
-  const currentSummary = JSON.parse(fs.readFileSync('/tmp/artifacts/summary.json'))
+  const prevSummary = latestVersionResults(await get(artifact.url, circleHeaders))
+  const currentSummary = latestVersionResults(fs.readFileSync('/tmp/artifacts/summary.json'))
 
   const thisCommit = execSync('git rev-parse HEAD').toString().trim()
   const { diffTree, html } = diff(prevSummary, currentSummary, 'master', thisCommit)

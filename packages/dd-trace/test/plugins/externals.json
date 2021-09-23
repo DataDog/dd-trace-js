@@ -1,4 +1,10 @@
 {
+  "cypress": [
+    {
+      "name": "cypress",
+      "versions": [">=6.7.0"]
+    }
+  ],
   "express": [
     {
       "name": "loopback",
@@ -6,6 +12,10 @@
     }
   ],
   "fastify": [
+    {
+      "name": "fastify",
+      "versions": ["2.15.0", "3.0.0", "3.9.2"]
+    },
     {
       "name": "middie",
       "versions": ["5.1.0"]
@@ -34,6 +44,10 @@
     }
   ],
   "jest": [
+    {
+      "name": "jest",
+      "versions": [">=24.8.0"]
+    },
     {
       "name": "jest-environment-jsdom",
       "versions": [">=24.8.0"]
@@ -88,11 +102,11 @@
   "next": [
     {
       "name": "react",
-      "versions": ["17.0.2"]
+      "dep": true
     },
     {
       "name": "react-dom",
-      "versions": ["17.0.2"]
+      "dep": true
     }
   ],
   "pg": [
@@ -104,7 +118,7 @@
   "pino": [
     {
       "name": "pino-pretty",
-      "versions": [">=3"]
+      "dep": true
     }
   ]
 }

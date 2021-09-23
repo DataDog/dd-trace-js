@@ -310,6 +310,7 @@ function addAllowHeaders (req, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
+    'x-datadog-origin',
     'x-datadog-parent-id',
     'x-datadog-sampled',
     'x-datadog-sampling-priority',

@@ -236,6 +236,11 @@ export declare interface TracerOptions {
   port?: number | string;
 
   /**
+   * Whether to enable profiling.
+   */
+  profiling?: boolean
+
+  /**
    * Options specific for the Dogstatsd agent.
    */
   dogstatsd?: {
@@ -321,7 +326,7 @@ export declare interface TracerOptions {
     b3?: boolean
 
     /**
-     * Whether to add an auto-generated `runtime-id` tag to spans and metrics.
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
      * @default false
      */
     runtimeId?: boolean
@@ -483,6 +488,7 @@ interface Plugins {
   "connect": plugins.connect;
   "couchbase": plugins.couchbase;
   "cucumber": plugins.cucumber;
+  "cypress": plugins.cypress;
   "dns": plugins.dns;
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
@@ -521,6 +527,7 @@ interface Plugins {
   "restify": plugins.restify;
   "rhea": plugins.rhea;
   "router": plugins.router;
+  "sharedb": plugins.sharedb;
   "tedious": plugins.tedious;
   "when": plugins.when;
   "winston": plugins.winston;
@@ -624,7 +631,7 @@ declare namespace plugins {
     };
 
     /**
-     * Whether to enable instrumention of <plugin>.middleware spans
+     * Whether to enable instrumentation of <plugin>.middleware spans
      *
      * @default true
      */
@@ -658,6 +665,11 @@ declare namespace plugins {
        */
       request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
     };
+
+    /**
+     * List of urls to which propagation headers should not be injected
+     */
+    propagationBlocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
   }
 
   /** @hidden */
@@ -784,6 +796,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [cypress](https://github.com/cypress-io/cypress) module.
+   */
+  interface cypress extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
    * [dns](https://nodejs.org/api/dns.html) module.
    */
   interface dns extends Instrumentation {}
@@ -880,6 +898,16 @@ declare namespace plugins {
     depth?: number;
 
     /**
+     * Whether to include the source of the operation within the query as a tag
+     * on every span. This may contain sensitive information and sould only be
+     * enabled if sensitive data is always sent as variables and not in the
+     * query text.
+     *
+     * @default false
+     */
+    source?: boolean;
+
+    /**
      * An array of variable names to record. Can also be a callback that returns
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
@@ -911,6 +939,8 @@ declare namespace plugins {
      */
     hooks?: {
       execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
+      validate?: (span?: Span, document?: any, errors?: any) => void;
+      parse?: (span?: Span, source?: any, document?: any) => void;
     }
   }
 
@@ -1237,6 +1267,27 @@ declare namespace plugins {
    * [router](https://github.com/pillarjs/router) module.
    */
   interface router extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [sharedb](https://github.com/share/sharedb) module.
+   */
+  interface sharedb extends Integration {
+    /**
+     * Hooks to run before spans are finished.
+     */
+    hooks?: {
+      /**
+       * Hook to execute just when the span is created.
+       */
+      receive?: (span?: opentracing.Span, request?: any) => any;
+
+      /**
+       * Hook to execute just when the span is finished.
+       */
+      reply?: (span?: opentracing.Span, request?: any, response?: any) => any;
+    };
+  }
 
   /**
    * This plugin automatically instruments the

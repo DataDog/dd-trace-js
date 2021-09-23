@@ -6,7 +6,6 @@ const awsHelpers = require('./helpers')
 
 function createWrapRequest (tracer, config) {
   config = normalizeConfig(config)
-
   return function wrapRequest (send) {
     return function requestWithTrace (cb) {
       if (!this.service) return send.apply(this, arguments)
@@ -47,13 +46,10 @@ function createWrapRequest (tracer, config) {
       const request = this
 
       return tracer.scope().activate(span, () => {
-        let boundCb
         if (typeof cb === 'function') {
-          boundCb = awsHelpers.wrapCb(cb, serviceIdentifier, tags, request, tracer, childOf)
-        } else {
-          boundCb = cb
+          arguments[0] = awsHelpers.wrapCb(cb, serviceIdentifier, tags, request, tracer, childOf)
         }
-        return send.call(this, boundCb)
+        return send.apply(this, arguments)
       })
     }
   }

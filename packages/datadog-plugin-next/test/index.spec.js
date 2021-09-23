@@ -12,8 +12,6 @@ const plugin = require('../src')
 wrapIt()
 
 describe('Plugin', function () {
-  this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
-
   let next
   let app
   let listener
@@ -31,18 +29,20 @@ describe('Plugin', function () {
           return agent.close()
         })
 
-        before(async () => {
+        before(async function () {
+          this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+
           const { createServer } = require('http')
 
           // building in-process makes tests fail for an unknown reason
           execSync('node build', {
             cwd: __dirname,
             env: {
+              ...process.env,
               version,
               // needed for webpack 5
               NODE_PATH: [
-                `${__dirname}/../../../versions/next@${version}/node_modules`,
-                `${__dirname}/../../../versions/node_modules`
+                `${__dirname}/../../../versions/next@${version}/node_modules`
               ].join(':')
             },
             stdio: ['pipe', 'ignore', 'pipe']
@@ -60,6 +60,10 @@ describe('Plugin', function () {
 
             handle(req, res, parsedUrl)
           })
+        })
+
+        after(() => {
+          execSync(`rm -rf ${__dirname}/.next`)
         })
 
         before(done => {

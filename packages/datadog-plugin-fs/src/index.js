@@ -142,7 +142,7 @@ function createWrapDirAsyncIterator (config, tracer, instrumenter) {
       }
       instrumenter.wrap(this, kDirReadPromisified, createWrapDirRead(config, tracer))
       instrumenter.wrap(this, kDirClosePromisified, createWrapKDirClose(config, tracer, instrumenter))
-      return asyncIterator.call(this)
+      return asyncIterator.apply(this, arguments)
     }
   }
 }
@@ -152,7 +152,7 @@ function createWrapKDirClose (config, tracer, instrumenter) {
     return function kDirCloseWithTrace () {
       const tags = makeFSTags('dir.close', this.path, null, config, tracer)
       return tracer.trace('fs.operation', { tags, orphanable }, (span) => {
-        const p = kDirClose.call(this)
+        const p = kDirClose.apply(this, arguments)
         const unwrapBoth = () => {
           instrumenter.unwrap(this, kDirReadPromisified)
           instrumenter.unwrap(this, kDirClosePromisified)

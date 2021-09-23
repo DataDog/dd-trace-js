@@ -36,5 +36,11 @@ describe('analyticsSampler', () => {
 
       expect(span.setTag).to.not.have.been.called
     })
+
+    it('should sample if `measuredByDefault` is true', () => {
+      sampler.sample(span, undefined, true)
+
+      expect(span.setTag).to.have.been.calledWith(MEASURED, true)
+    })
   })
 })

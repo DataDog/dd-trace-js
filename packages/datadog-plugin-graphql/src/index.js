@@ -50,8 +50,9 @@ function createWrapParse (tracer, config) {
 
       analyticsSampler.sample(span, config.measured, true)
 
+      let document
       try {
-        const document = parse.apply(this, arguments)
+        document = parse.apply(this, arguments)
         const operation = getOperation(document)
 
         if (!operation) return document // skip schema parsing
@@ -60,13 +61,14 @@ function createWrapParse (tracer, config) {
           document._datadog_source = source.body || source
         }
 
-        addDocumentTags(span, document)
+        addDocumentTags(span, document, config)
 
         return document
       } catch (e) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.parse(span, source, document)
         finish(span)
       }
     }
@@ -82,11 +84,12 @@ function createWrapValidate (tracer, config) {
 
       // skip for schema stitching nested validation
       if (document && document.loc) {
-        addDocumentTags(span, document)
+        addDocumentTags(span, document, config)
       }
 
+      let errors
       try {
-        const errors = validate.apply(this, arguments)
+        errors = validate.apply(this, arguments)
 
         setError(span, errors && errors[0])
 
@@ -95,6 +98,7 @@ function createWrapValidate (tracer, config) {
         setError(span, e)
         throw e
       } finally {
+        config.hooks.validate(span, document, errors)
         finish(span)
       }
     }
@@ -228,7 +232,7 @@ function startExecutionSpan (tracer, config, operation, args) {
   const span = startSpan(tracer, config, 'execute')
 
   addExecutionTags(span, config, operation, args.document, args.operationName)
-  addDocumentTags(span, args.document)
+  addDocumentTags(span, args.document, config)
   addVariableTags(tracer, config, span, args.variableValues)
 
   analyticsSampler.sample(span, config.measured, true)
@@ -254,10 +258,10 @@ function addExecutionTags (span, config, operation, document, operationName) {
   span.addTags(tags)
 }
 
-function addDocumentTags (span, document) {
+function addDocumentTags (span, document, config) {
   const tags = {}
 
-  if (document && document._datadog_source) {
+  if (config.source && document && document._datadog_source) {
     tags['graphql.source'] = document._datadog_source
   }
 
@@ -305,7 +309,7 @@ function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
   })
 
   if (fieldNode) {
-    if (document && fieldNode.loc) {
+    if (config.source && document && fieldNode.loc) {
       span.setTag('graphql.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
     }
 
@@ -460,8 +464,10 @@ function pathToArray (path) {
 function getHooks (config) {
   const noop = () => {}
   const execute = (config.hooks && config.hooks.execute) || noop
+  const parse = (config.hooks && config.hooks.parse) || noop
+  const validate = (config.hooks && config.hooks.validate) || noop
 
-  return { execute }
+  return { execute, parse, validate }
 }
 
 module.exports = [

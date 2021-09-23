@@ -28,7 +28,7 @@ function createWrapQuery (tracer, config) {
 
       analyticsSampler.sample(span, config.measured)
 
-      const sequence = scope.bind(query, span).call(this, sql, values, cb)
+      const sequence = scope.bind(query, span).apply(this, arguments)
 
       scope.bind(sequence)
 
@@ -51,7 +51,10 @@ function createWrapGetConnection (tracer, config) {
   return function wrapGetConnection (getConnection) {
     return function getConnectionWithTrace (cb) {
       const scope = tracer.scope()
-      return scope.bind(getConnection).call(this, scope.bind(cb))
+
+      arguments[0] = scope.bind(cb)
+
+      return scope.bind(getConnection).apply(this, arguments)
     }
   }
 }

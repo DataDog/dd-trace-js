@@ -20,7 +20,7 @@ describe('Plugin', () => {
       let lambda
       let tracer
 
-      describe('without configuration', () => {
+      describe('with the new trace context propagation', () => {
         let ZipFile
 
         before(async () => {
@@ -60,7 +60,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
-            const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
+            const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
@@ -82,7 +82,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
-            const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
+            const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
@@ -104,7 +104,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
-            const injectedTraceData = JSON.parse(clientContextSent).custom._datadog
+            const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)

@@ -26,23 +26,18 @@ class Lambda {
 
       if (isSyncInvocation) {
         try {
-          const _datadog = {}
-          tracer.inject(span, 'text_map', _datadog)
-          if (!request.params.ClientContext) {
-            const context = { custom: { _datadog } }
-            request.params.ClientContext = Buffer.from(JSON.stringify(context)).toString('base64')
-          } else {
-            const existingContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
-            const existingContext = JSON.parse(existingContextJson)
-
-            if (existingContext.custom) {
-              existingContext.custom._datadog = _datadog
-            } else {
-              existingContext.custom = { _datadog }
-            }
-            const newContextBase64 = Buffer.from(JSON.stringify(existingContext)).toString('base64')
-            request.params.ClientContext = newContextBase64
+          // Check to see if there's already a config on the request
+          let clientContext = {}
+          if (request.params.ClientContext) {
+            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
+            clientContext = JSON.parse(clientContextJson)
           }
+          if (!clientContext.custom) {
+            clientContext.custom = {}
+          }
+          tracer.inject(span, 'text_map', clientContext.custom)
+          const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
+          request.params.ClientContext = newContextBase64
         } catch (err) {
           log.error(err)
         }

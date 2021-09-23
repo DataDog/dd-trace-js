@@ -1,14 +1,14 @@
 'use strict'
 
+const fs = require('fs')
+const os = require('os')
 const URL = require('url').URL
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
-const id = require('./id')
 const { isTrue, isFalse } = require('./util')
-
-const runtimeId = `${id().toString()}${id().toString()}`
+const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -26,9 +26,9 @@ class Config {
 
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
-      // options.profiling,
-      // process.env.DD_PROFILING_ENABLED,
+      options.profiling,
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
+      process.env.DD_PROFILING_ENABLED,
       false
     )
     const DD_PROFILING_EXPORTERS = coalesce(
@@ -154,7 +154,7 @@ class Config {
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
-    this.url = DD_TRACE_AGENT_URL && new URL(DD_TRACE_AGENT_URL)
+    this.url = getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
@@ -203,13 +203,29 @@ class Config {
       blocking: isTrue(DD_APPSEC_BLOCKING)
     }
 
-    tagger.add(this.tags, { service: this.service, env: this.env, version: this.version })
+    tagger.add(this.tags, {
+      service: this.service,
+      env: this.env,
+      version: this.version,
+      'runtime-id': uuid()
+    })
+  }
+}
 
-    if (this.experimental.runtimeId) {
-      tagger.add(this.tags, {
-        'runtime-id': runtimeId
-      })
-    }
+function getAgentUrl (url, options) {
+  if (url) return new URL(url)
+
+  if (os.type() === 'Windows_NT') return
+
+  if (
+    !options.hostname &&
+    !options.port &&
+    !process.env.DD_AGENT_HOST &&
+    !process.env.DD_TRACE_AGENT_HOSTNAME &&
+    !process.env.DD_TRACE_AGENT_PORT &&
+    fs.existsSync('/var/run/datadog/apm.socket')
+  ) {
+    return new URL('file:///var/run/datadog/apm.socket')
   }
 }
 

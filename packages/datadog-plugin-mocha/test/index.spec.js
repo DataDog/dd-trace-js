@@ -165,7 +165,8 @@ describe('Plugin', () => {
         const testNames = [
           'mocha-test-skip can skip',
           'mocha-test-skip-different can skip too',
-          'mocha-test-skip-different can skip twice'
+          'mocha-test-skip-different can skip twice',
+          'mocha-test-programmatic-skip can skip too'
         ]
         const assertionPromises = testNames.map(testName => {
           return agent.use(trace => {
@@ -315,10 +316,16 @@ describe('Plugin', () => {
         agent.use(traces => {
           const testSpan = traces[0][0]
           expect(testSpan.meta).to.contain({
-            [ERROR_TYPE]: 'TypeError',
-            [ERROR_MESSAGE]: `"before each" hook for "will not run but be reported as failed": \
-Cannot set property 'error' of undefined`
+            [ERROR_TYPE]: 'TypeError'
           })
+          expect(testSpan.meta[ERROR_TYPE]).to.equal('TypeError')
+          const beginning = `"before each" hook for "will not run but be reported as failed": `
+          expect(testSpan.meta[ERROR_MESSAGE].startsWith(beginning)).to.equal(true)
+          const errorMsg = testSpan.meta[ERROR_MESSAGE].replace(beginning, '')
+          expect(
+            errorMsg === `Cannot set property 'error' of undefined` ||
+            errorMsg === `Cannot set properties of undefined (setting 'error')`
+          ).to.equal(true)
           expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
         }).then(done, done)
 

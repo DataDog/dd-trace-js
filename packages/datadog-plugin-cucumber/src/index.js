@@ -1,5 +1,4 @@
 const { relative } = require('path')
-const resolve = require('resolve')
 
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 
@@ -8,6 +7,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_SKIP_REASON,
   CI_APP_ORIGIN,
   ERROR_MESSAGE,
   getTestEnvironmentMetadata,
@@ -19,10 +19,9 @@ function setStatusFromResult (span, result, tag) {
     span.setTag(tag, 'pass')
   } else if (result.status === 2) {
     span.setTag(tag, 'skip')
-    span.setTag(ERROR_MESSAGE, 'skipped')
   } else if (result.status === 4) {
     span.setTag(tag, 'skip')
-    span.setTag(ERROR_MESSAGE, 'not implemented')
+    span.setTag(TEST_SKIP_REASON, 'not implemented')
   } else {
     span.setTag(tag, 'fail')
     span.setTag(ERROR_MESSAGE, result.message)
@@ -32,9 +31,11 @@ function setStatusFromResult (span, result, tag) {
 function setStatusFromResultLatest (span, result, tag) {
   if (result.status === 'PASSED') {
     span.setTag(tag, 'pass')
-  } else if (result.status === 'SKIPPED' || result.status === 'PENDING' || result.status === 'UNDEFINED') {
+  } else if (result.status === 'SKIPPED' || result.status === 'PENDING') {
     span.setTag(tag, 'skip')
-    span.setTag(ERROR_MESSAGE, result.message || 'skipped')
+  } else if (result.status === 'UNDEFINED') {
+    span.setTag(tag, 'skip')
+    span.setTag(TEST_SKIP_REASON, 'not implemented')
   } else {
     span.setTag(tag, 'fail')
     span.setTag(ERROR_MESSAGE, result.message)
@@ -132,7 +133,7 @@ module.exports = [
       const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber')
       const sourceRoot = process.cwd()
       const getTestSuiteName = (pickleUri) => {
-        return relative(sourceRoot, resolve.sync(pickleUri, { basedir: __dirname }))
+        return relative(sourceRoot, pickleUri)
       }
       const pl = TestCaseRunner.default
       this.wrap(

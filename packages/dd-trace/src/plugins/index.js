@@ -10,6 +10,7 @@ module.exports = {
   'connect': require('../../../datadog-plugin-connect/src'),
   'couchbase': require('../../../datadog-plugin-couchbase/src'),
   'cucumber': require('../../../datadog-plugin-cucumber/src'),
+  'cypress': require('../../../datadog-plugin-cypress/src'),
   'dns': require('../../../datadog-plugin-dns/src'),
   'elasticsearch': require('../../../datadog-plugin-elasticsearch/src'),
   'express': require('../../../datadog-plugin-express/src'),
@@ -48,6 +49,7 @@ module.exports = {
   'restify': require('../../../datadog-plugin-restify/src'),
   'rhea': require('../../../datadog-plugin-rhea/src'),
   'router': require('../../../datadog-plugin-router/src'),
+  'sharedb': require('../../../datadog-plugin-sharedb/src'),
   'tedious': require('../../../datadog-plugin-tedious/src'),
   'when': require('../../../datadog-plugin-when/src'),
   'winston': require('../../../datadog-plugin-winston/src')

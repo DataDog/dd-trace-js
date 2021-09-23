@@ -43,7 +43,9 @@ function createWrapConfigProxyFactory (tracer, config) {
             res.proxy && web.enterRoute(req, res.proxy.base_path)
           })
 
-          return configProxy.call(this, req, res, wrapNext(req, next))
+          arguments[2] = wrapNext(req, next)
+
+          return configProxy.apply(this, arguments)
         })
       }
     }
@@ -58,7 +60,9 @@ function createWrapPluginsFactory (tracer, config) {
       const pluginsMiddleware = pluginsFactory.apply(this, arguments)
 
       return function pluginsMiddlewareWithTrace (req, res, next) {
-        return pluginsMiddleware.call(this, req, res, wrapNext(req, next))
+        arguments[2] = wrapNext(req, next)
+
+        return pluginsMiddleware.apply(this, arguments)
       }
     }
   }
@@ -67,12 +71,12 @@ function createWrapPluginsFactory (tracer, config) {
 function wrapAddPlugin (addPlugin) {
   return function (name, plugin) {
     if (typeof plugin === 'function') {
-      plugin = wrapPluginInit(plugin)
+      arguments[1] = wrapPluginInit(plugin)
     } else if (plugin && typeof plugin.init === 'function') {
       plugin.init = wrapPluginInit(plugin.init)
     }
 
-    return addPlugin.call(this, name, plugin)
+    return addPlugin.apply(this, arguments)
   }
 }
 

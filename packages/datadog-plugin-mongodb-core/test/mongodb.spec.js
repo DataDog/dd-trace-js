@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
@@ -7,10 +8,10 @@ wrapIt()
 
 const withTopologies = fn => {
   withVersions(plugin, 'mongodb', (version, moduleName) => {
-    describe('using the server topology', () => {
+    describe('using the default topology', () => {
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
-        const client = new MongoClient('mongodb://localhost:27017', { useUnifiedTopology: false })
+        const client = new MongoClient('mongodb://127.0.0.1:27017')
 
         await client.connect()
 
@@ -18,17 +19,20 @@ const withTopologies = fn => {
       })
     })
 
-    describe('using the unified topology', () => {
-      fn(async () => {
-        const { MongoClient, Server } = require(`../../../versions/${moduleName}@${version}`).get()
-        const server = new Server('localhost', 27017, { reconnect: false })
-        const client = new MongoClient(server, { useUnifiedTopology: true })
+    // unified topology is now the only topology and thus the default since 4.x
+    if (!semver.intersects(version, '>=4')) {
+      describe('using the unified topology', () => {
+        fn(async () => {
+          const { MongoClient, Server } = require(`../../../versions/${moduleName}@${version}`).get()
+          const server = new Server('127.0.0.1', 27017, { reconnect: false })
+          const client = new MongoClient(server, { useUnifiedTopology: true })
 
-        await client.connect()
+          await client.connect()
 
-        return client
+          return client
+        })
       })
-    })
+    }
   })
 }
 
@@ -81,7 +85,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('type', 'mongodb')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collectionName}`)
-                expect(span.meta).to.have.property('out.host', 'localhost')
+                expect(span.meta).to.have.property('out.host', '127.0.0.1')
               })
               .then(done)
               .catch(done)
