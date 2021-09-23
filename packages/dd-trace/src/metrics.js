@@ -3,11 +3,11 @@
 // TODO: capture every second and flush every 10 seconds
 
 const v8 = require('v8')
+const path = require('path')
 const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
-const util = require('./util')
 
 const INTERVAL = 10 * 1000
 
@@ -37,7 +37,7 @@ module.exports = {
       })
 
     try {
-      nativeMetrics = util.loadMetrics()
+      nativeMetrics = require('node-gyp-build')(path.join(__dirname, '..', '..', '..'))
       nativeMetrics.start()
     } catch (e) {
       log.error(e)
