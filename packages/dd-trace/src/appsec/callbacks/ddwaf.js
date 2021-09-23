@@ -15,7 +15,7 @@ const DEFAULT_MAX_BUDGET = 5e3 // µs
 class WAFCallback {
   static loadDDWAF (rules) {
     try {
-      // dirty require because this can throw at require time
+      // require in `try/catch` because this can throw at require time
       const { DDWAF } = require('@datadog/native-appsec')
 
       return new DDWAF(rules)
@@ -33,13 +33,13 @@ class WAFCallback {
     this.ddwaf = WAFCallback.loadDDWAF(rules)
     this.wafContextCache = new WeakMap()
 
-    // closures are faster than binds wtf
+    // closures are faster than binds
     const self = this
     const method = (params, store) => {
       self.action(params, store)
     }
 
-    // will be its own class with more info later i guess
+    // might be its own class with more info later
     const callback = { method }
 
     this.subscriptions = []
