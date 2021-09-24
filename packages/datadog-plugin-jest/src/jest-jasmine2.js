@@ -7,7 +7,8 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { getTestSpanTags, setSuppressedErrors } = require('./util')
 
@@ -21,7 +22,7 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
 
       const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
 
-      const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
+      const testSuite = getTestSuitePath(globalInput.jasmine.testPath, globalConfig.rootDir)
 
       const newSpecFunction = tracer.wrap(
         'jest.test',
@@ -107,7 +108,7 @@ function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMet
     return function itSkipWithTrace () {
       const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
 
-      const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
+      const testSuite = getTestSuitePath(globalInput.jasmine.testPath, globalConfig.rootDir)
 
       const spec = it.apply(this, arguments)
 
