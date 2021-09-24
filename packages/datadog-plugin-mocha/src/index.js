@@ -1,3 +1,5 @@
+const path = require('path')
+
 const { promisify } = require('util')
 
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -21,7 +23,7 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
 
   const { file: testSuite } = test
   const fullTestName = test.fullTitle()
-  const strippedTestSuite = testSuite ? testSuite.replace(`${sourceRoot}/`, '') : ''
+  const strippedTestSuite = testSuite ? path.relative(sourceRoot, testSuite) : ''
 
   return {
     childOf,
