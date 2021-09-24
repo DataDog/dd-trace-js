@@ -72,9 +72,17 @@ const web = {
       req._datadog.instrumented = true
     }
 
-    if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.publish({ req, res })
+    if (!callback && INCOMING_HTTP_REQUEST_START.hasSubscribers) {
+      INCOMING_HTTP_REQUEST_START.publish({ req, res })
+    } else {
+      return tracer.scope().activate(span, () => {
+        if (INCOMING_HTTP_REQUEST_START.hasSubscribers) {
+          INCOMING_HTTP_REQUEST_START.publish({ req, res })
+        }
 
-    return callback && tracer.scope().activate(span, () => callback(span))
+        callback(span)
+      })
+    }
   },
 
   // Reactivate the request scope in case it was changed by a middleware.
