@@ -47,7 +47,7 @@ function disable () {
   RuleManager.clearAllRules()
   INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
 
-  const scope = global._ddtrace.scope()
+  const scope = global._ddtrace._tracer.scope()
 
   delete scope._config.tags['_dd.appsec.enabled']
   delete scope._config.tags['_dd.runtime_family']
