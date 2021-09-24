@@ -11,7 +11,8 @@ const {
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -30,7 +31,7 @@ function wrapEnvironment (BaseEnvironment) {
   return class DatadogJestEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
-      this.testSuite = context.testPath.replace(`${config.rootDir}/`, '')
+      this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
       this.testSpansByTestName = {}
       this.originalTestFnByTestName = {}
     }

@@ -13,22 +13,23 @@ const {
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
-  getTestParentSpan
+  getTestParentSpan,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
 
-  const { file: testSuite } = test
+  const { file: testSuiteAbsolutePath } = test
   const fullTestName = test.fullTitle()
-  const strippedTestSuite = testSuite ? testSuite.replace(`${sourceRoot}/`, '') : ''
+  const testSuite = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
 
   return {
     childOf,
-    resource: `${strippedTestSuite}.${fullTestName}`,
+    resource: `${testSuite}.${fullTestName}`,
     [TEST_TYPE]: 'test',
     [TEST_NAME]: fullTestName,
-    [TEST_SUITE]: strippedTestSuite,
+    [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP
   }
