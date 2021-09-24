@@ -1,3 +1,5 @@
+const path = require('path')
+
 const { getGitMetadata } = require('./git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
@@ -42,7 +44,8 @@ module.exports = {
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
-  getTestParentSpan
+  getTestParentSpan,
+  getTestSuitePath
 }
 
 function getTestEnvironmentMetadata (testFramework) {
@@ -109,4 +112,14 @@ function getTestParentSpan (tracer) {
     'x-datadog-parent-id': '0000000000000000',
     'x-datadog-sampled': 1
   })
+}
+/**
+ * We want to make sure that test suites are reported the same way for
+ * every OS, so we replace `path.sep` by `/`
+ */
+function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
+  if (!testSuiteAbsolutePath) {
+    return testSuiteAbsolutePath
+  }
+  return path.relative(sourceRoot, testSuiteAbsolutePath).replace(path.sep, '/')
 }
