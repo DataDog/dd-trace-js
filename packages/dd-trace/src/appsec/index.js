@@ -18,6 +18,9 @@ function enable (config) {
     RuleManager.applyRules(rules)
 
     INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
+
+    config.tags['_dd.appsec.enabled'] = 1
+    config.tags['_dd.runtime_family'] = 'nodejs'
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
   }
@@ -43,6 +46,11 @@ function incomingHttpTranslator (data) {
 function disable () {
   RuleManager.clearAllRules()
   INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
+
+  const scope = global._ddtrace.scope()
+
+  delete scope._config.tags['_dd.appsec.enabled']
+  delete scope._config.tags['_dd.runtime_family']
 }
 
 module.exports = {
