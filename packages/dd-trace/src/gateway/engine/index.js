@@ -41,6 +41,7 @@ function propagate (data, context = getContext()) {
 module.exports = {
   manager,
   startContext,
+  getContext,
   propagate,
   subscribedAddressesSet: manager.addresses
 }
