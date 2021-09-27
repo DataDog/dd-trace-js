@@ -75,6 +75,7 @@
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
+    "retry": "^0.10.1",
     "semver": "^5.5.0",
     "source-map": "^0.7.3",
     "source-map-resolve": "^0.6.0"
@@ -110,7 +111,6 @@
     "nock": "^11.3.3",
     "nyc": "^15.1.0",
     "proxyquire": "^1.8.0",
-    "retry": "^0.10.1",
     "rimraf": "^3.0.0",
     "sinon": "^11.1.2",
     "sinon-chai": "^3.7.0",

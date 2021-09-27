@@ -18,6 +18,7 @@ require,multer,MIT,Copyright 2014 Hage Yaapa
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
+require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contributors
 require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
@@ -51,7 +52,6 @@ dev,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
-dev,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
