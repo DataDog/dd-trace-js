@@ -7,8 +7,10 @@ const SpanContext = require('./span_context')
 const constants = require('../constants')
 const id = require('../id')
 const tagger = require('../tagger')
+const log = require('../log')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
+const { DD_TRACE_EXPERIMENTAL_STATE_TRACKING } = process.env
 
 class DatadogSpan extends Span {
   constructor (tracer, processor, sampler, prioritySampler, fields, debug) {
@@ -115,6 +117,12 @@ class DatadogSpan extends Span {
   _finish (finishTime) {
     if (this._duration !== undefined) {
       return
+    }
+
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
+      if (!this._spanContext._tags['service.name']) {
+        log.error(`Finishing invalid span: ${this}`)
+      }
     }
 
     finishTime = parseFloat(finishTime) || this._getTime()
