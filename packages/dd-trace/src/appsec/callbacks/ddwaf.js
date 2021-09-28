@@ -21,7 +21,7 @@ class WAFCallback {
       return new DDWAF(rules)
     } catch (err) {
       if (!warned) {
-        log.warning('AppSec could not load native package. In-app WAF features will not be available.')
+        log.warn('AppSec could not load native package. In-app WAF features will not be available.')
         warned = true
       }
 
