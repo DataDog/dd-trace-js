@@ -42,7 +42,8 @@ describe('startup logging', () => {
       tags: { version: '1.2.3' },
       logInjection: true,
       runtimeMetrics: true,
-      startupLogs: true
+      startupLogs: true,
+      appsec: { enabled: false }
     })
     setSamplingRules(['rule1', 'rule2'])
     startupLog({ agentError: { message: 'Error: fake error' } })
