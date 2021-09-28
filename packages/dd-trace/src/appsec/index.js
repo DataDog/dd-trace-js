@@ -39,7 +39,8 @@ function incomingHttpTranslator (data) {
 
   propagate({
     [Addresses.HTTP_INCOMING_URL]: data.req.url,
-    [Addresses.HTTP_INCOMING_HEADERS]: headers
+    [Addresses.HTTP_INCOMING_HEADERS]: headers,
+    [Addresses.HTTP_INCOMING_METHOD]: data.req.method
   }, context)
 }
 

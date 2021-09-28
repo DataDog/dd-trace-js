@@ -5,7 +5,7 @@ const path = require('path')
 const uuid = require('crypto-randomuuid')
 const requirePackageJson = require('../require-package-json')
 const { getContext } = require('../gateway/engine')
-const addresses = require('./addresses')
+const Addresses = require('./addresses')
 const Scheduler = require('../exporters/agent/scheduler')
 const request = require('../exporters/agent/request')
 const log = require('../log')
@@ -31,17 +31,17 @@ function resolveHTTPAddresses () {
   const context = getContext()
 
   return {
-    // scheme: context.resolve(addresses.),
-    // method: context.resolve(addresses.),
-    url: context.resolve(addresses.HTTP_INCOMING_URL),
-    // host: context.resolve(addresses.),
-    // port: context.resolve(addresses.),
-    // path: context.resolve(addresses.),
-    // route: context.resolve(addresses.),
-    remote_ip: '127.0.0.1', // context.resolve(addresses.),
-    // remote_port: context.resolve(addresses.),
-    // responseCode: context.resolve(addresses.),
-    headers: context.resolve(addresses.HTTP_INCOMING_HEADERS)
+    // scheme: context.resolve(Addresses.),
+    method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
+    url: context.resolve(Addresses.HTTP_INCOMING_URL),
+    // host: context.resolve(Addresses.),
+    // port: context.resolve(Addresses.),
+    // path: context.resolve(Addresses.),
+    // route: context.resolve(Addresses.),
+    remote_ip: '127.0.0.1', // context.resolve(Addresses.),
+    // remote_port: context.resolve(Addresses.),
+    // responseCode: context.resolve(Addresses.),
+    headers: context.resolve(Addresses.HTTP_INCOMING_HEADERS)
   }
 }
 
