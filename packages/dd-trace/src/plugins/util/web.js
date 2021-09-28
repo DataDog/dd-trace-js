@@ -72,9 +72,7 @@ const web = {
       req._datadog.instrumented = true
     }
 
-    if (!callback && INCOMING_HTTP_REQUEST_START.hasSubscribers) {
-      INCOMING_HTTP_REQUEST_START.publish({ req, res })
-    } else {
+    if (callback) {
       return tracer.scope().activate(span, () => {
         if (INCOMING_HTTP_REQUEST_START.hasSubscribers) {
           INCOMING_HTTP_REQUEST_START.publish({ req, res })
@@ -82,6 +80,8 @@ const web = {
 
         callback(span)
       })
+    } else if (INCOMING_HTTP_REQUEST_START.hasSubscribers) {
+      INCOMING_HTTP_REQUEST_START.publish({ req, res })
     }
   },
 
