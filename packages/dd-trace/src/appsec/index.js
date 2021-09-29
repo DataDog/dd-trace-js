@@ -5,7 +5,7 @@ const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const { INCOMING_HTTP_REQUEST_START } = require('../gateway/channels')
-const { startContext, propagate } = require('../gateway/engine/index')
+const Gateway = require('../gateway/engine/index')
 const Addresses = require('./addresses')
 
 function enable (config) {
@@ -21,13 +21,20 @@ function enable (config) {
 
     config.tags['_dd.appsec.enabled'] = 1
     config.tags['_dd.runtime_family'] = 'nodejs'
+
+    // add needed fields for HTTP context reporting
+    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_URL)
+    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_HEADERS)
+    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_METHOD)
+    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_IP)
+    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_PORT)
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
   }
 }
 
 function incomingHttpTranslator (data) {
-  const store = startContext()
+  const store = Gateway.startContext()
 
   store.set('req', data.req)
   store.set('res', data.res)
@@ -37,10 +44,13 @@ function incomingHttpTranslator (data) {
 
   const context = store.get('context')
 
-  propagate({
+  Gateway.propagate({
     [Addresses.HTTP_INCOMING_URL]: data.req.url,
     [Addresses.HTTP_INCOMING_HEADERS]: headers,
-    [Addresses.HTTP_INCOMING_METHOD]: data.req.method
+    [Addresses.HTTP_INCOMING_METHOD]: data.req.method,
+    // [Addresses.HTTP_INCOMING_PORT]: data.req.socket.localPort
+    [Addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
+    [Addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
   }, context)
 }
 

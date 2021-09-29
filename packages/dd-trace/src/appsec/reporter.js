@@ -30,18 +30,23 @@ const events = new Set()
 function resolveHTTPAddresses () {
   const context = getContext()
 
+  const path = context.resolve(Addresses.HTTP_INCOMING_URL)
+  const headers = context.resolve(Addresses.HTTP_INCOMING_HEADERS)
+
+  const url = new URL(path, `http://${headers.host}`)
+
   return {
     // scheme: context.resolve(Addresses.),
     method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
-    url: context.resolve(Addresses.HTTP_INCOMING_URL),
-    // host: context.resolve(Addresses.),
-    // port: context.resolve(Addresses.),
-    // path: context.resolve(Addresses.),
+    url: url.href,
+    host: url.hostname,
+    port: url.port, // context.resolve(Addresses.HTTP_INCOMING_PORT),
+    path: url.pathname,
     // route: context.resolve(Addresses.),
-    remote_ip: '127.0.0.1', // context.resolve(Addresses.),
-    // remote_port: context.resolve(Addresses.),
+    remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
+    remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
     // responseCode: context.resolve(Addresses.),
-    headers: context.resolve(Addresses.HTTP_INCOMING_HEADERS)
+    headers
   }
 }
 
