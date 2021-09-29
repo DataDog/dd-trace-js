@@ -10,7 +10,8 @@ const Scheduler = require('../exporters/agent/scheduler')
 const request = require('../exporters/agent/request')
 const log = require('../log')
 
-const FLUSH_INTERVAL = 2000
+const FLUSH_INTERVAL = 2e3
+const MAX_EVENT_BACKLOG = 1e6
 
 const host = {
   context_version: '0.1.0',
@@ -113,6 +114,8 @@ function reportAttack ({
   matchParameters,
   matchHighlight
 }) {
+  if (events.size > MAX_EVENT_BACKLOG) return
+
   const resolvedHttp = resolveHTTPAddresses()
 
   const { spanId, traceId, serviceName, serviceEnv, serviceVersion, tags } = getTracerData()
@@ -192,8 +195,16 @@ function reportAttack ({
 // TODO: lock
 function flush () {
   if (!events.size) return
+  else if (events.size >= MAX_EVENT_BACKLOG) {
+    log.warn('Dropping AppSec events because the backlog is full')
+  }
 
   const eventsArray = Array.from(events.values())
+
+  // if they fail to send, we drop the events
+  for (let i = 0; i < eventsArray.length; ++i) {
+    events.delete(eventsArray[i])
+  }
 
   const options = {
     path: '/appsec/proxy/api/v2/appsecevts',
@@ -222,10 +233,6 @@ function flush () {
   request(options, (err, res, status) => {
     if (err) {
       log.error(err)
-    } else {
-      for (let i = 0; i < eventsArray.length; ++i) {
-        events.delete(eventsArray[i])
-      }
     }
   })
 }
