@@ -24,6 +24,12 @@ class AsyncResourceStorage {
     return resource[this._ddResourceStore]
   }
 
+  enterWith (store) {
+    const resource = this._activeResource()
+
+    resource[this._ddResourceStore] = store
+  }
+
   run (store, callback, ...args) {
     const resource = this._activeResource()
 
@@ -37,6 +43,8 @@ class AsyncResourceStorage {
   }
 
   _activeResource () {
+    // The resource should never be undefined, but it happens with fibers
+    // because it breaks async_hooks.
     return executionAsyncResource() || {}
   }
 

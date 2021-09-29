@@ -26,6 +26,10 @@ class AsyncHooksStorage {
     return this._current
   }
 
+  enterWith (store) {
+    this._current = store
+  }
+
   run (store, callback, ...args) {
     const active = this.getStore()
 

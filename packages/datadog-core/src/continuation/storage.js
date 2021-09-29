@@ -25,6 +25,12 @@ class ContinuationLocalStorage {
     this._backend = null
   }
 
+  enterWith (store) {
+    if (!this._backend) return
+
+    return this._backend.enterWith(store)
+  }
+
   run (store, callback, ...args) {
     if (!this._backend) return callback(...args)
 

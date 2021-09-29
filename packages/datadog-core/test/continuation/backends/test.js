@@ -124,4 +124,17 @@ module.exports = (factory, supportsAsync = true) => {
       })
     }
   })
+
+  describe('enterWith()', () => {
+    it('should transition into the context for the remainder of the current execution', () => {
+      const newStore = {}
+
+      storage.run(store, () => {
+        storage.enterWith(newStore)
+        expect(storage.getStore()).to.equal(newStore)
+      })
+
+      expect(storage.getStore()).to.be.undefined
+    })
+  })
 }

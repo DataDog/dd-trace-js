@@ -14,6 +14,10 @@ class SyncStorage {
     return this._current
   }
 
+  enterWith (store) {
+    this._current = store
+  }
+
   run (store, callback, ...args) {
     this._stack.push(this._current)
     this._current = store
