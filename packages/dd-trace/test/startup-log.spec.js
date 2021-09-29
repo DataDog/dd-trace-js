@@ -43,7 +43,7 @@ describe('startup logging', () => {
       logInjection: true,
       runtimeMetrics: true,
       startupLogs: true,
-      appsec: { enabled: false }
+      appsec: { enabled: true }
     })
     setSamplingRules(['rule1', 'rule2'])
     startupLog({ agentError: { message: 'Error: fake error' } })
@@ -77,7 +77,8 @@ describe('startup logging', () => {
       sample_rate: 1,
       dd_version: '1.2.3',
       log_injection_enabled: true,
-      runtime_metrics_enabled: true
+      runtime_metrics_enabled: true,
+      appsec_enabled: true
     })
   })
 
