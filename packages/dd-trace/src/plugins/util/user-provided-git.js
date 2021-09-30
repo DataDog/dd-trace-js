@@ -1,0 +1,57 @@
+const {
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_AUTHOR_NAME
+} = require('./tags')
+
+function removeEmptyValues (tags) {
+  return Object.keys(tags).reduce((filteredTags, tag) => {
+    if (!tags[tag]) {
+      return filteredTags
+    }
+    return {
+      ...filteredTags,
+      [tag]: tags[tag]
+    }
+  }, {})
+}
+
+function getUserProviderGitMetadata () {
+  const {
+    DD_GIT_COMMIT_SHA,
+    DD_GIT_BRANCH,
+    DD_GIT_REPOSITORY_URL,
+    DD_GIT_TAG,
+    DD_GIT_COMMIT_MESSAGE,
+    DD_GIT_COMMIT_COMMITTER_NAME,
+    DD_GIT_COMMIT_COMMITTER_EMAIL,
+    DD_GIT_COMMIT_COMMITTER_DATE,
+    DD_GIT_COMMIT_AUTHOR_NAME,
+    DD_GIT_COMMIT_AUTHOR_EMAIL,
+    DD_GIT_COMMIT_AUTHOR_DATE
+  } = process.env
+
+  return removeEmptyValues({
+    [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
+    [GIT_BRANCH]: DD_GIT_BRANCH,
+    [GIT_REPOSITORY_URL]: DD_GIT_REPOSITORY_URL,
+    [GIT_TAG]: DD_GIT_TAG,
+    [GIT_COMMIT_MESSAGE]: DD_GIT_COMMIT_MESSAGE,
+    [GIT_COMMIT_COMMITTER_NAME]: DD_GIT_COMMIT_COMMITTER_NAME,
+    [GIT_COMMIT_COMMITTER_DATE]: DD_GIT_COMMIT_COMMITTER_DATE,
+    [GIT_COMMIT_COMMITTER_EMAIL]: DD_GIT_COMMIT_COMMITTER_EMAIL,
+    [GIT_COMMIT_AUTHOR_NAME]: DD_GIT_COMMIT_AUTHOR_NAME,
+    [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL,
+    [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE
+  })
+}
+
+module.exports = { getUserProviderGitMetadata }

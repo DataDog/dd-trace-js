@@ -301,5 +301,79 @@
       "git.repository_url": "bitbucket-repo-url",
       "git.tag": "0.1.0"
     }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "bitbucket-commit",
+      "BITBUCKET_GIT_SSH_ORIGIN": "bitbucket-repo-url",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
+      "DD_GIT_BRANCH": "user-supplied-branch",
+      "DD_GIT_COMMIT_AUTHOR_DATE": "usersupplied-authordate",
+      "DD_GIT_COMMIT_AUTHOR_EMAIL": "usersupplied-authoremail",
+      "DD_GIT_COMMIT_AUTHOR_NAME": "usersupplied-authorname",
+      "DD_GIT_COMMIT_COMMITTER_DATE": "usersupplied-comitterdate",
+      "DD_GIT_COMMIT_COMMITTER_EMAIL": "usersupplied-comitteremail",
+      "DD_GIT_COMMIT_COMMITTER_NAME": "usersupplied-comittername",
+      "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
+      "DD_GIT_COMMIT_SHA": "usersupplied-commit",
+      "DD_GIT_REPOSITORY_URL": "usersupplied-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.branch": "user-supplied-branch",
+      "git.commit.author.date": "usersupplied-authordate",
+      "git.commit.author.email": "usersupplied-authoremail",
+      "git.commit.author.name": "usersupplied-authorname",
+      "git.commit.committer.date": "usersupplied-comitterdate",
+      "git.commit.committer.email": "usersupplied-comitteremail",
+      "git.commit.committer.name": "usersupplied-comittername",
+      "git.commit.message": "usersupplied-message",
+      "git.commit.sha": "usersupplied-commit",
+      "git.repository_url": "usersupplied-repo"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "bitbucket-commit",
+      "BITBUCKET_GIT_SSH_ORIGIN": "bitbucket-repo-url",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
+      "DD_GIT_COMMIT_AUTHOR_DATE": "usersupplied-authordate",
+      "DD_GIT_COMMIT_AUTHOR_EMAIL": "usersupplied-authoremail",
+      "DD_GIT_COMMIT_AUTHOR_NAME": "usersupplied-authorname",
+      "DD_GIT_COMMIT_COMMITTER_DATE": "usersupplied-comitterdate",
+      "DD_GIT_COMMIT_COMMITTER_EMAIL": "usersupplied-comitteremail",
+      "DD_GIT_COMMIT_COMMITTER_NAME": "usersupplied-comittername",
+      "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
+      "DD_GIT_COMMIT_SHA": "usersupplied-commit",
+      "DD_GIT_REPOSITORY_URL": "usersupplied-repo",
+      "DD_GIT_TAG": "0.0.2"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.author.date": "usersupplied-authordate",
+      "git.commit.author.email": "usersupplied-authoremail",
+      "git.commit.author.name": "usersupplied-authorname",
+      "git.commit.committer.date": "usersupplied-comitterdate",
+      "git.commit.committer.email": "usersupplied-comitteremail",
+      "git.commit.committer.name": "usersupplied-comittername",
+      "git.commit.message": "usersupplied-message",
+      "git.commit.sha": "usersupplied-commit",
+      "git.repository_url": "usersupplied-repo",
+      "git.tag": "0.0.2"
+    }
   ]
 ]
