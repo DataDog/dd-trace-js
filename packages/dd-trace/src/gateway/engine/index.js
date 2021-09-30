@@ -42,6 +42,5 @@ module.exports = {
   manager,
   startContext,
   getContext,
-  propagate,
-  subscribedAddressesSet: manager.addresses
+  propagate
 }
