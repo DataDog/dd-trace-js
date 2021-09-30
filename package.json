@@ -82,7 +82,7 @@
   },
   "devDependencies": {
     "autocannon": "^4.5.2",
-    "axios": "^0.21.1",
+    "axios": "^0.21.2",
     "benchmark": "^2.1.4",
     "body-parser": "^1.18.2",
     "chai": "^4.2.0",
