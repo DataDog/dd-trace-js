@@ -1,6 +1,7 @@
 const path = require('path')
 
 const { getGitMetadata } = require('./git')
+const { getUserProviderGitMetadata } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
@@ -73,12 +74,15 @@ function getTestEnvironmentMetadata (testFramework) {
     ciWorkspacePath
   })
 
+  const userProvidedGitMetadata = getUserProviderGitMetadata()
+
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
   return {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
+    ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
   }
 }

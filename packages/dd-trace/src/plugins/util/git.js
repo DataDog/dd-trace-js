@@ -39,34 +39,20 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git show -s --format=%an,%ae,%ad,%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
 
-  const {
-    DD_GIT_REPOSITORY_URL,
-    DD_GIT_COMMIT_SHA,
-    DD_GIT_BRANCH,
-    DD_GIT_TAG,
-    DD_GIT_COMMIT_MESSAGE,
-    DD_GIT_COMMIT_AUTHOR_NAME,
-    DD_GIT_COMMIT_AUTHOR_EMAIL,
-    DD_GIT_COMMIT_AUTHOR_DATE,
-    DD_GIT_COMMIT_COMMITTER_NAME,
-    DD_GIT_COMMIT_COMMITTER_EMAIL,
-    DD_GIT_COMMIT_COMMITTER_DATE
-  } = process.env
-
   return {
     [GIT_REPOSITORY_URL]:
-      DD_GIT_REPOSITORY_URL || repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
+      repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
     [GIT_COMMIT_MESSAGE]:
-      DD_GIT_COMMIT_MESSAGE || commitMessage || sanitizedExec('git show -s --format=%s', { stdio: 'pipe' }),
-    [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE || authorDate,
-    [GIT_COMMIT_AUTHOR_NAME]: DD_GIT_COMMIT_AUTHOR_NAME || ciAuthorName || authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL || ciAuthorEmail || authorEmail,
-    [GIT_COMMIT_COMMITTER_DATE]: DD_GIT_COMMIT_COMMITTER_DATE || committerDate,
-    [GIT_COMMIT_COMMITTER_NAME]: DD_GIT_COMMIT_COMMITTER_NAME || committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL]: DD_GIT_COMMIT_COMMITTER_EMAIL || committerEmail,
-    [GIT_BRANCH]: DD_GIT_BRANCH || branch || sanitizedExec('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' }),
-    [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA || commitSHA || sanitizedExec('git rev-parse HEAD', { stdio: 'pipe' }),
-    [GIT_TAG]: DD_GIT_TAG || tag,
+      commitMessage || sanitizedExec('git show -s --format=%s', { stdio: 'pipe' }),
+    [GIT_COMMIT_AUTHOR_DATE]: authorDate,
+    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
+    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
+    [GIT_COMMIT_COMMITTER_DATE]: committerDate,
+    [GIT_COMMIT_COMMITTER_NAME]: committerName,
+    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
+    [GIT_BRANCH]: branch || sanitizedExec('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' }),
+    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git rev-parse HEAD', { stdio: 'pipe' }),
+    [GIT_TAG]: tag,
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git rev-parse --show-toplevel', { stdio: 'pipe' })
   }
 }
