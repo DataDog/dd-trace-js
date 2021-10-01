@@ -141,7 +141,7 @@ describe('Instrumenter', () => {
         expect(integrations.express.unpatch).to.have.been.calledWith(express)
       })
 
-      it('should not patch modules with invalid files', () => {
+      it('should not patch using instrumentations with invalid files', () => {
         integrations.mysql[0].file = 'invalid.js'
 
         instrumenter.use('mysql-mock')
@@ -149,19 +149,19 @@ describe('Instrumenter', () => {
         require('mysql-mock')
 
         expect(integrations.mysql[0].patch).to.not.have.been.called
-        expect(integrations.mysql[1].patch).to.not.have.been.called
+        expect(integrations.mysql[1].patch).to.have.been.called
       })
 
       it('should handle errors when unpatching', () => {
         integrations.mysql[1].unpatch = sinon.stub().throws(new Error())
-        integrations.mysql[1].file = 'invalid.js'
 
         instrumenter.use('mysql-mock')
 
         require('mysql-mock')
 
-        expect(integrations.mysql[0].patch).to.not.have.been.called
-        expect(integrations.mysql[1].patch).to.not.have.been.called
+        instrumenter.unpatch(integrations.mysql[1])
+
+        expect(integrations.mysql[1].unpatch).to.have.been.called
       })
 
       it('should attempt to patch already loaded modules', () => {
