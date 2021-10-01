@@ -1,6 +1,6 @@
 'use strict'
 
-describe('getScope', () => {
+describe.skip('getScope', () => {
   let getScope
   let versionDescriptor
   const ASYNC_RESOURCE = { name: 'async_resource' }
