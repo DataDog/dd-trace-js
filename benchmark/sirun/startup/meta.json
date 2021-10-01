@@ -14,6 +14,19 @@
       "env": {
         "USE_TRACER": "1"
       }
+    },
+    "control-everything": {
+      "env": {
+        "USE_TRACER": "0",
+        "EVERYTHING": "1"
+      }
+    },
+    "with-tracer-everything": {
+      "baseline": "control-everything",
+      "env": {
+        "USE_TRACER": "1",
+        "EVERYTHING": "1"
+      }
     }
   }
 }
