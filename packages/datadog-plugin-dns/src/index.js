@@ -1,5 +1,8 @@
 'use strict'
 
+const dc = require('diagnostics_channel')
+const { AsyncResource } = require('async_hooks')
+
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const tx = require('../../dd-trace/src/plugins/util/tx')
 
@@ -17,94 +20,93 @@ const rrtypes = {
   resolveSoa: 'SOA'
 }
 
-function createWrapLookup (tracer, config) {
+function createWrapLookup (config) {
   return function wrapLookup (lookup) {
-    return function lookupWithTrace (hostname, options, callback) {
-      if (!isArgsValid(arguments, 2)) return lookup.apply(this, arguments)
-
-      const span = startSpan(tracer, config, 'dns.lookup', {
-        'resource.name': hostname,
-        'dns.hostname': hostname
-      })
-
-      wrapArgs(span, arguments, (e, address) => {
-        span.setTag('dns.address', address)
-      })
-
-      return tracer.scope().activate(span, () => lookup.apply(this, arguments))
-    }
+    return dcWrap(config, 'apm:dns:lookup', lookup)
   }
 }
+dcSub('apm:dns:lookup', 'dns.lookup', {
+  tags: ({ context, args }) => {
+    if (!isArgsValid(args, 2)) {
+      context.noTrace = true
+      return
+    }
+    return { 'resource.name': args[0], 'dns.hostname': args[0] }
+  },
+  asyncEnd: ({ context, result }) => context.span.setTag('dns.address', result[0])
+})
 
-function createWrapLookupService (tracer, config) {
+function createWrapLookupService (config) {
   return function wrapLookupService (lookupService) {
-    return function lookupServiceWithTrace (address, port, callback) {
-      if (!isArgsValid(arguments, 3)) return lookupService.apply(this, arguments)
-
-      const span = startSpan(tracer, config, 'dns.lookup_service', {
-        'resource.name': `${address}:${port}`,
-        'dns.address': address,
-        'dns.port': port
-      })
-
-      wrapArgs(span, arguments)
-
-      return tracer.scope().activate(span, () => lookupService.apply(this, arguments))
-    }
+    return dcWrap(config, 'apm:dns:lookup_service', lookupService)
   }
 }
+dcSub('apm:dns:lookup_service', 'dns.lookup_service', {
+  tags: ({ context, args }) => {
+    if (!isArgsValid(args, 3)) {
+      context.noTrace = true
+      return
+    }
+    const [address, port] = args
+    return {
+      'resource.name': `${address}:${port}`,
+      'dns.address': address,
+      'dns.port': port
+    }
+  }
+})
 
-function createWrapResolve (tracer, config) {
+function createWrapResolve (config) {
   return function wrapResolve (resolve) {
-    return function resolveWithTrace (hostname, rrtype, callback) {
-      if (!isArgsValid(arguments, 2)) return resolve.apply(this, arguments)
-
-      if (typeof rrtype !== 'string') {
-        rrtype = 'A'
-      }
-
-      const span = wrapResolver(tracer, config, rrtype, arguments)
-
-      return tracer.scope().activate(span, () => resolve.apply(this, arguments))
-    }
+    return dcWrap(config, 'apm:dns:resolve', resolve)
   }
 }
+dcSub('apm:dns:resolve', 'dns.resolve', {
+  tags: ({ context, config, args }) => {
+    if (!isArgsValid(args, 2)) {
+      context.noTrace = true
+      return
+    }
 
-function createWrapResolver (tracer, config, rrtype) {
+    const hostname = args[0]
+    const rrtype = typeof args[1] === 'string' ? args[1] : config.rrtype || 'A'
+    return {
+      'resource.name': `${rrtype} ${hostname}`,
+      'dns.hostname': hostname,
+      'dns.rrtype': rrtype
+    }
+  }
+})
+
+function createWrapResolver (config, rrtype) {
   return function wrapResolve (resolve) {
-    return function resolveWithTrace (hostname, callback) {
-      if (!isArgsValid(arguments, 2)) return resolve.apply(this, arguments)
-
-      const span = wrapResolver(tracer, config, rrtype, arguments)
-
-      return tracer.scope().activate(span, () => resolve.apply(this, arguments))
-    }
+    config = Object.assign({}, config, { rrtype })
+    return dcWrap(config, 'apm:dns:resolve', resolve)
   }
 }
 
-function createWrapReverse (tracer, config) {
+function createWrapReverse (config) {
   return function wrapReverse (reverse) {
-    return function reverseWithTrace (ip, callback) {
-      if (!isArgsValid(arguments, 2)) return reverse.apply(this, arguments)
-
-      const span = startSpan(tracer, config, 'dns.reverse', {
-        'resource.name': ip,
-        'dns.ip': ip
-      })
-
-      wrapArgs(span, arguments)
-
-      return tracer.scope().activate(span, () => reverse.apply(this, arguments))
-    }
+    return dcWrap(config, 'apm:dns:reverse', reverse)
   }
 }
 
-function startSpan (tracer, config, operation, tags) {
-  const childOf = tracer.scope().active()
-  const span = tracer.startSpan(operation, {
+dcSub('apm:dns:reverse', 'dns.reverse', {
+  tags: ({ context, args }) => {
+    if (!isArgsValid(args, 2)) {
+      context.noTrace = true
+      return
+    }
+    return { 'resource.name': args[0], 'dns.ip': args[0] }
+  }
+})
+
+function startSpan (config, operation, tags) {
+  const childOf = tracer().scope().active()
+  const span = tracer().startSpan(operation, {
     childOf,
     tags: Object.assign({
-      'service.name': config.service || tracer._service,
+      'service.name': config.service || tracer()._service,
       'span.kind': 'client'
     }, tags)
   })
@@ -121,34 +123,11 @@ function isArgsValid (args, minLength) {
   return true
 }
 
-function wrapArgs (span, args, callback) {
-  const original = args[args.length - 1]
-  const fn = tx.wrap(span, original)
-
-  args[args.length - 1] = function () {
-    callback && callback.apply(null, arguments)
-    return fn.apply(this, arguments)
-  }
-}
-
-function wrapResolver (tracer, config, rrtype, args) {
-  const hostname = args[0]
-  const span = startSpan(tracer, config, 'dns.resolve', {
-    'resource.name': `${rrtype} ${hostname}`,
-    'dns.hostname': hostname,
-    'dns.rrtype': rrtype
-  })
-
-  wrapArgs(span, args)
-
-  return span
-}
-
-function patchResolveShorthands (tracer, config, shim, prototype) {
+function patchResolveShorthands (config, shim, prototype) {
   Object.keys(rrtypes)
     .filter(method => !!prototype[method])
     .forEach(method => {
-      shim.wrap(prototype, method, createWrapResolver(tracer, config, rrtypes[method]))
+      shim.wrap(prototype, method, createWrapResolver(config, rrtypes[method]))
     })
 }
 
@@ -160,22 +139,111 @@ function unpatchResolveShorthands (shim, prototype) {
     })
 }
 
+function tracer () {
+  return global._ddtrace._tracer
+}
+
+function channel (name) {
+  if (!global._ddtraceChannels) {
+    global._ddtraceChannels = new Set()
+  }
+  const ch = dc.channel(name)
+  global._ddtraceChannels.add(ch)
+  return ch
+}
+
+function dcWrap (config, prefix, fn) {
+  const startCh = channel(prefix + ':start')
+  const endCh = channel(prefix + ':end')
+  const asyncEndCh = channel(prefix + ':async-end')
+  const errorCh = channel(prefix + ':error')
+
+  return function () {
+    const context = {}
+    const cb = AsyncResource.bind(arguments[arguments.length - 1])
+
+    startCh.publish({ context, config, args: arguments, thisObj: this })
+
+    if (typeof cb === 'function') {
+      arguments[arguments.length - 1] = function (error, ...result) {
+        if (error) {
+          errorCh.publish({ context, error, type: 'callback' })
+        } else {
+          if (result.length === 1) {
+            result = result[0]
+          }
+          asyncEndCh.publish({ context, result, type: 'callback' })
+        }
+        cb.call(this, error, ...result)
+      }
+    }
+
+    let result
+    try {
+      result = fn.apply(this, arguments)
+
+      if (result && typeof result.then === 'function') {
+        result.then(
+          result => asyncEndCh.publish({ context, result, type: 'promise' }),
+          error => errorCh.publish({ context, error, type: 'reject' })
+        )
+      }
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      errorCh.publish({ context, error, type: 'throw' })
+
+      throw error
+    } finally {
+      endCh.publish({ context, result })
+    }
+  }
+}
+
+function dcSub (prefix, name, hooks = {}) {
+  hooks = Object.assign({
+    tags: () => ({}),
+    asyncEnd: () => {}
+  }, hooks)
+  channel(prefix + ':start').subscribe(({ context, config, args }) => {
+    const tags = hooks.tags({ context, config, args })
+    if (context.noTrace) return
+    const span = startSpan(config, name, tags)
+    context.parent = tracer().scope()._activeResource()
+    context.span = span
+    tracer().scope()._enter(span, context.parent)
+  })
+  channel(prefix + ':end').subscribe(({ context }) => {
+    if (context.noTrace) return
+    tracer().scope()._exit(context.parent)
+  })
+  channel(prefix + ':async-end').subscribe(({ context, result }) => {
+    if (context.noTrace) return
+    hooks.asyncEnd({ context, result })
+    context.span.finish()
+  })
+  channel(prefix + ':error').subscribe(({ context, error }) => {
+    if (context.noTrace) return
+    context.span.addError(error)
+    context.span.finish()
+  })
+}
+
 module.exports = [
   {
     name: 'dns',
     patch (dns, tracer, config) {
-      this.wrap(dns, 'lookup', createWrapLookup(tracer, config))
-      this.wrap(dns, 'lookupService', createWrapLookupService(tracer, config))
-      this.wrap(dns, 'resolve', createWrapResolve(tracer, config))
-      this.wrap(dns, 'reverse', createWrapReverse(tracer, config))
+      this.wrap(dns, 'lookup', createWrapLookup(config))
+      this.wrap(dns, 'lookupService', createWrapLookupService(config))
+      this.wrap(dns, 'resolve', createWrapResolve(config))
+      this.wrap(dns, 'reverse', createWrapReverse(config))
 
-      patchResolveShorthands(tracer, config, this, dns)
+      patchResolveShorthands(config, this, dns)
 
       if (dns.Resolver) {
-        this.wrap(dns.Resolver.prototype, 'resolve', createWrapResolve(tracer, config))
-        this.wrap(dns.Resolver.prototype, 'reverse', createWrapReverse(tracer, config))
+        this.wrap(dns.Resolver.prototype, 'resolve', createWrapResolve(config))
+        this.wrap(dns.Resolver.prototype, 'reverse', createWrapReverse(config))
 
-        patchResolveShorthands(tracer, config, this, dns.Resolver.prototype)
+        patchResolveShorthands(config, this, dns.Resolver.prototype)
       }
     },
     unpatch (dns) {
