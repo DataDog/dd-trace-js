@@ -7,24 +7,9 @@ const os = require('os')
 const proxyquire = require('../proxyquire')
 const semver = require('semver')
 const metrics = require('../../src/metrics')
-const AsyncHooksScope = require('../../src/scope/async_hooks')
-const AsyncLocalStorageScope = require('../../src/scope/async_local_storage')
-const AsyncResourceScope = require('../../src/scope/async_resource')
+const scope = require('../../src/scope')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
-
-const defaultScope = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
-  ? 'async_resource'
-  : 'async_hooks'
-
-const asyncHooksScope = new AsyncHooksScope({
-  trackAsyncScope: true,
-  debug: true
-})
-const asyncLocalStorageScope = defaultScope === 'async_hooks' ? null : new AsyncLocalStorageScope({
-  trackAsyncScope: true
-})
-const asyncResourceScope = defaultScope === 'async_hooks' ? null : new AsyncResourceScope()
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
@@ -40,13 +25,7 @@ afterEach(() => {
   metrics.stop()
 })
 
-function wrapIt (whichScope = defaultScope) {
-  const scopes = {
-    async_hooks: asyncHooksScope,
-    async_local_storage: asyncLocalStorageScope,
-    async_resource: asyncResourceScope
-  }
-  const scope = scopes[whichScope] || scopes.async_hooks
+function wrapIt () {
   const it = global.it
   const only = global.it.only
 

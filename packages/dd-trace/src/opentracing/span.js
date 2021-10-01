@@ -8,6 +8,7 @@ const constants = require('../constants')
 const id = require('../id')
 const tagger = require('../tagger')
 const log = require('../log')
+const { storage } = require('../../../datadog-core')
 
 const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 const { DD_TRACE_EXPERIMENTAL_STATE_TRACKING } = process.env
@@ -28,6 +29,7 @@ class DatadogSpan extends Span {
     this._sampler = sampler
     this._processor = processor
     this._prioritySampler = prioritySampler
+    this._store = storage.getStore()
 
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
