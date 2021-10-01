@@ -7,9 +7,9 @@ const os = require('os')
 const proxyquire = require('../proxyquire')
 const semver = require('semver')
 const metrics = require('../../src/metrics')
-const scope = require('../../src/scope')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
+const { storage } = require('../../../datadog-core')
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
@@ -25,35 +25,11 @@ afterEach(() => {
   metrics.stop()
 })
 
-function wrapIt () {
-  const it = global.it
-  const only = global.it.only
+afterEach(() => {
+  storage.enterWith(undefined)
+})
 
-  function wrap (testFn) {
-    return function (title, fn) {
-      if (!fn) return testFn.apply(this, arguments)
-
-      const length = fn.length
-
-      fn = scope.bind(fn, null)
-
-      if (length > 0) {
-        return testFn.call(this, title, function (done) {
-          done = scope.bind(done, null)
-
-          return fn.call(this, done)
-        })
-      } else {
-        return testFn.call(this, title, fn)
-      }
-    }
-  }
-
-  global.it = wrap(it)
-  global.it.only = wrap(only)
-
-  global.it.skip = it.skip
-}
+function wrapIt () {}
 
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = [].concat(plugin)
