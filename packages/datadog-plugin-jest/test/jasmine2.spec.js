@@ -70,12 +70,12 @@ describe('Plugin', () => {
               [TEST_NAME_TAG]: name,
               [TEST_STATUS]: status,
               [TEST_SUITE_TAG]: 'packages/datadog-plugin-jest/test/jest-test.js',
-              [TEST_TYPE]: 'test',
-              [TEST_FRAMEWORK_VERSION]: version
+              [TEST_TYPE]: 'test'
             })
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
+            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         })
 
