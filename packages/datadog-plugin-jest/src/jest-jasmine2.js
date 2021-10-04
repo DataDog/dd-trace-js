@@ -5,6 +5,8 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FRAMEWORK_VERSION,
+  JEST_TEST_RUNNER,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   finishAllTraceSpans,
@@ -29,7 +31,12 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
         {
           type: 'test',
           childOf,
-          tags: { ...commonSpanTags, [TEST_SUITE]: testSuite }
+          tags: {
+            ...commonSpanTags,
+            [TEST_SUITE]: testSuite,
+            [TEST_FRAMEWORK_VERSION]: tracer._version,
+            [JEST_TEST_RUNNER]: 'jest-jasmine2'
+          }
         },
         async (done) => {
           const testSpan = tracer.scope().active()
@@ -124,7 +131,9 @@ function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMet
             [RESOURCE_NAME]: resource,
             [TEST_NAME]: testName,
             [TEST_SUITE]: testSuite,
-            [TEST_STATUS]: 'skip'
+            [TEST_STATUS]: 'skip',
+            [TEST_FRAMEWORK_VERSION]: tracer._version,
+            [JEST_TEST_RUNNER]: 'jest-jasmine2'
           }
         }
       )

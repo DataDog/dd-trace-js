@@ -17,6 +17,7 @@ const {
 const id = require('../../id')
 
 const TEST_FRAMEWORK = 'test.framework'
+const TEST_FRAMEWORK_VERSION = 'test.framework_version'
 const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
@@ -30,8 +31,12 @@ const ERROR_STACK = 'error.stack'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
+const JEST_TEST_RUNNER = 'test.jest.test_runner'
+
 module.exports = {
   TEST_FRAMEWORK,
+  TEST_FRAMEWORK_VERSION,
+  JEST_TEST_RUNNER,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
