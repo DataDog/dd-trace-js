@@ -11,7 +11,8 @@ const {
   TEST_NAME: TEST_NAME_TAG,
   TEST_SUITE: TEST_SUITE_TAG,
   TEST_STATUS,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -74,6 +75,7 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
+            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         })
 

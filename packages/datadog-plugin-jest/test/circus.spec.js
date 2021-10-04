@@ -9,6 +9,7 @@ const {
   TEST_TYPE,
   TEST_NAME: TEST_NAME_TAG,
   TEST_SUITE: TEST_SUITE_TAG,
+  TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   ERROR_TYPE,
   ERROR_MESSAGE,
@@ -72,6 +73,7 @@ describe('Plugin', () => {
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
             expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           }).then(done).catch(done)
 
         const passingTestEvent = {
