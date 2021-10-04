@@ -62,9 +62,9 @@ describe('Plugin', () => {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [TEST_FRAMEWORK_VERSION]: version
+              [ORIGIN_KEY]: CI_APP_ORIGIN
             })
+            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         const failingTestPromise = agent
           .use(traces => {
