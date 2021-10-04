@@ -130,5 +130,11 @@
       "name": "pino-pretty",
       "dep": true
     }
+  ],
+  "undici": [
+    {
+      "name": "undici",
+      "versions": [">=4"]
+    }
   ]
 }

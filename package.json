@@ -88,6 +88,7 @@
     "source-map-resolve": "^0.6.0"
   },
   "devDependencies": {
+    "abort-controller": "^3.0.0",
     "autocannon": "^4.5.2",
     "axios": "^0.21.2",
     "benchmark": "^2.1.4",
