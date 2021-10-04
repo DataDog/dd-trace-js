@@ -14,7 +14,8 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   ERROR_TYPE,
-  ERROR_MESSAGE
+  ERROR_MESSAGE,
+  TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -61,7 +62,8 @@ describe('Plugin', () => {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [TEST_FRAMEWORK_VERSION]: version
             })
           })
         const failingTestPromise = agent

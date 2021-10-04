@@ -3,6 +3,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FRAMEWORK_VERSION,
   getTestEnvironmentMetadata,
   CI_APP_ORIGIN,
   getTestParentSpan
@@ -19,7 +20,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
   skipped: 'skip'
 }
 
-function getTestSpanMetadata (tracer, testName, testSuite) {
+function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   const childOf = getTestParentSpan(tracer)
 
   return {
@@ -29,7 +30,8 @@ function getTestSpanMetadata (tracer, testName, testSuite) {
     [TEST_NAME]: testName,
     [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP
+    [SAMPLING_PRIORITY]: AUTO_KEEP,
+    [TEST_FRAMEWORK_VERSION]: cypressConfig.version
   }
 }
 
@@ -50,7 +52,7 @@ module.exports = (on, config) => {
         childOf,
         resource,
         ...testSpanMetadata
-      } = getTestSpanMetadata(tracer, testName, testSuite)
+      } = getTestSpanMetadata(tracer, testName, testSuite, config)
 
       if (!activeSpan) {
         activeSpan = tracer.startSpan('cypress.test', {
