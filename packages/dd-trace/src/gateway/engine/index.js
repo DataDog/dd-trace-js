@@ -22,6 +22,10 @@ function getContext () {
   return store && store.get('context')
 }
 
+function getStore () {
+  return als.getStore()
+}
+
 function propagate (data, context = getContext()) {
   if (!context) return
 
@@ -42,5 +46,6 @@ module.exports = {
   manager,
   startContext,
   getContext,
+  getStore,
   propagate
 }

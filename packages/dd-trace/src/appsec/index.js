@@ -4,9 +4,10 @@ const fs = require('fs')
 const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const { INCOMING_HTTP_REQUEST_START } = require('../gateway/channels')
+const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
 const Gateway = require('../gateway/engine/index')
 const Addresses = require('./addresses')
+const ContextStore = require('./context_store')
 
 function enable (config) {
   try {
@@ -18,6 +19,7 @@ function enable (config) {
     RuleManager.applyRules(rules)
 
     INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
+    INCOMING_HTTP_REQUEST_END.subscribe(incomingHTTPEnd)
 
     config.tags['_dd.appsec.enabled'] = 1
     config.tags['_dd.runtime_family'] = 'nodejs'
@@ -33,11 +35,26 @@ function enable (config) {
   }
 }
 
+function incomingHTTPEnd ({ req, res }) {
+  const store = Gateway.getStore()
+  if (!store) return
+  const contextStore = store.get('contextStore')
+  if (!contextStore) return
+  const topSpan = req._datadog.span
+  for (const [key, value] of contextStore.top) {
+    topSpan.setTag(key, value)
+  }
+  for (const [key, value] of contextStore.all) { // all overwrites top
+    topSpan.setTag(key, value)
+  }
+}
+
 function incomingHttpTranslator (data) {
   const store = Gateway.startContext()
 
   store.set('req', data.req)
   store.set('res', data.res)
+  store.set('contextStore', new ContextStore())
 
   const headers = Object.assign({}, data.req.headers)
   delete headers.cookie
