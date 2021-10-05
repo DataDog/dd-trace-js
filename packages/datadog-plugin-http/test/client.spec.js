@@ -12,8 +12,6 @@ const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
-wrapIt()
-
 describe('Plugin', () => {
   let express
   let http

@@ -3,10 +3,6 @@
 const { storage } = require('../../datadog-core')
 
 class Scope {
-  constructor () {
-    storage.enable()
-  }
-
   active () {
     const store = storage.getStore()
 

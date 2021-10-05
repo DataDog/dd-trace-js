@@ -2,8 +2,6 @@
 
 const Scope = require('../../src/scope/noop/scope')
 
-wrapIt()
-
 describe('ScopeManager', () => {
   let ScopeManager
   let scopeManager

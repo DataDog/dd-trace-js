@@ -3,8 +3,6 @@
 const os = require('os')
 const { execSync } = require('child_process')
 
-wrapIt()
-
 describe('pkg', () => {
   let pkg
 

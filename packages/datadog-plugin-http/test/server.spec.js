@@ -4,8 +4,6 @@ const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 
-wrapIt()
-
 describe('Plugin', () => {
   let http
   let listener

@@ -2,8 +2,6 @@
 
 const nock = require('nock')
 
-wrapIt()
-
 describe('request', () => {
   let request
   let log

@@ -1,9 +1,9 @@
 'use strict'
 
-const StorageBackend = require('../../../src/continuation/backends/async_hooks')
+const StorageBackend = require('../../src/storage/sync')
 const testStorage = require('./test')
 
-describe('continuation/backends/async_hooks', () => {
+describe('storage/sync', () => {
   let storage
 
   beforeEach(() => {
@@ -14,5 +14,5 @@ describe('continuation/backends/async_hooks', () => {
     storage.disable()
   })
 
-  testStorage(() => storage)
+  testStorage(() => storage, false)
 })

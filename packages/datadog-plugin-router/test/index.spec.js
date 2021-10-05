@@ -9,8 +9,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
 const plugin = require('../src')
 
-wrapIt()
-
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {

@@ -6,9 +6,7 @@ const {
 
 if (SCOPE_MANAGER) {
   const Scope = require(`../../../packages/dd-trace/src/scope/${SCOPE_MANAGER}`)
-  const scope = new Scope({
-    trackAsyncScope: true
-  })
+  const scope = new Scope()
   if (scope.enable) {
     scope.enable()
   }

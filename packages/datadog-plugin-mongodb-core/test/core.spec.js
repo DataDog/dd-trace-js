@@ -4,8 +4,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 const withTopologies = fn => {
   withVersions(plugin, ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
     describe('using the server topology', () => {

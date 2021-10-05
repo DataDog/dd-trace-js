@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 const config = {
   user: 'test',
   password: 'Oracle18',

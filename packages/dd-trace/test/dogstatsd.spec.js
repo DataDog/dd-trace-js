@@ -1,7 +1,5 @@
 'use strict'
 
-wrapIt()
-
 describe('dogstatsd', () => {
   let client
   let Client

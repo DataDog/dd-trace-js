@@ -1,7 +1,7 @@
 'use strict'
 
-const ContinuationLocalStorage = require('./src/continuation/storage')
+const LocalStorage = require('./src/storage')
 
-const storage = new ContinuationLocalStorage()
+const storage = new LocalStorage()
 
 module.exports = { storage }

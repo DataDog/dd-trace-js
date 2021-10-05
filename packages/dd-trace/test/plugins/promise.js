@@ -5,8 +5,6 @@ module.exports = (name, factory, versionRange) => {
   const plugin = require(`../../../datadog-plugin-${name}/src`)
   const semver = require('semver')
 
-  wrapIt()
-
   describe('Plugin', () => {
     let Promise
     let tracer

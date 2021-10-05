@@ -6,8 +6,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let tracer
   let fastify

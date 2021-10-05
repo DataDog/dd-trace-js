@@ -7,8 +7,6 @@ const semver = require('semver')
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
 
-wrapIt()
-
 describe('Plugin', () => {
   let tds
   let tracer

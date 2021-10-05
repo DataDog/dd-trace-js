@@ -286,12 +286,6 @@ export declare interface TracerOptions {
   runtimeMetrics?: boolean
 
   /**
-   * Whether to track the scope of async functions. This is needed for async/await to work with non-native promises (thenables). Only disable this if you are sure only native promises are used with async/await, or if you are using Node >=14.5 since the issue has been fixed in that version.
-   * @default true
-   */
-  trackAsyncScope?: boolean
-
-  /**
    * Custom function for DNS lookups when sending requests to the agent.
    * @default dns.lookup()
    */

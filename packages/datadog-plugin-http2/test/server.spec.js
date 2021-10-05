@@ -7,8 +7,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
-wrapIt()
-
 const describe = () => {} // temporarily disable HTTP2 server plugin tests
 
 describe('Plugin', () => {

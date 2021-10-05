@@ -1,7 +1,5 @@
 'use strict'
 
-wrapIt()
-
 describe('metrics', () => {
   let metrics
   let config

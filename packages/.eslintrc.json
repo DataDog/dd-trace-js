@@ -9,7 +9,6 @@
     "expect": true,
     "sinon": true,
     "proxyquire": true,
-    "wrapIt": true,
     "withVersions": true
   },
   "rules": {

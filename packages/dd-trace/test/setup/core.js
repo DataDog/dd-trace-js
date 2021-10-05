@@ -17,7 +17,6 @@ chai.use(require('../asserts/profile'))
 global.sinon = sinon
 global.expect = chai.expect
 global.proxyquire = proxyquire
-global.wrapIt = wrapIt
 global.withVersions = withVersions
 
 afterEach(() => {
@@ -28,8 +27,6 @@ afterEach(() => {
 afterEach(() => {
   storage.enterWith(undefined)
 })
-
-function wrapIt () {}
 
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = [].concat(plugin)

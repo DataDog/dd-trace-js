@@ -1,7 +1,5 @@
 'use strict'
 
-wrapIt()
-
 describe('id', () => {
   let id
   let crypto

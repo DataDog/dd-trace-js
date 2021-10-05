@@ -4,8 +4,6 @@ const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let logger
   let tracer
