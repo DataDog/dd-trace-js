@@ -64,15 +64,18 @@ class SpanProcessor {
       }
 
       for (const span of trace.started) {
+        const context = span.context()
+        const id = context.toSpanId()
+
         if (started.has(span)) {
           log.error(`Span was already started in the same trace: ${span}`)
         } else {
           started.add(span)
 
-          if (startedIds.has(span)) {
+          if (startedIds.has(id)) {
             log.error(`Another span with the same ID was already started in the same trace: ${span}`)
           } else {
-            startedIds.add(span)
+            startedIds.add(id)
           }
 
           if (context._trace !== trace) {
