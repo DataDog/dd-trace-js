@@ -80,5 +80,13 @@ describe('plugins/util/redis', () => {
       expect(rawCommand.substr(0, 10)).to.equal('GET aaaaaa')
       expect(rawCommand.substr(990)).to.equal('aaaaaaa...')
     })
+
+    it('should ignore arguments for authentication', () => {
+      span = redis.instrument(tracer, config, '1', 'auth', ['username', 'password'])
+
+      const rawCommand = span.context()._tags['redis.raw_command']
+
+      expect(rawCommand).to.equal('AUTH')
+    })
   })
 })
