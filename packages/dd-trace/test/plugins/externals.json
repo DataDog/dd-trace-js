@@ -134,7 +134,7 @@
   "undici": [
     {
       "name": "undici",
-      "versions": [">=4"]
+      "versions": [">=4.7.0"]
     }
   ]
 }
