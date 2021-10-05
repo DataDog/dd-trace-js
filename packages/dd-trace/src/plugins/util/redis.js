@@ -42,7 +42,7 @@ const redis = {
 function formatCommand (command, args) {
   command = command.toUpperCase()
 
-  if (!args) return command
+  if (!args || command === 'AUTH') return command
 
   for (let i = 0, l = args.length; i < l; i++) {
     if (typeof args[i] === 'function') continue
