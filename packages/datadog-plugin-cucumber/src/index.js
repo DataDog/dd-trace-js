@@ -5,6 +5,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FRAMEWORK_VERSION,
   TEST_SKIP_REASON,
   CI_APP_ORIGIN,
   ERROR_MESSAGE,
@@ -52,6 +53,7 @@ function createWrapRun (tracer, testEnvironmentMetadata, sourceRoot, setStatus) 
         [TEST_NAME]: testName,
         [TEST_SUITE]: testSuite,
         [SAMPLING_RULE_DECISION]: 1,
+        [TEST_FRAMEWORK_VERSION]: tracer._version,
         ...testEnvironmentMetadata
       }
 

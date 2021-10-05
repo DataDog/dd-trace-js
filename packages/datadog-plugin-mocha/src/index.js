@@ -9,6 +9,7 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
+  TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString,
@@ -31,7 +32,8 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
     [TEST_NAME]: fullTestName,
     [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP
+    [SAMPLING_PRIORITY]: AUTO_KEEP,
+    [TEST_FRAMEWORK_VERSION]: tracer._version
   }
 }
 

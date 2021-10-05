@@ -18,7 +18,8 @@ const {
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 const ASYNC_TESTS = [
@@ -113,6 +114,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         })
         Promise.all(assertionPromises)

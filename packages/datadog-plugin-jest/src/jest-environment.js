@@ -5,6 +5,8 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FRAMEWORK_VERSION,
+  JEST_TEST_RUNNER,
   ERROR_MESSAGE,
   ERROR_TYPE,
   TEST_PARAMETERS,
@@ -138,7 +140,9 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
     const spanTags = {
       ...commonSpanTags,
       [TEST_NAME]: testName,
-      [TEST_SUITE]: this.testSuite
+      [TEST_SUITE]: this.testSuite,
+      [TEST_FRAMEWORK_VERSION]: tracer._version,
+      [JEST_TEST_RUNNER]: 'jest-circus'
     }
 
     const testParametersString = getTestParametersString(nameToParams, event.test.name)
