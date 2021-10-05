@@ -36,6 +36,8 @@ addHook({ name: 'dns' }, dns => {
 
     patchResolveShorthands(dns.Resolver.prototype)
   }
+
+  return dns
 })
 
 class DNSPlugin extends Plugin {
@@ -115,6 +117,4 @@ function patchResolveShorthands (prototype) {
     })
 }
 
-module.exports = [
-  DNSPlugin
-]
+module.exports = DNSPlugin

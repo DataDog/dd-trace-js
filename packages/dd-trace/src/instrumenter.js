@@ -6,6 +6,7 @@ const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
+const Plugin = require('./plugins/plugin')
 
 const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
@@ -69,6 +70,7 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
+          if (plugins[name].prototype instanceof Plugin) return
           const pluginConfig = {}
           if (serviceMapping && serviceMapping[name]) {
             pluginConfig.service = serviceMapping[name]

@@ -3,50 +3,45 @@
 const dc = require('diagnostics_channel')
 
 class Subscription {
-  #enabled
   #channel
   #handler
 
   constructor (event, handler) {
-    this.#enabled = false
     this.#channel = dc.channel(event)
     this.#handler = handler
   }
 
-  get isEnabled () {
-    return this.#enabled
-  }
-
   enable () {
     this.#channel.subscribe(this.#handler)
-    this.#enabled = true
   }
 
   disable () {
     this.#channel.unsubscribe(this.#handler)
-    this.#enabled = false
   }
 }
 
 module.exports = class Plugin {
   #subscriptions
+  #enabled
 
-  constructor (config) {
+  constructor () {
     this.#subscriptions = []
-    this.config = config
+    this.#enabled = false
   }
 
   addWrappedSubscriptions(prefix, name, hooks = {}) {
     hooks = Object.assign({
+      // TODO more hooks will eventually be needed
       tags: () => ({}),
       asyncEnd: () => {}
     }, hooks)
     this.addSubscription(prefix + ':start', ({ context, args }) => {
       const tags = hooks.tags.call(this, { context, args })
       if (context.noTrace) return
-      const span = startSpan(this.config, name, tags)
+      const span = tracer().startSpan(this.config, name, tags)
       context.parent = tracer().scope()._activeResource()
       context.span = span
+      // TODO this and the the _exit below need to be replaces with something like `enterWith`
       tracer().scope()._enter(span, context.parent)
     })
     this.addSubscription(prefix + ':end', ({ context }) => {
@@ -69,12 +64,15 @@ module.exports = class Plugin {
     this.#subscriptions.push(new Subscription(channelName, handler))
   }
 
-  enable () {
-    this.#subscriptions.forEach(sub => sub.enable())
-  }
-
-  disable () {
-    this.#subscriptions.forEach(sub => sub.disable())
+  configure (config) {
+    this.config = config
+    if (config.enabled && !this.#enabled) {
+      this.#enabled = true
+      this.#subscriptions.forEach(sub => sub.enable())
+    } else if (!config.enabled && this.#enabled) {
+      this.#enabled = false
+      this.#subscriptions.forEach(sub => sub.disable())
+    }
   }
 }
 
