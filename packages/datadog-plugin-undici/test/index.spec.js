@@ -125,61 +125,6 @@ describe('undici', () => {
         })
       })
 
-      // TODO: is this a thing in undici?
-      it.skip('should support a string URL and an options object, which merges and takes precedence', done => {
-        const app = express()
-
-        app.get('/user', (req, res) => {
-          res.status(200).send()
-        })
-
-        getPort().then(port => {
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-            })
-            .then(done)
-            .catch(done)
-
-          appListener = server(app, port, () => {
-            const req = undici.request(`http://localhost:${port}/another-path`, { path: '/user' })
-
-          })
-        })
-      })
-
-      // TODO: is that valid undici?
-      it.skip('should support a URL object and an options object, which merges and takes precedence', done => {
-        const app = express()
-
-        app.get('/user', (req, res) => {
-          res.status(200).send()
-        })
-
-        getPort().then(port => {
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-            })
-            .then(done)
-            .catch(done)
-
-          const uri = {
-            protocol: `http:`,
-            hostname: 'localhost',
-            port,
-            pathname: '/another-path'
-          }
-
-          appListener = server(app, port, () => {
-            const req = undici.request(uri, { path: '/user' })
-
-          })
-        })
-      })
-
       it('should support configuration as an WHATWG URL object', async () => {
         const app = express()
         const port = await getPort()
@@ -194,31 +139,6 @@ describe('undici', () => {
         await agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('http.status_code', '200')
           expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-        })
-      })
-
-      // TODO: is this a valid undici request?
-      it.skip('should use the correct defaults when not specified', done => {
-        const app = express()
-
-        app.get('/user', (req, res) => {
-          res.status(200).send()
-        })
-
-        getPort().then(port => {
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/`)
-            })
-            .then(done)
-            .catch(done)
-
-          appListener = server(app, port, () => {
-            const req = undici.request({
-              protocol: `http:`,
-              port
-            })
-          })
         })
       })
 
@@ -430,7 +350,6 @@ describe('undici', () => {
             .catch(done)
 
           undici.request(`http://localhost:${port}/user`, (err) => {
-            // console.error(err)
             error = err
           })
         })
@@ -478,8 +397,7 @@ describe('undici', () => {
         })
       })
 
-      // TODO: how to destroy requests with undici
-      it.skip('should record destroyed requests as errors', done => {
+      it('should record destroyed requests as errors', done => {
         const app = express()
 
         app.get('/user', (req, res) => {})
@@ -583,8 +501,7 @@ describe('undici', () => {
         })
       })
 
-      // TODO: Is that a real thing?
-      it.skip('should use the correct fallback protocol', done => {
+      it('should skip requests to the agent', done => {
         const app = express()
 
         app.get('/user', (req, res) => {
@@ -592,47 +509,19 @@ describe('undici', () => {
         })
 
         getPort().then(port => {
+          const timer = setTimeout(done, 100)
+
           agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+            .use(() => {
+              done(new Error('Request to the agent was traced.'))
+              clearTimeout(timer)
             })
-            .then(done)
-            .catch(done)
 
           appListener = server(app, port, () => {
-            const req = undici.request({
-              hostname: 'localhost',
-              port,
-              path: '/user?foo=bar'
-            }, res => {
-              res.on('data', () => {})
-            })
+            undici.request(tracer._tracer._url.href)
           })
         })
       })
-
-        it('should skip requests to the agent', done => {
-          const app = express()
-
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
-
-          getPort().then(port => {
-            const timer = setTimeout(done, 100)
-
-            agent
-              .use(() => {
-                done(new Error('Request to the agent was traced.'))
-                clearTimeout(timer)
-              })
-
-            appListener = server(app, port, () => {
-              undici.request(tracer._tracer._url.href)
-            })
-          })
-        })
     })
 
     describe('with service configuration', () => {
@@ -759,26 +648,86 @@ describe('undici', () => {
           })
       })
 
-      // TODO: Injected headers are not available yet
-      it.skip('should add tags for the host header', done => {
-        const app = express()
 
-        app.get('/user', (req, res) => {
-          res.setHeader('x-foo', 'bar')
-          res.status(200).send()
+      describe('host header', () => {
+
+        // TODO: Injected headers are not available yet
+        // for request
+        it('should add tags for the host header', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.setHeader('x-foo', 'bar')
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const meta = traces[0][0].meta
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              undici.request(`http://localhost:${port}/user`)
+            })
+          })
         })
 
-        getPort().then(port => {
-          agent
-            .use(traces => {
-              const meta = traces[0][0].meta
-              expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
-            })
-            .then(done)
-            .catch(done)
+        it('should add tags for the host header through Client', done => {
+          const app = express()
 
-          appListener = server(app, port, () => {
-            undici.request(`http://localhost:${port}/user`)
+          app.get('/user', (req, res) => {
+            res.setHeader('x-foo', 'bar')
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const meta = traces[0][0].meta
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+                const client = new undici.Client(`http://localhost:${port}`)
+
+                client.request({
+                  path: '/user',
+                  method: 'GET'
+                })
+            })
+          })
+        })
+
+        it('should pass overwritten host header', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.setHeader('x-foo', 'bar')
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const meta = traces[0][0].meta
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `my-service`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              undici.request(`http://localhost:${port}/user`, {
+                headers: {
+                  host: 'my-service',
+                }
+              })
+            })
           })
         })
       })
@@ -838,7 +787,7 @@ describe('undici', () => {
         config = {
           hooks: {
             request: (span, req, res) => {
-              span.setTag('resource.name', `${req.method} ${req._route}`)
+              span.setTag('resource.name', `${req.method} -- ${req.path}`)
             }
           }
         }
@@ -849,8 +798,7 @@ describe('undici', () => {
           })
       })
 
-      // TODO: how does it translates?
-      it.skip('should run the request hook before the span is finished', done => {
+      it('should run the request hook before the span is finished', done => {
         const app = express()
 
         app.get('/user', (req, res) => {
@@ -860,16 +808,13 @@ describe('undici', () => {
         getPort().then(port => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'GET /user')
+              expect(traces[0][0]).to.have.property('resource', 'GET -- /user')
             })
             .then(done)
             .catch(done)
 
           appListener = server(app, port, () => {
-            const req = undici.request(`http://localhost:${port}/user`)
-
-            req._route = '/user'
-
+            undici.request(`http://localhost:${port}/user`)
           })
         })
       })

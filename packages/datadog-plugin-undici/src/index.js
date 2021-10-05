@@ -9,6 +9,7 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const diagnosticsChannel = require('diagnostics_channel')
 
 const Reference = opentracing.Reference
 
@@ -21,223 +22,162 @@ const CLIENT = kinds.CLIENT
 const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 const REFERENCE_NOOP = constants.REFERENCE_NOOP
 
-function patch (http, methodName, tracer, config) {
-  config = normalizeConfig(tracer, config)
-  this.wrap(http, methodName, fn => makeRequestTrace(fn))
+function addError (span, error) {
+  span.addTags({
+    'error.type': error.name,
+    'error.msg': error.message,
+    'error.stack': error.stack
+  })
+  return error
+}
 
-  function makeRequestTrace (request) {
-    return function requestTrace (options, callback) {
-      let args
+function parseHeaders (headers) {
+  const pairs = headers
+    .split('\r\n')
+    .map((r) => r.split(':').map((str) => str.trim()))
 
-      try {
-        args = normalizeArgs.apply(null, arguments)
-      } catch (e) {
-        log.error(e)
-        return request.apply(this, arguments)
-      }
-
-      const protocol = options.protocol;
-      const hostname = options.hostname || options.host || 'localhost'
-      const host = options.port ? `${hostname}:${options.port}` : hostname
-      const path = options.path ? options.path.split(/[?#]/)[0] : '/'
-      const uri = `${options.origin}${path}`
-
-
-      const method = (options.method || 'GET').toUpperCase()
-
-      const scope = tracer.scope()
-      const childOf = scope.active()
-      const type = config.filter(uri) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
-      const span = tracer.startSpan('http.request', {
-        references: [
-          new Reference(type, childOf)
-        ],
-        tags: {
-          [SPAN_KIND]: CLIENT,
-          'service.name': getServiceName(tracer, config, options),
-          'resource.name': method,
-          'span.type': 'http',
-          'http.method': method,
-          'http.url': uri
-        }
-      })
-
-      if (!(hasAmazonSignature(options) || !config.propagationFilter(uri))) {
-        tracer.inject(span, HTTP_HEADERS, options.headers)
-      }
-
-      analyticsSampler.sample(span, config.measured)
-
-
-      if (callback) {
-        callback = scope.bind(callback, childOf)
-        const req = scope.bind(request, span).call(this, options, function(err, res) {
-          if (err) {
-            addError(span, err)
-          }
-          finish(req, res, span, config)
-          callback(err, res);
-        })
-        return req
-      }
-
-      const req = scope.bind(request, span).call(this, options)
-      req.then((res) => {
-        finish(options, res, span, config)
-        return res
-      }).catch((err) => {
-        addError(span, err)
-        finish(options, err, span, config)
-        throw err;
-      })
-      return req
-      // const emit = req.emit
-
-      // req.emit = function (eventName, arg) {
-      //   switch (eventName) {
-      //     case 'response': {
-      //       const res = arg
-
-      //       scope.bind(res)
-
-      //       res.on('end', () => finish(req, res, span, config))
-
-      //       break
-      //     }
-      //     case 'error':
-      //       addError(span, arg)
-      //     case 'abort': // eslint-disable-line no-fallthrough
-      //     case 'timeout': // eslint-disable-line no-fallthrough
-      //       finish(req, null, span, config)
-      //   }
-
-      //   return emit.apply(this, arguments)
-      // }
-
-      // scope.bind(req)
-
-      return req
+  const object = {}
+  pairs.forEach(([key, value]) => {
+    key = key.toLowerCase()
+    if (!value) {
+      return
     }
+    if (object[key]) {
+      if (!Array.isArray(object[key])) {
+        object[key] = [object[key], value]
+      } else {
+        object[key].push(value)
+      }
+    } else {
+      object[key] = value
+    }
+  })
+  return object
+}
+
+function diagnostics (tracer, config) {
+  config = normalizeConfig(tracer, config)
+
+  const requestChannel = diagnosticsChannel.channel('undici:request:create')
+  const headersChannel = diagnosticsChannel.channel('undici:request:headers')
+  const requestErrorChannel = diagnosticsChannel.channel(
+    'undici:request:error'
+  )
+
+  // We use a weakmap here to store the request / spans
+  const requestSpansMap = new WeakMap()
+
+  requestChannel.subscribe(handleRequestCreate)
+  requestErrorChannel.subscribe(handleRequestError)
+  headersChannel.subscribe(handleRequestHeaders)
+
+  function handleRequestCreate ({ request }) {
+    const method = (request.method || 'GET').toUpperCase()
+
+    const scope = tracer.scope()
+    const childOf = scope.active()
+    const path = request.path ? request.path.split(/[?#]/)[0] : '/'
+    const uri = `${request.origin}${path}`
+    const type = config.filter(uri) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
+
+    const span = tracer.startSpan('http.request', {
+      references: [new Reference(type, childOf)],
+      tags: {
+        [SPAN_KIND]: CLIENT,
+        'resource.name': method,
+        'span.type': 'http',
+        'http.method': method,
+        'http.url': uri,
+        'service.name': getServiceName(tracer, config, request)
+      }
+    })
+
+    requestSpansMap.set(request, span)
+
+    if (!(hasAmazonSignature(request) || !config.propagationFilter(uri))) {
+      const injectedHeaders = {}
+      tracer.inject(span, HTTP_HEADERS, injectedHeaders)
+      Object.entries(injectedHeaders).forEach(([key, value]) => {
+        request.addHeader(key, value)
+      })
+    }
+
+    analyticsSampler.sample(span, config.measured)
   }
 
-  function finish (options, res, span, config) {
-    if (res) {
-      span.setTag(HTTP_STATUS_CODE, res.statusCode)
+  function handleRequestError ({ request, error }) {
+    const span = requestSpansMap.get(request)
+    addError(span, error)
+    finish(request, null, span, config)
+  }
 
-      if (!config.validateStatus(res.statusCode)) {
-        span.setTag('error', 1)
-      }
+  function handleRequestHeaders ({ request, response }) {
+    const span = requestSpansMap.get(request)
+    finish(request, response, span, config)
+  }
 
-      addResponseHeaders(res, span, config)
+  return function unsubscribe () {
+    if (requestChannel.hasSubscribers) {
+      requestChannel.unsubscribe(handleRequestCreate)
+    }
+    if (headersChannel.hasSubscribers) {
+      headersChannel.unsubscribe(handleRequestHeaders)
+    }
+    if (requestErrorChannel.hasSubscribers) {
+      requestErrorChannel.unsubscribe(handleRequestError)
+    }
+  }
+}
+
+function addRequestHeaders (req, span, config) {
+  const headers = parseHeaders(req.headers)
+  Object.entries(headers).forEach(([key, value]) => {
+    span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
+  })
+
+  if (!headers.host) {
+    // req.servername holds the value of the host header
+    if (req.servername) {
+      span.setTag(`${HTTP_REQUEST_HEADERS}.host`, req.servername)
     } else {
+      // Undici's host header are written directly
+      // to the stream, and not passed to the `Request` object
+      // This workaround ensure we set the host if
+      // it was not explicitely provided
+      const { hostname, port } = url.parse(req.origin)
+      const host = `${hostname}${port ? `:${port}` : ''}`
+      span.setTag(`${HTTP_REQUEST_HEADERS}.host`, host)
+    }
+  }
+}
+
+function addResponseHeaders (res, span, config) {
+  const resHeader = res.headers.map((x) => x.toString())
+  while (resHeader.length) {
+    const key = resHeader.shift()
+    const value = resHeader.shift()
+    span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
+  }
+}
+
+function finish (req, res, span, config) {
+  if (res) {
+    span.setTag(HTTP_STATUS_CODE, res.statusCode)
+
+    if (!config.validateStatus(res.statusCode)) {
       span.setTag('error', 1)
     }
 
-    addRequestHeaders(options, span, config)
-
-    config.hooks.request(span, options, res)
-
-    span.finish()
+    addResponseHeaders(res, span, config)
+  } else {
+    span.setTag('error', 1)
   }
 
-  function addError (span, error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
+  addRequestHeaders(req, span, config)
 
-    return error
-  }
+  config.hooks.request(span, req, res)
 
-  function addRequestHeaders (req, span, config) {
-    config.headers.forEach(key => {
-      const value = req.headers[key]
-
-      if (value) {
-        span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
-      }
-    })
-  }
-
-  function addResponseHeaders (res, span, config) {
-    config.headers.forEach(key => {
-      const value = res.headers[key]
-      if (value) {
-        span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
-      }
-    })
-  }
-
-  function normalizeArgs (inputURL, inputOptions, cb) {
-    inputURL = normalizeOptions(inputURL)
-
-    const [callback, inputOptionsNormalized] = normalizeCallback(inputOptions, cb, inputURL)
-    const options = combineOptions(inputURL, inputOptionsNormalized)
-    normalizeHeaders(options)
-    const uri = url.format(options)
-
-    return { uri, options, callback }
-  }
-
-  function normalizeCallback (inputOptions, callback, inputURL) {
-    if (typeof inputOptions === 'function') {
-      return [inputOptions, inputURL || {}]
-    } else {
-      return [callback, inputOptions]
-    }
-  }
-
-  function combineOptions (inputURL, inputOptions) {
-    if (typeof inputOptions === 'object') {
-      return Object.assign(inputURL || {}, inputOptions)
-    } else {
-      return inputURL
-    }
-  }
-
-  function normalizeHeaders (options) {
-    options.headers = options.headers || {}
-  }
-
-  // https://github.com/nodejs/node/blob/7e911d8b03a838e5ac6bb06c5b313533e89673ef/lib/internal/url.js#L1271
-  function urlToOptions (url) {
-    const agent = url.agent || http.globalAgent
-    const options = {
-      protocol: url.protocol || agent.protocol,
-      hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
-        ? url.hostname.slice(1, -1)
-        : url.hostname ||
-        url.host ||
-        'localhost',
-      hash: url.hash,
-      search: url.search,
-      pathname: url.pathname,
-      path: `${url.pathname || ''}${url.search || ''}`,
-      href: url.href
-    }
-    if (url.port !== '') {
-      options.port = Number(url.port)
-    }
-    if (url.username || url.password) {
-      options.auth = `${url.username}:${url.password}`
-    }
-    return options
-  }
-
-  function normalizeOptions (inputURL) {
-    if (typeof inputURL === 'string') {
-      try {
-        return urlToOptions(new url.URL(inputURL))
-      } catch (e) {
-        return url.parse(inputURL)
-      }
-    } else if (inputURL instanceof url.URL) {
-      return urlToOptions(inputURL)
-    } else {
-      return inputURL
-    }
-  }
+  span.finish()
 }
 
 function getHost (options) {
@@ -260,30 +200,38 @@ function hasAmazonSignature (options) {
   }
 
   if (options.headers) {
-    const headers = Object.keys(options.headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: options.headers[next]
-      }), {})
+    let headers = {}
+    if (typeof options.headers === 'string') {
+      headers = parseHeaders(options.headers)
+    } else {
+      headers = Object.keys(options.headers).reduce(
+        (prev, next) =>
+          Object.assign(prev, {
+            [next.toLowerCase()]: options.headers[next]
+          }),
+        {}
+      )
+    }
 
     if (headers['x-amz-signature']) {
       return true
     }
 
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
+    if (
+      [].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))
+    ) {
       return true
     }
   }
 
-  return options.path && options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
+  return (
+    options.path &&
+    options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
+  )
 }
 
 function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
-}
-
-function unpatch (http) {
-  this.unwrap(http, 'request')
-  this.unwrap(http, 'get')
+  return (value) => String(value).startsWith(searchString)
 }
 
 function getStatusValidator (config) {
@@ -292,7 +240,7 @@ function getStatusValidator (config) {
   } else if (config.hasOwnProperty('validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
-  return code => code < 400 || code >= 500
+  return (code) => code < 400 || code >= 500
 }
 
 function getFilter (tracer, config) {
@@ -315,7 +263,9 @@ function getAgentFilter (url) {
 function normalizeConfig (tracer, config) {
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(tracer, config)
-  const propagationFilter = getFilter(tracer, { blocklist: config.propagationBlocklist })
+  const propagationFilter = getFilter(tracer, {
+    blocklist: config.propagationBlocklist
+  })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
@@ -332,8 +282,8 @@ function getHeaders (config) {
   if (!Array.isArray(config.headers)) return []
 
   return config.headers
-    .filter(key => typeof key === 'string')
-    .map(key => key.toLowerCase())
+    .filter((key) => typeof key === 'string')
+    .map((key) => key.toLowerCase())
 }
 
 function getHooks (config) {
@@ -346,11 +296,9 @@ function getHooks (config) {
 module.exports = [
   {
     name: 'undici',
-    versions: ['>=4'],
-    file: 'lib/api/index.js',
-    patch: function (undici, tracer, config) {
-      patch.call(this, undici, 'request', tracer, config)
-    },
-    unpatch
+    versions: ['>=4.7.1-alpha'],
+    patch: function (_, tracer, config) {
+      this.unpatch = diagnostics.call(this, tracer, config)
+    }
   }
 ]
