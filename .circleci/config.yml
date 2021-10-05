@@ -627,7 +627,7 @@ jobs:
         environment:
           - PLUGINS=sharedb
 
-  node-undici: 
+  node-undici:
     <<: *node-plugin-base
     docker:
       - image: node:<< parameters.node-version >>
@@ -823,7 +823,7 @@ workflows:
       - node-router: *matrix-supported-node-versions
       - node-sharedb: *matrix-supported-node-versions
       - node-tedious: *matrix-supported-node-versions
-      - node-undici: 
+      - node-undici:
           matrix:
             parameters:
               node-version: ["14"]
