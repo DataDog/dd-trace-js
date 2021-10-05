@@ -9,7 +9,6 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const diagnosticsChannel = require('diagnostics_channel')
 
 const Reference = opentracing.Reference
 
@@ -56,6 +55,7 @@ function parseHeaders (headers) {
 }
 
 function diagnostics (tracer, config) {
+  const diagnosticsChannel = require('diagnostics_channel')
   config = normalizeConfig(tracer, config)
 
   const requestChannel = diagnosticsChannel.channel('undici:request:create')
