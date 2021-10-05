@@ -3,8 +3,6 @@
 const AbortController = require('abort-controller')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
-const fs = require('fs')
-const path = require('path')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 
@@ -133,7 +131,7 @@ describe('undici', () => {
         app.get('/user', (req, res) => res.status(200).send())
 
         appListener = server(app, port, () => {
-          const req = undici.request(url)
+          undici.request(url)
         })
 
         await agent.use(traces => {
@@ -158,8 +156,7 @@ describe('undici', () => {
             .catch(done)
 
           appListener = server(app, port, () => {
-            const req = undici.request(`http://localhost:${port}/user`)
-
+            undici.request(`http://localhost:${port}/user`)
           })
         })
       })
@@ -308,11 +305,10 @@ describe('undici', () => {
 
         getPort().then(port => {
           appListener = server(app, port, () => {
-            const req = undici.request(`http://localhost:${port}/user`, res => {
+            undici.request(`http://localhost:${port}/user`, res => {
               expect(tracer.scope().active()).to.be.null
               done()
             })
-
           })
         })
       })
@@ -329,7 +325,7 @@ describe('undici', () => {
 
         getPort().then(port => {
           appListener = server(app, port, () => {
-            const req = undici.request(`http://localhost:${port}/user`, res => {
+            undici.request(`http://localhost:${port}/user`, res => {
               done()
             })
           })
@@ -418,13 +414,13 @@ describe('undici', () => {
 
           appListener = server(app, port, () => {
             const client = new undici.Client(`http://localhost:${port}`)
-            const req = client.request({
+            client.request({
               path: '/user',
               method: 'GET'
             }, (err, data) => {
-              error = err;
+              error = err
             })
-            client.destroy();
+            client.destroy()
           })
         })
       })
@@ -444,8 +440,8 @@ describe('undici', () => {
             .catch(done)
 
           appListener = server(app, port, () => {
-            const abort = new AbortController();
-            undici.request(`http://localhost:${port}/user`,{
+            const abort = new AbortController()
+            undici.request(`http://localhost:${port}/user`, {
               signal: abort.signal
             })
             abort.abort()
@@ -471,7 +467,7 @@ describe('undici', () => {
           appListener = server(app, port, () => {
             undici.request(`http://localhost:${port}/user`, {
               bodyTimeout: 0,
-              headersTimeout: 0,
+              headersTimeout: 0
             })
           })
         })
@@ -494,7 +490,7 @@ describe('undici', () => {
 
           appListener = server(app, port, () => {
             const ac = new AbortController()
-            const req = undici.request(`http://localhost:${port}/abort`, { signal: ac.signal })
+            undici.request(`http://localhost:${port}/abort`, { signal: ac.signal })
 
             ac.abort()
           })
@@ -648,9 +644,7 @@ describe('undici', () => {
           })
       })
 
-
       describe('host header', () => {
-
         // TODO: Injected headers are not available yet
         // for request
         it('should add tags for the host header', done => {
@@ -694,12 +688,12 @@ describe('undici', () => {
               .catch(done)
 
             appListener = server(app, port, () => {
-                const client = new undici.Client(`http://localhost:${port}`)
+              const client = new undici.Client(`http://localhost:${port}`)
 
-                client.request({
-                  path: '/user',
-                  method: 'GET'
-                })
+              client.request({
+                path: '/user',
+                method: 'GET'
+              })
             })
           })
         })
@@ -724,7 +718,7 @@ describe('undici', () => {
             appListener = server(app, port, () => {
               undici.request(`http://localhost:${port}/user`, {
                 headers: {
-                  host: 'my-service',
+                  host: 'my-service'
                 }
               })
             })
@@ -773,7 +767,7 @@ describe('undici', () => {
 
           appListener = server(app, port, () => {
             undici.request(`http://localhost:${port}/user`, {
-              headers: {'x-foo': 'bar'}
+              headers: { 'x-foo': 'bar' }
             })
           })
         })
