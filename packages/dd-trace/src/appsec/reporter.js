@@ -141,9 +141,6 @@ function reportAttack ({
     context: {
       actor: {
         context_version: '0.1.0',
-        ip: {
-          address: resolvedHttp.remote_ip
-        },
         identifiers: null,
         _id: null
       },
