@@ -627,6 +627,11 @@ jobs:
         environment:
           - PLUGINS=sharedb
 
+  node-undici: 
+    <<: *node-plugin-base
+    docker:
+      - image: node:<< parameters.node-version >>
+
   node-when: *node-plugin-base
 
   node-winston: *node-plugin-base
@@ -818,6 +823,10 @@ workflows:
       - node-router: *matrix-supported-node-versions
       - node-sharedb: *matrix-supported-node-versions
       - node-tedious: *matrix-supported-node-versions
+      - node-undici: 
+          matrix:
+            parameters:
+              node-version: ["14"]
       - node-when: *matrix-supported-node-versions
       - node-winston: *matrix-supported-node-versions
       - codecov:
@@ -873,6 +882,7 @@ workflows:
             - node-router
             - node-sharedb
             - node-tedious
+            - node-undici
             - node-when
             - node-winston
   bench: &bench-jobs
