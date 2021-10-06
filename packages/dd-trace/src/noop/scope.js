@@ -20,4 +20,4 @@ class Scope {
   }
 }
 
-module.exports = new Scope()
+module.exports = Scope

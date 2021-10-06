@@ -3,7 +3,7 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const scopes = require('../../../ext/scopes')
-const scope = require('./scope')
+const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 
@@ -18,7 +18,7 @@ class DatadogTracer extends Tracer {
     super(config)
 
     this._scopeManager = getScopeManager(config)
-    this._scope = scope
+    this._scope = new Scope()
     setStartupLogConfig(config)
   }
 

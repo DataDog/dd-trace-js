@@ -12,9 +12,10 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    const store = span ? span._store : storage.getStore()
+    const oldStore = storage.getStore()
+    const newStore = span ? span._store : oldStore
 
-    storage.enterWith({ ...store, span })
+    storage.enterWith({ ...newStore, span })
 
     try {
       return callback()
@@ -25,7 +26,7 @@ class Scope {
 
       throw e
     } finally {
-      storage.enterWith(store)
+      storage.enterWith(oldStore)
     }
   }
 
@@ -217,4 +218,4 @@ function wrapMethod (target, name, wrapper, ...args) {
   target[name]._datadog_unbound = original
 }
 
-module.exports = new Scope()
+module.exports = Scope
