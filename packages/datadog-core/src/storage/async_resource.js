@@ -65,7 +65,7 @@ class AsyncResourceStorage {
   _init (asyncId, type, triggerAsyncId, resource) {
     const currentResource = this._executionAsyncResource()
 
-    if (currentResource.hasOwnProperty(this._ddResourceStore)) {
+    if (Object.prototype.hasOwnProperty.call(currentResource, this._ddResourceStore)) {
       resource[this._ddResourceStore] = currentResource[this._ddResourceStore]
     }
   }
