@@ -1,11 +1,11 @@
 
 const {
-  SCOPE_MANAGER,
+  DD_TRACE_SCOPE,
   COUNT
 } = process.env
 
-if (SCOPE_MANAGER) {
-  const Scope = require(`../../../packages/dd-trace/src/scope/${SCOPE_MANAGER}`)
+if (DD_TRACE_SCOPE) {
+  const Scope = require('../../../packages/dd-trace/src/scope')
   const scope = new Scope()
   if (scope.enable) {
     scope.enable()
