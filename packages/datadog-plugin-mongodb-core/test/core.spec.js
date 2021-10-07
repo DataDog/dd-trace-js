@@ -195,8 +195,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             server.insert(`test.${collection}`, [{ a: 1 }], {}, () => {
               expect(tracer.scope().active()).to.be.null
               done()
@@ -287,8 +285,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
               query: { a: 1 }

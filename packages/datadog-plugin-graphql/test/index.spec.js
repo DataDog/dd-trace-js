@@ -491,8 +491,6 @@ describe('Plugin', () => {
         })
 
         it('should run parsing, validation and execution in the current context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const source = `query MyQuery { hello(name: "world") }`
           const span = tracer.startSpan('test.request')
 
@@ -529,8 +527,6 @@ describe('Plugin', () => {
         })
 
         it('should run rootValue resolvers in the current context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -554,8 +550,6 @@ describe('Plugin', () => {
         })
 
         it('should run returned promise in the parent context', () => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -1149,8 +1143,6 @@ describe('Plugin', () => {
         })
 
         it('should run the resolvers in the execution scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const schema = graphql.buildSchema(`
             type Query {
               hello: String

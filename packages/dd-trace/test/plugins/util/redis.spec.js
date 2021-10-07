@@ -30,8 +30,6 @@ describe('plugins/util/redis', () => {
     })
 
     it('should use the parent from the scope', () => {
-      if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
       const parent = tracer.startSpan('parent')
 
       tracer.scope().activate(parent, () => {

@@ -44,8 +44,6 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           memcached = new Memcached('localhost:11211', { retries: 0 })
 
           const span = tracer.startSpan('web.request')

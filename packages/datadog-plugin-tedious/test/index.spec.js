@@ -72,7 +72,6 @@ describe('Plugin', () => {
       })
 
       it('should run the Request callback in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
         const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
           expect(tracer.scope().active()).to.equal(span)
@@ -85,7 +84,6 @@ describe('Plugin', () => {
       })
 
       it('should run the Request event listeners in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
         const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
           if (err) done(err)
@@ -101,7 +99,6 @@ describe('Plugin', () => {
       })
 
       it('should run the Connection event listeners in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
 
         tracer.scope().activate(span, () => {

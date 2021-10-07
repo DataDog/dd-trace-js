@@ -131,8 +131,6 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path when changing scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const { methods, mount, routes, send } = paperplane
 
           const endpoints = routes({
@@ -175,8 +173,6 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path without a scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const { methods, mount, routes, send } = paperplane
 
           const endpoints = routes({

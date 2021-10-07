@@ -103,8 +103,6 @@ describe('Plugin', () => {
         })
 
         it('should run middleware in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = new Koa()
 
           app.use((ctx, next) => {
@@ -128,8 +126,6 @@ describe('Plugin', () => {
         })
 
         it('should activate a scope per middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = new Koa()
 
           let span
@@ -608,8 +604,6 @@ describe('Plugin', () => {
           })
 
           it('should run middleware in the request scope', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             const app = new Koa()
 
             app.use((ctx, next) => {
@@ -633,8 +627,6 @@ describe('Plugin', () => {
           })
 
           it('should not activate a scope per middleware', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             const app = new Koa()
 
             let span

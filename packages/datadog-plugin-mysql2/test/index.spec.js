@@ -41,8 +41,6 @@ describe('Plugin', () => {
         })
 
         it('should propagate context to callbacks, with correct callback args', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
@@ -58,8 +56,6 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           connection.query('SELECT 1 + 1 AS solution', () => {
             expect(tracer.scope().active()).to.be.null
             done()
@@ -67,8 +63,6 @@ describe('Plugin', () => {
         })
 
         it('should run event listeners in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const query = connection.query('SELECT 1 + 1 AS solution')
 
           query.on('result', () => {
@@ -254,8 +248,6 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           pool.query('SELECT 1 + 1 AS solution', () => {
             expect(tracer.scope().active()).to.be.null
             done()
@@ -263,8 +255,6 @@ describe('Plugin', () => {
         })
 
         it('should propagate context to callbacks', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const span1 = tracer.startSpan('test1')
           const span2 = tracer.startSpan('test2')
 

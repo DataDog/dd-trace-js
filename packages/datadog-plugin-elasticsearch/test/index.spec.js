@@ -135,8 +135,6 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             agent
               .use(traces => {
                 expect(last(traces[0])).to.have.property('parent_id')
@@ -153,8 +151,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             client.ping(error => {
               expect(tracer.scope().active()).to.be.null
               done(error)
@@ -200,8 +196,6 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             agent
               .use(traces => {
                 expect(last(traces[0])).to.have.property('parent_id')

@@ -98,7 +98,6 @@ describe('Plugin', () => {
     })
     describe('mocha', () => {
       it('works with passing tests', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-test-pass.js')
         const testNames = [
           'mocha-test-pass can pass',
@@ -126,7 +125,6 @@ describe('Plugin', () => {
         mocha.run()
       })
       it('works with failing tests', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-test-fail.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
         agent
@@ -160,7 +158,6 @@ describe('Plugin', () => {
         mocha.run()
       })
       it('works with skipping tests', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-test-skip.js')
         const testNames = [
           'mocha-test-skip can skip',
@@ -227,7 +224,6 @@ describe('Plugin', () => {
       })
 
       it('works for parameterized tests', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-test-parameterized.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
         agent
@@ -258,7 +254,6 @@ describe('Plugin', () => {
       })
 
       it('works with integrations', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-test-integration.js')
 
         agent.use(trace => {
@@ -280,7 +275,6 @@ describe('Plugin', () => {
       })
 
       it('works with http integration', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-test-integration-http.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
@@ -310,7 +304,6 @@ describe('Plugin', () => {
       })
 
       it('works with sync errors in the hooks', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-fail-hook-sync.js')
 
         agent.use(traces => {
@@ -337,7 +330,6 @@ describe('Plugin', () => {
       })
 
       it('works with async errors in the hooks', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testFilePath = path.join(__dirname, 'mocha-fail-hook-async.js')
 
         agent.use(traces => {
@@ -357,7 +349,6 @@ Timeout of 100ms exceeded. For async tests and hooks, ensure "done()" is called;
       })
 
       it('works with async tests with done fail', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         // necessary because we run mocha within mocha and mocha adds a handler for uncaughtExceptions.
         // If we don't do this, the handler for the parent test (this test) will be called
         // first and not the one for mocha-test-done-fail-badly.js (test we are testing).

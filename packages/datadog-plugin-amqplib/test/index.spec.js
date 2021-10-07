@@ -187,8 +187,6 @@ describe('Plugin', () => {
             })
 
             it('should run the command callback in the parent context', done => {
-              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
               channel.assertQueue('', {}, (err, ok) => {
                 if (err) return done(err)
 
@@ -200,8 +198,6 @@ describe('Plugin', () => {
             })
 
             it('should run the delivery callback in the producer context', done => {
-              if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
               channel.assertQueue('', {}, (err, ok) => {
                 if (err) return done(err)
 
@@ -244,8 +240,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             channel.assertQueue('test', {})
               .then(() => {
                 expect(tracer.scope().active()).to.be.null

@@ -42,7 +42,6 @@ describe('Plugin', () => {
         })
 
         it('should run the Query callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.cb')
@@ -56,7 +55,6 @@ describe('Plugin', () => {
         })
 
         it('should run the Query event listener in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
@@ -72,7 +70,6 @@ describe('Plugin', () => {
         })
 
         it('should run the Bucket event listener in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
           bucket.disconnect()
           const span = tracer.startSpan('test')
 
@@ -87,7 +84,6 @@ describe('Plugin', () => {
         })
 
         it('should run any Bucket operations in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {

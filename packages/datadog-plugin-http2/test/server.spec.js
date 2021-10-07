@@ -84,8 +84,6 @@ describe('Plugin', () => {
         })
 
         it('should run the request listener in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app = (stream, headers) => {
             expect(tracer.scope().active()).to.not.be.null
             done()
@@ -132,8 +130,6 @@ describe('Plugin', () => {
         })
 
         it('should run the request listener in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app = (req, res) => {
             expect(tracer.scope().active()).to.not.be.null
             done()

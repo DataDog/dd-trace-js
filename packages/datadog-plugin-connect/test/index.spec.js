@@ -270,8 +270,6 @@ describe('Plugin', () => {
         })
 
         it('should activate a scope per middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = connect()
 
           let span
@@ -717,8 +715,6 @@ describe('Plugin', () => {
         })
 
         it('should not activate a scope per middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = connect()
 
           let span

@@ -453,8 +453,6 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -474,8 +472,6 @@ describe('Plugin', () => {
         })
 
         it('should run the event listeners in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
 
           app.get('/user', (req, res) => {

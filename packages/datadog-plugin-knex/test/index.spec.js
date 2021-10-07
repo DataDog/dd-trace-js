@@ -34,8 +34,6 @@ describe('Plugin', () => {
             })
         })
         it('should propagate context', () => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
           const span = {}
 
           return tracer.scope().activate(span, () => {

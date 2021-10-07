@@ -69,8 +69,6 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the callback', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             connection.execute(dbQuery, () => {
               expect(tracer.scope().active()).to.be.null
               done()
@@ -127,8 +125,6 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the callback', () => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
             return connection.execute(dbQuery).then(() => {
               expect(tracer.scope().active()).to.be.null
             })
