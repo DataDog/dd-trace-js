@@ -296,7 +296,7 @@ function getHooks (config) {
 module.exports = [
   {
     name: 'undici',
-    versions: ['>=4.7.0'], // FIXME: pending an undici release
+    versions: ['>=4.7.1'],
     patch: function (_, tracer, config) {
       this.unpatch = diagnostics.call(this, tracer, config)
     }
