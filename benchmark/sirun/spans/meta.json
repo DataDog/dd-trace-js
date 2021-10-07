@@ -6,11 +6,13 @@
   "variants": {
     "finish-immediately": {
       "env": {
+        "DD_TRACE_SCOPE": "noop",
         "FINISH": "now"
       }
     },
     "finish-later": {
       "env": {
+        "DD_TRACE_SCOPE": "noop",
         "FINISH": "later"
       }
     }

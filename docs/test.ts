@@ -79,7 +79,6 @@ tracer.init({
     foo: 'bar'
   },
   reportHostname: true,
-  scope: 'noop',
   logLevel: 'debug'
 });
 
