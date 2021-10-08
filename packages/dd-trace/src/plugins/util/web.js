@@ -181,7 +181,7 @@ const web = {
 
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const childOf = tracer.scope().active() || tracer.extract(FORMAT_HTTP_HEADERS, headers)
     const span = tracer.startSpan(name, { childOf })
 
     return span
