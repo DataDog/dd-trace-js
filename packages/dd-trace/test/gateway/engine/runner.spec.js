@@ -3,7 +3,7 @@
 const Runner = require('../../../src/gateway/engine/runner')
 const als = require('../../../src/gateway/als')
 
-describe('Gateway runner', () => {
+describe('Gateway Runner', () => {
   describe('runSubscriptions', () => {
     it('should return empty array when passed empty set', () => {
       const result = Runner.runSubscriptions(new Set(), {})

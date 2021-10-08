@@ -4,7 +4,7 @@ const Engine = require('../../../src/gateway/engine')
 const { SubscriptionManager, Context } = require('../../../src/gateway/engine/engine')
 const als = require('../../../src/gateway/als')
 
-describe('Gateway index', () => {
+describe('Gateway Index', () => {
   afterEach((cb) => {
     Engine.manager.clear()
     als.exit(cb)

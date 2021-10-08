@@ -14,8 +14,10 @@ function applyRules (rules) {
 }
 
 function clearAllRules () {
-  for (const [, callback] of appliedCallbacks) {
+  for (const [key, callback] of appliedCallbacks) {
     callback.clear()
+
+    appliedCallbacks.delete(key)
   }
 }
 
