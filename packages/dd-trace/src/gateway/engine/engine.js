@@ -93,7 +93,7 @@ class Context {
     this.newAddresses = []
   }
 
-  cleanup () {
+  clear () {
     this.store = new Map()
     this.allAddresses = new Set()
     this.newAddresses = []
