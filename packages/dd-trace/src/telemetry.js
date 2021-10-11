@@ -90,10 +90,24 @@ function createHostObject () {
 function sendData (reqType, payload = {}) {
   const {
     hostname,
-    port
+    port,
+    DD_API_KEY
   } = config
+
+  const headers = {
+    'content-type': 'application/json',
+    'dd-telemetry-api-version': 'v1',
+    'dd-telemetry-request-type': reqType
+  }
+
+  let backendUrlPath = 'api/v2/apmtelemetry'
+  if (!!DD_API_KEY) {
+    backendUrlPath = 'telemetry/proxy/api/v2/apmtelemetry'
+  } else {
+    headers['dd-api-key'] = DD_API_KEY
+  }
   const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-  const backendUrl = `https://${backendHost}/api/v2/apmtelemetry`
+  const backendUrl = `https://${backendHost}/${backendUrlPath}`
   const req = http.request({
     hostname,
     port,
@@ -101,9 +115,7 @@ function sendData (reqType, payload = {}) {
     path: backendUrl,
     headers: {
       host: backendHost,
-      'content-type': 'application/json',
-      'dd-telemetry-api-version': 'v1',
-      'dd-telemetry-request-type': reqType
+      ...headers
     }
   })
   req.on('error', () => {}) // Ignore errors
