@@ -379,6 +379,44 @@ Timeout of 100ms exceeded. For async tests and hooks, ensure "done()" is called;
         mocha.addFile(testFilePath)
         mocha.run()
       })
+
+      it('works with retries', (done) => {
+        const testFilePath = path.join(__dirname, 'mocha-test-retries.js')
+
+        let numTestSpans = 0
+
+        // Handler that always fails to be run for every trace that is generated.
+        // This way, the number of test spans is counted.
+        agent.use(trace => {
+          const testSpan = trace[0][0]
+          if (testSpan.type === 'test') {
+            numTestSpans++
+          }
+          expect(true).to.equal(false)
+        })
+
+        const assertionPromises = ['fail', 'pass'].map((testStatus, index) => {
+          return agent.use(trace => {
+            const testSpan = trace[0][0]
+            // expect(testSpan.meta.attempt).to.equal(`${index}`)
+            expect(testSpan.meta[TEST_STATUS]).to.equal(testStatus)
+          })
+        })
+
+        Promise.all(assertionPromises)
+          .then(() => {
+            // it will fail twice and pass at the third time
+            expect(numTestSpans).to.equal(3)
+            done()
+          })
+          .catch(done)
+
+        const mocha = new Mocha({
+          reporter: function () {} // silent on internal tests
+        })
+        mocha.addFile(testFilePath)
+        mocha.run()
+      })
     })
   })
 })
