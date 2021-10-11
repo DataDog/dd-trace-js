@@ -61,14 +61,9 @@ describe('Gateway Index', () => {
       Engine.propagate({ 'a': 1, 'b': 2 })
 
       expect(context.setValue).to.have.been.calledTwice
+      expect(context.setValue.firstCall).to.have.been.calledWith('a', 1)
+      expect(context.setValue.secondCall).to.have.been.calledWith('b', 2)
       expect(context.dispatch).to.have.been.calledOnce
-
-      const calls = context.setValue.getCalls().map((call) => call.args)
-
-      expect(calls).to.deep.equal([
-        ['a', 1],
-        ['b', 2]
-      ])
     })
 
     it('should propagate to a passed context', () => {

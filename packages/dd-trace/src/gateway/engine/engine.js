@@ -40,7 +40,7 @@ class SubscriptionManager {
   matchSubscriptions (newAddresses, allAddresses) {
     const addresses = new Set()
     const subscriptions = new Set()
-    const knowSubscriptions = new Set()
+    const knownSubscriptions = new Set()
 
     // TODO: possible optimization: collect matchedSubscriptions on the fly in Context#setValue
     for (let i = 0; i < newAddresses.length; ++i) {
@@ -51,8 +51,8 @@ class SubscriptionManager {
       for (let j = 0; j < matchedSubscriptions.length; ++j) {
         const subscription = matchedSubscriptions[j]
 
-        if (knowSubscriptions.has(subscription) === true) continue
-        knowSubscriptions.add(subscription)
+        if (knownSubscriptions.has(subscription) === true) continue
+        knownSubscriptions.add(subscription)
 
         const isFullfiled = subscription.addresses.every(allAddresses.has, allAddresses)
 
@@ -71,6 +71,9 @@ class SubscriptionManager {
 
   dispatch (newAddresses, allAddresses, context) {
     const { addresses, subscriptions } = this.matchSubscriptions(newAddresses, allAddresses)
+
+    // TODO: possible optimization
+    // if(!subscriptions.size) return []
 
     const params = {}
 
