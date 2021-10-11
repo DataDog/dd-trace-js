@@ -1,6 +1,6 @@
 'use strict'
 
-const { runSubscriptions } = require('./runner')
+const Runner = require('./runner')
 
 const MAX_CONTEXT_SIZE = 1024
 
@@ -81,7 +81,7 @@ class SubscriptionManager {
       params[address] = context.resolve(address)
     })
 
-    return runSubscriptions(subscriptions, params)
+    return Runner.runSubscriptions(subscriptions, params)
   }
 }
 

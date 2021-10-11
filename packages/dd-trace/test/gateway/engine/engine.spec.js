@@ -1,12 +1,165 @@
 'use strict'
 
 const { SubscriptionManager, Context } = require('../../../src/gateway/engine/engine')
+const Runner = require('../../../src/gateway/engine/runner')
 
 describe('Gateway Engine', () => {
   let manager
 
   beforeEach(() => {
     manager = new SubscriptionManager()
+  })
+
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  describe('SubscriptionManager', () => {
+    describe('clear', () => {
+      it('should reset the manager', () => {
+        manager.addSubscription({ addresses: ['a', 'b'] })
+
+        manager.clear()
+
+        expect(manager).to.deep.equal(new SubscriptionManager())
+      })
+    })
+
+    describe('addSubscription', () => {
+      it('should not do anything when passed no addresses', () => {
+        manager.addSubscription({ addresses: [] })
+
+        expect(manager.addresses).to.be.empty
+      })
+
+      it('should not do anything when passed a known subscription', () => {
+        sinon.spy(manager.subscriptions, 'add')
+
+        const subscription = { addresses: ['a', 'b', 'c'] }
+
+        manager.addSubscription(subscription)
+
+        expect(manager.subscriptions.add).to.have.been.calledOnce
+
+        manager.addSubscription(subscription)
+
+        expect(manager.subscriptions.add).to.have.been.calledOnce
+      })
+
+      it('should add subscription', () => {
+        const subscription = { addresses: ['a', 'b', 'c'] }
+        manager.addSubscription(subscription)
+
+        expect(manager.addresses).to.have.all.keys('a', 'b', 'c')
+        expect(manager.addressToSubscriptions.get('a')).to.include(subscription)
+        expect(manager.addressToSubscriptions.get('b')).to.include(subscription)
+        expect(manager.addressToSubscriptions.get('c')).to.include(subscription)
+        expect(manager.subscriptions).to.include(subscription)
+      })
+
+      it('should add subscription when passed a known address', () => {
+        const firstSub = { addresses: ['a', 'b'] }
+        manager.addSubscription(firstSub)
+
+        const secondSub = { addresses: ['b', 'c'] }
+        manager.addSubscription(secondSub)
+
+        expect(manager.addresses).to.have.all.keys('a', 'b', 'c')
+        expect(manager.addressToSubscriptions.get('b')).to.have.members([firstSub, secondSub])
+        expect(manager.subscriptions).to.have.all.keys(firstSub, secondSub)
+      })
+    })
+
+    describe('matchSubscriptions', () => {
+      it('should not match unknown newAddress', () => {
+        const allAddresses = new Set(['unknown_newAddress'])
+        sinon.spy(allAddresses, 'has')
+
+        const result = manager.matchSubscriptions(['unknown_newAddress'], allAddresses)
+
+        expect(result.addresses).to.be.empty
+        expect(result.subscriptions).to.be.empty
+        expect(allAddresses.has).to.not.have.been.called
+      })
+
+      it('should not match a subscription twice', () => {
+        const subscription = { addresses: ['a', 'b'] }
+
+        manager.addSubscription(subscription)
+
+        const allAddresses = new Set(['a', 'b'])
+        sinon.spy(allAddresses, 'has')
+
+        const result = manager.matchSubscriptions(['a', 'b'], allAddresses)
+
+        expect(result.subscriptions).to.have.all.keys(subscription)
+        expect(allAddresses.has).to.have.been.calledTwice
+        expect(allAddresses.has.firstCall).to.have.been.calledWith('a')
+        expect(allAddresses.has.secondCall).to.have.been.calledWith('b')
+      })
+
+      it('should match subscriptions', () => {
+        const firstSub = { addresses: ['a', 'b'] }
+        manager.addSubscription(firstSub)
+
+        const secondSub = { addresses: ['d'] }
+        manager.addSubscription(secondSub)
+
+        const thirdSub = { addresses: ['a', 'c'] }
+        manager.addSubscription(thirdSub)
+
+        const result = manager.matchSubscriptions(['a', 'c'], new Set(['a', 'b', 'c', 'd']))
+
+        expect(result.addresses).to.have.all.keys('a', 'b', 'c')
+        expect(result.subscriptions).to.have.all.keys(firstSub, thirdSub)
+      })
+
+      it('should not match unfullfiled subscription', () => {
+        const firstSub = { addresses: ['a', 'b'] }
+        manager.addSubscription(firstSub)
+
+        const secondSub = { addresses: ['a', 'd'] }
+        manager.addSubscription(secondSub)
+
+        const thirdSub = { addresses: ['a', 'c'] }
+        manager.addSubscription(thirdSub)
+
+        const result = manager.matchSubscriptions(['a', 'c'], new Set(['a', 'b', 'c']))
+
+        expect(result.addresses).to.have.all.keys('a', 'b', 'c')
+        expect(result.subscriptions).to.have.all.keys(firstSub, thirdSub)
+      })
+    })
+
+    describe('dispatch', () => {
+      it('should call matchSubscriptions then call runSubscriptions with resolved params', () => {
+        const context = new Context()
+        context.setMultipleValues({
+          a: 1,
+          b: 2,
+          c: 3
+        })
+
+        const addresses = new Set(['a', 'c'])
+
+        const subscriptions = new Set([
+          { addresses: ['a'] },
+          { addresses: ['c'] }
+        ])
+
+        sinon.stub(manager, 'matchSubscriptions').returns({ addresses, subscriptions })
+        sinon.stub(Runner, 'runSubscriptions').returns('result')
+
+        const result = manager.dispatch(context.newAddresses, context.allAddresses, context)
+
+        expect(result).to.equal('result')
+        expect(manager.matchSubscriptions).to.have.been.calledOnceWithExactly(
+          context.newAddresses,
+          context.allAddresses
+        )
+        expect(Runner.runSubscriptions).to.have.been.calledOnceWithExactly(subscriptions, { a: 1, c: 3 })
+      })
+    })
   })
 
   describe('Context', () => {
@@ -23,9 +176,7 @@ describe('Gateway Engine', () => {
 
         context.clear()
 
-        const result = context.resolve('address')
-
-        expect(result).to.be.undefined
+        expect(context).to.deep.equal(new Context())
       })
     })
 
