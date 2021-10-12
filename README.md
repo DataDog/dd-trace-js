@@ -23,12 +23,20 @@ Before contributing to this open source project, read our [CONTRIBUTING.md](http
 
 ### Requirements
 
-Since this project supports multiple Node versions, using a version
-manager such as [nvm](https://github.com/creationix/nvm) is recommended.
+The tests can be run using the system node or by using the provided `dev` container.
 
-We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
+- To use the system Node it is recommended to use [nvm](https://github.com/creationix/nvm)
+  to manage multiple Node versions.
 
-To get started once you have Node and yarn installed, run:
+- To use the `dev` container provided run and proceed with the rest of the instructions:
+
+```sh
+$ docker-compose run dev
+```
+
+
+Once Node is installed or the dev docker container has been started run
+[yarn](https://yarnpkg.com/):
 
 ```sh
 $ yarn
@@ -57,6 +65,16 @@ To run the unit tests continuously in watch mode while developing, use:
 ```sh
 $ yarn tdd
 ```
+
+#### Plugin Tests
+
+Plugin tests can be run with:
+
+```sh
+PLUGINS=<plugin1>,<plugin2>,... yarn test:plugins:ci
+```
+
+Be sure to `docker-compose up` any services that might be required for the plugin.
 
 #### Memory Leaks
 

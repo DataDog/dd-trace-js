@@ -122,3 +122,10 @@ services:
       KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
       KAFKA_CREATE_TOPICS: "test-topic:1:1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  dev:
+    image: node:latest
+    command: bash
+    network_mode: host
+    working_dir: /src
+    volumes:
+      - ./:/src
