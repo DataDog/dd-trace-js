@@ -99,15 +99,18 @@ function sendData (reqType, payload = {}) {
     'dd-telemetry-api-version': 'v1',
     'dd-telemetry-request-type': reqType
   }
-
+  const backendHost = 'tracer-telemetry-edge.datadoghq.com'
+  let backendProtocol = 'https'
   let backendUrlPath = 'api/v2/apmtelemetry'
+
   if (!!DD_API_KEY) {
-    backendUrlPath = 'telemetry/proxy/api/v2/apmtelemetry'
+    backendProtocol = 'http'
+    backendUrlPath = 'telemetry/proxy/' + backendUrlPath
   } else {
     headers['dd-api-key'] = DD_API_KEY
   }
-  const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-  const backendUrl = `https://${backendHost}/${backendUrlPath}`
+  let backendUrl = `${backendProtocol}://${backendHost}/${backendUrlPath}`
+
   const req = http.request({
     hostname,
     port,
