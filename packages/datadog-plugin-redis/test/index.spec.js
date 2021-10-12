@@ -1,9 +1,16 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const axios = require('axios')
 const plugin = require('../src')
 
 wrapIt()
+
+function testNameToToken(s) {
+  s = s.toLowerCase().replace(/ /g, "_")
+  return s
+}
+
 
 describe('Plugin', () => {
   let redis
@@ -12,16 +19,17 @@ describe('Plugin', () => {
   let pub
   let sub
 
-  describe('redis', () => {
-    withVersions(plugin, 'redis', version => {
-      beforeEach(() => {
+  /*
+  describe('redis', function () {
+    withVersions(plugin, 'redis', function (version) {
+      beforeEach(function () {
         tracer = require('../../dd-trace')
       })
 
       afterEach(() => {
-        client.quit(() => {})
-        pub.quit(() => {})
-        sub.quit(() => {})
+        client.quit(() => { })
+        pub.quit(() => { })
+        sub.quit(() => { })
       })
 
       describe('without configuration', () => {
@@ -59,7 +67,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          client.get('foo', () => {})
+          client.get('foo', () => { })
         })
 
         it('should support commands without a callback', done => {
@@ -155,12 +163,12 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          client.get('foo', () => {})
+          client.get('foo', () => { })
           client.on('error', done)
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.use(() => { }) // wait for initial command
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -168,7 +176,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          client.get('foo', () => {})
+          client.get('foo', () => { })
         })
       })
 
@@ -189,7 +197,7 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.use(() => { }) // wait for initial command
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -197,8 +205,50 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          client.get('foo', () => {})
+          client.get('foo', () => { })
         })
+      })
+    })
+  })
+  */
+
+  describe('redis-snapshot', function () {
+    var redis
+    var tracer
+    var client
+    withVersions(plugin, 'redis', function (version) {
+      beforeEach(async function () {
+        redis = require(`../../../versions/redis@${version}`).get()
+        client = redis.createClient()
+        tracer = require('../../dd-trace')
+        tracer.init({
+          port: 9126,
+          plugins: false,
+        })
+        tracer.use("redis", {
+          service: 'custom',
+          allowlist: ['get'],
+        })
+        const token = testNameToToken(this.test.fullTitle())
+        const resp = await axios.get(`http://localhost:9126/test/session/start?test_session_token=${token}`)
+        expect(resp.status).to.equal(200)
+      })
+
+      afterEach(async function () {
+        const token = testNameToToken(this.test.fullTitle())
+        let resp = await axios.get(`http://localhost:9126/test/session/snapshot?test_session_token=${token}`)
+        if (resp.status != 200) {
+          console.log(resp.data)
+        }
+        expect(resp.status).to.equal(200)
+        resp = await axios.get(`http://localhost:9126/test/session/clear?test_session_token=${token}`)
+        expect(resp.status).to.equal(200)
+        await client.quit()
+        agent.wipe()
+      })
+
+      it('get', function (done) {
+        client.get('foo', () => { done() })
       })
     })
   })

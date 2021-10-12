@@ -122,3 +122,21 @@ services:
       KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
       KAFKA_CREATE_TOPICS: "test-topic:1:1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  testagent:
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    ports:
+      # Route to 9126 to avoid conflicts with the default agent port
+      - "127.0.0.1:9126:8126"
+    environment:
+      - LOG_LEVEL=INFO
+      - SNAPSHOT_DIR=/snapshots
+      - SNAPSHOT_CI
+    volumes:
+      - ./tests/snapshots:/snapshots
+  dev:
+    image: node:latest
+    command: bash
+    network_mode: host
+    working_dir: /src
+    volumes:
+      - ./:/src

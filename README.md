@@ -26,6 +26,12 @@ Before contributing to this open source project, read our [CONTRIBUTING.md](http
 Since this project supports multiple Node versions, using a version
 manager such as [nvm](https://github.com/creationix/nvm) is recommended.
 
+Development can also be done with the docker container::
+
+```sh
+$ docker-compose run dev
+```
+
 We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
 
 To get started once you have Node and yarn installed, run:
