@@ -163,11 +163,21 @@ describe('Gateway Engine', () => {
   })
 
   describe('Context', () => {
+    let oldManager
     let context
+
+    before(() => {
+      oldManager = Context.manager
+    })
 
     beforeEach(() => {
       context = new Context()
       Context.setManager(manager)
+    })
+
+    // restore manager set in singleton
+    after(() => {
+      Context.setManager(oldManager)
     })
 
     describe('clear', () => {
