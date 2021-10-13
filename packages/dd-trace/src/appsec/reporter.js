@@ -103,90 +103,28 @@ function getTracerData () {
   return result
 }
 
-function reportAttack ({
-  eventType,
-  blocked,
+function formatAttack ({
   ruleId,
   ruleName,
-  ruleSet,
+  ruleTags,
   matchOperator,
   matchOperatorValue,
   matchParameters,
   matchHighlight
 }) {
-  if (events.size > MAX_EVENT_BACKLOG) return
-
-  const resolvedHttp = resolveHTTPAddresses()
-
-  const { spanId, traceId, serviceName, serviceEnv, serviceVersion, tags } = getTracerData()
-
-  const event = {
-    event_id: uuid(),
-    event_type: eventType,
-    event_version: '0.1.0',
-    detected_at: (new Date()).toJSON(),
-    type: ruleSet,
-    blocked,
+  return {
     rule: {
       id: ruleId,
       name: ruleName,
-      set: ruleSet
+      tags: ruleTags
     },
     rule_match: {
       operator: matchOperator,
       operator_value: matchOperatorValue,
       parameters: matchParameters,
       highlight: matchHighlight
-    },
-    context: {
-      actor: {
-        context_version: '0.1.0',
-        identifiers: null,
-        _id: null
-      },
-      host,
-      http: {
-        context_version: '0.1.0',
-        request: {
-          scheme: resolvedHttp.scheme,
-          method: resolvedHttp.method,
-          url: resolvedHttp.url,
-          host: resolvedHttp.host,
-          port: resolvedHttp.port,
-          path: resolvedHttp.path,
-          resource: resolvedHttp.route,
-          remote_ip: resolvedHttp.remote_ip,
-          remote_port: resolvedHttp.remote_port,
-          headers: getHeadersToSend(resolvedHttp.headers)
-        },
-        response: {
-          status: resolvedHttp.responseCode,
-          blocked
-        }
-      },
-      service: {
-        context_version: '0.1.0',
-        name: serviceName,
-        environment: serviceEnv,
-        version: serviceVersion
-      },
-      span: {
-        context_version: '0.1.0',
-        id: spanId
-      },
-      tags: {
-        context_version: '0.1.0',
-        values: tags
-      },
-      trace: {
-        context_version: '0.1.0',
-        id: traceId
-      },
-      tracer
     }
   }
-
-  events.add(event)
 }
 
 // TODO: lock
@@ -239,5 +177,5 @@ scheduler.start()
 
 module.exports = {
   scheduler,
-  reportAttack
+  formatAttack
 }

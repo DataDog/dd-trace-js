@@ -33,6 +33,7 @@ class WAFCallback {
     this.ddwaf = WAFCallback.loadDDWAF(rules)
     this.wafContextCache = new WeakMap()
     this.ruleNames = new Map()
+    this.ruleTags = new Map()
 
     // closures are faster than binds
     const self = this
@@ -48,6 +49,7 @@ class WAFCallback {
 
     for (const rule of rules.events) {
       this.ruleNames.set(rule.id, rule.name)
+      this.ruleTags.set(rule.id, rule.tags)
 
       for (const condition of rule.conditions) {
         let addresses = condition.parameters.inputs.map((address) => address.split(':', 2)[0])
@@ -93,26 +95,28 @@ class WAFCallback {
     try {
       const result = wafContext.run(params, DEFAULT_MAX_BUDGET)
 
-      return this.applyResult(result)
+      return { triggers: this.applyResult(result) }
     } catch (err) {
       log.warn('Error while running the AppSec WAF')
+      return {}
     }
   }
 
   applyResult (result) {
+    const triggers = []
+
     if (result.action) {
       const data = JSON.parse(result.data)
+
 
       for (let i = 0; i < data.length; ++i) {
         const point = data[i]
         const match = point.filter[0]
 
-        Reporter.reportAttack({
-          eventType: 'appsec.threat.attack',
-          blocked: false,
+        const formattedAttack = Reporter.formatAttack({
           ruleId: point.rule,
           ruleName: this.ruleNames.get(point.rule),
-          ruleSet: point.flow,
+          ruleTags: this.ruleTags.get(point.rule),
           matchOperator: match.operator,
           matchOperatorValue: match.operator_value,
           matchParameters: [{
@@ -123,9 +127,10 @@ class WAFCallback {
             match.match_status
           ]
         })
+        triggers.push(formattedAttack)
       }
     }
-
+    return triggers
     // result.perfData
     // result.perfTotalRuntime
   }

@@ -94,6 +94,7 @@ class Context {
     this.store = new Map()
     this.allAddresses = new Set()
     this.newAddresses = []
+    this.triggers = []
   }
 
   clear () {
@@ -133,6 +134,12 @@ class Context {
     if (this.newAddresses.length === 0) return []
 
     const result = Context.manager.dispatch(this.newAddresses, this.allAddresses, this)
+
+    for (const { triggers } of result) {
+      if (triggers) {
+        this.triggers.push(...triggers)
+      }
+    }
 
     this.newAddresses = []
 

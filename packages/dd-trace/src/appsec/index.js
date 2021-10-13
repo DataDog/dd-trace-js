@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const { INCOMING_HTTP_REQUEST_START } = require('../gateway/channels')
+const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
 const Gateway = require('../gateway/engine/index')
 const Addresses = require('./addresses')
 
@@ -18,6 +18,7 @@ function enable (config) {
     RuleManager.applyRules(rules)
 
     INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
+    INCOMING_HTTP_REQUEST_END.subscribe(notifyIncomingHttpEnd)
 
     config.tags['_dd.appsec.enabled'] = 1
     config.tags['_dd.runtime_family'] = 'nodejs'
@@ -31,6 +32,15 @@ function enable (config) {
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
   }
+}
+
+function notifyIncomingHttpEnd ({ req }) {
+  const context = Gateway.getContext()
+  if (context.triggers.length === 0) return
+  const topSpan = req._datadog.span
+  topSpan.setTag('_dd.appsec.json', JSON.stringify({ triggers: context.triggers }))
+  // we now write extra info about the HTTP request in the spans
+  // TODO(@vdeturckheim) add HTTP request info on the top span
 }
 
 function incomingHttpTranslator (data) {
