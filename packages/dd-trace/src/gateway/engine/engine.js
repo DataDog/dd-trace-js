@@ -54,9 +54,9 @@ class SubscriptionManager {
         if (knownSubscriptions.has(subscription) === true) continue
         knownSubscriptions.add(subscription)
 
-        const isFullfiled = subscription.addresses.every(allAddresses.has, allAddresses)
+        const isFulfilled = subscription.addresses.every(allAddresses.has, allAddresses)
 
-        if (isFullfiled === true) {
+        if (isFulfilled === true) {
           for (let k = 0; k < subscription.addresses.length; ++k) {
             addresses.add(subscription.addresses[k])
           }
