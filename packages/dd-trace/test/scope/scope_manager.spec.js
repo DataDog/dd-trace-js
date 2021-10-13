@@ -1,14 +1,12 @@
 'use strict'
 
+const ScopeManager = require('../../src/scope/noop/scope_manager')
 const Scope = require('../../src/scope/noop/scope')
 
 describe('ScopeManager', () => {
-  let ScopeManager
   let scopeManager
 
   beforeEach(() => {
-    ScopeManager = require('../../src/scope/scope_manager')
-
     scopeManager = new ScopeManager()
   })
 

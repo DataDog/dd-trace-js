@@ -70,7 +70,6 @@ function startupLog ({ agentError } = {}) {
   out.lang_version = process.versions.node
   out.env = config.env
   out.enabled = config.enabled
-  out.scope_manager = config.scope
   out.service = config.service
   out.agent_url = url
   if (agentError) {
