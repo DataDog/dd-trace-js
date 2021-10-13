@@ -55,7 +55,13 @@ function parseHeaders (headers) {
 }
 
 function diagnostics (tracer, config) {
-  const diagnosticsChannel = require('diagnostics_channel')
+  let diagnosticsChannel
+  try {
+    diagnosticsChannel = require('diagnostics_channel')
+  } catch (e) {
+    log.error("Unable to configure undici, cannot require 'diagnostics_channel'")
+    return () => {}
+  }
   config = normalizeConfig(tracer, config)
 
   const requestChannel = diagnosticsChannel.channel('undici:request:create')
