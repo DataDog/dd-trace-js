@@ -26,11 +26,11 @@ module.exports = ({ Assertion, expect }) => {
     expect(obj.timeNanos).to.be.a.long
     expect(obj.period).to.be.a.long
     expect(obj.periodType).to.be.a.valueType
-    expect(obj.sampleType).to.be.an('array').and.have.length.at.least(1)
-    expect(obj.sample).to.be.an('array').and.have.length.at.least(1)
-    expect(obj.location).to.be.an('array').and.have.length.at.least(1)
-    expect(obj.function).to.be.an('array').and.have.length.at.least(1)
-    expect(obj.stringTable).to.be.an('array')
+    expect(obj.sampleType).to.be.an('array').and.have.length(2)
+    expect(obj.sample).to.be.an('array')
+    expect(obj.location).to.be.an('array')
+    expect(obj.function).to.be.an('array')
+    expect(obj.stringTable).to.be.an('array').and.have.length.at.least(1)
     expect(obj.stringTable[0]).to.equal('')
 
     for (const sampleType of obj.sampleType) {
