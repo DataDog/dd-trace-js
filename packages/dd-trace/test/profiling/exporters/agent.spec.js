@@ -6,6 +6,7 @@ const upload = require('multer')()
 const os = require('os')
 const path = require('path')
 const getPort = require('get-port')
+const proxyquire = require('proxyquire')
 const { gunzipSync } = require('zlib')
 const CpuProfiler = require('../../../src/profiling/profilers/cpu')
 const HeapProfiler = require('../../../src/profiling/profilers/heap')
@@ -53,9 +54,17 @@ describe('exporters/agent', () => {
   let url
   let listener
   let app
+  let docker
 
   beforeEach(() => {
-    AgentExporter = require('../../../src/profiling/exporters/agent').AgentExporter
+    docker = {
+      id () {
+        return 'container-id'
+      }
+    }
+    AgentExporter = proxyquire('../../../src/profiling/exporters/agent', {
+      '../../exporters/agent/docker': docker
+    }).AgentExporter
     sockets = []
     app = express()
   })
@@ -96,6 +105,7 @@ describe('exporters/agent', () => {
       await new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
+            expect(req.headers).to.have.property('datadog-container-id', docker.id())
             expect(req.body).to.have.property('language', 'javascript')
             expect(req.body).to.have.property('runtime', 'nodejs')
             expect(req.body).to.have.property('runtime_version', process.version)
