@@ -114,7 +114,7 @@ describe('Gateway Engine', () => {
         expect(result.subscriptions).to.have.all.keys(firstSub, thirdSub)
       })
 
-      it('should not match unfullfiled subscription', () => {
+      it('should not match unfulfilled subscription', () => {
         const firstSub = { addresses: ['a', 'b'] }
         manager.addSubscription(firstSub)
 

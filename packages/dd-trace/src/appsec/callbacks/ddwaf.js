@@ -44,7 +44,6 @@ class WAFCallback {
     // might be its own class with more info later
     const callback = { method }
 
-    this.subscriptions = []
     const subscriptionGroups = new Set()
 
     for (const rule of rules.events) {
@@ -64,10 +63,9 @@ class WAFCallback {
         const hash = addresses.sort().join(',')
 
         if (subscriptionGroups.has(hash)) continue
-
         subscriptionGroups.add(hash)
-        const subscription = Gateway.manager.addSubscription({ addresses, callback })
-        this.subscriptions.push(subscription)
+
+        Gateway.manager.addSubscription({ addresses, callback })
       }
     }
   }
