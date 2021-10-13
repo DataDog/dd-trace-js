@@ -23,19 +23,26 @@ Before contributing to this open source project, read our [CONTRIBUTING.md](http
 
 ### Requirements
 
-The tests can be run using the system node or by using the provided `dev` container.
+The tests can be run using locally installed versions of Node or by using the
+provided `dev` container if installing or managing Node locally is not desired.
 
-- To use the system Node it is recommended to use [nvm](https://github.com/creationix/nvm)
-  to manage multiple Node versions.
+It is recommended to use [nvm](https://github.com/creationix/nvm) to manage
+multiple Node versions.
 
-- To use the `dev` container provided run and proceed with the rest of the instructions:
+#### Working in the `dev` container
+
+To get started in the `dev` container run:
 
 ```sh
 $ docker-compose run dev
 ```
 
+which will load a bash shell with Node available. All Node/yarn commands can now
+be run in the container.
 
-Once Node is installed or the dev docker container has been started run
+### Install
+
+Once Node is installed or the `dev` docker container has been started run
 [yarn](https://yarnpkg.com/):
 
 ```sh
@@ -68,13 +75,21 @@ $ yarn tdd
 
 #### Plugin Tests
 
-Plugin tests can be run with:
+First, be sure to `docker-compose up` the services that might be required for
+the plugin.
+
+The plugin tests can then be run with:
 
 ```sh
 PLUGINS=<plugin1>,<plugin2>,... yarn test:plugins:ci
 ```
 
-Be sure to `docker-compose up` any services that might be required for the plugin.
+If the plugin requires additional services then make sure they are specified
+as well. For example:
+
+```sh
+SERVICES=qpid PLUGINS=rhea yarn test:plugins:ci
+```
 
 #### Memory Leaks
 
