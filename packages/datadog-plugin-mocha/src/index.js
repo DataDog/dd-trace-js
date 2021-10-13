@@ -40,6 +40,12 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
 function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTest (runTest) {
     return async function runTestWithTrace () {
+      // `runTest` is rerun when retries are configured through `this.retries` and the test fails.
+      // This clause prevents rewrapping `this.test.fn` when it has already been wrapped.
+      if (this.test._currentRetry !== undefined && this.test._currentRetry !== 0) {
+        return runTest.apply(this, arguments)
+      }
+
       let specFunction = this.test.fn
       if (specFunction.length) {
         specFunction = promisify(specFunction)
