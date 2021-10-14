@@ -128,7 +128,10 @@ function getTestParentSpan (tracer) {
  */
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
-    return testSuiteAbsolutePath
+    return sourceRoot
   }
-  return path.relative(sourceRoot, testSuiteAbsolutePath).replace(path.sep, '/')
+  const testSuitePath = testSuiteAbsolutePath === sourceRoot
+    ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
+
+  return testSuitePath.replace(path.sep, '/')
 }
