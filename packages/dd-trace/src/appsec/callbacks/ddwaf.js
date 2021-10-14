@@ -38,7 +38,7 @@ class WAFCallback {
     // closures are faster than binds
     const self = this
     const method = (params, store) => {
-      self.action(params, store)
+      return self.action(params, store)
     }
 
     // might be its own class with more info later
