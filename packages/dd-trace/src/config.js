@@ -128,6 +128,10 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
       false
     )
+    const DD_API_KEY = coalesce(
+      process.env.DD_API_KEY,
+      null
+    )
     // TODO(simon-id): add documentation for appsec config when we release it in public beta
     const DD_APPSEC_ENABLED = coalesce(
       options.experimental && options.experimental.appsec,
@@ -161,6 +165,7 @@ class Config {
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
+    this.apiKey = DD_API_KEY
     this.serviceMapping = DD_SERVICE_MAPPING.length ? fromEntries(
       DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
     ) : {}

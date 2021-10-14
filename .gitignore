@@ -117,3 +117,4 @@ acmeair-nodejs
 !packages/*/test/**/dist
 !packages/*/test/**/node_modules
 test-results.xml
+/.idea/

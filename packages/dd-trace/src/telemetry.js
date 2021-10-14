@@ -91,23 +91,27 @@ function sendData (reqType, payload = {}) {
   const {
     hostname,
     port,
-    DD_API_KEY
+    apiKey
   } = config
 
+
+  let backendHost = 'tracer-telemetry-edge.datadoghq.com'
+  let backendUrlPath = 'api/v2/apmtelemetry'
+  let backendProtocol = 'https'
   const headers = {
+    host: backendHost,
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v1',
     'dd-telemetry-request-type': reqType
   }
-  const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-  let backendProtocol = 'https'
-  let backendUrlPath = 'api/v2/apmtelemetry'
 
-  if (!!DD_API_KEY) {
-    backendProtocol = 'http'
+  if (!!apiKey) {
     backendUrlPath = 'telemetry/proxy/' + backendUrlPath
+    backendHost = 'localhost:8126'
+    backendProtocol = 'http'
+    headers['host'] = backendHost
   } else {
-    headers['dd-api-key'] = DD_API_KEY
+    headers['dd-api-key'] = apiKey
   }
   let backendUrl = `${backendProtocol}://${backendHost}/${backendUrlPath}`
 
@@ -116,10 +120,7 @@ function sendData (reqType, payload = {}) {
     port,
     method: 'POST',
     path: backendUrl,
-    headers: {
-      host: backendHost,
-      ...headers
-    }
+    headers
   })
   req.on('error', () => {}) // Ignore errors
   req.write(JSON.stringify({
