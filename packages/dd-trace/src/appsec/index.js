@@ -56,7 +56,7 @@ function incomingHttpTranslator (data) {
 
 function disable () {
   RuleManager.clearAllRules()
-  INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
+  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
 
   const scope = global._ddtrace._tracer.scope()
 
@@ -66,5 +66,6 @@ function disable () {
 
 module.exports = {
   enable,
-  disable
+  disable,
+  incomingHttpTranslator
 }
