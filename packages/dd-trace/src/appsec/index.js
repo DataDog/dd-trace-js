@@ -39,9 +39,6 @@ function notifyIncomingHttpEnd ({ req }) {
   if (context.triggers.length === 0) return
   const topSpan = req._datadog.span
   topSpan.setTag('_dd.appsec.json', JSON.stringify({ triggers: context.triggers }))
-  topSpan.setTag('manual.keep')
-  topSpan.setTag('appsec.event', true)
-  topSpan.setTag('_dd.origin', 'appsec')
   // we now write extra info about the HTTP request in the spans
   // TODO(@vdeturckheim) add HTTP request info on the top span
 }

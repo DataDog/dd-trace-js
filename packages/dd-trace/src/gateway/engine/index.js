@@ -35,7 +35,17 @@ function propagate (data, context = getContext()) {
     }
   }
 
-  context.dispatch()
+  const { appsecKeep } = context.dispatch()
+  if (appsecKeep) {
+    const store = als.getStore()
+    const req = store && store.get('req')
+    const topSpan = req && req._datadog && req._datadog.span
+    if (!topSpan) return
+    // TODO(vdeturckheim) check/ask if we need to place this on the current span too
+    topSpan.setTag('manual.keep')
+    topSpan.setTag('appsec.event', true)
+    topSpan.setTag('_dd.origin', 'appsec')
+  }
 }
 
 module.exports = {

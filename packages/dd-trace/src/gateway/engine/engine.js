@@ -135,15 +135,17 @@ class Context {
 
     const result = Context.manager.dispatch(this.newAddresses, this.allAddresses, this)
 
+    let appsecKeep = false
     for (const { triggers } of result) {
       if (triggers) {
         this.triggers.push(...triggers)
+        appsecKeep = true
       }
     }
 
     this.newAddresses = []
 
-    return result
+    return { appsecKeep, result }
   }
 
   resolve (address) {

@@ -284,7 +284,7 @@ describe('Gateway Engine', () => {
 
         const result = context.dispatch()
 
-        expect(result).to.equal('result')
+        expect(result.result).to.equal('result')
 
         expect(Context.manager.dispatch).to.have.been.calledOnceWithExactly(
           ['a'],
