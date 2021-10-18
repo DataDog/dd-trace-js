@@ -5,7 +5,6 @@ const { createHook, executionAsyncResource } = require('async_hooks')
 class AsyncResourceStorage {
   constructor () {
     this._ddResourceStore = Symbol('ddResourceStore')
-    this._stack = []
     this._enabled = false
     this._hook = this._createHook()
   }
@@ -13,7 +12,6 @@ class AsyncResourceStorage {
   disable () {
     if (!this._enabled) return
 
-    this._stack = []
     this._hook.disable()
     this._enabled = false
   }
@@ -38,14 +36,14 @@ class AsyncResourceStorage {
     this._enable()
 
     const resource = this._executionAsyncResource()
+    const oldStore = resource[this._ddResourceStore]
 
-    this._stack.push(resource[this._ddResourceStore])
     resource[this._ddResourceStore] = store
 
     try {
       return callback(...args)
     } finally {
-      resource[this._ddResourceStore] = this._stack.pop()
+      resource[this._ddResourceStore] = oldStore
     }
   }
 
