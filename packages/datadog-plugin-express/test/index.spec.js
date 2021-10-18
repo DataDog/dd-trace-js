@@ -5,8 +5,6 @@ const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -389,8 +387,6 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path when changing scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
           const router = express.Router()
 
@@ -429,8 +425,6 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path without a scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
           const router = express.Router()
 
@@ -584,8 +578,6 @@ describe('Plugin', () => {
         })
 
         it('should activate a scope per middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
 
           let span
@@ -616,8 +608,6 @@ describe('Plugin', () => {
         })
 
         it('should activate a span for every middleware on a route', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
 
           const span = {}
@@ -1056,8 +1046,6 @@ describe('Plugin', () => {
         })
 
         it('should not activate a scope per middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
 
           let span
@@ -1086,8 +1074,6 @@ describe('Plugin', () => {
         })
 
         it('should not do automatic instrumentation on middleware', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const app = express()
 
           app.use((req, res, next) => {

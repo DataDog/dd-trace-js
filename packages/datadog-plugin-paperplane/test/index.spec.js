@@ -8,8 +8,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 const composeP = (...fs) => x =>
   fs.reduceRight(then, x)
 
@@ -133,8 +131,6 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path when changing scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const { methods, mount, routes, send } = paperplane
 
           const endpoints = routes({
@@ -177,8 +173,6 @@ describe('Plugin', () => {
         })
 
         it('should not lose the current path without a scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const { methods, mount, routes, send } = paperplane
 
           const endpoints = routes({

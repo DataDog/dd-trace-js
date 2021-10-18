@@ -7,8 +7,6 @@ const Readable = require('stream').Readable
 const kinds = require('../src/kinds')
 const pkgs = ['grpc', '@grpc/grpc-js']
 
-wrapIt()
-
 describe('Plugin', () => {
   let grpc
   let port

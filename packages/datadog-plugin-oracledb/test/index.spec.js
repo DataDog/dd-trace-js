@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 const config = {
   user: 'test',
   password: 'Oracle18',
@@ -71,8 +69,6 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the callback', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             connection.execute(dbQuery, () => {
               expect(tracer.scope().active()).to.be.null
               done()
@@ -129,8 +125,6 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the callback', () => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
             return connection.execute(dbQuery).then(() => {
               expect(tracer.scope().active()).to.be.null
             })

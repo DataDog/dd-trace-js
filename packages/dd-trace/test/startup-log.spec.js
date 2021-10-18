@@ -68,7 +68,6 @@ describe('startup logging', () => {
       lang_version: process.versions.node,
       env: 'production',
       enabled: true,
-      scope_manager: 'async_hooks',
       service: 'test',
       agent_url: 'http://example.com:4321',
       agent_error: 'Error: fake error',

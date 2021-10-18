@@ -5,8 +5,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let knex
   let client
@@ -36,8 +34,6 @@ describe('Plugin', () => {
             })
         })
         it('should propagate context', () => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
           const span = {}
 
           return tracer.scope().activate(span, () => {

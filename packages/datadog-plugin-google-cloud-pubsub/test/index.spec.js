@@ -5,8 +5,6 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const plugin = require('../src')
 const id = require('../../dd-trace/src/id')
 
-wrapIt()
-
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
 

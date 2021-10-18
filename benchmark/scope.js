@@ -2,13 +2,13 @@
 
 const { AsyncResource } = require('async_hooks')
 
-const benchmark = require('../benchmark')
+const benchmark = require('./benchmark')
 
-const suite = benchmark('scope (executionAsyncResource)')
+const suite = benchmark('scope')
 
-const spanStub = require('../stubs/span')
+const spanStub = require('./stubs/span')
 
-const Scope = require('../../packages/dd-trace/src/scope/async_resource')
+const Scope = require('../packages/dd-trace/src/scope')
 
 const scope = new Scope({
   experimental: {}

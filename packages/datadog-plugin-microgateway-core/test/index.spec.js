@@ -9,8 +9,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const proxy = require('./proxy')
 
-wrapIt()
-
 describe('Plugin', () => {
   let Gateway
   let gateway

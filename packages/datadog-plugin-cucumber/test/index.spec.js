@@ -19,8 +19,6 @@ const {
   TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
-wrapIt()
-
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
   const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))

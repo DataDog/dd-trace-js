@@ -8,8 +8,6 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 
-wrapIt()
-
 describe('Tracer', () => {
   let Tracer
   let tracer

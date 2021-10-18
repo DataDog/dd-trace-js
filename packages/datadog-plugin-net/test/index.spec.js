@@ -5,8 +5,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { Int64BE } = require('int64-buffer') // TODO remove dependency
 
-wrapIt()
-
 describe('Plugin', () => {
   let net
   let tcp

@@ -9,8 +9,6 @@ const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const pkgs = ['grpc', '@grpc/grpc-js']
 
-wrapIt()
-
 describe('Plugin', () => {
   let grpc
   let port

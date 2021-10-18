@@ -1,7 +1,5 @@
 'use strict'
 
-wrapIt()
-
 describe('docker', () => {
   let docker
   let fs

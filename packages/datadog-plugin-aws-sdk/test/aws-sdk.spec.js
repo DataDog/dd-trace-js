@@ -5,8 +5,6 @@ const plugin = require('../src')
 const { setup, sort } = require('./spec_helpers')
 const semver = require('semver')
 
-wrapIt()
-
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service

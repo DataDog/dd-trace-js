@@ -5,8 +5,6 @@ module.exports = (name, factory, versionRange) => {
   const plugin = require(`../../../datadog-plugin-${name}/src`)
   const semver = require('semver')
 
-  wrapIt()
-
   describe('Plugin', () => {
     let Promise
     let tracer
@@ -35,8 +33,6 @@ module.exports = (name, factory, versionRange) => {
           })
 
           it('should run the then() callbacks in the context where then() was called', () => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
             const span = {}
 
             let promise = new Promise((resolve, reject) => {
@@ -63,8 +59,6 @@ module.exports = (name, factory, versionRange) => {
           })
 
           it('should run the catch() callback in the context where catch() was called', () => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
             const span = {}
             const promise = new Promise((resolve, reject) => {
               setImmediate(() => {
@@ -86,8 +80,6 @@ module.exports = (name, factory, versionRange) => {
           })
 
           it('should allow to run without a scope if not available when calling then()', () => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
             tracer.scope().activate(null, () => {
               const promise = new Promise((resolve, reject) => {
                 setImmediate(() => {

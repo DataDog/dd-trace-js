@@ -9,8 +9,6 @@ const { parse } = require('url')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', function () {
   let next
   let app

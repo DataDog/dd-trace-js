@@ -20,8 +20,6 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
-wrapIt()
-
 describe('plugins/util/web', () => {
   let web
   let tracer

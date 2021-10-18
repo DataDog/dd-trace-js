@@ -6,8 +6,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let tracer
   let fastify
@@ -140,8 +138,6 @@ describe('Plugin', () => {
         }
 
         it('should run handlers in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -162,8 +158,6 @@ describe('Plugin', () => {
         })
 
         it('should run middleware in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -181,8 +175,6 @@ describe('Plugin', () => {
         })
 
         it('should run POST handlers in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app.post('/user', (request, reply) => {
             expect(tracer.scope().active()).to.not.be.null
             reply.send()
@@ -198,8 +190,6 @@ describe('Plugin', () => {
         })
 
         it('should run routes in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -224,8 +214,6 @@ describe('Plugin', () => {
         })
 
         it('should run hooks in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app.addHook('onRequest', (request, reply, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()

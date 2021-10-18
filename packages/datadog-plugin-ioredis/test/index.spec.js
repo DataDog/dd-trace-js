@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let Redis
   let redis
@@ -48,8 +46,6 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', () => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
           const span = {}
 
           return tracer.scope().activate(span, () => {

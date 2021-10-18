@@ -40,7 +40,6 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
-  trackAsyncScope: false,
   ingestion: {
     sampleRate: 0.5,
     rateLimit: 500
@@ -80,7 +79,6 @@ tracer.init({
     foo: 'bar'
   },
   reportHostname: true,
-  scope: 'noop',
   logLevel: 'debug'
 });
 

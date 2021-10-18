@@ -4,8 +4,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 const withTopologies = fn => {
   withVersions(plugin, ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
     describe('using the server topology', () => {
@@ -197,8 +195,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             server.insert(`test.${collection}`, [{ a: 1 }], {}, () => {
               expect(tracer.scope().active()).to.be.null
               done()
@@ -289,8 +285,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
               query: { a: 1 }

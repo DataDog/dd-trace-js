@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let LimitdClient
   let limitd
@@ -27,8 +25,6 @@ describe('Plugin', () => {
       })
 
       it('should propagate context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
         const span = {}
 
         tracer.scope().activate(span, () => {

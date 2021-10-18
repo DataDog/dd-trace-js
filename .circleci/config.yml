@@ -55,7 +55,7 @@ node-core-base: &node-core-base
     - &yarn-test-core
       run:
         name: Unit tests
-        command: yarn test:core:ci
+        command: yarn test:trace:core:ci
     - store-test-results-and-coverage
 
 node-bench-base: &node-bench-base
