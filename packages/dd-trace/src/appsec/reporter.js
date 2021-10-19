@@ -52,16 +52,16 @@ function resolveHTTPAddresses () {
 }
 
 const HEADERS_TO_SEND = [
-  'user-agent',
-  'referer',
-  'x-forwarded-for',
-  'x-real-ip',
   'client-ip',
-  'x-forwarded',
-  'x-cluster-client-ip',
   'forwarded-for',
   'forwarded',
-  'via'
+  'referer',
+  'user-agent',
+  'via',
+  'x-cluster-client-ip',
+  'x-forwarded-for',
+  'x-forwarded',
+  'x-real-ip'
 ]
 
 function getHeadersToSend (headers) {
