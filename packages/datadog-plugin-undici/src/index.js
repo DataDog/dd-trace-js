@@ -53,29 +53,36 @@ function parseHeaders (headers) {
   })
   return object
 }
+const channels = {
+  requestChannel: undefined,
+  headersChannel: undefined,
+  errorChannel: undefined
+}
 
 function diagnostics (tracer, config) {
   let diagnosticsChannel
   try {
     diagnosticsChannel = require('diagnostics_channel')
   } catch (e) {
-    log.error("Unable to configure undici, cannot require 'diagnostics_channel'")
+    log.error(
+      "Unable to configure undici, cannot require 'diagnostics_channel'"
+    )
     return () => {}
   }
   config = normalizeConfig(tracer, config)
 
-  const requestChannel = diagnosticsChannel.channel('undici:request:create')
-  const headersChannel = diagnosticsChannel.channel('undici:request:headers')
-  const requestErrorChannel = diagnosticsChannel.channel(
-    'undici:request:error'
+  channels.requestChannel = diagnosticsChannel.channel('undici:request:create')
+  channels.headersChannel = diagnosticsChannel.channel(
+    'undici:request:headers'
   )
+  channels.errorChannel = diagnosticsChannel.channel('undici:request:error')
+
+  channels.requestChannel.subscribe(handleRequestCreate)
+  channels.errorChannel.subscribe(handleRequestError)
+  channels.headersChannel.subscribe(handleRequestHeaders)
 
   // We use a weakmap here to store the request / spans
   const requestSpansMap = new WeakMap()
-
-  requestChannel.subscribe(handleRequestCreate)
-  requestErrorChannel.subscribe(handleRequestError)
-  headersChannel.subscribe(handleRequestHeaders)
 
   function handleRequestCreate ({ request }) {
     const method = (request.method || 'GET').toUpperCase()
@@ -123,14 +130,14 @@ function diagnostics (tracer, config) {
   }
 
   return function unsubscribe () {
-    if (requestChannel.hasSubscribers) {
-      requestChannel.unsubscribe(handleRequestCreate)
+    if (channels.requestChannel.hasSubscribers) {
+      channels.requestChannel.unsubscribe(handleRequestCreate)
     }
-    if (headersChannel.hasSubscribers) {
-      headersChannel.unsubscribe(handleRequestHeaders)
+    if (channels.headersChannel.hasSubscribers) {
+      channels.headersChannel.unsubscribe(handleRequestHeaders)
     }
-    if (requestErrorChannel.hasSubscribers) {
-      requestErrorChannel.unsubscribe(handleRequestError)
+    if (channels.errorChannel.hasSubscribers) {
+      channels.errorChannel.unsubscribe(handleRequestError)
     }
   }
 }
