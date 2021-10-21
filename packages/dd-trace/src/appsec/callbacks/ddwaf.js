@@ -45,11 +45,11 @@ class WAFCallback {
 
     const subscriptionGroups = new Set()
 
-    for (const rule of rules.events) {
+    for (const rule of rules.rules) {
       this.ruleNames.set(rule.id, rule.name)
 
       for (const condition of rule.conditions) {
-        let addresses = condition.parameters.inputs.map((address) => address.split(':', 2)[0])
+        let addresses = condition.parameters.inputs.map((input) => input.address.split(':', 2)[0])
 
         if (!addresses.every((address) => validAddressSet.has(address))) {
           log.warn(`Skipping invalid rule ${rule.id}`)
