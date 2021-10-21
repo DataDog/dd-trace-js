@@ -191,9 +191,10 @@ function reportAttack ({
   events.add(event)
 }
 
-// TODO: lock
+let lock = false
+
 function flush () {
-  if (!events.size) return
+  if (lock || !events.size) return
   else if (events.size >= MAX_EVENT_BACKLOG) {
     log.warn('Dropping AppSec events because the backlog is full')
   }
@@ -229,7 +230,11 @@ function flush () {
     options.port = url.port
   }
 
+  lock = true
+
   request(options, (err, res, status) => {
+    lock = false
+
     if (err) {
       log.error(err)
     }
