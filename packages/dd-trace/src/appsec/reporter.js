@@ -31,6 +31,8 @@ const events = new Set()
 function resolveHTTPAddresses () {
   const context = getContext()
 
+  if (!context) return {}
+
   const path = context.resolve(Addresses.HTTP_INCOMING_URL)
   const headers = context.resolve(Addresses.HTTP_INCOMING_HEADERS)
 
@@ -67,6 +69,8 @@ const HEADERS_TO_SEND = [
 ]
 
 function getHeadersToSend (headers) {
+  if (!headers) return
+
   const result = {}
 
   for (let i = 0; i < HEADERS_TO_SEND.length; ++i) {
@@ -189,17 +193,20 @@ function reportAttack ({
   }
 
   events.add(event)
+
+  return event
 }
 
 let lock = false
 
 function flush () {
   if (lock || !events.size) return
-  else if (events.size >= MAX_EVENT_BACKLOG) {
+
+  if (events.size >= MAX_EVENT_BACKLOG) {
     log.warn('Dropping AppSec events because the backlog is full')
   }
 
-  const eventsArray = Array.from(events.values())
+  const eventsArray = Array.from(events)
 
   // if they fail to send, we drop the events
   for (let i = 0; i < eventsArray.length; ++i) {
@@ -245,5 +252,8 @@ const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 
 module.exports = {
   scheduler,
-  reportAttack
+  reportAttack,
+  flush,
+  getTracerData,
+  events
 }
