@@ -7,6 +7,7 @@ const RuleManager = require('./rule_manager')
 const { INCOMING_HTTP_REQUEST_START } = require('../gateway/channels')
 const Gateway = require('../gateway/engine/index')
 const Addresses = require('./addresses')
+const Reporter = require('./reporter')
 
 function enable (config) {
   try {
@@ -28,6 +29,8 @@ function enable (config) {
     Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_METHOD)
     Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_IP)
     Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_PORT)
+
+    Reporter.scheduler.start()
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
   }
@@ -62,6 +65,9 @@ function disable () {
 
   delete scope._config.tags['_dd.appsec.enabled']
   delete scope._config.tags['_dd.runtime_family']
+
+  Reporter.scheduler.stop()
+  Reporter.flush()
 }
 
 module.exports = {

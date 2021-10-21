@@ -237,7 +237,6 @@ function flush () {
 }
 
 const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
-scheduler.start()
 
 module.exports = {
   scheduler,
