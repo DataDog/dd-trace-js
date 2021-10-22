@@ -30,6 +30,18 @@ class Scope {
     }
   }
 
+  enter (span) {
+    const oldStore = storage.getStore()
+    const newStore = span ? span._store : oldStore
+
+    storage.enterWith({ ...newStore, span })
+    return oldStore
+  }
+
+  exit (oldStore) {
+    storage.enterWith(oldStore)
+  }
+
   bind (target, span) {
     target = this._bindEmitter(target, span)
     target = this._bindPromise(target, span)

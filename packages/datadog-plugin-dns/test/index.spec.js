@@ -13,7 +13,7 @@ describe('Plugin', () => {
     })
 
     beforeEach(() => {
-      return agent.load('dns', undefined, { scope: 'async_hooks' })
+      return agent.load('dns')
         .then(() => {
           dns = require('dns')
           tracer = require('../../dd-trace')

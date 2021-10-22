@@ -46,15 +46,12 @@ module.exports = class Plugin {
         tags['span.kind'] = this.constructor.kind
       }
       const span = tracer().startSpan(name, { childOf, tags })
-      console.log(tracer().scope().__proto__)
-      context.parent = tracer().scope()._activeResource()
       context.span = span
-      // TODO this and the the _exit below need to be replaces with something like `enterWith`
-      tracer().scope()._enter(span, context.parent)
+      context.parent = tracer().scope().enter(span)
     })
     this.addSubscription(prefix + ':end', ({ context }) => {
       if (context.noTrace) return
-      tracer().scope()._exit(context.parent)
+      tracer().scope().exit(context.parent)
     })
     this.addSubscription(prefix + ':async-end', ({ context, result }) => {
       if (context.noTrace) return
