@@ -43,6 +43,8 @@ class Instrumenter {
   }
 
   use (name, config) {
+    const plugin = plugins[name.toLowerCase()]
+    if (plugin.prototype instanceof Plugin) return
     if (typeof config === 'boolean') {
       config = { enabled: config }
     }
@@ -50,7 +52,7 @@ class Instrumenter {
     config = getConfig(name, config)
 
     try {
-      this._set(plugins[name.toLowerCase()], { name, config })
+      this._set(plugin, { name, config })
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }

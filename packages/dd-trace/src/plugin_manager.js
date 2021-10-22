@@ -15,6 +15,11 @@ function getConfig (name, config = {}) {
     config.enabled = isTrue(enabled)
   }
 
+  // TODO is this the best/correct place for this default?
+  if (!("enabled" in config)) {
+    config.enabled = true
+  }
+
   return config
 }
 
@@ -36,7 +41,6 @@ module.exports = class PluginManager {
     if (typeof pluginConfig === 'boolean') {
       pluginConfig = { enabled: pluginConfig }
     }
-    // TODO ensure enabled is always set to a boolean.
 
     this.#pluginsByName[name].configure(getConfig(name, pluginConfig))
   }

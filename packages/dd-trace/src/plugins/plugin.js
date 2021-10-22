@@ -36,9 +36,17 @@ module.exports = class Plugin {
       asyncEnd: () => {}
     }, hooks)
     this.addSubscription(prefix + ':start', ({ context, args }) => {
-      const tags = hooks.tags.call(this, { context, args })
+      let tags = hooks.tags.call(this, { context, args })
       if (context.noTrace) return
-      const span = tracer().startSpan(this.config, name, tags)
+      const childOf = tracer().scope().active()
+      tags = Object.assign({
+        'service.name': this.config.service || tracer()._service
+      }, tags)
+      if (this.constructor.kind) {
+        tags['span.kind'] = this.constructor.kind
+      }
+      const span = tracer().startSpan(name, { childOf, tags })
+      console.log(tracer().scope().__proto__)
       context.parent = tracer().scope()._activeResource()
       context.span = span
       // TODO this and the the _exit below need to be replaces with something like `enterWith`

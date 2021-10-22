@@ -45,6 +45,10 @@ class DNSPlugin extends Plugin {
     return 'dns'
   }
 
+  static get kind () {
+    return 'client'
+  }
+
   constructor (config) {
     super(config)
     this.addWrappedSubscriptions('apm:dns:lookup', 'dns.lookup', {
