@@ -25,11 +25,7 @@ class NativeCpuProfiler {
 
   profile () {
     if (!this._stop) return
-    // Next profile MUST be started before previous ends otherwise V8 will tear
-    // down the symbolizer thread and start a new one when the next one starts.
-    const stop = this._stop
-    this._record()
-    return stop()
+    return this._stop(true)
   }
 
   encode (profile) {
