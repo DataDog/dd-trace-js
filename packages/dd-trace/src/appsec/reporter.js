@@ -149,12 +149,12 @@ function reportAttack ({
           remote_ip: resolvedHttp.remote_ip,
           remote_port: resolvedHttp.remote_port,
           headers: resolvedHttp.headers
-        },
+        }/* ,
         response: {
           status: resolvedHttp.responseCode,
           headers: resolvedHttp.responseHeaders,
           blocked
-        }
+        } */
       },
       library,
       service: {
