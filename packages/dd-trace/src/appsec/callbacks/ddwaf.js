@@ -32,7 +32,7 @@ class WAFCallback {
   constructor (rules) {
     this.ddwaf = WAFCallback.loadDDWAF(rules)
     this.wafContextCache = new WeakMap()
-    this.ruleNames = new Map()
+    this.ruleCache = new Map()
 
     // closures are faster than binds
     const self = this
@@ -46,7 +46,7 @@ class WAFCallback {
     const subscriptionGroups = new Set()
 
     for (const rule of rules.rules) {
-      this.ruleNames.set(rule.id, rule.name)
+      this.ruleCache.set(rule.id, rule)
 
       for (const condition of rule.conditions) {
         let addresses = condition.parameters.inputs.map((input) => input.address.split(':', 2)[0])
@@ -105,16 +105,19 @@ class WAFCallback {
         const point = data[i]
         const match = point.filter[0]
 
+        const rule = this.ruleCache.get(point.rule)
+
         Reporter.reportAttack({
           eventType: 'appsec.threat.attack',
           blocked: false,
           ruleId: point.rule,
-          ruleName: this.ruleNames.get(point.rule),
-          ruleSet: point.flow,
+          ruleName: rule.name,
+          ruleTags: rule.tags,
           matchOperator: match.operator,
           matchOperatorValue: match.operator_value,
           matchParameters: [{
-            name: match.binding_accessor,
+            address: match.binding_accessor,
+            key_path: match.key_path,
             value: match.resolved_value
           }],
           matchHighlight: [

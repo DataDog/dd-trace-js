@@ -19,7 +19,7 @@ const host = {
   hostname: os.hostname()
 }
 
-const tracer = {
+const library = {
   context_version: '0.1.0',
   runtime_type: 'nodejs',
   runtime_version: process.version,
@@ -39,17 +39,14 @@ function resolveHTTPAddresses () {
   const url = new URL(path, `http://${headers.host}`)
 
   return {
-    // scheme: context.resolve(Addresses.),
     method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
-    url: url.href,
-    host: url.hostname,
-    port: url.port, // context.resolve(Addresses.HTTP_INCOMING_PORT),
-    path: url.pathname,
+    url: url.href.split('?')[0],
     // route: context.resolve(Addresses.),
     remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
-    // responseCode: context.resolve(Addresses.),
-    headers
+    headers: getHeadersToSend(headers)
+    // responseCode: context.resolve(Addresses.HTTP_OUTGOING_STATUS),
+    // responseHeaders: context.resolve(Addresses.HTTP_OUTGOING_HEADERS)
   }
 }
 
@@ -69,15 +66,15 @@ const HEADERS_TO_SEND = [
 ]
 
 function getHeadersToSend (headers) {
-  if (!headers) return
-
   const result = {}
+
+  if (!headers) return result
 
   for (let i = 0; i < HEADERS_TO_SEND.length; ++i) {
     const headerName = HEADERS_TO_SEND[i]
 
     if (headers[headerName]) {
-      result[headerName] = headers[headerName]
+      result[headerName] = [ headers[headerName] ]
     }
   }
 
@@ -91,7 +88,7 @@ function getTracerData () {
     serviceName: scope._config.service,
     serviceEnv: scope._config.env,
     serviceVersion: scope._config.version,
-    tags: Object.entries(scope._config.tags).map(([k, v]) => `${k}:${v}`) // TODO: this can be optimized
+    tags: Object.entries(scope._config.tags).map(([k, v]) => `${k}:${v}`)
   }
 
   const activeSpan = scope.active()
@@ -110,33 +107,30 @@ function getTracerData () {
 }
 
 function reportAttack ({
-  eventType,
-  blocked,
   ruleId,
   ruleName,
-  ruleSet,
+  ruleTags,
   matchOperator,
   matchOperatorValue,
   matchParameters,
-  matchHighlight
+  matchHighlight,
+  blocked
 }) {
   if (events.size > MAX_EVENT_BACKLOG) return
 
   const resolvedHttp = resolveHTTPAddresses()
 
-  const { spanId, traceId, serviceName, serviceEnv, serviceVersion, tags } = getTracerData()
+  const tracerData = getTracerData()
 
   const event = {
     event_id: uuid(),
-    event_type: eventType,
-    event_version: '0.1.0',
+    event_type: 'appsec',
+    event_version: '1.0.0',
     detected_at: (new Date()).toJSON(),
-    type: ruleSet,
-    blocked,
     rule: {
       id: ruleId,
       name: ruleName,
-      set: ruleSet
+      tags: ruleTags
     },
     rule_match: {
       operator: matchOperator,
@@ -145,50 +139,42 @@ function reportAttack ({
       highlight: matchHighlight
     },
     context: {
-      actor: {
-        context_version: '0.1.0',
-        identifiers: null,
-        _id: null
-      },
       host,
       http: {
-        context_version: '0.1.0',
+        context_version: '1.0.0',
         request: {
-          scheme: resolvedHttp.scheme,
           method: resolvedHttp.method,
           url: resolvedHttp.url,
-          host: resolvedHttp.host,
-          port: resolvedHttp.port,
-          path: resolvedHttp.path,
           resource: resolvedHttp.route,
           remote_ip: resolvedHttp.remote_ip,
           remote_port: resolvedHttp.remote_port,
-          headers: getHeadersToSend(resolvedHttp.headers)
+          headers: resolvedHttp.headers
         },
         response: {
           status: resolvedHttp.responseCode,
+          headers: resolvedHttp.responseHeaders,
           blocked
         }
       },
+      library,
       service: {
         context_version: '0.1.0',
-        name: serviceName,
-        environment: serviceEnv,
-        version: serviceVersion
+        name: tracerData.serviceName,
+        environment: tracerData.serviceEnv,
+        version: tracerData.serviceVersion
       },
       span: {
         context_version: '0.1.0',
-        id: spanId
+        id: tracerData.spanId
       },
       tags: {
         context_version: '0.1.0',
-        values: tags
+        values: tracerData.tags
       },
       trace: {
         context_version: '0.1.0',
-        id: traceId
-      },
-      tracer
+        id: tracerData.traceId
+      }
     }
   }
 
@@ -217,7 +203,6 @@ function flush () {
     path: '/appsec/proxy/api/v2/appsecevts',
     method: 'POST',
     headers: {
-      'X-Api-Version': 'v0.1.0',
       'Content-Type': 'application/json'
     },
     data: JSON.stringify({

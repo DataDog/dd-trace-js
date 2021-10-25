@@ -51,7 +51,6 @@ function incomingHttpTranslator (data) {
     [Addresses.HTTP_INCOMING_URL]: data.req.url,
     [Addresses.HTTP_INCOMING_HEADERS]: headers,
     [Addresses.HTTP_INCOMING_METHOD]: data.req.method,
-    // [Addresses.HTTP_INCOMING_PORT]: data.req.socket.localPort
     [Addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
     [Addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
   }, context)
