@@ -1,6 +1,7 @@
 'use strict'
 
 const dc = require('diagnostics_channel')
+const { storage } = require('../../../datadog-core')
 
 class Subscription {
   #channel
@@ -46,12 +47,14 @@ module.exports = class Plugin {
         tags['span.kind'] = this.constructor.kind
       }
       const span = tracer().startSpan(name, { childOf, tags })
+      const store = storage.getStore()
+      storage.enterWith({ ...store, span })
       context.span = span
-      context.parent = tracer().scope().enter(span)
+      context.original = store
     })
     this.addSubscription(prefix + ':end', ({ context }) => {
       if (context.noTrace) return
-      tracer().scope().exit(context.parent)
+      storage.enterWith(context.original)
     })
     this.addSubscription(prefix + ':async-end', ({ context, result }) => {
       if (context.noTrace) return
