@@ -106,16 +106,7 @@ function getTracerData () {
   return result
 }
 
-function reportAttack ({
-  ruleId,
-  ruleName,
-  ruleTags,
-  matchOperator,
-  matchOperatorValue,
-  matchParameters,
-  matchHighlight,
-  blocked
-}) {
+function reportAttack (rule, ruleMatches, blocked) {
   if (events.size > MAX_EVENT_BACKLOG) return
 
   const resolvedHttp = resolveHTTPAddresses()
@@ -127,17 +118,8 @@ function reportAttack ({
     event_type: 'appsec',
     event_version: '1.0.0',
     detected_at: (new Date()).toJSON(),
-    rule: {
-      id: ruleId,
-      name: ruleName,
-      tags: ruleTags
-    },
-    rule_match: {
-      operator: matchOperator,
-      operator_value: matchOperatorValue,
-      parameters: matchParameters,
-      highlight: matchHighlight
-    },
+    rule,
+    rule_match: ruleMatches,
     context: {
       host,
       http: {
