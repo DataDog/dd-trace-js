@@ -48,7 +48,7 @@ function createWrapMakeClientConstructor (tracer, config) {
 function wrapPackageDefinition (tracer, config, def) {
   for (const name in def) {
     if (def[name].format) continue
-    if (def[name].service) {
+    if (def[name].service && def[name].prototype) {
       wrapClientConstructor(tracer, config, def[name], def[name].service)
     } else {
       wrapPackageDefinition(tracer, config, def[name])
