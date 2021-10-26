@@ -106,7 +106,7 @@ function getTracerData () {
   return result
 }
 
-function reportAttack (rule, ruleMatches, blocked) {
+function reportAttack (rule, ruleMatch, blocked) {
   if (events.size > MAX_EVENT_BACKLOG) return
 
   const resolvedHttp = resolveHTTPAddresses()
@@ -119,7 +119,7 @@ function reportAttack (rule, ruleMatches, blocked) {
     event_version: '1.0.0',
     detected_at: (new Date()).toJSON(),
     rule,
-    rule_match: ruleMatches,
+    rule_match: ruleMatch,
     context: {
       host,
       http: {

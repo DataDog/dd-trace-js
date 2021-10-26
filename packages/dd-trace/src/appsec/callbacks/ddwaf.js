@@ -101,7 +101,7 @@ class WAFCallback {
       for (let i = 0; i < data.length; ++i) {
         const point = data[i]
 
-        Reporter.reportAttack(point.rule, point.rule_matches, false)
+        Reporter.reportAttack(point.rule, point.rule_matches[0], false)
       }
     }
 
