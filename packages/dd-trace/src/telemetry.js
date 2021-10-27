@@ -94,7 +94,6 @@ function sendData (reqType, payload = {}) {
     apiKey
   } = config
 
-
   let backendHost = 'tracer-telemetry-edge.datadoghq.com'
   let backendUrlPath = 'api/v2/apmtelemetry'
   let backendProtocol = 'https'
@@ -105,7 +104,7 @@ function sendData (reqType, payload = {}) {
     'dd-telemetry-request-type': reqType
   }
 
-  if (!!apiKey) {
+  if (apiKey) {
     backendUrlPath = 'telemetry/proxy/' + backendUrlPath
     backendHost = 'localhost:8126'
     backendProtocol = 'http'
@@ -113,7 +112,7 @@ function sendData (reqType, payload = {}) {
   } else {
     headers['dd-api-key'] = apiKey
   }
-  let backendUrl = `${backendProtocol}://${backendHost}/${backendUrlPath}`
+  const backendUrl = `${backendProtocol}://${backendHost}/${backendUrlPath}`
 
   const req = http.request({
     hostname,
