@@ -20,7 +20,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
   skipped: 'skip'
 }
 
-function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
+function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig, additionalSpans) {
   const childOf = getTestParentSpan(tracer)
 
   return {
@@ -31,7 +31,8 @@ function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
     [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [TEST_FRAMEWORK_VERSION]: cypressConfig.version
+    [TEST_FRAMEWORK_VERSION]: cypressConfig.version,
+    ...additionalSpans
   }
 }
 
@@ -46,13 +47,13 @@ module.exports = (on, config) => {
   })
   on('task', {
     'dd:beforeEach': (test) => {
-      const { testName, testSuite } = test
+      const { testName, testSuite, ...additionalSpans } = test
 
       const {
         childOf,
         resource,
         ...testSpanMetadata
-      } = getTestSpanMetadata(tracer, testName, testSuite, config)
+      } = getTestSpanMetadata(tracer, testName, testSuite, config, additionalSpans)
 
       if (!activeSpan) {
         activeSpan = tracer.startSpan('cypress.test', {
@@ -69,12 +70,15 @@ module.exports = (on, config) => {
       return null
     },
     'dd:afterEach': (test) => {
-      const { state, error } = test
+      const { state, error, ...additionalSpans } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)
         }
+        Object.entries(additionalSpans).forEach(([key, value]) => {
+          activeSpan.setTag(key, value)
+        })
         activeSpan.finish()
       }
       activeSpan = null
