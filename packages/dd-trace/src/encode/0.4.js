@@ -185,36 +185,29 @@ class AgentEncoder {
   }
 
   _encodeMap (bytes, value) {
-    const keys = []
-    const allKeys = Object.keys(value)
-
-    let key = ''
-
-    for (let i = 0, l = allKeys.length; i < l; i++) {
-      key = allKeys[i]
-      if (typeof value[key] !== 'function') {
-        keys.push(key)
-      }
-    }
-
-    const length = keys.length
+    const keys = Object.keys(value)
     const buffer = bytes.buffer
     const offset = bytes.length
 
     bytes.reserve(5)
     bytes.length += 5
 
+    let length = 0
+
+    for (const key of keys) {
+      if (typeof value[key] !== 'string' && typeof value[key] !== 'number') return
+
+      length++
+
+      this._encodeString(bytes, key)
+      this._encodeValue(bytes, value[key])
+    }
+
     buffer[offset] = 0xdf
     buffer[offset + 1] = length >> 24
     buffer[offset + 2] = length >> 16
     buffer[offset + 3] = length >> 8
     buffer[offset + 4] = length
-
-    for (let i = 0; i < length; i++) {
-      key = keys[i]
-      this._encodeString(bytes, key)
-      this._encodeValue(bytes, value[key])
-    }
   }
 
   _encodeValue (bytes, value) {
