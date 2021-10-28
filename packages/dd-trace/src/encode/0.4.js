@@ -255,7 +255,7 @@ class AgentEncoder {
       }
     } else {
       for (let i = 7; i >= 0; i--) {
-        buffer[offset + i + 1] = uInt8Float64Array[i]
+        buffer[bytes.length - i - 1] = uInt8Float64Array[i]
       }
     }
   }
