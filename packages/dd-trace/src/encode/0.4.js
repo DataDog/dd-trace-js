@@ -61,13 +61,15 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (const span of trace) {
+      bytes.reserve(1)
+
       if (span.type) {
-        bytes.push(0x8c)
+        bytes.buffer[bytes.length++] = 0x8c
 
         this._encodeString(bytes, 'type')
         this._encodeString(bytes, span.type)
       } else {
-        bytes.push(0x8b)
+        bytes.buffer[bytes.length++] = 0x8b
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -107,28 +109,79 @@ class AgentEncoder {
 
   _encodeArrayPrefix (bytes, value) {
     const length = value.length
+    const buffer = bytes.buffer
+    const offset = bytes.length
 
-    bytes.push(0xdd, length >> 24, length >> 16, length >> 8, length)
+    bytes.reserve(5)
+    bytes.length += 5
+
+    buffer[offset] = 0xdd
+    buffer[offset + 1] = length >> 24
+    buffer[offset + 2] = length >> 16
+    buffer[offset + 3] = length >> 8
+    buffer[offset + 4] = length
   }
 
   _encodeByte (bytes, value) {
-    bytes.push(value)
+    const buffer = bytes.buffer
+
+    bytes.reserve(1)
+
+    buffer[bytes.length++] = value
   }
 
   _encodeId (bytes, id) {
+    const buffer = bytes.buffer
+    const offset = bytes.length
+
+    bytes.reserve(9)
+    bytes.length += 9
+
     id = id.toArray()
-    bytes.push(0xcf, id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7])
+
+    buffer[offset] = 0xcf
+    buffer[offset + 1] = id[0]
+    buffer[offset + 2] = id[1]
+    buffer[offset + 3] = id[2]
+    buffer[offset + 4] = id[3]
+    buffer[offset + 5] = id[4]
+    buffer[offset + 6] = id[5]
+    buffer[offset + 7] = id[6]
+    buffer[offset + 8] = id[7]
   }
 
   _encodeInteger (bytes, value) {
-    bytes.push(0xce, value >> 24, value >> 16, value >> 8, value)
+    const buffer = bytes.buffer
+    const offset = bytes.length
+
+    bytes.reserve(5)
+    bytes.length += 5
+
+    buffer[offset] = 0xce
+    buffer[offset + 1] = value >> 24
+    buffer[offset + 2] = value >> 16
+    buffer[offset + 3] = value >> 8
+    buffer[offset + 4] = value
   }
 
   _encodeLong (bytes, value) {
+    const buffer = bytes.buffer
+    const offset = bytes.length
     const hi = (value / Math.pow(2, 32)) >> 0
     const lo = value >>> 0
 
-    bytes.push(0xcf, hi >> 24, hi >> 16, hi >> 8, hi, lo >> 24, lo >> 16, lo >> 8, lo)
+    bytes.reserve(9)
+    bytes.length += 9
+
+    buffer[offset] = 0xcf
+    buffer[offset + 1] = hi >> 24
+    buffer[offset + 2] = hi >> 16
+    buffer[offset + 3] = hi >> 8
+    buffer[offset + 4] = hi
+    buffer[offset + 5] = lo >> 24
+    buffer[offset + 6] = lo >> 16
+    buffer[offset + 7] = lo >> 8
+    buffer[offset + 8] = lo
   }
 
   _encodeMap (bytes, value) {
@@ -145,8 +198,17 @@ class AgentEncoder {
     }
 
     const length = keys.length
+    const buffer = bytes.buffer
+    const offset = bytes.length
 
-    bytes.push(0xdf, length >> 24, length >> 16, length >> 8, length)
+    bytes.reserve(5)
+    bytes.length += 5
+
+    buffer[offset] = 0xdf
+    buffer[offset + 1] = length >> 24
+    buffer[offset + 2] = length >> 16
+    buffer[offset + 3] = length >> 8
+    buffer[offset + 4] = length
 
     for (let i = 0; i < length; i++) {
       key = keys[i]
@@ -179,15 +241,21 @@ class AgentEncoder {
   _encodeFloat (bytes, value) {
     float64Array[0] = value
 
-    bytes.push(0xcb)
+    const buffer = bytes.buffer
+    const offset = bytes.length
+
+    bytes.reserve(9)
+    bytes.length += 9
+
+    buffer[offset] = 0xcb
 
     if (bigEndian) {
       for (let i = 0; i <= 7; i++) {
-        bytes.push(uInt8Float64Array[i])
+        buffer[offset + i + 1] = uInt8Float64Array[i]
       }
     } else {
       for (let i = 7; i >= 0; i--) {
-        bytes.push(uInt8Float64Array[i])
+        buffer[offset + i + 1] = uInt8Float64Array[i]
       }
     }
   }
