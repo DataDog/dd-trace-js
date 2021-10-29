@@ -323,7 +323,6 @@ describe('Plugin', () => {
 
           it('should handle bulkload requests', done => {
             const bulkLoad = buildBulkLoad()
-            bulkLoad.addRow({ num: 5 })
 
             agent
               .use(traces => {
@@ -333,10 +332,10 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            connection.execBulkLoad(bulkLoad)
+            connection.execBulkLoad(bulkLoad, [{ num: 5 }])
           })
 
-          if (semver.intersects(version, '>=4.2.0')) {
+          if (semver.intersects(version, '>=4.2.0 <14')) {
             it('should handle streaming BulkLoad requests', done => {
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
