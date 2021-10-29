@@ -335,7 +335,7 @@ describe('Plugin', () => {
             connection.execBulkLoad(bulkLoad, [{ num: 5 }])
           })
 
-          if (semver.intersects(version, '>=4.2.0 <14')) {
+          if (semver.intersects(version, '>=4.2.0') && !semver.intersects(version, '>=14')) {
             it('should handle streaming BulkLoad requests', done => {
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
