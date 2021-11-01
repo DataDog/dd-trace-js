@@ -10,7 +10,6 @@ describe('id', () => {
     seeds[0] = seeds[1] = 0xFF000000
 
     crypto = {
-      randomBytes: sinon.stub().returns(Buffer.from(seeds.buffer)),
       randomFillSync: data => {
         for (let i = 0; i < data.length / 8; i += 8) {
           data[i] = 0xFF
