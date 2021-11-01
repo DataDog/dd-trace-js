@@ -37,6 +37,7 @@ module.exports = class Plugin {
       asyncEnd: () => {}
     }, hooks)
     this.addSubscription(prefix + ':start', ({ context, args }) => {
+      context.started = true
       let tags = hooks.tags.call(this, { context, args })
       if (context.noTrace) return
       const childOf = tracer().scope().active()
@@ -53,16 +54,16 @@ module.exports = class Plugin {
       context.original = store
     })
     this.addSubscription(prefix + ':end', ({ context }) => {
-      if (context.noTrace) return
+      if (context.noTrace || !context.started) return
       storage.enterWith(context.original)
     })
     this.addSubscription(prefix + ':async-end', ({ context, result }) => {
-      if (context.noTrace) return
+      if (context.noTrace || !context.started) return
       hooks.asyncEnd.call(this, { context, result })
       context.span.finish()
     })
     this.addSubscription(prefix + ':error', ({ context, error }) => {
-      if (context.noTrace) return
+      if (context.noTrace || !context.started) return
       context.span.addError(error)
       context.span.finish()
     })

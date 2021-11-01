@@ -14,6 +14,7 @@ let sockets = []
 let agent = null
 let listener = null
 let tracer = null
+let plugins = []
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
@@ -45,6 +46,7 @@ module.exports = {
         listener = server.listen(port, 'localhost', () => resolve())
 
         pluginName = [].concat(pluginName)
+        plugins = pluginName
         config = [].concat(config)
 
         server.on('close', () => {
@@ -140,6 +142,9 @@ module.exports = {
     handlers.clear()
     delete require.cache[require.resolve('../..')]
     ritm.reset()
+    for (const plugin of plugins) {
+      tracer.use(plugin, { enabled: false })
+    }
     delete global._ddtrace
 
     return new Promise((resolve, reject) => {

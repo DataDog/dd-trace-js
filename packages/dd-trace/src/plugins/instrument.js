@@ -28,7 +28,7 @@ exports.wrap = function wrap (prefix, fn) {
   const asyncEndCh = channel(prefix + ':async-end')
   const errorCh = channel(prefix + ':error')
 
-  return function () {
+  const wrapped = function () {
     const context = { wrapped: fn }
     const cb = AsyncResource.bind(arguments[arguments.length - 1])
 
@@ -67,6 +67,12 @@ exports.wrap = function wrap (prefix, fn) {
       endCh.publish({ context, result })
     }
   }
+
+  Reflect.ownKeys(fn).forEach(key => {
+    Object.defineProperty(wrapped, key, Object.getOwnPropertyDescriptor(fn, key))
+  })
+
+  return wrapped
 }
 
 exports.addHook = function addHook ({ name, versions, file }, hook) {

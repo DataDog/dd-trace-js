@@ -24,8 +24,8 @@ const rrtypeMap = new WeakMap()
 
 addHook({ name: 'dns' }, dns => {
   dns.lookup = wrap('apm:dns:lookup', dns.lookup)
-  dns.lookupService = wrap('apm:dns:lookup', dns.lookupService)
-  dns.resolve = wrap('apm:dns:lookup', dns.resolve)
+  dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService)
+  dns.resolve = wrap('apm:dns:resolve', dns.resolve)
   dns.reverse = wrap('apm:dns:reverse', dns.reverse)
 
   patchResolveShorthands(dns)

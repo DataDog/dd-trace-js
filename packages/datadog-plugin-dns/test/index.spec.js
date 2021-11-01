@@ -128,12 +128,7 @@ describe('Plugin', () => {
         dns.lookup('localhost', 4, (err) => {
           if (err) return done(err)
 
-          try {
-            expect(tracer.scope().active()).to.equal(span)
-          } catch (e) {
-            console.log(e.message)
-            return done(e)
-          }
+          expect(tracer.scope().active()).to.equal(span)
 
           done()
         })
