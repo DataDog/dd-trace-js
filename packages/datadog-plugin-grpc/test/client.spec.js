@@ -324,6 +324,14 @@ describe('Plugin', () => {
                 })
             })
 
+            it('should handle property named "service"', async () => {
+              const definition = loader.loadSync(`${__dirname}/hasservice.proto`)
+              const thing = grpc.loadPackageDefinition(definition).thing
+              await buildClient({
+                getUnary: (_, callback) => callback(null)
+              }, thing.service.ThingService)
+            })
+
             it('should handle a missing callback', async () => {
               const client = await buildClient({
                 getUnary: (_, callback) => callback()
