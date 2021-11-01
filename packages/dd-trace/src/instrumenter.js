@@ -7,10 +7,10 @@ const Loader = require('./loader')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
 
-const disabldPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
+const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
 const collectDisabledPlugins = () => {
-  return new Set(disabldPlugins && disabldPlugins.split(',').map(plugin => plugin.trim()))
+  return new Set(disabledPlugins && disabledPlugins.split(',').map(plugin => plugin.trim()))
 }
 
 function cleanEnv (name) {
