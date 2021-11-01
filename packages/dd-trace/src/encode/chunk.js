@@ -14,25 +14,23 @@ class Chunk {
     this._minSize = minSize
   }
 
-  push (...bytes) {
-    this._reserve(bytes.length)
-
-    for (const byte of bytes) {
-      this.buffer[this.length++] = byte
-    }
-  }
-
   write (value) {
     const length = Buffer.byteLength(value)
     const offset = this.length
 
     if (length < 0x20) { // fixstr
-      this.push(length | 0xa0)
+      this.reserve(length + 1)
+      this.length += 1
+      this.buffer[offset] = length | 0xa0
     } else if (length < 0x100000000) { // str 32
-      this.push(0xdb, length >> 24, length >> 16, length >> 8, length)
+      this.reserve(length + 5)
+      this.length += 5
+      this.buffer[offset] = 0xdb
+      this.buffer[offset + 1] = length >> 24
+      this.buffer[offset + 2] = length >> 16
+      this.buffer[offset + 3] = length >> 8
+      this.buffer[offset + 4] = length
     }
-
-    this._reserve(length)
 
     this.length += this.buffer.utf8Write(value, this.length, length)
 
@@ -44,13 +42,13 @@ class Chunk {
   }
 
   set (array) {
-    this._reserve(array.length)
+    this.reserve(array.length)
 
     this.buffer.set(array, this.length)
     this.length += array.length
   }
 
-  _reserve (size) {
+  reserve (size) {
     if (this.length + size > this.buffer.length) {
       this._resize(this._minSize * Math.ceil((this.length + size) / this._minSize))
     }
