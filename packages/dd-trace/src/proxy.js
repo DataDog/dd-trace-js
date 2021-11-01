@@ -46,7 +46,7 @@ class Tracer extends BaseTracer {
             metrics.start(config)
           }
 
-          // dirty require for now so zero appsec code is executed unless explicitely enabled
+          // dirty require for now so zero appsec code is executed unless explicitly enabled
           if (config.appsec.enabled) {
             require('./appsec').enable(config)
           }
