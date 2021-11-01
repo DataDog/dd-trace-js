@@ -1,5 +1,7 @@
 'use strict'
 
+const { expect } = require('chai')
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
@@ -175,6 +177,7 @@ describe('Plugin', () => {
 
         it('should instrument parsing', done => {
           const source = `query MyQuery { hello(name: "world") }`
+          const variableValues = { who: 'world' }
 
           agent
             .use(traces => {
@@ -189,11 +192,12 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, null, null, { who: 'world' }).catch(done)
+          graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
         it('should instrument validation', done => {
           const source = `query MyQuery { hello(name: "world") }`
+          const variableValues = { who: 'world' }
 
           agent
             .use(traces => {
@@ -208,11 +212,12 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, null, null, { who: 'world' }).catch(done)
+          graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
         it('should instrument execution', done => {
           const source = `query MyQuery { hello(name: "world") }`
+          const variableValues = { who: 'world' }
 
           agent
             .use(traces => {
@@ -229,11 +234,12 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, null, null, { who: 'world' }).catch(done)
+          graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
         it('should not include variables by default', done => {
           const source = `query MyQuery($who: String!) { hello(name: $who) }`
+          const variableValues = { who: 'world' }
 
           agent
             .use(traces => {
@@ -243,7 +249,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, null, null, { who: 'world' }).catch(done)
+          graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
         it('should instrument schema resolvers', done => {
@@ -267,7 +273,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should instrument nested field resolvers', done => {
@@ -325,7 +331,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should instrument list field resolvers', done => {
@@ -375,7 +381,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should instrument mutations', done => {
@@ -390,7 +396,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should instrument subscriptions', done => {
@@ -405,13 +411,13 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should handle a circular schema', done => {
           const source = `{ human { pets { owner { name } } } }`
 
-          graphql.graphql(schema, source)
+          graphql.graphql({ schema, source })
             .then((result) => {
               expect(result.data.human.pets[0].owner.name).to.equal('test')
             })
@@ -427,6 +433,7 @@ describe('Plugin', () => {
           `)
 
           const source = `{ hello }`
+          const rootValue = { hello: 'world' }
 
           agent
             .use(traces => {
@@ -439,7 +446,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, { hello: 'world' }).catch(done)
+          graphql.graphql({ schema, source, rootValue }).catch(done)
         })
 
         it('should instrument the execution field resolver without a rootValue resolver', done => {
@@ -484,14 +491,15 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            graphql.graphql(schema, source).catch(done)
+            graphql.graphql({ schema, source }).catch(done)
           })
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should run parsing, validation and execution in the current context', done => {
           const source = `query MyQuery { hello(name: "world") }`
+          const variableValues = { who: 'world' }
           const span = tracer.startSpan('test.request')
 
           agent
@@ -520,7 +528,7 @@ describe('Plugin', () => {
             .catch(done)
 
           tracer.scope().activate(span, () => {
-            graphql.graphql(schema, source, null, null, { who: 'world' })
+            graphql.graphql({ schema, source, variableValues })
               .then(() => span.finish())
               .catch(done)
           })
@@ -576,11 +584,11 @@ describe('Plugin', () => {
         })
 
         it('should handle unsupported operations', () => {
-          const query = `query MyQuery { hello(name: "world") }`
+          const source = `query MyQuery { hello(name: "world") }`
           const subscription = `subscription { human { name } }`
 
-          return graphql.graphql(schema, query)
-            .then(() => graphql.graphql(schema, subscription))
+          return graphql.graphql({ schema, source })
+            .then(() => graphql.graphql({ schema, source: subscription }))
             .then(result => {
               expect(result).to.not.have.property('errors')
             })
@@ -631,7 +639,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.execute(schema, document)
+          graphql.execute({ schema, document })
         })
 
         it('should handle parsing exceptions', done => {
@@ -767,7 +775,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          Promise.resolve(graphql.execute(schema, document, rootValue))
+          Promise.resolve(graphql.execute({ schema, document, rootValue }))
             .then(res => {
               error = res.errors[0]
             })
@@ -934,7 +942,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should handle single fragment definitions', done => {
@@ -958,8 +966,41 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
+
+        // https://github.com/graphql/graphql-js/pull/2904
+        if (!semver.intersects(version, '>=16')) {
+          it('should instrument using positional arguments', done => {
+            const source = `query MyQuery { hello(name: "world") }`
+            const variableValues = { who: 'world' }
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('name', 'graphql.execute')
+                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
+                expect(spans[0]).to.have.property('type', 'graphql')
+                expect(spans[0].meta).to.not.have.property('graphql.source')
+                expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+                expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
+              })
+              .then(done)
+              .catch(done)
+
+            graphql.graphql(schema, source, null, null, variableValues).catch(done)
+          })
+        } else {
+          it('should not support positional arguments', done => {
+            const source = `query MyQuery { hello(name: "world") }`
+            const variableValues = { who: 'world' }
+
+            graphql.graphql(schema, source, null, null, variableValues)
+              .then(() => done(new Error('Expected error.')), () => done())
+          })
+        }
 
         // it('should not disable signature with invalid arguments', done => {
         //   agent
@@ -1035,7 +1076,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should apply the filter callback to the variables', done => {
@@ -1044,6 +1085,7 @@ describe('Plugin', () => {
               hello(title: $title, name: $who)
             }
           `
+          const variableValues = { title: 'planet', who: 'world' }
 
           agent
             .use(traces => {
@@ -1057,7 +1099,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, null, null, { title: 'planet', who: 'world' }).catch(done)
+          graphql.graphql({ schema, source, variableValues }).catch(done)
         })
       })
 
@@ -1085,6 +1127,7 @@ describe('Plugin', () => {
               hello(title: $title, name: $who)
             }
           `
+          const variableValues = { title: 'planet', who: 'world' }
 
           agent
             .use(traces => {
@@ -1096,7 +1139,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source, null, null, { title: 'planet', who: 'world' }).catch(done)
+          graphql.graphql({ schema, source, variableValues }).catch(done)
         })
       })
 
@@ -1139,7 +1182,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
 
         it('should run the resolvers in the execution scope', done => {
@@ -1217,7 +1260,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
       })
 
@@ -1271,7 +1314,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
       })
 
@@ -1304,7 +1347,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          graphql.graphql(schema, source).catch(done)
+          graphql.graphql({ schema, source }).catch(done)
         })
       })
 
