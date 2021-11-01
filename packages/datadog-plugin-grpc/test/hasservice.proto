@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package thing.service;
+
+service ThingService {
+  rpc FindOne (ThingById) returns (Thing);
+  rpc FindMany (stream ThingById) returns (stream Thing);
+}
+
+message ThingById {
+  int32 id = 1;
+}
+
+message Thing {
+  int32 id = 1;
+  string name = 2;
+}
