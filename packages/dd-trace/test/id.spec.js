@@ -5,12 +5,19 @@ describe('id', () => {
   let crypto
 
   beforeEach(() => {
-    const seeds = new Uint32Array(2)
-
-    seeds[0] = seeds[1] = 0xFF000000
-
     crypto = {
-      randomBytes: sinon.stub().returns(Buffer.from(seeds.buffer))
+      randomFillSync: data => {
+        for (let i = 0; i < data.length; i += 8) {
+          data[i] = 0xFF
+          data[i + 1] = 0x00
+          data[i + 2] = 0xFF
+          data[i + 3] = 0x00
+          data[i + 4] = 0xFF
+          data[i + 5] = 0x00
+          data[i + 6] = 0xFF
+          data[i + 7] = 0x00
+        }
+      }
     }
 
     sinon.stub(Math, 'random')
