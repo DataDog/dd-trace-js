@@ -5,10 +5,6 @@ describe('id', () => {
   let crypto
 
   beforeEach(() => {
-    const seeds = new Uint32Array(2)
-
-    seeds[0] = seeds[1] = 0xFF000000
-
     crypto = {
       randomFillSync: data => {
         for (let i = 0; i < data.length / 8; i += 8) {
