@@ -9,19 +9,16 @@ let tools
 function createWrapExecute (tracer, config, defaultFieldResolver) {
   return function wrapExecute (execute) {
     return function executeWithTrace () {
-      const args = normalizeArgs(arguments)
+      const args = normalizeArgs(arguments, tracer, config, defaultFieldResolver)
       const schema = args.schema
       const document = args.document
       const source = document && document._datadog_source
-      const fieldResolver = args.fieldResolver || defaultFieldResolver
-      const contextValue = args.contextValue = args.contextValue || {}
+      const contextValue = args.contextValue
       const operation = getOperation(document, args.operationName)
 
       if (contextValue._datadog_graphql) {
         return execute.apply(this, arguments)
       }
-
-      args.fieldResolver = wrapResolve(fieldResolver, tracer, config)
 
       if (schema) {
         wrapFields(schema._queryType, tracer, config)
@@ -32,7 +29,7 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
 
       contextValue._datadog_graphql = { source, span, fields: {} }
 
-      return call(execute, span, this, [args], (err, res) => {
+      return call(execute, span, this, arguments, (err, res) => {
         finishResolvers(contextValue, config)
 
         setError(span, err || (res && res.errors && res.errors[0]))
@@ -212,10 +209,19 @@ function getField (contextValue, path) {
   return contextValue._datadog_graphql.fields[path.join('.')]
 }
 
-function normalizeArgs (args) {
-  if (args.length === 1) {
-    return args[0]
-  }
+function normalizeArgs (args, tracer, config, defaultFieldResolver) {
+  if (args.length !== 1) return normalizePositional(args, tracer, config, defaultFieldResolver)
+
+  args[0].contextValue = args[0].contextValue || {}
+  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver, tracer, config)
+
+  return args[0]
+}
+
+function normalizePositional (args, tracer, config, defaultFieldResolver) {
+  args[3] = args[3] || {} // contextValue
+  args[6] = wrapResolve(args[6] || defaultFieldResolver, tracer, config) // fieldResolver
+  args.length = Math.max(args.length, 7)
 
   return {
     schema: args[0],
