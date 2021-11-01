@@ -7,7 +7,7 @@ describe('id', () => {
   beforeEach(() => {
     crypto = {
       randomFillSync: data => {
-        for (let i = 0; i < data.length / 8; i += 8) {
+        for (let i = 0; i < data.length; i += 8) {
           data[i] = 0xFF
           data[i + 1] = 0x00
           data[i + 2] = 0xFF
@@ -17,7 +17,6 @@ describe('id', () => {
           data[i + 6] = 0xFF
           data[i + 7] = 0x00
         }
-        data
       }
     }
 
