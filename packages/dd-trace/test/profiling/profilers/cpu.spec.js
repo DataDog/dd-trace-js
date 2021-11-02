@@ -74,7 +74,7 @@ describe('profilers/native/cpu', () => {
     expect(profile).to.equal('profile')
 
     sinon.assert.calledOnce(stop)
-    sinon.assert.calledTwice(pprof.time.start)
+    sinon.assert.calledOnce(pprof.time.start)
   })
 
   it('should encode profiles from the pprof time profiler', () => {
