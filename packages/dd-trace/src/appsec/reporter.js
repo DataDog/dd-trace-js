@@ -169,7 +169,7 @@ function reportAttack (rule, ruleMatch, blocked) {
 let lock = false
 
 function flush () {
-  if (lock || !events.size) return
+  if (lock || !events.size) return false
 
   if (events.size >= MAX_EVENT_BACKLOG) {
     log.warn('Dropping AppSec events because the backlog is full')
@@ -219,9 +219,11 @@ function flush () {
 const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 
 module.exports = {
-  scheduler,
+  events,
+  resolveHTTPAddresses,
+  getHeadersToSend,
+  getTracerData,
   reportAttack,
   flush,
-  getTracerData,
-  events
+  scheduler
 }
