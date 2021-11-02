@@ -113,12 +113,7 @@ function reportAttack (rule, ruleMatch, blocked) {
 
   const tracerData = getTracerData()
 
-  ruleMatch.highlight = []
-
-  for (const param of ruleMatch.parameters) {
-    ruleMatch.highlight = ruleMatch.highlight.concat(param.highlight)
-  }
-
+  // TODO: check if some contextes could be empty
   const event = {
     event_id: uuid(),
     event_type: 'appsec',

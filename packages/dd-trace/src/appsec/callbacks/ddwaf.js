@@ -100,8 +100,16 @@ class WAFCallback {
 
       for (let i = 0; i < data.length; ++i) {
         const point = data[i]
+        const ruleMatch = point.rule_matches[0]
 
-        Reporter.reportAttack(point.rule, point.rule_matches[0], false)
+        ruleMatch.highlight = []
+
+        for (const param of ruleMatch.parameters) {
+          ruleMatch.highlight = ruleMatch.highlight.concat(param.highlight)
+          delete param.highlight
+        }
+
+        Reporter.reportAttack(point.rule, ruleMatch, false)
       }
     }
 
