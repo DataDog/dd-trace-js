@@ -1,5 +1,9 @@
 'use strict'
 
+if (typeof process === 'undefined') {
+  return;
+}
+
 if (!global._ddtrace) {
   const TracerProxy = require('./src/proxy')
 
