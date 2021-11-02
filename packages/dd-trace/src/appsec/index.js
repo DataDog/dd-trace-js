@@ -60,10 +60,10 @@ function disable () {
   RuleManager.clearAllRules()
   if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
 
-  const scope = global._ddtrace._tracer.scope()
+  const tags = global._ddtrace._tracer._tags
 
-  delete scope._config.tags['_dd.appsec.enabled']
-  delete scope._config.tags['_dd.runtime_family']
+  delete tags['_dd.appsec.enabled']
+  delete tags['_dd.runtime_family']
 
   Reporter.scheduler.stop()
   Reporter.flush()

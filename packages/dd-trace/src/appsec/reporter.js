@@ -82,16 +82,16 @@ function getHeadersToSend (headers) {
 }
 
 function getTracerData () {
-  const scope = global._ddtrace._tracer.scope()
+  const tracer = global._ddtrace._tracer
 
   const result = {
-    serviceName: scope._config.service,
-    serviceEnv: scope._config.env,
-    serviceVersion: scope._config.version,
-    tags: Object.entries(scope._config.tags).map(([k, v]) => `${k}:${v}`)
+    serviceName: tracer._service,
+    serviceEnv: tracer._env,
+    serviceVersion: tracer._version,
+    tags: Object.entries(tracer._tags).map(([k, v]) => `${k}:${v}`)
   }
 
-  const activeSpan = scope.active()
+  const activeSpan = tracer.scope().active()
 
   if (activeSpan) {
     activeSpan.setTag('manual.keep')
