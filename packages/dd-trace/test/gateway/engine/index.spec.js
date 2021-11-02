@@ -6,6 +6,7 @@ const als = require('../../../src/gateway/als')
 
 describe('Gateway Index', () => {
   afterEach((cb) => {
+    sinon.restore()
     Engine.manager.clear()
     als.exit(cb)
   })
@@ -81,7 +82,6 @@ describe('Gateway Index', () => {
       expect(context.setValue.firstCall).to.have.been.calledWith('a', 1)
       expect(context.setValue.secondCall).to.have.been.calledWith('b', 2)
       expect(context.dispatch).to.have.been.calledOnce
-
     })
 
     it('should not propagate unneeded addresses', () => {
