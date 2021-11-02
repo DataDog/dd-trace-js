@@ -1,5 +1,13 @@
 'use strict'
 
+if (typeof process === 'undefined') {
+  // using exports.* simple assignments to deal w/ transpilers using
+  // cjs-module-lexer
+  exports.default = exports;
+  exports.init = require('../../empty.js').init;
+  return;
+}
+
 if (!global._ddtrace) {
   const TracerProxy = require('./src/proxy')
 
