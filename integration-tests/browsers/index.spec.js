@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { execSync } = require('child_process')
+const { execSync, spawnSync } = require('child_process')
 const { readFileSync, symlinkSync, mkdirSync, unlinkSync } = require('fs')
 const { platform } = require('os')
 const { resolve } = require('path')
@@ -35,7 +35,7 @@ for (const buildCommand of [
 }
 
 
-function createTestForBundler(npmScript, outFileLocation, expectDDTrace = false) {
+function createTestForBundler(outFileLocation) {
   return async function () {
     this.timeout(20e3)
 
@@ -74,26 +74,32 @@ function createTestForBundler(npmScript, outFileLocation, expectDDTrace = false)
   }
 }
 
-function createTestForNode(npmScript, outFileLocation, expectDDTrace = false) {
-  return async function () {
+function createTestForNode(outFileLocation) {
+  return function () {
     this.timeout(20e3)
 
-    execSync(`node node-entrypoint.js ${resolve(__dirname, outFileLocation)}`)
+    const result = spawnSync('node', ['node-entrypoint.js', resolve(__dirname, outFileLocation)], {
+      cwd: __dirname
+    })
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr.toString());
+    }
   }
 }
 
 describe('bundlers for browsers and JS CDNs', () => {
   // these are the common bundlers JS CDNs use under the hood in various ways
-  it('should perform a no-op instead of loading the tracer with webpack', createTestForBundler('webpack', './out/webpack.js'))
-  it('should perform a no-op instead of loading the tracer with esbuild', createTestForBundler('esbuild', './out/esbuild.js'))
-  it('should perform a no-op instead of loading the tracer with rollup', createTestForBundler('rollup', './out/rollup.js'))
+  it('should perform a no-op instead of loading the tracer with webpack', createTestForBundler('./out/webpack.js'))
+  it('should perform a no-op instead of loading the tracer with esbuild', createTestForBundler('./out/esbuild.js'))
+  it('should perform a no-op instead of loading the tracer with rollup', createTestForBundler('./out/rollup.js'))
 
   // these will still be bloating the bundle, but shouldn't cause errors
-  it('should perform a no-op instead of loading the tracer with webpack targeting node', createTestForBundler('webpack-node', './out/webpack-node.js'))
-  it('should perform a no-op instead of loading the tracer with esbuild targeting node', createTestForBundler('esbuild-node', './out/esbuild.js'))
+  it('should perform a no-op instead of loading the tracer with webpack targeting node', createTestForBundler('./out/webpack-node.js'))
+  it('should perform a no-op instead of loading the tracer with esbuild targeting node', createTestForBundler('./out/esbuild.js'))
 })
 
 describe('bundlers for servers', () => {
-  it('should load the tracer with webpack', createTestForNode('webpack-node', './out/webpack-node.js'))
-  it('should load the tracer with esbuild', createTestForNode('esbuild-node', './out/esbuild-node.js'))
+  it('should load the tracer with webpack', createTestForNode('./out/webpack-node.js'))
+  it('should load the tracer with esbuild', createTestForNode('./out/esbuild-node.js'))
 })
