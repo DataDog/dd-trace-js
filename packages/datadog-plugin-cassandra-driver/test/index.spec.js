@@ -4,8 +4,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let cassandra
   let tracer
@@ -121,8 +119,6 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const scope = tracer.scope()
           const childOf = tracer.startSpan('test')
 
@@ -135,8 +131,6 @@ describe('Plugin', () => {
         })
 
         it('should run the batch callback in the parent context', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const scope = tracer.scope()
           const childOf = tracer.startSpan('test')
 
@@ -149,8 +143,6 @@ describe('Plugin', () => {
         })
 
         it('should run event listeners in the correct scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const emitter = client.stream('SELECT now() FROM local;')
           const span = tracer.startSpan('test')
           const scope = tracer.scope()

@@ -57,7 +57,6 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
-    expect(config).to.have.property('trackAsyncScope', true)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('env', undefined)
@@ -197,10 +196,8 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       runtimeMetrics: true,
-      trackAsyncScope: false,
       reportHostname: true,
       plugins: false,
-      scope: 'noop',
       logLevel: logLevel,
       experimental: {
         b3: true,
@@ -235,10 +232,8 @@ describe('Config', () => {
     expect(config.tags).to.have.property('env', 'test')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('runtimeMetrics', true)
-    expect(config).to.have.property('trackAsyncScope', false)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
-    expect(config).to.have.property('scope', 'noop')
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')

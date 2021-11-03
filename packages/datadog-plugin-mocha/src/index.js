@@ -9,34 +9,43 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
+  TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
-  getTestParentSpan
+  getTestParentSpan,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
 
-  const { file: testSuite } = test
+  const { file: testSuiteAbsolutePath } = test
   const fullTestName = test.fullTitle()
-  const strippedTestSuite = testSuite ? testSuite.replace(`${sourceRoot}/`, '') : ''
+  const testSuite = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
 
   return {
     childOf,
-    resource: `${strippedTestSuite}.${fullTestName}`,
+    resource: `${testSuite}.${fullTestName}`,
     [TEST_TYPE]: 'test',
     [TEST_NAME]: fullTestName,
-    [TEST_SUITE]: strippedTestSuite,
+    [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP
+    [SAMPLING_PRIORITY]: AUTO_KEEP,
+    [TEST_FRAMEWORK_VERSION]: tracer._version
   }
 }
 
 function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTest (runTest) {
     return async function runTestWithTrace () {
+      // `runTest` is rerun when retries are configured through `this.retries` and the test fails.
+      // This clause prevents rewrapping `this.test.fn` when it has already been wrapped.
+      if (this.test._currentRetry !== undefined && this.test._currentRetry !== 0) {
+        return runTest.apply(this, arguments)
+      }
+
       let specFunction = this.test.fn
       if (specFunction.length) {
         specFunction = promisify(specFunction)

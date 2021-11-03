@@ -5,8 +5,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   describe('kafkajs', function () {
     afterEach(() => {

@@ -1,4 +1,4 @@
-const { getTestParametersString } = require('../../../src/plugins/util/test')
+const { getTestParametersString, getTestSuitePath } = require('../../../src/plugins/util/test')
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
@@ -27,5 +27,19 @@ describe('getTestParametersString', () => {
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
+  })
+})
+
+describe('getTestSuitePath', () => {
+  it('returns sourceRoot if the test path is falsy', () => {
+    const sourceRoot = '/users/opt'
+    const testSuitePath = getTestSuitePath(undefined, sourceRoot)
+    expect(testSuitePath).to.equal(sourceRoot)
+  })
+  it('returns sourceRoot if the test path has the same value', () => {
+    const sourceRoot = '/users/opt'
+    const testSuiteAbsolutePath = sourceRoot
+    const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
+    expect(testSuitePath).to.equal(sourceRoot)
   })
 })

@@ -6,8 +6,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let tracer
   let restify
@@ -87,8 +85,6 @@ describe('Plugin', () => {
         })
 
         it('should run handlers in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const server = restify.createServer()
 
           server.pre((req, res, next) => {
@@ -118,8 +114,6 @@ describe('Plugin', () => {
         })
 
         it('should reactivate the request span in middleware scopes', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           const server = restify.createServer()
 
           let span

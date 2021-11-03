@@ -5,8 +5,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const semver = require('semver')
 
-wrapIt()
-
 describe('Plugin', () => {
   let logger
   let tracer

@@ -6,8 +6,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let tracer
   let Hapi
@@ -240,36 +238,6 @@ describe('Plugin', () => {
           done()
 
           return reply(request, h)
-        })
-
-        axios
-          .get(`http://localhost:${port}/user/123`)
-          .catch(done)
-      })
-
-      it('should run request log events in the request scope', done => {
-        const events = server.events || server
-
-        server.route({
-          method: 'GET',
-          path: '/user/{id}',
-          handler
-        })
-
-        server.ext('onRequest', (request, h) => {
-          request.log('test')
-
-          done()
-
-          return reply(request, h)
-        })
-
-        events.on('request', () => {
-          try {
-            expect(tracer.scope().active()).to.not.be.null
-          } catch (e) {
-            done(e)
-          }
         })
 
         axios

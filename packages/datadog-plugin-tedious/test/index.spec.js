@@ -7,8 +7,6 @@ const semver = require('semver')
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
 
-wrapIt()
-
 describe('Plugin', () => {
   let tds
   let tracer
@@ -74,7 +72,6 @@ describe('Plugin', () => {
       })
 
       it('should run the Request callback in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
         const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
           expect(tracer.scope().active()).to.equal(span)
@@ -87,7 +84,6 @@ describe('Plugin', () => {
       })
 
       it('should run the Request event listeners in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
         const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
           if (err) done(err)
@@ -103,7 +99,6 @@ describe('Plugin', () => {
       })
 
       it('should run the Connection event listeners in the parent context', done => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const span = tracer.startSpan('test')
 
         tracer.scope().activate(span, () => {
@@ -328,7 +323,6 @@ describe('Plugin', () => {
 
           it('should handle bulkload requests', done => {
             const bulkLoad = buildBulkLoad()
-            bulkLoad.addRow({ num: 5 })
 
             agent
               .use(traces => {
@@ -338,10 +332,10 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            connection.execBulkLoad(bulkLoad)
+            connection.execBulkLoad(bulkLoad, [{ num: 5 }])
           })
 
-          if (semver.intersects(version, '>=4.2.0')) {
+          if (semver.intersects(version, '>=4.2.0') && !semver.intersects(version, '>=14')) {
             it('should handle streaming BulkLoad requests', done => {
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()

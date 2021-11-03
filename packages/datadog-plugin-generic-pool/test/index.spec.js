@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let genericPool
   let pool
@@ -40,19 +38,11 @@ describe('Plugin', () => {
 
       it('should run the acquire() callback in context where acquire() was called', done => {
         const span = tracer.startSpan('test')
-        const span2 = tracer.startSpan('test')
 
         tracer.scope().activate(span, () => {
           pool.acquire((err, resource) => {
             pool.release(resource)
             expect(tracer.scope().active()).to.equal(span)
-          })
-        })
-
-        tracer.scope().activate(span2, () => {
-          pool.acquire((err, resource) => {
-            pool.release(resource)
-            expect(tracer.scope().active()).to.equal(span2)
             done()
           })
         })

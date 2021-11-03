@@ -1,7 +1,5 @@
 'use strict'
 
-wrapIt()
-
 describe('plugins/util/redis', () => {
   let redis
   let tracer
@@ -32,8 +30,6 @@ describe('plugins/util/redis', () => {
     })
 
     it('should use the parent from the scope', () => {
-      if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
       const parent = tracer.startSpan('parent')
 
       tracer.scope().activate(parent, () => {
@@ -79,6 +75,14 @@ describe('plugins/util/redis', () => {
       expect(rawCommand).to.have.length(1000)
       expect(rawCommand.substr(0, 10)).to.equal('GET aaaaaa')
       expect(rawCommand.substr(990)).to.equal('aaaaaaa...')
+    })
+
+    it('should ignore arguments for authentication', () => {
+      span = redis.instrument(tracer, config, '1', 'auth', ['username', 'password'])
+
+      const rawCommand = span.context()._tags['redis.raw_command']
+
+      expect(rawCommand).to.equal('AUTH')
     })
   })
 })

@@ -25,9 +25,7 @@ class NativeCpuProfiler {
 
   profile () {
     if (!this._stop) return
-    const profile = this._stop()
-    this._record()
-    return profile
+    return this._stop(true)
   }
 
   encode (profile) {

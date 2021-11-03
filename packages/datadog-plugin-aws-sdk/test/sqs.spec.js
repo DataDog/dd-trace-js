@@ -4,8 +4,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const { setup } = require('./spec_helpers')
 
-wrapIt()
-
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
   Attributes: {

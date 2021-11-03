@@ -1,7 +1,7 @@
 'use strict'
 
 const web = require('../../dd-trace/src/plugins/util/web')
-const Scope = require('../../dd-trace/src/scope/base')
+const Scope = require('../../dd-trace/src/scope')
 
 function createWrapEmit (tracer, config) {
   config = web.normalizeConfig(config)

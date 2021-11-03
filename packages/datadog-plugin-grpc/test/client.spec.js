@@ -9,8 +9,6 @@ const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const pkgs = ['grpc', '@grpc/grpc-js']
 
-wrapIt()
-
 describe('Plugin', () => {
   let grpc
   let port
@@ -322,6 +320,14 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta['error.msg']).to.match(/^13 INTERNAL:.+$/)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 13)
                 })
+            })
+
+            it('should handle property named "service"', async () => {
+              const definition = loader.loadSync(`${__dirname}/hasservice.proto`)
+              const thing = grpc.loadPackageDefinition(definition).thing
+              await buildClient({
+                getUnary: (_, callback) => callback(null)
+              }, thing.service.ThingService)
             })
 
             it('should handle a missing callback', async () => {

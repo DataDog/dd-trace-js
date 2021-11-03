@@ -1,4 +1,7 @@
+const path = require('path')
+
 const { getGitMetadata } = require('./git')
+const { getUserProviderGitMetadata } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
@@ -14,6 +17,7 @@ const {
 const id = require('../../id')
 
 const TEST_FRAMEWORK = 'test.framework'
+const TEST_FRAMEWORK_VERSION = 'test.framework_version'
 const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
@@ -27,8 +31,12 @@ const ERROR_STACK = 'error.stack'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
+const JEST_TEST_RUNNER = 'test.jest.test_runner'
+
 module.exports = {
   TEST_FRAMEWORK,
+  TEST_FRAMEWORK_VERSION,
+  JEST_TEST_RUNNER,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -42,7 +50,8 @@ module.exports = {
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
-  getTestParentSpan
+  getTestParentSpan,
+  getTestSuitePath
 }
 
 function getTestEnvironmentMetadata (testFramework) {
@@ -70,12 +79,15 @@ function getTestEnvironmentMetadata (testFramework) {
     ciWorkspacePath
   })
 
+  const userProvidedGitMetadata = getUserProviderGitMetadata()
+
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
   return {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
+    ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
   }
 }
@@ -109,4 +121,17 @@ function getTestParentSpan (tracer) {
     'x-datadog-parent-id': '0000000000000000',
     'x-datadog-sampled': 1
   })
+}
+/**
+ * We want to make sure that test suites are reported the same way for
+ * every OS, so we replace `path.sep` by `/`
+ */
+function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
+  if (!testSuiteAbsolutePath) {
+    return sourceRoot
+  }
+  const testSuitePath = testSuiteAbsolutePath === sourceRoot
+    ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
+
+  return testSuitePath.replace(path.sep, '/')
 }

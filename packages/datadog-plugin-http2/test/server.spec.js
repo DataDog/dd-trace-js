@@ -7,8 +7,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
-wrapIt()
-
 const describe = () => {} // temporarily disable HTTP2 server plugin tests
 
 describe('Plugin', () => {
@@ -86,8 +84,6 @@ describe('Plugin', () => {
         })
 
         it('should run the request listener in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app = (stream, headers) => {
             expect(tracer.scope().active()).to.not.be.null
             done()
@@ -134,8 +130,6 @@ describe('Plugin', () => {
         })
 
         it('should run the request listener in the request scope', done => {
-          if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
           app = (req, res) => {
             expect(tracer.scope().active()).to.not.be.null
             done()

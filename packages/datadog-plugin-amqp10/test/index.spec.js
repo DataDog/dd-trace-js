@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 describe('Plugin', () => {
   let tracer
   let client
@@ -154,8 +152,6 @@ describe('Plugin', () => {
           })
 
           it('should run the message event listener in the AMQP span scope', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             tracer.scope().activate(null, () => {
               receiver.on('message', message => {
                 const span = tracer.scope().active()

@@ -9,12 +9,14 @@ const {
   TEST_TYPE,
   TEST_NAME: TEST_NAME_TAG,
   TEST_SUITE: TEST_SUITE_TAG,
+  TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
   TEST_PARAMETERS,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  JEST_TEST_RUNNER
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -41,7 +43,7 @@ describe('Plugin', () => {
         datadogJestEnv = new DatadogJestEnvironment({
           rootDir: BUILD_SOURCE_ROOT,
           testEnvironmentOptions: { userAgent: null }
-        }, { testPath: TEST_SUITE })
+        }, { testPath: `${BUILD_SOURCE_ROOT}/${TEST_SUITE}` })
         // TODO: avoid mocking expect once we instrument the runner instead of the environment
         datadogJestEnv.getVmContext = () => ({
           expect: {
@@ -56,7 +58,6 @@ describe('Plugin', () => {
 
     describe('jest with jest-circus', () => {
       it('should create a test span for a passing test', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
@@ -67,11 +68,13 @@ describe('Plugin', () => {
               [TEST_NAME_TAG]: TEST_NAME,
               [TEST_STATUS]: 'pass',
               [TEST_SUITE_TAG]: TEST_SUITE,
-              [TEST_TYPE]: 'test'
+              [TEST_TYPE]: 'test',
+              [JEST_TEST_RUNNER]: 'jest-circus'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
             expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           }).then(done).catch(done)
 
         const passingTestEvent = {
@@ -89,8 +92,6 @@ describe('Plugin', () => {
       })
 
       it('should create a test span for a failing test', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
@@ -125,8 +126,6 @@ describe('Plugin', () => {
       })
 
       it('should create a test span for a skipped test', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
@@ -156,8 +155,6 @@ describe('Plugin', () => {
       })
 
       it('should create a test span for an async test', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
@@ -190,7 +187,6 @@ describe('Plugin', () => {
       })
 
       it('should call wrap on test_start event', () => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         const originalWrap = tracer._tracer.wrap
         tracer._tracer.wrap = sinon.spy(() => {})
 
@@ -211,7 +207,6 @@ describe('Plugin', () => {
       })
 
       it('should not call wrap on events other than test_start or test_skip', () => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         const originalWrap = tracer._tracer.wrap
         tracer._tracer.wrap = sinon.spy(() => {})
 
@@ -224,7 +219,6 @@ describe('Plugin', () => {
       })
 
       it('should call startSpan and span finish on skipped tests', () => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         const span = { finish: sinon.spy(() => {}), context: sinon.spy(() => ({ _trace: { origin: '' } })) }
         tracer._tracer.startSpan = sinon.spy(() => {
           return span
@@ -245,7 +239,6 @@ describe('Plugin', () => {
       })
 
       it('should call flush on teardown', async () => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         tracer._tracer._exporter._writer.flush = sinon.spy((done) => {
           done()
         })
@@ -262,14 +255,12 @@ describe('Plugin', () => {
       })
 
       it('should set testSuite on the constructor', () => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
         expect(datadogJestEnv.testSuite).to.equal(TEST_SUITE)
       })
 
       it('does not crash with an empty context and uses test name from event', (done) => {
         const TEST_NAME_FROM_EVENT = `${TEST_NAME}_FROM_EVENT`
 
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
           .use(traces => {
             expect(traces[0][0].meta).to.contain({
@@ -299,8 +290,6 @@ describe('Plugin', () => {
       })
 
       it('should work with tests parameterized through an array', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         const tracer = require('../../dd-trace')
         sinon.spy(tracer._instrumenter, 'wrap')
 
@@ -340,8 +329,6 @@ describe('Plugin', () => {
       })
 
       it('should work with tests parameterized through a string', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
         const setupEvent = {
           name: 'setup'
         }
@@ -377,7 +364,6 @@ describe('Plugin', () => {
       })
 
       it('should detect timeouts as failed tests', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testStartEvent = {
           name: 'test_start',
           test: {
@@ -408,7 +394,6 @@ describe('Plugin', () => {
       })
 
       it('should work with timed out retries', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testStartEvent = {
           name: 'test_start',
           test: {
@@ -458,7 +443,6 @@ describe('Plugin', () => {
       })
 
       it('should not consider other errors as timeout', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testStartEvent = {
           name: 'test_start',
           test: {
@@ -490,7 +474,6 @@ describe('Plugin', () => {
       })
 
       it('set _dd.origin=ciapp-test to the test span and all children spans', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
           .use(trace => {
             const testSpan = trace[0].find(span => span.type === 'test')
@@ -519,7 +502,6 @@ describe('Plugin', () => {
       })
 
       it('should detect snapshot errors', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testStartEvent = {
           name: 'test_start',
           test: {
@@ -550,7 +532,6 @@ describe('Plugin', () => {
       })
 
       it('works with http integration', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         agent
           .use(trace => {
             const testSpan = trace[0].find(span => span.type === 'test')
@@ -578,7 +559,6 @@ describe('Plugin', () => {
       })
 
       it('handles errors in hooks', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const hookError = new Error('hook error')
 
         agent
@@ -609,8 +589,6 @@ describe('Plugin', () => {
       })
 
       it('does not crash when there is an error in a hook outside a test', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return
-
         const hookFailureEvent = {
           name: 'hook_failure'
         }
@@ -618,7 +596,6 @@ describe('Plugin', () => {
       })
 
       it('should not crash when getVmContext is not a function', (done) => {
-        if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
         const testStartEvent = {
           name: 'test_start',
           test: {

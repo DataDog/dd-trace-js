@@ -1,23 +1,16 @@
 'use strict'
 
 const Tracer = require('opentracing').Tracer
-const Scope = require('../scope/base')
+const ScopeManager = require('../scope/noop/scope_manager')
+const Scope = require('../noop/scope')
 const Span = require('./span')
 
 class NoopTracer extends Tracer {
   constructor (config) {
     super(config)
 
-    let ScopeManager
-
-    if (process.env.DD_CONTEXT_PROPAGATION === 'false') {
-      ScopeManager = require('../scope/noop/scope_manager')
-    } else {
-      ScopeManager = require('../scope/scope_manager')
-    }
-
     this._scopeManager = new ScopeManager()
-    this._scope = new Scope(config)
+    this._scope = new Scope()
     this._span = new Span(this)
   }
 

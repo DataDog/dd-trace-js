@@ -9,8 +9,6 @@ const zip = new JSZip()
 
 const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('base64')
 
-wrapIt()
-
 describe('Plugin', () => {
   describe('aws-sdk (lambda)', function () {
     setup()

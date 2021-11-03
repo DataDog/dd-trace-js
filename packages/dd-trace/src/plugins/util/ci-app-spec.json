@@ -2,6 +2,7 @@
   "test.type",
   "test.status",
   "test.framework",
+  "test.framework_version",
   "test.suite",
   "test.name",
   "test.skip_reason",

@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 
-wrapIt()
-
 // Retries and the initial request result in a trace with multiple spans.
 // The last span is the one that actually did the query.
 const last = spans => spans[spans.length - 1]
@@ -137,8 +135,6 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             agent
               .use(traces => {
                 expect(last(traces[0])).to.have.property('parent_id')
@@ -155,8 +151,6 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             client.ping(error => {
               expect(tracer.scope().active()).to.be.null
               done(error)
@@ -202,8 +196,6 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', done => {
-            if (process.env.DD_CONTEXT_PROPAGATION === 'false') return done()
-
             agent
               .use(traces => {
                 expect(last(traces[0])).to.have.property('parent_id')

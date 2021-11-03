@@ -5,7 +5,6 @@ const os = require('os')
 const URL = require('url').URL
 const pkg = require('./pkg')
 const coalesce = require('koalas')
-const scopes = require('../../../ext/scopes')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
@@ -168,7 +167,6 @@ class Config {
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
-    this.trackAsyncScope = options.trackAsyncScope !== false
     this.experimental = {
       b3: isTrue(DD_TRACE_B3_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
@@ -178,9 +176,7 @@ class Config {
       internalErrors: isTrue(DD_TRACE_INTERNAL_ERRORS_ENABLED)
     }
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
-    this.scope = isFalse(process.env.DD_CONTEXT_PROPAGATION)
-      ? scopes.NOOP
-      : coalesce(options.scope, process.env.DD_TRACE_SCOPE)
+    this.scope = process.env.DD_TRACE_SCOPE
     this.logLevel = coalesce(
       options.logLevel,
       process.env.DD_TRACE_LOG_LEVEL,

@@ -5,9 +5,12 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FRAMEWORK_VERSION,
+  JEST_TEST_RUNNER,
   CI_APP_ORIGIN,
   getTestEnvironmentMetadata,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { getTestSpanTags, setSuppressedErrors } = require('./util')
 
@@ -21,14 +24,19 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
 
       const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
 
-      const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
+      const testSuite = getTestSuitePath(globalInput.jasmine.testPath, globalConfig.rootDir)
 
       const newSpecFunction = tracer.wrap(
         'jest.test',
         {
           type: 'test',
           childOf,
-          tags: { ...commonSpanTags, [TEST_SUITE]: testSuite }
+          tags: {
+            ...commonSpanTags,
+            [TEST_SUITE]: testSuite,
+            [TEST_FRAMEWORK_VERSION]: tracer._version,
+            [JEST_TEST_RUNNER]: 'jest-jasmine2'
+          }
         },
         async (done) => {
           const testSpan = tracer.scope().active()
@@ -107,7 +115,7 @@ function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMet
     return function itSkipWithTrace () {
       const { childOf, commonSpanTags } = getTestSpanTags(tracer, testEnvironmentMetadata)
 
-      const testSuite = globalInput.jasmine.testPath.replace(`${globalConfig.rootDir}/`, '')
+      const testSuite = getTestSuitePath(globalInput.jasmine.testPath, globalConfig.rootDir)
 
       const spec = it.apply(this, arguments)
 
@@ -123,7 +131,9 @@ function createWrapItSkip (tracer, globalConfig, globalInput, testEnvironmentMet
             [RESOURCE_NAME]: resource,
             [TEST_NAME]: testName,
             [TEST_SUITE]: testSuite,
-            [TEST_STATUS]: 'skip'
+            [TEST_STATUS]: 'skip',
+            [TEST_FRAMEWORK_VERSION]: tracer._version,
+            [JEST_TEST_RUNNER]: 'jest-jasmine2'
           }
         }
       )
