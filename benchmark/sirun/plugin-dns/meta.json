@@ -1,0 +1,15 @@
+{
+  "name": "plugin-dns",
+  "run": "node index.js",
+  "cachegrind": true,
+  "iterations": 100,
+  "variants": {
+    "control": {
+      "env": { "USE_TRACER": "0" }
+    },
+    "with-tracer": {
+      "baseline": "control",
+      "env": { "USE_TRACER": "1" }
+    }
+  }
+}
