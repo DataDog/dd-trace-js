@@ -63,6 +63,7 @@
     "@datadog/sketches-js": "^1.0.4",
     "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",
+    "diagnostics_channel": "^1.1.0",
     "form-data": "^3.0.0",
     "import-in-the-middle": "^1.1.2",
     "koalas": "^1.0.2",
