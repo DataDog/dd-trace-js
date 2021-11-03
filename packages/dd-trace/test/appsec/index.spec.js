@@ -14,7 +14,7 @@ describe('AppSec Index', () => {
 
   beforeEach(() => {
     config = { tags: {} }
-    global._ddtrace = { _tracer: { scope: sinon.stub().returns({ _config: config }) } }
+    global._ddtrace = { _tracer: { _tags: config.tags } }
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
@@ -85,6 +85,49 @@ describe('AppSec Index', () => {
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
       expect(config.tags).to.not.have.any.keys('_dd.appsec.enabled', '_dd.runtime_family')
+    })
+  })
+
+  describe('incomingHttpTranslator', () => {
+    it('should propagate incoming http data', () => {
+      const store = new Map()
+      sinon.stub(Gateway, 'startContext').returns(store)
+
+      const context = {}
+      store.set('context', context)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      sinon.stub(Gateway, 'propagate')
+
+      AppSec.incomingHttpTranslator({ req, res })
+
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.remote_ip': '127.0.0.1',
+        'server.request.remote_port': 8080
+      }, context)
     })
   })
 })
