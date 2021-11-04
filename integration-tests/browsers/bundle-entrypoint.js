@@ -1,1 +1,1 @@
-require('dd-trace');
+require('dd-trace').init();
