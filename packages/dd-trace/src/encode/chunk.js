@@ -17,9 +17,8 @@ class Chunk {
   push (...bytes) {
     this._reserve(bytes.length)
 
-    for (const byte of bytes) {
-      this.buffer[this.length++] = byte
-    }
+    this.buffer.set(bytes, this.length);
+    this.length += bytes.length;
   }
 
   write (value) {
@@ -27,12 +26,15 @@ class Chunk {
     const offset = this.length
 
     if (length < 0x20) { // fixstr
-      this.push(length | 0xa0)
+      this._reserve(length + 1)
+      this.buffer[this.length] = length | 0xa0
+      this.length += 1
     } else if (length < 0x100000000) { // str 32
-      this.push(0xdb, length >> 24, length >> 16, length >> 8, length)
+      this._reserve(length + 5)
+      this.buffer[this.length] = 0xdb
+      this.buffer.writeUInt32BE(length, this.length + 1)
+      this.length += 5
     }
-
-    this._reserve(length)
 
     this.length += this.buffer.utf8Write(value, this.length, length)
 
