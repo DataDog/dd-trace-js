@@ -1,10 +1,11 @@
 'use strict'
 
-const Reporter = require('../../src/appsec/reporter')
+let Reporter = require('../../src/appsec/reporter')
 const Engine = require('../../src/gateway/engine')
 const als = require('../../src/gateway/als')
 const Addresses = require('../../src/appsec/addresses')
 const log = require('../../src/log')
+const URL = require('url').URL
 
 const MAX_EVENT_BACKLOG = 1e6
 
@@ -279,6 +280,128 @@ describe('reporter', () => {
         expect(event).to.have.nested.property('context.trace.context_version').that.equals('0.1.0')
         expect(event).to.have.nested.property('context.trace.id').that.is.a('string')
       })
+    })
+  })
+
+  describe('flush', () => {
+    let request
+
+    beforeEach(() => {
+      global._ddtrace._tracer._exporter = {
+        _writer: {
+          _url: new URL('http://test:123')
+        }
+      }
+
+      request = sinon.stub().yieldsAsync(null, {}, 200)
+
+      Reporter = proxyquire('../src/appsec/reporter', {
+        '../exporters/agent/request': request
+      })
+    })
+
+    it('should do nothing when called in parallel', () => {
+      Reporter.events.add({})
+      expect(Reporter.flush()).to.not.be.false
+
+      Reporter.events.add({})
+      expect(Reporter.flush()).to.be.false
+
+      expect(request).to.have.been.calledOnce
+    })
+
+    it('should do nothing if no events is found', () => {
+      expect(Reporter.flush()).to.be.false
+      expect(request).to.not.have.been.called
+    })
+
+    it('should log when backlog is full', () => {
+      sinon.spy(log, 'warn')
+
+      Reporter.events.add({})
+
+      sinon.stub(Reporter.events, 'size').get(() => MAX_EVENT_BACKLOG)
+
+      expect(Reporter.flush()).to.not.be.false
+      expect(log.warn).to.have.been.calledOnceWithExactly('Dropping AppSec events because the backlog is full')
+      expect(request).to.have.been.calledOnce
+    })
+
+    it('should parse socket url', () => {
+      global._ddtrace._tracer._exporter._writer._url = new URL('unix:/path.sock')
+
+      Reporter.events.add({})
+
+      expect(Reporter.flush()).to.not.be.false
+      expect(request).to.have.been.calledOnce
+      expect(request.firstCall.firstArg).to.deep.include({
+        path: '/appsec/proxy/api/v2/appsecevts',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        socketPath: '/path.sock'
+      })
+    })
+
+    it('should send events', () => {
+      Reporter.events.add({
+        a: 1,
+        b: [2, 3, 4],
+        c: 5
+      })
+      Reporter.events.add({
+        another: 'event'
+      })
+
+      expect(Reporter.flush()).to.not.be.false
+      expect(Reporter.events).to.be.empty
+      expect(request).to.have.been.calledOnce
+      const firstCall = request.firstCall
+
+      const firstArg = firstCall.firstArg
+      expect(firstArg).to.deep.include({
+        path: '/appsec/proxy/api/v2/appsecevts',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        protocol: 'http:',
+        hostname: 'test',
+        port: '123'
+      })
+      expect(firstArg.data).to.be.a('string')
+      const data = JSON.parse(firstArg.data)
+      expect(data).to.have.property('idempotency_key').that.is.a('string')
+      expect(data).to.deep.include({
+        protocol_version: 1,
+        events: [{
+          a: 1,
+          b: [2, 3, 4],
+          c: 5
+        }, {
+          another: 'event'
+        }]
+      })
+
+      const cb = firstCall.lastArg
+      expect(cb).to.be.a('function')
+    })
+
+    it('should log request error', () => {
+      request = sinon.stub().yields(new Error('socket hang up'), null, null)
+
+      Reporter = proxyquire('../src/appsec/reporter', {
+        '../exporters/agent/request': request
+      })
+
+      sinon.spy(log, 'error')
+
+      Reporter.events.add({})
+
+      expect(Reporter.flush()).to.not.be.false
+      expect(request).to.have.been.calledOnce
+      expect(log.error).to.have.been.calledOnce
     })
   })
 })

@@ -207,7 +207,7 @@ function flush () {
 
   lock = true
 
-  request(options, (err, res, status) => {
+  return request(options, (err, res, status) => {
     lock = false
 
     if (err) {
