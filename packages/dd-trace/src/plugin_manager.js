@@ -3,6 +3,9 @@
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
 
+// instrument everything that needs Plugin System V2 instrumentation
+require('../../datadog-instrumentations')
+
 
 // TODO this is shared w/ instrumenter. DRY up.
 function getConfig (name, config = {}) {
