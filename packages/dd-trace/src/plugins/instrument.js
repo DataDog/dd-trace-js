@@ -10,8 +10,8 @@ const parse = require('module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
-
 const channelMap = {}
+const noop = () => {}
 
 function channel (name) {
   const maybe = channelMap[name]
@@ -29,22 +29,34 @@ exports.wrap = function wrap (prefix, fn) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function () {
+    const startActive = startCh.hasSubscribers
+    const endActive = endCh.hasSubscribers
+    const asyncEndActive = asyncEndCh.hasSubscribers
+    const errorActive = errorCh.hasSubscribers
+
+    if (!(startActive || endActive || asyncEndActive || errorActive)) {
+      return fn.apply(this, arguments)
+    }
+
     const context = { wrapped: fn }
     const cb = AsyncResource.bind(arguments[arguments.length - 1])
 
-    startCh.publish({ context, args: arguments, thisObj: this })
+    if (startActive) {
+      startCh.publish({ context, args: arguments, thisObj: this })
+    }
 
     if (typeof cb === 'function') {
-      arguments[arguments.length - 1] = function (error, ...result) {
-        if (error) {
-          errorCh.publish({ context, error, type: 'callback' })
-        } else {
-          if (result.length === 1) {
-            result = result[0]
+      if (!(errorActive || asyncEndActive)) {
+        arguments[arguments.length - 1] = cb
+      } else {
+        arguments[arguments.length - 1] = function (error, ...result) {
+          if (error && errorActive) {
+            errorCh.publish({ context, error, type: 'callback' })
+          } else if (asyncEndActive) {
+            asyncEndCh.publish({ context, result, type: 'callback' })
           }
-          asyncEndCh.publish({ context, result, type: 'callback' })
+          cb.call(this, error, ...result)
         }
-        cb.call(this, error, ...result)
       }
     }
 
@@ -53,18 +65,26 @@ exports.wrap = function wrap (prefix, fn) {
       result = fn.apply(this, arguments)
 
       if (result && typeof result.then === 'function') {
-        result.then(
-          result => asyncEndCh.publish({ context, result, type: 'promise' }),
-          error => errorCh.publish({ context, error, type: 'reject' })
-        )
+        if (asyncEndActive) {
+          result.then(result => asyncEndCh.publish({ context, result, type: 'promise' }))
+        }
+        if (errorActive) {
+          // TODO can catch just be used here? do we need to re-reject? if so, do we need to do all
+          // this in-line in the promise chain?
+          result.then(noop, error => errorCh.publish({ context, error, type: 'reject' }))
+        }
       }
     } catch (error) {
       error.stack // trigger getting the stack at the original throwing point
-      errorCh.publish({ context, error, type: 'throw' })
+      if (errorActive) {
+        errorCh.publish({ context, error, type: 'throw' })
+      }
 
       throw error
     } finally {
-      endCh.publish({ context, result })
+      if (endActive) {
+        endCh.publish({ context, result })
+      }
     }
   }
 
