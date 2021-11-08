@@ -45,11 +45,14 @@ class WAFCallback {
     const subscriptionGroups = new Set()
 
     for (const rule of rules.rules) {
+      let toSubscribe = []
+
       for (const condition of rule.conditions) {
         let addresses = condition.parameters.inputs.map((input) => input.address.split(':', 2)[0])
 
         if (!addresses.every((address) => validAddressSet.has(address))) {
           log.warn(`Skipping invalid rule ${rule.id}`)
+          toSubscribe = []
           break
         }
 
@@ -60,6 +63,10 @@ class WAFCallback {
         if (subscriptionGroups.has(hash)) continue
         subscriptionGroups.add(hash)
 
+        toSubscribe.push(addresses)
+      }
+
+      for (const addresses of toSubscribe) {
         Gateway.manager.addSubscription({ addresses, callback })
       }
     }
@@ -118,7 +125,7 @@ class WAFCallback {
   }
 
   clear () {
-    this.libAppSec.dispose()
+    this.ddwaf.dispose()
 
     this.wafContextCache = new WeakMap()
 
