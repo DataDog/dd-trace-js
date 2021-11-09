@@ -45,10 +45,9 @@ class DNSPlugin extends Plugin {
         'dns.hostname': hostname
       })
     }, (result) => {
-      const store = storage.getStore()
-      if (!store) return // TODO why do we have a no-store scenario??
-      store.span.setTag('dns.address', result)
-      store.span.finish()
+      const { span } = storage.getStore()
+      span.setTag('dns.address', result)
+      span.finish()
     })
 
     this.addSubs('lookup_service', ([address, port]) => {
