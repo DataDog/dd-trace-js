@@ -972,12 +972,12 @@ declare namespace plugins {
     /**
      * Configuration for HTTP clients.
      */
-    client?: HttpClient | false,
+    client?: HttpClient | boolean,
 
     /**
      * Configuration for HTTP servers.
      */
-    server?: HttpServer | false
+    server?: HttpServer | boolean
 
     /**
      * Hooks to run before spans are finished.
@@ -1006,12 +1006,12 @@ declare namespace plugins {
     /**
      * Configuration for HTTP clients.
      */
-    client?: Http2Client | false,
+    client?: Http2Client | boolean,
 
     /**
      * Configuration for HTTP servers.
      */
-    server?: Http2Server | false
+    server?: Http2Server | boolean
   }
 
   /**
