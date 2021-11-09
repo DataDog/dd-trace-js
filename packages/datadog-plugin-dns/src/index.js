@@ -29,11 +29,11 @@ class DNSPlugin extends Plugin {
     return 'client'
   }
 
-  addSubs (func, start, asyncEnd) {
+  addSubs (func, start, asyncEnd = defaultAsyncEnd) {
     this.addSub(`apm:dns:${func}:start`, start)
     this.addSub(`apm:dns:${func}:end`, this.exit.bind(this))
     this.addSub(`apm:dns:${func}:error`, errorHandler)
-    this.addSub(`apm:dns:${func}:async-end`, asyncEnd || defaultAsyncEndHandler)
+    this.addSub(`apm:dns:${func}:async-end`, asyncEnd)
   }
 
   constructor (config) {
@@ -83,14 +83,12 @@ class DNSPlugin extends Plugin {
   }
 }
 
-function defaultAsyncEndHandler () {
+function defaultAsyncEnd () {
   storage.getStore().span.finish()
 }
 
 function errorHandler (error) {
-  const { span } = storage.getStore()
-  span.addError(error)
-  span.finish()
+  storage.getStore().addError(error)
 }
 
 module.exports = DNSPlugin

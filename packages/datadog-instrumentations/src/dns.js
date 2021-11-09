@@ -3,8 +3,6 @@
 const { AsyncResource } = require('async_hooks')
 const { channel, addHook } = require('../../dd-trace/src/plugins/instrument')
 
-const empty = {}
-
 const rrtypes = {
   resolveAny: 'ANY',
   resolve4: 'A',
@@ -61,16 +59,12 @@ function wrap (prefix, fn, expectedArgs) {
     }
 
     startCh.publish(arguments)
-    if (context.noTrace) {
-      return fn.apply(this, arguments)
-    }
 
     arguments[arguments.length - 1] = function (error, result) {
       if (error) {
         errorCh.publish(error)
-      } else {
-        asyncEndCh.publish(result)
       }
+      asyncEndCh.publish(result)
       cb.apply(this, arguments)
     }
 
@@ -83,7 +77,7 @@ function wrap (prefix, fn, expectedArgs) {
 
       throw error
     } finally {
-      endCh.publish(empty)
+      endCh.publish(undefined)
     }
   }
 
