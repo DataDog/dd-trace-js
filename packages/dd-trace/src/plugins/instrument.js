@@ -3,7 +3,6 @@
 const dc = require('diagnostics_channel')
 const path = require('path')
 const semver = require('semver')
-const { AsyncResource } = require('async_hooks')
 const iitm = require('../iitm')
 const ritm = require('../ritm')
 const parse = require('module-details-from-path')
@@ -11,88 +10,12 @@ const requirePackageJson = require('../require-package-json')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
-const noop = () => {}
-
-function channel (name) {
+exports.channel = function channel (name) {
   const maybe = channelMap[name]
   if (maybe) return maybe
   const ch = dc.channel(name)
   channelMap[name] = ch
   return ch
-}
-
-// TODO use shimmer?
-exports.wrap = function wrap (prefix, fn) {
-  const startCh = channel(prefix + ':start')
-  const endCh = channel(prefix + ':end')
-  const asyncEndCh = channel(prefix + ':async-end')
-  const errorCh = channel(prefix + ':error')
-
-  const wrapped = function () {
-    const startActive = startCh.hasSubscribers
-    const endActive = endCh.hasSubscribers
-    const asyncEndActive = asyncEndCh.hasSubscribers
-    const errorActive = errorCh.hasSubscribers
-
-    if (!(startActive || endActive || asyncEndActive || errorActive)) {
-      return fn.apply(this, arguments)
-    }
-
-    const context = { wrapped: fn }
-    const cb = AsyncResource.bind(arguments[arguments.length - 1])
-
-    if (startActive) {
-      startCh.publish({ context, args: arguments, thisObj: this })
-    }
-
-    if (typeof cb === 'function') {
-      if (!(errorActive || asyncEndActive)) {
-        arguments[arguments.length - 1] = cb
-      } else {
-        arguments[arguments.length - 1] = function (error, ...result) {
-          if (error && errorActive) {
-            errorCh.publish({ context, error, type: 'callback' })
-          } else if (asyncEndActive) {
-            asyncEndCh.publish({ context, result, type: 'callback' })
-          }
-          cb.call(this, error, ...result)
-        }
-      }
-    }
-
-    let result
-    try {
-      result = fn.apply(this, arguments)
-
-      if (result && typeof result.then === 'function') {
-        if (asyncEndActive) {
-          result.then(result => asyncEndCh.publish({ context, result, type: 'promise' }))
-        }
-        if (errorActive) {
-          // TODO can catch just be used here? do we need to re-reject? if so, do we need to do all
-          // this in-line in the promise chain?
-          result.then(noop, error => errorCh.publish({ context, error, type: 'reject' }))
-        }
-      }
-    } catch (error) {
-      error.stack // trigger getting the stack at the original throwing point
-      if (errorActive) {
-        errorCh.publish({ context, error, type: 'throw' })
-      }
-
-      throw error
-    } finally {
-      if (endActive) {
-        endCh.publish({ context, result })
-      }
-    }
-  }
-
-  Reflect.ownKeys(fn).forEach(key => {
-    Object.defineProperty(wrapped, key, Object.getOwnPropertyDescriptor(fn, key))
-  })
-
-  return wrapped
 }
 
 exports.addHook = function addHook ({ name, versions, file }, hook) {

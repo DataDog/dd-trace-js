@@ -24,52 +24,46 @@ class Subscription {
 module.exports = class Plugin {
   #subscriptions
   #enabled
+  #storeStack
 
   constructor () {
     this.#subscriptions = []
     this.#enabled = false
+    this.#storeStack = []
   }
 
-  addWrappedSubscriptions(prefix, name, hooks = {}) {
-    hooks = Object.assign({
-      // TODO more hooks will eventually be needed
-      tags: () => ({}),
-      asyncEnd: () => {}
-    }, hooks)
-    this.addSubscription(prefix + ':start', ({ context, args }) => {
-      context.started = true
-      let tags = hooks.tags.call(this, { context, args })
-      if (context.noTrace) return
-      const childOf = tracer().scope().active()
-      tags = Object.assign({
-        'service.name': this.config.service || tracer()._service
-      }, tags)
-      if (this.constructor.kind) {
-        tags['span.kind'] = this.constructor.kind
-      }
-      const span = tracer().startSpan(name, { childOf, tags })
-      const store = storage.getStore()
-      storage.enterWith({ ...store, span })
-      context.span = span
-      context.original = store
+  startSpanAndEnter (name, customTags) {
+    const tags = {
+      // TODO this needs to be sometimes suffixed
+      'service.name': this.config.service || tracer()._service
+    }
+    if (this.kind) {
+      tags['span.kind'] = this.kind
+    }
+    for (const tag in customTags) {
+      tags[tag] = customTags[tag]
+    }
+    const store = storage.getStore()
+    const childOf = store ? store.span : null
+    const span = tracer().startSpan(name, {
+      childOf,
+      tags
     })
-    this.addSubscription(prefix + ':end', ({ context }) => {
-      if (context.noTrace || !context.started) return
-      storage.enterWith(context.original)
-    })
-    this.addSubscription(prefix + ':async-end', ({ context, result }) => {
-      if (context.noTrace || !context.started) return
-      hooks.asyncEnd.call(this, { context, result })
-      context.span.finish()
-    })
-    this.addSubscription(prefix + ':error', ({ context, error }) => {
-      if (context.noTrace || !context.started) return
-      context.span.addError(error)
-      context.span.finish()
-    })
+    this.enter(span, store)
+    return span
   }
 
-  addSubscription (channelName, handler) {
+  enter (span, store) {
+    store ||= storage.getStore()
+    this.#storeStack.push(store)
+    storage.enterWith({ ...store, span })
+  }
+
+  exit () {
+    storage.enterWith(this.#storeStack.pop())
+  }
+
+  addSub (channelName, handler) {
     this.#subscriptions.push(new Subscription(channelName, handler))
   }
 
