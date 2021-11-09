@@ -11,7 +11,7 @@ const { assert } = require('chai')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
-describe.only('esm', () => {
+describe('esm', () => {
   let agent
   let proc
   let sandbox
