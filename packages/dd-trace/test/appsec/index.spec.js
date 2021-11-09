@@ -125,8 +125,8 @@ describe('AppSec Index', () => {
           'host': 'localhost'
         },
         'server.request.method': 'POST',
-        'server.request.remote_ip': '127.0.0.1',
-        'server.request.remote_port': 8080
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080
       }, context)
     })
   })

@@ -64,7 +64,7 @@ describe('WAFCallback', () => {
           conditions: [{
             parameters: {
               inputs: [{
-                address: 'server.request.remote_ip'
+                address: 'server.request.client_ip'
               }]
             }
           }, {
@@ -72,7 +72,7 @@ describe('WAFCallback', () => {
               inputs: [{
                 address: 'invalid_address'
               }, {
-                address: 'server.request.remote_port'
+                address: 'server.request.client_port'
               }]
             }
           }]
