@@ -1,11 +1,24 @@
 'use strict'
 
-const { rrtypeMap } = require('../../datadog-instrumentations/src/dns')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 
 // // TODO oops! we need to properly use this
 // const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+
+const rrtypes = [
+  'ANY',
+  'A',
+  'AAAA',
+  'CNAME',
+  'MX',
+  'NS',
+  'TXT',
+  'SRV',
+  'PTR',
+  'NAPTR',
+  'SOA'
+]
 
 class DNSPlugin extends Plugin {
   static get name () {
@@ -25,30 +38,20 @@ class DNSPlugin extends Plugin {
 
   constructor (config) {
     super(config)
-    this.addSubs('lookup', context => {
-      const { args } = context
-      if (!isArgsValid(args, 2)) {
-        context.noTrace = true
-        return
-      }
+
+    this.addSubs('lookup', ([hostname]) => {
       this.startSpanAndEnter('dns.lookup', {
-        'resource.name': args[0],
-        'dns.hostname': args[0]
+        'resource.name': hostname,
+        'dns.hostname': hostname
       })
-    }, ({ result }) => {
+    }, (result) => {
       const store = storage.getStore()
       if (!store) return // TODO why do we have a no-store scenario??
-      store.span.setTag('dns.address', result[0])
+      store.span.setTag('dns.address', result)
       store.span.finish()
     })
 
-    this.addSubs('lookup_service', context => {
-      const { args } = context
-      if (!isArgsValid(args, 3)) {
-        context.noTrace = true
-        return
-      }
-      const [address, port] = args
+    this.addSubs('lookup_service', ([address, port]) => {
       this.startSpanAndEnter('dns.lookup_service', {
         'resource.name': `${address}:${port}`,
         'dns.address': address,
@@ -56,15 +59,8 @@ class DNSPlugin extends Plugin {
       })
     })
 
-    this.addSubs('resolve', context => {
-      const { args } = context
-      if (!isArgsValid(args, 2)) {
-        context.noTrace = true
-        return
-      }
-
-      const hostname = args[0]
-      const rrtype = typeof args[1] === 'string' ? args[1] : rrtypeMap.get(context.wrapped) || 'A'
+    this.addSubs('resolve', ([hostname, maybeType]) => {
+      const rrtype = typeof maybeType === 'string' ? maybeType : 'A'
       this.startSpanAndEnter('dns.resolve', {
         'resource.name': `${rrtype} ${hostname}`,
         'dns.hostname': hostname,
@@ -72,23 +68,20 @@ class DNSPlugin extends Plugin {
       })
     })
 
-    this.addSubs('reverse', context => {
-      const { args } = context
-      if (!isArgsValid(args, 2)) {
-        context.noTrace = true
-        return
-      }
+    for (const rrtype of rrtypes) {
+      this.addSubs('resolve:' + rrtype, ([hostname]) => {
+        this.startSpanAndEnter('dns.resolve', {
+          'resource.name': `${rrtype} ${hostname}`,
+          'dns.hostname': hostname,
+          'dns.rrtype': rrtype
+        })
+      })
+    }
 
-      this.startSpanAndEnter('dns.reverse', { 'resource.name': args[0], 'dns.ip': args[0] })
+    this.addSubs('reverse', ([ip]) => {
+      this.startSpanAndEnter('dns.reverse', { 'resource.name': ip, 'dns.ip': ip })
     })
   }
-}
-
-function isArgsValid (args, minLength) {
-  if (args.length < minLength) return false
-  if (typeof args[args.length - 1] !== 'function') return false
-
-  return true
 }
 
 function defaultAsyncEndHandler () {

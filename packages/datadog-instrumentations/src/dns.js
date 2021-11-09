@@ -22,16 +22,16 @@ const rrtypes = {
 const rrtypeMap = new WeakMap()
 
 addHook({ name: 'dns' }, dns => {
-  dns.lookup = wrap('apm:dns:lookup', dns.lookup)
-  dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService)
-  dns.resolve = wrap('apm:dns:resolve', dns.resolve)
-  dns.reverse = wrap('apm:dns:reverse', dns.reverse)
+  dns.lookup = wrap('apm:dns:lookup', dns.lookup, 2)
+  dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService, 3)
+  dns.resolve = wrap('apm:dns:resolve', dns.resolve, 2)
+  dns.reverse = wrap('apm:dns:reverse', dns.reverse, 2)
 
   patchResolveShorthands(dns)
 
   if (dns.Resolver) {
-    dns.Resolver.prototype.resolve = wrap('apm:dns:resolve', dns.Resolver.prototype.resolve)
-    dns.Resolver.prototype.reverse = wrap('apm:dns:reverse', dns.Resolver.prototype.reverse)
+    dns.Resolver.prototype.resolve = wrap('apm:dns:resolve', dns.Resolver.prototype.resolve, 2)
+    dns.Resolver.prototype.reverse = wrap('apm:dns:reverse', dns.Resolver.prototype.reverse, 2)
 
     patchResolveShorthands(dns.Resolver.prototype)
   }
@@ -44,16 +44,11 @@ function patchResolveShorthands (prototype) {
     .filter(method => !!prototype[method])
     .forEach(method => {
       rrtypeMap.set(prototype[method], rrtypes[method])
-      prototype[method] = wrap('apm:dns:resolve', prototype[method])
+      prototype[method] = wrap('apm:dns:resolve:' + rrtypes[method], prototype[method], 2)
     })
 }
 
-// These modules normally don't have exports, but in this case, we want to use
-// the rrtypeMap in the plugin, so we'll export it.
-// TODO find some better common place for it, or retain a copy here and in the plugin.
-module.exports = { rrtypeMap }
-
-function wrap (prefix, fn) {
+function wrap (prefix, fn, expectedArgs) {
   const startCh = channel(prefix + ':start')
   const endCh = channel(prefix + ':end')
   const asyncEndCh = channel(prefix + ':async-end')
@@ -61,20 +56,22 @@ function wrap (prefix, fn) {
 
   const wrapped = function () {
     const cb = AsyncResource.bind(arguments[arguments.length - 1])
-    const context = { wrapped: fn, args: arguments }
+    if (!isArgsValid(arguments, expectedArgs)) {
+      return fn.apply(this, arguments)
+    }
 
-    startCh.publish(context)
+    startCh.publish(arguments)
     if (context.noTrace) {
       return fn.apply(this, arguments)
     }
 
-    arguments[arguments.length - 1] = function (error, ...result) {
+    arguments[arguments.length - 1] = function (error, result) {
       if (error) {
         errorCh.publish(error)
       } else {
-        asyncEndCh.publish({ result })
+        asyncEndCh.publish(result)
       }
-      cb.call(this, error, ...result)
+      cb.apply(this, arguments)
     }
 
     try {
@@ -95,4 +92,11 @@ function wrap (prefix, fn) {
   })
 
   return wrapped
+}
+
+function isArgsValid (args, minLength) {
+  if (args.length < minLength) return false
+  if (typeof args[args.length - 1] !== 'function') return false
+
+  return true
 }
