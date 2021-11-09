@@ -87,6 +87,43 @@ describe('Plugin', () => {
           })
         })
 
+        it('should propagate the tracing context from the producer to the consumer using .promise()', (done) => {
+          // No need to test if version does not support .promise();
+          if (typeof AWS.Request.prototype.promise !== 'function') {
+            done()
+            return
+          }
+          let parentId
+          let traceId
+
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span.resource.startsWith('sendMessage')).to.equal(true)
+
+            parentId = span.span_id.toString()
+            traceId = span.trace_id.toString()
+          })
+
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(parentId).to.be.a('string')
+            expect(span.parent_id.toString()).to.equal(parentId)
+            expect(span.trace_id.toString()).to.equal(traceId)
+          }).then(done, done)
+
+          sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }).promise().then(() => {
+            return sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }).promise()
+          }).catch(done)
+        })
+
         it('should run the consumer in the context of its span', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',

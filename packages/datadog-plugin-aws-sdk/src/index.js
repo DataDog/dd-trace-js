@@ -49,7 +49,24 @@ function createWrapRequest (tracer, config) {
         if (typeof cb === 'function') {
           arguments[0] = awsHelpers.wrapCb(cb, serviceIdentifier, tags, request, tracer, childOf)
         }
-        return send.apply(this, arguments)
+        const resp = send.apply(this, arguments)
+        // If using the .promise() function, create a fake callback to wrap
+        if (typeof resp.then === 'function') {
+          return resp.then(response => {
+            return new Promise(resolve => {
+              const wrappedCb = awsHelpers.wrapCb(
+                () => { resolve(response) },
+                serviceIdentifier,
+                tags,
+                request,
+                tracer,
+                childOf
+              )
+              wrappedCb(null, response)
+            })
+          })
+        }
+        return resp
       })
     }
   }
