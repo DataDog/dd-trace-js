@@ -1,12 +1,21 @@
 'use strict'
 
+const { promisify } = require('util')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
-const { fork } = require('child_process')
+const childProcess = require('child_process')
+const { fork } = childProcess
+const exec = promisify(childProcess.exec)
 const http = require('http')
+const fs = require('fs')
+const mkdir = promisify(fs.mkdir)
+const os = require('os')
+const path = require('path')
+const rimraf = promisify(require('rimraf'))
+const id = require('../packages/dd-trace/src/id')
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -93,6 +102,22 @@ function spawnProc (filename, options = {}) {
   })
 }
 
+async function createSandbox (dependencies = []) {
+  const folder = path.join(os.tmpdir(), id().toString())
+  const out = path.join(folder, 'dd-trace.tgz')
+  const allDependencies = [`file:${out}`].concat(dependencies)
+
+  await mkdir(folder)
+  await exec(`yarn pack --filename ${out}`) // TODO: cache this
+  await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder })
+  await exec(`cp -R ./integration-tests/* ${folder}`)
+
+  return {
+    folder,
+    remove: async () => rimraf(folder)
+  }
+}
+
 async function curl (url) {
   if (typeof url === 'object') {
     if (url.then) {
@@ -122,6 +147,7 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
 module.exports = {
   FakeAgent,
   spawnProc,
+  createSandbox,
   curl,
   curlAndAssertMessage
 }

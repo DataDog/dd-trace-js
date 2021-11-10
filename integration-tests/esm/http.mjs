@@ -1,4 +1,4 @@
-import tracer from '../../index.js'
+import tracer from 'dd-trace'
 import http from 'http'
 
 tracer.init({ port: process.env.AGENT_PORT })
