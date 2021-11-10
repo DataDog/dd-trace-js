@@ -3,16 +3,28 @@
 const {
   FakeAgent,
   spawnProc,
+  createSandbox,
   curlAndAssertMessage
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
 
-const hookFile = path.join(__dirname, '..', 'loader-hook.mjs')
+const hookFile = 'dd-trace/loader-hook.mjs'
 
 describe('esm', () => {
   let agent
   let proc
+  let sandbox
+  let cwd
+
+  before(async () => {
+    sandbox = await createSandbox(['express'])
+    cwd = sandbox.folder
+  })
+
+  after(async () => {
+    await sandbox.remove()
+  })
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
@@ -25,7 +37,8 @@ describe('esm', () => {
 
   context('http', () => {
     it('is instrumented', async () => {
-      proc = await spawnProc(path.join(__dirname, 'esm/http.mjs'), {
+      proc = await spawnProc(path.join(cwd, 'esm/http.mjs'), {
+        cwd,
         env: {
           NODE_OPTIONS: `--no-warnings --loader=${hookFile}`,
           AGENT_PORT: agent.port
@@ -44,7 +57,8 @@ describe('esm', () => {
 
   context('express', () => {
     it('is instrumented', async () => {
-      proc = await spawnProc(path.join(__dirname, 'esm/express.mjs'), {
+      proc = await spawnProc(path.join(cwd, 'esm/express.mjs'), {
+        cwd,
         env: {
           NODE_OPTIONS: `--no-warnings --loader=${hookFile}`,
           AGENT_PORT: agent.port
