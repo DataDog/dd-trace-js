@@ -10,7 +10,7 @@ if (process.env.AGENT_URL) {
   options.url = process.env.AGENT_URL
 }
 
-require('../..').init(options)
+require('dd-trace').init(options)
 
 const http = require('http')
 
