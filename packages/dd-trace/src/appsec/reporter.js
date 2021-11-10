@@ -36,12 +36,13 @@ function resolveHTTPAddresses () {
   const path = context.resolve(Addresses.HTTP_INCOMING_URL)
   const headers = context.resolve(Addresses.HTTP_INCOMING_HEADERS)
 
+  // TODO: should we really hardcode the url like that ?
   const url = new URL(path, `http://${headers.host}`)
 
   return {
     method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
     url: url.href.split('?')[0],
-    // route: context.resolve(Addresses.),
+    // route: context.resolve(Addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
     headers: getHeadersToSend(headers)

@@ -1,7 +1,7 @@
 'use strict'
 
 const als = require('../als')
-const lockName = 'ddRunnerLock'
+const lockName = 'ddRunnerLock' // TODO: do we really need this (to be global) ?
 
 function runSubscriptions (subscriptions, params) {
   const results = []
