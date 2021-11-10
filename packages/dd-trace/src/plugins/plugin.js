@@ -32,27 +32,6 @@ module.exports = class Plugin {
     this.#storeStack = []
   }
 
-  startSpanAndEnter (name, customTags) {
-    const tags = {
-      // TODO this needs to be sometimes suffixed
-      'service.name': this.config.service || tracer()._service
-    }
-    if (this.kind) {
-      tags['span.kind'] = this.kind
-    }
-    for (const tag in customTags) {
-      tags[tag] = customTags[tag]
-    }
-    const store = storage.getStore()
-    const childOf = store ? store.span : null
-    const span = tracer().startSpan(name, {
-      childOf,
-      tags
-    })
-    this.enter(span, store)
-    return span
-  }
-
   enter (span, store) {
     store ||= storage.getStore()
     this.#storeStack.push(store)
@@ -77,8 +56,4 @@ module.exports = class Plugin {
       this.#subscriptions.forEach(sub => sub.disable())
     }
   }
-}
-
-function tracer () {
-  return global._ddtrace._tracer
 }
