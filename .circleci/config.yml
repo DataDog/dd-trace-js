@@ -226,6 +226,8 @@ jobs:
 
   node-bench-sirun-profiler: *node-bench-sirun-base
 
+  node-bench-sirun-appsec: *node-bench-sirun-base
+
   node-bench-sirun-all:
     docker:
       - image: node
@@ -841,6 +843,7 @@ workflows:
       - node-bench-sirun-scope: *matrix-exact-supported-node-versions
       - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
       - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
+      - node-bench-sirun-appsec: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
             - node-bench-sirun-startup
@@ -855,6 +858,7 @@ workflows:
             - node-bench-sirun-scope
             - node-bench-sirun-exporting-pipeline
             - node-bench-sirun-profiler
+            - node-bench-sirun-appsec
   upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
