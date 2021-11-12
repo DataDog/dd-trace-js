@@ -43,8 +43,9 @@ class Instrumenter {
   }
 
   use (name, config) {
+    if (typeof name !== 'string') return
     const plugin = plugins[name.toLowerCase()]
-    if (plugin.prototype instanceof Plugin) return
+    if (plugin && plugin.prototype instanceof Plugin) return
     if (typeof config === 'boolean') {
       config = { enabled: config }
     }
