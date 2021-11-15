@@ -42,16 +42,16 @@ class WAFCallback {
     // might be its own class with more info later
     const callback = { method }
 
-    const subscriptionGroups = new Set()
+    const subscribedAddresses = new Set()
 
     for (const rule of rules.rules) {
       for (const condition of rule.conditions) {
         for (const input of condition.parameters.inputs) {
           const address = input.address.split(':', 2)[0]
 
-          if (!validAddressSet.has(address) || subscriptionGroups.has(address)) continue
+          if (!validAddressSet.has(address) || subscribedAddresses.has(address)) continue
 
-          subscriptionGroups.add(address)
+          subscribedAddresses.add(address)
 
           Gateway.manager.addSubscription({ addresses: [ address ], callback })
         }
