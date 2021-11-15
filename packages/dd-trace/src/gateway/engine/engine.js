@@ -93,7 +93,7 @@ class Context {
   constructor () {
     this.store = new Map()
     this.allAddresses = new Set()
-    this.newAddresses = []
+    this.newAddresses = [] // TODO: maybe this should be a Set
   }
 
   clear () {
