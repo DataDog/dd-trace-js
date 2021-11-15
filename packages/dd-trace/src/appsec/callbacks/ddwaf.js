@@ -45,29 +45,16 @@ class WAFCallback {
     const subscriptionGroups = new Set()
 
     for (const rule of rules.rules) {
-      let toSubscribe = []
-
       for (const condition of rule.conditions) {
-        let addresses = condition.parameters.inputs.map((input) => input.address.split(':', 2)[0])
+        for (const input of condition.parameters.inputs) {
+          const address = input.address.split(':', 2)[0]
 
-        if (!addresses.every((address) => validAddressSet.has(address))) {
-          log.warn(`Skipping invalid rule ${rule.id}`)
-          toSubscribe = []
-          break
+          if (!validAddressSet.has(address) || subscriptionGroups.has(address)) continue
+
+          subscriptionGroups.add(address)
+
+          Gateway.manager.addSubscription({ addresses: [ address ], callback })
         }
-
-        addresses = Array.from(new Set(addresses))
-
-        const hash = addresses.sort().join(',')
-
-        if (subscriptionGroups.has(hash)) continue
-        subscriptionGroups.add(hash)
-
-        toSubscribe.push(addresses)
-      }
-
-      for (const addresses of toSubscribe) {
-        Gateway.manager.addSubscription({ addresses, callback })
       }
     }
   }
