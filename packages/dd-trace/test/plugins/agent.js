@@ -7,7 +7,6 @@ const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
-const ritm = require('../../src/ritm')
 
 const handlers = new Set()
 let sockets = []
@@ -141,7 +140,6 @@ module.exports = {
     agent = null
     handlers.clear()
     delete require.cache[require.resolve('../..')]
-    ritm.reset()
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
