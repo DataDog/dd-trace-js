@@ -60,37 +60,10 @@ describe('WAFCallback', () => {
             }
           }]
         }, {
-          id: 'ruleId',
           conditions: [{
-            parameters: {
-              inputs: [{
-                address: 'server.request.client_ip'
-              }]
-            }
-          }, {
             parameters: {
               inputs: [{
                 address: 'invalid_address'
-              }, {
-                address: 'server.request.client_port'
-              }]
-            }
-          }]
-        }, {
-          conditions: [{
-            parameters: {
-              inputs: [{
-                address: 'server.request.uri.raw'
-              }, {
-                address: 'server.request.headers.no_cookies'
-              }, {
-                address: 'server.request.headers.no_cookies:user-agent'
-              }]
-            }
-          }, {
-            parameters: {
-              inputs: [{
-                address: 'server.request.uri.raw'
               }, {
                 address: 'server.request.headers.no_cookies'
               }, {
@@ -109,8 +82,6 @@ describe('WAFCallback', () => {
 
       sinon.stub(WAFCallback.prototype, 'action')
 
-      sinon.spy(log, 'warn')
-
       sinon.stub(Gateway.manager, 'addSubscription')
 
       const waf = new WAFCallback(rules)
@@ -119,25 +90,26 @@ describe('WAFCallback', () => {
       expect(waf.ddwaf).to.equal(ddwaf)
       expect(waf.wafContextCache).to.be.an.instanceOf(WeakMap)
 
-      expect(log.warn).to.have.been.calledOnceWithExactly('Skipping invalid rule ruleId')
-
-      expect(Gateway.manager.addSubscription).to.have.been.calledTwice
+      expect(Gateway.manager.addSubscription).to.have.been.calledThrice
 
       const firstCall = Gateway.manager.addSubscription.firstCall.firstArg
       expect(firstCall).to.have.property('addresses').that.is.an('array').that.deep.equals([
-        'server.request.headers.no_cookies',
-        'server.request.uri.raw'
+        'server.request.headers.no_cookies'
       ])
       expect(firstCall).to.have.nested.property('callback.method').that.is.a('function')
       const callback = firstCall.callback
 
       const secondCall = Gateway.manager.addSubscription.secondCall.firstArg
       expect(secondCall).to.have.property('addresses').that.is.an('array').that.deep.equals([
-        'server.request.headers.no_cookies',
-        'server.request.method',
         'server.request.uri.raw'
       ])
       expect(secondCall).to.have.property('callback').that.equals(callback)
+
+      const thirdCall = Gateway.manager.addSubscription.thirdCall.firstArg
+      expect(thirdCall).to.have.property('addresses').that.is.an('array').that.deep.equals([
+        'server.request.method'
+      ])
+      expect(thirdCall).to.have.property('callback').that.equals(callback)
 
       callback.method('params', 'store')
       expect(WAFCallback.prototype.action).to.have.been.calledOnceWithExactly('params', 'store')
