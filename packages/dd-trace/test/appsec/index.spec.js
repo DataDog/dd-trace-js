@@ -25,6 +25,7 @@ describe('AppSec Index', () => {
   afterEach(() => {
     sinon.restore()
     AppSec.disable()
+    delete global._ddtrace
   })
 
   describe('enable', () => {
