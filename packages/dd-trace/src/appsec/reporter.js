@@ -97,7 +97,7 @@ function filterHeaders (headers, whitelist) {
     const headerName = whitelist[i]
 
     if (headers[headerName]) {
-      result[headerName] = [ headers[headerName] ]
+      result[headerName] = [ headers[headerName].toString() ]
     }
   }
 
