@@ -176,7 +176,13 @@ function reportAttack (rule, ruleMatch) {
   }
 
   if (context) {
-    toFinish.set(context, event)
+    const list = toFinish.get(context)
+
+    if (list) {
+      list.push(event)
+    } else {
+      toFinish.set(context, [ event ])
+    }
   } else {
     events.add(event)
   }
@@ -185,13 +191,18 @@ function reportAttack (rule, ruleMatch) {
 }
 
 function finishAttacks (context) {
-  const event = toFinish.get(context)
+  const list = toFinish.get(context)
 
-  if (!event) return false
+  if (!list) return false
 
-  event.context.http.response = resolveHTTPResponse(context)
+  const resolvedResponse = resolveHTTPResponse(context)
 
-  events.add(event)
+  for (const event of list) {
+    event.context.http.response = resolvedResponse
+
+    events.add(event)
+  }
+
   toFinish.delete(context)
 }
 
