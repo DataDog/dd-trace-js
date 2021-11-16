@@ -4,10 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-let theSpan
-
 class MemcachedPlugin extends Plugin {
-
   static get name () {
     return 'memcached'
   }
@@ -26,7 +23,6 @@ class MemcachedPlugin extends Plugin {
           'service.name': this.config.service || `${tracer()._service}-memcached`
         }
       })
-      theSpan = span
 
       analyticsSampler.sample(span, this.config.measured)
       this.enter(span, store)

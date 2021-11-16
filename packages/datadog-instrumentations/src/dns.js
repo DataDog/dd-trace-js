@@ -54,7 +54,11 @@ function wrap (prefix, fn, expectedArgs) {
 
   const wrapped = function () {
     const cb = AsyncResource.bind(arguments[arguments.length - 1])
-    if (!isArgsValid(arguments, expectedArgs)) {
+    if (
+      !startCh.hasSubscribers ||
+      arguments.length < expectedArgs ||
+      typeof cb !== 'function'
+    ) {
       return fn.apply(this, arguments)
     }
 
@@ -86,11 +90,4 @@ function wrap (prefix, fn, expectedArgs) {
   })
 
   return wrapped
-}
-
-function isArgsValid (args, minLength) {
-  if (args.length < minLength) return false
-  if (typeof args[args.length - 1] !== 'function') return false
-
-  return true
 }

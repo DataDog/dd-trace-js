@@ -6,7 +6,6 @@ const plugins = require('./plugins')
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
 
-
 // TODO this is shared w/ instrumenter. DRY up.
 function getConfig (name, config = {}) {
   if (!name) {
@@ -19,7 +18,7 @@ function getConfig (name, config = {}) {
   }
 
   // TODO is this the best/correct place for this default?
-  if (!("enabled" in config)) {
+  if (!('enabled' in config)) {
     config.enabled = true
   }
 
@@ -30,22 +29,20 @@ function getConfig (name, config = {}) {
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
-  #pluginsByName
-
   constructor () {
-    this.#pluginsByName = Object.values(plugins)
+    this._pluginsByName = Object.values(plugins)
       .filter(p => typeof p === 'function')
       .reduce((acc, C) => Object.assign(acc, { [C.name]: new C() }), {})
   }
 
   // like instrumenter.use()
   configurePlugin (name, pluginConfig) {
-    if (!(name in this.#pluginsByName)) return
+    if (!(name in this._pluginsByName)) return
     if (typeof pluginConfig === 'boolean') {
       pluginConfig = { enabled: pluginConfig }
     }
 
-    this.#pluginsByName[name].configure(getConfig(name, pluginConfig))
+    this._pluginsByName[name].configure(getConfig(name, pluginConfig))
   }
 
   // like instrumenter.enable()
@@ -54,7 +51,7 @@ module.exports = class PluginManager {
     const serviceMapping = config.serviceMapping
 
     if (config.plugins !== false) {
-      for (const name in this.#pluginsByName) {
+      for (const name in this._pluginsByName) {
         const pluginConfig = {}
         if (serviceMapping && serviceMapping[name]) {
           pluginConfig.service = serviceMapping[name]
@@ -65,7 +62,7 @@ module.exports = class PluginManager {
   }
 
   // This is basically just for testing. like intrumenter.disable()
-  destroy() {
-    for (const plugin of this.#pluginsByName) plugin.configure({ enabled: false })
+  destroy () {
+    for (const plugin of this._pluginsByName) plugin.configure({ enabled: false })
   }
 }

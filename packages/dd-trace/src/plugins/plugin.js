@@ -4,56 +4,49 @@ const dc = require('diagnostics_channel')
 const { storage } = require('../../../datadog-core')
 
 class Subscription {
-  #channel
-  #handler
-
   constructor (event, handler) {
-    this.#channel = dc.channel(event)
-    this.#handler = handler
+    this._channel = dc.channel(event)
+    this._handler = handler
   }
 
   enable () {
-    this.#channel.subscribe(this.#handler)
+    this._channel.subscribe(this._handler)
   }
 
   disable () {
-    this.#channel.unsubscribe(this.#handler)
+    this._channel.unsubscribe(this._handler)
   }
 }
 
 module.exports = class Plugin {
-  #subscriptions
-  #enabled
-  #storeStack
-
   constructor () {
-    this.#subscriptions = []
-    this.#enabled = false
-    this.#storeStack = []
+    this._subscriptions = []
+    this._enabled = false
+    this._storeStack = []
   }
 
   enter (span, store) {
-    store ||= storage.getStore()
-    this.#storeStack.push(store)
+    store = store || storage.getStore()
+    this._storeStack.push(store)
     storage.enterWith({ ...store, span })
   }
 
   exit () {
-    storage.enterWith(this.#storeStack.pop())
+    storage.enterWith(this._storeStack.pop())
   }
 
   addSub (channelName, handler) {
-    this.#subscriptions.push(new Subscription(channelName, handler))
+    this._subscriptions.push(new Subscription(channelName, handler))
   }
 
   configure (config) {
     this.config = config
-    if (config.enabled && !this.#enabled) {
-      this.#enabled = true
-      this.#subscriptions.forEach(sub => sub.enable())
-    } else if (!config.enabled && this.#enabled) {
-      this.#enabled = false
-      this.#subscriptions.forEach(sub => sub.disable())
+    if (config.enabled && !this._enabled) {
+      this._enabled = true
+      this._subscriptions.forEach(sub => sub.enable())
+    } else if (!config.enabled && this._enabled) {
+      this._enabled = false
+      this._subscriptions.forEach(sub => sub.disable())
     }
   }
 }

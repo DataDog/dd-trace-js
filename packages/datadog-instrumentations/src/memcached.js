@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncResource, executionAsyncResource } = require('async_hooks')
+const { AsyncResource } = require('async_hooks')
 const { channel, addHook } = require('../../dd-trace/src/plugins/instrument')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {

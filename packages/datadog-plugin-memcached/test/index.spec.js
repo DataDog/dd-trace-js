@@ -10,7 +10,6 @@ describe('Plugin', () => {
 
   describe('memcached', () => {
     withVersions('memcached', 'memcached', version => {
-
       afterEach(() => {
         memcached.end()
         agent.close()
