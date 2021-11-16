@@ -64,12 +64,11 @@ function resolveHTTPRequest (context) {
     // resource: context.resolve(Addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
-    headers: getHeadersToSend(headers, REQUEST_HEADERS_WHITELIST)
+    headers: filterHeaders(headers, REQUEST_HEADERS_WHITELIST)
   }
 }
 
-
-function getHeadersToSend (headers, whitelist) {
+function filterHeaders (headers, whitelist) {
   const result = {}
 
   if (!headers) return result
@@ -216,7 +215,7 @@ const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 module.exports = {
   events,
   resolveHTTPRequest,
-  getHeadersToSend,
+  filterHeaders,
   getTracerData,
   reportAttack,
   flush,
