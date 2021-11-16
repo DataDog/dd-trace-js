@@ -13,6 +13,27 @@ const log = require('../log')
 const FLUSH_INTERVAL = 2e3
 const MAX_EVENT_BACKLOG = 1e6
 
+const REQUEST_HEADERS_WHITELIST = [
+  'accept',
+  'accept-encoding',
+  'accept-language',
+  'content-encoding',
+  'content-language',
+  'content-length',
+  'content-type',
+  'forwarded',
+  'forwarded-for',
+  'host',
+  'true-client-ip',
+  'user-agent',
+  'via',
+  'x-client-ip',
+  'x-cluster-client-ip',
+  'x-forwarded',
+  'x-forwarded-for',
+  'x-real-ip'
+]
+
 const host = {
   context_version: '0.1.0',
   os_type: os.type(),
@@ -28,9 +49,7 @@ const library = {
 
 const events = new Set()
 
-function resolveHTTPAddresses () {
-  const context = getContext()
-
+function resolveHTTPRequest (context) {
   if (!context) return {}
 
   const path = context.resolve(Addresses.HTTP_INCOMING_URL)
@@ -42,37 +61,21 @@ function resolveHTTPAddresses () {
   return {
     method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
     url: url.href.split('?')[0],
-    // route: context.resolve(Addresses.HTTP_INCOMING_ROUTE),
+    // resource: context.resolve(Addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
-    headers: getHeadersToSend(headers)
-    // responseCode: context.resolve(Addresses.HTTP_OUTGOING_STATUS),
-    // responseHeaders: context.resolve(Addresses.HTTP_OUTGOING_HEADERS)
+    headers: getHeadersToSend(headers, REQUEST_HEADERS_WHITELIST)
   }
 }
 
-const HEADERS_TO_SEND = [
-  'client-ip',
-  'forwarded-for',
-  'forwarded',
-  'referer',
-  'true-client-ip',
-  'user-agent',
-  'via',
-  'x-client-ip',
-  'x-cluster-client-ip',
-  'x-forwarded-for',
-  'x-forwarded',
-  'x-real-ip'
-]
 
-function getHeadersToSend (headers) {
+function getHeadersToSend (headers, whitelist) {
   const result = {}
 
   if (!headers) return result
 
-  for (let i = 0; i < HEADERS_TO_SEND.length; ++i) {
-    const headerName = HEADERS_TO_SEND[i]
+  for (let i = 0; i < whitelist.length; ++i) {
+    const headerName = whitelist[i]
 
     if (headers[headerName]) {
       result[headerName] = [ headers[headerName] ]
@@ -95,6 +98,7 @@ function getTracerData () {
   const activeSpan = tracer.scope().active()
 
   if (activeSpan) {
+    // TODO: this could be optimized to run only once per request
     activeSpan.setTag('manual.keep')
     activeSpan.setTag('appsec.event', true)
 
@@ -107,10 +111,12 @@ function getTracerData () {
   return result
 }
 
-function reportAttack (rule, ruleMatch, blocked) {
+function reportAttack (rule, ruleMatch) {
   if (events.size > MAX_EVENT_BACKLOG) return
 
-  const resolvedHttp = resolveHTTPAddresses()
+  const context = getContext()
+
+  const resolvedRequest = resolveHTTPRequest(context)
 
   const tracerData = getTracerData()
 
@@ -126,19 +132,7 @@ function reportAttack (rule, ruleMatch, blocked) {
       host,
       http: {
         context_version: '1.0.0',
-        request: {
-          method: resolvedHttp.method,
-          url: resolvedHttp.url,
-          resource: resolvedHttp.route,
-          remote_ip: resolvedHttp.remote_ip,
-          remote_port: resolvedHttp.remote_port,
-          headers: resolvedHttp.headers
-        }/* ,
-        response: {
-          status: resolvedHttp.responseCode,
-          headers: resolvedHttp.responseHeaders,
-          blocked
-        } */
+        request: resolvedRequest
       },
       library,
       service: {
@@ -221,7 +215,7 @@ const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 
 module.exports = {
   events,
-  resolveHTTPAddresses,
+  resolveHTTPRequest,
   getHeadersToSend,
   getTracerData,
   reportAttack,
