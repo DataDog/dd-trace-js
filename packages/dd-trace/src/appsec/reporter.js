@@ -34,6 +34,13 @@ const REQUEST_HEADERS_WHITELIST = [
   'x-real-ip'
 ]
 
+const RESPONSE_HEADERS_WHITELIST = [
+  'content-encoding',
+  'content-language',
+  'content-length',
+  'content-type'
+]
+
 const host = {
   context_version: '0.1.0',
   os_type: os.type(),
@@ -47,6 +54,7 @@ const library = {
   lib_version: requirePackageJson(path.join(__dirname, '..', '..', '..', '..')).version
 }
 
+const toFinish = new WeakMap()
 const events = new Set()
 
 function resolveHTTPRequest (context) {
@@ -65,6 +73,18 @@ function resolveHTTPRequest (context) {
     remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
     headers: filterHeaders(headers, REQUEST_HEADERS_WHITELIST)
+  }
+}
+
+function resolveHTTPResponse (context) {
+  if (!context) return {}
+
+  const headers = context.resolve(Addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+
+  return {
+    status: context.resolve(Addresses.HTTP_INCOMING_RESPONSE_CODE),
+    headers: filterHeaders(headers, RESPONSE_HEADERS_WHITELIST),
+    blocked: false
   }
 }
 
@@ -155,9 +175,24 @@ function reportAttack (rule, ruleMatch) {
     }
   }
 
-  events.add(event)
+  if (context) {
+    toFinish.set(context, event)
+  } else {
+    events.add(event)
+  }
 
   return event
+}
+
+function finishAttacks (context) {
+  const event = toFinish.get(context)
+
+  if (!event) return false
+
+  event.context.http.response = resolveHTTPResponse(context)
+
+  events.add(event)
+  toFinish.delete(context)
 }
 
 let lock = false
@@ -213,11 +248,14 @@ function flush () {
 const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 
 module.exports = {
+  toFinish,
   events,
   resolveHTTPRequest,
+  resolveHTTPResponse,
   filterHeaders,
   getTracerData,
   reportAttack,
+  finishAttacks,
   flush,
   scheduler
 }
