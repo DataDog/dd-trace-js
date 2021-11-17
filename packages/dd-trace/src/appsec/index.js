@@ -19,6 +19,10 @@ function enable (config) {
     RuleManager.applyRules(rules)
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
+
+    // abort AppSec start
+    RuleManager.clearAllRules()
+    return
   }
 
   INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
