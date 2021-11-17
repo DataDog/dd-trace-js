@@ -11,20 +11,16 @@ describe('Gateway Runner', () => {
       expect(result).to.be.an('array').that.is.empty
     })
 
-    it('should return empty array when locked', () => {
+    it('should return empty array when called recursively', () => {
       const subscriptions = [
         { callback: { method: () => 'a' } },
-        { callback: { method: () => 'b' } },
+        { callback: { method: () => Runner.runSubscriptions(new Set(subscriptions)) } },
         { callback: { method: () => 'c' } }
       ]
 
-      process['ddRunnerLock'] = true
-
       const result = Runner.runSubscriptions(new Set(subscriptions), {})
 
-      process['ddRunnerLock'] = false
-
-      expect(result).to.be.an('array').that.is.empty
+      expect(result).to.deep.equal(['a', [], 'c'])
     })
 
     it('should execute callbacks', () => {

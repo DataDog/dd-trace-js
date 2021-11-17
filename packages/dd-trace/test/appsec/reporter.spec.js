@@ -3,10 +3,11 @@
 let Reporter = require('../../src/appsec/reporter')
 const Engine = require('../../src/gateway/engine')
 const als = require('../../src/gateway/als')
-const Addresses = require('../../src/appsec/addresses')
+const addresses = require('../../src/appsec/addresses')
 const log = require('../../src/log')
 const URL = require('url').URL
 const os = require('os')
+const libVersion = require('../../lib/version')
 
 const MAX_EVENT_BACKLOG = 1e6
 
@@ -64,14 +65,14 @@ describe('reporter', () => {
       const context = Engine.getContext()
 
       context.store = new Map(Object.entries({
-        [Addresses.HTTP_INCOMING_URL]: '/path?query=string',
-        [Addresses.HTTP_INCOMING_HEADERS]: {
+        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
+        [addresses.HTTP_INCOMING_HEADERS]: {
           host: 'localhost',
           'user-agent': 'arachni'
         },
-        [Addresses.HTTP_INCOMING_METHOD]: 'GET',
-        [Addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
-        [Addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
+        [addresses.HTTP_INCOMING_METHOD]: 'GET',
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
+        [addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
       }))
 
       const result = Reporter.resolveHTTPAddresses()
@@ -211,14 +212,14 @@ describe('reporter', () => {
       const context = Engine.getContext()
 
       context.store = new Map(Object.entries({
-        [Addresses.HTTP_INCOMING_URL]: '/path?query=string',
-        [Addresses.HTTP_INCOMING_HEADERS]: {
+        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
+        [addresses.HTTP_INCOMING_HEADERS]: {
           host: 'localhost',
           'user-agent': 'arachni'
         },
-        [Addresses.HTTP_INCOMING_METHOD]: 'GET',
-        [Addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
-        [Addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
+        [addresses.HTTP_INCOMING_METHOD]: 'GET',
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
+        [addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
       }))
 
       stubActiveSpan()
@@ -278,7 +279,7 @@ describe('reporter', () => {
       expect(event).to.have.nested.property('context.library.context_version').that.equals('0.1.0')
       expect(event).to.have.nested.property('context.library.runtime_type').that.equals('nodejs')
       expect(event).to.have.nested.property('context.library.runtime_version').that.equals(process.version)
-      expect(event).to.have.nested.property('context.library.lib_version').that.is.a('string')
+      expect(event).to.have.nested.property('context.library.lib_version').that.equals(libVersion)
 
       expect(event).to.have.nested.property('context.service.context_version').that.equals('0.1.0')
       expect(event).to.have.nested.property('context.service.name').that.equals('service')

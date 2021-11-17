@@ -6,7 +6,7 @@ const log = require('../log')
 const RuleManager = require('./rule_manager')
 const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
 const Gateway = require('../gateway/engine/index')
-const Addresses = require('./addresses')
+const addresses = require('./addresses')
 const Reporter = require('./reporter')
 
 function enable (config) {
@@ -17,26 +17,30 @@ function enable (config) {
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules)
-
-    INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpStartTranslator)
-    INCOMING_HTTP_REQUEST_END.subscribe(incomingHttpEndTranslator)
-
-    config.tags['_dd.appsec.enabled'] = 1
-    config.tags['_dd.runtime_family'] = 'nodejs'
-
-    // add needed fields for HTTP context reporting
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_URL)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_HEADERS)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_METHOD)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_IP)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_PORT)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_RESPONSE_CODE)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_RESPONSE_HEADERS)
-
-    Reporter.scheduler.start()
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
+
+    // abort AppSec start
+    RuleManager.clearAllRules()
+    return
   }
+
+  INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpStartTranslator)
+  INCOMING_HTTP_REQUEST_END.subscribe(incomingHttpEndTranslator)
+
+  config.tags['_dd.appsec.enabled'] = 1
+  config.tags['_dd.runtime_family'] = 'nodejs'
+
+  // add needed fields for HTTP context reporting
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_URL)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_METHOD)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_PORT)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_CODE)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+
+  Reporter.scheduler.start()
 }
 
 function incomingHttpStartTranslator (data) {
@@ -51,11 +55,11 @@ function incomingHttpStartTranslator (data) {
   const context = store.get('context')
 
   Gateway.propagate({
-    [Addresses.HTTP_INCOMING_URL]: data.req.url,
-    [Addresses.HTTP_INCOMING_HEADERS]: headers,
-    [Addresses.HTTP_INCOMING_METHOD]: data.req.method,
-    [Addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
-    [Addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
+    [addresses.HTTP_INCOMING_URL]: data.req.url,
+    [addresses.HTTP_INCOMING_HEADERS]: headers,
+    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
+    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
+    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
   }, context)
 }
 

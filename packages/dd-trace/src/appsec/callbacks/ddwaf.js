@@ -1,13 +1,13 @@
 'use strict'
 
 const log = require('../../log')
-const Addresses = require('../addresses')
+const addresses = require('../addresses')
 const Gateway = require('../../gateway/engine')
 const Reporter = require('../reporter')
 
 let warned = false
 
-const validAddressSet = new Set(Object.values(Addresses))
+const validAddressSet = new Set(Object.values(addresses))
 
 const DEFAULT_MAX_BUDGET = 5e3 // µs
 

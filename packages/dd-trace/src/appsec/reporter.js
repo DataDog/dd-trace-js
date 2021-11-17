@@ -1,14 +1,13 @@
 'use strict'
 
 const os = require('os')
-const path = require('path')
 const uuid = require('crypto-randomuuid')
-const requirePackageJson = require('../require-package-json')
 const { getContext } = require('../gateway/engine')
-const Addresses = require('./addresses')
+const addresses = require('./addresses')
 const Scheduler = require('../exporters/agent/scheduler')
 const request = require('../exporters/agent/request')
 const log = require('../log')
+const libVersion = require('../../lib/version')
 
 const FLUSH_INTERVAL = 2e3
 const MAX_EVENT_BACKLOG = 1e6
@@ -51,7 +50,7 @@ const library = {
   context_version: '0.1.0',
   runtime_type: 'nodejs',
   runtime_version: process.version,
-  lib_version: requirePackageJson(path.join(__dirname, '..', '..', '..', '..')).version
+  lib_version: libVersion
 }
 
 const toFinish = new WeakMap()
@@ -60,18 +59,18 @@ const events = new Set()
 function resolveHTTPRequest (context) {
   if (!context) return {}
 
-  const path = context.resolve(Addresses.HTTP_INCOMING_URL)
-  const headers = context.resolve(Addresses.HTTP_INCOMING_HEADERS)
+  const path = context.resolve(addresses.HTTP_INCOMING_URL)
+  const headers = context.resolve(addresses.HTTP_INCOMING_HEADERS)
 
   // TODO: should we really hardcode the url like that ?
   const url = new URL(path, `http://${headers.host}`)
 
   return {
-    method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
+    method: context.resolve(addresses.HTTP_INCOMING_METHOD),
     url: url.href.split('?')[0],
-    // resource: context.resolve(Addresses.HTTP_INCOMING_ROUTE),
-    remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
-    remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
+    // resource: context.resolve(addresses.HTTP_INCOMING_ROUTE),
+    remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
+    remote_port: context.resolve(addresses.HTTP_INCOMING_REMOTE_PORT),
     headers: filterHeaders(headers, REQUEST_HEADERS_WHITELIST)
   }
 }

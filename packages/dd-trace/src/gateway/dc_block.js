@@ -1,12 +1,16 @@
 'use strict'
 
-const dc = require('./dc')
+const dc = require('diagnostics_channel')
 const shimmer = require('shimmer')
 
+let protoCache
+
 function getActiveChannelPrototype () {
+  if (protoCache) return protoCache
+
   const noop = () => {}
 
-  const channel = dc.channel('imstealingurprototype')
+  const channel = dc.channel('dd-trace:temp_getproto')
 
   // We have to force the channel to switch to ActiveChannel prototype
   channel.subscribe(noop)
@@ -15,10 +19,12 @@ function getActiveChannelPrototype () {
 
   channel.unsubscribe(noop)
 
+  protoCache = activeChannelPrototype
+
   return activeChannelPrototype
 }
 
-function wrappedPublish (data) {
+function blockingPublish (data) {
   let firstError
 
   for (let i = 0; i < this._subscribers.length; i++) {
@@ -41,7 +47,7 @@ function wrappedPublish (data) {
 
 function enable () {
   shimmer.wrap(getActiveChannelPrototype(), 'publish', (originalPublish) => {
-    return wrappedPublish
+    return blockingPublish
   })
 }
 
@@ -50,9 +56,8 @@ function disable () {
 }
 
 class DCBlockingError extends Error {
-  constructor (message) {
-    super(message)
-    this.name = this.constructor.name
+  get name () {
+    return this.constructor.name
   }
 }
 

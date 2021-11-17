@@ -1,20 +1,21 @@
 'use strict'
 
 const als = require('../als')
-const lockName = 'ddRunnerLock' // TODO: do we really need this (to be global) ?
+
+let lock = false // lock to prevent recursive calls to runSubscriptions
 
 function runSubscriptions (subscriptions, params) {
   const results = []
 
-  if (!subscriptions.size || process[lockName]) return results
-  process[lockName] = true
+  if (lock || !subscriptions.size) return results
+  lock = true
 
   const store = als.getStore()
 
   const executedCallbacks = new Set()
 
-  subscriptions.forEach((subscription) => {
-    if (executedCallbacks.has(subscription.callback)) return
+  for (const subscription of subscriptions) {
+    if (executedCallbacks.has(subscription.callback)) continue
     executedCallbacks.add(subscription.callback)
 
     let result
@@ -27,9 +28,9 @@ function runSubscriptions (subscriptions, params) {
     }
 
     results.push(result)
-  })
+  }
 
-  process[lockName] = false
+  lock = false
 
   return results
 }
