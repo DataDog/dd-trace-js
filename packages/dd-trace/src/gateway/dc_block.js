@@ -56,9 +56,8 @@ function disable () {
 }
 
 class DCBlockingError extends Error {
-  constructor (message) {
-    super(message)
-    this.name = this.constructor.name
+  get name () {
+    return this.constructor.name
   }
 }
 
