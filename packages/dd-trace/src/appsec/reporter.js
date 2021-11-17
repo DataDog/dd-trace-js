@@ -1,14 +1,13 @@
 'use strict'
 
 const os = require('os')
-const path = require('path')
 const uuid = require('crypto-randomuuid')
-const requirePackageJson = require('../require-package-json')
 const { getContext } = require('../gateway/engine')
 const Addresses = require('./addresses')
 const Scheduler = require('../exporters/agent/scheduler')
 const request = require('../exporters/agent/request')
 const log = require('../log')
+const libVersion = require('../../lib/version')
 
 const FLUSH_INTERVAL = 2e3
 const MAX_EVENT_BACKLOG = 1e6
@@ -23,7 +22,7 @@ const library = {
   context_version: '0.1.0',
   runtime_type: 'nodejs',
   runtime_version: process.version,
-  lib_version: requirePackageJson(path.join(__dirname, '..', '..', '..', '..')).version
+  lib_version: libVersion
 }
 
 const events = new Set()
