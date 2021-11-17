@@ -64,6 +64,7 @@ function incomingHttpEndTranslator (data) {
 
   if (!context) return
 
+  // TODO: this doesn't support headers sent with res.writeHead()
   const headers = Object.assign({}, data.res.getHeaders())
   delete headers['set-cookie']
 
