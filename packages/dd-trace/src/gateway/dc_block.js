@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('./dc')
+const dc = require('diagnostics_channel')
 const shimmer = require('shimmer')
 
 function getActiveChannelPrototype () {
