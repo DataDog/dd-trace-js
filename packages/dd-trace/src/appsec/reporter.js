@@ -3,7 +3,7 @@
 const os = require('os')
 const uuid = require('crypto-randomuuid')
 const { getContext } = require('../gateway/engine')
-const Addresses = require('./addresses')
+const addresses = require('./addresses')
 const Scheduler = require('../exporters/agent/scheduler')
 const request = require('../exporters/agent/request')
 const log = require('../log')
@@ -32,21 +32,21 @@ function resolveHTTPAddresses () {
 
   if (!context) return {}
 
-  const path = context.resolve(Addresses.HTTP_INCOMING_URL)
-  const headers = context.resolve(Addresses.HTTP_INCOMING_HEADERS)
+  const path = context.resolve(addresses.HTTP_INCOMING_URL)
+  const headers = context.resolve(addresses.HTTP_INCOMING_HEADERS)
 
   // TODO: should we really hardcode the url like that ?
   const url = new URL(path, `http://${headers.host}`)
 
   return {
-    method: context.resolve(Addresses.HTTP_INCOMING_METHOD),
+    method: context.resolve(addresses.HTTP_INCOMING_METHOD),
     url: url.href.split('?')[0],
-    // route: context.resolve(Addresses.HTTP_INCOMING_ROUTE),
-    remote_ip: context.resolve(Addresses.HTTP_INCOMING_REMOTE_IP),
-    remote_port: context.resolve(Addresses.HTTP_INCOMING_REMOTE_PORT),
+    // route: context.resolve(addresses.HTTP_INCOMING_ROUTE),
+    remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
+    remote_port: context.resolve(addresses.HTTP_INCOMING_REMOTE_PORT),
     headers: getHeadersToSend(headers)
-    // responseCode: context.resolve(Addresses.HTTP_OUTGOING_STATUS),
-    // responseHeaders: context.resolve(Addresses.HTTP_OUTGOING_HEADERS)
+    // responseCode: context.resolve(addresses.HTTP_OUTGOING_STATUS),
+    // responseHeaders: context.resolve(addresses.HTTP_OUTGOING_HEADERS)
   }
 }
 
