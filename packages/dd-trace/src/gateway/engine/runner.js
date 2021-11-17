@@ -14,8 +14,8 @@ function runSubscriptions (subscriptions, params) {
 
   const executedCallbacks = new Set()
 
-  subscriptions.forEach((subscription) => {
-    if (executedCallbacks.has(subscription.callback)) return
+  for (const subscription of subscriptions) {
+    if (executedCallbacks.has(subscription.callback)) continue
     executedCallbacks.add(subscription.callback)
 
     let result
@@ -28,7 +28,7 @@ function runSubscriptions (subscriptions, params) {
     }
 
     results.push(result)
-  })
+  }
 
   lock = false
 
