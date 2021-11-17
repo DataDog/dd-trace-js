@@ -10,7 +10,7 @@ function getActiveChannelPrototype () {
 
   const noop = () => {}
 
-  const channel = dc.channel('imstealingurprototype')
+  const channel = dc.channel('dd-trace:temp_getproto')
 
   // We have to force the channel to switch to ActiveChannel prototype
   channel.subscribe(noop)
