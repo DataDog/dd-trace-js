@@ -73,8 +73,8 @@ function incomingHttpEndTranslator (data) {
   delete headers['set-cookie']
 
   Gateway.propagate({
-    [Addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
-    [Addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
+    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
   }, context)
 
   Reporter.finishAttacks(context)
@@ -82,7 +82,9 @@ function incomingHttpEndTranslator (data) {
 
 function disable () {
   RuleManager.clearAllRules()
-  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
+
+  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpStartTranslator)
+  if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.unsubscribe(incomingHttpEndTranslator)
 
   const tags = global._ddtrace._tracer._tags
 
