@@ -131,7 +131,7 @@ class AgentExporter {
       })
 
       operation.attempt((attempt) => {
-        const timeout = Math.pow(this._backoffTime, attempt)
+        const timeout = this._backoffTime * Math.pow(2, attempt)
         sendRequest({ ...options, timeout }, form, (err, response) => {
           if (operation.retry(err)) {
             this._logger.error(`Error from the agent: ${err.message}`)
