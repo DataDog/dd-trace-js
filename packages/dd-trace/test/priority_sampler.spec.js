@@ -151,13 +151,13 @@ describe('PrioritySampler', () => {
       prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
 
       delete context._sampling.priority
 
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_REJECT)
+      expect(context._sampling).to.have.property('priority', USER_REJECT)
     })
 
     it('should support a sample rate from a rule on service as string', () => {
@@ -171,7 +171,7 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
     })
 
     it('should support a sample rate from a rule on service as string as regex', () => {
@@ -185,7 +185,7 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
     })
 
     it('should support a sample rate from a rule on name as string', () => {
@@ -200,7 +200,7 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
     })
 
     it('should support a sample rate from a rule on name as regex', () => {
@@ -215,7 +215,7 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
     })
 
     it('should fallback to the global sample rate', () => {
@@ -229,7 +229,7 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
     })
 
     it('should support a rate limit', () => {
@@ -239,13 +239,13 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
 
       delete context._sampling.priority
 
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_REJECT)
+      expect(context._sampling).to.have.property('priority', USER_REJECT)
     })
 
     it('should support disabling the rate limit', () => {
@@ -255,13 +255,13 @@ describe('PrioritySampler', () => {
       })
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
 
       delete context._sampling.priority
 
       prioritySampler.sample(context)
 
-      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
     })
 
     it('should add metrics for agent sample rate', () => {
