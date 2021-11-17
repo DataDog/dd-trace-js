@@ -17,23 +17,23 @@ function enable (config) {
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules)
-
-    INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
-
-    config.tags['_dd.appsec.enabled'] = 1
-    config.tags['_dd.runtime_family'] = 'nodejs'
-
-    // add needed fields for HTTP context reporting
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_URL)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_HEADERS)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_METHOD)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_IP)
-    Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_PORT)
-
-    Reporter.scheduler.start()
   } catch (err) {
     log.error(`Unable to apply AppSec rules: ${err}`)
   }
+
+  INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
+
+  config.tags['_dd.appsec.enabled'] = 1
+  config.tags['_dd.runtime_family'] = 'nodejs'
+
+  // add needed fields for HTTP context reporting
+  Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_URL)
+  Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_HEADERS)
+  Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_METHOD)
+  Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_IP)
+  Gateway.manager.addresses.add(Addresses.HTTP_INCOMING_REMOTE_PORT)
+
+  Reporter.scheduler.start()
 }
 
 function incomingHttpTranslator (data) {
