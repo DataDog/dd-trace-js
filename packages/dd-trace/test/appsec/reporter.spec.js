@@ -166,7 +166,7 @@ describe('reporter', () => {
 
   describe('reportAttack', () => {
     it('should do nothing when backlog is full', () => {
-      Reporter.reportAttack({}, {}, false)
+      Reporter.reportAttack({}, {})
 
       expect(Reporter.events.size).to.equal(1)
 
@@ -174,7 +174,7 @@ describe('reporter', () => {
 
       expect(Reporter.events.size).to.equal(MAX_EVENT_BACKLOG + 1)
 
-      Reporter.reportAttack({}, {}, false)
+      Reporter.reportAttack({}, {})
 
       expect(Reporter.events.size).to.equal(MAX_EVENT_BACKLOG + 1)
     })
@@ -224,7 +224,7 @@ describe('reporter', () => {
 
       stubActiveSpan()
 
-      const event = Reporter.reportAttack(rule, ruleMatch, false)
+      const event = Reporter.reportAttack(rule, ruleMatch)
 
       expect(Reporter.events).to.have.all.keys(event)
 
