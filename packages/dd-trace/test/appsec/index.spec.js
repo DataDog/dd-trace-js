@@ -8,6 +8,7 @@ const RuleManager = require('../../src/appsec/rule_manager')
 const { INCOMING_HTTP_REQUEST_START } = require('../../src/gateway/channels')
 const Gateway = require('../../src/gateway/engine/index')
 const Addresses = require('../../src/appsec/addresses')
+const Reporter = require('../../src/appsec/reporter')
 
 describe('AppSec Index', () => {
   let config
@@ -19,6 +20,7 @@ describe('AppSec Index', () => {
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(INCOMING_HTTP_REQUEST_START, 'subscribe')
+    sinon.stub(Reporter.scheduler, 'start')
     Gateway.manager.clear()
   })
 
@@ -47,6 +49,7 @@ describe('AppSec Index', () => {
         Addresses.HTTP_INCOMING_REMOTE_IP,
         Addresses.HTTP_INCOMING_REMOTE_PORT
       )
+      expect(Reporter.scheduler.start).to.have.been.calledOnce
     })
 
     it('should log when enable fails', () => {
@@ -57,6 +60,10 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(log.error).to.have.been.calledOnceWithExactly('Unable to apply AppSec rules: Error: Invalid Rules')
+      expect(INCOMING_HTTP_REQUEST_START.subscribe).to.not.have.been.called
+      expect(config.tags).to.be.empty
+      expect(Gateway.manager.addresses).to.be.empty
+      expect(Reporter.scheduler.start).to.not.have.been.called
     })
   })
 
