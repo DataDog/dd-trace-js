@@ -18,7 +18,7 @@ function getActiveChannelPrototype () {
   return activeChannelPrototype
 }
 
-function wrappedPublish (data) {
+function blockingPublish (data) {
   let firstError
 
   for (let i = 0; i < this._subscribers.length; i++) {
@@ -41,7 +41,7 @@ function wrappedPublish (data) {
 
 function enable () {
   shimmer.wrap(getActiveChannelPrototype(), 'publish', (originalPublish) => {
-    return wrappedPublish
+    return blockingPublish
   })
 }
 
