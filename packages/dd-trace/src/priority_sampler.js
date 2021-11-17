@@ -21,6 +21,8 @@ const AUTO_KEEP = ext.priority.AUTO_KEEP
 const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
+let isViaRule
+
 class PrioritySampler {
   constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
@@ -58,7 +60,10 @@ class PrioritySampler {
     }
 
     if (auto) {
-      context._sampling.priority = this.isSampled(root) ? AUTO_KEEP : AUTO_REJECT
+      const isSampled = this.isSampled(root)
+      context._sampling.priority = isSampled
+        ? (isViaRule === true ? USER_KEEP : AUTO_KEEP)
+        : (isViaRule === true ? USER_REJECT : AUTO_REJECT)
     }
   }
 
@@ -110,6 +115,7 @@ class PrioritySampler {
   }
 
   _isSampledByRule (context, rule) {
+    isViaRule = true
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
 
     return rule.sampler.isSampled(context)
@@ -124,6 +130,7 @@ class PrioritySampler {
   }
 
   _isSampledByAgent (context) {
+    isViaRule = false
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
@@ -151,9 +158,9 @@ class PrioritySampler {
     const service = context._tags['service.name']
 
     if (rule.name instanceof RegExp && !rule.name.test(name)) return false
-    if (rule.name && rule.name !== name) return false
+    if (typeof rule.name === 'string' && rule.name !== name) return false
     if (rule.service instanceof RegExp && !rule.service.test(service)) return false
-    if (rule.service && rule.service !== service) return false
+    if (typeof rule.service === 'string' && rule.service !== service) return false
 
     return true
   }
