@@ -21,8 +21,6 @@ const AUTO_KEEP = ext.priority.AUTO_KEEP
 const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
-let isViaRule
-
 class PrioritySampler {
   constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
@@ -35,12 +33,8 @@ class PrioritySampler {
   }
 
   isSampled (span) {
-    const context = this._getContext(span)
-    const rule = this._findRule(context)
-
-    return rule
-      ? this._isSampledByRule(context, rule) && this._isSampledByRateLimit(context)
-      : this._isSampledByAgent(context)
+    const priority = this._getPriorityFromAuto(span)
+    return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
   sample (span, auto = true) {
@@ -52,7 +46,7 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    const tag = this._getPriority(context._tags)
+    const tag = this._getPriorityFromTags(context._tags)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -60,10 +54,7 @@ class PrioritySampler {
     }
 
     if (auto) {
-      const isSampled = this.isSampled(root)
-      context._sampling.priority = isSampled
-        ? (isViaRule === true ? USER_KEEP : AUTO_KEEP)
-        : (isViaRule === true ? USER_REJECT : AUTO_REJECT)
+      context._sampling.priority = this._getPriorityFromAuto(root)
     }
   }
 
@@ -98,7 +89,16 @@ class PrioritySampler {
     return typeof span.context === 'function' ? span.context() : span
   }
 
-  _getPriority (tags) {
+  _getPriorityFromAuto (span) {
+    const context = this._getContext(span)
+    const rule = this._findRule(context)
+
+    return rule
+      ? this._getPriorityByRule(context, rule)
+      : this._getPriorityByAgent(context)
+  }
+
+  _getPriorityFromTags (tags) {
     if (tags.hasOwnProperty(MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
     } else if (tags.hasOwnProperty(MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
@@ -114,11 +114,10 @@ class PrioritySampler {
     }
   }
 
-  _isSampledByRule (context, rule) {
-    isViaRule = true
+  _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
 
-    return rule.sampler.isSampled(context)
+    return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context) ? USER_KEEP : USER_REJECT
   }
 
   _isSampledByRateLimit (context) {
@@ -129,14 +128,13 @@ class PrioritySampler {
     return allowed
   }
 
-  _isSampledByAgent (context) {
-    isViaRule = false
+  _getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
-    return sampler.isSampled(context)
+    return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
 
   _normalizeRules (rules, sampleRate) {
