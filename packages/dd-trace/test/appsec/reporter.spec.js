@@ -7,6 +7,7 @@ const Addresses = require('../../src/appsec/addresses')
 const log = require('../../src/log')
 const URL = require('url').URL
 const os = require('os')
+const libVersion = require('../../lib/version')
 
 const MAX_EVENT_BACKLOG = 1e6
 
@@ -278,7 +279,7 @@ describe('reporter', () => {
       expect(event).to.have.nested.property('context.library.context_version').that.equals('0.1.0')
       expect(event).to.have.nested.property('context.library.runtime_type').that.equals('nodejs')
       expect(event).to.have.nested.property('context.library.runtime_version').that.equals(process.version)
-      expect(event).to.have.nested.property('context.library.lib_version').that.is.a('string')
+      expect(event).to.have.nested.property('context.library.lib_version').that.equals(libVersion)
 
       expect(event).to.have.nested.property('context.service.context_version').that.equals('0.1.0')
       expect(event).to.have.nested.property('context.service.name').that.equals('service')
