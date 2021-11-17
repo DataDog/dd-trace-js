@@ -3,7 +3,11 @@
 const dc = require('diagnostics_channel')
 const shimmer = require('shimmer')
 
+let protoCache
+
 function getActiveChannelPrototype () {
+  if (protoCache) return protoCache
+
   const noop = () => {}
 
   const channel = dc.channel('imstealingurprototype')
@@ -14,6 +18,8 @@ function getActiveChannelPrototype () {
   const activeChannelPrototype = Object.getPrototypeOf(channel)
 
   channel.unsubscribe(noop)
+
+  protoCache = activeChannelPrototype
 
   return activeChannelPrototype
 }
