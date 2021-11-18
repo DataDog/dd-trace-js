@@ -197,7 +197,9 @@ function finishAttacks (context) {
 
   const resolvedResponse = resolveHTTPResponse(context)
 
-  for (const event of list) {
+  for (let i = 0; i < list.length; ++i) {
+    const event = list[i]
+
     event.context.http.response = resolvedResponse
 
     events.add(event)
