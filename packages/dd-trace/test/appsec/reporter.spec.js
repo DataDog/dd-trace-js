@@ -90,6 +90,38 @@ describe('reporter', () => {
     })
   })
 
+  describe('resolveHTTPResponse', () => {
+    it('should return empty object when passed no context', () => {
+      const result = Reporter.resolveHTTPResponse()
+
+      expect(result).to.be.an('object').that.is.empty
+    })
+
+    it('should return resolved addresses', () => {
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
+        }
+      }))
+
+      const result = Reporter.resolveHTTPResponse(context)
+
+      expect(result).to.deep.equal({
+        status: 201,
+        headers: {
+          'content-type': [ 'application/json' ],
+          'content-length': [ '42' ]
+        },
+        blocked: false
+      })
+    })
+  })
+
   describe('filterHeaders', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
