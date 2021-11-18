@@ -183,6 +183,7 @@ function reportAttack (rule, ruleMatch) {
       toFinish.set(context, [ event ])
     }
   } else {
+    // we know this will not get finished so we commit it directly
     events.add(event)
   }
 
