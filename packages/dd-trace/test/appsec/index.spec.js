@@ -148,4 +148,58 @@ describe('AppSec Index', () => {
       }, context)
     })
   })
+
+  describe('incomingHttpEndTranslator', () => {
+    it('should do nothing when context is not found', () => {
+      sinon.stub(Gateway, 'getContext').returns(null)
+
+      const req = {}
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishAttacks')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.propagate).to.not.have.been.called
+      expect(Reporter.finishAttacks).to.not.have.been.called
+    })
+
+    it('should propagate incoming http end data', () => {
+      const context = {}
+
+      sinon.stub(Gateway, 'getContext').returns(context)
+
+      const req = {}
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishAttacks')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': {
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }
+      }, context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(context)
+    })
+  })
 })
