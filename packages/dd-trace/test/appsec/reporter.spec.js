@@ -312,6 +312,86 @@ describe('reporter', () => {
       expect(event).to.have.nested.property('context.trace.context_version').that.equals('0.1.0')
       expect(event).to.have.nested.property('context.trace.id').that.equals('traceId')
     })
+
+    it('should push events to toFinish list when context is found', () => {
+      Engine.startContext()
+
+      const context = Engine.getContext()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_URL]: '/',
+        [addresses.HTTP_INCOMING_HEADERS]: {
+          host: 'localhost'
+        }
+      }))
+
+      const event1 = Reporter.reportAttack({}, {})
+      expect(Reporter.toFinish.get(context)).to.deep.equal([
+        event1
+      ])
+      expect(Reporter.events).to.be.empty
+
+      const event2 = Reporter.reportAttack({}, {})
+      expect(Reporter.toFinish.get(context)).to.deep.equal([
+        event1,
+        event2
+      ])
+      expect(Reporter.events).to.be.empty
+    })
+
+    it('should push events to events list when context is not found', () => {
+      const event1 = Reporter.reportAttack({}, {})
+      expect(Reporter.events).to.have.all.keys(event1)
+
+      const event2 = Reporter.reportAttack({}, {})
+      expect(Reporter.events).to.have.all.keys(event1, event2)
+    })
+  })
+
+  describe('finishAttacks', () => {
+    it('should do nothing when no toFinish entry found', () => {
+      const result = Reporter.finishAttacks({})
+
+      expect(result).to.be.false
+    })
+
+    it('should add http response data inside events', () => {
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
+        }
+      }))
+
+      const event1 = Reporter.reportAttack({}, {})
+      const event2 = Reporter.reportAttack({}, {})
+
+      Reporter.toFinish.set(context, [ event1, event2 ])
+
+      const result = Reporter.finishAttacks(context)
+      expect(result).to.not.be.false
+
+      expect(event1).to.have.nested.property('context.http.response.status').that.equals(201)
+      expect(event1).to.have.nested.property('context.http.response.headers').that.deep.equals({
+        'content-type': [ 'application/json' ],
+        'content-length': [ '42' ]
+      })
+      expect(event1).to.have.nested.property('context.http.response.blocked').that.is.false
+
+      expect(event2).to.have.nested.property('context.http.response.status').that.equals(201)
+      expect(event2).to.have.nested.property('context.http.response.headers').that.deep.equals({
+        'content-type': [ 'application/json' ],
+        'content-length': [ '42' ]
+      })
+      expect(event2).to.have.nested.property('context.http.response.blocked').that.is.false
+
+      expect(Reporter.events).to.have.all.keys(event1, event2)
+      expect(Reporter.toFinish.get(context)).to.be.undefined
+    })
   })
 
   describe('flush', () => {
