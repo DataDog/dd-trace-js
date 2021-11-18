@@ -78,10 +78,10 @@ function resolveHTTPRequest (context) {
 function resolveHTTPResponse (context) {
   if (!context) return {}
 
-  const headers = context.resolve(Addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+  const headers = context.resolve(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
 
   return {
-    status: context.resolve(Addresses.HTTP_INCOMING_RESPONSE_CODE),
+    status: context.resolve(addresses.HTTP_INCOMING_RESPONSE_CODE),
     headers: filterHeaders(headers, RESPONSE_HEADERS_WHITELIST),
     blocked: false
   }
