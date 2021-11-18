@@ -2,6 +2,7 @@
 
 let Reporter = require('../../src/appsec/reporter')
 const Engine = require('../../src/gateway/engine')
+const { Context } = require('../../src/gateway/engine/engine')
 const als = require('../../src/gateway/als')
 const addresses = require('../../src/appsec/addresses')
 const log = require('../../src/log')
@@ -47,39 +48,39 @@ describe('reporter', () => {
   afterEach((cb) => {
     sinon.restore()
     Engine.manager.clear()
-    als.exit(cb)
     Reporter.events.clear()
     delete global._ddtrace
+    als.exit(cb)
   })
 
-  describe('resolveHTTPAddresses', () => {
-    it('should return empty object when no context', () => {
-      const result = Reporter.resolveHTTPAddresses()
+  describe('resolveHTTPRequest', () => {
+    it('should return empty object when passed no context', () => {
+      const result = Reporter.resolveHTTPRequest()
 
       expect(result).to.be.an('object').that.is.empty
     })
 
     it('should return resolved addresses', () => {
-      Engine.startContext()
-
-      const context = Engine.getContext()
+      const context = new Context()
 
       context.store = new Map(Object.entries({
         [addresses.HTTP_INCOMING_URL]: '/path?query=string',
         [addresses.HTTP_INCOMING_HEADERS]: {
           host: 'localhost',
-          'user-agent': 'arachni'
+          'user-agent': 'arachni',
+          secret: 'password'
         },
         [addresses.HTTP_INCOMING_METHOD]: 'GET',
         [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
         [addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
       }))
 
-      const result = Reporter.resolveHTTPAddresses()
+      const result = Reporter.resolveHTTPRequest(context)
 
       expect(result).to.deep.equal({
         url: 'http://localhost/path',
         headers: {
+          host: [ 'localhost' ],
           'user-agent': [ 'arachni' ]
         },
         method: 'GET',
@@ -89,46 +90,30 @@ describe('reporter', () => {
     })
   })
 
-  describe('getHeadersToSend', () => {
+  describe('filterHeaders', () => {
     it('should return empty object when providing no headers', () => {
-      const result = Reporter.getHeadersToSend(null)
+      const result = Reporter.filterHeaders(null)
 
       expect(result).to.be.an('object').that.is.empty
     })
 
     it('should filter and format headers from whitelist', () => {
-      const result = Reporter.getHeadersToSend({
-        'client-ip': 1,
-        'forwarded-for': 2,
-        'forwarded': 3,
-        'referer': 4,
-        'true-client-ip': 5,
-        'user-agent': 6,
-        'via': 7,
-        'x-client-ip': 8,
-        'x-cluster-client-ip': 9,
-        'x-forwarded-for': 10,
-        'x-forwarded': 11,
-        'x-real-ip': 12,
-
-        // should not keep those
-        'secret-header': 'secret',
-        'host': 'localhost'
-      })
+      const result = Reporter.filterHeaders({
+        host: 'localhost',
+        'user-agent': 42,
+        secret: 'password',
+        'x-forwarded-for': '10'
+      }, [
+        'host',
+        'user-agent',
+        'x-forwarded-for',
+        'x-client-ip'
+      ])
 
       expect(result).to.deep.equal({
-        'client-ip': [ 1 ],
-        'forwarded-for': [ 2 ],
-        'forwarded': [ 3 ],
-        'referer': [ 4 ],
-        'true-client-ip': [ 5 ],
-        'user-agent': [ 6 ],
-        'via': [ 7 ],
-        'x-client-ip': [ 8 ],
-        'x-cluster-client-ip': [ 9 ],
-        'x-forwarded-for': [ 10 ],
-        'x-forwarded': [ 11 ],
-        'x-real-ip': [ 12 ]
+        'host': [ 'localhost' ],
+        'user-agent': [ '42' ],
+        'x-forwarded-for': [ '10' ]
       })
     })
   })
@@ -215,7 +200,8 @@ describe('reporter', () => {
         [addresses.HTTP_INCOMING_URL]: '/path?query=string',
         [addresses.HTTP_INCOMING_HEADERS]: {
           host: 'localhost',
-          'user-agent': 'arachni'
+          'user-agent': 'arachni',
+          secret: 'password'
         },
         [addresses.HTTP_INCOMING_METHOD]: 'GET',
         [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
@@ -225,8 +211,6 @@ describe('reporter', () => {
       stubActiveSpan()
 
       const event = Reporter.reportAttack(rule, ruleMatch)
-
-      expect(Reporter.events).to.have.all.keys(event)
 
       expect(event).to.have.property('event_id').that.is.a('string')
       expect(event).to.have.property('detected_at').that.is.a('string')
@@ -273,6 +257,7 @@ describe('reporter', () => {
       expect(event).to.have.nested.property('context.http.request.remote_ip').that.equals('8.8.8.8')
       expect(event).to.have.nested.property('context.http.request.remote_port').that.equals(1337)
       expect(event).to.have.nested.property('context.http.request.headers').that.deep.equals({
+        'host': [ 'localhost' ],
         'user-agent': ['arachni']
       })
 
