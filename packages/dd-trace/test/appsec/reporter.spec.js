@@ -129,7 +129,7 @@ describe('reporter', () => {
       expect(result).to.be.an('object').that.is.empty
     })
 
-    it('should filter and format headers from whitelist', () => {
+    it('should filter and format headers from passlist', () => {
       const result = Reporter.filterHeaders({
         host: 'localhost',
         'user-agent': 42,

@@ -12,7 +12,7 @@ const libVersion = require('../../lib/version')
 const FLUSH_INTERVAL = 2e3
 const MAX_EVENT_BACKLOG = 1e6
 
-const REQUEST_HEADERS_WHITELIST = [
+const REQUEST_HEADERS_PASSLIST = [
   'accept',
   'accept-encoding',
   'accept-language',
@@ -33,7 +33,7 @@ const REQUEST_HEADERS_WHITELIST = [
   'x-real-ip'
 ]
 
-const RESPONSE_HEADERS_WHITELIST = [
+const RESPONSE_HEADERS_PASSLIST = [
   'content-encoding',
   'content-language',
   'content-length',
@@ -71,7 +71,7 @@ function resolveHTTPRequest (context) {
     // resource: context.resolve(addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(addresses.HTTP_INCOMING_REMOTE_PORT),
-    headers: filterHeaders(headers, REQUEST_HEADERS_WHITELIST)
+    headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST)
   }
 }
 
@@ -82,18 +82,18 @@ function resolveHTTPResponse (context) {
 
   return {
     status: context.resolve(addresses.HTTP_INCOMING_RESPONSE_CODE),
-    headers: filterHeaders(headers, RESPONSE_HEADERS_WHITELIST),
+    headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST),
     blocked: false
   }
 }
 
-function filterHeaders (headers, whitelist) {
+function filterHeaders (headers, passlist) {
   const result = {}
 
   if (!headers) return result
 
-  for (let i = 0; i < whitelist.length; ++i) {
-    const headerName = whitelist[i]
+  for (let i = 0; i < passlist.length; ++i) {
+    const headerName = passlist[i]
 
     if (headers[headerName]) {
       result[headerName] = [ headers[headerName].toString() ]
