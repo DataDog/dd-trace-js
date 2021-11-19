@@ -53,6 +53,7 @@ const library = {
   lib_version: libVersion
 }
 
+// this is the list of "unfinished" events awaiting response data population before being sent for each gateway context
 const toFinish = new WeakMap()
 const events = new Set()
 
