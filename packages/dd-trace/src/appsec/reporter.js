@@ -12,6 +12,34 @@ const libVersion = require('../../lib/version')
 const FLUSH_INTERVAL = 2e3
 const MAX_EVENT_BACKLOG = 1e6
 
+const REQUEST_HEADERS_PASSLIST = [
+  'accept',
+  'accept-encoding',
+  'accept-language',
+  'content-encoding',
+  'content-language',
+  'content-length',
+  'content-type',
+  'forwarded',
+  'forwarded-for',
+  'host',
+  'true-client-ip',
+  'user-agent',
+  'via',
+  'x-client-ip',
+  'x-cluster-client-ip',
+  'x-forwarded',
+  'x-forwarded-for',
+  'x-real-ip'
+]
+
+const RESPONSE_HEADERS_PASSLIST = [
+  'content-encoding',
+  'content-language',
+  'content-length',
+  'content-type'
+]
+
 const host = {
   context_version: '0.1.0',
   os_type: os.type(),
@@ -25,11 +53,11 @@ const library = {
   lib_version: libVersion
 }
 
+// this is the list of "unfinished" events awaiting response data population before being sent for each gateway context
+const toFinish = new WeakMap()
 const events = new Set()
 
-function resolveHTTPAddresses () {
-  const context = getContext()
-
+function resolveHTTPRequest (context) {
   if (!context) return {}
 
   const path = context.resolve(addresses.HTTP_INCOMING_URL)
@@ -41,40 +69,35 @@ function resolveHTTPAddresses () {
   return {
     method: context.resolve(addresses.HTTP_INCOMING_METHOD),
     url: url.href.split('?')[0],
-    // route: context.resolve(addresses.HTTP_INCOMING_ROUTE),
+    // resource: context.resolve(addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
     remote_port: context.resolve(addresses.HTTP_INCOMING_REMOTE_PORT),
-    headers: getHeadersToSend(headers)
-    // responseCode: context.resolve(addresses.HTTP_OUTGOING_STATUS),
-    // responseHeaders: context.resolve(addresses.HTTP_OUTGOING_HEADERS)
+    headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST)
   }
 }
 
-const HEADERS_TO_SEND = [
-  'client-ip',
-  'forwarded-for',
-  'forwarded',
-  'referer',
-  'true-client-ip',
-  'user-agent',
-  'via',
-  'x-client-ip',
-  'x-cluster-client-ip',
-  'x-forwarded-for',
-  'x-forwarded',
-  'x-real-ip'
-]
+function resolveHTTPResponse (context) {
+  if (!context) return {}
 
-function getHeadersToSend (headers) {
+  const headers = context.resolve(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+
+  return {
+    status: context.resolve(addresses.HTTP_INCOMING_RESPONSE_CODE),
+    headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST),
+    blocked: false
+  }
+}
+
+function filterHeaders (headers, passlist) {
   const result = {}
 
   if (!headers) return result
 
-  for (let i = 0; i < HEADERS_TO_SEND.length; ++i) {
-    const headerName = HEADERS_TO_SEND[i]
+  for (let i = 0; i < passlist.length; ++i) {
+    const headerName = passlist[i]
 
     if (headers[headerName]) {
-      result[headerName] = [ headers[headerName] ]
+      result[headerName] = [ headers[headerName].toString() ]
     }
   }
 
@@ -94,6 +117,7 @@ function getTracerData () {
   const activeSpan = tracer.scope().active()
 
   if (activeSpan) {
+    // TODO: this could be optimized to run only once per request
     activeSpan.setTag('manual.keep')
     activeSpan.setTag('appsec.event', true)
 
@@ -106,10 +130,12 @@ function getTracerData () {
   return result
 }
 
-function reportAttack (rule, ruleMatch, blocked) {
+function reportAttack (rule, ruleMatch) {
   if (events.size > MAX_EVENT_BACKLOG) return
 
-  const resolvedHttp = resolveHTTPAddresses()
+  const context = getContext()
+
+  const resolvedRequest = resolveHTTPRequest(context)
 
   const tracerData = getTracerData()
 
@@ -125,19 +151,7 @@ function reportAttack (rule, ruleMatch, blocked) {
       host,
       http: {
         context_version: '1.0.0',
-        request: {
-          method: resolvedHttp.method,
-          url: resolvedHttp.url,
-          resource: resolvedHttp.route,
-          remote_ip: resolvedHttp.remote_ip,
-          remote_port: resolvedHttp.remote_port,
-          headers: resolvedHttp.headers
-        }/* ,
-        response: {
-          status: resolvedHttp.responseCode,
-          headers: resolvedHttp.responseHeaders,
-          blocked
-        } */
+        request: resolvedRequest
       },
       library,
       service: {
@@ -161,9 +175,38 @@ function reportAttack (rule, ruleMatch, blocked) {
     }
   }
 
-  events.add(event)
+  if (context) {
+    const list = toFinish.get(context)
+
+    if (list) {
+      list.push(event)
+    } else {
+      toFinish.set(context, [ event ])
+    }
+  } else {
+    // we know this will not get finished so we commit it directly
+    events.add(event)
+  }
 
   return event
+}
+
+function finishAttacks (context) {
+  const list = toFinish.get(context)
+
+  if (!list) return false
+
+  const resolvedResponse = resolveHTTPResponse(context)
+
+  for (let i = 0; i < list.length; ++i) {
+    const event = list[i]
+
+    event.context.http.response = resolvedResponse
+
+    events.add(event)
+  }
+
+  toFinish.delete(context)
 }
 
 let lock = false
@@ -219,11 +262,14 @@ function flush () {
 const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 
 module.exports = {
+  toFinish,
   events,
-  resolveHTTPAddresses,
-  getHeadersToSend,
+  resolveHTTPRequest,
+  resolveHTTPResponse,
+  filterHeaders,
   getTracerData,
   reportAttack,
+  finishAttacks,
   flush,
   scheduler
 }

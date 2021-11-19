@@ -80,7 +80,7 @@ describe('WAFCallback', () => {
 
       sinon.stub(WAFCallback, 'loadDDWAF').returns(ddwaf)
 
-      sinon.stub(WAFCallback.prototype, 'action')
+      sinon.stub(WAFCallback.prototype, 'action').returns('result')
 
       sinon.stub(Gateway.manager, 'addSubscription')
 
@@ -111,9 +111,10 @@ describe('WAFCallback', () => {
       ])
       expect(thirdCall).to.have.property('callback').that.equals(callback)
 
-      callback.method('params', 'store')
+      const result = callback.method('params', 'store')
       expect(WAFCallback.prototype.action).to.have.been.calledOnceWithExactly('params', 'store')
       expect(WAFCallback.prototype.action).to.have.been.calledOn(waf)
+      expect(result).to.equal('result')
     })
   })
 
@@ -277,7 +278,7 @@ describe('WAFCallback', () => {
             value: '/wordpress?<script>'
           }],
           highlight: ['arachni/v', 'wordpress', '<script']
-        }, false)
+        })
 
         expect(Reporter.reportAttack.secondCall).to.have.been.calledWithExactly({
           id: 'ua-1337-rx',
@@ -295,7 +296,7 @@ describe('WAFCallback', () => {
             value: '/PG_SLEEP 1'
           }],
           highlight: []
-        }, false)
+        })
       })
 
       it('should do nothing when passed no action', () => {

@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const { INCOMING_HTTP_REQUEST_START } = require('../gateway/channels')
+const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
 const Gateway = require('../gateway/engine/index')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
@@ -25,7 +25,8 @@ function enable (config) {
     return
   }
 
-  INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpTranslator)
+  INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpStartTranslator)
+  INCOMING_HTTP_REQUEST_END.subscribe(incomingHttpEndTranslator)
 
   config.tags['_dd.appsec.enabled'] = 1
   config.tags['_dd.runtime_family'] = 'nodejs'
@@ -36,11 +37,13 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_METHOD)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_PORT)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_CODE)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
 
   Reporter.scheduler.start()
 }
 
-function incomingHttpTranslator (data) {
+function incomingHttpStartTranslator (data) {
   const store = Gateway.startContext()
 
   store.set('req', data.req)
@@ -60,9 +63,28 @@ function incomingHttpTranslator (data) {
   }, context)
 }
 
+function incomingHttpEndTranslator (data) {
+  const context = Gateway.getContext()
+
+  if (!context) return
+
+  // TODO: this doesn't support headers sent with res.writeHead()
+  const headers = Object.assign({}, data.res.getHeaders())
+  delete headers['set-cookie']
+
+  Gateway.propagate({
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
+    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
+  }, context)
+
+  Reporter.finishAttacks(context)
+}
+
 function disable () {
   RuleManager.clearAllRules()
-  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpTranslator)
+
+  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpStartTranslator)
+  if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.unsubscribe(incomingHttpEndTranslator)
 
   const tags = global._ddtrace._tracer._tags
 
@@ -76,5 +98,6 @@ function disable () {
 module.exports = {
   enable,
   disable,
-  incomingHttpTranslator
+  incomingHttpStartTranslator,
+  incomingHttpEndTranslator
 }
