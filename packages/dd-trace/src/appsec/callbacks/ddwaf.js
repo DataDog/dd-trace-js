@@ -79,7 +79,10 @@ class WAFCallback {
       wafContext = this.ddwaf.createContext()
     }
 
+    // TODO: if status code in params, convert it to string
+
     try {
+      // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
       const result = wafContext.run(params, DEFAULT_MAX_BUDGET)
 
       return this.applyResult(result)
