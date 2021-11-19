@@ -353,6 +353,7 @@ describe('reporter', () => {
       const result = Reporter.finishAttacks({})
 
       expect(result).to.be.false
+      expect(Reporter.events).to.be.empty
     })
 
     it('should add http response data inside events', () => {
