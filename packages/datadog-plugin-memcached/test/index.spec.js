@@ -12,7 +12,7 @@ describe('Plugin', () => {
     withVersions('memcached', 'memcached', version => {
       afterEach(() => {
         memcached.end()
-        agent.close()
+        agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {

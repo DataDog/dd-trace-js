@@ -7,6 +7,7 @@ const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
+const ritm = require('../../src/ritm')
 
 const handlers = new Set()
 let sockets = []
@@ -130,7 +131,8 @@ module.exports = {
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
-  close () {
+  close (opts = {}) {
+    const { ritmReset } = opts
     this.wipe()
 
     listener.close()
@@ -139,6 +141,9 @@ module.exports = {
     sockets = []
     agent = null
     handlers.clear()
+    if (ritmReset !== false) {
+      ritm.reset()
+    }
     delete require.cache[require.resolve('../..')]
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
