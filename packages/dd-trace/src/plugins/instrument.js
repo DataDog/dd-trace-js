@@ -7,6 +7,7 @@ const iitm = require('../iitm')
 const ritm = require('../ritm')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../require-package-json')
+const { AsyncResource } = require('async_hooks')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
@@ -87,4 +88,35 @@ function cjsPostLoad (instrumentation, hook) {
 
 function getBasedir (id) {
   return parse(id).basedir.replace(pathSepExpr, '/')
+}
+
+if (semver.satisfies(process.versions.node, '>=16.0.0')) {
+  exports.bind = AsyncResource.bind
+  exports.bindAsyncResource = AsyncResource.prototype.bind
+} else {
+  exports.bindAsyncResource = function bindAsyncResource (fn, thisArg) {
+    thisArg = thisArg || this
+    const ret = this.runInAsyncScope.bind(this, fn, thisArg)
+    Object.defineProperties(ret, {
+      'length': {
+        configurable: true,
+        enumerable: false,
+        value: fn.length,
+        writable: false
+      },
+      'asyncResource': {
+        configurable: true,
+        enumerable: true,
+        value: this,
+        writable: true
+      }
+    })
+    return ret
+  }
+
+  exports.bind = function bind (fn, type, thisArg) {
+    type = type || fn.name
+    const ar = new AsyncResource(type || 'bound-anonymous-fn')
+    return exports.bindAsyncResource.call(ar, fn, thisArg)
+  }
 }

@@ -1,7 +1,6 @@
 'use strict'
 
-const { AsyncResource } = require('async_hooks')
-const { channel, addHook } = require('../../dd-trace/src/plugins/instrument')
+const { channel, addHook, bind } = require('../../dd-trace/src/plugins/instrument')
 
 const rrtypes = {
   resolveAny: 'ANY',
@@ -53,7 +52,7 @@ function wrap (prefix, fn, expectedArgs) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function () {
-    const cb = AsyncResource.bind(arguments[arguments.length - 1])
+    const cb = bind(arguments[arguments.length - 1])
     if (
       !startCh.hasSubscribers ||
       arguments.length < expectedArgs ||
