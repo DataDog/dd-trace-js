@@ -114,6 +114,7 @@ function getTracerData () {
     tags: Object.entries(tracer._tags).map(([k, v]) => `${k}:${v}`)
   }
 
+  // TODO: getting active span will be different in 2.0
   const activeSpan = tracer.scope().active()
 
   if (activeSpan) {
