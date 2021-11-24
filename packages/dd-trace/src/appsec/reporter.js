@@ -219,8 +219,6 @@ function flush () {
     log.warn('Dropping AppSec events because the backlog is full')
   }
 
-
-
   const options = {
     path: '/appsec/proxy/api/v2/appsecevts',
     method: 'POST',
