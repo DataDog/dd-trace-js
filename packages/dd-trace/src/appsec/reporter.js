@@ -219,12 +219,7 @@ function flush () {
     log.warn('Dropping AppSec events because the backlog is full')
   }
 
-  const eventsArray = Array.from(events)
 
-  // if they fail to send, we drop the events
-  for (let i = 0; i < eventsArray.length; ++i) {
-    events.delete(eventsArray[i])
-  }
 
   const options = {
     path: '/appsec/proxy/api/v2/appsecevts',
@@ -235,9 +230,12 @@ function flush () {
     data: JSON.stringify({
       protocol_version: 1,
       idempotency_key: uuid(),
-      events: eventsArray
+      events: Array.from(events)
     })
   }
+
+  // if they fail to send, we drop the events
+  events.clear()
 
   const url = global._ddtrace._tracer._exporter._writer._url
 
