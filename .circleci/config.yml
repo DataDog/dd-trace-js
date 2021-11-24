@@ -250,6 +250,8 @@ jobs:
           path: /tmp/artifacts
 
   node-bench-ci-performance:
+    docker:
+      - image: node
     resource_class: medium
     working_directory: ~/dd-trace-js
 
