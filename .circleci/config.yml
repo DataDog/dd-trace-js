@@ -249,6 +249,16 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
 
+  node-bench-ci-performance:
+    resource_class: medium
+    working_directory: ~/dd-trace-js
+
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: E2E Benchmark
+          command: yarn bench:e2e:ci-visibility
+
   # Shimmer tests
 
   shimmer:
