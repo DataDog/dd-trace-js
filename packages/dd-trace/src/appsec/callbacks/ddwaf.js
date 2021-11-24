@@ -97,7 +97,7 @@ class WAFCallback {
 
       for (let i = 0; i < data.length; ++i) {
         const point = data[i]
-        const ruleMatch = point.rule_matches[0]
+        const ruleMatch = point.rule_matches[point.rule_matches.length - 1]
 
         ruleMatch.highlight = []
 
