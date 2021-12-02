@@ -1,6 +1,6 @@
 'use strict'
 
-// TODO: use uppercase for command names
+// TODO: always use uppercase for command names
 
 const tx = require('../../dd-trace/src/plugins/util/redis')
 
