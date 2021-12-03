@@ -84,7 +84,7 @@ describe('telemetry', () => {
   })
 
   it('should send app-started', () => {
-    return testSeq(0, 'app-started', payload => {
+    return testSeq(1, 'app-started', payload => {
       expect(payload).to.deep.include({
         integrations: [
           { name: 'foo', enabled: true, auto_enabled: true },
@@ -105,7 +105,7 @@ describe('telemetry', () => {
   })
 
   it('should send app-heartbeat', () => {
-    return testSeq(1, 'app-heartbeat', payload => {
+    return testSeq(2, 'app-heartbeat', payload => {
       expect(payload).to.deep.equal({})
     })
   })
@@ -114,7 +114,7 @@ describe('telemetry', () => {
     instrumentedMap.set({ name: 'baz' }, {})
     telemetry.updateIntegrations()
 
-    return testSeq(2, 'app-integrations-change', payload => {
+    return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
           { name: 'foo', enabled: true, auto_enabled: true },
@@ -128,7 +128,7 @@ describe('telemetry', () => {
   it('should send app-closing', () => {
     process.emit('beforeExit')
 
-    return testSeq(3, 'app-closing', payload => {
+    return testSeq(4, 'app-closing', payload => {
       expect(payload).to.deep.equal({})
     })
   })
@@ -151,10 +151,10 @@ describe('telemetry', () => {
 })
 
 async function testSeq (seqId, reqType, validatePayload) {
-  while (traceAgent.reqs.length < seqId + 1) {
+  while (traceAgent.reqs.length < seqId) {
     await once(traceAgent, 'handled-req')
   }
-  const req = traceAgent.reqs[seqId]
+  const req = traceAgent.reqs[seqId - 1]
   const backendHost = 'tracer-telemetry-edge.datadoghq.com'
   const backendUrl = `https://${backendHost}/api/v2/apmtelemetry`
   expect(req.method).to.equal('POST')
@@ -169,7 +169,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     api_version: 'v1',
     request_type: reqType,
     runtime_id: '1a2b3c',
-    seqId,
+    seq_id: seqId,
     application: {
       service_name: 'test service',
       env: 'preprod',

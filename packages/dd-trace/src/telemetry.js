@@ -11,7 +11,7 @@ const os = require('os')
 let config
 let instrumenter
 
-let seqId = -1
+let seqId = 0
 let application
 let host
 let interval
@@ -112,7 +112,7 @@ function sendData (reqType, payload = {}) {
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],
-    seqId: ++seqId,
+    seq_id: ++seqId,
     payload,
     application,
     host
