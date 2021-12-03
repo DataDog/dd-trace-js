@@ -81,7 +81,7 @@ class WAFCallback {
 
     // cast status code to string
     if (params[addresses.HTTP_INCOMING_RESPONSE_CODE]) {
-      params[addresses.HTTP_INCOMING_RESPONSE_CODE] = params[addresses.HTTP_INCOMING_RESPONSE_CODE].toString()
+      params[addresses.HTTP_INCOMING_RESPONSE_CODE] = params[addresses.HTTP_INCOMING_RESPONSE_CODE] + ''
     }
 
     try {
