@@ -62,6 +62,12 @@ describe('telemetry', () => {
       [{ name: 'bar' }, {}]
     ])
 
+    const circularObject = {
+      child: { parent: null, field: 'child_value' },
+      field: 'parent_value'
+    }
+    circularObject.child.parent = circularObject
+
     telemetry.start({
       telemetryEnabled: true,
       hostname: 'localhost',
@@ -71,7 +77,8 @@ describe('telemetry', () => {
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c'
-      }
+      },
+      circularObject
     }, {
       _instrumented: instrumentedMap
     })
@@ -98,7 +105,9 @@ describe('telemetry', () => {
           service: 'test service',
           version: '1.2.3-beta4',
           env: 'preprod',
-          'tags.runtime-id': '1a2b3c'
+          'tags.runtime-id': '1a2b3c',
+          'circularObject.field': 'parent_value',
+          'circularObject.child.field': 'child_value'
         }
       })
     })
@@ -155,12 +164,9 @@ async function testSeq (seqId, reqType, validatePayload) {
     await once(traceAgent, 'handled-req')
   }
   const req = traceAgent.reqs[seqId - 1]
-  const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-  const backendUrl = `https://${backendHost}/api/v2/apmtelemetry`
   expect(req.method).to.equal('POST')
-  expect(req.url).to.equal(backendUrl)
+  expect(req.url).to.equal(`/telemetry/proxy/api/v2/apmtelemetry`)
   expect(req.headers).to.include({
-    host: backendHost,
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v1',
     'dd-telemetry-request-type': reqType
