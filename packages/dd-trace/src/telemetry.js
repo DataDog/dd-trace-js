@@ -45,10 +45,15 @@ function getDependencies () {
   return deps
 }
 
-function flatten (input, result = {}, prefix = []) {
+function flatten (input, result = {}, prefix = [], traversedObjects = null) {
+  traversedObjects = traversedObjects ? traversedObjects : new WeakSet()
+  if (traversedObjects.has(input)) {
+    return
+  }
+  traversedObjects.add(input)
   for (const [key, value] of Object.entries(input)) {
     if (typeof value === 'object' && value !== null) {
-      flatten(value, result, [...prefix, key])
+      flatten(value, result, [...prefix, key], traversedObjects)
     } else {
       result[[...prefix, key].join('.')] = value
     }
