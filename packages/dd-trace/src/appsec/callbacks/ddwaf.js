@@ -79,11 +79,9 @@ class WAFCallback {
       wafContext = this.ddwaf.createContext()
     }
 
-    // it looks like the WAF also works with numbers?
-    for (const k of Object.keys(params)) {
-      if (typeof params[k] === 'number') {
-        params[k] = params[k].toString()
-      }
+    // cast status code to string
+    if (params[addresses.HTTP_INCOMING_RESPONSE_CODE]) {
+      params[addresses.HTTP_INCOMING_RESPONSE_CODE] = params[addresses.HTTP_INCOMING_RESPONSE_CODE].toString()
     }
 
     try {
