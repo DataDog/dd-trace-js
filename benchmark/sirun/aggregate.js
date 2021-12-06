@@ -16,12 +16,17 @@ fs.writeFileSync('all-sirun-output.ndjson', ndjsons)
 
 const versionResults = {}
 ndjsons.trim().split('\n').forEach(x => {
-  const results = JSON.parse(x)
-  const nodeVersion = results.nodeVersion.split('.')[0]
-  if (!versionResults[nodeVersion]) {
-    versionResults[nodeVersion] = []
+  try {
+    const results = JSON.parse(x)
+    const nodeVersion = results.nodeVersion.split('.')[0]
+    if (!versionResults[nodeVersion]) {
+      versionResults[nodeVersion] = []
+    }
+    versionResults[nodeVersion].push(results)
+  } catch (e) {
+    console.log(x) // eslint-disable-line no-console
+    throw e
   }
-  versionResults[nodeVersion].push(results)
 })
 
 const buildData = {
