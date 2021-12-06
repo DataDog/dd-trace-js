@@ -92,15 +92,12 @@ function sendData (reqType, payload = {}) {
     hostname,
     port
   } = config
-  const backendHost = 'tracer-telemetry-edge.datadoghq.com'
-  const backendUrl = `https://${backendHost}/api/v2/apmtelemetry`
   const req = http.request({
     hostname,
     port,
     method: 'POST',
-    path: backendUrl,
+    path: '/telemetry/proxy/api/v2/apmtelemetry',
     headers: {
-      host: backendHost,
       'content-type': 'application/json',
       'dd-telemetry-api-version': 'v1',
       'dd-telemetry-request-type': reqType
