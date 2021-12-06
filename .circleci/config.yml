@@ -832,10 +832,10 @@ workflows:
       - node-bench-latest
       - node-bench-profiler-latest
       - node-bench-e2e-latest
-      # - node-bench-sirun-startup: &matrix-exact-supported-node-versions
-      #     matrix:
-      #       parameters:
-      #         node-version: ["12", "14", "16"]
+      - node-bench-sirun-startup: &matrix-exact-supported-node-versions
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16"]
       # - node-bench-sirun-spans: *matrix-exact-supported-node-versions
       # - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
       # - node-bench-sirun-log: *matrix-exact-supported-node-versions
