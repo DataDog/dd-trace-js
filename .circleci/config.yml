@@ -836,34 +836,34 @@ workflows:
           matrix:
             parameters:
               node-version: ["12", "14", "16"]
-      - node-bench-sirun-spans: *matrix-exact-supported-node-versions
-      - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
-      - node-bench-sirun-log: *matrix-exact-supported-node-versions
-      - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
-      - node-bench-sirun-scope: *matrix-exact-supported-node-versions
-      - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
-      - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-spans: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-log: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-scope: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
+      # - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
-            - node-bench-sirun-startup
-            - node-bench-sirun-spans
-            - node-bench-sirun-async_hooks
-            - node-bench-sirun-log
-            - node-bench-sirun-encoding
-            - node-bench-sirun-plugin-q
-            - node-bench-sirun-plugin-bluebird
-            - node-bench-sirun-plugin-http
-            - node-bench-sirun-plugin-net
-            - node-bench-sirun-scope
-            - node-bench-sirun-exporting-pipeline
-            - node-bench-sirun-profiler
-            - node-bench-sirun-plugin-dns
+            # - node-bench-sirun-startup
+            # - node-bench-sirun-spans
+            # - node-bench-sirun-async_hooks
+            # - node-bench-sirun-log
+            # - node-bench-sirun-encoding
+            # - node-bench-sirun-plugin-q
+            # - node-bench-sirun-plugin-bluebird
+            # - node-bench-sirun-plugin-http
+            # - node-bench-sirun-plugin-net
+            # - node-bench-sirun-scope
+            # - node-bench-sirun-exporting-pipeline
+            # - node-bench-sirun-profiler
+            # - node-bench-sirun-plugin-dns
             - node-bench-sirun-plugin-graphql
   upstream: &upstream-jobs
     jobs:

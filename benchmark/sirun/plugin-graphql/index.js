@@ -38,6 +38,6 @@ const source = `
 
 const variableValues = { who: 'world' }
 
-for (let i = 0; i < 5; i++) {
+for (let i = 0; i < 1; i++) {
   graphql.graphql({ schema, source, variableValues })
 }
