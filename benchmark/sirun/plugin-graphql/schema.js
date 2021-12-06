@@ -115,7 +115,7 @@ const schema = new graphql.GraphQLSchema({
         async resolve (obj, args) {
           const promises = []
 
-          for (let i = 0; i < 1000; i++) {
+          for (let i = 0; i < 100; i++) {
             promises.push(await Promise.resolve({}))
           }
 

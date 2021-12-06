@@ -1,12 +1,13 @@
 'use strict'
 
+const semver = require('semver')
+
 // TODO: benchmark the tracer as well but for now it's just too slow
 // if (Number(process.env.WITH_TRACER)) {
 //   require('../../..').init().use('graphql', { depth: 0 })
 // }
 
 if (Number(process.env.WITH_ASYNC_HOOKS)) {
-  const semver = require('semver')
   const hook = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
     ? { init () {} }
     : { init () {}, before () {}, after () {}, destroy () {} }
@@ -38,6 +39,6 @@ const source = `
 
 const variableValues = { who: 'world' }
 
-for (let i = 0; i < 1; i++) {
+for (let i = 0; i < 25; i++) {
   graphql.graphql({ schema, source, variableValues })
 }
