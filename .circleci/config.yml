@@ -228,7 +228,9 @@ jobs:
 
   node-bench-sirun-plugin-dns: *node-bench-sirun-base
 
-  node-bench-sirun-plugin-graphql: *node-bench-sirun-base
+  node-bench-sirun-plugin-graphql:
+    <<: *node-bench-sirun-base
+    resource_class: large
 
   node-bench-sirun-all:
     docker:
