@@ -1,7 +1,7 @@
 {
   "name": "plugin-graphql",
   "run": "node index.js",
-  "cachegrind": false,
+  "cachegrind": true,
   "iterations": 3,
   "variants": {
     "control": {},
