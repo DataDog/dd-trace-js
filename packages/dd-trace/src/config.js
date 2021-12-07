@@ -3,6 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const URL = require('url').URL
+const path = require('path')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
@@ -134,6 +135,11 @@ class Config {
       process.env.DD_APPSEC_ENABLED,
       false
     )
+    const DD_APPSEC_RULES = coalesce(
+      options.experimental && options.experimental.appsec && options.experimental.appsec.rules,
+      process.env.DD_APPSEC_RULES,
+      path.join(__dirname, 'appsec', 'recommended.json')
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
@@ -193,7 +199,8 @@ class Config {
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.appsec = {
-      enabled: isTrue(DD_APPSEC_ENABLED)
+      enabled: isTrue(DD_APPSEC_ENABLED),
+      rules: DD_APPSEC_RULES
     }
 
     tagger.add(this.tags, {

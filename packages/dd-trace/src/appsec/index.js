@@ -1,7 +1,6 @@
 'use strict'
 
 const fs = require('fs')
-const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
@@ -11,9 +10,9 @@ const Reporter = require('./reporter')
 
 function enable (config) {
   try {
-    // TODO: enable dc_blocking: config.blocking === true
+    // TODO: enable dc_blocking: config.appsec.blocking === true
 
-    let rules = fs.readFileSync(path.join(__dirname, 'recommended.json'))
+    let rules = fs.readFileSync(config.appsec.rules)
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules)
