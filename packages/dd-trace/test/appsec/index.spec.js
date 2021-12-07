@@ -1,7 +1,6 @@
 'use strict'
 
 const fs = require('fs')
-const path = require('path')
 const log = require('../../src/log')
 const AppSec = require('../../src/appsec')
 const RuleManager = require('../../src/appsec/rule_manager')
@@ -14,7 +13,13 @@ describe('AppSec Index', () => {
   let config
 
   beforeEach(() => {
-    config = { tags: {} }
+    config = {
+      tags: {},
+      appsec: {
+        enabled: true,
+        rules: './path/rules.json'
+      }
+    }
     global._ddtrace = { _tracer: { _tags: config.tags } }
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
@@ -35,8 +40,7 @@ describe('AppSec Index', () => {
     it('should enable AppSec', () => {
       AppSec.enable(config)
 
-      const rulesPath = path.resolve(path.join(__dirname, '..', '..', 'src', 'appsec', 'recommended.json'))
-      expect(fs.readFileSync).to.have.been.calledOnceWithExactly(rulesPath)
+      expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] })
       expect(INCOMING_HTTP_REQUEST_START.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
