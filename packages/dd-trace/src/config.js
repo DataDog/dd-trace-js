@@ -127,7 +127,9 @@ class Config {
     )
     // TODO(simon-id): add documentation for appsec config when we release it in public beta
     const DD_APPSEC_ENABLED = coalesce(
-      options.experimental && options.experimental.appsec,
+      options.experimental &&
+        options.experimental.appsec &&
+        (options.experimental.appsec === true || options.experimental.appsec.enabled === true),
       process.env.DD_EXPERIMENTAL_APPSEC_ENABLED,
       process.env.DD_APPSEC_ENABLED,
       false
