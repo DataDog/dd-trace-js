@@ -87,18 +87,6 @@ class DNSPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    for (const rrtype of rrtypes) {
-      this.addSubs('resolve:' + rrtype, ([hostname]) => {
-        const store = storage.getStore()
-        const span = this.startSpan('dns.resolve', {
-          'resource.name': `${rrtype} ${hostname}`,
-          'dns.hostname': hostname,
-          'dns.rrtype': rrtype
-        }, store)
-        this.enter(span, store)
-      })
-    }
-
     this.addSubs('reverse', ([ip]) => {
       const store = storage.getStore()
       const span = this.startSpan('dns.reverse', { 'resource.name': ip, 'dns.ip': ip }, store)

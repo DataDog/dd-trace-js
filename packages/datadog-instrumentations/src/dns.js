@@ -41,11 +41,11 @@ function patchResolveShorthands (prototype) {
     .filter(method => !!prototype[method])
     .forEach(method => {
       rrtypeMap.set(prototype[method], rrtypes[method])
-      prototype[method] = wrap('apm:dns:resolve:' + rrtypes[method], prototype[method], 2)
+      prototype[method] = wrap('apm:dns:resolve', prototype[method], 2, rrtypes[method])
     })
 }
 
-function wrap (prefix, fn, expectedArgs) {
+function wrap (prefix, fn, expectedArgs, rrtype) {
   const startCh = channel(prefix + ':start')
   const endCh = channel(prefix + ':end')
   const asyncEndCh = channel(prefix + ':async-end')
@@ -61,7 +61,12 @@ function wrap (prefix, fn, expectedArgs) {
       return fn.apply(this, arguments)
     }
 
-    startCh.publish(arguments)
+    const startArgs = Array.from(arguments)
+    startArgs.pop() // gets rid of the callback
+    if (rrtype) {
+      startArgs.push(rrtype)
+    }
+    startCh.publish(startArgs)
 
     arguments[arguments.length - 1] = function (error, result) {
       if (error) {
