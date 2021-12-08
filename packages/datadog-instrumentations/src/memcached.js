@@ -7,15 +7,15 @@ const {
   bind,
   bindAsyncResource
 } = require('../../dd-trace/src/plugins/instrument')
+const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
   const startCh = channel('apm:memcached:command:start')
   const startQueryCbCh = channel('apm:memcached:query-cb:start')
   const asyncEndQueryCbCh = channel('apm:memcached:query-cb:async-end')
   const endCh = channel('apm:memcached:command:end')
-  const command = Memcached.prototype.command
 
-  Memcached.prototype.command = function (queryCompiler, server) {
+  shimmer.wrap(Memcached.prototype, 'command', command => function (queryCompiler, server) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
@@ -45,14 +45,6 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
     const result = command.apply(this, arguments)
     endCh.publish(undefined)
     return result
-  }
-
-  Reflect.ownKeys(command).forEach(key => {
-    Object.defineProperty(
-      Memcached.prototype.command,
-      key,
-      Object.getOwnPropertyDescriptor(command, key)
-    )
   })
 
   return Memcached

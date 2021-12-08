@@ -1,6 +1,7 @@
 'use strict'
 
 const { channel, addHook, bind } = require('../../dd-trace/src/plugins/instrument')
+const shimmer = require('../../datadog-shimmer')
 
 const rrtypes = {
   resolveAny: 'ANY',
@@ -89,9 +90,5 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     }
   }
 
-  Reflect.ownKeys(fn).forEach(key => {
-    Object.defineProperty(wrapped, key, Object.getOwnPropertyDescriptor(fn, key))
-  })
-
-  return wrapped
+  return shimmer.wrap(fn, wrapped)
 }
