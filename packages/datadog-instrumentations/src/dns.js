@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, bind } = require('../../dd-trace/src/plugins/instrument')
+const { channel, addHook, bind } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const rrtypes = {

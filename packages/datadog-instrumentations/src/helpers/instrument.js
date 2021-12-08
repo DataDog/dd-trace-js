@@ -3,10 +3,10 @@
 const dc = require('diagnostics_channel')
 const path = require('path')
 const semver = require('semver')
-const iitm = require('../iitm')
-const ritm = require('../ritm')
+const iitm = require('../../../dd-trace/src/iitm')
+const ritm = require('../../../dd-trace/src/ritm')
 const parse = require('module-details-from-path')
-const requirePackageJson = require('../require-package-json')
+const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { AsyncResource } = require('async_hooks')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')

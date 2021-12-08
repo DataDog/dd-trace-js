@@ -38,7 +38,7 @@ function loadInst (plugin) {
   }
   const instPath = path.join(__dirname, `../../../datadog-instrumentations/src/${plugin}.js`)
   proxyquire.noPreserveCache()(instPath, {
-    '../../dd-trace/src/plugins/instrument': instrument
+    './helpers/instrument': instrument
   })
   return instrumentations
 }

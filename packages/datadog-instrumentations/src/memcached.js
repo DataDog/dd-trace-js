@@ -6,7 +6,7 @@ const {
   addHook,
   bind,
   bindAsyncResource
-} = require('../../dd-trace/src/plugins/instrument')
+} = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
