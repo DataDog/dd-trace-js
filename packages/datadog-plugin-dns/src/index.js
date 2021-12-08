@@ -25,10 +25,6 @@ class DNSPlugin extends Plugin {
     return 'dns'
   }
 
-  get kind () {
-    return 'client'
-  }
-
   addSubs (func, start, asyncEnd = defaultAsyncEnd) {
     this.addSub(`apm:dns:${func}:start`, start)
     this.addSub(`apm:dns:${func}:end`, this.exit.bind(this))
