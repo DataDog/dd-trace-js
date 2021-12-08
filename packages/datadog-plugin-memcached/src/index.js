@@ -9,18 +9,18 @@ class MemcachedPlugin extends Plugin {
     return 'memcached'
   }
 
-  constructor (config) {
-    super(config)
+  constructor (...args) {
+    super(...args)
 
     this.addSub('apm:memcached:command:start', () => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
-      const span = tracer().startSpan('memcached.command', {
+      const span = this.tracer.startSpan('memcached.command', {
         childOf,
         tags: {
           'span.kind': 'client',
           'span.type': 'memcached',
-          'service.name': this.config.service || `${tracer()._service}-memcached`
+          'service.name': this.config.service || `${this.tracer._service}-memcached`
         }
       })
 
@@ -77,10 +77,6 @@ function getAddress (client, server, query) {
   }
 
   return server && server.split(':')
-}
-
-function tracer () {
-  return global._ddtrace._tracer
 }
 
 module.exports = MemcachedPlugin

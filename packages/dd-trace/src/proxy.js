@@ -17,7 +17,7 @@ class Tracer extends BaseTracer {
     super()
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
-    this._pluginManager = new PluginManager()
+    this._pluginManager = new PluginManager(this)
     this._deprecate = method => log.deprecate(`tracer.${method}`, [
       `tracer.${method}() is deprecated.`,
       'Please use tracer.startSpan() and tracer.scope() instead.',

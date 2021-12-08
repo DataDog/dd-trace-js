@@ -6,20 +6,6 @@ const { storage } = require('../../datadog-core')
 // // TODO oops! we need to properly use this
 // const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-const rrtypes = [
-  'ANY',
-  'A',
-  'AAAA',
-  'CNAME',
-  'MX',
-  'NS',
-  'TXT',
-  'SRV',
-  'PTR',
-  'NAPTR',
-  'SOA'
-]
-
 class DNSPlugin extends Plugin {
   static get name () {
     return 'dns'
@@ -34,20 +20,20 @@ class DNSPlugin extends Plugin {
 
   startSpan (name, customTags, store) {
     const tags = {
-      'service.name': this.config.service || tracer()._service,
+      'service.name': this.config.service || this.tracer._service,
       'span.kind': 'client'
     }
     for (const tag in customTags) {
       tags[tag] = customTags[tag]
     }
-    return tracer().startSpan(name, {
+    return this.tracer.startSpan(name, {
       childOf: store ? store.span : null,
       tags
     })
   }
 
-  constructor (config) {
-    super(config)
+  constructor (...args) {
+    super(...args)
 
     this.addSubs('lookup', ([hostname]) => {
       const store = storage.getStore()
@@ -97,10 +83,6 @@ function defaultAsyncEnd () {
 
 function errorHandler (error) {
   storage.getStore().addError(error)
-}
-
-function tracer () {
-  return global._ddtrace._tracer
 }
 
 module.exports = DNSPlugin

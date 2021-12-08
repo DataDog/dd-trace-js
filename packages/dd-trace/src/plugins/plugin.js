@@ -19,10 +19,15 @@ class Subscription {
 }
 
 module.exports = class Plugin {
-  constructor () {
+  constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
     this._storeStack = []
+    this._tracer = tracer
+  }
+
+  get tracer () {
+    return this._tracer._tracer
   }
 
   enter (span, store) {
