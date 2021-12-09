@@ -1,10 +1,8 @@
 'use strict'
 
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
-
-// // TODO oops! we need to properly use this
-// const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class DNSPlugin extends Plugin {
   static get name () {
@@ -26,10 +24,12 @@ class DNSPlugin extends Plugin {
     for (const tag in customTags) {
       tags[tag] = customTags[tag]
     }
-    return this.tracer.startSpan(name, {
+    const span = this.tracer.startSpan(name, {
       childOf: store ? store.span : null,
       tags
     })
+    analyticsSampler.sample(span, this.config.measured)
+    return span
   }
 
   constructor (...args) {
