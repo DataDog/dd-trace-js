@@ -70,13 +70,13 @@ module.exports = (on, config) => {
       return activeSpan ? activeSpan._spanContext._traceId.toString() : null
     },
     'dd:afterEach': (test) => {
-      const { state, error, isRumActive } = test
+      const { state, error, isRUMActive } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)
         }
-        if (isRumActive) {
+        if (isRUMActive) {
           activeSpan.setTag(TEST_IS_RUM_ACTIVE, true)
         }
         activeSpan.finish()
