@@ -30,9 +30,11 @@ function getConfig (name, config = {}) {
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
   constructor (tracer) {
-    this._pluginsByName = Object.values(plugins)
-      .filter(p => typeof p === 'function')
-      .reduce((acc, C) => Object.assign(acc, { [C.name]: new C(tracer) }), {})
+    this._pluginsByName = {}
+    for (const PluginClass of Object.values(plugins)) {
+      if (typeof PluginClass !== 'function') continue
+      this._pluginsByName[PluginClass.name] = new PluginClass(tracer)
+    }
   }
 
   // like instrumenter.use()
