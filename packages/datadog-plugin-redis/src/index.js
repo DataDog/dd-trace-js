@@ -1,6 +1,24 @@
 'use strict'
 
+// TODO: always use uppercase for command names
+
 const tx = require('../../dd-trace/src/plugins/util/redis')
+
+function createWrapAddCommand (tracer, config) {
+  return function wrapAddCommand (addCommand) {
+    return function addCommandWithTrace (command) {
+      const name = command[0]
+      const args = command.slice(1)
+
+      if (!config.filter(name)) return addCommand.apply(this, arguments)
+
+      const scope = tracer.scope()
+      const span = startSpan(tracer, config, this, name, args)
+
+      return tx.wrap(span, scope.bind(addCommand, span).apply(this, arguments))
+    }
+  }
+}
 
 function createWrapInternalSendCommand (tracer, config) {
   return function wrapInternalSendCommand (internalSendCommand) {
@@ -50,8 +68,20 @@ function startSpan (tracer, config, client, command, args) {
 
 module.exports = [
   {
+    name: '@node-redis/client',
+    versions: ['>=1'],
+    file: 'dist/lib/client/commands-queue.js',
+    patch (redis, tracer, config) {
+      config = tx.normalizeConfig(config)
+      this.wrap(redis.default.prototype, 'addCommand', createWrapAddCommand(tracer, config))
+    },
+    unpatch (redis) {
+      this.unwrap(redis.default.prototype, 'addCommand')
+    }
+  },
+  {
     name: 'redis',
-    versions: ['>=2.6'],
+    versions: ['>=2.6 <4'],
     patch (redis, tracer, config) {
       config = tx.normalizeConfig(config)
       this.wrap(redis.RedisClient.prototype, 'internal_send_command', createWrapInternalSendCommand(tracer, config))
