@@ -1,10 +1,8 @@
 /* eslint-disable */
 beforeEach(() => {
-  const testName = Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle()
-  const testSuite = Cypress.mocha.getRootSuite().file
   cy.task('dd:beforeEach', {
-    testName,
-    testSuite
+    testName: Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle(),
+    testSuite: Cypress.mocha.getRootSuite().file
   }).then(traceId => {
     Cypress.env('traceId', traceId)
   })
@@ -28,7 +26,6 @@ afterEach(() => {
     }
     if (win.DD_RUM) {
       testInfo.isRUMActive = true
-      // TODO: if (win.DD_RUM.isBrownSessionActive()) testInfo.isSessionReplayActive = true
     }
     cy.task('dd:afterEach', testInfo)
   })

@@ -4,6 +4,7 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   TEST_FRAMEWORK_VERSION,
+  TEST_IS_RUM_ACTIVE,
   getTestEnvironmentMetadata,
   CI_APP_ORIGIN,
   getTestParentSpan
@@ -76,7 +77,7 @@ module.exports = (on, config) => {
           activeSpan.setTag('error', error)
         }
         if (isRumActive) {
-          activeSpan.setTag('test.is_rum_active', true)
+          activeSpan.setTag(TEST_IS_RUM_ACTIVE, true)
         }
         activeSpan.finish()
       }
