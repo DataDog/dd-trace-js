@@ -159,4 +159,4 @@ class AgentExporter {
   }
 }
 
-module.exports = { AgentExporter }
+module.exports = { AgentExporter, computeRetries }

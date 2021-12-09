@@ -1,10 +1,12 @@
 'use strict'
 
 const expect = require('chai').expect
+const sinon = require('sinon')
 const express = require('express')
 const upload = require('multer')()
 const os = require('os')
 const path = require('path')
+const { request } = require('http')
 const getPort = require('get-port')
 const proxyquire = require('proxyquire')
 const { gunzipSync } = require('zlib')
@@ -55,6 +57,8 @@ describe('exporters/agent', () => {
   let listener
   let app
   let docker
+  let http
+  let computeRetries
 
   beforeEach(() => {
     docker = {
@@ -62,9 +66,15 @@ describe('exporters/agent', () => {
         return 'container-id'
       }
     }
-    AgentExporter = proxyquire('../../../src/profiling/exporters/agent', {
-      '../../exporters/agent/docker': docker
-    }).AgentExporter
+    http = {
+      request: sinon.spy(request)
+    }
+    const agent = proxyquire('../../../src/profiling/exporters/agent', {
+      '../../exporters/agent/docker': docker,
+      'http': http
+    })
+    AgentExporter = agent.AgentExporter
+    computeRetries = agent.computeRetries
     sockets = []
     app = express()
   })
@@ -155,10 +165,11 @@ describe('exporters/agent', () => {
     })
 
     it('should backoff up to the uploadTimeout', async () => {
+      const uploadTimeout = 100
       const exporter = new AgentExporter({
         url,
         logger,
-        uploadTimeout: 100
+        uploadTimeout
       })
 
       const start = new Date()
@@ -195,6 +206,19 @@ describe('exporters/agent', () => {
       }
       expect(failed).to.be.true
       expect(attempt).to.be.greaterThan(0)
+
+      const initialTimeout = computeRetries(uploadTimeout)[1]
+      const spyCalls = http.request.getCalls()
+      for (let i = 0; i < spyCalls.length; i++) {
+        const call = spyCalls[i]
+
+        // Verify number does not have decimals as this causes timer warnings
+        expect(Number.isInteger(call.args[0].timeout)).to.be.true
+
+        // Retry is 1-indexed so add 1 to i
+        expect(call.args[0].timeout)
+          .to.equal(initialTimeout * Math.pow(2, i + 1))
+      }
     })
 
     it('should log exports and handle http errors gracefully', async function () {
