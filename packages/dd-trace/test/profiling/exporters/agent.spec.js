@@ -207,6 +207,14 @@ describe('exporters/agent', () => {
       expect(failed).to.be.true
       expect(attempt).to.be.greaterThan(0)
 
+      // Verify computeRetries produces correct starting values
+      for (let i = 1; i <= 100; i++) {
+        const [retries, timeout] = computeRetries(i * 1000)
+        expect(retries).to.be.gte(2)
+        expect(timeout).to.be.lte(1000)
+        expect(Number.isInteger(timeout)).to.be.true
+      }
+
       const initialTimeout = computeRetries(uploadTimeout)[1]
       const spyCalls = http.request.getCalls()
       for (let i = 0; i < spyCalls.length; i++) {

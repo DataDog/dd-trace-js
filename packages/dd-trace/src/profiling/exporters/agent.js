@@ -40,7 +40,7 @@ function computeRetries (uploadTimeout) {
     tries++
     uploadTimeout /= 2
   }
-  return [tries, uploadTimeout]
+  return [tries, Math.floor(uploadTimeout)]
 }
 
 class AgentExporter {
