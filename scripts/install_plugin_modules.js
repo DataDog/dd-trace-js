@@ -58,7 +58,7 @@ async function assertVersions () {
           `../packages/datadog-instrumentations/src/${plugin.name}.js`
         )
         proxyquire.noPreserveCache()(instPath, {
-          '../../dd-trace/src/plugins/instrument': instrument
+          './helpers/instrument': instrument
         })
         return instrumentations
       } else {
