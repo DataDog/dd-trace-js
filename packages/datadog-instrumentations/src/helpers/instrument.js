@@ -49,7 +49,6 @@ function filename (name, file) {
 }
 
 // TODO this is basically Loader#_getModules + running the hook. DRY up.
-// TODO delete all this as a semver major
 function cjsPostLoad (instrumentation, hook) {
   const ids = Object.keys(require.cache)
 
