@@ -9,18 +9,19 @@ function exec (...args) {
     const proc = childProcess.spawn(...args)
     streamAddVersion(proc.stdout)
     proc.on('error', reject)
-    proc.on('exit', resolve)
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error('Process exited with non-zero code.'))
+      }
+    })
   })
 }
 
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
 
-const env = Object.assign({}, process.env, { SIRUN_NO_STDIO: '1' })
-
-const interval = setInterval(() => {
-  // eslint-disable-next-line no-console
-  console.error('This test is still running one minute later...')
-}, 60000)
+const env = Object.assign({}, process.env)
 
 function streamAddVersion (input) {
   input.rl = readline.createInterface({ input })
@@ -42,19 +43,19 @@ function getStdio () {
 }
 
 (async () => {
-  if (metaJson.variants) {
-    const variants = metaJson.variants
-    const len = Object.keys(variants).length
-    let count = 0
-    for (const variant in variants) {
-      const variantEnv = Object.assign({}, env, { SIRUN_VARIANT: variant })
-      await exec('sirun', ['meta.json'], { env: variantEnv, stdio: getStdio() })
-      if (++count === len) {
-        clearInterval(interval)
+  try {
+    if (metaJson.variants) {
+      const variants = metaJson.variants
+      for (const variant in variants) {
+        const variantEnv = Object.assign({}, env, { SIRUN_VARIANT: variant })
+        await exec('sirun', ['meta.json'], { env: variantEnv, stdio: getStdio() })
       }
+    } else {
+      await exec('sirun', ['meta.json'], { env, stdio: getStdio() })
     }
-  } else {
-    await exec('sirun', ['meta.json'], { env, stdio: getStdio() })
-    clearInterval(interval)
+  } catch (e) {
+    setImmediate(() => {
+      throw e // Older Node versions don't fail on uncaught promise rejections.
+    })
   }
 })()
