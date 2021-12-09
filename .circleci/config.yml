@@ -524,7 +524,7 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
-      - image: circleci/mongo:3.4
+      - image: circleci/mongo:3.6
 
   node-net: *node-plugin-base
 
