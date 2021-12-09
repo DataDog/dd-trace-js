@@ -17,7 +17,7 @@ const exporter = new Exporter({
 const sp = new SpanProcessor(exporter, prioritySampler)
 
 const finished = []
-const trace = { finished, started: finished }
+const trace = { finished, started: finished, tags: {} }
 
 function createSpan (parent) {
   const spanId = id()
