@@ -23,7 +23,9 @@ ndjsons.forEach(n => {
       versionResults[nodeVersion].push(results)
       jsons.push(json)
     } catch (e) {
-      console.error(`Could not parse ${filename}.`) // eslint-disable-line no-console
+      // eslint-disable-next-line no-console
+      console.error(`Could not parse ${filename}.`)
+      console.error(json) // eslint-disable-line no-console
       throw e
     }
   })
