@@ -39,8 +39,6 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_PORT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_CODE)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
-
-  Reporter.scheduler.start()
 }
 
 function incomingHttpStartTranslator (data) {
@@ -90,9 +88,6 @@ function disable () {
 
   delete tags['_dd.appsec.enabled']
   delete tags['_dd.runtime_family']
-
-  Reporter.scheduler.stop()
-  Reporter.flush()
 }
 
 module.exports = {
