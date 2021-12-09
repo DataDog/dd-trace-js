@@ -1,8 +1,8 @@
 {
   "name": "exporting-pipeline",
-  "setup": "bash -c \"nohup node ../../e2e/fake-agent.js &\"",
+  "setup": "bash -c \"nohup node ../../e2e/fake-agent.js >/dev/null 2>&1 &\"",
   "run": "node index.js",
-  "iterations": 10,
+  "iterations": 5,
   "cachegrind": true,
   "variants": {
     "0.4": { "env": { "ENCODER_VERSION": "0.4" } },
