@@ -11,9 +11,10 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
   const startCh = channel('apm:memcached:command:start')
-  const startQueryCbCh = channel('apm:memcached:query-cb:start')
-  const asyncEndQueryCbCh = channel('apm:memcached:query-cb:async-end')
+  const startWithArgsCh = channel('apm:memcached:command:start:with-args')
+  const asyncEndCh = channel('apm:memcached:command:async-end')
   const endCh = channel('apm:memcached:command:end')
+  const errorCh = channel('apm:memcached:command:error')
 
   shimmer.wrap(Memcached.prototype, 'command', command => function (queryCompiler, server) {
     if (!startCh.hasSubscribers) {
@@ -29,11 +30,14 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
       const callback = bindAsyncResource.call(asyncResource, query.callback)
 
       query.callback = bind(function (err) {
-        asyncEndQueryCbCh.publish(err)
+        if (err) {
+          errorCh.publish(err)
+        }
+        asyncEndCh.publish(undefined)
 
         return callback.apply(this, arguments)
       })
-      startQueryCbCh.publish({ client, server, query })
+      startWithArgsCh.publish({ client, server, query })
 
       return query
     }

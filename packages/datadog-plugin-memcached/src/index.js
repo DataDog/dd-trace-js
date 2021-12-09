@@ -32,7 +32,7 @@ class MemcachedPlugin extends Plugin {
       this.exit()
     })
 
-    this.addSub('apm:memcached:query-cb:start', ({ client, server, query }) => {
+    this.addSub('apm:memcached:command:start:with-args', ({ client, server, query }) => {
       const span = storage.getStore().span
       span.addTags({
         'resource.name': query.type,
@@ -49,11 +49,13 @@ class MemcachedPlugin extends Plugin {
       }
     })
 
-    this.addSub('apm:memcached:query-cb:async-end', err => {
+    this.addSub('apm:memcached:command:error', err => {
       const span = storage.getStore().span
-      if (err) {
-        span.setTag('error', err)
-      }
+      span.setTag('error', err)
+    })
+
+    this.addSub('apm:memcached:command:async-end', () => {
+      const span = storage.getStore().span
       span.finish()
     })
   }
