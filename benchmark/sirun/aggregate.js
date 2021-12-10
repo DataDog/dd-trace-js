@@ -4,25 +4,34 @@ const fs = require('fs')
 const path = require('path')
 const { summarizeResults } = require('./get-results')
 
+const jsons = []
 const ndjsons = fs.readdirSync(__dirname)
-  .map(n =>
-    n.endsWith('.ndjson')
-      ? fs.readFileSync(path.join(__dirname, n.toString()), 'utf8').trim()
-      : ''
-  )
-  .join('\n')
-
-fs.writeFileSync('all-sirun-output.ndjson', ndjsons)
+  .filter(n => n.endsWith('.ndjson'))
 
 const versionResults = {}
-ndjsons.trim().split('\n').forEach(x => {
-  const results = JSON.parse(x)
-  const nodeVersion = results.nodeVersion.split('.')[0]
-  if (!versionResults[nodeVersion]) {
-    versionResults[nodeVersion] = []
-  }
-  versionResults[nodeVersion].push(results)
+ndjsons.forEach(n => {
+  const filename = path.join(__dirname, n.toString())
+  const lines = fs.readFileSync(filename, 'utf8').trim().split('\n')
+
+  lines.forEach(json => {
+    try {
+      const results = JSON.parse(json)
+      const nodeVersion = results.nodeVersion.split('.')[0]
+      if (!versionResults[nodeVersion]) {
+        versionResults[nodeVersion] = []
+      }
+      versionResults[nodeVersion].push(results)
+      jsons.push(json)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error(`Could not parse ${filename}.`)
+      console.error(json) // eslint-disable-line no-console
+      throw e
+    }
+  })
 })
+
+fs.writeFileSync('all-sirun-output.ndjson', jsons.join('\n'))
 
 const buildData = {
   byVersion: true
