@@ -98,7 +98,7 @@ async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   if (withTracer) {
     env.NODE_OPTIONS = `--require ${ddTraceInit}`
   }
-  await execOrError(withTracer, `npm install --legacy-peer-deps`, { cwd })
+  await execOrError(withTracer, `npm install`, { cwd })
   const result = await exec(withTracer, testCmd, { cwd, env })
   await execOrError(withTracer, `rm -rf ${cwd}`)
   return result
