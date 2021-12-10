@@ -503,7 +503,7 @@ jobs:
         environment:
           - SERVICES=mysql
           - PLUGINS=mysql|mysql2
-      - image: mysql:5.7
+      - image: mariadb:10.4
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=yes
           - MYSQL_DATABASE=db
