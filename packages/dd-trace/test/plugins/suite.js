@@ -191,7 +191,7 @@ if (require.main === module) {
       const suitePath = path.join(__dirname, `../../../datadog-plugin-${plugin}/test/suite.js`)
       if (fs.existsSync(suitePath)) {
         const proc = childProcess.spawn('node', [suitePath], { stdio: 'inherit' })
-        const code = await once(proc, 'exit')
+        const [code] = await once(proc, 'exit')
         if (code !== 0) {
           process.exitCode = code
           break
