@@ -643,7 +643,9 @@ jobs:
 
   node-upstream-graphql: *node-upstream-base
 
-  node-upstream-koa: *node-upstream-base
+  node-upstream-koa:
+    <<: *node-upstream-base
+    resource_class: large
 
   node-upstream-pino: *node-upstream-base
 
