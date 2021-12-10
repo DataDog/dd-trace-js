@@ -186,6 +186,32 @@ describe('WAFCallback', () => {
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' })
       })
 
+      it('should cast status code into string', () => {
+        const wafContext = waf.ddwaf.createContext()
+
+        waf.wafContextCache.set(store.get('context'), wafContext)
+
+        waf.action({
+          'string': '/test',
+          'server.response.status': 404,
+          'number': 1337,
+          'object': {
+            a: 1,
+            b: '2'
+          }
+        }, store)
+
+        expect(wafContext.run).to.have.been.calledOnceWithExactly({
+          'string': '/test',
+          'server.response.status': '404',
+          'number': 1337,
+          'object': {
+            a: 1,
+            b: '2'
+          }
+        }, DEFAULT_MAX_BUDGET)
+      })
+
       it('should catch and log exceptions', () => {
         sinon.spy(log, 'warn')
 
@@ -220,6 +246,10 @@ describe('WAFCallback', () => {
               }
             },
             rule_matches: [{
+              not_relevant: true
+            }, {
+              not_relevant: true
+            }, {
               operator: 'matchOperator',
               operator_value: 'matchOperatorValue',
               parameters: [{
