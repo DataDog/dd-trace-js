@@ -1,16 +1,6 @@
 'use strict'
 
-const os = require('os')
-const uuid = require('crypto-randomuuid')
-const { getContext } = require('../gateway/engine')
 const addresses = require('./addresses')
-const Scheduler = require('../exporters/agent/scheduler')
-const request = require('../exporters/agent/request')
-const log = require('../log')
-const libVersion = require('../../lib/version')
-
-const FLUSH_INTERVAL = 2e3
-const MAX_EVENT_BACKLOG = 1e6
 
 const REQUEST_HEADERS_PASSLIST = [
   'accept',
@@ -40,39 +30,15 @@ const RESPONSE_HEADERS_PASSLIST = [
   'content-type'
 ]
 
-const host = {
-  context_version: '0.1.0',
-  os_type: os.type(),
-  hostname: os.hostname()
-}
-
-const library = {
-  context_version: '0.1.0',
-  runtime_type: 'nodejs',
-  runtime_version: process.version,
-  lib_version: libVersion
-}
-
-// this is the list of "unfinished" events awaiting response data population before being sent for each gateway context
-const toFinish = new WeakMap()
-const events = new Set()
-
 function resolveHTTPRequest (context) {
   if (!context) return {}
 
-  const path = context.resolve(addresses.HTTP_INCOMING_URL)
   const headers = context.resolve(addresses.HTTP_INCOMING_HEADERS)
 
-  // TODO: should we really hardcode the url like that ?
-  const url = new URL(path, `http://${headers.host}`)
-
   return {
-    method: context.resolve(addresses.HTTP_INCOMING_METHOD),
-    url: url.href.split('?')[0],
-    // resource: context.resolve(addresses.HTTP_INCOMING_ROUTE),
+    // route: context.resolve(addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
-    remote_port: context.resolve(addresses.HTTP_INCOMING_REMOTE_PORT),
-    headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST)
+    headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST, 'http.request.headers.')
   }
 }
 
@@ -82,13 +48,11 @@ function resolveHTTPResponse (context) {
   const headers = context.resolve(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
 
   return {
-    status: context.resolve(addresses.HTTP_INCOMING_RESPONSE_CODE),
-    headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST),
-    blocked: false
+    headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
   }
 }
 
-function filterHeaders (headers, passlist) {
+function filterHeaders (headers, passlist, prefix) {
   const result = {}
 
   if (!headers) return result
@@ -97,176 +61,81 @@ function filterHeaders (headers, passlist) {
     const headerName = passlist[i]
 
     if (headers[headerName]) {
-      result[headerName] = [ headers[headerName].toString() ]
+      result[`${prefix}${formatHeaderName(headerName)}`] = headers[headerName].toString()
     }
   }
 
   return result
 }
 
-function getTracerData () {
-  const tracer = global._ddtrace._tracer
-
-  const result = {
-    serviceName: tracer._service,
-    serviceEnv: tracer._env,
-    serviceVersion: tracer._version,
-    tags: Object.entries(tracer._tags).map(([k, v]) => `${k}:${v}`)
-  }
-
-  // TODO: getting active span will be different in 2.0
-  const activeSpan = tracer.scope().active()
-
-  if (activeSpan) {
-    // TODO: this could be optimized to run only once per request
-    activeSpan.setTag('manual.keep')
-    activeSpan.setTag('appsec.event', true)
-
-    const context = activeSpan.context()
-
-    result.spanId = context.toSpanId()
-    result.traceId = context.toTraceId()
-  }
-
-  return result
+function formatHeaderName (name) {
+  return name
+    .toString()
+    .trim()
+    .slice(0, 200)
+    .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
+    .toLowerCase()
 }
 
-function reportAttack (rule, ruleMatch) {
-  if (events.size > MAX_EVENT_BACKLOG) return
+function reportAttack (attackData, store) {
+  const req = store && store.get('req')
+  const topSpan = req && req._datadog && req._datadog.span
+  if (!topSpan) return
 
-  const context = getContext()
+  const currentTags = topSpan.context()._tags
 
-  const resolvedRequest = resolveHTTPRequest(context)
-
-  const tracerData = getTracerData()
-
-  // TODO: check if some contextes could be empty
-  const event = {
-    event_id: uuid(),
-    event_type: 'appsec',
-    event_version: '1.0.0',
-    detected_at: (new Date()).toJSON(),
-    rule,
-    rule_match: ruleMatch,
-    context: {
-      host,
-      http: {
-        context_version: '1.0.0',
-        request: resolvedRequest
-      },
-      library,
-      service: {
-        context_version: '0.1.0',
-        name: tracerData.serviceName,
-        environment: tracerData.serviceEnv,
-        version: tracerData.serviceVersion
-      },
-      span: {
-        context_version: '0.1.0',
-        id: tracerData.spanId
-      },
-      tags: {
-        context_version: '0.1.0',
-        values: tracerData.tags
-      },
-      trace: {
-        context_version: '0.1.0',
-        id: tracerData.traceId
-      }
-    }
+  const newTags = {
+    'appsec.event': true,
+    'manual.keep': undefined
   }
+
+  if (!currentTags['_dd.origin']) {
+    newTags['_dd.origin'] = 'appsec'
+  }
+
+  const currentJson = currentTags['_dd.appsec.json']
+
+  // merge JSON arrays without parsing them
+  if (currentJson) {
+    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1, -1) + currentJson.slice(-2)
+  } else {
+    newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
+  }
+
+  const context = store.get('context')
 
   if (context) {
-    const list = toFinish.get(context)
+    const resolvedRequest = resolveHTTPRequest(context)
 
-    if (list) {
-      list.push(event)
-    } else {
-      toFinish.set(context, [ event ])
+    Object.assign(newTags, resolvedRequest.headers)
+
+    const ua = resolvedRequest.headers['http.request.headers.user-agent']
+    if (ua) {
+      newTags['http.useragent'] = ua
     }
-  } else {
-    // we know this will not get finished so we commit it directly
-    events.add(event)
+
+    newTags['network.client.ip'] = resolvedRequest.remote_ip
+
+    // newTags['http.endpoint'] = resolvedRequest.route
   }
 
-  return event
+  topSpan.addTags(newTags)
 }
 
-function finishAttacks (context) {
-  const list = toFinish.get(context)
+function finishAttacks (req, context) {
+  const topSpan = req && req._datadog && req._datadog.span
+  if (!topSpan || !context) return
 
-  if (!list) return false
+  const resolvedReponse = resolveHTTPResponse(context)
 
-  const resolvedResponse = resolveHTTPResponse(context)
-
-  for (let i = 0; i < list.length; ++i) {
-    const event = list[i]
-
-    event.context.http.response = resolvedResponse
-
-    events.add(event)
-  }
-
-  toFinish.delete(context)
+  topSpan.addTags(resolvedReponse.headers)
 }
-
-let lock = false
-
-function flush () {
-  if (lock || !events.size) return false
-
-  if (events.size >= MAX_EVENT_BACKLOG) {
-    log.warn('Dropping AppSec events because the backlog is full')
-  }
-
-  const options = {
-    path: '/appsec/proxy/api/v2/appsecevts',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    data: JSON.stringify({
-      protocol_version: 1,
-      idempotency_key: uuid(),
-      events: Array.from(events)
-    })
-  }
-
-  // if they fail to send, we drop the events
-  events.clear()
-
-  const url = global._ddtrace._tracer._exporter._writer._url
-
-  if (url.protocol === 'unix:') {
-    options.socketPath = url.pathname
-  } else {
-    options.protocol = url.protocol
-    options.hostname = url.hostname
-    options.port = url.port
-  }
-
-  lock = true
-
-  return request(options, (err, res, status) => {
-    lock = false
-
-    if (err) {
-      log.error(err)
-    }
-  })
-}
-
-const scheduler = new Scheduler(flush, FLUSH_INTERVAL)
 
 module.exports = {
-  toFinish,
-  events,
   resolveHTTPRequest,
   resolveHTTPResponse,
   filterHeaders,
-  getTracerData,
+  formatHeaderName,
   reportAttack,
-  finishAttacks,
-  flush,
-  scheduler
+  finishAttacks
 }

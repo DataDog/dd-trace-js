@@ -75,7 +75,7 @@ function incomingHttpEndTranslator (data) {
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
   }, context)
 
-  Reporter.finishAttacks(context)
+  Reporter.finishAttacks(data.req, context)
 }
 
 function disable () {
