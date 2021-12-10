@@ -1,12 +1,7 @@
 'use strict'
 const suiteTest = require('../../dd-trace/test/plugins/suite')
 
-suiteTest({
-  modName: 'koa',
-  repoUrl: 'koajs/koa',
-  commitish: 'latest',
-  parallel: false
-})
+suiteTest('koa', 'koajs/koa', 'latest')
 
 // TODO enable this
 // suiteTest('@koa/router', 'koajs/router', 'latest')

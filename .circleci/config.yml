@@ -361,6 +361,7 @@ jobs:
 
   node-cassandra:
     <<: *node-plugin-base
+    resource_class: medium
     docker:
       - image: node:<< parameters.node-version >>
         environment:
