@@ -122,7 +122,6 @@ async function run (modName, repoUrl, commitish, testCmd, parallel) {
 
 function defaultRunner ({ withoutTracer, withTracer }) {
   try {
-    expect(withTracer.code).to.equal(0)
     expect(withTracer.code).to.equal(withoutTracer.code)
   } catch (e) {
     // eslint-disable-next-line no-console
