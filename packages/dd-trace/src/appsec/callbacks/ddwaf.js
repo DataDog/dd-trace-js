@@ -79,7 +79,10 @@ class WAFCallback {
       wafContext = this.ddwaf.createContext()
     }
 
-    // TODO: if status code in params, convert it to string
+    // cast status code to string
+    if (params[addresses.HTTP_INCOMING_RESPONSE_CODE]) {
+      params[addresses.HTTP_INCOMING_RESPONSE_CODE] = params[addresses.HTTP_INCOMING_RESPONSE_CODE] + ''
+    }
 
     try {
       // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
