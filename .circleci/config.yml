@@ -620,6 +620,7 @@ jobs:
 
   node-upstream-amqplib:
     <<: *node-upstream-base
+    resource_class: medium
     docker:
       - image: node:<< parameters.node-version >>
         environment:
