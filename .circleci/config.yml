@@ -707,11 +707,7 @@ workflows:
       - node-core-windows
       - shimmer: *matrix-supported-node-versions
       - node-integration: *matrix-supported-node-versions
-      # TODO: Figure out why `npm install` always times out on Node 16.
-      - node-amqplib:
-          matrix:
-              parameters:
-                node-version: ["12", "14"]
+      - node-amqplib: *matrix-supported-node-versions
       - node-amqp10: *matrix-supported-node-versions
       - node-aws-sdk: *matrix-supported-node-versions
       - node-bluebird: *matrix-supported-node-versions
@@ -873,7 +869,11 @@ workflows:
     jobs:
       # - node-upstream-node
       - node-upstream-amqp10: *matrix-supported-node-versions
-      - node-upstream-amqplib: *matrix-supported-node-versions
+      # TODO: Figure out why `npm install` always times out on Node 16.
+      - node-amqplib:
+          matrix:
+              parameters:
+                node-version: ["12", "14"]
       - node-upstream-axios: *matrix-supported-node-versions
       - node-upstream-bunyan: *matrix-supported-node-versions
       - node-upstream-connect: *matrix-supported-node-versions
