@@ -647,7 +647,7 @@ jobs:
 
   node-upstream-koa:
     <<: *node-upstream-base
-    resource_class: medium
+    resource_class: large
 
   node-upstream-pino:
     <<: *node-upstream-base
