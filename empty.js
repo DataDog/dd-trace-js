@@ -6,7 +6,7 @@
 
 // a minimal shim is here to avoid errors if people do manage to
 // import dd-trace-js improperly but it should avoid errors.
-exports.default = exports;
+exports.default = exports
 exports.init = ({
-    init() {}
-}).init;
+  init () {}
+}).init
