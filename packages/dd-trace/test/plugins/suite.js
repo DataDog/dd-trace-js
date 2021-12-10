@@ -113,8 +113,8 @@ async function run (modName, repoUrl, commitish, testCmd, parallel) {
 
     return { withoutTracer, withTracer }
   } else {
-    const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
     const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
+    const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
 
     return { withoutTracer, withTracer }
   }
