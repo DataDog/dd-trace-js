@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: Update setup script to not leave agent process running in background.
+
 const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
@@ -56,7 +58,7 @@ function processSpans () {
   sp.process(finished[0])
   trace.finished = finished
   trace.started = finished
-  if (++iterations < 40000) {
+  if (++iterations < 25000) {
     setImmediate(processSpans)
   }
 }
