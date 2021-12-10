@@ -543,7 +543,9 @@ jobs:
 
   node-paperplane: *node-plugin-base
 
-  node-pino: *node-plugin-base
+  node-pino:
+    <<: *node-plugin-base
+    resource_class: medium
 
   node-postgres:
     <<: *node-plugin-base
