@@ -60,8 +60,14 @@ function exec (withTracer, cmd, opts = {}) {
     proc.on('error', reject)
     const stdout = []
     const stderr = []
-    proc.stdout.on('data', d => stdout.push(d))
-    proc.stderr.on('data', d => stderr.push(d))
+    proc.stdout.on('data', d => {
+      stdout.push(d)
+      process.stdout.write(d)
+    })
+    proc.stderr.on('data', d => {
+      stderr.push(d)
+      process.stderr.write(d)
+    })
     proc.on('exit', code => {
       resolve({
         code,
@@ -113,8 +119,8 @@ async function run (modName, repoUrl, commitish, testCmd, parallel) {
 
     return { withoutTracer, withTracer }
   } else {
-    const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
     const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
+    const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
 
     return { withoutTracer, withTracer }
   }
