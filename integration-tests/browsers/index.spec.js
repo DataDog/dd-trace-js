@@ -42,7 +42,9 @@ function createTestForBundler (outFileLocation) {
   return async function () {
     this.timeout(20e3)
 
-    const browser = await puppeteer.launch()
+    const browser = await puppeteer.launch({
+      args: ['--no-sandbox'],
+    })
     const page = await browser.newPage()
     await page.goto('about:blank')
 
