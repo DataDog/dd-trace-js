@@ -33,7 +33,7 @@ const triggerWorkflow = () => {
           response += chunk
         })
         res.on('end', () => {
-          resolve(response)
+          resolve(res.statusCode)
         })
       })
     request.on('error', (error) => {
@@ -105,12 +105,17 @@ const wait = (timeToWaitMs) => {
 async function main () {
   // Trigger JS GHA
   console.log('Triggering CI Visibility Test Environment Workflow')
-  await triggerWorkflow()
+  const httpResponseCode = await triggerWorkflow()
+  console.log('GitHub API Response code:', httpResponseCode)
   // Give some time for GH to process the request
-  await wait(2000)
+  await wait(5000)
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
-  const { workflow_runs: workflows } = workflowsInProgress
+  console.log('workflows in progress:', workflowsInProgress)
+  const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
+  if (numWorkflows === 0) {
+    throw new Error('Could not find the triggered job')
+  }
   const [{ id: runId } = {}] = workflows
 
   console.log('Waiting for the workflow to finish.')
