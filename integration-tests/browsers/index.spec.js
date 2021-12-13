@@ -43,7 +43,7 @@ function createTestForBundler (outFileLocation) {
     this.timeout(20e3)
 
     const browser = await puppeteer.launch({
-      args: ['--no-sandbox'],
+      args: ['--no-sandbox']
     })
     const page = await browser.newPage()
     await page.goto('about:blank')
