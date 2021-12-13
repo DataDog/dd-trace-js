@@ -19,6 +19,7 @@ const getCommonHeaders = () => {
 
 const triggerWorkflow = () => {
   return new Promise((resolve, reject) => {
+    let response = ''
     const body = JSON.stringify({
       ref: 'main'
     })
@@ -28,8 +29,11 @@ const triggerWorkflow = () => {
         method: 'POST',
         headers: getCommonHeaders()
       }, (res) => {
+        res.on('data', (chunk) => {
+          response += chunk
+        })
         res.on('end', () => {
-          resolve()
+          resolve(response)
         })
       })
     request.on('error', (error) => {
@@ -100,28 +104,32 @@ const wait = (timeToWaitMs) => {
 
 async function main () {
   // Trigger JS GHA
+  console.log('Triggering CI Visibility Test Environment Workflow')
   await triggerWorkflow()
-
   // Give some time for GH to process the request
-  await wait(1000)
-
+  await wait(2000)
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
   const { workflow_runs: workflows } = workflowsInProgress
   const [{ id: runId } = {}] = workflows
 
+  console.log('Waiting for the workflow to finish.')
+  console.log(`Job URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
   // Poll every 10 seconds until we have a finished status
   await new Promise((resolve, reject) => {
     const intervalId = setInterval(async () => {
       const currentWorkflow = await getCurrentWorkflowJobs(runId)
       const { jobs: [{ status, conclusion }] } = currentWorkflow
       if (status === 'completed' && conclusion === 'success') {
+        console.log('Performance overhead test successful')
         resolve()
         clearInterval(intervalId)
       } else if (status === 'completed' && conclusion !== 'success') {
         reject(new Error('Performance overhead test failed'))
+      } else {
+        console.log(`Checking the result of Job ${runId} again`)
       }
-    }, 10000)
+    }, 15000)
   })
 }
 
