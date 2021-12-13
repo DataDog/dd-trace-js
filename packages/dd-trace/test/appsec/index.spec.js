@@ -26,7 +26,6 @@ describe('AppSec Index', () => {
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(INCOMING_HTTP_REQUEST_START, 'subscribe')
     sinon.stub(INCOMING_HTTP_REQUEST_END, 'subscribe')
-    sinon.stub(Reporter.scheduler, 'start')
     Gateway.manager.clear()
   })
 
@@ -58,7 +57,6 @@ describe('AppSec Index', () => {
         addresses.HTTP_INCOMING_RESPONSE_CODE,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS
       )
-      expect(Reporter.scheduler.start).to.have.been.calledOnce
     })
 
     it('should log when enable fails', () => {
@@ -73,7 +71,6 @@ describe('AppSec Index', () => {
       expect(INCOMING_HTTP_REQUEST_END.subscribe).to.not.have.been.called
       expect(config.tags).to.be.empty
       expect(Gateway.manager.addresses).to.be.empty
-      expect(Reporter.scheduler.start).to.not.have.been.called
     })
   })
 
@@ -203,7 +200,7 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }
       }, context)
-      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
     })
   })
 })
