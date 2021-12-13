@@ -249,7 +249,7 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
 
-  node-bench-ci-performance:
+  node-ci-visibility-performance-benchmark:
     docker:
       - image: node
     resource_class: medium
@@ -258,7 +258,7 @@ jobs:
     steps:
       - checkout-and-yarn-install
       - run:
-          name: E2E Benchmark
+          name: CI Visibility Performance Overhead Test
           command: yarn bench:e2e:ci-visibility
 
   # Shimmer tests
