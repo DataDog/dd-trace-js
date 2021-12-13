@@ -882,6 +882,7 @@ workflows:
             - node-bench-sirun-profiler
             - node-bench-sirun-plugin-dns
             - node-bench-sirun-plugin-graphql
+      - node-ci-visibility-performance-benchmark
   upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
