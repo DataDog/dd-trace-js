@@ -58,7 +58,7 @@
     "node": ">=12"
   },
   "dependencies": {
-    "@datadog/native-metrics": "^1.0.1",
+    "@datadog/native-metrics": "^1.1.0",
     "@datadog/pprof": "^0.3.0",
     "@datadog/sketches-js": "^1.0.4",
     "@types/node": ">=12",
