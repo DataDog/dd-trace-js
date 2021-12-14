@@ -8,10 +8,6 @@ require('../../datadog-instrumentations')
 
 // TODO this is shared w/ instrumenter. DRY up.
 function getConfig (name, config = {}) {
-  if (!name) {
-    return config
-  }
-
   const enabled = process.env[`DD_TRACE_${name.toUpperCase()}_ENABLED`.replace(/[^a-z0-9_]/ig, '_')]
   if (enabled !== undefined) {
     config.enabled = isTrue(enabled)
@@ -49,7 +45,6 @@ module.exports = class PluginManager {
 
   // like instrumenter.enable()
   configure (config) {
-    config = config || {}
     const serviceMapping = config.serviceMapping
 
     if (config.plugins !== false) {
@@ -65,6 +60,6 @@ module.exports = class PluginManager {
 
   // This is basically just for testing. like intrumenter.disable()
   destroy () {
-    for (const plugin of this._pluginsByName) plugin.configure({ enabled: false })
+    for (const name in this._pluginsByName) this._pluginsByName[name].configure({ enabled: false })
   }
 }
