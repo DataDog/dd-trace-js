@@ -2,7 +2,7 @@
 
 const proxyquire = require('proxyquire')
 
-describe.only('Plugin Manager', () => {
+describe('Plugin Manager', () => {
   let tracer
   let instantiated
   let PluginManager
