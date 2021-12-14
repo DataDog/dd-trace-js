@@ -886,7 +886,8 @@ workflows:
       - node-upstream-connect: *matrix-supported-node-versions
       - node-upstream-graphql: *matrix-supported-node-versions
       - node-upstream-koa: *matrix-supported-node-versions
-      - node-upstream-pino: *matrix-supported-node-versions
+      # TODO: re-enable if it ever stops being flaky
+      # - node-upstream-pino: *matrix-supported-node-versions
       - node-upstream-promise: *matrix-supported-node-versions
       - node-upstream-q: *matrix-supported-node-versions
 
