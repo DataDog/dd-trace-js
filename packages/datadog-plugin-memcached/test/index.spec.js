@@ -1,7 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('Plugin', () => {
   let Memcached
@@ -9,19 +9,18 @@ describe('Plugin', () => {
   let tracer
 
   describe('memcached', () => {
-    withVersions(plugin, 'memcached', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-        Memcached = require(`../../../versions/memcached@${version}`).get()
-      })
-
+    withVersions('memcached', 'memcached', version => {
       afterEach(() => {
         memcached.end()
+        agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
-        before(() => agent.load('memcached'))
-        after(() => agent.close())
+        beforeEach(async () => {
+          await agent.load('memcached')
+          tracer = require('../../dd-trace')
+          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+        })
 
         it('should do automatic instrumentation when using callbacks', done => {
           memcached = new Memcached('localhost:11211', { retries: 0 })
@@ -50,8 +49,13 @@ describe('Plugin', () => {
 
           tracer.scope().activate(span, () => {
             memcached.get('test', err => {
-              expect(tracer.scope().active()).to.equal(span)
-              done(err)
+              if (err) return done(err)
+              try {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              } catch (e) {
+                done(e)
+              }
             })
           })
         })
@@ -134,10 +138,10 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => agent.load('memcached', { service: 'custom' }))
-        after(() => agent.close())
-
-        beforeEach(() => {
+        beforeEach(async () => {
+          await agent.load('memcached', { service: 'custom' })
+          tracer = require('../../dd-trace')
+          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
           memcached = new Memcached('localhost:11211', { retries: 0 })
         })
 
