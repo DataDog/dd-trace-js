@@ -513,7 +513,6 @@ interface Plugins {
   "paperplane": plugins.paperplane;
   "pg": plugins.pg;
   "pino": plugins.pino;
-  "promise-js": plugins.promise_js;
   "redis": plugins.redis;
   "restify": plugins.restify;
   "rhea": plugins.rhea;
@@ -1178,12 +1177,6 @@ declare namespace plugins {
    * on the tracer.
    */
   interface pino extends Integration {}
-
-  /**
-   * This plugin patches the [promise-js](https://github.com/kevincennis/promise)
-   * module to bind the promise callback the the caller context.
-   */
-  interface promise_js extends Integration {}
 
   /**
    * This plugin automatically instruments the

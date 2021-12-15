@@ -233,7 +233,6 @@ tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');
-tracer.use('promise-js');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');

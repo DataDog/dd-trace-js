@@ -41,7 +41,6 @@ module.exports = {
   'paperplane': require('../../../datadog-plugin-paperplane/src'),
   'pg': require('../../../datadog-plugin-pg/src'),
   'pino': require('../../../datadog-plugin-pino/src'),
-  'promise-js': require('../../../datadog-plugin-promise-js/src'),
   'redis': require('../../../datadog-plugin-redis/src'),
   'restify': require('../../../datadog-plugin-restify/src'),
   'rhea': require('../../../datadog-plugin-rhea/src'),
