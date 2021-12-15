@@ -476,7 +476,6 @@ interface Plugins {
   "amqp10": plugins.amqp10;
   "amqplib": plugins.amqplib;
   "aws-sdk": plugins.aws_sdk;
-  "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
@@ -749,12 +748,6 @@ declare namespace plugins {
      */
     [key: string]: boolean | Object | undefined;
   }
-
-  /**
-   * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
-   * module to bind the promise callback the the caller context.
-   */
-  interface bluebird extends Integration {}
 
   /**
    * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
