@@ -54,7 +54,7 @@ module.exports = {
   getTestSuitePath
 }
 
-function getTestEnvironmentMetadata (testFramework) {
+function getTestEnvironmentMetadata (testFramework, config) {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
   const {
@@ -83,13 +83,17 @@ function getTestEnvironmentMetadata (testFramework) {
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
-  return {
+  const metadata = {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
   }
+  if (config && config.service) {
+    metadata['service.name'] = config.service
+  }
+  return metadata
 }
 
 function getTestParametersString (parametersByTestName, testName) {
