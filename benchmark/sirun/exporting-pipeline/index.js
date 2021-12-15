@@ -17,7 +17,7 @@ const exporter = new Exporter({
 const sp = new SpanProcessor(exporter, prioritySampler)
 
 const finished = []
-const trace = { finished, started: finished }
+const trace = { finished, started: finished, tags: {} }
 
 function createSpan (parent) {
   const spanId = id()
@@ -31,8 +31,8 @@ function createSpan (parent) {
     _sampling: {},
     _traceFlags: {},
     _tags: {
+      'service.name': 'hello',
       a: 'b',
-      hello: 'world',
       and: 'this is a longer string, just because we want to test some longer strongs, got it? okay',
       b: 45,
       something: 98764389,
