@@ -25,6 +25,7 @@ function format (span) {
 
   extractError(formatted, span)
   extractRootTags(formatted, span)
+  extractChunkTags(formatted, span)
   extractTags(formatted, span)
 
   return formatted
@@ -110,6 +111,17 @@ function extractRootTags (trace, span) {
   addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
   addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
   addTag({}, trace.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+}
+
+function extractChunkTags (trace, span) {
+  const context = span.context()
+  const isLocalRoot = span === context._trace.started[0]
+
+  if (!isLocalRoot) return
+
+  for (const key in context._trace.tags) {
+    addTag(trace.meta, trace.metrics, key, context._trace.tags[key])
+  }
 }
 
 function extractError (trace, span) {
