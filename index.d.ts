@@ -522,7 +522,6 @@ interface Plugins {
   "router": plugins.router;
   "sharedb": plugins.sharedb;
   "tedious": plugins.tedious;
-  "when": plugins.when;
   "winston": plugins.winston;
 }
 
@@ -1281,12 +1280,6 @@ declare namespace plugins {
    * [tedious](https://github.com/tediousjs/tedious/) module.
    */
   interface tedious extends Instrumentation {}
-
-  /**
-   * This plugin patches the [when](https://github.com/cujojs/when)
-   * module to bind the promise callback the the caller context.
-   */
-  interface when extends Integration {}
 
   /**
    * This plugin patches the [winston](https://github.com/winstonjs/winston)

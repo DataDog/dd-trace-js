@@ -244,7 +244,6 @@ tracer.use('rhea');
 tracer.use('router');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
-tracer.use('when');
 tracer.use('winston');
 
 tracer.use('express', false)

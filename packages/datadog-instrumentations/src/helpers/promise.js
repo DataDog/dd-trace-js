@@ -4,7 +4,7 @@ const {
   bind
 } = require('./instrument')
 
-exports.wrapThen = function wrapThen (then) {
+exports.wrapThen = function wrapThen (origThen) {
   return function then (onFulfilled, onRejected, onProgress) {
     arguments[0] = wrapCallback(onFulfilled)
     arguments[1] = wrapCallback(onRejected)
@@ -14,7 +14,7 @@ exports.wrapThen = function wrapThen (then) {
       arguments[2] = wrapCallback(onProgress)
     }
 
-    return then.apply(this, arguments)
+    return origThen.apply(this, arguments)
   }
 }
 
