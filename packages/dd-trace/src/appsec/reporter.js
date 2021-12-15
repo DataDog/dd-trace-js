@@ -80,7 +80,7 @@ function formatHeaderName (name) {
 function reportAttack (attackData, store) {
   const req = store && store.get('req')
   const topSpan = req && req._datadog && req._datadog.span
-  if (!topSpan) return
+  if (!topSpan) return false
 
   const currentTags = topSpan.context()._tags
 
@@ -124,7 +124,7 @@ function reportAttack (attackData, store) {
 
 function finishAttacks (req, context) {
   const topSpan = req && req._datadog && req._datadog.span
-  if (!topSpan || !context) return
+  if (!topSpan || !context) return false
 
   const resolvedReponse = resolveHTTPResponse(context)
 
