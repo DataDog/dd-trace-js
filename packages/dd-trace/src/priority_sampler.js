@@ -28,6 +28,7 @@ const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
 const defaultSampler = new Sampler(AUTO_KEEP)
+const serviceNames = new Map()
 
 class PrioritySampler {
   constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
@@ -157,7 +158,7 @@ class PrioritySampler {
   _addUpstreamService (span) {
     const context = span.context()
     const trace = context._trace
-    const service = Buffer.from(context._tags['service.name']).toString('base64')
+    const service = this._toBase64(context._tags['service.name'])
     const priority = context._sampling.priority
     const mechanism = context._sampling.mechanism
     const rate = Math.ceil(coalesce(
@@ -170,6 +171,17 @@ class PrioritySampler {
       : group
 
     trace.tags[UPSTREAM_SERVICES_KEY] = groups
+  }
+
+  _toBase64 (serviceName) {
+    let encoded = serviceNames.get(serviceName)
+
+    if (!encoded) {
+      encoded = Buffer.from(serviceName).toString('base64')
+      serviceNames.set(serviceName, encoded)
+    }
+
+    return encoded
   }
 
   _normalizeRules (rules, sampleRate) {
