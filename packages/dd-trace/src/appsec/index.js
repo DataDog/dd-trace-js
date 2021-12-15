@@ -38,8 +38,6 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_PORT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_CODE)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
-
-  Reporter.scheduler.start()
 }
 
 function incomingHttpStartTranslator (data) {
@@ -76,7 +74,7 @@ function incomingHttpEndTranslator (data) {
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
   }, context)
 
-  Reporter.finishAttacks(context)
+  Reporter.finishAttacks(data.req, context)
 }
 
 function disable () {
@@ -89,9 +87,6 @@ function disable () {
 
   delete tags['_dd.appsec.enabled']
   delete tags['_dd.runtime_family']
-
-  Reporter.scheduler.stop()
-  Reporter.flush()
 }
 
 module.exports = {

@@ -88,29 +88,15 @@ class WAFCallback {
       // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
       const result = wafContext.run(params, DEFAULT_MAX_BUDGET)
 
-      return this.applyResult(result)
+      return this.applyResult(result, store)
     } catch (err) {
       log.warn('Error while running the AppSec WAF')
     }
   }
 
-  applyResult (result) {
-    if (result.action) {
-      const data = JSON.parse(result.data)
-
-      for (let i = 0; i < data.length; ++i) {
-        const point = data[i]
-        const ruleMatch = point.rule_matches[point.rule_matches.length - 1]
-
-        ruleMatch.highlight = []
-
-        for (const param of ruleMatch.parameters) {
-          ruleMatch.highlight = ruleMatch.highlight.concat(param.highlight)
-          delete param.highlight
-        }
-
-        Reporter.reportAttack(point.rule, ruleMatch)
-      }
+  applyResult (result, store) {
+    if (result.data && result.data !== '[]') {
+      Reporter.reportAttack(result.data, store)
     }
 
     // result.perfData
