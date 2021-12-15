@@ -1,6 +1,7 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/promise')
+const { wrapThen } = require('../../datadog-instrumentations/src/helpers/promise')
+
 
 module.exports = [
   {
@@ -8,7 +9,7 @@ module.exports = [
     file: 'lib/core.js',
     versions: ['>=7'],
     patch (Promise, tracer, config) {
-      this.wrap(Promise.prototype, 'then', tx.createWrapThen(tracer, config))
+      this.wrap(Promise.prototype, 'then', wrapThen)
     },
     unpatch (Promise) {
       this.unwrap(Promise.prototype, 'then')

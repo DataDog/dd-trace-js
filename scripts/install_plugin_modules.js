@@ -25,6 +25,13 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
   }
 }))
 
+fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
+  .filter(file => file.endsWith('js'))
+  .forEach(file => {
+    file = file.replace('.js', '')
+    plugins[file] = { name: file, prototype: Object.create(Plugin.prototype) }
+  })
+
 run()
 
 async function run () {
@@ -46,7 +53,9 @@ async function assertVersions () {
   const internals = names
     .map(key => {
       const plugin = plugins[key]
+      console.log(plugin)
       if (plugin.prototype instanceof Plugin) {
+        console.log(key)
         const instrumentations = []
         const instrument = {
           addHook (instrumentation) {
@@ -60,6 +69,7 @@ async function assertVersions () {
         proxyquire.noPreserveCache()(instPath, {
           './helpers/instrument': instrument
         })
+        console.log(instrumentations)
         return instrumentations
       } else {
         return plugin
