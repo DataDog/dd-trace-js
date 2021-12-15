@@ -514,7 +514,6 @@ interface Plugins {
   "pg": plugins.pg;
   "pino": plugins.pino;
   "promise-js": plugins.promise_js;
-  "promise": plugins.promise;
   "q": plugins.q;
   "redis": plugins.redis;
   "restify": plugins.restify;
@@ -1186,12 +1185,6 @@ declare namespace plugins {
    * module to bind the promise callback the the caller context.
    */
   interface promise_js extends Integration {}
-
-  /**
-   * This plugin patches the [promise](https://github.com/then/promise)
-   * module to bind the promise callback the the caller context.
-   */
-  interface promise extends Integration {}
 
   /**
    * This plugin patches the [q](https://github.com/kriskowal/q)
