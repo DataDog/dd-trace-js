@@ -35,8 +35,10 @@ function addToLibraryCopies (originalLib, libraryCopy) {
 
 addHook({ name: 'bluebird', versions: ['>=2.0.2'] }, Promise => {
   shimmer.wrap(Promise.prototype, '_then', wrapThen)
+  return Promise
 })
 
 addHook({ name: 'bluebird', versions: ['^2.11.0', '^3.4.1'] }, Promise => {
   shimmer.wrap(Promise, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(Promise))
+  return Promise
 })

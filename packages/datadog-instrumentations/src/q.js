@@ -9,4 +9,5 @@ addHook({
   versions: ['>=1']
 }, Q => {
   shimmer.wrap(Q.makePromise.prototype, 'then', wrapThen)
+  return Q
 })
