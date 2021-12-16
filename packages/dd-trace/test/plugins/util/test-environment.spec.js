@@ -17,6 +17,10 @@ const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/tes
 })
 
 describe('test environment data', () => {
+  it('getTestEnvironmentMetadata can include service name', () => {
+    const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
+    expect(tags).to.contain({ 'service.name': 'service-name' })
+  })
   it('getCIMetadata returns an empty object if the CI is not supported', () => {
     process.env = {}
     expect(getCIMetadata()).to.eql({})
