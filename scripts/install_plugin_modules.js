@@ -53,9 +53,7 @@ async function assertVersions () {
   const internals = names
     .map(key => {
       const plugin = plugins[key]
-      console.log(plugin)
       if (plugin.prototype instanceof Plugin) {
-        console.log(key)
         const instrumentations = []
         const instrument = {
           addHook (instrumentation) {
@@ -69,7 +67,6 @@ async function assertVersions () {
         proxyquire.noPreserveCache()(instPath, {
           './helpers/instrument': instrument
         })
-        console.log(instrumentations)
         return instrumentations
       } else {
         return plugin
