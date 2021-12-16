@@ -786,7 +786,12 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [cucumber](https://www.npmjs.com/package/@cucumber/cucumber) module.
    */
-  interface cucumber extends Instrumentation {}
+  interface cucumber extends Instrumentation {
+    /**
+     * The service name to be used for this plugin.
+     */
+    service?: string;
+  }
 
   /**
    * This plugin automatically instruments the
@@ -1063,7 +1068,12 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [jest](https://github.com/facebook/jest) module.
    */
-  interface jest extends Integration {}
+  interface jest extends Integration {
+    /**
+     * The service name to be used for this plugin.
+     */
+    service?: string;
+  }
 
   /**
    * This plugin patches the [knex](https://knexjs.org/)
@@ -1105,7 +1115,12 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mocha](https://mochajs.org/) module.
    */
-  interface mocha extends Integration {}
+  interface mocha extends Integration {
+    /**
+     * The service name to be used for this plugin.
+     */
+    service?: string;
+  }
 
   /**
    * This plugin automatically instruments the
