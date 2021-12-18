@@ -100,7 +100,7 @@ module.exports = [
   },
   {
     name: 'pino',
-    versions: ['>=5.14.0'],
+    versions: ['>=5.14.0 <6.8.0'],
     patch (pino, tracer, config) {
       if (!tracer._logInjection) return
 
@@ -110,6 +110,30 @@ module.exports = [
     },
     unpatch (pino) {
       return this.unwrapExport(pino)
+    }
+  },
+  {
+    name: 'pino',
+    versions: ['>=6.8.0'],
+    patch (pino, tracer, config) {
+      if (!tracer._logInjection) return
+
+      const mixinSym = pino.symbols.mixinSym
+
+      const wrapped = this.wrapExport(pino, createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino))
+
+      wrapped.pino = this.wrapExport(pino.pino, createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino.pino))
+      wrapped.default = this.wrapExport(pino.default,
+        createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino.default))
+
+      return wrapped
+    },
+    unpatch (pino) {
+      const unwrapped = this.unwrapExport(pino)
+      unwrapped.pino = this.unwrapExport(pino.pino)
+      unwrapped.default = this.unwrapExport(pino.default)
+
+      return unwrapped
     }
   },
   {
