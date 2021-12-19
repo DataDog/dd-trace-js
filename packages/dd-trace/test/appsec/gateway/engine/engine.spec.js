@@ -1,7 +1,7 @@
 'use strict'
 
-const { SubscriptionManager, Context } = require('../../../src/gateway/engine/engine')
-const Runner = require('../../../src/gateway/engine/runner')
+const { SubscriptionManager, Context } = require('../../../../src/appsec/gateway/engine/engine')
+const Runner = require('../../../../src/appsec/gateway/engine/runner')
 
 describe('Gateway Engine', () => {
   let manager

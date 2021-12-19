@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 const addresses = require('../addresses')
-const Gateway = require('../../gateway/engine')
+const Gateway = require('../gateway/engine')
 const Reporter = require('../reporter')
 
 let warned = false

@@ -5,7 +5,7 @@ const agent = require('../agent')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../../src/gateway/channels')
+const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../../src/appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER

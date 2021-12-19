@@ -1,8 +1,8 @@
 'use strict'
 
 const Reporter = require('../../src/appsec/reporter')
-const Engine = require('../../src/gateway/engine')
-const { Context } = require('../../src/gateway/engine/engine')
+const Engine = require('../../src/appsec/gateway/engine')
+const { Context } = require('../../src/appsec/gateway/engine/engine')
 const addresses = require('../../src/appsec/addresses')
 
 describe('reporter', () => {

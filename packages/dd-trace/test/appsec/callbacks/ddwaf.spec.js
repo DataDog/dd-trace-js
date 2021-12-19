@@ -1,7 +1,7 @@
 'use strict'
 
 const WAFCallback = require('../../../src/appsec/callbacks/ddwaf')
-const Gateway = require('../../../src/gateway/engine')
+const Gateway = require('../../../src/appsec/gateway/engine')
 const Reporter = require('../../../src/appsec/reporter')
 const rules = require('../../../src/appsec/recommended.json')
 const log = require('../../../src/log')

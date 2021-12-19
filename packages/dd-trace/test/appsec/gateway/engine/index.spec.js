@@ -1,8 +1,8 @@
 'use strict'
 
-const Engine = require('../../../src/gateway/engine')
-const { SubscriptionManager, Context } = require('../../../src/gateway/engine/engine')
-const als = require('../../../src/gateway/als')
+const Engine = require('../../../../src/appsec/gateway/engine')
+const { SubscriptionManager, Context } = require('../../../../src/appsec/gateway/engine/engine')
+const als = require('../../../../src/appsec/gateway/als')
 
 describe('Gateway Index', () => {
   afterEach((cb) => {

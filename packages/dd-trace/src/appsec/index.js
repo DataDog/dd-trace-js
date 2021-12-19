@@ -3,8 +3,8 @@
 const fs = require('fs')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
-const Gateway = require('../gateway/engine/index')
+const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('./gateway/channels')
+const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 
