@@ -1,5 +1,6 @@
 const log = require('./log')
 const format = require('./format')
+const { CI_APP_ORIGIN } = require('./plugins/util/test')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -13,6 +14,10 @@ class SpanProcessor {
   process (span) {
     const spanContext = span.context()
     const trace = spanContext._trace
+
+    if (this._exporter.isInCI) {
+      trace.origin = CI_APP_ORIGIN
+    }
 
     if (trace.started.length === trace.finished.length) {
       this._prioritySampler.sample(spanContext)
