@@ -27,9 +27,6 @@ function enable (config) {
   INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpStartTranslator)
   INCOMING_HTTP_REQUEST_END.subscribe(incomingHttpEndTranslator)
 
-  config.tags['_dd.appsec.enabled'] = 1
-  config.tags['_dd.runtime_family'] = 'nodejs'
-
   // add needed fields for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_URL)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
@@ -41,6 +38,14 @@ function enable (config) {
 }
 
 function incomingHttpStartTranslator (data) {
+  const topSpan = data.req._datadog && data.req._datadog.span
+  if (topSpan) {
+    topSpan.addTags({
+      '_dd.appsec.enabled': 1,
+      '_dd.runtime_family': 'nodejs'
+    })
+  }
+
   const store = Gateway.startContext()
 
   store.set('req', data.req)
@@ -82,11 +87,6 @@ function disable () {
 
   if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpStartTranslator)
   if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.unsubscribe(incomingHttpEndTranslator)
-
-  const tags = global._ddtrace._tracer._tags
-
-  delete tags['_dd.appsec.enabled']
-  delete tags['_dd.runtime_family']
 }
 
 module.exports = {

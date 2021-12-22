@@ -14,13 +14,11 @@ describe('AppSec Index', () => {
 
   beforeEach(() => {
     config = {
-      tags: {},
       appsec: {
         enabled: true,
         rules: './path/rules.json'
       }
     }
-    global._ddtrace = { _tracer: { _tags: config.tags } }
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
@@ -32,7 +30,6 @@ describe('AppSec Index', () => {
   afterEach(() => {
     sinon.restore()
     AppSec.disable()
-    delete global._ddtrace
   })
 
   describe('enable', () => {
@@ -44,10 +41,6 @@ describe('AppSec Index', () => {
       expect(INCOMING_HTTP_REQUEST_START.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(INCOMING_HTTP_REQUEST_END.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(config.tags).to.deep.equal({
-        '_dd.appsec.enabled': 1,
-        '_dd.runtime_family': 'nodejs'
-      })
       expect(Gateway.manager.addresses).to.have.all.keys(
         addresses.HTTP_INCOMING_URL,
         addresses.HTTP_INCOMING_HEADERS,
@@ -69,7 +62,6 @@ describe('AppSec Index', () => {
       expect(log.error).to.have.been.calledOnceWithExactly('Unable to apply AppSec rules: Error: Invalid Rules')
       expect(INCOMING_HTTP_REQUEST_START.subscribe).to.not.have.been.called
       expect(INCOMING_HTTP_REQUEST_END.subscribe).to.not.have.been.called
-      expect(config.tags).to.be.empty
       expect(Gateway.manager.addresses).to.be.empty
     })
   })
@@ -92,7 +84,6 @@ describe('AppSec Index', () => {
       expect(INCOMING_HTTP_REQUEST_START.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(INCOMING_HTTP_REQUEST_END.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(config.tags).to.not.have.any.keys('_dd.appsec.enabled', '_dd.runtime_family')
     })
 
     it('should disable AppSec when DC channels are not active', () => {
@@ -103,7 +94,6 @@ describe('AppSec Index', () => {
       expect(AppSec.disable).to.not.throw()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
-      expect(config.tags).to.not.have.any.keys('_dd.appsec.enabled', '_dd.runtime_family')
     })
   })
 
@@ -114,6 +104,10 @@ describe('AppSec Index', () => {
 
       const context = {}
       store.set('context', context)
+
+      const topSpan = {
+        addTags: sinon.stub()
+      }
 
       const req = {
         url: '/path',
@@ -126,6 +120,9 @@ describe('AppSec Index', () => {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
+        },
+        _datadog: {
+          span: topSpan
         }
       }
       const res = {}
@@ -134,6 +131,10 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
 
+      expect(topSpan.addTags).to.have.been.calledOnceWithExactly({
+        '_dd.appsec.enabled': 1,
+        '_dd.runtime_family': 'nodejs'
+      })
       expect(Gateway.startContext).to.have.been.calledOnce
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
