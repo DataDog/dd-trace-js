@@ -438,7 +438,6 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION` | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
 | runtimeMetrics  | `DD_RUNTIME_METRICS_ENABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | profiling       | `DD_PROFILING_ENABLED`            | `false`        | Whether to enable profiling. |
-| ci              | `DD_CI_VISIBILITY_ENABLED`        | `false`        | Whether running in a CI environment. |
 | reportHostname  | `DD_TRACE_REPORT_HOSTNAME`        | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
 | ingestion.sampleRate | `DD_TRACE_SAMPLE_RATE`       | `-`        | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
 | ingestion.rateLimit  | `DD_TRACE_RATE_LIMIT`        | `-`        | Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |

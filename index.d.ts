@@ -241,7 +241,7 @@ export declare interface TracerOptions {
   profiling?: boolean
 
   /**
-   * Whether running in a CI environment.
+   * Whether CI Visibility is enabled.
    */
   ci?: boolean
 

@@ -198,7 +198,7 @@ class Config {
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED)
     }
-    this.isInCI = isTrue(DD_CI_VISIBILITY_ENABLED)
+    this.ci = isTrue(DD_CI_VISIBILITY_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,

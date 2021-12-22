@@ -133,6 +133,20 @@ describe('Tracer', () => {
       }
     })
 
+    it('should set ciapp-test origin when CI Visibility is enabled', () => {
+      let span
+
+      config = new Config({ service: 'service', ci: true })
+
+      const ciTracer = new Tracer(config)
+
+      ciTracer.trace('name', {}, (_span) => {
+        span = _span
+      })
+
+      expect(span.context()._trace.origin).to.equal('ciapp-test')
+    })
+
     describe('with a callback taking a callback', () => {
       it('should wait for the callback to be called before finishing the span', () => {
         let span

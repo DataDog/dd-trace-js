@@ -70,16 +70,4 @@ describe('SpanProcessor', () => {
 
     expect(exporter.export).not.to.have.been.called
   })
-
-  it('should set ciapp-test origin when CI Visibility is enabled', () => {
-    const ciExporter = {
-      export: sinon.stub(),
-      isInCI: true
-    }
-
-    const ciProcessor = new SpanProcessor(ciExporter, prioritySampler)
-    ciProcessor.process(span)
-
-    expect(trace.origin).to.equal('ciapp-test')
-  })
 })
