@@ -59,10 +59,10 @@
   },
   "dependencies": {
     "@datadog/native-appsec": "^0.7.0",
-    "@datadog/native-metrics": "^1.0.1",
+    "@datadog/native-metrics": "^1.1.0",
     "@datadog/pprof": "^0.3.0",
     "@datadog/sketches-js": "^1.0.4",
-    "@types/node": "^10.12.18",
+    "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "form-data": "^3.0.0",

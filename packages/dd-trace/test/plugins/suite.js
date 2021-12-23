@@ -98,7 +98,7 @@ async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
   if (withTracer) {
     env.NODE_OPTIONS = `--require ${ddTraceInit}`
   }
-  await execOrError(withTracer, `npm install`, { cwd })
+  await execOrError(withTracer, `npm install --legacy-peer-deps`, { cwd })
   const result = await exec(withTracer, testCmd, { cwd, env })
   await execOrError(withTracer, `rm -rf ${cwd}`)
   return result
@@ -122,7 +122,6 @@ async function run (modName, repoUrl, commitish, testCmd, parallel) {
 
 function defaultRunner ({ withoutTracer, withTracer }) {
   try {
-    expect(withTracer.code).to.equal(0)
     expect(withTracer.code).to.equal(withoutTracer.code)
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -191,7 +190,7 @@ if (require.main === module) {
       const suitePath = path.join(__dirname, `../../../datadog-plugin-${plugin}/test/suite.js`)
       if (fs.existsSync(suitePath)) {
         const proc = childProcess.spawn('node', [suitePath], { stdio: 'inherit' })
-        const code = await once(proc, 'exit')
+        const [code] = await once(proc, 'exit')
         if (code !== 0) {
           process.exitCode = code
           break

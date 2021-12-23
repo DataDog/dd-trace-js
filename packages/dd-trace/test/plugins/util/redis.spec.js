@@ -23,8 +23,6 @@ describe('plugins/util/redis', () => {
         'span.type': 'redis',
         'db.type': 'redis',
         'db.name': '1',
-        'out.host': '127.0.0.1',
-        'out.port': '6379',
         'redis.raw_command': 'SET foo bar'
       })
     })

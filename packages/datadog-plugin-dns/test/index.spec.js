@@ -68,18 +68,18 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
             service: 'test',
-            resource: 'A localhost'
+            resource: 'A lvh.me'
           })
           expect(traces[0][0].meta).to.deep.include({
             'span.kind': 'client',
-            'dns.hostname': 'localhost',
+            'dns.hostname': 'lvh.me',
             'dns.rrtype': 'A'
           })
         })
         .then(done)
         .catch(done)
 
-      dns.resolve('localhost', err => err && done(err))
+      dns.resolve('lvh.me', err => err && done(err))
     })
 
     it('should instrument resolve shorthands', done => {
@@ -88,18 +88,18 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
             service: 'test',
-            resource: 'ANY localhost'
+            resource: 'ANY lvh.me'
           })
           expect(traces[0][0].meta).to.deep.include({
             'span.kind': 'client',
-            'dns.hostname': 'localhost',
+            'dns.hostname': 'lvh.me',
             'dns.rrtype': 'ANY'
           })
         })
         .then(done)
         .catch(done)
 
-      dns.resolveAny('localhost', err => err && done(err))
+      dns.resolveAny('lvh.me', err => err && done(err))
     })
 
     it('should instrument reverse', done => {
@@ -122,7 +122,7 @@ describe('Plugin', () => {
     })
 
     it('should preserve the parent scope in the callback', done => {
-      const span = {}
+      const span = tracer.startSpan('dummySpan', {})
 
       tracer.scope().activate(span, () => {
         dns.lookup('localhost', 4, (err) => {
@@ -152,17 +152,17 @@ describe('Plugin', () => {
           expect(traces[0][0]).to.deep.include({
             name: 'dns.resolve',
             service: 'test',
-            resource: 'A localhost'
+            resource: 'A lvh.me'
           })
           expect(traces[0][0].meta).to.deep.include({
-            'dns.hostname': 'localhost',
+            'dns.hostname': 'lvh.me',
             'dns.rrtype': 'A'
           })
         })
         .then(done)
         .catch(done)
 
-      resolver.resolve('localhost', err => err && done(err))
+      resolver.resolve('lvh.me', err => err && done(err))
     })
   })
 })
