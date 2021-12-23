@@ -8,7 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
+const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -72,17 +72,7 @@ const web = {
       req._datadog.instrumented = true
     }
 
-    if (callback) {
-      return tracer.scope().activate(span, () => {
-        if (incomingHttpRequestStart.hasSubscribers) {
-          incomingHttpRequestStart.publish({ req, res })
-        }
-
-        callback(span)
-      })
-    } else if (incomingHttpRequestStart.hasSubscribers) {
-      incomingHttpRequestStart.publish({ req, res })
-    }
+    return callback && tracer.scope().activate(span, () => callback(span))
   },
 
   // Reactivate the request scope in case it was changed by a middleware.
