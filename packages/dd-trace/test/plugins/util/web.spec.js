@@ -5,7 +5,7 @@ const agent = require('../agent')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../../src/appsec/gateway/channels')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -385,7 +385,7 @@ describe('plugins/util/web', () => {
           expect(tracer.scope().active()).to.exist
         })
 
-        INCOMING_HTTP_REQUEST_START.subscribe(spy)
+        incomingHttpRequestStart.subscribe(spy)
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
           expect(spy).to.have.been.calledOnce
@@ -393,7 +393,7 @@ describe('plugins/util/web', () => {
           expect(tracer.scope().active()).to.equal(span)
         })
 
-        INCOMING_HTTP_REQUEST_START.unsubscribe(spy)
+        incomingHttpRequestStart.unsubscribe(spy)
       })
 
       it('should call diagnostics_channel even without callback', () => {
@@ -403,11 +403,11 @@ describe('plugins/util/web', () => {
           expect(tracer.scope().active()).to.not.exist
         })
 
-        INCOMING_HTTP_REQUEST_START.subscribe(spy)
+        incomingHttpRequestStart.subscribe(spy)
 
         web.instrument(tracer, config, req, res, 'test.request')
 
-        INCOMING_HTTP_REQUEST_START.unsubscribe(spy)
+        incomingHttpRequestStart.unsubscribe(spy)
 
         expect(spy).to.have.been.calledOnce
       })
@@ -553,11 +553,11 @@ describe('plugins/util/web', () => {
           expect(tracer.scope().active()).to.not.exist
         })
 
-        INCOMING_HTTP_REQUEST_END.subscribe(spy)
+        incomingHttpRequestEnd.subscribe(spy)
 
         res.end()
 
-        INCOMING_HTTP_REQUEST_END.unsubscribe(spy)
+        incomingHttpRequestEnd.unsubscribe(spy)
 
         expect(span.finish).to.have.been.calledOnce
 

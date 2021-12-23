@@ -3,7 +3,7 @@
 const fs = require('fs')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('./gateway/channels')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
 const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
@@ -24,8 +24,8 @@ function enable (config) {
     return
   }
 
-  INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpStartTranslator)
-  INCOMING_HTTP_REQUEST_END.subscribe(incomingHttpEndTranslator)
+  incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
+  incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
 
   // add needed fields for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_URL)
@@ -85,8 +85,8 @@ function incomingHttpEndTranslator (data) {
 function disable () {
   RuleManager.clearAllRules()
 
-  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpStartTranslator)
-  if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.unsubscribe(incomingHttpEndTranslator)
+  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
+  if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
 }
 
 module.exports = {

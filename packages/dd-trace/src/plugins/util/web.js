@@ -8,7 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../appsec/gateway/channels')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -74,14 +74,14 @@ const web = {
 
     if (callback) {
       return tracer.scope().activate(span, () => {
-        if (INCOMING_HTTP_REQUEST_START.hasSubscribers) {
-          INCOMING_HTTP_REQUEST_START.publish({ req, res })
+        if (incomingHttpRequestStart.hasSubscribers) {
+          incomingHttpRequestStart.publish({ req, res })
         }
 
         callback(span)
       })
-    } else if (INCOMING_HTTP_REQUEST_START.hasSubscribers) {
-      INCOMING_HTTP_REQUEST_START.publish({ req, res })
+    } else if (incomingHttpRequestStart.hasSubscribers) {
+      incomingHttpRequestStart.publish({ req, res })
     }
   },
 
@@ -277,7 +277,7 @@ function wrapEnd (req) {
 
     finishMiddleware(req, res)
 
-    if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.publish({ req, res })
+    if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.publish({ req, res })
 
     const returnValue = end.apply(res, arguments)
 
