@@ -18,10 +18,20 @@
         "DD_APPSEC_ENABLED": "1"
       }
     },
+    "control-with-attacks": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node server.js",
+      "env": {
+        "DD_APPSEC_ENABLED": "0",
+        "ATTACK_UA": "1",
+        "ATTACK_404": "1",
+        "ATTACK_QS": "1"
+      }
+    },
     "appsec-enabled-with-attacks": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node server.js",
-      "baseline": "control",
+      "baseline": "control-with-attacks",
       "env": {
         "DD_APPSEC_ENABLED": "1",
         "ATTACK_UA": "1",
