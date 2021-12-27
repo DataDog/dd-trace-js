@@ -18,5 +18,7 @@ webpack(config, (err, stats) => {
     throw err
   }
 
-  console.log(stats.toString()) // eslint-disable-line no-console
+  if (stats.hasError()) {
+    console.error(stats.toString()) // eslint-disable-line no-console
+  }
 })
