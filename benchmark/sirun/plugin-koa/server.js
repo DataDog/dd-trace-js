@@ -13,7 +13,7 @@ if (WITH_INTERNAL_TRACER === 'true') {
 }
 
 const http = require('http')
-const Koa = require('koa')
+const Koa = require('../../../versions/koa/node_modules/koa')
 const net = require('net')
 const app = new Koa()
 

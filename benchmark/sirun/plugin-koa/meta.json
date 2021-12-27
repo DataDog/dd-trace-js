@@ -10,14 +10,14 @@
   "cachegrind": true,
   "variants": {
     "baseline": {},
-    "with-tracer": {
-      "env": {
-        "WITH_TRACER": "true"
-      }
-    },
     "with-internal-tracer": {
       "env": {
         "WITH_INTERNAL_TRACER": "true"
+      }
+    },
+    "with-tracer": {
+      "env": {
+        "WITH_TRACER": "true"
       }
     }
   }

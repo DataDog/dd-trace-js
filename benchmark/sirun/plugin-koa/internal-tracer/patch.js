@@ -9,6 +9,8 @@ const errorChannel = channel('apm:koa:request:error')
 const asyncEndChannel = channel('apm:koa:request:async-end')
 
 Hook(['koa'], function (Koa, name, basedir) {
+  if (name !== 'koa/lib/application.js') return Koa
+
   const { handleRequest } = Koa.prototype
 
   Koa.prototype.handleRequest = function (ctx, fnMiddleware) {

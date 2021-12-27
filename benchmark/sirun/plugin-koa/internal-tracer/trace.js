@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('diagnostics_channel')
-const { tracer } = require('../../../packages/datadog-tracer')
+const { tracer } = require('../../../../packages/datadog-tracer')
 const { storage } = require('../../../../packages/datadog-core')
 
 const startChannel = channel('apm:koa:request:start')
