@@ -1,0 +1,22 @@
+{
+  "name": "plugin-http",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "control": {
+      "setup": "bash -c \"nohup node ../plugin-http/client.js >/dev/null 2>&1 &\"",
+      "run": "node ../plugin-http/server.js",
+      "env": {
+        "DD_APPSEC_ENABLED": "0"
+      }
+    },
+    "appsec-enabled": {
+      "setup": "bash -c \"nohup node ../plugin-http/client.js >/dev/null 2>&1 &\"",
+      "run": "node ../plugin-http/server.js",
+      "baseline": "control",
+      "env": {
+        "DD_APPSEC_ENABLED": "1"
+      }
+    }
+  }
+}
