@@ -6,7 +6,7 @@ const http = require('http')
 let connectionsMade = 0
 
 function request (opts) {
-  http.request(opts, (res) => {
+  http.get(opts, (res) => {
     res.on('data', () => {})
     res.on('end', () => {
       if (++connectionsMade !== reqs) {
