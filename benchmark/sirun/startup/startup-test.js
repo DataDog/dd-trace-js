@@ -5,11 +5,11 @@ if (Number(process.env.USE_TRACER)) {
 }
 
 if (Number(process.env.USE_INTERNAL_TRACER)) {
-  require('../../../packages/datadog-tracer')
+  require('./internal')
 }
 
 if (Number(process.env.USE_INTERNAL_TRACER_BUNDLE)) {
-  require('./dist/tracer')
+  require('./dist/internal')
 }
 
 if (Number(process.env.EVERYTHING)) {

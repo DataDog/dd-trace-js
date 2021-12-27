@@ -4,12 +4,12 @@ if (process.env.USE_INTERNAL_TRACER_BUNDLE === '1') {
   const webpack = require('webpack')
 
   const config = {
-    entry: [`${__dirname}/../../../packages/datadog-tracer/index.js`],
+    entry: [`${__dirname}/internal.js`],
     target: 'node',
     mode: 'production',
     output: {
       path: `${__dirname}/dist`,
-      filename: 'tracer.js',
+      filename: 'internal.js',
       libraryTarget: 'umd'
     }
   }
@@ -19,7 +19,7 @@ if (process.env.USE_INTERNAL_TRACER_BUNDLE === '1') {
       throw err
     }
 
-    if (stats.hasError()) {
+    if (stats.hasErrors()) {
       console.error(stats.toString()) // eslint-disable-line no-console
     }
   })
