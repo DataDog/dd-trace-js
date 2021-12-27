@@ -1,5 +1,5 @@
 {
-  "name": "plugin-http",
+  "name": "appsec",
   "cachegrind": true,
   "iterations": 10,
   "variants": {
