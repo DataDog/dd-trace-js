@@ -1,14 +1,20 @@
 'use strict'
 
+const coalesce = require('koalas')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const ext = require('../../../ext')
 const { setSamplingRules } = require('./startup-log')
 
 const {
+  SAMPLING_MECHANISM_DEFAULT,
+  SAMPLING_MECHANISM_AGENT,
+  SAMPLING_MECHANISM_RULE,
+  SAMPLING_MECHANISM_MANUAL,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
-  SAMPLING_AGENT_DECISION
+  SAMPLING_AGENT_DECISION,
+  UPSTREAM_SERVICES_KEY
 } = require('./constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
@@ -20,6 +26,9 @@ const AUTO_REJECT = ext.priority.AUTO_REJECT
 const AUTO_KEEP = ext.priority.AUTO_KEEP
 const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
+
+const defaultSampler = new Sampler(AUTO_KEEP)
+const serviceNames = new Map()
 
 class PrioritySampler {
   constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
@@ -33,12 +42,8 @@ class PrioritySampler {
   }
 
   isSampled (span) {
-    const context = this._getContext(span)
-    const rule = this._findRule(context)
-
-    return rule
-      ? this._isSampledByRule(context, rule) && this._isSampledByRateLimit(context)
-      : this._isSampledByAgent(context)
+    const priority = this._getPriorityFromAuto(span)
+    return priority === USER_KEEP || priority === AUTO_KEEP
   }
 
   sample (span, auto = true) {
@@ -50,16 +55,18 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    const tag = this._getPriority(context._tags)
+    const tag = this._getPriorityFromTags(context._tags)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
+      context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+    } else if (auto) {
+      context._sampling.priority = this._getPriorityFromAuto(root)
+    } else {
       return
     }
 
-    if (auto) {
-      context._sampling.priority = this.isSampled(root) ? AUTO_KEEP : AUTO_REJECT
-    }
+    this._addUpstreamService(root)
   }
 
   update (rates) {
@@ -72,7 +79,7 @@ class PrioritySampler {
       samplers[key] = sampler
     }
 
-    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || new Sampler(AUTO_KEEP)
+    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
     this._samplers = samplers
   }
@@ -93,7 +100,16 @@ class PrioritySampler {
     return typeof span.context === 'function' ? span.context() : span
   }
 
-  _getPriority (tags) {
+  _getPriorityFromAuto (span) {
+    const context = this._getContext(span)
+    const rule = this._findRule(context)
+
+    return rule
+      ? this._getPriorityByRule(context, rule)
+      : this._getPriorityByAgent(context)
+  }
+
+  _getPriorityFromTags (tags) {
     if (tags.hasOwnProperty(MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
     } else if (tags.hasOwnProperty(MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
@@ -109,10 +125,11 @@ class PrioritySampler {
     }
   }
 
-  _isSampledByRule (context, rule) {
+  _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._sampling.mechanism = SAMPLING_MECHANISM_RULE
 
-    return rule.sampler.isSampled(context)
+    return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context) ? USER_KEEP : USER_REJECT
   }
 
   _isSampledByRateLimit (context) {
@@ -123,13 +140,48 @@ class PrioritySampler {
     return allowed
   }
 
-  _isSampledByAgent (context) {
+  _getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
-    return sampler.isSampled(context)
+    if (sampler === defaultSampler) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    } else {
+      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+    }
+
+    return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
+  }
+
+  _addUpstreamService (span) {
+    const context = span.context()
+    const trace = context._trace
+    const service = this._toBase64(context._tags['service.name'])
+    const priority = context._sampling.priority
+    const mechanism = context._sampling.mechanism
+    const rate = Math.ceil(coalesce(
+      context._trace[SAMPLING_RULE_DECISION],
+      context._trace[SAMPLING_AGENT_DECISION]
+    ) * 10000) / 10000
+    const group = `${service}|${priority}|${mechanism}|${rate}`
+    const groups = trace.tags[UPSTREAM_SERVICES_KEY]
+      ? `${trace.tags[UPSTREAM_SERVICES_KEY]};${group}`
+      : group
+
+    trace.tags[UPSTREAM_SERVICES_KEY] = groups
+  }
+
+  _toBase64 (serviceName) {
+    let encoded = serviceNames.get(serviceName)
+
+    if (!encoded) {
+      encoded = Buffer.from(serviceName).toString('base64')
+      serviceNames.set(serviceName, encoded)
+    }
+
+    return encoded
   }
 
   _normalizeRules (rules, sampleRate) {
@@ -151,9 +203,9 @@ class PrioritySampler {
     const service = context._tags['service.name']
 
     if (rule.name instanceof RegExp && !rule.name.test(name)) return false
-    if (rule.name && rule.name !== name) return false
+    if (typeof rule.name === 'string' && rule.name !== name) return false
     if (rule.service instanceof RegExp && !rule.service.test(service)) return false
-    if (rule.service && rule.service !== service) return false
+    if (typeof rule.service === 'string' && rule.service !== service) return false
 
     return true
   }

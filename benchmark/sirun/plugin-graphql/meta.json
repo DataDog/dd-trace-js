@@ -1,0 +1,13 @@
+{
+  "name": "plugin-graphql",
+  "run": "node index.js",
+  "cachegrind": true,
+  "iterations": 3,
+  "variants": {
+    "control": {},
+    "with-async-hooks": {
+      "baseline": "control",
+      "env": { "WITH_ASYNC_HOOKS": "1" }
+    }
+  }
+}

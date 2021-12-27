@@ -19,13 +19,15 @@ const {
   JEST_TEST_RUNNER
 } = require('../../dd-trace/src/plugins/util/test')
 
-describe('Plugin', () => {
+describe('Plugin', function () {
   let tracer
   let DatadogJestEnvironment
   let datadogJestEnv
   const TEST_NAME = 'test_name'
   const TEST_SUITE = 'test-file.js'
   const BUILD_SOURCE_ROOT = '/source-root'
+
+  this.timeout(5000)
 
   withVersions(plugin, ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {

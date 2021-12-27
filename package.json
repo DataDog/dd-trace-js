@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "2.0.0-appsec-beta.1",
+  "version": "2.0.0-appsec-beta.3",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -58,11 +58,11 @@
     "node": ">=12"
   },
   "dependencies": {
-    "@datadog/native-appsec": "^0.6.0",
-    "@datadog/native-metrics": "^1.0.1",
+    "@datadog/native-appsec": "^0.7.0",
+    "@datadog/native-metrics": "^1.1.0",
     "@datadog/pprof": "^0.3.0",
     "@datadog/sketches-js": "^1.0.4",
-    "@types/node": "^10.12.18",
+    "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "form-data": "^3.0.0",

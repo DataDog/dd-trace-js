@@ -1,7 +1,7 @@
 'use strict'
 
 const ASYNC_HOOKS = process.env.ASYNC_HOOKS && process.env.ASYNC_HOOKS.split(',')
-const PROMISES_PER_INTERVAL = process.env.PROMISES_PER_INTERVAL || 250000
+const PROMISES_PER_INTERVAL = process.env.PROMISES_PER_INTERVAL || 100000
 const INTERVALS = process.env.INTERVALS || 10
 
 if (ASYNC_HOOKS) {

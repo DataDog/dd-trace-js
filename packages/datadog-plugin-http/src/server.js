@@ -2,6 +2,7 @@
 
 const web = require('../../dd-trace/src/plugins/util/web')
 const Scope = require('../../dd-trace/src/scope')
+const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
 
 function createWrapEmit (tracer, config) {
   config = web.normalizeConfig(config)
@@ -10,6 +11,10 @@ function createWrapEmit (tracer, config) {
     return function emitWithTrace (eventName, req, res) {
       if (eventName === 'request') {
         return web.instrument(tracer, config, req, res, 'http.request', () => {
+          if (incomingHttpRequestStart.hasSubscribers) {
+            incomingHttpRequestStart.publish({ req, res })
+          }
+
           return emit.apply(this, arguments)
         })
       }

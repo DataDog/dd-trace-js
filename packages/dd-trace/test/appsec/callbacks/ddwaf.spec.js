@@ -1,7 +1,7 @@
 'use strict'
 
 const WAFCallback = require('../../../src/appsec/callbacks/ddwaf')
-const Gateway = require('../../../src/gateway/engine')
+const Gateway = require('../../../src/appsec/gateway/engine')
 const Reporter = require('../../../src/appsec/reporter')
 const rules = require('../../../src/appsec/recommended.json')
 const log = require('../../../src/log')
@@ -151,7 +151,7 @@ describe('WAFCallback', () => {
         waf.action({ a: 1, b: 2 }, store)
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' })
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
       })
 
       it('should create wafContext and cache it', () => {
@@ -163,17 +163,19 @@ describe('WAFCallback', () => {
         const wafContext = waf.wafContextCache.get(key)
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' })
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
       })
 
       it('should create wafContext and not cache it when no request context is found', () => {
         sinon.spy(waf.wafContextCache, 'set')
 
-        waf.action({ a: 1, b: 2 }, new Map())
+        const store = new Map()
+
+        waf.action({ a: 1, b: 2 }, store)
 
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' })
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
       })
 
       it('should create wafContext and not cache it when no store is passed', () => {
@@ -183,7 +185,33 @@ describe('WAFCallback', () => {
 
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' })
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, undefined)
+      })
+
+      it('should cast status code into string', () => {
+        const wafContext = waf.ddwaf.createContext()
+
+        waf.wafContextCache.set(store.get('context'), wafContext)
+
+        waf.action({
+          'string': '/test',
+          'server.response.status': 404,
+          'number': 1337,
+          'object': {
+            a: 1,
+            b: '2'
+          }
+        }, store)
+
+        expect(wafContext.run).to.have.been.calledOnceWithExactly({
+          'string': '/test',
+          'server.response.status': '404',
+          'number': 1337,
+          'object': {
+            a: 1,
+            b: '2'
+          }
+        }, DEFAULT_MAX_BUDGET)
       })
 
       it('should catch and log exceptions', () => {
@@ -207,100 +235,66 @@ describe('WAFCallback', () => {
         sinon.stub(Reporter, 'reportAttack')
       })
 
-      it('should call reporter with parsed attacks when passed action', () => {
-        waf.applyResult({
-          action: 'monitor',
-          data: JSON.stringify([{
-            rule: {
-              id: 'ruleId',
-              name: 'ruleName',
-              tags: {
-                type: 'ruleType',
-                category: 'ruleCategory'
-              }
-            },
-            rule_matches: [{
-              operator: 'matchOperator',
-              operator_value: 'matchOperatorValue',
-              parameters: [{
-                address: 'headers',
-                key_path: ['user-agent', 0],
-                value: 'arachni/v1',
-                highlight: ['arachni/v']
-              }, {
-                address: 'url',
-                key_path: [],
-                value: '/wordpress?<script>',
-                highlight: ['wordpress', '<script']
-              }]
-            }]
+      it('should call reporter with unparsed attacks when passed data', () => {
+        const data = JSON.stringify([{
+          rule: {
+            id: 'ruleId',
+            name: 'ruleName',
+            tags: {
+              type: 'ruleType',
+              category: 'ruleCategory'
+            }
+          },
+          rule_matches: [{
+            not_relevant: true
           }, {
-            rule: {
-              id: 'ua-1337-rx',
-              name: 'Hacker rule',
-              tags: {
-                type: 'user-agent',
-                category: 'hacker'
-              }
-            },
-            rule_matches: [{
-              operator: 'is_sqli',
-              operator_value: '',
-              parameters: [{
-                address: 'url',
-                key_path: [],
-                value: '/PG_SLEEP 1',
-                highlight: []
-              }]
-            }]
-          }])
-        })
-
-        expect(Reporter.reportAttack).to.have.been.calledTwice
-
-        expect(Reporter.reportAttack.firstCall).to.have.been.calledWithExactly({
-          id: 'ruleId',
-          name: 'ruleName',
-          tags: {
-            type: 'ruleType',
-            category: 'ruleCategory'
-          }
-        }, {
-          operator: 'matchOperator',
-          operator_value: 'matchOperatorValue',
-          parameters: [{
-            address: 'headers',
-            key_path: ['user-agent', 0],
-            value: 'arachni/v1'
+            not_relevant: true
           }, {
-            address: 'url',
-            key_path: [],
-            value: '/wordpress?<script>'
-          }],
-          highlight: ['arachni/v', 'wordpress', '<script']
-        })
-
-        expect(Reporter.reportAttack.secondCall).to.have.been.calledWithExactly({
-          id: 'ua-1337-rx',
-          name: 'Hacker rule',
-          tags: {
-            type: 'user-agent',
-            category: 'hacker'
-          }
+            operator: 'matchOperator',
+            operator_value: 'matchOperatorValue',
+            parameters: [{
+              address: 'headers',
+              key_path: ['user-agent', 0],
+              value: 'arachni/v1',
+              highlight: ['arachni/v']
+            }, {
+              address: 'url',
+              key_path: [],
+              value: '/wordpress?<script>',
+              highlight: ['wordpress', '<script']
+            }]
+          }]
         }, {
-          operator: 'is_sqli',
-          operator_value: '',
-          parameters: [{
-            address: 'url',
-            key_path: [],
-            value: '/PG_SLEEP 1'
-          }],
-          highlight: []
-        })
+          rule: {
+            id: 'ua-1337-rx',
+            name: 'Hacker rule',
+            tags: {
+              type: 'user-agent',
+              category: 'hacker'
+            }
+          },
+          rule_matches: [{
+            operator: 'is_sqli',
+            operator_value: '',
+            parameters: [{
+              address: 'url',
+              key_path: [],
+              value: '/PG_SLEEP 1',
+              highlight: []
+            }]
+          }]
+        }])
+
+        const store = new Map()
+
+        waf.applyResult({ data }, store)
+
+        expect(Reporter.reportAttack).to.have.been.calledOnceWithExactly(data, store)
       })
 
-      it('should do nothing when passed no action', () => {
+      it('should do nothing when passed empty data', () => {
         waf.applyResult({})
+        waf.applyResult({ data: '[]' })
 
         expect(Reporter.reportAttack).to.not.have.been.called
       })
