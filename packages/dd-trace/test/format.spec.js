@@ -118,6 +118,23 @@ describe('format', () => {
       )
     })
 
+    it('should extract trace chunk tags', () => {
+      spanContext._trace.tags = {
+        chunk: 'test',
+        count: 1
+      }
+
+      trace = format(span)
+
+      expect(trace.meta).to.include({
+        chunk: 'test'
+      })
+
+      expect(trace.metrics).to.include({
+        count: 1
+      })
+    })
+
     it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
       spanContext._tags[HOSTNAME_KEY] = 'some_hostname'
 

@@ -1,19 +1,18 @@
 'use strict'
 
 const fs = require('fs')
-const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../gateway/channels')
-const Gateway = require('../gateway/engine/index')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
+const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 
 function enable (config) {
   try {
-    // TODO: enable dc_blocking: config.blocking === true
+    // TODO: enable dc_blocking: config.appsec.blocking === true
 
-    let rules = fs.readFileSync(path.join(__dirname, 'recommended.json'))
+    let rules = fs.readFileSync(config.appsec.rules)
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules)
@@ -25,11 +24,8 @@ function enable (config) {
     return
   }
 
-  INCOMING_HTTP_REQUEST_START.subscribe(incomingHttpStartTranslator)
-  INCOMING_HTTP_REQUEST_END.subscribe(incomingHttpEndTranslator)
-
-  config.tags['_dd.appsec.enabled'] = 1
-  config.tags['_dd.runtime_family'] = 'nodejs'
+  incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
+  incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
 
   // add needed fields for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_URL)
@@ -39,11 +35,17 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_PORT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_CODE)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
-
-  Reporter.scheduler.start()
 }
 
 function incomingHttpStartTranslator (data) {
+  const topSpan = data.req._datadog && data.req._datadog.span
+  if (topSpan) {
+    topSpan.addTags({
+      '_dd.appsec.enabled': 1,
+      '_dd.runtime_family': 'nodejs'
+    })
+  }
+
   const store = Gateway.startContext()
 
   store.set('req', data.req)
@@ -77,22 +79,14 @@ function incomingHttpEndTranslator (data) {
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
   }, context)
 
-  Reporter.finishAttacks(context)
+  Reporter.finishAttacks(data.req, context)
 }
 
 function disable () {
   RuleManager.clearAllRules()
 
-  if (INCOMING_HTTP_REQUEST_START.hasSubscribers) INCOMING_HTTP_REQUEST_START.unsubscribe(incomingHttpStartTranslator)
-  if (INCOMING_HTTP_REQUEST_END.hasSubscribers) INCOMING_HTTP_REQUEST_END.unsubscribe(incomingHttpEndTranslator)
-
-  const tags = global._ddtrace._tracer._tags
-
-  delete tags['_dd.appsec.enabled']
-  delete tags['_dd.runtime_family']
-
-  Reporter.scheduler.stop()
-  Reporter.flush()
+  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
+  if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
 }
 
 module.exports = {

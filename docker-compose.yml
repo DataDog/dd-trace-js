@@ -20,7 +20,7 @@ services:
     ports:
       - "127.0.0.1:1433:1433"
   mysql:
-    image: mysql:5.7
+    image: mariadb:10.4
     environment:
       - MYSQL_ALLOW_EMPTY_PASSWORD=yes
       - MYSQL_DATABASE=db
@@ -31,7 +31,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
   mongo:
-    image: circleci/mongo:3.4
+    image: circleci/mongo:3.6
     ports:
       - "127.0.0.1:27017:27017"
   oracledb:

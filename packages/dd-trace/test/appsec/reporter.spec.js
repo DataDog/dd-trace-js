@@ -1,56 +1,27 @@
 'use strict'
 
-let Reporter = require('../../src/appsec/reporter')
-const Engine = require('../../src/gateway/engine')
-const { Context } = require('../../src/gateway/engine/engine')
-const als = require('../../src/gateway/als')
+const Reporter = require('../../src/appsec/reporter')
+const Engine = require('../../src/appsec/gateway/engine')
+const { Context } = require('../../src/appsec/gateway/engine/engine')
 const addresses = require('../../src/appsec/addresses')
-const log = require('../../src/log')
-const URL = require('url').URL
-const os = require('os')
-const libVersion = require('../../lib/version')
-
-const MAX_EVENT_BACKLOG = 1e6
 
 describe('reporter', () => {
-  let scope
-
-  function stubActiveSpan () {
-    const span = {
-      setTag: sinon.stub(),
-      context: sinon.stub().returns({
-        toSpanId: sinon.stub().returns('spanId'),
-        toTraceId: sinon.stub().returns('traceId')
-      })
-    }
-
-    sinon.stub(scope, 'active').returns(span)
-
-    return span
-  }
-
-  beforeEach(() => {
-    scope = {
-      active: () => null
-    }
-
-    global._ddtrace = {
-      _tracer: {
-        _service: 'service',
-        _env: 'env',
-        _version: 'version',
-        _tags: { a: 1, b: 2 },
-        scope: sinon.stub().returns(scope)
+  function stubReq (oldTags = {}) {
+    return {
+      _datadog: {
+        span: {
+          context: sinon.stub().returns({
+            _tags: oldTags
+          }),
+          addTags: sinon.stub()
+        }
       }
     }
-  })
+  }
 
-  afterEach((cb) => {
+  afterEach(() => {
     sinon.restore()
     Engine.manager.clear()
-    Reporter.events.clear()
-    delete global._ddtrace
-    als.exit(cb)
   })
 
   describe('resolveHTTPRequest', () => {
@@ -78,14 +49,11 @@ describe('reporter', () => {
       const result = Reporter.resolveHTTPRequest(context)
 
       expect(result).to.deep.equal({
-        url: 'http://localhost/path',
         headers: {
-          host: [ 'localhost' ],
-          'user-agent': [ 'arachni' ]
+          'http.request.headers.host': 'localhost',
+          'http.request.headers.user-agent': 'arachni'
         },
-        method: 'GET',
-        remote_ip: '8.8.8.8',
-        remote_port: 1337
+        remote_ip: '8.8.8.8'
       })
     })
   })
@@ -112,12 +80,10 @@ describe('reporter', () => {
       const result = Reporter.resolveHTTPResponse(context)
 
       expect(result).to.deep.equal({
-        status: 201,
         headers: {
-          'content-type': [ 'application/json' ],
-          'content-length': [ '42' ]
-        },
-        blocked: false
+          'http.response.headers.content-type': 'application/json',
+          'http.response.headers.content-length': '42'
+        }
       })
     })
   })
@@ -140,93 +106,40 @@ describe('reporter', () => {
         'user-agent',
         'x-forwarded-for',
         'x-client-ip'
-      ])
+      ], 'prefix.')
 
       expect(result).to.deep.equal({
-        'host': [ 'localhost' ],
-        'user-agent': [ '42' ],
-        'x-forwarded-for': [ '10' ]
+        'prefix.host': 'localhost',
+        'prefix.user-agent': '42',
+        'prefix.x-forwarded-for': '10'
       })
     })
   })
 
-  describe('getTracerData', () => {
-    it('should get tracer data with active span', () => {
-      const span = stubActiveSpan()
-
-      const result = Reporter.getTracerData()
-
-      expect(span.setTag).to.have.been.calledTwice
-      expect(span.setTag.firstCall).to.have.been.calledWithExactly('manual.keep')
-      expect(span.setTag.secondCall).to.have.been.calledWithExactly('appsec.event', true)
-      expect(result).to.deep.equal({
-        serviceName: 'service',
-        serviceEnv: 'env',
-        serviceVersion: 'version',
-        tags: ['a:1', 'b:2'],
-        spanId: 'spanId',
-        traceId: 'traceId'
-      })
-    })
-
-    it('should get tracer data without active span', () => {
-      const result = Reporter.getTracerData()
-
-      expect(result).to.deep.equal({
-        serviceName: 'service',
-        serviceEnv: 'env',
-        serviceVersion: 'version',
-        tags: ['a:1', 'b:2']
-      })
+  describe('formatHeaderName', () => {
+    it('should format a string', () => {
+      expect(Reporter.formatHeaderName('Content-Type')).to.equal('content-type')
+      expect(Reporter.formatHeaderName(' Content-Type ')).to.equal('content-type')
+      expect(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e')).to.equal('c___ont_____ent----typ_/_e')
+      expect(Reporter.formatHeaderName('Some.Header')).to.equal('some_header')
+      expect(Reporter.formatHeaderName(42)).to.equal('42')
+      expect(Reporter.formatHeaderName(''.padEnd(300, 'a'))).to.have.lengthOf(200)
     })
   })
 
   describe('reportAttack', () => {
-    it('should do nothing when backlog is full', () => {
-      Reporter.reportAttack({}, {})
-
-      expect(Reporter.events.size).to.equal(1)
-
-      sinon.stub(Reporter.events, 'size').get(() => MAX_EVENT_BACKLOG + 1)
-
-      expect(Reporter.events.size).to.equal(MAX_EVENT_BACKLOG + 1)
-
-      Reporter.reportAttack({}, {})
-
-      expect(Reporter.events.size).to.equal(MAX_EVENT_BACKLOG + 1)
+    it('should do nothing when passed incomplete objects', () => {
+      expect(Reporter.reportAttack('', null)).to.be.false
+      expect(Reporter.reportAttack('', new Map())).to.be.false
+      expect(Reporter.reportAttack('', new Map([['req', null]]))).to.be.false
+      expect(Reporter.reportAttack('', new Map([['req', {}]]))).to.be.false
+      expect(Reporter.reportAttack('', new Map([['req', { _datadog: {} }]]))).to.be.false
     })
 
-    it('should build the event', () => {
-      const rule = {
-        id: 'ruleId',
-        name: 'ruleName',
-        tags: {
-          type: 'ruleType',
-          category: 'ruleCategory'
-        }
-      }
+    it('should add tags to request span', () => {
+      const req = stubReq()
 
-      const ruleMatch = {
-        operator: 'matchOperator',
-        operator_value: 'matchOperatorValue',
-        parameters: [{
-          address: 'server.request.uri.raw',
-          key_path: [],
-          value: '../..'
-        }, {
-          address: 'server.request.headers.no_cookies',
-          key_path: ['user-agent'],
-          value: 'Arachni/v1'
-        }],
-        highlight: [
-          'numero_uno',
-          'numero_dos'
-        ]
-      }
-
-      Engine.startContext()
-
-      const context = Engine.getContext()
+      const context = new Context()
 
       context.store = new Map(Object.entries({
         [addresses.HTTP_INCOMING_URL]: '/path?query=string',
@@ -235,132 +148,90 @@ describe('reporter', () => {
           'user-agent': 'arachni',
           secret: 'password'
         },
-        [addresses.HTTP_INCOMING_METHOD]: 'GET',
-        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
-        [addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8'
       }))
 
-      stubActiveSpan()
+      const store = new Map()
+      store.set('req', req)
+      store.set('context', context)
 
-      const event = Reporter.reportAttack(rule, ruleMatch)
+      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]', store)
+      expect(result).to.not.be.false
 
-      expect(event).to.have.property('event_id').that.is.a('string')
-      expect(event).to.have.property('detected_at').that.is.a('string')
-      expect(event.rule).to.equal(rule)
-      expect(event.rule_match).to.equal(ruleMatch)
-      expect(event).to.deep.include({
-        event_type: 'appsec',
-        event_version: '1.0.0',
-        rule: {
-          id: 'ruleId',
-          name: 'ruleName',
-          tags: {
-            type: 'ruleType',
-            category: 'ruleCategory'
-          }
-        },
-        rule_match: {
-          operator: 'matchOperator',
-          operator_value: 'matchOperatorValue',
-          parameters: [{
-            address: 'server.request.uri.raw',
-            key_path: [],
-            value: '../..'
-          }, {
-            address: 'server.request.headers.no_cookies',
-            key_path: ['user-agent'],
-            value: 'Arachni/v1'
-          }],
-          highlight: [
-            'numero_uno',
-            'numero_dos'
-          ]
-        }
+      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.event': true,
+        'manual.keep': undefined,
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni',
+        'network.client.ip': '8.8.8.8'
       })
-
-      expect(event).to.have.nested.property('context.host.context_version').that.equals('0.1.0')
-      expect(event).to.have.nested.property('context.host.os_type').that.equals(os.type())
-      expect(event).to.have.nested.property('context.host.hostname').that.equals(os.hostname())
-
-      expect(event).to.have.nested.property('context.http.context_version').that.equals('1.0.0')
-      expect(event).to.have.nested.property('context.http.request.method').that.equals('GET')
-      expect(event).to.have.nested.property('context.http.request.url').that.equals('http://localhost/path')
-      // expect(event).to.have.nested.property('context.http.request.ressource').that.equals('')
-      expect(event).to.have.nested.property('context.http.request.remote_ip').that.equals('8.8.8.8')
-      expect(event).to.have.nested.property('context.http.request.remote_port').that.equals(1337)
-      expect(event).to.have.nested.property('context.http.request.headers').that.deep.equals({
-        'host': [ 'localhost' ],
-        'user-agent': ['arachni']
-      })
-
-      expect(event).to.have.nested.property('context.library.context_version').that.equals('0.1.0')
-      expect(event).to.have.nested.property('context.library.runtime_type').that.equals('nodejs')
-      expect(event).to.have.nested.property('context.library.runtime_version').that.equals(process.version)
-      expect(event).to.have.nested.property('context.library.lib_version').that.equals(libVersion)
-
-      expect(event).to.have.nested.property('context.service.context_version').that.equals('0.1.0')
-      expect(event).to.have.nested.property('context.service.name').that.equals('service')
-      expect(event).to.have.nested.property('context.service.environment').that.equals('env')
-      expect(event).to.have.nested.property('context.service.version').that.equals('version')
-
-      expect(event).to.have.nested.property('context.span.context_version').that.equals('0.1.0')
-      expect(event).to.have.nested.property('context.span.id').that.equals('spanId')
-
-      expect(event).to.have.nested.property('context.tags.context_version').that.equals('0.1.0')
-      expect(event).to.have.nested.property('context.tags.values').that.deep.equals(['a:1', 'b:2'])
-
-      expect(event).to.have.nested.property('context.trace.context_version').that.equals('0.1.0')
-      expect(event).to.have.nested.property('context.trace.id').that.equals('traceId')
     })
 
-    it('should push events to toFinish list when context is found', () => {
-      Engine.startContext()
+    it('should not overwrite origin tag', () => {
+      const req = stubReq({ '_dd.origin': 'tracer' })
 
-      const context = Engine.getContext()
+      const store = new Map()
+      store.set('req', req)
+
+      const result = Reporter.reportAttack('[]', store)
+      expect(result).to.not.be.false
+
+      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.event': true,
+        'manual.keep': undefined,
+        '_dd.appsec.json': '{"triggers":[]}'
+      })
+    })
+
+    it('should merge attacks json', () => {
+      const req = stubReq({ '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' })
+
+      const context = new Context()
 
       context.store = new Map(Object.entries({
-        [addresses.HTTP_INCOMING_URL]: '/',
+        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
         [addresses.HTTP_INCOMING_HEADERS]: {
-          host: 'localhost'
-        }
+          host: 'localhost',
+          secret: 'password'
+        },
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8'
       }))
 
-      const event1 = Reporter.reportAttack({}, {})
-      expect(Reporter.toFinish.get(context)).to.deep.equal([
-        event1
-      ])
-      expect(Reporter.events).to.be.empty
+      const store = new Map()
+      store.set('req', req)
+      store.set('context', context)
 
-      const event2 = Reporter.reportAttack({}, {})
-      expect(Reporter.toFinish.get(context)).to.deep.equal([
-        event1,
-        event2
-      ])
-      expect(Reporter.events).to.be.empty
-    })
+      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]', store)
+      expect(result).to.not.be.false
 
-    it('should push events to events list when context is not found', () => {
-      const event1 = Reporter.reportAttack({}, {})
-      expect(Reporter.events).to.have.all.keys(event1)
-
-      const event2 = Reporter.reportAttack({}, {})
-      expect(Reporter.events).to.have.all.keys(event1, event2)
+      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.event': true,
+        'manual.keep': undefined,
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
+        'http.request.headers.host': 'localhost',
+        'network.client.ip': '8.8.8.8'
+      })
     })
   })
 
   describe('finishAttacks', () => {
-    it('should do nothing when no toFinish entry found', () => {
-      const result = Reporter.finishAttacks({})
-
-      expect(result).to.be.false
-      expect(Reporter.events).to.be.empty
+    it('should do nothing when passed incomplete objects', () => {
+      expect(Reporter.finishAttacks(null, {})).to.be.false
+      expect(Reporter.finishAttacks({}, {})).to.be.false
+      expect(Reporter.finishAttacks({ _datadog: {} }, {})).to.be.false
+      expect(Reporter.finishAttacks({ _datadog: { span: {} } }, null)).to.be.false
     })
 
-    it('should add http response data inside events', () => {
+    it('should add http response data inside request span', () => {
+      const req = stubReq()
+
       const context = new Context()
 
       context.store = new Map(Object.entries({
-        [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
         [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
           'content-type': 'application/json',
           'content-length': 42,
@@ -368,152 +239,13 @@ describe('reporter', () => {
         }
       }))
 
-      const event1 = Reporter.reportAttack({}, {})
-      const event2 = Reporter.reportAttack({}, {})
-
-      Reporter.toFinish.set(context, [ event1, event2 ])
-
-      const result = Reporter.finishAttacks(context)
+      const result = Reporter.finishAttacks(req, context)
       expect(result).to.not.be.false
 
-      expect(event1).to.have.nested.property('context.http.response.status').that.equals(201)
-      expect(event1).to.have.nested.property('context.http.response.headers').that.deep.equals({
-        'content-type': [ 'application/json' ],
-        'content-length': [ '42' ]
+      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+        'http.response.headers.content-type': 'application/json',
+        'http.response.headers.content-length': '42'
       })
-      expect(event1).to.have.nested.property('context.http.response.blocked').that.is.false
-
-      expect(event2).to.have.nested.property('context.http.response.status').that.equals(201)
-      expect(event2).to.have.nested.property('context.http.response.headers').that.deep.equals({
-        'content-type': [ 'application/json' ],
-        'content-length': [ '42' ]
-      })
-      expect(event2).to.have.nested.property('context.http.response.blocked').that.is.false
-
-      expect(Reporter.events).to.have.all.keys(event1, event2)
-      expect(Reporter.toFinish.get(context)).to.be.undefined
-    })
-  })
-
-  describe('flush', () => {
-    let request
-
-    beforeEach(() => {
-      global._ddtrace._tracer._exporter = {
-        _writer: {
-          _url: new URL('http://test:123')
-        }
-      }
-
-      request = sinon.stub().yieldsAsync(null, {}, 200)
-
-      Reporter = proxyquire('../src/appsec/reporter', {
-        '../exporters/agent/request': request
-      })
-    })
-
-    it('should do nothing when called in parallel', () => {
-      Reporter.events.add({})
-      expect(Reporter.flush()).to.not.be.false
-
-      Reporter.events.add({})
-      expect(Reporter.flush()).to.be.false
-
-      expect(request).to.have.been.calledOnce
-    })
-
-    it('should do nothing if no events is found', () => {
-      expect(Reporter.flush()).to.be.false
-      expect(request).to.not.have.been.called
-    })
-
-    it('should log when backlog is full', () => {
-      sinon.spy(log, 'warn')
-
-      Reporter.events.add({})
-
-      sinon.stub(Reporter.events, 'size').get(() => MAX_EVENT_BACKLOG)
-
-      expect(Reporter.flush()).to.not.be.false
-      expect(log.warn).to.have.been.calledOnceWithExactly('Dropping AppSec events because the backlog is full')
-      expect(request).to.have.been.calledOnce
-    })
-
-    it('should parse socket url', () => {
-      global._ddtrace._tracer._exporter._writer._url = new URL('unix:/path.sock')
-
-      Reporter.events.add({})
-
-      expect(Reporter.flush()).to.not.be.false
-      expect(request).to.have.been.calledOnce
-      expect(request.firstCall.firstArg).to.deep.include({
-        path: '/appsec/proxy/api/v2/appsecevts',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        socketPath: '/path.sock'
-      })
-    })
-
-    it('should send events', () => {
-      Reporter.events.add({
-        a: 1,
-        b: [2, 3, 4],
-        c: 5
-      })
-      Reporter.events.add({
-        another: 'event'
-      })
-
-      expect(Reporter.flush()).to.not.be.false
-      expect(Reporter.events).to.be.empty
-      expect(request).to.have.been.calledOnce
-      const firstCall = request.firstCall
-
-      const firstArg = firstCall.firstArg
-      expect(firstArg).to.deep.include({
-        path: '/appsec/proxy/api/v2/appsecevts',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        protocol: 'http:',
-        hostname: 'test',
-        port: '123'
-      })
-      expect(firstArg.data).to.be.a('string')
-      const data = JSON.parse(firstArg.data)
-      expect(data).to.have.property('idempotency_key').that.is.a('string')
-      expect(data).to.deep.include({
-        protocol_version: 1,
-        events: [{
-          a: 1,
-          b: [2, 3, 4],
-          c: 5
-        }, {
-          another: 'event'
-        }]
-      })
-
-      const cb = firstCall.lastArg
-      expect(cb).to.be.a('function')
-    })
-
-    it('should log request error', () => {
-      request = sinon.stub().yields(new Error('socket hang up'), null, null)
-
-      Reporter = proxyquire('../src/appsec/reporter', {
-        '../exporters/agent/request': request
-      })
-
-      sinon.spy(log, 'error')
-
-      Reporter.events.add({})
-
-      expect(Reporter.flush()).to.not.be.false
-      expect(request).to.have.been.calledOnce
-      expect(log.error).to.have.been.calledOnce
     })
   })
 })

@@ -88,6 +88,7 @@ function resolveTilde (filePath) {
 }
 
 module.exports = {
+  normalizeRef,
   getCIMetadata () {
     const { env } = process
 
@@ -215,11 +216,19 @@ module.exports = {
         GITHUB_HEAD_REF,
         GITHUB_REF,
         GITHUB_SHA,
-        GITHUB_REPOSITORY
+        GITHUB_REPOSITORY,
+        GITHUB_SERVER_URL,
+        GITHUB_RUN_ATTEMPT
       } = env
 
-      const repositoryURL = `https://github.com/${GITHUB_REPOSITORY}.git`
-      const pipelineURL = `https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
+      const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
+      let pipelineURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
+
+      if (GITHUB_RUN_ATTEMPT) {
+        pipelineURL = `${pipelineURL}/attempts/${GITHUB_RUN_ATTEMPT}`
+      }
+
+      const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
 
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
       const refKey = ref.includes('tags') ? GIT_TAG : GIT_BRANCH
@@ -232,7 +241,7 @@ module.exports = {
         [CI_PROVIDER_NAME]: 'github',
         [GIT_COMMIT_SHA]: GITHUB_SHA,
         [GIT_REPOSITORY_URL]: repositoryURL,
-        [CI_JOB_URL]: pipelineURL,
+        [CI_JOB_URL]: jobUrl,
         [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
         [refKey]: ref
       }

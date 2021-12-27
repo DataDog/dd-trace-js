@@ -5,7 +5,7 @@ const agent = require('../agent')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../../src/gateway/channels')
+const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -377,40 +377,6 @@ describe('plugins/util/web', () => {
           })
         })
       })
-
-      it('should call diagnostics_channel', () => {
-        const spy = sinon.spy((data) => {
-          expect(data.req).to.equal(req)
-          expect(data.res).to.equal(res)
-          expect(tracer.scope().active()).to.exist
-        })
-
-        INCOMING_HTTP_REQUEST_START.subscribe(spy)
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          expect(spy).to.have.been.calledOnce
-
-          expect(tracer.scope().active()).to.equal(span)
-        })
-
-        INCOMING_HTTP_REQUEST_START.unsubscribe(spy)
-      })
-
-      it('should call diagnostics_channel even without callback', () => {
-        const spy = sinon.spy((data) => {
-          expect(data.req).to.equal(req)
-          expect(data.res).to.equal(res)
-          expect(tracer.scope().active()).to.not.exist
-        })
-
-        INCOMING_HTTP_REQUEST_START.subscribe(spy)
-
-        web.instrument(tracer, config, req, res, 'test.request')
-
-        INCOMING_HTTP_REQUEST_START.unsubscribe(spy)
-
-        expect(spy).to.have.been.calledOnce
-      })
     })
 
     describe('on request end', () => {
@@ -553,11 +519,11 @@ describe('plugins/util/web', () => {
           expect(tracer.scope().active()).to.not.exist
         })
 
-        INCOMING_HTTP_REQUEST_END.subscribe(spy)
+        incomingHttpRequestEnd.subscribe(spy)
 
         res.end()
 
-        INCOMING_HTTP_REQUEST_END.unsubscribe(spy)
+        incomingHttpRequestEnd.unsubscribe(spy)
 
         expect(span.finish).to.have.been.calledOnce
 

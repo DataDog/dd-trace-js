@@ -1,12 +1,11 @@
 'use strict'
 
 const fs = require('fs')
-const path = require('path')
 const log = require('../../src/log')
 const AppSec = require('../../src/appsec')
 const RuleManager = require('../../src/appsec/rule_manager')
-const { INCOMING_HTTP_REQUEST_START, INCOMING_HTTP_REQUEST_END } = require('../../src/gateway/channels')
-const Gateway = require('../../src/gateway/engine/index')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
+const Gateway = require('../../src/appsec/gateway/engine')
 const addresses = require('../../src/appsec/addresses')
 const Reporter = require('../../src/appsec/reporter')
 
@@ -14,37 +13,34 @@ describe('AppSec Index', () => {
   let config
 
   beforeEach(() => {
-    config = { tags: {} }
-    global._ddtrace = { _tracer: { _tags: config.tags } }
+    config = {
+      appsec: {
+        enabled: true,
+        rules: './path/rules.json'
+      }
+    }
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
-    sinon.stub(INCOMING_HTTP_REQUEST_START, 'subscribe')
-    sinon.stub(INCOMING_HTTP_REQUEST_END, 'subscribe')
-    sinon.stub(Reporter.scheduler, 'start')
+    sinon.stub(incomingHttpRequestStart, 'subscribe')
+    sinon.stub(incomingHttpRequestEnd, 'subscribe')
     Gateway.manager.clear()
   })
 
   afterEach(() => {
     sinon.restore()
     AppSec.disable()
-    delete global._ddtrace
   })
 
   describe('enable', () => {
     it('should enable AppSec', () => {
       AppSec.enable(config)
 
-      const rulesPath = path.resolve(path.join(__dirname, '..', '..', 'src', 'appsec', 'recommended.json'))
-      expect(fs.readFileSync).to.have.been.calledOnceWithExactly(rulesPath)
+      expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] })
-      expect(INCOMING_HTTP_REQUEST_START.subscribe)
+      expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(INCOMING_HTTP_REQUEST_END.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(config.tags).to.deep.equal({
-        '_dd.appsec.enabled': 1,
-        '_dd.runtime_family': 'nodejs'
-      })
+      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
       expect(Gateway.manager.addresses).to.have.all.keys(
         addresses.HTTP_INCOMING_URL,
         addresses.HTTP_INCOMING_HEADERS,
@@ -54,7 +50,6 @@ describe('AppSec Index', () => {
         addresses.HTTP_INCOMING_RESPONSE_CODE,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS
       )
-      expect(Reporter.scheduler.start).to.have.been.calledOnce
     })
 
     it('should log when enable fails', () => {
@@ -65,33 +60,30 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(log.error).to.have.been.calledOnceWithExactly('Unable to apply AppSec rules: Error: Invalid Rules')
-      expect(INCOMING_HTTP_REQUEST_START.subscribe).to.not.have.been.called
-      expect(INCOMING_HTTP_REQUEST_END.subscribe).to.not.have.been.called
-      expect(config.tags).to.be.empty
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
       expect(Gateway.manager.addresses).to.be.empty
-      expect(Reporter.scheduler.start).to.not.have.been.called
     })
   })
 
   describe('disable', () => {
     it('should disable AppSec', () => {
       // we need real DC for this test
-      INCOMING_HTTP_REQUEST_START.subscribe.restore()
-      INCOMING_HTTP_REQUEST_END.subscribe.restore()
+      incomingHttpRequestStart.subscribe.restore()
+      incomingHttpRequestEnd.subscribe.restore()
 
       AppSec.enable(config)
 
       sinon.stub(RuleManager, 'clearAllRules')
-      sinon.spy(INCOMING_HTTP_REQUEST_START, 'unsubscribe')
-      sinon.spy(INCOMING_HTTP_REQUEST_END, 'unsubscribe')
+      sinon.spy(incomingHttpRequestStart, 'unsubscribe')
+      sinon.spy(incomingHttpRequestEnd, 'unsubscribe')
 
       AppSec.disable()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
-      expect(INCOMING_HTTP_REQUEST_START.unsubscribe)
+      expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(INCOMING_HTTP_REQUEST_END.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(config.tags).to.not.have.any.keys('_dd.appsec.enabled', '_dd.runtime_family')
+      expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
     })
 
     it('should disable AppSec when DC channels are not active', () => {
@@ -102,7 +94,6 @@ describe('AppSec Index', () => {
       expect(AppSec.disable).to.not.throw()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
-      expect(config.tags).to.not.have.any.keys('_dd.appsec.enabled', '_dd.runtime_family')
     })
   })
 
@@ -113,6 +104,10 @@ describe('AppSec Index', () => {
 
       const context = {}
       store.set('context', context)
+
+      const topSpan = {
+        addTags: sinon.stub()
+      }
 
       const req = {
         url: '/path',
@@ -125,6 +120,9 @@ describe('AppSec Index', () => {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
+        },
+        _datadog: {
+          span: topSpan
         }
       }
       const res = {}
@@ -133,6 +131,10 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
 
+      expect(topSpan.addTags).to.have.been.calledOnceWithExactly({
+        '_dd.appsec.enabled': 1,
+        '_dd.runtime_family': 'nodejs'
+      })
       expect(Gateway.startContext).to.have.been.calledOnce
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
@@ -199,7 +201,7 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }
       }, context)
-      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
     })
   })
 })

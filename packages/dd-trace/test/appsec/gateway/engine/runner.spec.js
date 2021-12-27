@@ -1,7 +1,7 @@
 'use strict'
 
-const Runner = require('../../../src/gateway/engine/runner')
-const als = require('../../../src/gateway/als')
+const Runner = require('../../../../src/appsec/gateway/engine/runner')
+const als = require('../../../../src/appsec/gateway/als')
 
 describe('Gateway Runner', () => {
   describe('runSubscriptions', () => {
