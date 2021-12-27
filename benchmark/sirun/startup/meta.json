@@ -1,5 +1,6 @@
 {
   "name": "startup",
+  "setup": "node setup",
   "run": "node startup-test.js",
   "cachegrind": true,
   "iterations": 10,
@@ -7,6 +8,18 @@
     "control": {
       "env": {
         "USE_TRACER": "0"
+      }
+    },
+    "with-internal-tracer": {
+      "baseline": "control",
+      "env": {
+        "USE_INTERNAL_TRACER": "1"
+      }
+    },
+    "with-internal-tracer-bundle": {
+      "baseline": "control",
+      "env": {
+        "USE_INTERNAL_TRACER_BUNDLE": "1"
       }
     },
     "with-tracer": {
