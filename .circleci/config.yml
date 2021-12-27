@@ -894,9 +894,9 @@ workflows:
       # - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
       # - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
       # - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
-      - node-bench-sirun-all:
-          requires:
-            - node-bench-sirun-startup
+      # - node-bench-sirun-all:
+      #     requires:
+      #       - node-bench-sirun-startup
       #       - node-bench-sirun-spans
       #       - node-bench-sirun-async_hooks
       #       - node-bench-sirun-log
@@ -904,7 +904,7 @@ workflows:
       #       - node-bench-sirun-plugin-q
       #       - node-bench-sirun-plugin-bluebird
       #       - node-bench-sirun-plugin-http
-            - node-bench-sirun-plugin-koa
+      #       - node-bench-sirun-plugin-koa
       #       - node-bench-sirun-plugin-net
       #       - node-bench-sirun-scope
       #       - node-bench-sirun-exporting-pipeline
