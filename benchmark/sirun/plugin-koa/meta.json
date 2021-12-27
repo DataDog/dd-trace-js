@@ -1,0 +1,24 @@
+{
+  "name": "koa",
+  "setup": "node setup",
+  "run": "node server",
+  "env": {
+    "PORT": "3030",
+    "REQUESTS": "10000"
+  },
+  "iterations": 10,
+  "cachegrind": true,
+  "variants": {
+    "baseline": {},
+    "with-tracer": {
+      "env": {
+        "WITH_TRACER": "true"
+      }
+    },
+    "with-internal-tracer": {
+      "env": {
+        "WITH_INTERNAL_TRACER": "true"
+      }
+    }
+  }
+}
