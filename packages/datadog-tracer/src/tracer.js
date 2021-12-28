@@ -61,13 +61,19 @@ class Tracer {
     this._writer.write(trace.spans)
   }
 
-  flush () {
-    this._writer.flush()
+  flush (done) {
+    this._writer.flush((err, res) => {
+      if (!err && res.rate_by_service) {
+        this._sampler.update(res.rate_by_service)
+      }
+
+      done && done()
+    })
   }
 }
 
 const tracer = new Tracer()
 
-process.once('beforeExit', () => tracer.flush())
+process.once('beforeExit', () => tracer.flush()) // TODO: move out or timer in
 
 module.exports = { tracer }

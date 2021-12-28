@@ -1,20 +1,29 @@
 'use strict'
 
-const limiter = require('limiter')
+const { RateLimiter } = require('./limiter')
 
+const DEFAULT_KEY = 'service:,env:'
 const {
+  AUTO_KEEP,
+  AUTO_REJECT,
+  SAMPLING_MECHANISM_AGENT,
   SAMPLING_MECHANISM_DEFAULT,
   SAMPLING_MECHANISM_RULE,
+  SAMPLING_AGENT_DECISION,
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
   USER_KEEP,
   USER_REJECT,
-  AUTO_KEEP,
-  AUTO_REJECT
+  UPSTREAM_SERVICES_KEY
 } = require('./constants')
+
+const serviceNames = new Map()
 
 class Sampler {
   constructor ({ sampleRate, rateLimit = 100, rules = [] } = {}) {
+    this._rates = {}
     this._rules = this._normalizeRules(rules, sampleRate)
-    this._limiter = new RateLimiter(rateLimit)
+    this._limiter = this._rules.length > 0 && new RateLimiter(rateLimit)
   }
 
   sample (span) {
@@ -33,17 +42,12 @@ class Sampler {
     }
   }
 
-  _isSampled (rate) {
-    return rate === 1 || Math.random() < rate
+  update (rates) {
+    this._rates = rates
   }
 
-  _getPriorityFromAuto (span) {
-    const context = this._getContext(span)
-    const rule = this._findRule(context)
-
-    return rule
-      ? this._setPriorityByRule(context, rule)
-      : this._setPriorityByAgent(context)
+  _isSampled (rate) {
+    return rate === 1 || Math.random() < rate
   }
 
   _setPriorityByRule (span, rule) {
@@ -53,22 +57,26 @@ class Sampler {
 
     trace.samplingPriority = sampled && allowed ? USER_KEEP : USER_REJECT
     trace.samplingMechanism = SAMPLING_MECHANISM_RULE
-    // trace[SAMPLING_RULE_DECISION] = rule.sampleRate
+    trace.metrics[SAMPLING_RULE_DECISION] = rule.sampleRate
 
     if (!allowed) {
-      // trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+      trace.metrics[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
     }
   }
 
-  // TODO: actually support this or move sampling out of the internal tracer
   _setPriorityByAgent (span) {
     const trace = span.trace
-    const sampled = true
+    const key = `service:${span.service},env:${this._env}`
+    const rate = this._rates[key] || this._rates[DEFAULT_KEY]
 
-    trace.samplingPriority = sampled ? AUTO_KEEP : AUTO_REJECT
-    trace.samplingMechanism = SAMPLING_MECHANISM_DEFAULT
-
-    // trace[SAMPLING_AGENT_DECISION] = sampler.rate()
+    if (rate === undefined) {
+      trace.samplingPriority = AUTO_KEEP
+      trace.samplingMechanism = SAMPLING_MECHANISM_DEFAULT
+    } else {
+      trace.samplingPriority = this._isSampled(rate) ? AUTO_KEEP : AUTO_REJECT
+      trace.samplingMechanism = SAMPLING_MECHANISM_AGENT
+      trace.metrics[SAMPLING_AGENT_DECISION] = rate
+    }
   }
 
   _normalizeRules (rules, sampleRate) {
@@ -95,58 +103,45 @@ class Sampler {
 
     return true
   }
-}
 
-class RateLimiter {
-  constructor (rateLimit) {
-    this._rateLimit = parseInt(rateLimit)
-    this._limiter = new limiter.RateLimiter(this._rateLimit, 'second')
-    this._tokensRequested = 0
-    this._prevIntervalTokens = 0
-    this._prevTokensRequested = 0
+  _addUpstreamService (span) {
+    const context = span.context()
+    const trace = context._trace
+    const service = this._toBase64(context._tags['service.name'])
+    const priority = context._sampling.priority
+    const mechanism = context._sampling.mechanism
+    const rate = this._getRate(span)
+    const group = `${service}|${priority}|${mechanism}|${rate}`
+    const groups = trace.meta[UPSTREAM_SERVICES_KEY]
+      ? `${trace.meta[UPSTREAM_SERVICES_KEY]};${group}`
+      : group
+
+    trace.meta[UPSTREAM_SERVICES_KEY] = groups
   }
 
-  isAllowed () {
-    const curIntervalStart = this._limiter.curIntervalStart
-    const curIntervalTokens = this._limiter.tokensThisInterval
-    const allowed = this._isAllowed()
+  _toBase64 (serviceName) {
+    let encoded = serviceNames.get(serviceName)
 
-    if (curIntervalStart !== this._limiter.curIntervalStart) {
-      this._prevIntervalTokens = curIntervalTokens
-      this._prevTokensRequested = this._tokensRequested
-      this._tokensRequested = 1
-    } else {
-      this._tokensRequested++
+    if (!encoded) {
+      encoded = Buffer.from(serviceName).toString('base64')
+      serviceNames.set(serviceName, encoded)
     }
 
-    return allowed
+    return encoded
   }
 
-  effectiveRate () {
-    if (this._rateLimit < 0) return 1
-    if (this._rateLimit === 0) return 0
-    if (this._tokensRequested === 0) return 1
+  _getRate (span) {
+    const trace = span.trace
 
-    const allowed = this._prevIntervalTokens + this._limiter.tokensThisInterval
-    const requested = this._prevTokensRequested + this._tokensRequested
-
-    return allowed / requested
-  }
-
-  _isAllowed () {
-    if (this._rateLimit < 0) return true
-    if (this._rateLimit === 0) return false
-
-    return this._limiter.tryRemoveTokens(1)
-  }
-
-  _currentWindowRate () {
-    if (this._rateLimit < 0) return 1
-    if (this._rateLimit === 0) return 0
-    if (this._tokensRequested === 0) return 1
-
-    return this._limiter.tokensThisInterval / this._tokensRequested
+    switch (trace.samplingMechanism) {
+      case SAMPLING_MECHANISM_RULE:
+        return Math.ceil(trace.metrics[SAMPLING_RULE_DECISION] * 10000) / 10000
+      case SAMPLING_MECHANISM_AGENT:
+        return Math.ceil(trace.metrics[SAMPLING_AGENT_DECISION] * 10000) / 10000
+      default:
+        return ''
+    }
   }
 }
 
-module.exports = { RateLimiter, Sampler }
+module.exports = { Sampler }
