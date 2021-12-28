@@ -4,16 +4,24 @@ const { Sampler } = require('./sampler')
 const { Writer } = require('./writer')
 const { Span } = require('./span')
 const { TextMapPropagator } = require('./propagators/text_map')
+const { LogPropagator } = require('./propagators/log')
 
-const { DD_SERVICE, DD_ENV, RATE_LIMIT, SAMPLE_RATE } = process.env
+const {
+  DD_SERVICE,
+  DD_ENV,
+  DD_VERSION,
+  DD_TRACE_RATE_LIMIT,
+  DD_TRACE_SAMPLE_RATE
+} = process.env
 
-const sampleRate = parseFloat(SAMPLE_RATE || '1')
-const rateLimit = parseFloat(RATE_LIMIT || '100')
+const sampleRate = parseFloat(DD_TRACE_SAMPLE_RATE || '1')
+const rateLimit = parseFloat(DD_TRACE_RATE_LIMIT || '100')
 
 class Tracer {
   constructor () {
     this.config = {
       service: DD_SERVICE || 'node',
+      version: DD_VERSION,
       env: DD_ENV
     }
 
@@ -22,6 +30,9 @@ class Tracer {
     this._propagators = {
       text_map: [
         new TextMapPropagator()
+      ],
+      log: [
+        new LogPropagator()
       ]
     }
   }

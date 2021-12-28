@@ -21,9 +21,10 @@ class Writer {
   }
 
   flush (done = noop) {
-    if (this._encoder.count() === 0) return
-
     const count = this._encoder.count()
+
+    if (count === 0) return
+
     const data = this._encoder.makePayload()
     const timeout = 2000
     const options = {
