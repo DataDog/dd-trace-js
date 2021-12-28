@@ -1,7 +1,7 @@
 'use strict'
 
 class NoopTracer {
-  startSpan () { return noopSpan }
+  startSpan () { return span }
   inject () {}
   extract () { return null }
   export () {}
@@ -16,6 +16,7 @@ class NoopSpan {
   finish () {}
 }
 
-const noopSpan = new NoopSpan()
+const span = new NoopSpan()
+const tracer = new NoopTracer()
 
-module.exports = { NoopSpan, NoopTracer }
+module.exports = { tracer }

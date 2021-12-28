@@ -70,4 +70,4 @@ const tracer = new Tracer()
 
 process.once('beforeExit', () => tracer.flush())
 
-module.exports = tracer
+module.exports = { tracer }
