@@ -30,6 +30,12 @@ function get (url, headers) {
         resolve(get(res.headers.location, headers))
         return
       }
+      if (res.statusCode === 403 && res.headers['x-ratelimit-remaining'] === '0') {
+        setTimeout(() => {
+          resolve(get(url, headers))
+        }, parseInt(res.headers['x-ratelimit-reset']) * 1e3 - Date.now())
+        return
+      }
       if (res.statusCode >= 400) {
         console.error('status code', res.statusCode, 'from', url)
         console.error('headers', res.headers)
