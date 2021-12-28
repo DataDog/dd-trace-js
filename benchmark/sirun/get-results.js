@@ -27,15 +27,7 @@ function get (url, headers) {
       accept: 'application/json'
     }, headers) }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
-        resolve(get(res.headers.location, headers))
-        return
-      }
-      if (res.statusCode === 403 && res.headers['x-ratelimit-remaining'] === '0') {
-        const timeout = parseInt(res.headers['x-ratelimit-reset']) * 1e3 - Date.now()
-        console.error('rate limited. waiting', timeout, 'ms')
-        setTimeout(() => {
-          resolve(get(url, headers))
-        }, timeout)
+        resolve(get(res.headers.location))
         return
       }
       if (res.statusCode >= 400) {
