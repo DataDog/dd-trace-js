@@ -166,7 +166,6 @@ class Encoder {
   }
 
   _encodeMeta (bytes, span) {
-    const meta = span.meta
     const error = span.error
     const buffer = bytes.buffer
     const offset = bytes.length
@@ -176,43 +175,22 @@ class Encoder {
 
     let length = 0
 
-    for (const key in meta) {
-      if (typeof meta[key] !== 'string' && typeof meta[key] !== 'number') continue
+    // TODO: global tags
 
-      length++
-
-      this._encodeString(bytes, key)
-      this._encodeString(bytes, String(meta[key]))
+    for (const key in span.trace.meta) {
+      length += this._encodeMetaProperty(bytes, key, span.trace.meta[key])
     }
 
-    if (error.name) {
-      length++
-
-      this._encodeString(bytes, 'type')
-      this._encodeString(bytes, error.name)
+    for (const key in span.meta) {
+      length += this._encodeMetaProperty(bytes, key, span.meta[key])
     }
 
-    if (error.message) {
-      length++
-
-      this._encodeString(bytes, 'msg')
-      this._encodeString(bytes, error.message)
-    }
-
-    if (error.stack) {
-      length++
-
-      this._encodeString(bytes, 'stack')
-      this._encodeString(bytes, error.stack)
-    }
+    length += this._encodeMetaProperty(bytes, 'error.type', error.name)
+    length += this._encodeMetaProperty(bytes, 'error.msg', error.message)
+    length += this._encodeMetaProperty(bytes, 'error.stack', error.stack)
 
     for (const key in error) {
-      if (typeof error[key] !== 'string') continue
-
-      length++
-
-      this._encodeString(bytes, key)
-      this._encodeString(bytes, meta[key])
+      length += this._encodeMetaProperty(bytes, key, error[key])
     }
 
     buffer[offset] = 0xdf
@@ -222,8 +200,16 @@ class Encoder {
     buffer[offset + 4] = length
   }
 
+  _encodeMetaProperty (bytes, key, value) {
+    if (typeof value !== 'string') return 0
+
+    this._encodeString(bytes, key)
+    this._encodeString(bytes, value)
+
+    return 1
+  }
+
   _encodeMetrics (bytes, span) {
-    const metrics = span.metrics
     const buffer = bytes.buffer
     const offset = bytes.length
 
@@ -232,13 +218,14 @@ class Encoder {
 
     let length = 0
 
-    for (const key in metrics) {
-      if (typeof metrics[key] !== 'number') continue
+    // TODO: global tags
 
-      length++
+    for (const key in span.trace.metrics) {
+      length += this._encodeMetricsProperty(bytes, key, span.trace.metrics[key])
+    }
 
-      this._encodeString(bytes, key)
-      this._encodeFloat(bytes, metrics[key])
+    for (const key in span.metrics) {
+      length += this._encodeMetricsProperty(bytes, key, span.metrics[key])
     }
 
     buffer[offset] = 0xdf
@@ -246,6 +233,15 @@ class Encoder {
     buffer[offset + 2] = length >> 16
     buffer[offset + 3] = length >> 8
     buffer[offset + 4] = length
+  }
+
+  _encodeMetricsProperty (bytes, key, value) {
+    if (typeof value !== 'number') return 0
+
+    this._encodeString(bytes, key)
+    this._encodeFloat(bytes, value)
+
+    return 1
   }
 
   _encodeString (bytes, value = '') {
