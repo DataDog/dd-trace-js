@@ -27,7 +27,7 @@ function get (url, headers) {
       accept: 'application/json'
     }, headers) }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
-        resolve(get(res.headers.location))
+        resolve(get(res.headers.location, headers))
         return
       }
       if (res.statusCode >= 400) {
