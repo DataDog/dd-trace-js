@@ -31,9 +31,11 @@ function get (url, headers) {
         return
       }
       if (res.statusCode === 403 && res.headers['x-ratelimit-remaining'] === '0') {
+        const timeout = parseInt(res.headers['x-ratelimit-reset']) * 1e3 - Date.now()
+        console.error('rate limited. waiting', timeout, 'ms')
         setTimeout(() => {
           resolve(get(url, headers))
-        }, parseInt(res.headers['x-ratelimit-reset']) * 1e3 - Date.now())
+        }, timeout)
         return
       }
       if (res.statusCode >= 400) {
