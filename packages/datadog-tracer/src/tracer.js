@@ -6,6 +6,7 @@ const { Span } = require('./span')
 const { Config } = require('./config')
 const { TextMapPropagator } = require('./propagators/text_map')
 const { LogPropagator } = require('./propagators/log')
+const { AUTO_KEEP } = require('./constants')
 
 class Tracer {
   constructor (options) {
@@ -55,7 +56,7 @@ class Tracer {
     if (trace.started === trace.finished) {
       this._sampler.sample(span)
 
-      if (trace.samplingPriority > 0) {
+      if (trace.samplingPriority >= AUTO_KEEP) {
         this._writer.write(trace.spans)
       }
 
