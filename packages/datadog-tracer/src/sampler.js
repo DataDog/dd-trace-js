@@ -30,8 +30,7 @@ class Sampler {
     const trace = span.trace
     const root = trace.spans[0]
 
-    if (!span || !span.trace.started) return
-    if (trace.samplingPriority !== undefined) return
+    if (!root || trace.samplingPriority !== undefined) return
 
     const rule = this._findRule(root)
 

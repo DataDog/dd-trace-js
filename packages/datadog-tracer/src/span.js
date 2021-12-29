@@ -42,7 +42,6 @@ class Span {
     this.type = type || ''
 
     this.trace.started++
-    this.trace.spans.push(this)
 
     startedChannel.publish(this)
   }
@@ -84,14 +83,7 @@ class Span {
 
     finishedChannel.publish(this)
 
-    if (trace.started === trace.finished) {
-      if (trace.samplingPriority > 0) {
-        this.tracer.export(trace)
-      }
-
-      trace.started = trace.finished = 0
-      trace.spans = []
-    }
+    this.tracer.process(this)
   }
 }
 

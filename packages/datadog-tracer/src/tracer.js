@@ -28,7 +28,11 @@ class Tracer {
   }
 
   startSpan (name, resource, options) {
-    return new Span(this, name, resource, options)
+    const span = new Span(this, name, resource, options)
+
+    span.trace.spans.push(span)
+
+    return span
   }
 
   inject (span, format, carrier) {
@@ -57,9 +61,18 @@ class Tracer {
     return null
   }
 
-  export (trace) {
-    this._sampler.sample(trace.spans[0]) // TODO: should this be done here?
-    this._writer.write(trace.spans)
+  process (span) {
+    const trace = span.trace
+
+    if (trace.started === trace.finished) {
+      this._sampler.sample(span)
+
+      if (trace.samplingPriority > 0) {
+        this._writer.write(trace.spans)
+      }
+
+      trace.spans = []
+    }
   }
 
   flush (done) {
