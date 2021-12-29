@@ -175,7 +175,9 @@ class Encoder {
 
     let length = 0
 
-    // TODO: global tags
+    for (const key in span.tracer.config.meta) {
+      length += this._encodeMetaProperty(bytes, key, span.tracer.config.meta[key])
+    }
 
     for (const key in span.trace.meta) {
       length += this._encodeMetaProperty(bytes, key, span.trace.meta[key])
@@ -218,7 +220,9 @@ class Encoder {
 
     let length = 0
 
-    // TODO: global tags
+    for (const key in span.tracer.config.metrics) {
+      length += this._encodeMetricsProperty(bytes, key, span.tracer.config.metrics[key])
+    }
 
     for (const key in span.trace.metrics) {
       length += this._encodeMetricsProperty(bytes, key, span.trace.metrics[key])

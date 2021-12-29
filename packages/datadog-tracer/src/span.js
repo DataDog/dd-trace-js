@@ -3,7 +3,7 @@
 const { channel } = require('diagnostics_channel')
 const { id, zeroId } = require('./id')
 const { Trace } = require('./trace')
-const { now } = require('./util')
+const { addTags, now, setTag } = require('./util')
 
 const {
   SAMPLING_MECHANISM_MANUAL,
@@ -48,11 +48,7 @@ class Span {
   }
 
   setTag (key, value) {
-    if (typeof value === 'number') {
-      this.metrics[key] = value
-    } else {
-      this.meta[key] = value
-    }
+    setTag(this, key, value)
   }
 
   setBaggageItem (key, value) {
@@ -63,9 +59,7 @@ class Span {
   }
 
   addTags (keyValuePairs) {
-    for (const key in keyValuePairs) {
-      this.setTag(key, keyValuePairs[key])
-    }
+    addTags(this, keyValuePairs)
   }
 
   addError (error) {

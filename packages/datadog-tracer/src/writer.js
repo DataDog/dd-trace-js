@@ -12,7 +12,8 @@ const errorChannel = channel('datadog:apm:agent:error')
 const noop = () => {}
 
 class Writer {
-  constructor () {
+  constructor (config) {
+    this._config = config
     this._encoder = new Encoder(this)
   }
 
@@ -28,8 +29,8 @@ class Writer {
     const data = this._encoder.makePayload()
     const timeout = 2000
     const options = {
-      hostname: 'localhost',
-      port: 8126,
+      hostname: this._config.url.hostname,
+      port: this._config.url.port,
       path: '/v0.5/traces',
       method: 'PUT',
       headers: {

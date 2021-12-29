@@ -9,7 +9,9 @@ class RateLimiter {
     this._limiter = undefined
 
     if (rateLimit > 0) {
-      const limiter = require('limiter') // not always needed so lazy loaded
+      // Not always needed so lazy loaded.
+      // TODO: Replace with internal implementation.
+      const limiter = require('limiter')
 
       this._limiter = new limiter.RateLimiter(this._rateLimit, 'second')
     }
