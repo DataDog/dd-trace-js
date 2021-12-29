@@ -511,12 +511,9 @@ describe('plugins/util/web', () => {
       })
 
       it('should call diagnostics_channel', () => {
-        sinon.spy(span, 'finish')
-
         const spy = sinon.spy((data) => {
           expect(data.req).to.equal(req)
           expect(data.res).to.equal(res)
-          expect(tracer.scope().active()).to.not.exist
         })
 
         incomingHttpRequestEnd.subscribe(spy)
@@ -525,9 +522,8 @@ describe('plugins/util/web', () => {
 
         incomingHttpRequestEnd.unsubscribe(spy)
 
-        expect(span.finish).to.have.been.calledOnce
-
         expect(spy).to.have.been.calledOnce
+        expect(end).to.have.been.calledAfter(spy)
       })
     })
   })
