@@ -14,12 +14,8 @@ class Tracer {
     this._writer = new Writer(config)
     this._sampler = new Sampler(config)
     this._propagators = {
-      text_map: [
-        new TextMapPropagator(config)
-      ],
-      log: [
-        new LogPropagator(config)
-      ]
+      text_map: new TextMapPropagator(config),
+      log: new LogPropagator(config)
     }
   }
 
@@ -36,29 +32,21 @@ class Tracer {
   }
 
   inject (span, format, carrier) {
-    const propagators = this._propagators[format]
+    const propagator = this._propagators[format]
 
-    if (!propagators) return
+    if (!propagator) return
 
     this._sampler.sample(span)
 
-    for (const propagator of propagators) {
-      propagator.inject(span, carrier)
-    }
+    propagator.inject(span, carrier)
   }
 
   extract (format, carrier) {
-    const propagators = this._propagators[format]
+    const propagator = this._propagators[format]
 
-    if (!propagators) return
+    if (!propagator) return null
 
-    for (const propagator of propagators) {
-      const spanContext = propagator.extract(carrier)
-
-      if (spanContext) return spanContext
-    }
-
-    return null
+    return propagator.extract(carrier)
   }
 
   process (span) {

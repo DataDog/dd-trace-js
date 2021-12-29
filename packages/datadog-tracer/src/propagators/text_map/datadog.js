@@ -1,7 +1,7 @@
 'use strict'
 
-const { id, zeroId } = require('../id')
-const { Trace } = require('../trace')
+const { id, zeroId } = require('../../id')
+const { Trace } = require('../../trace')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
@@ -11,15 +11,15 @@ const tagsKey = 'x-datadog-tags'
 const baggagePrefix = 'ot-baggage-'
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 
-class TextMapPropagator {
-  inject (spanContext, carrier) {
-    carrier[traceKey] = spanContext.trace.traceId.toString()
-    carrier[spanKey] = spanContext.spanId.toSpanId()
+class DatadogPropagator {
+  inject (span, carrier) {
+    carrier[traceKey] = span.trace.traceId.toString()
+    carrier[spanKey] = span.spanId.toSpanId()
 
-    this._injectOrigin(spanContext, carrier)
-    this._injectSamplingPriority(spanContext, carrier)
-    this._injectBaggageItems(spanContext, carrier)
-    this._injectTags(spanContext, carrier)
+    this._injectOrigin(span, carrier)
+    this._injectSamplingPriority(span, carrier)
+    this._injectBaggageItems(span, carrier)
+    this._injectTags(span, carrier)
   }
 
   extract (carrier) {
@@ -45,30 +45,30 @@ class TextMapPropagator {
     }
   }
 
-  _injectOrigin (spanContext, carrier) {
-    const origin = spanContext.trace.origin
+  _injectOrigin (span, carrier) {
+    const origin = span.trace.origin
 
     if (origin) {
       carrier[originKey] = origin
     }
   }
 
-  _injectSamplingPriority (spanContext, carrier) {
-    const priority = spanContext.trace.samplingPriority
+  _injectSamplingPriority (span, carrier) {
+    const priority = span.trace.samplingPriority
 
     if (Number.isInteger(priority)) {
       carrier[samplingKey] = priority.toString()
     }
   }
 
-  _injectBaggageItems (spanContext, carrier) {
-    for (const key in spanContext.trace.baggage) {
-      carrier[baggagePrefix + key] = String(spanContext.baggage[key])
+  _injectBaggageItems (span, carrier) {
+    for (const key in span.trace.baggage) {
+      carrier[baggagePrefix + key] = String(span.baggage[key])
     }
   }
 
-  _injectTags (spanContext, carrier) {
-    const trace = spanContext.trace
+  _injectTags (span, carrier) {
+    const trace = span.trace
     const tags = []
 
     for (const key in trace.tags) {
@@ -129,4 +129,4 @@ class TextMapPropagator {
   }
 }
 
-module.exports = { TextMapPropagator }
+module.exports = { DatadogPropagator }
