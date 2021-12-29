@@ -55,10 +55,7 @@ class Tracer {
 
     if (trace.started === trace.finished) {
       this._sampler.sample(span)
-
-      if (trace.samplingPriority >= AUTO_KEEP) {
-        this._writer.write(trace.spans)
-      }
+      this._writer.write(trace.spans)
 
       trace.spans = []
     }
