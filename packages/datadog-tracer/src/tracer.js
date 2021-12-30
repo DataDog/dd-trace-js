@@ -69,12 +69,11 @@ class Tracer {
   }
 
   flush (done) {
+    this._timer = clearTimeout(this._timer)
     this._writer.flush((err, res) => {
       if (!err && res.rate_by_service) {
         this._sampler.update(res.rate_by_service)
       }
-
-      this._timer = clearTimeout(this._timer)
 
       done && done()
     })
