@@ -6,7 +6,6 @@ const { Span } = require('./span')
 const { Config } = require('./config')
 const { TextMapPropagator } = require('./propagators/text_map')
 const { LogPropagator } = require('./propagators/log')
-const { AUTO_KEEP } = require('./constants')
 
 class Tracer {
   constructor (options) {
