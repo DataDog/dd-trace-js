@@ -23,8 +23,8 @@ class Tracer {
     this.config.update(options)
   }
 
-  startSpan (name, resource, options) {
-    const span = new Span(this, name, resource, options)
+  startSpan (name, options) {
+    const span = new Span(this, name, options)
 
     span.trace.spans.push(span)
 
