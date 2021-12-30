@@ -11,6 +11,7 @@ class Tracer {
   constructor (options) {
     const config = this.config = new Config(options)
 
+    this._timer = undefined
     this._writer = new Writer(config)
     this._sampler = new Sampler(config)
     this._propagators = {
@@ -51,12 +52,19 @@ class Tracer {
 
   process (span) {
     const trace = span.trace
+    const flushInterval = this.config.flushInterval
 
     if (trace.started === trace.finished) {
       this._sampler.sample(span)
       this._writer.write(trace.spans)
 
       trace.spans = []
+
+      if (this.config.flushInterval === 0) {
+        this.flush()
+      } else if (this.config.flushInterval > 0 && !this._timer) {
+        this._timer = setTimeout(() => this.flush(), flushInterval).unref()
+      }
     }
   }
 
@@ -66,6 +74,8 @@ class Tracer {
         this._sampler.update(res.rate_by_service)
       }
 
+      this._timer = clearTimeout(this._timer)
+
       done && done()
     })
   }
@@ -73,6 +83,6 @@ class Tracer {
 
 const tracer = new Tracer()
 
-process.once('beforeExit', () => tracer.flush()) // TODO: move out or timer in
+process.once('beforeExit', () => tracer.flush())
 
 module.exports = { tracer }

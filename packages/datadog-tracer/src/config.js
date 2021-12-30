@@ -22,6 +22,7 @@ class Config {
     this.version = DD_VERSION
     this.sampleRate = DD_TRACE_SAMPLE_RATE && parseInt(DD_TRACE_SAMPLE_RATE)
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100
+    this.flushInterval = 2000
     this.meta = {}
     this.metrics = {}
     this.url = this._getUrl(
@@ -47,6 +48,9 @@ class Config {
     this.rateLimit = typeof options.rateLimit === 'number'
       ? options.rateLimit
       : this.rateLimit
+    this.flushInterval = typeof options.flushInterval === 'number'
+      ? options.flushInterval
+      : this.flushInterval
     this.url = this._getUrl(options.url, options.hostname, options.port)
 
     addTags(this, options.tags)

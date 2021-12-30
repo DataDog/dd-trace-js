@@ -3,37 +3,35 @@
 class RateLimiter {
   constructor (rateLimit) {
     this._rateLimit = rateLimit
-    this._tokensRequested = 0
-    this._prevIntervalTokens = 0
+    this._prevTokensAllowed = 0
     this._prevTokensRequested = 0
-    this._limiter = undefined
-
-    if (rateLimit > 0) {
-      // Not always needed so lazy loaded.
-      // TODO: Replace with internal implementation.
-      const limiter = require('limiter')
-
-      this._limiter = new limiter.RateLimiter(this._rateLimit, 'second')
-    }
+    this._tokensRequested = 0
+    this._tokensAllowed = 0
+    this._timer = undefined
   }
 
   isAllowed () {
     if (this._rateLimit < 0) return true
     if (this._rateLimit === 0) return false
 
-    const curIntervalStart = this._limiter.curIntervalStart
-    const curIntervalTokens = this._limiter.tokensThisInterval
-    const allowed = this._limiter.tryRemoveTokens(1)
-
-    if (curIntervalStart !== this._limiter.curIntervalStart) {
-      this._prevIntervalTokens = curIntervalTokens
+    if (!this._timer) {
+      this._prevTokensAllowed = this._tokensAllowed
       this._prevTokensRequested = this._tokensRequested
-      this._tokensRequested = 1
-    } else {
-      this._tokensRequested++
+      this._tokensAllowed = 0
+      this._tokensRequested = 0
+      this._timer = setTimeout(() => {
+        this._timer = clearTimeout(this._timer)
+      }, 1000).unref()
     }
 
-    return allowed
+    this._tokensRequested++
+
+    if (this._tokensRequested > this._rateLimit) {
+      return false
+    } else {
+      this._tokensAllowed++
+      return true
+    }
   }
 
   effectiveRate () {
@@ -41,7 +39,7 @@ class RateLimiter {
     if (this._rateLimit === 0) return 0
     if (this._tokensRequested === 0) return 1
 
-    const allowed = this._prevIntervalTokens + this._limiter.tokensThisInterval
+    const allowed = this._prevTokensAllowed + this._tokensAllowed
     const requested = this._prevTokensRequested + this._tokensRequested
 
     return allowed / requested
