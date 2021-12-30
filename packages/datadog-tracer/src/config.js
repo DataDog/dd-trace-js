@@ -1,5 +1,6 @@
 'use strict'
 
+const { existsSync } = require('fs')
 const { addTags, parseTags } = require('./util')
 const pkg = require('./pkg')
 
@@ -10,6 +11,9 @@ const DD_ENV = env.DD_ENV
 const DD_VERSION = env.DD_VERSION
 const DD_TRACE_SAMPLE_RATE = env.DD_TRACE_SAMPLE_RATE
 const DD_TRACE_RATE_LIMIT = env.DD_TRACE_RATE_LIMIT
+const DD_TRACE_AGENT_URL = env.DD_TRACE_AGENT_URL || env.DD_TRACE_URL
+const DD_TRACE_AGENT_HOSTNAME = env.DD_AGENT_HOST || env.DD_TRACE_AGENT_HOSTNAME
+const DD_TRACE_AGENT_PORT = env.DD_TRACE_AGENT_PORT
 
 class Config {
   constructor (options) {
@@ -20,7 +24,11 @@ class Config {
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100
     this.meta = {}
     this.metrics = {}
-    this.url = new URL('http://localhost:8126')
+    this.url = this._getUrl(
+      DD_TRACE_AGENT_URL,
+      DD_TRACE_AGENT_HOSTNAME,
+      DD_TRACE_AGENT_PORT
+    )
 
     parseTags(this, env.DD_TAGS)
     parseTags(this, env.DD_TRACE_TAGS)
@@ -30,7 +38,7 @@ class Config {
   }
 
   update (options = {}) {
-    this.service = options.service || this.service
+    this.service = options.service || (options.tags && options.tags.service) || this.service
     this.env = options.env || this.env
     this.version = options.version || this.version
     this.sampleRate = typeof options.sampleRate === 'number'
@@ -39,8 +47,25 @@ class Config {
     this.rateLimit = typeof options.rateLimit === 'number'
       ? options.rateLimit
       : this.rateLimit
+    this.url = this._getUrl(options.url, options.hostname, options.port)
 
     addTags(this, options.tags)
+  }
+
+  _getUrl (url, hostname, port) {
+    try {
+      if (hostname || port) {
+        return new URL(`http://${hostname || '127.0.0.1'}:${port || 8126}`)
+      } else if (url) {
+        return new URL(url)
+      } else if (existsSync('/var/run/datadog/apm.socket')) {
+        return new URL('file:///var/run/datadog/apm.socket')
+      }
+    } catch (e) {
+      // ignore error and fallback to default return value
+    }
+
+    return this.url || new URL('http://127.0.0.1:8126')
   }
 }
 
