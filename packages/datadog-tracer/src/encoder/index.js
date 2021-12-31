@@ -2,6 +2,7 @@
 
 // TODO: use a different cache for low cardinality and high cardinality strings
 
+const { runtimeId } = require('../../../datadog-core')
 const Chunk = require('./chunk')
 
 const ARRAY_OF_TWO = 0x92
@@ -16,10 +17,11 @@ float64Array[0] = -1
 const bigEndian = uInt8Float64Array[7] === 0
 
 class Encoder {
-  constructor (writer) {
+  constructor (writer, config) {
     this._traceBytes = new Chunk()
     this._stringBytes = new Chunk()
     this._writer = writer
+    this._config = config
     this._reset()
   }
 
@@ -175,6 +177,19 @@ class Encoder {
 
     let length = 0
 
+    length += this._encodeMetaProperty(bytes, 'service', this._config.service)
+    length += this._encodeMetaProperty(bytes, 'env', this._config.env)
+    length += this._encodeMetaProperty(bytes, 'version', this._config.version)
+    length += this._encodeMetaProperty(bytes, 'runtime-id', runtimeId)
+    length += this._encodeMetaProperty(bytes, 'error.type', error.name)
+    length += this._encodeMetaProperty(bytes, 'error.msg', error.message)
+    length += this._encodeMetaProperty(bytes, 'error.stack', error.stack)
+    length += this._encodeMetaProperty(bytes, '_dd.origin', span.trace.origin)
+
+    for (const key in error) {
+      length += this._encodeMetaProperty(bytes, key, error[key])
+    }
+
     for (const key in span.tracer.config.meta) {
       length += this._encodeMetaProperty(bytes, key, span.tracer.config.meta[key])
     }
@@ -185,14 +200,6 @@ class Encoder {
 
     for (const key in span.meta) {
       length += this._encodeMetaProperty(bytes, key, span.meta[key])
-    }
-
-    length += this._encodeMetaProperty(bytes, 'error.type', error.name)
-    length += this._encodeMetaProperty(bytes, 'error.msg', error.message)
-    length += this._encodeMetaProperty(bytes, 'error.stack', error.stack)
-
-    for (const key in error) {
-      length += this._encodeMetaProperty(bytes, key, error[key])
     }
 
     buffer[offset] = 0xdf
@@ -219,6 +226,8 @@ class Encoder {
     bytes.length += 5
 
     let length = 0
+
+    length += this._encodeMetricsProperty(bytes, '_sampling_priority_v1', span.trace.samplingPriority)
 
     for (const key in span.tracer.config.metrics) {
       length += this._encodeMetricsProperty(bytes, key, span.tracer.config.metrics[key])

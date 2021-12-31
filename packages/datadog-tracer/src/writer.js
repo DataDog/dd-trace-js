@@ -3,6 +3,7 @@
 const { channel } = require('diagnostics_channel')
 const http = require('http')
 const { Encoder } = require('./encoder')
+const { dockerId } = require('../../datadog-core')
 const tracerVersion = require('../../dd-trace/lib/version') // TODO: use package.json
 
 const requestChannel = channel('datadog:apm:agent:request')
@@ -14,7 +15,7 @@ const noop = () => {}
 class Writer {
   constructor (config) {
     this._config = config
-    this._encoder = new Encoder(this)
+    this._encoder = new Encoder(this, config)
   }
 
   write (spans) {
@@ -36,6 +37,7 @@ class Writer {
       headers: {
         'Content-Length': String(data.length),
         'Content-Type': 'application/msgpack',
+        'Datadog-Container-ID': dockerId || '',
         'Datadog-Meta-Lang': 'nodejs',
         'Datadog-Meta-Lang-Version': process.version,
         'Datadog-Meta-Lang-Interpreter': process.jsEngine || 'v8',

@@ -8,14 +8,6 @@ function addTags (obj, keyValuePairs) {
   }
 }
 
-function coalesce (...args) {
-  for (const arg of args) {
-    if (arg !== undefined) {
-      return arg
-    }
-  }
-}
-
 function now () {
   const hr = process.hrtime()
   return hr[0] * 1e9 + hr[1]
@@ -41,4 +33,4 @@ function setTag (obj, key, value) {
   }
 }
 
-module.exports = { addTags, coalesce, now, parseTags, setTag }
+module.exports = { addTags, now, parseTags, setTag }

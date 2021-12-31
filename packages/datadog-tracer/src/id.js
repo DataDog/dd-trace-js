@@ -14,16 +14,14 @@ const zeroId = {
 
 let batch = 0
 
-function id (value) {
-  if (value) return fromNumberString(value)
-
+function id (value, raddix) {
   const buffer = value
-    ? fromNumberString(value)
+    ? fromNumberString(value, raddix)
     : pseudoRandom()
 
   return {
     toArray: () => buffer,
-    toString: () => toNumberString(buffer),
+    toString: (raddix) => toNumberString(buffer, raddix),
     toJSON: () => toNumberString(buffer)
   }
 }
