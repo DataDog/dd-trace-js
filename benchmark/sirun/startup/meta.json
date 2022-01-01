@@ -13,13 +13,15 @@
     "with-internal-tracer": {
       "baseline": "control",
       "env": {
-        "USE_INTERNAL_TRACER": "1"
+        "USE_INTERNAL_TRACER": "1",
+        "DD_TRACE_AGENT_PROTOCOL_VERSION": "0.5"
       }
     },
     "with-internal-tracer-bundle": {
       "baseline": "control",
       "env": {
-        "USE_INTERNAL_TRACER_BUNDLE": "1"
+        "USE_INTERNAL_TRACER_BUNDLE": "1",
+        "DD_TRACE_AGENT_PROTOCOL_VERSION": "0.5"
       }
     },
     "with-tracer": {
