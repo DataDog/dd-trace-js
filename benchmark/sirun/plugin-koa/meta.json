@@ -12,7 +12,8 @@
     "baseline": {},
     "with-internal-tracer": {
       "env": {
-        "WITH_INTERNAL_TRACER": "true"
+        "WITH_INTERNAL_TRACER": "true",
+        "DD_TRACE_AGENT_PROTOCOL_VERSION": "0.5"
       }
     },
     "with-tracer": {
