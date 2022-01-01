@@ -50,7 +50,7 @@ class Client {
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode <= 299) {
           try {
-            const response = JSON.stringify(json)
+            const response = JSON.parse(json)
             done(null, response)
           } catch (e) {
             done(e)
