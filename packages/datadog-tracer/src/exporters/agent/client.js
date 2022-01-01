@@ -76,7 +76,7 @@ class Client {
       req.write(data)
     }
 
-    makeRequest(() => makeRequest(done))
+    makeRequest(() => makeRequest(done)) // retry once on error
   }
 }
 
