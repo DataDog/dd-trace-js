@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('diagnostics_channel')
-const { runtimeId } = require('../../../datadog-core')
+const { runtimeId } = require('../../../../../datadog-core')
 const Chunk = require('./chunk')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB

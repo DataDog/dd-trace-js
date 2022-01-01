@@ -1,7 +1,6 @@
 'use strict'
 
 const { Sampler } = require('./sampler')
-const { Writer } = require('./writer')
 const { Span } = require('./span')
 const { Config } = require('./config')
 const { TextMapPropagator } = require('./propagators/text_map')
@@ -11,9 +10,8 @@ class Tracer {
   constructor (options) {
     const config = this.config = new Config(options)
 
-    this._timer = undefined
-    this._writer = new Writer(config)
     this._sampler = new Sampler(config)
+    this._exporter = this._getExporter()
     this._propagators = {
       text_map: new TextMapPropagator(config),
       log: new LogPropagator(config)
@@ -52,36 +50,32 @@ class Tracer {
 
   process (span) {
     const trace = span.trace
-    const flushInterval = this.config.flushInterval
 
     if (trace.started === trace.finished) {
       this._sampler.sample(span)
-      this._writer.write(trace.spans)
+      this._exporter.add(trace.spans)
 
       trace.spans = []
-
-      if (this.config.flushInterval === 0) {
-        this.flush()
-      } else if (this.config.flushInterval > 0 && !this._timer) {
-        this._timer = setTimeout(() => this.flush(), flushInterval).unref()
-      }
     }
   }
 
   flush (done) {
-    this._timer = clearTimeout(this._timer)
-    this._writer.flush((err, res) => {
-      if (!err && res.rate_by_service) {
-        this._sampler.update(res.rate_by_service)
-      }
+    this._exporter.flush(done)
+  }
 
-      done && done()
-    })
+  _getExporter () {
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+
+    if (inAWSLambda) {
+      const { LogExporter } = require('./exporters/log')
+      return new LogExporter(this.config)
+    } else {
+      const { AgentExporter } = require('./exporters/agent')
+      return new AgentExporter(this.config, this._sampler)
+    }
   }
 }
 
 const tracer = new Tracer()
-
-process.once('beforeExit', () => tracer.flush())
 
 module.exports = { tracer }
