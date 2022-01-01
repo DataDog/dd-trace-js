@@ -1,8 +1,12 @@
 'use strict'
 
 const http = require('http')
+const https = require('https')
 const { dockerId } = require('../../../../datadog-core')
 const tracerVersion = require('../../../../dd-trace/lib/version') // TODO: use package.json
+
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 1 })
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 1 })
 
 class Client {
   constructor (config) {
@@ -12,9 +16,13 @@ class Client {
   request (options, done) {
     if (options.count === 0) return
 
+    const isSecure = options.protocol === 'https:'
+    const client = isSecure ? https : http
+    const agent = isSecure ? httpsAgent : httpAgent
     const data = options.data
     const timeout = 2000
     const httpOptions = {
+      agent,
       hostname: this._config.url.hostname,
       port: this._config.url.port,
       path: options.path,
@@ -32,7 +40,7 @@ class Client {
       timeout
     }
 
-    const req = http.request(httpOptions, res => {
+    const onResponse = res => {
       let json = ''
 
       res.setTimeout(timeout)
@@ -57,14 +65,18 @@ class Client {
           done(error, null)
         }
       })
-    })
+    }
 
-    req.on('error', err => {
-      done(err)
-    })
+    const makeRequest = onError => {
+      const req = client.request(httpOptions, onResponse)
 
-    req.setTimeout(timeout, req.abort)
-    req.write(data)
+      req.on('error', onError)
+
+      req.setTimeout(timeout, req.abort)
+      req.write(data)
+    }
+
+    makeRequest(() => makeRequest(done))
   }
 }
 
