@@ -2,7 +2,6 @@
 
 const { channel } = require('diagnostics_channel')
 const http = require('http')
-const { Encoder } = require('./encoder')
 const { dockerId } = require('../../datadog-core')
 const tracerVersion = require('../../dd-trace/lib/version') // TODO: use package.json
 
@@ -15,24 +14,26 @@ const noop = () => {}
 class Writer {
   constructor (config) {
     this._config = config
-    this._encoder = new Encoder(this, config)
+    this._protocolVersion = config.protocolVersion
+    this._encoders = {}
   }
 
   write (spans) {
-    this._encoder.encode(spans)
+    this._getEncoder().encode(spans)
   }
 
   flush (done = noop) {
-    const count = this._encoder.count()
+    const encoder = this._getEncoder()
+    const count = encoder.count()
 
     if (count === 0) return
 
-    const data = this._encoder.makePayload()
+    const data = encoder.makePayload()
     const timeout = 2000
     const options = {
       hostname: this._config.url.hostname,
       port: this._config.url.port,
-      path: '/v0.5/traces',
+      path: `/v${this._protocolVersion}/traces`,
       method: 'PUT',
       headers: {
         'Content-Length': String(data.length),
@@ -85,6 +86,29 @@ class Writer {
 
     req.setTimeout(timeout, req.abort)
     req.write(data)
+
+    this._protocolVersion = this._config.protocolVersion
+  }
+
+  _getEncoder () {
+    const config = this._config
+    const protocolVersion = this._protocolVersion
+
+    if (!this._encoders[protocolVersion]) {
+      switch (protocolVersion) {
+        case '0.5': {
+          const { Encoder } = require('./encoder/0.5')
+          this._encoders[protocolVersion] = new Encoder(this, config)
+          break
+        }
+        default: {
+          const { Encoder } = require('./encoder/0.4')
+          this._encoders[protocolVersion] = new Encoder(this, config)
+        }
+      }
+    }
+
+    return this._encoders[protocolVersion]
   }
 }
 

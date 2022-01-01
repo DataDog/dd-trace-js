@@ -14,12 +14,14 @@ const DD_TRACE_RATE_LIMIT = env.DD_TRACE_RATE_LIMIT
 const DD_TRACE_AGENT_URL = env.DD_TRACE_AGENT_URL || env.DD_TRACE_URL
 const DD_TRACE_AGENT_HOSTNAME = env.DD_AGENT_HOST || env.DD_TRACE_AGENT_HOSTNAME
 const DD_TRACE_AGENT_PORT = env.DD_TRACE_AGENT_PORT
+const DD_TRACE_AGENT_PROTOCOL_VERSION = env.DD_TRACE_AGENT_PROTOCOL_VERSION
 
 class Config {
   constructor (options) {
     this.service = DD_SERVICE || pkg.name || 'node'
     this.env = DD_ENV
     this.version = DD_VERSION
+    this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION || '0.4'
     this.sampleRate = DD_TRACE_SAMPLE_RATE && parseInt(DD_TRACE_SAMPLE_RATE)
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100
     this.flushInterval = 2000
@@ -42,6 +44,7 @@ class Config {
     this.service = options.service || (options.tags && options.tags.service) || this.service
     this.env = options.env || this.env
     this.version = options.version || this.version
+    this.protocolVersion = options.protocolVersion || this.protocolVersion
     this.sampleRate = typeof options.sampleRate === 'number'
       ? options.sampleRate
       : this.sampleRate

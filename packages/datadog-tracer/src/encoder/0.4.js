@@ -1,14 +1,12 @@
 'use strict'
 
-// TODO: use a different cache for low cardinality and high cardinality strings
-
+const { channel } = require('diagnostics_channel')
 const { runtimeId } = require('../../../datadog-core')
 const Chunk = require('./chunk')
 
-const ARRAY_OF_TWO = 0x92
-const ARRAY_OF_TWELVE = 0x9c
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
+const encodedChannel = channel('datadog:apm:encoder:encoded')
 const float64Array = new Float64Array(1)
 const uInt8Float64Array = new Uint8Array(float64Array.buffer)
 
@@ -31,10 +29,17 @@ class Encoder {
 
   encode (spans) {
     const bytes = this._traceBytes
+    const start = bytes.length
 
     this._traceCount++
 
     this._encode(bytes, spans)
+
+    const end = bytes.length
+
+    if (encodedChannel.hasSubscribers) {
+      encodedChannel.publish(bytes.buffer.subarray(start, end))
+    }
 
     // we can go over the soft limit since the agent has a 50MB hard limit
     if (this._traceBytes.length > SOFT_LIMIT || this._stringBytes.length > SOFT_LIMIT) {
@@ -43,40 +48,53 @@ class Encoder {
   }
 
   makePayload () {
-    const prefixSize = 1
-    const stringSize = this._stringBytes.length + 5
     const traceSize = this._traceBytes.length + 5
-    const buffer = Buffer.allocUnsafe(prefixSize + stringSize + traceSize)
+    const buffer = Buffer.allocUnsafe(traceSize)
 
-    let offset = 0
-
-    buffer[offset++] = ARRAY_OF_TWO
-
-    offset = this._writeStrings(buffer, offset)
-    offset = this._writeTraces(buffer, offset)
+    this._writeTraces(buffer)
 
     this._reset()
 
     return buffer
   }
 
-  _encode (bytes, spans) {
-    this._encodeArrayPrefix(bytes, spans)
+  _encode (bytes, trace) {
+    this._encodeArrayPrefix(bytes, trace)
 
-    for (const span of spans) {
-      this._encodeByte(bytes, ARRAY_OF_TWELVE)
-      this._encodeString(bytes, span.service)
-      this._encodeString(bytes, span.name)
-      this._encodeString(bytes, span.resource)
+    for (const span of trace) {
+      bytes.reserve(1)
+
+      if (span.type) {
+        bytes.buffer[bytes.length++] = 0x8c
+
+        this._encodeString(bytes, 'type')
+        this._encodeString(bytes, span.type)
+      } else {
+        bytes.buffer[bytes.length++] = 0x8b
+      }
+
+      this._encodeString(bytes, 'trace_id')
       this._encodeId(bytes, span.trace.traceId)
+      this._encodeString(bytes, 'span_id')
       this._encodeId(bytes, span.spanId)
+      this._encodeString(bytes, 'parent_id')
       this._encodeId(bytes, span.parentId)
-      this._encodeLong(bytes, span.start || 0)
-      this._encodeLong(bytes, span.duration || 0)
+      this._encodeString(bytes, 'name')
+      this._encodeString(bytes, span.name)
+      this._encodeString(bytes, 'resource')
+      this._encodeString(bytes, span.resource)
+      this._encodeString(bytes, 'service')
+      this._encodeString(bytes, span.service)
+      this._encodeString(bytes, 'error')
       this._encodeInteger(bytes, span.error ? 1 : 0)
+      this._encodeString(bytes, 'start')
+      this._encodeLong(bytes, span.start)
+      this._encodeString(bytes, 'duration')
+      this._encodeLong(bytes, span.duration)
+      this._encodeString(bytes, 'meta')
       this._encodeMeta(bytes, span)
+      this._encodeString(bytes, 'metrics')
       this._encodeMetrics(bytes, span)
-      this._encodeString(bytes, span.type)
     }
   }
 
@@ -259,7 +277,10 @@ class Encoder {
 
   _encodeString (bytes, value = '') {
     this._cacheString(value)
-    this._encodeInteger(bytes, this._stringMap[value])
+
+    const { start, end } = this._stringMap[value]
+
+    this._stringBytes.copy(bytes, start, end)
   }
 
   _encodeFloat (bytes, value) {
@@ -286,8 +307,11 @@ class Encoder {
 
   _cacheString (value) {
     if (!(value in this._stringMap)) {
-      this._stringMap[value] = this._stringCount++
-      this._stringBytes.write(value)
+      this._stringCount++
+      this._stringMap[value] = {
+        start: this._stringBytes.length,
+        end: this._stringBytes.length + this._stringBytes.write(value)
+      }
     }
   }
 
@@ -301,13 +325,6 @@ class Encoder {
   _writeTraces (buffer, offset = 0) {
     offset = this._writeArrayPrefix(buffer, offset, this._traceCount)
     offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
-
-    return offset
-  }
-
-  _writeStrings (buffer, offset) {
-    offset = this._writeArrayPrefix(buffer, offset, this._stringCount)
-    offset += this._stringBytes.buffer.copy(buffer, offset, 0, this._stringBytes.length)
 
     return offset
   }
