@@ -16,15 +16,19 @@ class Client {
   request (options, done) {
     if (options.count === 0) return
 
-    const isSecure = options.protocol === 'https:'
+    const url = this._config.url
+    const isSecure = url.protocol === 'https:'
+    const isUnix = url.protocol === 'unix:'
     const client = isSecure ? https : http
     const agent = isSecure ? httpsAgent : httpAgent
     const data = options.data
     const timeout = 2000
     const httpOptions = {
       agent,
-      hostname: this._config.url.hostname,
-      port: this._config.url.port,
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port,
+      socketPath: isUnix && url.pathname,
       path: options.path,
       method: 'PUT',
       headers: {
