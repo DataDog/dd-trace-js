@@ -10,7 +10,7 @@ class AgentExporter {
     this._sampler = sampler
     this._protocolVersion = config.protocolVersion
     this._client = new Client(config)
-    this._encoders = {}
+    this._encoder = this._getEncoder()
     this._timer = undefined
 
     process.once('beforeExit', () => this.flush())
@@ -19,7 +19,7 @@ class AgentExporter {
   add (spans) {
     const flushInterval = this._config.flushInterval
 
-    this._getEncoder().encode(spans)
+    this._encoder.encode(spans)
 
     if (flushInterval === 0) {
       this.flush()
@@ -29,7 +29,7 @@ class AgentExporter {
   }
 
   flush (done = noop) {
-    const encoder = this._getEncoder()
+    const encoder = this._encoder
     const count = encoder.count()
 
     if (count === 0) return
@@ -46,27 +46,27 @@ class AgentExporter {
     })
 
     this._protocolVersion = this._config.protocolVersion
+    this._encoder = this._getEncoder()
   }
 
   _getEncoder () {
     const config = this._config
     const protocolVersion = this._protocolVersion
 
-    if (!this._encoders[protocolVersion]) {
-      switch (protocolVersion) {
-        case '0.5': {
-          const { Encoder } = require('./encoder/0.5')
-          this._encoders[protocolVersion] = new Encoder(this, config)
-          break
-        }
-        default: {
-          const { Encoder } = require('./encoder/0.4')
-          this._encoders[protocolVersion] = new Encoder(this, config)
-        }
-      }
+    if (this._encoder && protocolVersion === config.protocolVersion) {
+      return this._encoder
     }
 
-    return this._encoders[protocolVersion]
+    switch (protocolVersion) {
+      case '0.5': {
+        const { Encoder } = require('./encoder/0.5')
+        return new Encoder(this, config)
+      }
+      default: {
+        const { Encoder } = require('./encoder/0.4')
+        return new Encoder(this, config)
+      }
+    }
   }
 }
 
