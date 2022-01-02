@@ -64,14 +64,15 @@ class Tracer {
   }
 
   _getExporter () {
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-
-    if (inAWSLambda) {
-      const { LogExporter } = require('./exporters/log')
-      return new LogExporter(this.config)
-    } else {
-      const { AgentExporter } = require('./exporters/agent')
-      return new AgentExporter(this.config, this._sampler)
+    switch (this.config.exporter) {
+      case 'log': {
+        const { LogExporter } = require('./exporters/log')
+        return new LogExporter(this.config)
+      }
+      default: {
+        const { AgentExporter } = require('./exporters/agent')
+        return new AgentExporter(this.config, this._sampler)
+      }
     }
   }
 }

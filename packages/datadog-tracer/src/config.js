@@ -22,6 +22,7 @@ class Config {
     this.env = DD_ENV
     this.version = DD_VERSION
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION || '0.4'
+    this.exporter = env.AWS_LAMBDA_FUNCTION_NAME ? 'log' : 'agent'
     this.sampleRate = DD_TRACE_SAMPLE_RATE && parseInt(DD_TRACE_SAMPLE_RATE)
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100
     this.flushInterval = 2000
