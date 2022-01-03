@@ -228,6 +228,8 @@ jobs:
 
   node-bench-sirun-plugin-dns: *node-bench-sirun-base
 
+  node-bench-sirun-plugin-graphql: *node-bench-sirun-base
+
   node-bench-sirun-all:
     docker:
       - image: node
@@ -333,6 +335,7 @@ jobs:
 
   node-aws-sdk:
     <<: *node-plugin-base
+    resource_class: medium
     docker:
       - image: node:<< parameters.node-version >>
         environment:
@@ -361,6 +364,7 @@ jobs:
 
   node-cassandra:
     <<: *node-plugin-base
+    resource_class: medium
     docker:
       - image: node:<< parameters.node-version >>
         environment:
@@ -503,7 +507,7 @@ jobs:
         environment:
           - SERVICES=mysql
           - PLUGINS=mysql|mysql2
-      - image: mysql:5.7
+      - image: mariadb:10.4
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=yes
           - MYSQL_DATABASE=db
@@ -524,7 +528,7 @@ jobs:
         environment:
           - SERVICES=mongo
           - PLUGINS=mongoose
-      - image: circleci/mongo:3.4
+      - image: circleci/mongo:3.6
 
   node-net: *node-plugin-base
 
@@ -542,7 +546,9 @@ jobs:
 
   node-paperplane: *node-plugin-base
 
-  node-pino: *node-plugin-base
+  node-pino:
+    <<: *node-plugin-base
+    resource_class: medium
 
   node-postgres:
     <<: *node-plugin-base
@@ -619,6 +625,7 @@ jobs:
 
   node-upstream-amqplib:
     <<: *node-upstream-base
+    resource_class: medium
     docker:
       - image: node:<< parameters.node-version >>
         environment:
@@ -643,7 +650,9 @@ jobs:
 
   node-upstream-graphql: *node-upstream-base
 
-  node-upstream-koa: *node-upstream-base
+  node-upstream-koa:
+    <<: *node-upstream-base
+    resource_class: large
 
   node-upstream-pino: *node-upstream-base
 
@@ -811,7 +820,7 @@ workflows:
             - node-next
             - node-oracledb
             - node-paperplane
-            - node-pino
+            # - node-pino
             - node-postgres
             - node-promise-js
             - node-promise
@@ -844,6 +853,7 @@ workflows:
       - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
       - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
             - node-bench-sirun-startup
@@ -859,17 +869,23 @@ workflows:
             - node-bench-sirun-exporting-pipeline
             - node-bench-sirun-profiler
             - node-bench-sirun-plugin-dns
+            - node-bench-sirun-plugin-graphql
   upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
       - node-upstream-amqp10: *matrix-supported-node-versions
-      - node-upstream-amqplib: *matrix-supported-node-versions
+      # TODO: Figure out why `npm install` always times out on Node 16.
+      - node-amqplib:
+          matrix:
+              parameters:
+                node-version: ["12", "14"]
       - node-upstream-axios: *matrix-supported-node-versions
       - node-upstream-bunyan: *matrix-supported-node-versions
       - node-upstream-connect: *matrix-supported-node-versions
       - node-upstream-graphql: *matrix-supported-node-versions
       - node-upstream-koa: *matrix-supported-node-versions
-      - node-upstream-pino: *matrix-supported-node-versions
+      # TODO: re-enable if it ever stops being flaky
+      # - node-upstream-pino: *matrix-supported-node-versions
       - node-upstream-promise: *matrix-supported-node-versions
       - node-upstream-q: *matrix-supported-node-versions
 

@@ -4,9 +4,11 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
+const proxyquire = require('proxyquire')
 const exec = require('./helpers/exec')
 const childProcess = require('child_process')
 const plugins = require('../packages/dd-trace/src/plugins')
+const Plugin = require('../packages/dd-trace/src/plugins/plugin')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
@@ -42,7 +44,27 @@ async function assertVersions () {
   }
 
   const internals = names
-    .map(key => plugins[key])
+    .map(key => {
+      const plugin = plugins[key]
+      if (plugin.prototype instanceof Plugin) {
+        const instrumentations = []
+        const instrument = {
+          addHook (instrumentation) {
+            instrumentations.push(instrumentation)
+          }
+        }
+        const instPath = path.join(
+          __dirname,
+          `../packages/datadog-instrumentations/src/${plugin.name}.js`
+        )
+        proxyquire.noPreserveCache()(instPath, {
+          './helpers/instrument': instrument
+        })
+        return instrumentations
+      } else {
+        return plugin
+      }
+    })
     .reduce((prev, next) => prev.concat(next), [])
 
   for (const inst of internals) {
