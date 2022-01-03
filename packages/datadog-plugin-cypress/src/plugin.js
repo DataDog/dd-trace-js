@@ -67,7 +67,7 @@ module.exports = (on, config) => {
           }
         })
       }
-      return activeSpan ? activeSpan._spanContext._traceId.toString() : null
+      return activeSpan ? activeSpan._spanContext._traceId.toString(10) : null
     },
     'dd:afterEach': (test) => {
       const { state, error, isRUMActive } = test
