@@ -1,6 +1,8 @@
 'use strict'
 
 const { Client } = require('./client')
+const { EncoderV4 } = require('./encoder/0.4')
+const { EncoderV5 } = require('./encoder/0.5')
 
 const noop = () => {}
 
@@ -59,12 +61,10 @@ class AgentExporter {
 
     switch (protocolVersion) {
       case '0.5': {
-        const { Encoder } = require('./encoder/0.5')
-        return new Encoder(this, config)
+        return new EncoderV5(this, config)
       }
       default: {
-        const { Encoder } = require('./encoder/0.4')
-        return new Encoder(this, config)
+        return new EncoderV4(this, config)
       }
     }
   }

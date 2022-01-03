@@ -1,11 +1,11 @@
 'use strict'
 
-const { Encoder: BaseEncoder } = require('./0.4')
+const { EncoderV4 } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
 
-class Encoder extends BaseEncoder {
+class EncoderV5 extends EncoderV4 {
   makePayload () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
@@ -64,4 +64,4 @@ class Encoder extends BaseEncoder {
   }
 }
 
-module.exports = { Encoder }
+module.exports = { EncoderV5 }

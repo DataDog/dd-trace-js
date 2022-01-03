@@ -1,10 +1,10 @@
 'use strict'
 
-function addTags (obj, keyValuePairs) {
+function addTags (obj, keyValuePairs, prefix) {
   if (!keyValuePairs) return
 
   for (const key in keyValuePairs) {
-    setTag(obj, key, keyValuePairs[key])
+    setTag(obj, prefix ? `${prefix}${key}` : key, keyValuePairs[key])
   }
 }
 
@@ -28,8 +28,10 @@ function parseTags (obj, str) {
 function setTag (obj, key, value) {
   if (typeof value === 'number') {
     obj.metrics[key] = value
-  } else {
-    obj.meta[key] = value
+  } else if (typeof value === 'boolean') {
+    obj.metrics[key] = value ? 1 : 0
+  } else if (value) {
+    obj.meta[key] = String(value)
   }
 }
 

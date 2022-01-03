@@ -15,9 +15,12 @@ const DD_TRACE_AGENT_URL = env.DD_TRACE_AGENT_URL || env.DD_TRACE_URL
 const DD_TRACE_AGENT_HOSTNAME = env.DD_AGENT_HOST || env.DD_TRACE_AGENT_HOSTNAME
 const DD_TRACE_AGENT_PORT = env.DD_TRACE_AGENT_PORT
 const DD_TRACE_AGENT_PROTOCOL_VERSION = env.DD_TRACE_AGENT_PROTOCOL_VERSION
+const DD_TRACE_REPORT_HOSTNAME = (env.DD_TRACE_REPORT_HOSTNAME || '').toLowerCase()
 
 class Config {
   constructor (options) {
+    const reportHostname = DD_TRACE_REPORT_HOSTNAME === 'true' || DD_TRACE_REPORT_HOSTNAME === '1'
+
     this.service = DD_SERVICE || pkg.name || 'node'
     this.env = DD_ENV
     this.version = DD_VERSION
@@ -28,11 +31,8 @@ class Config {
     this.flushInterval = 2000
     this.meta = {}
     this.metrics = {}
-    this.url = this._getUrl(
-      DD_TRACE_AGENT_URL,
-      DD_TRACE_AGENT_HOSTNAME,
-      DD_TRACE_AGENT_PORT
-    )
+    this.url = this._getUrl(DD_TRACE_AGENT_URL, DD_TRACE_AGENT_HOSTNAME, DD_TRACE_AGENT_PORT)
+    this.hostname = reportHostname && require('os').hostname()
 
     parseTags(this, env.DD_TAGS)
     parseTags(this, env.DD_TRACE_TAGS)
@@ -56,6 +56,12 @@ class Config {
       ? options.flushInterval
       : this.flushInterval
     this.url = this._getUrl(options.url, options.hostname, options.port)
+
+    if (options.reportHostname === true) {
+      this.hostname = require('os').hostname()
+    } else if (options.reportHostname === false) {
+      this.hostname = undefined
+    }
 
     addTags(this, options.tags)
   }

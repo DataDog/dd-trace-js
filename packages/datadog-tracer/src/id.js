@@ -48,7 +48,6 @@ function pseudoRandom () {
 }
 
 function fromNumberString (str, raddix = 10) {
-  const buffer = new Array(8)
   const len = str.length
 
   let pos = 0
@@ -78,6 +77,10 @@ function fromNumberString (str, raddix = 10) {
       high++
     }
   }
+
+  if (high === 0 && low === 0) return zeroId
+
+  const buffer = new Array(8) // TODO: use existing buffer
 
   writeUInt32BE(buffer, high, 0)
   writeUInt32BE(buffer, low, 4)

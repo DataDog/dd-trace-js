@@ -16,7 +16,7 @@ class NoopTracer {
 }
 
 class NoopSpan {
-  constructor () {
+  constructor (tracer) {
     this.trace = trace
     this.spanId = zeroId
     this.parentId = zeroId
@@ -31,6 +31,8 @@ class NoopSpan {
     this.metrics = {}
     this.duration = 0
     this.type = ''
+    this.kind = ''
+    this.measured = false
   }
   setTag () {}
   setBaggageItem () {}
@@ -59,6 +61,6 @@ class NoopTrace {
 
 const tracer = new NoopTracer()
 const trace = new NoopTrace()
-const span = new NoopSpan()
+const span = new NoopSpan(tracer)
 
 module.exports = { tracer }

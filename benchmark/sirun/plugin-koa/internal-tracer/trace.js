@@ -9,6 +9,8 @@ const errorChannel = channel('apm:koa:request:error')
 const asyncEndChannel = channel('apm:koa:request:async-end')
 
 startChannel.subscribe(({ req }) => {
+  const type = 'web'
+  const kind = 'server'
   const resource = `${req.method} ${req.url}`
   const meta = {
     'http.url': req.url,
@@ -16,7 +18,7 @@ startChannel.subscribe(({ req }) => {
     'http.method': req.method
   }
 
-  const span = tracer.startSpan('koa.request', { resource, meta })
+  const span = tracer.startSpan('koa.request', { resource, type, kind, meta })
   const store = storage.getStore()
 
   store.span = span

@@ -14,7 +14,7 @@ float64Array[0] = -1
 
 const bigEndian = uInt8Float64Array[7] === 0
 
-class Encoder {
+class EncoderV4 {
   constructor (writer, config) {
     this._traceBytes = new Chunk()
     this._stringBytes = new Chunk()
@@ -199,25 +199,35 @@ class Encoder {
     length += this._encodeMetaProperty(bytes, 'env', this._config.env)
     length += this._encodeMetaProperty(bytes, 'version', this._config.version)
     length += this._encodeMetaProperty(bytes, 'runtime-id', runtimeId)
-    length += this._encodeMetaProperty(bytes, 'error.type', error.name)
-    length += this._encodeMetaProperty(bytes, 'error.msg', error.message)
-    length += this._encodeMetaProperty(bytes, 'error.stack', error.stack)
     length += this._encodeMetaProperty(bytes, '_dd.origin', span.trace.origin)
+    length += this._encodeMetaProperty(bytes, '_dd.hostname', this._config.hostname)
 
-    for (const key in error) {
-      length += this._encodeMetaProperty(bytes, key, error[key])
+    if (error && typeof error === 'object') {
+      length += this._encodeMetaProperty(bytes, 'error.type', error.name)
+      length += this._encodeMetaProperty(bytes, 'error.msg', error.message)
+      length += this._encodeMetaProperty(bytes, 'error.stack', error.stack)
+
+      for (const key in error) {
+        length += this._encodeMetaProperty(bytes, key, error[key])
+      }
+    }
+
+    if (span.service === span.tracer.config.service) {
+      length += this._encodeMetaProperty(bytes, 'language', 'javascript')
     }
 
     for (const key in span.tracer.config.meta) {
       length += this._encodeMetaProperty(bytes, key, span.tracer.config.meta[key])
     }
 
-    for (const key in span.trace.meta) {
-      length += this._encodeMetaProperty(bytes, key, span.trace.meta[key])
-    }
-
     for (const key in span.meta) {
       length += this._encodeMetaProperty(bytes, key, span.meta[key])
+    }
+
+    if (span === span.trace.spans[0]) {
+      for (const key in span.trace.meta) {
+        length += this._encodeMetaProperty(bytes, key, span.trace.meta[key])
+      }
     }
 
     buffer[offset] = 0xdf
@@ -228,7 +238,7 @@ class Encoder {
   }
 
   _encodeMetaProperty (bytes, key, value) {
-    if (typeof value !== 'string') return 0
+    if (!value || typeof value !== 'string') return 0
 
     this._encodeString(bytes, key)
     this._encodeString(bytes, value)
@@ -246,17 +256,20 @@ class Encoder {
     let length = 0
 
     length += this._encodeMetricsProperty(bytes, '_sampling_priority_v1', span.trace.samplingPriority)
+    length += this._encodeMetricsProperty(bytes, '_dd.measured', span.measured ? 1 : 0)
 
     for (const key in span.tracer.config.metrics) {
       length += this._encodeMetricsProperty(bytes, key, span.tracer.config.metrics[key])
     }
 
-    for (const key in span.trace.metrics) {
-      length += this._encodeMetricsProperty(bytes, key, span.trace.metrics[key])
-    }
-
     for (const key in span.metrics) {
       length += this._encodeMetricsProperty(bytes, key, span.metrics[key])
+    }
+
+    if (span === span.trace.spans[0]) {
+      for (const key in span.trace.metrics) {
+        length += this._encodeMetricsProperty(bytes, key, span.trace.metrics[key])
+      }
     }
 
     buffer[offset] = 0xdf
@@ -330,4 +343,4 @@ class Encoder {
   }
 }
 
-module.exports = { Encoder }
+module.exports = { EncoderV4 }
