@@ -18,11 +18,13 @@ const getCommonHeaders = () => {
 }
 
 const triggerWorkflow = () => {
+  console.log(`Branch under test: ${process.env.CIRCLE_BRANCH}`)
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
-      ref: 'main'
+      ref: 'main',
+      inputs: { branch: process.env.CIRCLE_BRANCH }
     })
     const request = https.request(
       DISPATCH_WORKFLOW_URL,
@@ -112,16 +114,17 @@ async function main () {
   await wait(15000)
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
-  console.log('workflows in progress:', workflowsInProgress)
+  console.log('Workflows in progress:', workflowsInProgress)
   const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
   if (numWorkflows === 0) {
     throw new Error('Could not find the triggered job')
   }
+  // Pick the first one (most recently triggered one)
   const [{ id: runId } = {}] = workflows
 
   console.log('Waiting for the workflow to finish.')
   console.log(`Job URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
-  // Poll every 10 seconds until we have a finished status
+  // Poll every 15 seconds until we have a finished status
   await new Promise((resolve, reject) => {
     const intervalId = setInterval(async () => {
       const currentWorkflow = await getCurrentWorkflowJobs(runId)
