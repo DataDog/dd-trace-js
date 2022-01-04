@@ -51,7 +51,7 @@ const getWorkflowRunsInProgress = () => {
   return new Promise((resolve, reject) => {
     let response = ''
     const request = https.request(
-      `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress OR waiting OR requested`,
+      `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress OR waiting OR requested OR queued`,
       {
         headers: getCommonHeaders()
       },
