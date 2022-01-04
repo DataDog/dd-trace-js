@@ -43,10 +43,10 @@ class SubscriptionManager {
     const knownSubscriptions = new Set()
 
     // TODO: possible optimization: collect matchedSubscriptions on the fly in Context#setValue
-    for (let i = 0; i < newAddresses.length; ++i) {
-      const matchedSubscriptions = this.addressToSubscriptions.get(newAddresses[i])
+    newAddresses.forEach((newAddress) => {
+      const matchedSubscriptions = this.addressToSubscriptions.get(newAddress)
 
-      if (matchedSubscriptions === undefined) continue
+      if (matchedSubscriptions === undefined) return
 
       for (let j = 0; j < matchedSubscriptions.length; ++j) {
         const subscription = matchedSubscriptions[j]
@@ -64,24 +64,24 @@ class SubscriptionManager {
           subscriptions.add(subscription)
         }
       }
-    }
+    })
 
     return { addresses, subscriptions }
   }
 
   dispatch (newAddresses, allAddresses, context) {
-    const { addresses, subscriptions } = this.matchSubscriptions(newAddresses, allAddresses)
+    const matches = this.matchSubscriptions(newAddresses, allAddresses)
 
     // TODO: possible optimization
-    // if(!subscriptions.size) return []
+    // check if matches.subscriptions is empty here instead of in runner.js
 
     const params = {}
 
-    addresses.forEach((address) => {
+    matches.addresses.forEach((address) => {
       params[address] = context.resolve(address)
     })
 
-    return Runner.runSubscriptions(subscriptions, params)
+    return Runner.runSubscriptions(matches.subscriptions, params)
   }
 }
 
@@ -93,48 +93,37 @@ class Context {
   constructor () {
     this.store = new Map()
     this.allAddresses = new Set()
-    this.newAddresses = [] // TODO: maybe this should be a Set
+    this.newAddresses = new Set()
   }
 
   clear () {
     this.store = new Map()
     this.allAddresses = new Set()
-    this.newAddresses = []
+    this.newAddresses = new Set()
   }
 
   setValue (address, value) {
     if (this.allAddresses.size >= MAX_CONTEXT_SIZE) return this
 
-    const oldValue = this.store.get(address)
-    if (oldValue === value) return this
+    // cannot optimize for objects because they're pointers
+    if (typeof value !== 'object') {
+      const oldValue = this.store.get(address)
+      if (oldValue === value) return this
+    }
 
     this.store.set(address, value)
-
-    if (!this.newAddresses.includes(address)) {
-      this.allAddresses.add(address)
-      this.newAddresses.push(address)
-    }
-
-    return this
-  }
-
-  setMultipleValues (params) {
-    const addresses = Object.keys(params)
-
-    for (let i = 0; i < addresses.length; ++i) {
-      const address = addresses[i]
-      this.setValue(address, params[address])
-    }
+    this.allAddresses.add(address)
+    this.newAddresses.add(address)
 
     return this
   }
 
   dispatch () {
-    if (this.newAddresses.length === 0) return []
+    if (this.newAddresses.size === 0) return []
 
     const result = Context.manager.dispatch(this.newAddresses, this.allAddresses, this)
 
-    this.newAddresses = []
+    this.newAddresses.clear()
 
     return result
   }

@@ -75,7 +75,7 @@ describe('Gateway Engine', () => {
         const allAddresses = new Set(['unknown_newAddress'])
         sinon.spy(allAddresses, 'has')
 
-        const result = manager.matchSubscriptions(['unknown_newAddress'], allAddresses)
+        const result = manager.matchSubscriptions(new Set(['unknown_newAddress']), allAddresses)
 
         expect(result.addresses).to.be.empty
         expect(result.subscriptions).to.be.empty
@@ -90,7 +90,7 @@ describe('Gateway Engine', () => {
         const allAddresses = new Set(['a', 'b'])
         sinon.spy(allAddresses, 'has')
 
-        const result = manager.matchSubscriptions(['a', 'b'], allAddresses)
+        const result = manager.matchSubscriptions(new Set(['a', 'b']), allAddresses)
 
         expect(result.subscriptions).to.have.all.keys(subscription)
         expect(allAddresses.has).to.have.been.calledTwice
@@ -108,7 +108,7 @@ describe('Gateway Engine', () => {
         const thirdSub = { addresses: ['a', 'c'] }
         manager.addSubscription(thirdSub)
 
-        const result = manager.matchSubscriptions(['a', 'c'], new Set(['a', 'b', 'c', 'd']))
+        const result = manager.matchSubscriptions(new Set(['a', 'c']), new Set(['a', 'b', 'c', 'd']))
 
         expect(result.addresses).to.have.all.keys('a', 'b', 'c')
         expect(result.subscriptions).to.have.all.keys(firstSub, thirdSub)
@@ -124,7 +124,7 @@ describe('Gateway Engine', () => {
         const thirdSub = { addresses: ['a', 'c'] }
         manager.addSubscription(thirdSub)
 
-        const result = manager.matchSubscriptions(['a', 'c'], new Set(['a', 'b', 'c']))
+        const result = manager.matchSubscriptions(new Set(['a', 'c']), new Set(['a', 'b', 'c']))
 
         expect(result.addresses).to.have.all.keys('a', 'b', 'c')
         expect(result.subscriptions).to.have.all.keys(firstSub, thirdSub)
@@ -134,11 +134,9 @@ describe('Gateway Engine', () => {
     describe('dispatch', () => {
       it('should call matchSubscriptions then call runSubscriptions with resolved params', () => {
         const context = new Context()
-        context.setMultipleValues({
-          a: 1,
-          b: 2,
-          c: 3
-        })
+        context.setValue('a', 1)
+        context.setValue('b', 2)
+        context.setValue('c', 3)
 
         const addresses = new Set(['a', 'c'])
 
@@ -233,37 +231,34 @@ describe('Gateway Engine', () => {
         expect(context.store.get('address')).to.equal('value')
       })
 
+      it('should not check old value check when value is an object', () => {
+        sinon.spy(context.store, 'set')
+
+        const value = {}
+
+        context.setValue('address', value)
+
+        expect(context.store.set).to.have.been.calledOnceWithExactly('address', value)
+
+        context.setValue('address', value)
+
+        expect(context.store.set).to.have.been.calledTwice
+        expect(context.store.set.secondCall).to.have.been.calledWithExactly('address', value)
+      })
+
       it('should not add the address in newAddresses twice', () => {
         context.setValue('address', 'value')
 
-        expect(context.allAddresses).to.include('address')
-        expect(context.newAddresses).to.deep.equal(['address'])
+        expect(context.allAddresses).to.deep.equal(new Set(['address']))
+        expect(context.newAddresses).to.deep.equal(new Set(['address']))
 
         const result = context.setValue('address', 'new_value')
 
         expect(result).to.equal(context)
         expect(context.store.get('address')).to.equal('new_value')
 
-        expect(context.allAddresses).to.include('address')
-        expect(context.newAddresses).to.deep.equal(['address'])
-      })
-    })
-
-    describe('setMultipleValues', () => {
-      it('should call setValue for every entry in passed object', () => {
-        sinon.spy(context, 'setValue')
-
-        const result = context.setMultipleValues({
-          'a': 1,
-          'b': 2,
-          'c': 3
-        })
-
-        expect(result).to.equal(context)
-        expect(context.setValue).to.have.been.calledThrice
-        expect(context.setValue.firstCall).to.have.been.calledWithExactly('a', 1)
-        expect(context.setValue.secondCall).to.have.been.calledWithExactly('b', 2)
-        expect(context.setValue.thirdCall).to.have.been.calledWithExactly('c', 3)
+        expect(context.allAddresses).to.deep.equal(new Set(['address']))
+        expect(context.newAddresses).to.deep.equal(new Set(['address']))
       })
     })
 
@@ -279,6 +274,7 @@ describe('Gateway Engine', () => {
 
       it('should call manager dispatch with new addresses', () => {
         sinon.stub(Context.manager, 'dispatch').returns('result')
+        sinon.stub(context.newAddresses, 'clear')
 
         context.setValue('a', 1)
 
@@ -287,10 +283,13 @@ describe('Gateway Engine', () => {
         expect(result).to.equal('result')
 
         expect(Context.manager.dispatch).to.have.been.calledOnceWithExactly(
-          ['a'],
+          new Set(['a']),
           new Set(['a']),
           context
         )
+
+        expect(context.newAddresses.clear).to.have.been.calledOnce
+        context.newAddresses.clear.wrappedMethod.apply(context.newAddresses)
 
         context.setValue('b', 2)
         context.setValue('c', 3)
@@ -299,7 +298,7 @@ describe('Gateway Engine', () => {
 
         expect(Context.manager.dispatch).to.have.been.calledTwice
         expect(Context.manager.dispatch.secondCall).to.have.been.calledWithExactly(
-          ['b', 'c'],
+          new Set(['b', 'c']),
           new Set(['a', 'b', 'c']),
           context
         )
