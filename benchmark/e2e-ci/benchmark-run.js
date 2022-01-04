@@ -109,7 +109,7 @@ async function main () {
   const httpResponseCode = await triggerWorkflow()
   console.log('GitHub API Response code:', httpResponseCode)
   // Give some time for GH to process the request
-  await wait(5000)
+  await wait(15000)
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
   console.log('workflows in progress:', workflowsInProgress)
