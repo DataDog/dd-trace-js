@@ -11,7 +11,7 @@ const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
 const getCommonHeaders = () => {
   return {
     'Content-Type': 'application/json',
-    'authorization': `Bearer ${process.env.GITHUB_PERSONAL_ACCESS_TOKEN}`,
+    'authorization': `Bearer ${process.env.ROBOT_CI_GITHUB_PERSONAL_ACCESS_TOKEN}`,
     'Accept': 'application/vnd.github.v3+json',
     'user-agent': 'dd-trace benchmark tests'
   }
