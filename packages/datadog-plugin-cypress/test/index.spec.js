@@ -12,6 +12,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_IS_RUM_ACTIVE,
   CI_APP_ORIGIN,
   ERROR_TYPE,
   ERROR_MESSAGE,
@@ -62,7 +63,8 @@ describe('Plugin', () => {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [TEST_IS_RUM_ACTIVE]: 'true'
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
@@ -82,7 +84,8 @@ describe('Plugin', () => {
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [ERROR_TYPE]: 'AssertionError'
+              [ERROR_TYPE]: 'AssertionError',
+              [TEST_IS_RUM_ACTIVE]: 'true'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
               "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
