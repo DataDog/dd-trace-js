@@ -19,6 +19,7 @@ const getCommonHeaders = () => {
 
 const triggerWorkflow = () => {
   return new Promise((resolve, reject) => {
+    // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
       ref: 'main'
