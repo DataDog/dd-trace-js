@@ -128,13 +128,20 @@ async function main () {
   await new Promise((resolve, reject) => {
     const intervalId = setInterval(async () => {
       const currentWorkflow = await getCurrentWorkflowJobs(runId)
-      const { jobs: [{ status, conclusion }] } = currentWorkflow
-      if (status === 'completed' && conclusion === 'success') {
+      const { jobs, total_count: numJobs } = currentWorkflow
+      console.log('Number of jobs: ', numJobs)
+      const hasAnyJobFailed = jobs.some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
+      const hasEveryJobPassed = jobs.every(
+        ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
+      )
+      if (hasAnyJobFailed) {
+        reject(new Error(`Performance overhead test failed.
+Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`))
+        clearInterval(intervalId)
+      } else if (hasEveryJobPassed) {
         console.log('Performance overhead test successful')
         resolve()
         clearInterval(intervalId)
-      } else if (status === 'completed' && conclusion !== 'success') {
-        reject(new Error('Performance overhead test failed'))
       } else {
         console.log(`Checking the result of Job ${runId} again`)
       }
