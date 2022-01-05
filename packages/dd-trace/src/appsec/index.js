@@ -27,13 +27,9 @@ function enable (config) {
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
 
-  // add needed fields for HTTP context reporting
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_URL)
+  // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_METHOD)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_PORT)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_CODE)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
 }
 
@@ -85,6 +81,7 @@ function incomingHttpEndTranslator (data) {
 function disable () {
   RuleManager.clearAllRules()
 
+  // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
 }

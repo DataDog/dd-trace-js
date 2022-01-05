@@ -61,16 +61,16 @@ function filterHeaders (headers, passlist, prefix) {
     const headerName = passlist[i]
 
     if (headers[headerName]) {
-      result[`${prefix}${formatHeaderName(headerName)}`] = headers[headerName].toString()
+      result[`${prefix}${formatHeaderName(headerName)}`] = headers[headerName] + ''
     }
   }
 
   return result
 }
 
+// TODO: this can be precomputed at start time
 function formatHeaderName (name) {
   return name
-    .toString()
     .trim()
     .slice(0, 200)
     .replace(/[^a-zA-Z0-9_\-:/]/g, '_')

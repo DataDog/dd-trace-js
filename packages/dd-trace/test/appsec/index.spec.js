@@ -42,12 +42,8 @@ describe('AppSec Index', () => {
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
       expect(Gateway.manager.addresses).to.have.all.keys(
-        addresses.HTTP_INCOMING_URL,
         addresses.HTTP_INCOMING_HEADERS,
-        addresses.HTTP_INCOMING_METHOD,
         addresses.HTTP_INCOMING_REMOTE_IP,
-        addresses.HTTP_INCOMING_REMOTE_PORT,
-        addresses.HTTP_INCOMING_RESPONSE_CODE,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS
       )
     })

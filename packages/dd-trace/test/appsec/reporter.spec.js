@@ -122,7 +122,6 @@ describe('reporter', () => {
       expect(Reporter.formatHeaderName(' Content-Type ')).to.equal('content-type')
       expect(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e')).to.equal('c___ont_____ent----typ_/_e')
       expect(Reporter.formatHeaderName('Some.Header')).to.equal('some_header')
-      expect(Reporter.formatHeaderName(42)).to.equal('42')
       expect(Reporter.formatHeaderName(''.padEnd(300, 'a'))).to.have.lengthOf(200)
     })
   })
