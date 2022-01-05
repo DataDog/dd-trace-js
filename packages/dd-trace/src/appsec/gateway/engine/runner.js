@@ -12,6 +12,8 @@ function runSubscriptions (subscriptions, params) {
 
   const store = als.getStore()
 
+  // TODO: possible optimization
+  // can we deduplicate those before ?
   const executedCallbacks = new Set()
 
   for (const subscription of subscriptions) {
