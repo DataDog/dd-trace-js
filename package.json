@@ -75,7 +75,7 @@
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "multer": "^1.4.2",
-    "opentracing": ">=0.12.1",
+    "opentracing": "0.14.5",
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
     "retry": "^0.10.1",
