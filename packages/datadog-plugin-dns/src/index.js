@@ -82,7 +82,7 @@ function defaultAsyncEnd () {
 }
 
 function errorHandler (error) {
-  storage.getStore().addError(error)
+  storage.getStore().span.setTag('error', error)
 }
 
 module.exports = DNSPlugin
