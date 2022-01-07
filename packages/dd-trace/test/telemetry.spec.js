@@ -97,19 +97,18 @@ describe('telemetry', () => {
           { name: 'foo', enabled: true, auto_enabled: true },
           { name: 'bar', enabled: true, auto_enabled: true }
         ],
-        dependencies: getMochaDeps(),
-        configuration: {
-          telemetryEnabled: true,
-          hostname: 'localhost',
-          port: traceAgent.address().port,
-          service: 'test service',
-          version: '1.2.3-beta4',
-          env: 'preprod',
-          'tags.runtime-id': '1a2b3c',
-          'circularObject.field': 'parent_value',
-          'circularObject.child.field': 'child_value'
-        }
-      })
+        dependencies: getMochaDeps()
+      }).and.to.have.property('configuration').that.include.members([
+        { name: 'telemetryEnabled', value: true },
+        { name: 'hostname', value: 'localhost' },
+        { name: 'port', value: traceAgent.address().port },
+        { name: 'service', value: 'test service' },
+        { name: 'version', value: '1.2.3-beta4' },
+        { name: 'env', value: 'preprod' },
+        { name: 'tags.runtime-id', value: '1a2b3c' },
+        { name: 'circularObject.field', value: 'parent_value' },
+        { name: 'circularObject.child.field', value: 'child_value' }
+      ])
     })
   })
 
