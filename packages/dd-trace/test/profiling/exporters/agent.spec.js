@@ -60,6 +60,45 @@ describe('exporters/agent', () => {
   let http
   let computeRetries
 
+  function verifyRequest (req, profiles, start, end) {
+    expect(req.headers).to.have.property('datadog-container-id', docker.id())
+    expect(req.body).to.have.property('language', 'javascript')
+    expect(req.body).to.have.property('runtime', 'nodejs')
+    expect(req.body).to.have.property('runtime_version', process.version)
+    expect(req.body).to.have.property('profiler_version', version)
+    expect(req.body).to.have.property('format', 'pprof')
+    expect(req.body).to.have.deep.property('tags', [
+      'language:javascript',
+      'runtime:nodejs',
+      `runtime_version:${process.version}`,
+      `profiler_version:${version}`,
+      'format:pprof',
+      'runtime-id:a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
+    ])
+    expect(req.body).to.have.deep.property('types', ['cpu', 'heap'])
+    expect(req.body).to.have.property('recording-start', start.toISOString())
+    expect(req.body).to.have.property('recording-end', end.toISOString())
+
+    expect(req.files[0]).to.have.property('fieldname', 'data[0]')
+    expect(req.files[0]).to.have.property('originalname', 'cpu.pb.gz')
+    expect(req.files[0]).to.have.property('mimetype', 'application/octet-stream')
+    expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
+
+    expect(req.files[1]).to.have.property('fieldname', 'data[1]')
+    expect(req.files[1]).to.have.property('originalname', 'heap.pb.gz')
+    expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
+    expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
+
+    const cpuProfile = decode(gunzipSync(req.files[0].buffer))
+    const heapProfile = decode(gunzipSync(req.files[1].buffer))
+
+    expect(cpuProfile).to.be.a.profile
+    expect(heapProfile).to.be.a.profile
+
+    expect(cpuProfile).to.deep.equal(decode(gunzipSync(profiles.cpu)))
+    expect(heapProfile).to.deep.equal(decode(gunzipSync(profiles.heap)))
+  }
+
   beforeEach(() => {
     docker = {
       id () {
@@ -115,43 +154,7 @@ describe('exporters/agent', () => {
       await new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
-            expect(req.headers).to.have.property('datadog-container-id', docker.id())
-            expect(req.body).to.have.property('language', 'javascript')
-            expect(req.body).to.have.property('runtime', 'nodejs')
-            expect(req.body).to.have.property('runtime_version', process.version)
-            expect(req.body).to.have.property('profiler_version', version)
-            expect(req.body).to.have.property('format', 'pprof')
-            expect(req.body).to.have.deep.property('tags', [
-              'language:javascript',
-              'runtime:nodejs',
-              `runtime_version:${process.version}`,
-              `profiler_version:${version}`,
-              'format:pprof',
-              'runtime-id:a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
-            ])
-            expect(req.body).to.have.deep.property('types', ['cpu', 'heap'])
-            expect(req.body).to.have.property('recording-start', start.toISOString())
-            expect(req.body).to.have.property('recording-end', end.toISOString())
-
-            expect(req.files[0]).to.have.property('fieldname', 'data[0]')
-            expect(req.files[0]).to.have.property('originalname', 'cpu.pb.gz')
-            expect(req.files[0]).to.have.property('mimetype', 'application/octet-stream')
-            expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
-
-            expect(req.files[1]).to.have.property('fieldname', 'data[1]')
-            expect(req.files[1]).to.have.property('originalname', 'heap.pb.gz')
-            expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
-            expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
-
-            const cpuProfile = decode(gunzipSync(req.files[0].buffer))
-            const heapProfile = decode(gunzipSync(req.files[1].buffer))
-
-            expect(cpuProfile).to.be.a.profile
-            expect(heapProfile).to.be.a.profile
-
-            expect(cpuProfile).to.deep.equal(decode(gunzipSync(profiles.cpu)))
-            expect(heapProfile).to.deep.equal(decode(gunzipSync(profiles.heap)))
-
+            verifyRequest(req, profiles, start, end)
             resolve()
           } catch (e) {
             reject(e)
@@ -174,7 +177,9 @@ describe('exporters/agent', () => {
 
       const start = new Date()
       const end = new Date()
-      const tags = { foo: 'bar' }
+      const tags = {
+        'runtime-id': 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
+      }
 
       const [ cpu, heap ] = await Promise.all([
         createProfile(['wall', 'microseconds']),
@@ -189,6 +194,7 @@ describe('exporters/agent', () => {
       let attempt = 0
       app.post('/profiling/v1/input', upload.any(), (req, res) => {
         attempt++
+        verifyRequest(req, profiles, start, end)
         if (attempt % 2) {
           res.writeHead(500)
           res.end()
@@ -235,8 +241,9 @@ describe('exporters/agent', () => {
         /^Building agent export report: (\n {2}[a-z-_]+(\[\])?: [a-z0-9-TZ:.]+)+$/m,
         /^Adding cpu profile to agent export:( [0-9a-f]{2})+$/,
         /^Adding heap profile to agent export:( [0-9a-f]{2})+$/,
-        /^Submitting agent report to:/i,
+        /^Submitting profiler agent report attempt #1 to:/i,
         /^Error from the agent: HTTP Error 400$/,
+        /^Submitting profiler agent report attempt #2 to:/i,
         /^Agent export response: ([0-9a-f]{2}( |$))*/
       ]
 
@@ -246,7 +253,7 @@ describe('exporters/agent', () => {
       })
 
       function onMessage (message) {
-        const expected = expectedLogs[index++ % expectedLogs.length]
+        const expected = expectedLogs[index++]
         expect(typeof message === 'function' ? message() : message)
           .to.match(expected)
         if (index >= expectedLogs.length) doneLogs()
