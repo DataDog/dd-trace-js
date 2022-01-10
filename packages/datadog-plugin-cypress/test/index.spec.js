@@ -38,7 +38,7 @@ describe('Plugin', () => {
     afterEach(done => appServer.close(done))
 
     describe('cypress', function () {
-      this.timeout(60000)
+      this.timeout(120000)
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
