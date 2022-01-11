@@ -63,7 +63,6 @@ describe('SpanProcessor', () => {
 
     expect(exporter.export).not.to.have.been.called
   })
-
   it('should not append if the span was dropped', () => {
     span.context()._traceFlags.sampled = false
     processor.process(span)
