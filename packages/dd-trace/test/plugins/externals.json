@@ -8,7 +8,7 @@
   "express": [
     {
       "name": "loopback",
-      "versions": [">=2.13.0"]
+      "versions": [">=2.38.1"]
     }
   ],
   "fastify": [
