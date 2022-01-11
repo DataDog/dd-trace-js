@@ -102,18 +102,6 @@ describe('Plugin', () => {
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
           })
-
-          it('should have the additional metadata configured', done => {
-            agent.use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans[0].meta).to.have.property('moleculer.context.meta.foo', 'bar')
-              expect(spans[0].metrics).to.have.property('moleculer.context.params.a', 5)
-              expect(spans[0].metrics).to.have.property('moleculer.context.params.b', 3)
-            }).then(done, done)
-
-            broker.call('math.add', { a: 5, b: 3 }, { meta: { foo: 'bar' } }).catch(done)
-          })
         })
       })
 
@@ -163,18 +151,6 @@ describe('Plugin', () => {
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
-          })
-
-          it('should have the additional metadata configured', done => {
-            agent.use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans[0].meta).to.have.property('moleculer.context.meta.foo', 'bar')
-              expect(spans[0].metrics).to.have.property('moleculer.context.params.a', 5)
-              expect(spans[0].metrics).to.have.property('moleculer.context.params.b', 3)
-            }).then(done, done)
-
-            broker.call('math.add', { a: 5, b: 3 }, { meta: { foo: 'bar' } }).catch(done)
           })
         })
       })
