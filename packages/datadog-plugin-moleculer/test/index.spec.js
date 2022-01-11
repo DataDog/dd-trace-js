@@ -8,8 +8,6 @@ const plugin = require('../src')
 
 const sort = trace => trace.sort((a, b) => a.start.toNumber() - b.start.toNumber())
 
-wrapIt()
-
 describe('Plugin', () => {
   let broker
   let port
