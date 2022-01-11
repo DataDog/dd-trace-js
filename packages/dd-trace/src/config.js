@@ -23,11 +23,6 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
-    const DD_CI_VISIBILITY_ENABLED = coalesce(
-      options.ci,
-      process.env.DD_CI_VISIBILITY_ENABLED,
-      false
-    )
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling,
@@ -198,7 +193,6 @@ class Config {
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED)
     }
-    this.ci = isTrue(DD_CI_VISIBILITY_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,

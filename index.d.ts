@@ -241,11 +241,6 @@ export declare interface TracerOptions {
   profiling?: boolean
 
   /**
-   * Whether CI Visibility is enabled.
-   */
-  ci?: boolean
-
-  /**
    * Options specific for the Dogstatsd agent.
    */
   dogstatsd?: {

@@ -6,7 +6,6 @@ const ScopeManager = require('./scope/noop/scope_manager')
 const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
-const { CI_APP_ORIGIN } = require('./plugins/util/test')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -19,7 +18,6 @@ class DatadogTracer extends Tracer {
 
     this._scopeManager = new ScopeManager()
     this._scope = new Scope()
-    this._ci = config.ci
     setStartupLogConfig(config)
   }
 
@@ -33,10 +31,6 @@ class DatadogTracer extends Tracer {
     }
 
     const span = this.startSpan(name, options)
-
-    if (this._ci) {
-      span.context()._trace.origin = CI_APP_ORIGIN
-    }
 
     addTags(span, options)
 
