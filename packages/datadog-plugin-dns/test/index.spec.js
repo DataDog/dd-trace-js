@@ -40,6 +40,30 @@ describe('Plugin', () => {
       dns.lookup('localhost', 4, (err, address, family) => err && done(err))
     })
 
+    it('should instrument errors correctly', done => {
+      agent
+        .use(traces => {
+          expect(traces[0][0]).to.deep.include({
+            name: 'dns.lookup',
+            service: 'test',
+            resource: 'fakedomain.faketld',
+            error: 1
+          })
+          expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
+            'dns.hostname': 'fakedomain.faketld',
+            'error.type': 'Error',
+            'error.msg': 'getaddrinfo ENOTFOUND fakedomain.faketld'
+          })
+        })
+        .then(done)
+        .catch(done)
+
+      dns.lookup('fakedomain.faketld', 4, (err, address, family) => {
+        expect(err).to.not.be.null
+      })
+    })
+
     it('should instrument lookupService', done => {
       agent
         .use(traces => {

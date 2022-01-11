@@ -22,7 +22,8 @@ class DatadogSpanContext extends SpanContext {
     this._noop = props.noop || null
     this._trace = props.trace || {
       started: [],
-      finished: []
+      finished: [],
+      tags: {}
     }
   }
 

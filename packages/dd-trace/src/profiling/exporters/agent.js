@@ -55,7 +55,6 @@ class AgentExporter {
   }
 
   export ({ profiles, start, end, tags }) {
-    const form = new FormData()
     const types = Object.keys(profiles)
 
     const fields = [
@@ -75,10 +74,6 @@ class AgentExporter {
       ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
     ]
 
-    for (const [key, value] of fields) {
-      form.append(key, value)
-    }
-
     this._logger.debug(() => {
       const body = fields.map(([key, value]) => `  ${key}: ${value}`).join('\n')
       return `Building agent export report: ${'\n' + body}`
@@ -93,35 +88,13 @@ class AgentExporter {
         return `Adding ${type} profile to agent export: ` + bytes
       })
 
-      form.append(`types[${index}]`, type)
-      form.append(`data[${index}]`, buffer, {
+      fields.push([`types[${index}]`, type])
+      fields.push([`data[${index}]`, buffer, {
         filename: `${type}.pb.gz`,
         contentType: 'application/octet-stream',
         knownLength: buffer.length
-      })
+      }])
     }
-
-    const options = {
-      method: 'POST',
-      path: '/profiling/v1/input',
-      headers: form.getHeaders()
-    }
-
-    if (containerId) {
-      options.headers['Datadog-Container-ID'] = containerId
-    }
-
-    if (this._url.protocol === 'unix:') {
-      options.socketPath = this._url.pathname
-    } else {
-      options.protocol = this._url.protocol
-      options.hostname = this._url.hostname
-      options.port = this._url.port
-    }
-
-    this._logger.debug(() => {
-      return `Submitting agent report to: ${JSON.stringify(options)}`
-    })
 
     return new Promise((resolve, reject) => {
       const operation = retry.operation({
@@ -131,8 +104,36 @@ class AgentExporter {
       })
 
       operation.attempt((attempt) => {
-        const timeout = this._backoffTime * Math.pow(2, attempt)
-        sendRequest({ ...options, timeout }, form, (err, response) => {
+        const form = new FormData()
+
+        for (const [key, value, options] of fields) {
+          form.append(key, value, options)
+        }
+
+        const options = {
+          method: 'POST',
+          path: '/profiling/v1/input',
+          headers: form.getHeaders(),
+          timeout: this._backoffTime * Math.pow(2, attempt)
+        }
+
+        if (containerId) {
+          options.headers['Datadog-Container-ID'] = containerId
+        }
+
+        if (this._url.protocol === 'unix:') {
+          options.socketPath = this._url.pathname
+        } else {
+          options.protocol = this._url.protocol
+          options.hostname = this._url.hostname
+          options.port = this._url.port
+        }
+
+        this._logger.debug(() => {
+          return `Submitting profiler agent report attempt #${attempt} to: ${JSON.stringify(options)}`
+        })
+
+        sendRequest(options, form, (err, response) => {
           if (operation.retry(err)) {
             this._logger.error(`Error from the agent: ${err.message}`)
             return
