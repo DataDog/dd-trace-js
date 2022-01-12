@@ -1,5 +1,5 @@
 const tracer = require('../../packages/dd-trace')
-const { ORIGIN_KEY } = require('../packages/dd-trace/src/constants')
+const { ORIGIN_KEY } = require('../../packages/dd-trace/src/constants')
 
 tracer.init({
   startupLogs: false,
