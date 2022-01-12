@@ -1,31 +1,29 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('Plugin', () => {
   let mysql
   let tracer
 
   describe('mysql', () => {
-    withVersions(plugin, 'mysql', version => {
+    withVersions('mysql', 'mysql', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
-
       describe('without configuration', () => {
         let connection
 
-        before(() => {
-          return agent.load('mysql')
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(() => {
-          mysql = require(`../../../versions/mysql@${version}`).get()
+        beforeEach(async () => {
+          await agent.load('mysql')
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
             host: 'localhost',
@@ -36,16 +34,11 @@ describe('Plugin', () => {
           connection.connect()
         })
 
-        afterEach(done => {
-          connection.end(done)
-        })
-
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
-
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               expect(results).to.not.be.null
               expect(fields).to.not.be.null
@@ -87,6 +80,7 @@ describe('Plugin', () => {
 
           connection.query('SELECT 1 + 1 AS solution', (error, results, fields) => {
             if (error) throw error
+            done()
           })
         })
 
@@ -111,23 +105,22 @@ describe('Plugin', () => {
             done()
           })
 
-          connection.query('SELECT 1 + 1 AS solution')
+          connection.query('SELECT 1 + 1 AS solution', done())
         })
       })
 
       describe('with configuration', () => {
         let connection
 
-        before(() => {
-          return agent.load('mysql', { service: 'custom' })
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(() => {
-          mysql = require(`../../../versions/mysql@${version}`).get()
+        beforeEach(async () => {
+          await agent.load('mysql', { service: 'custom' })
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
             host: 'localhost',
@@ -136,10 +129,6 @@ describe('Plugin', () => {
           })
 
           connection.connect()
-        })
-
-        afterEach(done => {
-          connection.end(done)
         })
 
         it('should be configured with the correct values', done => {
@@ -155,16 +144,15 @@ describe('Plugin', () => {
       describe('with a connection pool', () => {
         let pool
 
-        before(() => {
-          return agent.load('mysql')
+        afterEach((done) => {
+          pool.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(() => {
-          mysql = require(`../../../versions/mysql@${version}`).get()
+        beforeEach(async () => {
+          await agent.load('mysql')
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           pool = mysql.createPool({
             connectionLimit: 1,
@@ -172,10 +160,6 @@ describe('Plugin', () => {
             user: 'root',
             database: 'db'
           })
-        })
-
-        afterEach(done => {
-          pool.end(done)
         })
 
         it('should do automatic instrumentation', done => {
@@ -191,7 +175,9 @@ describe('Plugin', () => {
             done()
           })
 
-          pool.query('SELECT 1 + 1 AS solution', () => {})
+          pool.query('SELECT 1 + 1 AS solution', () => {
+            done()
+          })
         })
 
         it('should run the callback in the parent context', done => {
