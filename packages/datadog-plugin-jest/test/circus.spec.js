@@ -40,7 +40,7 @@ describe('Plugin', function () {
         .reply(200, 'OK')
 
       tracer = require('../../dd-trace')
-      return agent.load(['jest', 'fs', 'http']).then(() => {
+      return agent.load(['jest', 'fs', 'http'], { service: 'test' }).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({
           rootDir: BUILD_SOURCE_ROOT,
@@ -77,6 +77,7 @@ describe('Plugin', function () {
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
             expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
+            expect(traces[0][0].service).to.equal('test')
             expect(traces[0][0].meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           }).then(done).catch(done)
 

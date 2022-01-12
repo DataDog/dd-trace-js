@@ -238,8 +238,8 @@ module.exports = [
   {
     name: 'jest-environment-node',
     versions: ['>=24.8.0'],
-    patch: function (NodeEnvironment, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
+    patch: function (NodeEnvironment, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest', config)
 
       this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 
@@ -257,8 +257,8 @@ module.exports = [
   {
     name: 'jest-environment-jsdom',
     versions: ['>=24.8.0'],
-    patch: function (JsdomEnvironment, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
+    patch: function (JsdomEnvironment, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest', config)
 
       this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
 

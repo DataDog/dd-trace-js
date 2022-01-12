@@ -103,8 +103,8 @@ module.exports = [
     name: '@cucumber/cucumber',
     versions: ['7.0.0 - 7.2.1'],
     file: 'lib/runtime/pickle_runner.js',
-    patch (PickleRunner, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber')
+    patch (PickleRunner, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber', config)
       const sourceRoot = process.cwd()
       const pl = PickleRunner.default
       this.wrap(
@@ -127,8 +127,8 @@ module.exports = [
     name: '@cucumber/cucumber',
     versions: ['>=7.3.0'],
     file: 'lib/runtime/test_case_runner.js',
-    patch (TestCaseRunner, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber')
+    patch (TestCaseRunner, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber', config)
       const sourceRoot = process.cwd()
       const pl = TestCaseRunner.default
       this.wrap(
