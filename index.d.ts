@@ -716,13 +716,6 @@ declare namespace plugins {
      * @default false
      */
     meta?: boolean;
-
-    /**
-     * Whether to include context params as tags.
-     *
-     * @default false
-     */
-    params?: boolean;
   }
 
   /**
