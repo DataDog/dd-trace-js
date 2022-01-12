@@ -17,9 +17,8 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
   shimmer.wrap(Connection.prototype, 'query', query => function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const cb = bindAsyncResource.call(asyncResource, arguments[arguments.length - 1])
 
-    if (!startCh.hasSubscribers || arguments.length === 1 || typeof cb !== 'function') {
+    if (!startCh.hasSubscribers || arguments.length === 1 || typeof arguments[arguments.length - 1] !== 'function') {
       if (arguments[0]._callback) {
         const newCb = arguments[0]._callback
         arguments[0]._callback = bind(function () {
@@ -29,6 +28,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
       return query.apply(this, arguments)
     }
 
+    const cb = bindAsyncResource.call(asyncResource, arguments[arguments.length - 1])
     const startArgs = Array.from(arguments)
     startCh.publish(startArgs)
 
