@@ -239,8 +239,8 @@ module.exports = [
     name: 'mocha',
     versions: ['>=5.2.0'],
     file: 'lib/runner.js',
-    patch (Runner, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('mocha')
+    patch (Runner, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', config)
       const sourceRoot = process.cwd()
       this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, testEnvironmentMetadata, sourceRoot))
       this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, testEnvironmentMetadata, sourceRoot))
