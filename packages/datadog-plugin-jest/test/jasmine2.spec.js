@@ -40,7 +40,7 @@ describe('Plugin', () => {
       return agent.close()
     })
     beforeEach(() => {
-      return agent.load(['jest']).then(() => {
+      return agent.load(['jest'], { service: 'test' }).then(() => {
         jestExecutable = require(`../../../versions/jest@${version}`).get()
       })
     })
@@ -76,6 +76,7 @@ describe('Plugin', () => {
             })
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
+            expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })

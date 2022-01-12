@@ -169,8 +169,8 @@ module.exports = [
     name: 'jest-jasmine2',
     versions: ['>=24.8.0'],
     file: 'build/jasmineAsyncInstall.js',
-    patch: function (jasmineAsyncInstallExport, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest')
+    patch: function (jasmineAsyncInstallExport, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest', config)
       return this.wrapExport(
         jasmineAsyncInstallExport.default,
         createWrapJasmineAsyncInstall(tracer, this, testEnvironmentMetadata)(jasmineAsyncInstallExport.default)
