@@ -422,8 +422,8 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 | Config          | Environment Variable              | Default     | Description |
 | --------------- | --------------------------------- | ----------- | ----------- |
-| enabled         | `DD_TRACE_ENABLED`                | `true`         | Whether to enable the tracer. |
-| debug           | `DD_TRACE_DEBUG`                  | `false`        | Enable debug logging in the tracer. |
+| -               | `DD_TRACE_ENABLED`                | `true`         | Whether to enable the tracer. |
+| -               | `DD_TRACE_DEBUG`                  | `false`        | Enable debug logging in the tracer. |
 | service         | `DD_SERVICE`                      | -              | The service name to be used for this program. Defaults to value of the `name` field in `package.json`. |
 | version         | `DD_VERSION`                      | -              | The version number of the application. Defaults to value of the `version` field in `package.json`. |
 | url             | `DD_TRACE_AGENT_URL`              | -              | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
@@ -440,13 +440,13 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | runtimeMetrics  | `DD_RUNTIME_METRICS_ENABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | profiling       | `DD_PROFILING_ENABLED`            | `false`        | Whether to enable profiling. |
 | reportHostname  | `DD_TRACE_REPORT_HOSTNAME`        | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| ingestion.sampleRate | `DD_TRACE_SAMPLE_RATE`       | `-`        | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
-| ingestion.rateLimit  | `DD_TRACE_RATE_LIMIT`        | `-`        | Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
+| ingestion.sampleRate | `DD_TRACE_SAMPLE_RATE`       | `-`            | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
+| ingestion.rateLimit  | `DD_TRACE_RATE_LIMIT`        | `-`            | Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
 | experimental    | -                                 | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins         | -                                 | `true`         | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 | -               | `DD_TRACE_DISABLED_PLUGINS`       | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
 | logLevel        | `DD_TRACE_LOG_LEVEL`              | `debug`        | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
-| startupLogs     | `DD_TRACE_STARTUP_LOGS`           | `true`         | Enable tracer startup configuration and diagnostic log. |
+| startupLogs     | `DD_TRACE_STARTUP_LOGS`           | `false`        | Enable tracer startup configuration and diagnostic log. |
 | appsec.enabled  | `DD_APPSEC_ENABLED`               | `false`        | Enable AppSec protection. |
 | appsec.rules    | `DD_APPSEC_RULES`                 | -              | A path to a custom AppSec rules file. |
 

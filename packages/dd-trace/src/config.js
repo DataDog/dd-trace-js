@@ -26,7 +26,7 @@ class Config {
 
     // Temporary disabled
     const DD_PROFILING_ENABLED = coalesce(
-      options.profiling,
+      options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
       process.env.DD_PROFILING_ENABLED,
       false
@@ -42,7 +42,7 @@ class Config {
       false
     )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
-      options.runtimeMetrics,
+      options.runtimeMetrics, // TODO: remove when enabled by default
       process.env.DD_RUNTIME_METRICS_ENABLED,
       false
     )
@@ -85,15 +85,13 @@ class Config {
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,
       process.env.DD_TRACE_STARTUP_LOGS,
-      true
+      false
     )
     const DD_TRACE_ENABLED = coalesce(
-      options.enabled,
       process.env.DD_TRACE_ENABLED,
       true
     )
     const DD_TRACE_DEBUG = coalesce(
-      options.debug,
       process.env.DD_TRACE_DEBUG,
       false
     )
@@ -125,7 +123,7 @@ class Config {
     let appsec = options.appsec || (options.experimental && options.experimental.appsec)
 
     const DD_APPSEC_ENABLED = coalesce(
-      appsec && (appsec === true || appsec.enabled === true),
+      appsec && (appsec === true || appsec.enabled === true), // TODO: remove when enabled by default
       process.env.DD_APPSEC_ENABLED,
       false
     )
