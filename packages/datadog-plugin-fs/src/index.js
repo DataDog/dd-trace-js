@@ -1,5 +1,7 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
+
 let kDirReadPromisified
 let kDirClosePromisified
 let kHandle
@@ -52,7 +54,7 @@ const orphanable = false
 function createWrapCreateReadStream (config, tracer) {
   return function wrapCreateReadStream (createReadStream) {
     return function createReadStreamWithTrace (path, options) {
-      if (!hasParent(tracer)) {
+      if (!hasParent()) {
         return createReadStream.apply(this, arguments)
       }
       const tags = makeFSFlagTags('ReadStream', path, options, 'r', config, tracer)
@@ -282,8 +284,10 @@ function getSymbolName (sym) {
   return sym.description || sym.toString()
 }
 
-function hasParent (tracer) {
-  return !!tracer.scope().active()
+function hasParent () {
+  const store = storage.getStore()
+
+  return store && store.span && !store.noop
 }
 
 function createWrapCb (tracer, config, name, tagMaker) {

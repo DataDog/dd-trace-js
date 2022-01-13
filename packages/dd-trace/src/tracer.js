@@ -4,6 +4,7 @@ const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const ScopeManager = require('./scope/noop/scope_manager')
 const Scope = require('./scope')
+const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 
@@ -68,6 +69,10 @@ class DatadogTracer extends Tracer {
     const tracer = this
 
     return function () {
+      const store = storage.getStore()
+
+      if (store && store.noop) return fn.apply(this, arguments)
+
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
         optionsObj = optionsObj.apply(this, arguments)

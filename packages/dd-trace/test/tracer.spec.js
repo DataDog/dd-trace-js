@@ -1,6 +1,7 @@
 'use strict'
 
 const Span = require('opentracing').Span
+const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
 
@@ -410,6 +411,18 @@ describe('Tracer', () => {
       expect(tracer.trace).to.have.been.calledWith('name', {
         tags: { sometag: 'somevalue', invocations: 2 }
       })
+    })
+
+    it('should not trace in a noop context', () => {
+      const fn = tracer.wrap('name', {}, () => {})
+
+      sinon.spy(tracer, 'trace')
+
+      storage.enterWith({ noop: true })
+      fn()
+      storage.enterWith(null)
+
+      expect(tracer.trace).to.have.not.been.called
     })
 
     describe('when there is no parent span', () => {

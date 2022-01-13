@@ -4,12 +4,17 @@ const http = require('http')
 const https = require('https')
 const docker = require('./docker')
 const log = require('../../log')
+const { storage } = require('../../../../datadog-core')
 
 const httpAgent = new http.Agent({ keepAlive: true })
 const httpsAgent = new https.Agent({ keepAlive: true })
 const containerId = docker.id()
 
 function retriableRequest (options, callback, client, data) {
+  const store = storage.getStore()
+
+  storage.enterWith({ noop: true })
+
   const req = client.request(options, res => {
     let data = ''
 
@@ -29,6 +34,9 @@ function retriableRequest (options, callback, client, data) {
   })
   req.setTimeout(options.timeout, req.abort)
   data.forEach(buffer => req.write(buffer))
+
+  storage.enterWith(store)
+
   return req
 }
 

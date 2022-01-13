@@ -1,6 +1,6 @@
 'use strict'
 
-const NoopSpan = require('./noop/span')
+const { storage } = require('../../datadog-core')
 
 const _default = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
@@ -45,11 +45,11 @@ function processMsg (msg) {
 }
 
 function withNoop (fn) {
-  if (!log._tracer) {
-    fn()
-  } else {
-    log._tracer.scope().activate(log._noopSpan(), fn)
-  }
+  const store = storage.getStore()
+
+  storage.enterWith({ noop: true })
+  fn()
+  storage.enterWith(store)
 }
 
 const log = {
@@ -73,18 +73,9 @@ const log = {
     return this
   },
 
-  _noopSpan () {
-    if (!this.__noopSpan) {
-      this.__noopSpan = new NoopSpan(this._tracer)
-    }
-    return this.__noopSpan
-  },
-
   reset () {
     this._logger = _default
     this._enabled = false
-    delete this._tracer
-    delete this.__noopSpan
     this._deprecate = memoize((code, message) => {
       withNoop(() => this._logger.error(message))
       return this

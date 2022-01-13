@@ -9,6 +9,7 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { storage } = require('../../datadog-core')
 
 const Reference = opentracing.Reference
 
@@ -27,6 +28,10 @@ function patch (http, methodName, tracer, config) {
 
   function makeRequestTrace (request) {
     return function requestTrace () {
+      const store = storage.getStore()
+
+      if (store && store.noop) return request.apply(this, arguments)
+
       let args
 
       try {
@@ -286,29 +291,20 @@ function getStatusValidator (config) {
   return code => code < 400 || code >= 500
 }
 
-function getFilter (tracer, config) {
-  const blocklist = tracer._url ? [getAgentFilter(tracer._url)] : []
-
+function getFilter (config) {
   config = Object.assign({}, config, {
-    blocklist: blocklist.concat(config.blocklist || [])
+    blocklist: config.blocklist || []
   })
 
   return urlFilter.getFilter(config)
-}
-
-function getAgentFilter (url) {
-  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
-  const agentFilter = url.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-  return RegExp(`^${agentFilter}.*$`, 'i')
 }
 
 function normalizeConfig (tracer, config) {
   config = config.client || config
 
   const validateStatus = getStatusValidator(config)
-  const filter = getFilter(tracer, config)
-  const propagationFilter = getFilter(tracer, { blocklist: config.propagationBlocklist })
+  const filter = getFilter(config)
+  const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
