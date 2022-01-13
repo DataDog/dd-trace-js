@@ -16,13 +16,6 @@ class SpanProcessor {
 
     if (trace.started.length === trace.finished.length) {
       this._prioritySampler.sample(spanContext)
-
-      if (spanContext._traceFlags.sampled === false) {
-        log.debug(() => `Dropping trace due to user configured filtering: ${trace.started}`)
-        this._erase(trace)
-        return
-      }
-
       const formattedSpans = trace.finished.map(format)
       this._exporter.export(formattedSpans)
       this._erase(trace)

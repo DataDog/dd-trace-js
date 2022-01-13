@@ -4,29 +4,24 @@ const opentracing = require('opentracing')
 const now = require('performance-now')
 const Span = opentracing.Span
 const SpanContext = require('./span_context')
-const constants = require('../constants')
 const id = require('../id')
 const tagger = require('../tagger')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 
-const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 const { DD_TRACE_EXPERIMENTAL_STATE_TRACKING } = process.env
 
 class DatadogSpan extends Span {
-  constructor (tracer, processor, sampler, prioritySampler, fields, debug) {
+  constructor (tracer, processor, prioritySampler, fields, debug) {
     super()
 
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = Object.assign({
-      [SAMPLE_RATE_METRIC_KEY]: sampler.rate()
-    }, fields.tags)
+    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this._parentTracer = tracer
     this._debug = debug
-    this._sampler = sampler
     this._processor = processor
     this._prioritySampler = prioritySampler
     this._store = storage.getStore()

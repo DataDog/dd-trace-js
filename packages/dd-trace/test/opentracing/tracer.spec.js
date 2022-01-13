@@ -3,7 +3,6 @@
 const opentracing = require('opentracing')
 const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
-const NoopSpan = require('../../src/noop/span')
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
@@ -18,8 +17,6 @@ describe('Tracer', () => {
   let processor
   let exporter
   let agentExporter
-  let Sampler
-  let sampler
   let spanContext
   let fields
   let carrier
@@ -52,11 +49,6 @@ describe('Tracer', () => {
       process: sinon.spy()
     }
     SpanProcessor = sinon.stub().returns(processor)
-
-    sampler = {
-      isSampled: sinon.stub().returns(true)
-    }
-    Sampler = sinon.stub().returns(sampler)
 
     spanContext = {}
     carrier = {}
@@ -93,7 +85,6 @@ describe('Tracer', () => {
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
       '../span_processor': SpanProcessor,
-      '../sampler': Sampler,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
@@ -110,12 +101,6 @@ describe('Tracer', () => {
     expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler)
   })
 
-  it('should support sampling', () => {
-    tracer = new Tracer(config)
-
-    expect(Sampler).to.have.been.calledWith(config.sampleRate)
-  })
-
   describe('startSpan', () => {
     it('should start a span', () => {
       fields.tags = { foo: 'bar' }
@@ -124,7 +109,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -151,7 +136,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -167,7 +152,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -180,7 +165,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWith(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         tags: {
@@ -204,7 +189,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent
       })
@@ -220,7 +205,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -232,7 +217,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -246,7 +231,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, sampler, prioritySampler, {
+      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null
       })
@@ -268,58 +253,6 @@ describe('Tracer', () => {
 
       expect(span.addTags).to.have.been.calledWith(config.tags)
       expect(span.addTags).to.have.been.calledWith(fields.tags)
-    })
-
-    it('should return a noop span when not sampled', () => {
-      sampler.isSampled.returns(false)
-
-      tracer = new Tracer(config)
-      span = tracer.startSpan('name', fields)
-
-      expect(span.context()).to.have.property('_noop', span)
-      expect(span.context()._traceFlags).to.include({ sampled: false })
-    })
-
-    it('should return a noop when the parent is not sampled', () => {
-      tracer = new Tracer(config)
-
-      const parent = new SpanContext({ traceFlags: { sampled: false } })
-
-      fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
-      ]
-
-      span = tracer.startSpan('name', fields)
-
-      expect(span.context()).to.have.property('_noop', span)
-      expect(span.context()._traceFlags).to.include({ sampled: false })
-    })
-
-    it('should return the same instance when the parent is a noop', () => {
-      tracer = new Tracer(config)
-
-      const parent = new NoopSpan(tracer)
-
-      fields.childOf = parent
-
-      span = tracer.startSpan('name', fields)
-
-      expect(span).to.equal(parent)
-    })
-
-    it('should always start a new span when the parent is sampled', () => {
-      const parent = new SpanContext()
-
-      fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
-      ]
-
-      sampler.isSampled.returns(false)
-
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.called
     })
   })
 
