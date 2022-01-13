@@ -122,6 +122,10 @@ function getAllTestsInSuite (root) {
 function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
+      if (!this.__datadog_end_handled) {
+        this.once('end', () => tracer._exporter._writer.flush())
+        this.__datadog_end_handled = true
+      }
       runTests.apply(this, arguments)
       const suite = arguments[0]
       const tests = getAllTestsInSuite(suite)
