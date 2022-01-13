@@ -3,6 +3,8 @@
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+
 describe('TextMapPropagator', () => {
   let TextMapPropagator
   let propagator
@@ -93,18 +95,6 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-datadog-origin', 'synthetics')
     })
 
-    it('should inject client sampling', () => {
-      const carrier = {}
-      const spanContext = new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('-456', 10)
-      })
-
-      propagator.inject(spanContext, carrier)
-
-      expect(carrier).to.have.property('x-datadog-sampled', '1')
-    })
-
     it('should inject trace tags prefixed for propagation', () => {
       const carrier = {}
       const spanContext = new SpanContext({
@@ -148,9 +138,8 @@ describe('TextMapPropagator', () => {
         traceId: id('0000000000000123'),
         spanId: id('0000000000000456'),
         parentId: id('0000000000000789'),
-        traceFlags: {
-          sampled: true,
-          debug: true
+        sampling: {
+          priority: USER_KEEP
         }
       })
 
@@ -206,7 +195,7 @@ describe('TextMapPropagator', () => {
         traceId: id('123', 10),
         spanId: id('-456', 10),
         sampling: {
-          priority: 0
+          priority: AUTO_REJECT
         },
         baggageItems
       }))
@@ -220,15 +209,6 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace).to.have.property('origin', 'synthetics')
     })
 
-    it('should extract client sampling', () => {
-      textMap['x-datadog-sampled'] = '0'
-
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
-
-      expect(spanContext._traceFlags).to.have.property('sampled', false)
-    })
-
     it('should extract trace tags', () => {
       textMap['x-datadog-tags'] = 'foo=bar,baz=qux'
 
@@ -239,19 +219,6 @@ describe('TextMapPropagator', () => {
         foo: 'bar',
         baz: 'qux'
       })
-    })
-
-    it('should extract from an aws-sqsd header', () => {
-      const carrier = {
-        'x-aws-sqsd-attr-_datadog': JSON.stringify(textMap)
-      }
-
-      const spanContext = propagator.extract(carrier)
-
-      expect(spanContext).to.deep.equal(new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('-456', 10)
-      }))
     })
 
     describe('with B3 propagation as multiple headers', () => {
@@ -273,9 +240,8 @@ describe('TextMapPropagator', () => {
         expect(spanContext).to.deep.equal(new SpanContext({
           traceId: id('123', 16),
           spanId: id('456', 16),
-          baggageItems,
-          traceFlags: {
-            sampled: true
+          sampling: {
+            priority: AUTO_KEEP
           }
         }))
       })
@@ -290,7 +256,7 @@ describe('TextMapPropagator', () => {
         expect(spanContext._traceId).to.match(idExpr)
         expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
         expect(spanContext._spanId).to.be.null
-        expect(spanContext._traceFlags.sampled).to.equal(false)
+        expect(spanContext._sampling.priority).to.equal(AUTO_REJECT)
       })
 
       it('should support sampled traces', () => {
@@ -303,7 +269,7 @@ describe('TextMapPropagator', () => {
         expect(spanContext._traceId).to.match(idExpr)
         expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
         expect(spanContext._spanId).to.be.null
-        expect(spanContext._traceFlags.sampled).to.equal(true)
+        expect(spanContext._sampling.priority).to.equal(AUTO_KEEP)
       })
 
       it('should support the debug flag', () => {
@@ -316,7 +282,7 @@ describe('TextMapPropagator', () => {
         expect(spanContext._traceId).to.match(idExpr)
         expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
         expect(spanContext._spanId).to.be.null
-        expect(spanContext._traceFlags.sampled).to.equal(true)
+        expect(spanContext._sampling.priority).to.equal(USER_KEEP)
       })
 
       it('should skip extraction without the feature flag', () => {
@@ -349,14 +315,11 @@ describe('TextMapPropagator', () => {
         expect(spanContext).to.deep.equal(new SpanContext({
           traceId: id('123', 16),
           spanId: id('456', 16),
-          baggageItems,
-          traceFlags: {
-            sampled: true
-          }
+          sampling: {}
         }))
       })
 
-      it('should extract client sampling', () => {
+      it('should extract sampling', () => {
         textMap['b3'] = '0000000000000123-0000000000000456-1'
 
         const carrier = textMap
@@ -365,9 +328,8 @@ describe('TextMapPropagator', () => {
         expect(spanContext).to.deep.equal(new SpanContext({
           traceId: id('123', 16),
           spanId: id('456', 16),
-          baggageItems,
-          traceFlags: {
-            sampled: true
+          sampling: {
+            priority: AUTO_KEEP
           }
         }))
       })
@@ -381,9 +343,8 @@ describe('TextMapPropagator', () => {
         expect(spanContext).to.deep.equal(new SpanContext({
           traceId: id('123', 16),
           spanId: id('456', 16),
-          baggageItems,
-          traceFlags: {
-            sampled: true
+          sampling: {
+            priority: AUTO_KEEP
           }
         }))
       })
@@ -398,7 +359,7 @@ describe('TextMapPropagator', () => {
         expect(spanContext._traceId).to.match(idExpr)
         expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
         expect(spanContext._spanId).to.be.null
-        expect(spanContext._traceFlags.sampled).to.equal(false)
+        expect(spanContext._sampling.priority).to.equal(AUTO_REJECT)
       })
 
       it('should support sampled traces', () => {
@@ -411,7 +372,7 @@ describe('TextMapPropagator', () => {
         expect(spanContext._traceId).to.match(idExpr)
         expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
         expect(spanContext._spanId).to.be.null
-        expect(spanContext._traceFlags.sampled).to.equal(true)
+        expect(spanContext._sampling.priority).to.equal(AUTO_KEEP)
       })
 
       it('should support the debug flag', () => {
@@ -424,7 +385,7 @@ describe('TextMapPropagator', () => {
         expect(spanContext._traceId).to.match(idExpr)
         expect(spanContext._traceId.toString()).to.not.equal('0000000000000000')
         expect(spanContext._spanId).to.be.null
-        expect(spanContext._traceFlags.sampled).to.equal(true)
+        expect(spanContext._sampling.priority).to.equal(USER_KEEP)
       })
 
       it('should skip extraction without the feature flag', () => {
