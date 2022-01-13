@@ -80,7 +80,6 @@ describe('Plugin', () => {
 
           connection.query('SELECT 1 + 1 AS solution', (error, results, fields) => {
             if (error) throw error
-            done()
           })
         })
 
@@ -105,7 +104,7 @@ describe('Plugin', () => {
             done()
           })
 
-          connection.query('SELECT 1 + 1 AS solution', done())
+          connection.query('SELECT 1 + 1 AS solution')
         })
       })
 
@@ -175,9 +174,7 @@ describe('Plugin', () => {
             done()
           })
 
-          pool.query('SELECT 1 + 1 AS solution', () => {
-            done()
-          })
+          pool.query('SELECT 1 + 1 AS solution', () => {})
         })
 
         it('should run the callback in the parent context', done => {

@@ -4,7 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class MYSQLPlugin extends Plugin {
+class MySQLPlugin extends Plugin {
   static get name () {
     return 'mysql'
   }
@@ -12,25 +12,25 @@ class MYSQLPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:mysql:query:start', () => {
+    this.addSub('apm:mysql:query:start', ([sql, conf]) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('mysql.query', {
         childOf,
         tags: {
-          // [this.Tags.SPAN_KIND]: this.Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': this.config.service || `${this.tracer._service}-mysql`,
           'span.type': 'sql',
           'span.kind': 'client',
           'db.type': 'mysql',
-          'db.user': this.config.user,
-          'out.host': this.config.host,
-          'out.port': this.config.port
+          'db.user': conf.user,
+          'out.host': conf.host,
+          'out.port': conf.port,
+          'resource.name': sql
         }
       })
 
-      if (this.config.database) {
-        span.setTag('db.name', this.config.database)
+      if (conf.database) {
+        span.setTag('db.name', conf.database)
       }
 
       analyticsSampler.sample(span, this.config.measured)
@@ -42,16 +42,10 @@ class MYSQLPlugin extends Plugin {
     })
 
     this.addSub('apm:mysql:query:error', err => {
-      const span = storage.getStore().span
-
       if (err) {
-        span.addTags({
-          'error.type': err.name,
-          'error.msg': err.message,
-          'error.stack': err.stack
-        })
+        const span = storage.getStore().span
+        span.setTag('error', err)
       }
-      span.finish()
     })
 
     this.addSub('apm:mysql:query:async-end', () => {
@@ -61,4 +55,4 @@ class MYSQLPlugin extends Plugin {
   }
 }
 
-module.exports = MYSQLPlugin
+module.exports = MySQLPlugin

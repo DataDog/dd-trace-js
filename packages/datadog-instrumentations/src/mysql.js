@@ -17,34 +17,38 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
   shimmer.wrap(Connection.prototype, 'query', query => function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    if (!startCh.hasSubscribers || arguments.length === 1 || typeof arguments[arguments.length - 1] !== 'function') {
-      if (arguments[0]._callback) {
-        const newCb = arguments[0]._callback
-        arguments[0]._callback = bind(function () {
-          newCb.apply(this, arguments)
-        })
-      }
+    if (!startCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
 
-    const cb = bindAsyncResource.call(asyncResource, arguments[arguments.length - 1])
-    const startArgs = Array.from(arguments)
+    const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
+    const startArgs = [sql, this.config]
+
     startCh.publish(startArgs)
 
-    arguments[arguments.length - 1] = bind(function (error, result) {
-      if (error) {
-        errorCh.publish(error)
-      }
-      asyncEndCh.publish(result)
-
-      return cb.apply(this, arguments)
-    })
-
     try {
-      return query.apply(this, arguments)
+      const res = query.apply(this, arguments)
+
+      if (res._callback) {
+        const cb = bindAsyncResource.call(asyncResource, res._callback)
+        res._callback = bind(function (error, result) {
+          if (error) {
+            errorCh.publish(error)
+          }
+          asyncEndCh.publish(result)
+
+          return cb.apply(this, arguments)
+        })
+      } else {
+        const cb = bind(function () {
+          asyncEndCh.publish(undefined)
+        })
+        res.on('end', cb)
+      }
+
+      return res
     } catch (err) {
-      err.stack
+      err.stack // trigger getting the stack at the original throwing point
       errorCh.publish(err)
 
       throw err
@@ -57,8 +61,8 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 })
 
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
-  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function () {
-    arguments[0] = bind(arguments[0])
+  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
+    arguments[0] = bind(cb)
     return getConnection.apply(this, arguments)
   })
   return Pool
