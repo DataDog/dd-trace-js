@@ -268,8 +268,7 @@ export declare interface TracerOptions {
   version?: string;
 
   /**
-   * Percentage of spans to sample as a float between 0 and 1.
-   * @default 1
+   * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
    */
   sampleRate?: number;
 

@@ -432,7 +432,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | env             | `DD_ENV`                          | -              | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
 | logInjection    | `DD_LOGS_INJECTION`               | `false`        | Enable automatic injection of trace IDs in logs for supported logging libraries. |
 | tags            | `DD_TAGS`                         | `{}`           | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
-| sampleRate      | -                                 | `1`            | Percentage of spans to sample as a float between 0 and 1. |
+| sampleRate      | `DD_TRACE_SAMPLE_RATE`            | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
 | flushInterval   | -                                 | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | lookup          | -                                 | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION` | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
