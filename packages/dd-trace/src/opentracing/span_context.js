@@ -8,6 +8,8 @@ class DatadogSpanContext extends SpanContext {
 
     props = props || {}
 
+    const trace = props.trace || {}
+
     this._traceId = props.traceId
     this._spanId = props.spanId
     this._parentId = props.parentId || null
@@ -16,15 +18,11 @@ class DatadogSpanContext extends SpanContext {
     this._tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
-    this._traceFlags = props.traceFlags || {}
-    this._traceFlags.sampled = this._traceFlags.sampled !== false
-    this._traceFlags.debug = this._traceFlags.debug === true
     this._noop = props.noop || null
-    this._trace = props.trace || {
-      started: [],
-      finished: [],
-      tags: {}
-    }
+    this._trace = trace
+    this._trace.started = trace.started || []
+    this._trace.finished = trace.finished || []
+    this._trace.tags = trace.tags || {}
   }
 
   toTraceId () {

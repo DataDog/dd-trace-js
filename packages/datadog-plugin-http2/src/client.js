@@ -1,9 +1,7 @@
 'use strict'
 
 const URL = require('url').URL
-const opentracing = require('opentracing')
 const log = require('../../dd-trace/src/log')
-const constants = require('../../dd-trace/src/constants')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
@@ -11,16 +9,13 @@ const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const shimmer = require('../../datadog-shimmer')
 
-const Reference = opentracing.Reference
-
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const MANUAL_DROP = tags.MANUAL_DROP
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
-const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
-const REFERENCE_NOOP = constants.REFERENCE_NOOP
 
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
@@ -165,12 +160,8 @@ function startSpan (tracer, config, headers, sessionDetails) {
   const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
   const url = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${path}`
 
-  const type = config.filter(url) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
-
   const span = tracer.startSpan('http.request', {
-    references: [
-      new Reference(type, childOf)
-    ],
+    childOf,
     tags: {
       [SPAN_KIND]: CLIENT,
       'service.name': getServiceName(tracer, config, sessionDetails),
@@ -180,6 +171,10 @@ function startSpan (tracer, config, headers, sessionDetails) {
       'http.url': url.split('?')[0]
     }
   })
+
+  if (!config.filter(url)) {
+    span.setTag(MANUAL_DROP, true)
+  }
 
   if (!hasAmazonSignature(headers, path)) {
     tracer.inject(span, HTTP_HEADERS, headers)

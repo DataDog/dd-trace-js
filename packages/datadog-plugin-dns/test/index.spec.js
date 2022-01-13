@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
+const { storage } = require('../../datadog-core')
 
 describe('Plugin', () => {
   let dns
@@ -186,7 +187,22 @@ describe('Plugin', () => {
         .then(done)
         .catch(done)
 
-      resolver.resolve('lvh.me', err => err && done(err))
+      resolver.resolve('lvh.me', () => {})
+    })
+
+    it('should skip instrumentation for noop context', done => {
+      const resolver = new dns.Resolver()
+      const timer = setTimeout(done, 200)
+
+      agent
+        .use(() => {
+          done(new Error('Resolve was traced.'))
+          clearTimeout(timer)
+        })
+
+      storage.run({ noop: true }, () => {
+        resolver.resolve('lvh.me', () => {})
+      })
     })
   })
 })

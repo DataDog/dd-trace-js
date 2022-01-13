@@ -13,15 +13,12 @@ const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
-const NoopSpan = require('../noop/span')
 const formats = require('../../../../ext/formats')
 
 const log = require('../log')
-const constants = require('../constants')
 const metrics = require('../metrics')
 const getExporter = require('../exporter')
 
-const REFERENCE_NOOP = constants.REFERENCE_NOOP
 const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
 
@@ -63,14 +60,11 @@ class DatadogTracer extends Tracer {
   }
 
   _startSpanInternal (name, fields = {}, parent, type) {
-    if (parent && parent._noop) return parent._noop
-    if (!isSampled(this._sampler, parent, type)) return new NoopSpan(this, parent)
-
     const tags = {
       'service.name': this._service
     }
 
-    const span = new Span(this, this._processor, this._sampler, this._prioritySampler, {
+    const span = new Span(this, this._processor, this._prioritySampler, {
       operationName: fields.operationName || name,
       parent,
       tags,
@@ -121,12 +115,12 @@ function getParent (references = []) {
     const spanContext = ref.referencedContext()
     const type = ref.type()
 
-    if (type !== REFERENCE_NOOP && spanContext && !(spanContext instanceof SpanContext)) {
+    if (spanContext && !(spanContext instanceof SpanContext)) {
       log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
       continue
     }
 
-    if (type === REFERENCE_CHILD_OF || type === REFERENCE_NOOP) {
+    if (type === REFERENCE_CHILD_OF) {
       parent = ref
       break
     } else if (type === REFERENCE_FOLLOWS_FROM) {
@@ -137,14 +131,6 @@ function getParent (references = []) {
   }
 
   return parent
-}
-
-function isSampled (sampler, parent, type) {
-  if (type === REFERENCE_NOOP) return false
-  if (parent && !parent._traceFlags.sampled) return false
-  if (!parent && !sampler.isSampled()) return false
-
-  return true
 }
 
 module.exports = DatadogTracer

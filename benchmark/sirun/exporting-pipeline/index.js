@@ -29,7 +29,6 @@ function createSpan (parent) {
     _parentId: parent ? parent.context()._spanId : id(0),
     _hostname: hostname,
     _sampling: {},
-    _traceFlags: {},
     _tags: {
       'service.name': 'hello',
       a: 'b',

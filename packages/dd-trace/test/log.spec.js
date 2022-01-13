@@ -277,7 +277,7 @@ describe('log', () => {
         service: 'test',
         logger: {
           debug: () => {
-            expect(!!tracer.scope().active().context()._noop).to.equal(true)
+            expect(tracer.scope().active()).to.be.null
             onceDone()
           },
           info: () => {},
@@ -286,7 +286,6 @@ describe('log', () => {
         }
       })
       tracer.trace('testing.testing', () => {
-        expect(!!tracer.scope().active().context()._noop).to.equal(false)
         log.debug()
       })
     })

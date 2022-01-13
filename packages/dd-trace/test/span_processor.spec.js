@@ -20,8 +20,7 @@ describe('SpanProcessor', () => {
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {},
-        _traceFlags: {}
+        _tags: {}
       })
     }
 
@@ -59,12 +58,6 @@ describe('SpanProcessor', () => {
   it('should skip traces with unfinished spans', () => {
     trace.started = [span]
     trace.finished = []
-    processor.process(span)
-
-    expect(exporter.export).not.to.have.been.called
-  })
-  it('should not append if the span was dropped', () => {
-    span.context()._traceFlags.sampled = false
     processor.process(span)
 
     expect(exporter.export).not.to.have.been.called

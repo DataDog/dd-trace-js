@@ -138,7 +138,12 @@ class Config {
     const dogstatsd = coalesce(options.dogstatsd, {})
 
     Object.assign(sampler, {
-      sampleRate: coalesce(ingestion.sampleRate, sampler.sampleRate, process.env.DD_TRACE_SAMPLE_RATE),
+      sampleRate: coalesce(
+        options.sampleRate,
+        ingestion.sampleRate,
+        sampler.sampleRate,
+        process.env.DD_TRACE_SAMPLE_RATE
+      ),
       rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, process.env.DD_TRACE_RATE_LIMIT)
     })
 
@@ -154,7 +159,7 @@ class Config {
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
-    this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
+    this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE

@@ -1,25 +1,21 @@
 'use strict'
 
 const url = require('url')
-const opentracing = require('opentracing')
 const log = require('../../dd-trace/src/log')
-const constants = require('../../dd-trace/src/constants')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-
-const Reference = opentracing.Reference
+const { storage } = require('../../datadog-core')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const MANUAL_DROP = tags.MANUAL_DROP
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
-const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
-const REFERENCE_NOOP = constants.REFERENCE_NOOP
 
 function patch (http, methodName, tracer, config) {
   config = normalizeConfig(tracer, config)
@@ -27,6 +23,10 @@ function patch (http, methodName, tracer, config) {
 
   function makeRequestTrace (request) {
     return function requestTrace () {
+      const store = storage.getStore()
+
+      if (store && store.noop) return request.apply(this, arguments)
+
       let args
 
       try {
@@ -50,11 +50,8 @@ function patch (http, methodName, tracer, config) {
 
       const scope = tracer.scope()
       const childOf = scope.active()
-      const type = config.filter(uri) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
       const span = tracer.startSpan('http.request', {
-        references: [
-          new Reference(type, childOf)
-        ],
+        childOf,
         tags: {
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(tracer, config, options),
@@ -64,6 +61,10 @@ function patch (http, methodName, tracer, config) {
           'http.url': uri
         }
       })
+
+      if (!config.filter(uri)) {
+        span.setTag(MANUAL_DROP, true)
+      }
 
       if (!(hasAmazonSignature(options) || !config.propagationFilter(uri))) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
@@ -287,20 +288,11 @@ function getStatusValidator (config) {
 }
 
 function getFilter (tracer, config) {
-  const blocklist = tracer._url ? [getAgentFilter(tracer._url)] : []
-
   config = Object.assign({}, config, {
-    blocklist: blocklist.concat(config.blocklist || [])
+    blocklist: config.blocklist || []
   })
 
   return urlFilter.getFilter(config)
-}
-
-function getAgentFilter (url) {
-  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
-  const agentFilter = url.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-  return RegExp(`^${agentFilter}.*$`, 'i')
 }
 
 function normalizeConfig (tracer, config) {
