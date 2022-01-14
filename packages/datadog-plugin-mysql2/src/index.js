@@ -1,94 +1,58 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapAddCommand (tracer, config) {
-  return function wrapAddCommand (addCommand) {
-    return function addCommandWithTrace (cmd) {
-      const name = cmd && cmd.constructor && cmd.constructor.name
-      const isCommand = typeof cmd.execute === 'function'
-      const isSupported = name === 'Execute' || name === 'Query'
+class MySQL2Plugin extends Plugin {
+  static get name () {
+    return 'mysql2'
+  }
 
-      if (isCommand && isSupported) {
-        cmd.execute = wrapExecute(tracer, config, cmd.execute)
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:mysql2:addCommand:start', ([sql, conf]) => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('mysql.query', {
+        childOf,
+        tags: {
+          'service.name': this.config.service || `${this.tracer._service}-mysql`,
+          'span.type': 'sql',
+          'span.kind': 'client',
+          'db.type': 'mysql',
+          'db.user': conf.user,
+          'out.host': conf.host,
+          'out.port': conf.port,
+          'resource.name': sql
+        }
+      })
+
+      if (conf.database) {
+        span.setTag('db.name', conf.database)
       }
 
-      return addCommand.apply(this, arguments)
-    }
-  }
-}
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
-function wrapExecute (tracer, config, execute) {
-  const scope = tracer.scope()
-  const childOf = scope.active()
+    this.addSub('apm:mysql2:addCommand:end', () => {
+      this.exit()
+    })
 
-  return function executeWithTrace (packet, connection) {
-    const connectionConfig = (connection && connection.config) || {}
-    const sql = this.statement ? this.statement.query : this.sql
-    const span = tracer.startSpan('mysql.query', {
-      childOf,
-      tags: {
-        [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-        'service.name': config.service || `${tracer._service}-mysql`,
-        'resource.name': sql,
-        'span.type': 'sql',
-        'span.kind': 'client',
-        'db.type': 'mysql',
-        'db.user': connectionConfig.user,
-        'db.name': connectionConfig.database,
-        'out.host': connectionConfig.host,
-        'out.port': connectionConfig.port
+    this.addSub('apm:mysql2:addCommand:error', err => {
+      if (err) {
+        const span = storage.getStore().span
+        span.setTag('error', err)
       }
     })
 
-    analyticsSampler.sample(span, config.measured)
-
-    if (typeof this.onResult === 'function') {
-      this.onResult = wrapCallback(tracer, span, childOf, this.onResult)
-    } else {
-      this.on('error', error => span.addTags({ error }))
-      this.on('end', () => span.finish())
-    }
-
-    this.execute = execute
-
-    return scope.bind(execute, span).apply(this, arguments)
+    this.addSub('apm:mysql2:addCommand:async-end', () => {
+      const span = storage.getStore().span
+      span.finish()
+    })
   }
 }
 
-function wrapCallback (tracer, span, parent, done) {
-  return tracer.scope().bind((...args) => {
-    const [ error ] = args
-    span.addTags({ error })
-
-    span.finish()
-
-    done(...args)
-  }, parent)
-}
-
-module.exports = [
-  {
-    name: 'mysql2',
-    file: 'lib/connection.js',
-    versions: ['>=1'],
-    patch (Connection, tracer, config) {
-      this.wrap(Connection.prototype, 'addCommand', createWrapAddCommand(tracer, config))
-    },
-    unpatch (Connection) {
-      this.unwrap(Connection.prototype, 'addCommand')
-    }
-  },
-  {
-    name: 'mysql2',
-    file: 'lib/commands/command.js',
-    versions: ['>=1'],
-    patch (Command, tracer, config) {
-      tracer.scope().bind(Command.prototype)
-    },
-    unpatch (Command, tracer) {
-      tracer.scope().unbind(Command.prototype)
-    }
-  }
-]
+module.exports = MySQL2Plugin

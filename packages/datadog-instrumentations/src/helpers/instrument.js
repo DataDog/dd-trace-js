@@ -8,6 +8,7 @@ const ritm = require('../../../dd-trace/src/ritm')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { AsyncResource } = require('async_hooks')
+const shimmer = require('../../../datadog-shimmer')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
@@ -116,5 +117,51 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
       })
       return ret
     }
+  }
+}
+
+exports.bindEventEmitter = function bindEventEmitter(emitter) {
+  shimmer.wrap(emitter, 'addListener', wrapAddListener)
+  shimmer.wrap(emitter, 'prependListener', wrapAddListener)
+  shimmer.wrap(emitter, 'on', wrapAddListener)
+  shimmer.wrap(emitter, 'once', wrapAddListener)
+  shimmer.wrap(emitter, 'removeListener', wrapRemoveListener)
+  shimmer.wrap(emitter, 'off', wrapRemoveListener)
+  shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
+  emitter.__is_dd_emitter = true
+}
+
+function wrapAddListener(addListener) {
+  return function (name, fn) {
+    const bound = exports.bind(fn)
+    this._datadog_events = this._datadog_events || {}
+    if (!this._datadog_events[name]) {
+      this._datadog_events[name] = new Map()
+    }
+    this._datadog_events[name].set(fn, bound)
+    addListener.call(this, name, bound)
+  }
+}
+
+function wrapRemoveListener(removeListener) {
+  return function (name, fn) {
+    const listeners = this._datadog_events && this._datadog_events[name]
+    const bound = listeners.get(fn)
+    listeners.delete(fn)
+    removeListener.call(this, name, bound)
+  }
+}
+
+function wrapRemoveAllListener(removeAllListeners) {
+  return function (name, fn) {
+    const listeners = this._datadog_events && this._datadog_events[name]
+    const bound = listeners.get(fn)
+    listeners.delete(fn)
+    if (name) {
+      delete this._datadog_events[name]
+    } else {
+      delete this._datadog_events
+    }
+    removeAllListeners.call(this, name, bound)
   }
 }
