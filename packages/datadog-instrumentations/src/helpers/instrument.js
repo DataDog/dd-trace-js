@@ -120,7 +120,7 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
   }
 }
 
-exports.bindEventEmitter = function bindEventEmitter(emitter) {
+exports.bindEventEmitter = function bindEventEmitter (emitter) {
   shimmer.wrap(emitter, 'addListener', wrapAddListener)
   shimmer.wrap(emitter, 'prependListener', wrapAddListener)
   shimmer.wrap(emitter, 'on', wrapAddListener)
@@ -131,7 +131,7 @@ exports.bindEventEmitter = function bindEventEmitter(emitter) {
   emitter.__is_dd_emitter = true
 }
 
-function wrapAddListener(addListener) {
+function wrapAddListener (addListener) {
   return function (name, fn) {
     const bound = exports.bind(fn)
     this._datadog_events = this._datadog_events || {}
@@ -143,7 +143,7 @@ function wrapAddListener(addListener) {
   }
 }
 
-function wrapRemoveListener(removeListener) {
+function wrapRemoveListener (removeListener) {
   return function (name, fn) {
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
@@ -152,7 +152,7 @@ function wrapRemoveListener(removeListener) {
   }
 }
 
-function wrapRemoveAllListener(removeAllListeners) {
+function wrapRemoveAllListener (removeAllListeners) {
   return function (name, fn) {
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
