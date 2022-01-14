@@ -13,7 +13,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('couchbase', () => {
-    withVersions(plugin, 'couchbase', version => {
+    withVersions('couchbase', 'couchbase', version => {
       beforeEach(() => {
         tracer = global.tracer = require('../../dd-trace')
       })
