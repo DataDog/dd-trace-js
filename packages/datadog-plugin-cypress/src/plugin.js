@@ -27,7 +27,7 @@ function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   return {
     childOf,
     resource: `${testSuite}.${testName}`,
-    [TEST_TYPE]: 'test',
+    [TEST_TYPE]: 'browser',
     [TEST_NAME]: testName,
     [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
