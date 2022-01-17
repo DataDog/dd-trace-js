@@ -786,7 +786,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [cucumber](https://www.npmjs.com/package/@cucumber/cucumber) module.
    */
-  interface cucumber extends Instrumentation {}
+  interface cucumber extends Integration {}
 
   /**
    * This plugin automatically instruments the
