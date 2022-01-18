@@ -83,6 +83,12 @@ module.exports = (on, config) => {
       }
       activeSpan = null
       return null
+    },
+    'dd:addTags': (tags) => {
+      if (activeSpan) {
+        activeSpan.addTags(tags)
+      }
+      return null
     }
   })
 }
