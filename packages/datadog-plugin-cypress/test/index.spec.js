@@ -58,6 +58,9 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.meta).to.contain({
               language: 'javascript',
+              addTags: 'custom',
+              addTagsBeforeEach: 'custom',
+              addTagsAfterEach: 'custom',
               [TEST_FRAMEWORK]: 'cypress',
               [TEST_NAME]: 'can visit a page renders a hello world',
               [TEST_STATUS]: 'pass',
@@ -78,6 +81,9 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.meta).to.contain({
               language: 'javascript',
+              addTags: 'custom',
+              addTagsBeforeEach: 'custom',
+              addTagsAfterEach: 'custom',
               [TEST_FRAMEWORK]: 'cypress',
               [TEST_NAME]: 'can visit a page will fail',
               [TEST_STATUS]: 'fail',
@@ -86,6 +92,9 @@ describe('Plugin', () => {
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [ERROR_TYPE]: 'AssertionError',
               [TEST_IS_RUM_ACTIVE]: 'true'
+            })
+            expect(testSpan.meta).to.not.contain({
+              addTagsAfterFailure: 'custom'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
               "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
