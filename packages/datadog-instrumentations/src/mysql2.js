@@ -5,16 +5,15 @@ const {
   channel,
   addHook,
   bind,
-  bindAsyncResource,
-  bindEventEmitter
+  bindAsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connection => {
-  const startCh = channel('apm:mysql2:addCommand:start')
-  const asyncEndCh = channel('apm:mysql2:addCommand:async-end')
-  const endCh = channel('apm:mysql2:addCommand:end')
-  const errorCh = channel('apm:mysql2:addCommand:error')
+  const startCh = channel('apm:mysql:query:start')
+  const asyncEndCh = channel('apm:mysql:query:async-end')
+  const endCh = channel('apm:mysql:query:end')
+  const errorCh = channel('apm:mysql:query:error')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -26,12 +25,12 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
     const isCommand = typeof cmd.execute === 'function'
     const isSupported = name === 'Execute' || name === 'Query'
 
-    if (isCommand && isSupported) {
-      const sql = cmd.statement ? cmd.statement.query : cmd.sql
-      startCh.publish([sql, this.config])
-    } else {
+    if (!(isCommand && isSupported)) {
       return addCommand.apply(this, arguments)
     }
+
+    const sql = cmd.statement ? cmd.statement.query : cmd.sql
+    startCh.publish([sql, this.config])
 
     try {
       const res = addCommand.apply(this, arguments)
@@ -70,6 +69,9 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
 })
 
 addHook({ name: 'mysql2', file: 'lib/commands/command.js', versions: ['>=1'] }, Command => {
-  bindEventEmitter(Command.prototype)
+  shimmer.wrap(Command.prototype, 'on', on => function (name, fn) {
+    const bound = bind(fn)
+    on.call(this, name, bound)
+  })
   return Command
 })
