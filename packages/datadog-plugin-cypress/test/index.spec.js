@@ -65,7 +65,7 @@ describe('Plugin', () => {
               [TEST_NAME]: 'can visit a page renders a hello world',
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
-              [TEST_TYPE]: 'browser',
+              [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_IS_RUM_ACTIVE]: 'true'
             })
@@ -88,7 +88,7 @@ describe('Plugin', () => {
               [TEST_NAME]: 'can visit a page will fail',
               [TEST_STATUS]: 'fail',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
-              [TEST_TYPE]: 'browser',
+              [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [ERROR_TYPE]: 'AssertionError',
               [TEST_IS_RUM_ACTIVE]: 'true'
