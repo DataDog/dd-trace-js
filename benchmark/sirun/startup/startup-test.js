@@ -7,7 +7,7 @@ if (Number(process.env.USE_TRACER)) {
 if (Number(process.env.EVERYTHING)) {
   const json = require('../../../package.json')
   for (const pkg in json.dependencies) {
-    if (pkg !== '@types/node' && pkg !== 'nan') {
+    if (pkg !== 'nan') {
       require(pkg)
     }
   }

@@ -2,7 +2,6 @@ Component,Origin,License,Copyright
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
-require,@types/node,MIT,Copyright Authors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,diagnostics_channel,MIT,Copyright 2021 Simon D.
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
@@ -23,6 +22,7 @@ require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contributors
 require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
+dev,@types/node,MIT,Copyright Authors
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
