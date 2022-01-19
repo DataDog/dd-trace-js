@@ -10,7 +10,8 @@ const services = {
   s3: getService(require('./services/s3')),
   redshift: getService(require('./services/redshift')),
   sns: getService(require('./services/sns')),
-  sqs: getService(require('./services/sqs'))
+  sqs: getService(require('./services/sqs')),
+  eventbridge: getService(require('./services/eventbridge'))
 }
 
 function getService (Service) {
