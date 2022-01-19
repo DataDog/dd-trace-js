@@ -520,6 +520,36 @@ describe('Plugin', () => {
           })
         })
 
+        it('should not lose the current path when route handler is a middlware', done => {
+          const app = express()
+
+          app.get('/app', (req, res, next) => {
+            res.body = 'test'
+            next()
+          })
+
+          app.use((req, res) => {
+            res.status(200).send(req.body)
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /app')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/app`)
+                .catch(done)
+            })
+          })
+        })
+
         it('should not leak the current scope to other requests when using a task queue', done => {
           const app = express()
 
