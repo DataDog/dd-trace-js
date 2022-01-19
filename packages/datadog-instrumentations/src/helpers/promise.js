@@ -1,23 +1,29 @@
 'use strict'
 
-const {
-  bind
-} = require('./instrument')
+const { AsyncResource } = require('async_hooks')
 
 exports.wrapThen = function wrapThen (origThen) {
   return function then (onFulfilled, onRejected, onProgress) {
-    arguments[0] = wrapCallback(onFulfilled)
-    arguments[1] = wrapCallback(onRejected)
+    const ar = new AsyncResource('bound-anonymous-fn')
+
+    arguments[0] = wrapCallback(ar, onFulfilled)
+    arguments[1] = wrapCallback(ar, onRejected)
 
     // not standard but sometimes supported
     if (onProgress) {
-      arguments[2] = wrapCallback(onProgress)
+      arguments[2] = wrapCallback(ar, onProgress)
     }
 
     return origThen.apply(this, arguments)
   }
 }
 
-function wrapCallback (callback) {
-  return typeof callback === 'function' ? bind(callback) : callback
+function wrapCallback (ar, callback) {
+  if (typeof callback !== 'function') return callback
+
+  return function () {
+    return ar.runInAsyncScope(() => {
+      return callback.apply(this, arguments)
+    })
+  }
 }
