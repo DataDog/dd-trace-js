@@ -62,7 +62,6 @@
     "@datadog/native-metrics": "^1.1.0",
     "@datadog/pprof": "^0.3.0",
     "@datadog/sketches-js": "^1.0.4",
-    "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "form-data": "^3.0.0",
@@ -85,6 +84,7 @@
     "source-map-resolve": "^0.6.0"
   },
   "devDependencies": {
+    "@types/node": ">=12",
     "autocannon": "^4.5.2",
     "axios": "^0.21.2",
     "benchmark": "^2.1.4",
