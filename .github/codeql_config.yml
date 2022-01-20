@@ -1,4 +1,8 @@
 name: "CodeQL config"
 
-paths-ignore: 
+paths-ignore:
+  - 'benchmark'
+  - 'integration-tests'
+  - 'node-upstream-tests'
   - 'packages/**/test'
+  - 'scripts'
