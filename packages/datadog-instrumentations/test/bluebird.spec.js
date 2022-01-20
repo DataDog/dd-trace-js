@@ -1,6 +1,8 @@
 'use strict'
 
-const assertPromise = require('../../dd-trace/test/plugins/promise')
+require('../src/bluebird')
+
+const assertPromise = require('./helpers/promise')
 
 assertPromise('bluebird')
 

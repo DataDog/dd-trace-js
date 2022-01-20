@@ -25,6 +25,13 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
   }
 }))
 
+fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
+  .filter(file => file.endsWith('js'))
+  .forEach(file => {
+    file = file.replace('.js', '')
+    plugins[file] = { name: file, prototype: Object.create(Plugin.prototype) }
+  })
+
 run()
 
 async function run () {

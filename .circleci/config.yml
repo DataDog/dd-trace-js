@@ -278,6 +278,29 @@ jobs:
           command: yarn test:shimmer:ci
       - store-test-results-and-coverage
 
+  # Instrumentation tests
+
+  instrumentations:
+    parameters:
+      node-version:
+        type: string
+    docker:
+      - image: node:<< parameters.node-version >>
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: Install dependencies
+          command: |
+            export PLUGINS="bluebird|promise-js|promise|q|when"
+            node ./scripts/install_plugin_modules
+      - run:
+          name: Unit tests
+          command: yarn test:instrumentations:ci
+      - store-test-results-and-coverage
+
+
   # Core tests
 
   node-core:
@@ -721,6 +744,7 @@ workflows:
               node-version: ["12", "14", "16", "latest"]
       - node-core-windows
       - shimmer: *matrix-supported-node-versions
+      - instrumentations: *matrix-supported-node-versions
       - node-integration: *matrix-supported-node-versions
       - node-amqplib: *matrix-supported-node-versions
       - node-amqp10: *matrix-supported-node-versions
@@ -794,6 +818,7 @@ workflows:
       - codecov:
           requires:
             - shimmer
+            - instrumentations
             - node-core
             - node-amqplib
             - node-amqp10

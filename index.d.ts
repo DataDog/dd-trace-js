@@ -476,7 +476,6 @@ interface Plugins {
   "amqp10": plugins.amqp10;
   "amqplib": plugins.amqplib;
   "aws-sdk": plugins.aws_sdk;
-  "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
@@ -514,16 +513,12 @@ interface Plugins {
   "paperplane": plugins.paperplane;
   "pg": plugins.pg;
   "pino": plugins.pino;
-  "promise-js": plugins.promise_js;
-  "promise": plugins.promise;
-  "q": plugins.q;
   "redis": plugins.redis;
   "restify": plugins.restify;
   "rhea": plugins.rhea;
   "router": plugins.router;
   "sharedb": plugins.sharedb;
   "tedious": plugins.tedious;
-  "when": plugins.when;
   "winston": plugins.winston;
 }
 
@@ -749,12 +744,6 @@ declare namespace plugins {
      */
     [key: string]: boolean | Object | undefined;
   }
-
-  /**
-   * This plugin patches the [bluebird](https://github.com/petkaantonov/bluebird)
-   * module to bind the promise callback the the caller context.
-   */
-  interface bluebird extends Integration {}
 
   /**
    * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -1190,24 +1179,6 @@ declare namespace plugins {
   interface pino extends Integration {}
 
   /**
-   * This plugin patches the [promise-js](https://github.com/kevincennis/promise)
-   * module to bind the promise callback the the caller context.
-   */
-  interface promise_js extends Integration {}
-
-  /**
-   * This plugin patches the [promise](https://github.com/then/promise)
-   * module to bind the promise callback the the caller context.
-   */
-  interface promise extends Integration {}
-
-  /**
-   * This plugin patches the [q](https://github.com/kriskowal/q)
-   * module to bind the promise callback the the caller context.
-   */
-  interface q extends Integration {}
-
-  /**
    * This plugin automatically instruments the
    * [redis](https://github.com/NodeRedis/node_redis) module.
    */
@@ -1288,12 +1259,6 @@ declare namespace plugins {
    * [tedious](https://github.com/tediousjs/tedious/) module.
    */
   interface tedious extends Instrumentation {}
-
-  /**
-   * This plugin patches the [when](https://github.com/cujojs/when)
-   * module to bind the promise callback the the caller context.
-   */
-  interface when extends Integration {}
 
   /**
    * This plugin patches the [winston](https://github.com/winstonjs/winston)

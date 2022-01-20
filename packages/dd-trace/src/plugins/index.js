@@ -4,7 +4,6 @@ module.exports = {
   'amqp10': require('../../../datadog-plugin-amqp10/src'),
   'amqplib': require('../../../datadog-plugin-amqplib/src'),
   'aws-sdk': require('../../../datadog-plugin-aws-sdk/src'),
-  'bluebird': require('../../../datadog-plugin-bluebird/src'),
   'bunyan': require('../../../datadog-plugin-bunyan/src'),
   'cassandra-driver': require('../../../datadog-plugin-cassandra-driver/src'),
   'connect': require('../../../datadog-plugin-connect/src'),
@@ -42,15 +41,11 @@ module.exports = {
   'paperplane': require('../../../datadog-plugin-paperplane/src'),
   'pg': require('../../../datadog-plugin-pg/src'),
   'pino': require('../../../datadog-plugin-pino/src'),
-  'promise': require('../../../datadog-plugin-promise/src'),
-  'promise-js': require('../../../datadog-plugin-promise-js/src'),
-  'q': require('../../../datadog-plugin-q/src'),
   'redis': require('../../../datadog-plugin-redis/src'),
   'restify': require('../../../datadog-plugin-restify/src'),
   'rhea': require('../../../datadog-plugin-rhea/src'),
   'router': require('../../../datadog-plugin-router/src'),
   'sharedb': require('../../../datadog-plugin-sharedb/src'),
   'tedious': require('../../../datadog-plugin-tedious/src'),
-  'when': require('../../../datadog-plugin-when/src'),
   'winston': require('../../../datadog-plugin-winston/src')
 }

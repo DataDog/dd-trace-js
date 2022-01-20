@@ -188,6 +188,7 @@ if (require.main === module) {
   ;(async () => {
     for (const plugin of plugins) {
       const suitePath = path.join(__dirname, `../../../datadog-plugin-${plugin}/test/suite.js`)
+      const altSuitePath = path.join(__dirname, `../../../datadog-instrumentations/test/${plugin}.suite.js`)
       if (fs.existsSync(suitePath)) {
         const proc = childProcess.spawn('node', [suitePath], { stdio: 'inherit' })
         const [code] = await once(proc, 'exit')
@@ -195,9 +196,16 @@ if (require.main === module) {
           process.exitCode = code
           break
         }
+      } else if (fs.existsSync(altSuitePath)) {
+        const proc = childProcess.spawn('node', [altSuitePath], { stdio: 'inherit' })
+        const [code] = await once(proc, 'exit')
+        if (code !== 0) {
+          process.exitCode = code
+          break
+        }
       } else {
         // eslint-disable-next-line no-console
-        console.log('no test file found at', suitePath)
+        console.log('no test file found at', suitePath, 'or', altSuitePath)
       }
     }
   })()

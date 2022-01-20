@@ -21,7 +21,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(['ioredis', 'bluebird']))
+        before(() => agent.load(['ioredis']))
         after(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', done => {

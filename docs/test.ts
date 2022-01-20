@@ -166,7 +166,6 @@ const sharedbOptions = {
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('aws-sdk', awsSdkOptions);
-tracer.use('bluebird');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -234,9 +233,6 @@ tracer.use('paperplane', httpServerOptions);
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');
-tracer.use('promise-js');
-tracer.use('promise');
-tracer.use('q');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');
@@ -245,7 +241,6 @@ tracer.use('rhea');
 tracer.use('router');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
-tracer.use('when');
 tracer.use('winston');
 
 tracer.use('express', false)
