@@ -26,7 +26,6 @@ module.exports = {
   'knex': require('../../../datadog-plugin-knex/src'),
   'koa': require('../../../datadog-plugin-koa/src'),
   'kafkajs': require('../../../datadog-plugin-kafkajs/src'),
-  'limitd-client': require('../../../datadog-plugin-limitd-client/src'),
   'memcached': require('../../../datadog-plugin-memcached/src'),
   'microgateway-core': require('../../../datadog-plugin-microgateway-core/src'),
   'mocha': require('../../../datadog-plugin-mocha/src'),
