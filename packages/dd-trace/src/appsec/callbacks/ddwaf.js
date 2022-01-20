@@ -99,6 +99,7 @@ class WAFCallback {
       Reporter.reportAttack(result.data, store)
     }
 
+    // TODO: use these values later for budget management
     // result.perfData
     // result.perfTotalRuntime
   }
