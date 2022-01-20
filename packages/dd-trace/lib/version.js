@@ -1,1 +1,1 @@
-module.exports = '2.0.0-appsec-beta.5'
+module.exports = '2.0.0-pre'
