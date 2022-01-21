@@ -34,6 +34,7 @@ function enable (config) {
 }
 
 function incomingHttpStartTranslator (data) {
+  // TODO: get span from datadog-core storage instead
   const topSpan = data.req._datadog && data.req._datadog.span
   if (topSpan) {
     topSpan.addTags({
