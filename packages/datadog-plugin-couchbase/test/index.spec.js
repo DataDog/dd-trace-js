@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('Plugin', () => {
   let couchbase
@@ -20,13 +20,16 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
+          debugger;
           return agent.load('couchbase').then(() => {
-            couchbase = require(`../../../versions/couchbase@${version}`).get()
+            // couchbase = require(`../../../versions/couchbase@${version}`).get()
+            couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
             N1qlQuery = couchbase.N1qlQuery
           })
         })
 
         beforeEach(done => {
+          debugger;
           cluster = new couchbase.Cluster('localhost:8091')
           cluster.authenticate('Administrator', 'password')
           cluster.enableCbas('localhost:8095')
@@ -38,16 +41,19 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
-        it('should run the Query callback in the parent context', done => {
+        it.only('should run the Query callback in the parent context', done => {
+          debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.cb')
 
           tracer.scope().activate(span, () => {
+            debugger;
             cluster.query(n1qlQuery, (err, rows) => {
+              debugger;
               expect(tracer.scope().active()).to.equal(span)
               done(err)
             })

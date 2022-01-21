@@ -11,6 +11,7 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
+  debugger;
   const startChn1qlReq = channel('apm:couchbase:_n1qlReq:start')
   const asyncEndChn1qlReq = channel('apm:couchbase:_n1qlReq:async-end')
   const endChn1qlReq = channel('apm:couchbase:_n1qlReq:end')
@@ -19,6 +20,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   bindEventEmitter(Bucket.prototype)
 
   shimmer.wrap(Bucket.prototype, '_maybeInvoke', _maybeInvoke => function (fn, args) {
+    debugger;
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
     const callbackIndex = args.length - 1
@@ -32,6 +34,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   })
 
   shimmer.wrap(Bucket.prototype, 'query', query => function (q, params, callback) {
+    debugger;
     callback = arguments[arguments.length - 1]
 
     if (typeof callback === 'function') {
@@ -42,6 +45,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   })
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
+    debugger;
     if (
       !startCh.hasSubscribers
     ) {
@@ -64,18 +68,30 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
     return _n1qlReq.apply(this, arguments)
   })
-
-  Bucket.upsert = wrap('apm:couchbase:upsert', Bucket.upsert)
-  Bucket.insert = wrap('apm:couchbase:insert', Bucket.insert)
-  Bucket.replace = wrap('apm:couchbase:replace', Bucket.replace)
-  Bucket.append = wrap('apm:couchbase:append', Bucket.append)
-  Bucket.prepend = wrap('apm:couchbase:prepend', Bucket.prepend)
+  debugger;
+  if (Bucket.prototype.upsert) {
+    Bucket.prototype.upsert = wrap('apm:couchbase:upsert', Bucket.prototype.upsert)
+  }
+  if (Bucket.prototype.insert) {
+    Bucket.prototype.insert = wrap('apm:couchbase:insert', Bucket.prototype.insert)
+  }
+  if (Bucket.prototype.replace) {
+    Bucket.prototype.replace = wrap('apm:couchbase:replace', Bucket.prototype.replace)
+  }
+  if (Bucket.prototype.append) {
+    Bucket.prototype.append = wrap('apm:couchbase:append', Bucket.prototype.append)
+  }
+  if (Bucket.prototype.prepend) {
+    Bucket.prototype.prepend = wrap('apm:couchbase:prepend', Bucket.prototype.prepend)
+  }
 
   return Bucket
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
+  // debugger;
   shimmer.wrap(Cluster.prototype, '_maybeInvoke', _maybeInvoke => function (fn, args) {
+    debugger;
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
     const callbackIndex = args.length - 1
@@ -89,6 +105,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
   })
 
   shimmer.wrap(Cluster.prototype, 'query', query => function (q, params, callback) {
+    debugger;
     callback = arguments[arguments.length - 1]
 
     if (typeof callback === 'function') {
@@ -117,6 +134,7 @@ function wrap (prefix, fn) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function (key, value, options, callback) {
+    debugger;
     if (
       !startCh.hasSubscribers
     ) {

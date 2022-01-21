@@ -8,6 +8,7 @@ const ritm = require('../../../dd-trace/src/ritm')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { AsyncResource } = require('async_hooks')
+const shimmer = require('../../../datadog-shimmer')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
