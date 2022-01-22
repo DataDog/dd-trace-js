@@ -26,7 +26,8 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
       scopeManager: sinon.stub().returns('scopeManager'),
-      setUrl: sinon.stub()
+      setUrl: sinon.stub(),
+      flush: sinon.stub().returns('flush')
     }
 
     noop = {
@@ -38,7 +39,8 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       currentSpan: sinon.stub().returns('current'),
       scopeManager: sinon.stub().returns('scopeManager'),
-      setUrl: sinon.stub()
+      setUrl: sinon.stub(),
+      flush: sinon.stub().returns('flush')
     }
 
     log = {
@@ -320,6 +322,15 @@ describe('TracerProxy', () => {
         expect(returnValue).to.equal(proxy)
       })
     })
+
+    describe('flush', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.flush()
+
+        expect(noop.flush).to.have.been.calledWith()
+        expect(returnValue).to.equal('flush')
+      })
+    })
   })
 
   describe('initialized', () => {
@@ -423,6 +434,15 @@ describe('TracerProxy', () => {
 
         expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+      })
+    })
+
+    describe('flush', () => {
+      it('should call the underlying DatadogTracer', () => {
+        const returnValue = proxy.flush('a', 'b', 'c')
+
+        expect(tracer.flush).to.have.been.calledWith('a', 'b', 'c')
+        expect(returnValue).to.equal('flush')
       })
     })
   })

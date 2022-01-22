@@ -319,3 +319,5 @@ scope.bind(emitter, span);
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
+
+tracer.flush();
