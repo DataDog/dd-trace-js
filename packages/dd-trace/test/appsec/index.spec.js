@@ -51,11 +51,15 @@ describe('AppSec Index', () => {
     it('should log when enable fails', () => {
       sinon.stub(log, 'error')
       RuleManager.applyRules.restore()
-      sinon.stub(RuleManager, 'applyRules').throws(new Error('Invalid Rules'))
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'applyRules').throws(err)
 
       AppSec.enable(config)
 
-      expect(log.error).to.have.been.calledOnceWithExactly('Unable to apply AppSec rules: Error: Invalid Rules')
+      expect(log.error).to.have.been.calledTwice
+      expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
+      expect(log.error.secondCall).to.have.been.calledWithExactly(err)
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
       expect(Gateway.manager.addresses).to.be.empty

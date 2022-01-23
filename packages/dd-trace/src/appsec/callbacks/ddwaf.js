@@ -5,8 +5,6 @@ const addresses = require('../addresses')
 const Gateway = require('../gateway/engine')
 const Reporter = require('../reporter')
 
-let warned = false
-
 const validAddressSet = new Set(Object.values(addresses))
 
 const DEFAULT_MAX_BUDGET = 5e3 // µs
@@ -20,10 +18,7 @@ class WAFCallback {
 
       return new DDWAF(rules)
     } catch (err) {
-      if (!warned) {
-        log.warn('AppSec could not load native package. In-app WAF features will not be available.')
-        warned = true
-      }
+      log.error('AppSec could not load native package. In-app WAF features will not be available.')
 
       throw err
     }

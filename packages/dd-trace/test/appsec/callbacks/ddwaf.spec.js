@@ -21,15 +21,14 @@ describe('WAFCallback', () => {
       expect(result).itself.to.respondTo('dispose')
     })
 
-    it('should log exceptions only once', () => {
-      sinon.spy(log, 'warn')
+    it('should log exceptions', () => {
+      sinon.spy(log, 'error')
 
       const wafError = () => WAFCallback.loadDDWAF({})
 
       expect(wafError).to.throw('Invalid rules')
-      expect(wafError).to.throw('Invalid rules')
 
-      expect(log.warn).to.have.been
+      expect(log.error).to.have.been
         .calledOnceWithExactly('AppSec could not load native package. In-app WAF features will not be available.')
     })
   })
@@ -215,10 +214,12 @@ describe('WAFCallback', () => {
       })
 
       it('should catch and log exceptions', () => {
-        sinon.spy(log, 'warn')
+        sinon.spy(log, 'error')
+
+        const err = new Error('Empty params')
 
         const wafContext = {
-          run: sinon.stub().throws(new Error('Empty params'))
+          run: sinon.stub().throws(err)
         }
 
         waf.wafContextCache.set(store.get('context'), wafContext)
@@ -226,7 +227,9 @@ describe('WAFCallback', () => {
         expect(() => waf.action({ a: 1, b: 2 }, store)).to.not.throw()
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
         expect(waf.applyResult).to.not.have.been.called
-        expect(log.warn).to.have.been.calledOnceWithExactly('Error while running the AppSec WAF')
+        expect(log.error).to.have.been.calledTwice
+        expect(log.error.firstCall).to.have.been.calledWithExactly('Error while running the AppSec WAF')
+        expect(log.error.secondCall).to.have.been.calledWithExactly(err)
       })
     })
 
