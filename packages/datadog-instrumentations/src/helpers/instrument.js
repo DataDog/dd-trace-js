@@ -133,18 +133,36 @@ exports.bindEventEmitter = function bindEventEmitter (emitter) {
 
 function wrapAddListener (addListener) {
   return function (name, fn) {
+    debugger;
+    // console.log(1, this.__dd_scope)
+    // console.log(2, fn)
+    // console.log(3, fn._datadog_unbound)
+    // console.log(4, fn.listener)
+    // console.log(fn.toString())
+    if (!this.__dd_scope || !fn || fn._datadog_unbound || fn.listener) {
+      return addListener.apply(this, arguments)
+    }
     const bound = exports.bind(fn)
     this._datadog_events = this._datadog_events || {}
     if (!this._datadog_events[name]) {
       this._datadog_events[name] = new Map()
     }
-    this._datadog_events[name].set(fn, bound)
+
+    const events = this._datadog_events[name]
+
+    if (!events.has(fn)) {
+      events.set(fn, [])
+    }
+    events.get(fn).push(bound)
+
+    // this._datadog_events[name].set(fn, bound)
     addListener.call(this, name, bound)
   }
 }
 
 function wrapRemoveListener (removeListener) {
   return function (name, fn) {
+    debugger;
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
     listeners.delete(fn)
@@ -154,6 +172,7 @@ function wrapRemoveListener (removeListener) {
 
 function wrapRemoveAllListener (removeAllListeners) {
   return function (name, fn) {
+    debugger;
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
     listeners.delete(fn)

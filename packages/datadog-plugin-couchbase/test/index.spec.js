@@ -20,7 +20,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          debugger;
+          // debugger;
           return agent.load('couchbase').then(() => {
             // couchbase = require(`../../../versions/couchbase@${version}`).get()
             couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
@@ -29,7 +29,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          debugger;
+          // debugger;
           cluster = new couchbase.Cluster('localhost:8091')
           cluster.authenticate('Administrator', 'password')
           cluster.enableCbas('localhost:8095')
@@ -44,7 +44,7 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
-        it.only('should run the Query callback in the parent context', done => {
+        it('should run the Query callback in the parent context', done => {
           debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
@@ -60,7 +60,8 @@ describe('Plugin', () => {
           })
         })
 
-        it('should run the Query event listener in the parent context', done => {
+        it.only('should run the Query event listener in the parent context', done => {
+          debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
@@ -68,7 +69,11 @@ describe('Plugin', () => {
           const emitter = cluster.query(n1qlQuery)
 
           tracer.scope().activate(span, () => {
+            debugger;
+            // console.log(tracer.scope().active())
             emitter.on('rows', () => {
+              debugger;
+              console.log(tracer.scope().active())
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
