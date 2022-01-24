@@ -12,6 +12,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_IS_RUM_ACTIVE,
   CI_APP_ORIGIN,
   ERROR_TYPE,
   ERROR_MESSAGE,
@@ -37,7 +38,7 @@ describe('Plugin', () => {
     afterEach(done => appServer.close(done))
 
     describe('cypress', function () {
-      this.timeout(60000)
+      this.timeout(120000)
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
@@ -57,12 +58,16 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.meta).to.contain({
               language: 'javascript',
+              addTags: 'custom',
+              addTagsBeforeEach: 'custom',
+              addTagsAfterEach: 'custom',
               [TEST_FRAMEWORK]: 'cypress',
               [TEST_NAME]: 'can visit a page renders a hello world',
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [TEST_IS_RUM_ACTIVE]: 'true'
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
@@ -76,13 +81,20 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.meta).to.contain({
               language: 'javascript',
+              addTags: 'custom',
+              addTagsBeforeEach: 'custom',
+              addTagsAfterEach: 'custom',
               [TEST_FRAMEWORK]: 'cypress',
               [TEST_NAME]: 'can visit a page will fail',
               [TEST_STATUS]: 'fail',
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [ERROR_TYPE]: 'AssertionError'
+              [ERROR_TYPE]: 'AssertionError',
+              [TEST_IS_RUM_ACTIVE]: 'true'
+            })
+            expect(testSpan.meta).to.not.contain({
+              addTagsAfterFailure: 'custom'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
               "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"

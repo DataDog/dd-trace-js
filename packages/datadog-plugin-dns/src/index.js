@@ -1,201 +1,88 @@
 'use strict'
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const tx = require('../../dd-trace/src/plugins/util/tx')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 
-const rrtypes = {
-  resolveAny: 'ANY',
-  resolve4: 'A',
-  resolve6: 'AAAA',
-  resolveCname: 'CNAME',
-  resolveMx: 'MX',
-  resolveNs: 'NS',
-  resolveTxt: 'TXT',
-  resolveSrv: 'SRV',
-  resolvePtr: 'PTR',
-  resolveNaptr: 'NAPTR',
-  resolveSoa: 'SOA'
-}
+class DNSPlugin extends Plugin {
+  static get name () {
+    return 'dns'
+  }
 
-function createWrapLookup (tracer, config) {
-  return function wrapLookup (lookup) {
-    return function lookupWithTrace (hostname, options, callback) {
-      if (!isArgsValid(arguments, 2)) return lookup.apply(this, arguments)
+  addSubs (func, start, asyncEnd = defaultAsyncEnd) {
+    this.addSub(`apm:dns:${func}:start`, start)
+    this.addSub(`apm:dns:${func}:end`, this.exit.bind(this))
+    this.addSub(`apm:dns:${func}:error`, errorHandler)
+    this.addSub(`apm:dns:${func}:async-end`, asyncEnd)
+  }
 
-      const span = startSpan(tracer, config, 'dns.lookup', {
+  startSpan (name, customTags, store) {
+    const tags = {
+      'service.name': this.config.service || this.tracer._service,
+      'span.kind': 'client'
+    }
+    for (const tag in customTags) {
+      tags[tag] = customTags[tag]
+    }
+    const span = this.tracer.startSpan(name, {
+      childOf: store ? store.span : null,
+      tags
+    })
+    analyticsSampler.sample(span, this.config.measured)
+    return span
+  }
+
+  constructor (...args) {
+    super(...args)
+
+    this.addSubs('lookup', ([hostname]) => {
+      const store = storage.getStore()
+      const span = this.startSpan('dns.lookup', {
         'resource.name': hostname,
         'dns.hostname': hostname
-      })
+      }, store)
+      this.enter(span, store)
+    }, (result) => {
+      const { span } = storage.getStore()
+      span.setTag('dns.address', result)
+      span.finish()
+    })
 
-      wrapArgs(span, arguments, (e, address) => {
-        span.setTag('dns.address', address)
-      })
-
-      return tracer.scope().activate(span, () => lookup.apply(this, arguments))
-    }
-  }
-}
-
-function createWrapLookupService (tracer, config) {
-  return function wrapLookupService (lookupService) {
-    return function lookupServiceWithTrace (address, port, callback) {
-      if (!isArgsValid(arguments, 3)) return lookupService.apply(this, arguments)
-
-      const span = startSpan(tracer, config, 'dns.lookup_service', {
+    this.addSubs('lookup_service', ([address, port]) => {
+      const store = storage.getStore()
+      const span = this.startSpan('dns.lookup_service', {
         'resource.name': `${address}:${port}`,
         'dns.address': address,
         'dns.port': port
-      })
-
-      wrapArgs(span, arguments)
-
-      return tracer.scope().activate(span, () => lookupService.apply(this, arguments))
-    }
-  }
-}
-
-function createWrapResolve (tracer, config) {
-  return function wrapResolve (resolve) {
-    return function resolveWithTrace (hostname, rrtype, callback) {
-      if (!isArgsValid(arguments, 2)) return resolve.apply(this, arguments)
-
-      if (typeof rrtype !== 'string') {
-        rrtype = 'A'
-      }
-
-      const span = wrapResolver(tracer, config, rrtype, arguments)
-
-      return tracer.scope().activate(span, () => resolve.apply(this, arguments))
-    }
-  }
-}
-
-function createWrapResolver (tracer, config, rrtype) {
-  return function wrapResolve (resolve) {
-    return function resolveWithTrace (hostname, callback) {
-      if (!isArgsValid(arguments, 2)) return resolve.apply(this, arguments)
-
-      const span = wrapResolver(tracer, config, rrtype, arguments)
-
-      return tracer.scope().activate(span, () => resolve.apply(this, arguments))
-    }
-  }
-}
-
-function createWrapReverse (tracer, config) {
-  return function wrapReverse (reverse) {
-    return function reverseWithTrace (ip, callback) {
-      if (!isArgsValid(arguments, 2)) return reverse.apply(this, arguments)
-
-      const span = startSpan(tracer, config, 'dns.reverse', {
-        'resource.name': ip,
-        'dns.ip': ip
-      })
-
-      wrapArgs(span, arguments)
-
-      return tracer.scope().activate(span, () => reverse.apply(this, arguments))
-    }
-  }
-}
-
-function startSpan (tracer, config, operation, tags) {
-  const childOf = tracer.scope().active()
-  const span = tracer.startSpan(operation, {
-    childOf,
-    tags: Object.assign({
-      'service.name': config.service || tracer._service,
-      'span.kind': 'client'
-    }, tags)
-  })
-
-  analyticsSampler.sample(span, config.measured)
-
-  return span
-}
-
-function isArgsValid (args, minLength) {
-  if (args.length < minLength) return false
-  if (typeof args[args.length - 1] !== 'function') return false
-
-  return true
-}
-
-function wrapArgs (span, args, callback) {
-  const original = args[args.length - 1]
-  const fn = tx.wrap(span, original)
-
-  args[args.length - 1] = function () {
-    callback && callback.apply(null, arguments)
-    return fn.apply(this, arguments)
-  }
-}
-
-function wrapResolver (tracer, config, rrtype, args) {
-  const hostname = args[0]
-  const span = startSpan(tracer, config, 'dns.resolve', {
-    'resource.name': `${rrtype} ${hostname}`,
-    'dns.hostname': hostname,
-    'dns.rrtype': rrtype
-  })
-
-  wrapArgs(span, args)
-
-  return span
-}
-
-function patchResolveShorthands (tracer, config, shim, prototype) {
-  Object.keys(rrtypes)
-    .filter(method => !!prototype[method])
-    .forEach(method => {
-      shim.wrap(prototype, method, createWrapResolver(tracer, config, rrtypes[method]))
+      }, store)
+      this.enter(span, store)
     })
-}
 
-function unpatchResolveShorthands (shim, prototype) {
-  Object.keys(rrtypes)
-    .filter(method => !!prototype[method])
-    .forEach(method => {
-      shim.unwrap(prototype, method)
+    this.addSubs('resolve', ([hostname, maybeType]) => {
+      const store = storage.getStore()
+      const rrtype = typeof maybeType === 'string' ? maybeType : 'A'
+      const span = this.startSpan('dns.resolve', {
+        'resource.name': `${rrtype} ${hostname}`,
+        'dns.hostname': hostname,
+        'dns.rrtype': rrtype
+      }, store)
+      this.enter(span, store)
     })
+
+    this.addSubs('reverse', ([ip]) => {
+      const store = storage.getStore()
+      const span = this.startSpan('dns.reverse', { 'resource.name': ip, 'dns.ip': ip }, store)
+      this.enter(span, store)
+    })
+  }
 }
 
-module.exports = [
-  {
-    name: 'dns',
-    patch (dns, tracer, config) {
-      this.wrap(dns, 'lookup', createWrapLookup(tracer, config))
-      this.wrap(dns, 'lookupService', createWrapLookupService(tracer, config))
-      this.wrap(dns, 'resolve', createWrapResolve(tracer, config))
-      this.wrap(dns, 'reverse', createWrapReverse(tracer, config))
+function defaultAsyncEnd () {
+  storage.getStore().span.finish()
+}
 
-      patchResolveShorthands(tracer, config, this, dns)
+function errorHandler (error) {
+  storage.getStore().span.setTag('error', error)
+}
 
-      if (dns.Resolver) {
-        this.wrap(dns.Resolver.prototype, 'resolve', createWrapResolve(tracer, config))
-        this.wrap(dns.Resolver.prototype, 'reverse', createWrapReverse(tracer, config))
-
-        patchResolveShorthands(tracer, config, this, dns.Resolver.prototype)
-      }
-    },
-    unpatch (dns) {
-      this.unwrap(dns, [
-        'lookup',
-        'lookupService',
-        'resolve',
-        'reverse'
-      ])
-
-      unpatchResolveShorthands(this, dns)
-
-      if (dns.Resolver) {
-        this.unwrap(dns.prototype.Resolver, [
-          'resolve',
-          'reverse'
-        ])
-
-        unpatchResolveShorthands(this, dns.Resolver.prototype)
-      }
-    }
-  }
-]
+module.exports = DNSPlugin

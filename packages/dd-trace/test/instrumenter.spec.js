@@ -5,6 +5,7 @@
 const proxyquire = require('proxyquire')
 const path = require('path')
 const { expect } = require('chai')
+const ritm = require('../src/ritm')
 
 describe('Instrumenter', () => {
   let Instrumenter
@@ -86,6 +87,7 @@ describe('Instrumenter', () => {
       .forEach(name => {
         delete require.cache[name]
       })
+    ritm.reset()
   })
 
   describe('with integrations enabled', () => {

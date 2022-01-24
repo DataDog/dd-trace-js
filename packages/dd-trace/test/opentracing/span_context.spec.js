@@ -28,7 +28,8 @@ describe('SpanContext', () => {
       noop,
       trace: {
         started: ['span1', 'span2'],
-        finished: ['span1']
+        finished: ['span1'],
+        tags: { foo: 'bar' }
       }
     }
     const spanContext = new SpanContext(props)
@@ -49,7 +50,8 @@ describe('SpanContext', () => {
       _noop: noop,
       _trace: {
         started: ['span1', 'span2'],
-        finished: ['span1']
+        finished: ['span1'],
+        tags: { foo: 'bar' }
       }
     })
   })
@@ -76,7 +78,8 @@ describe('SpanContext', () => {
       _noop: null,
       _trace: {
         started: [],
-        finished: []
+        finished: [],
+        tags: {}
       }
     })
   })

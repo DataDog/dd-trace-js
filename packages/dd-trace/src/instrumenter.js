@@ -6,6 +6,7 @@ const metrics = require('./metrics')
 const Loader = require('./loader')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
+const Plugin = require('./plugins/plugin')
 
 const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
@@ -42,6 +43,9 @@ class Instrumenter {
   }
 
   use (name, config) {
+    if (typeof name !== 'string') return
+    const plugin = plugins[name.toLowerCase()]
+    if (plugin && plugin.prototype instanceof Plugin) return
     if (typeof config === 'boolean') {
       config = { enabled: config }
     }
@@ -49,7 +53,7 @@ class Instrumenter {
     config = getConfig(name, config)
 
     try {
-      this._set(plugins[name.toLowerCase()], { name, config })
+      this._set(plugin, { name, config })
     } catch (e) {
       log.debug(`Could not find a plugin named "${name}".`)
     }
@@ -69,6 +73,7 @@ class Instrumenter {
       Object.keys(plugins)
         .filter(name => !this._plugins.has(plugins[name]))
         .forEach(name => {
+          if (plugins[name].prototype instanceof Plugin) return
           const pluginConfig = {}
           if (serviceMapping && serviceMapping[name]) {
             pluginConfig.service = serviceMapping[name]

@@ -1,77 +1,64 @@
 'use strict'
 
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapCommand (tracer, config) {
-  return function wrapCommand (command) {
-    return function commandWithTrace (queryCompiler, server) {
-      const scope = tracer.scope()
-      const childOf = scope.active()
-      const span = tracer.startSpan('memcached.command', {
+class MemcachedPlugin extends Plugin {
+  static get name () {
+    return 'memcached'
+  }
+
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:memcached:command:start', () => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('memcached.command', {
         childOf,
         tags: {
           'span.kind': 'client',
           'span.type': 'memcached',
-          'service.name': config.service || `${tracer._service}-memcached`
+          'service.name': this.config.service || `${this.tracer._service}-memcached`
         }
       })
 
-      analyticsSampler.sample(span, config.measured)
-
-      arguments[0] = wrapQueryCompiler(queryCompiler, this, server, scope, span)
-
-      return scope.bind(command, span).apply(this, arguments)
-    }
-  }
-}
-
-function wrapQueryCompiler (original, client, server, scope, span) {
-  const parent = scope.active()
-
-  return function () {
-    const query = original.apply(this, arguments)
-    const callback = query.callback
-
-    span.addTags({
-      'resource.name': query.type,
-      'memcached.command': query.command
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
     })
 
-    addHost(span, client, server, query)
+    this.addSub('apm:memcached:command:end', () => {
+      this.exit()
+    })
 
-    query.callback = scope.bind(function (err) {
-      addError(span, err)
+    this.addSub('apm:memcached:command:start:with-args', ({ client, server, query }) => {
+      const span = storage.getStore().span
+      span.addTags({
+        'resource.name': query.type,
+        'memcached.command': query.command
+      })
 
+      const address = getAddress(client, server, query)
+
+      if (address) {
+        span.addTags({
+          'out.host': address[0],
+          'out.port': address[1]
+        })
+      }
+    })
+
+    this.addSub('apm:memcached:command:error', err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
+
+    this.addSub('apm:memcached:command:async-end', () => {
+      const span = storage.getStore().span
       span.finish()
-
-      return callback.apply(this, arguments)
-    }, parent)
-
-    return query
-  }
-}
-
-function addHost (span, client, server, query) {
-  const address = getAddress(client, server, query)
-
-  if (address) {
-    span.addTags({
-      'out.host': address[0],
-      'out.port': address[1]
     })
   }
-}
-
-function addError (span, error) {
-  if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
-  }
-
-  return error
 }
 
 function getAddress (client, server, query) {
@@ -94,13 +81,4 @@ function getAddress (client, server, query) {
   return server && server.split(':')
 }
 
-module.exports = {
-  name: 'memcached',
-  versions: ['>=2.2'],
-  patch (Memcached, tracer, config) {
-    this.wrap(Memcached.prototype, 'command', createWrapCommand(tracer, config))
-  },
-  unpatch (Memcached) {
-    this.unwrap(Memcached.prototype, 'command')
-  }
-}
+module.exports = MemcachedPlugin

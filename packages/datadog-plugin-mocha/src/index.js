@@ -122,6 +122,7 @@ function getAllTestsInSuite (root) {
 function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
+      this.once('end', () => tracer._exporter._writer.flush())
       runTests.apply(this, arguments)
       const suite = arguments[0]
       const tests = getAllTestsInSuite(suite)
@@ -239,8 +240,8 @@ module.exports = [
     name: 'mocha',
     versions: ['>=5.2.0'],
     file: 'lib/runner.js',
-    patch (Runner, tracer) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('mocha')
+    patch (Runner, tracer, config) {
+      const testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', config)
       const sourceRoot = process.cwd()
       this.wrap(Runner.prototype, 'runTests', createWrapRunTests(tracer, testEnvironmentMetadata, sourceRoot))
       this.wrap(Runner.prototype, 'runTest', createWrapRunTest(tracer, testEnvironmentMetadata, sourceRoot))

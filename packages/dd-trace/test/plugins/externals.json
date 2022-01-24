@@ -8,7 +8,7 @@
   "express": [
     {
       "name": "loopback",
-      "versions": [">=2.13.0"]
+      "versions": [">=2.38.1"]
     }
   ],
   "fastify": [
@@ -61,6 +61,10 @@
     {
       "name": "sqlite3",
       "versions": ["4.0.7"]
+    },
+    {
+      "name": "@vscode/sqlite3",
+      "versions": ["5.0.7"]
     }
   ],
   "koa": [

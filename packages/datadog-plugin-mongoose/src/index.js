@@ -1,6 +1,6 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/promise')
+const { wrapThen } = require('../../datadog-instrumentations/src/helpers/promise')
 
 function createWrapCollectionAddQueue (tracer, config) {
   return function wrapAddQueue (addQueue) {
@@ -33,7 +33,7 @@ module.exports = [
     versions: ['>=4.6.4'],
     patch (mongoose, tracer, config) {
       if (mongoose.Promise !== global.Promise) {
-        this.wrap(mongoose.Promise.prototype, 'then', tx.createWrapThen(tracer, config))
+        this.wrap(mongoose.Promise.prototype, 'then', wrapThen)
       }
 
       this.wrap(mongoose.Collection.prototype, 'addQueue', createWrapCollectionAddQueue(tracer, config))

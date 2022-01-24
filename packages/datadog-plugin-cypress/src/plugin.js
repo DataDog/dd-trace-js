@@ -4,6 +4,7 @@ const {
   TEST_SUITE,
   TEST_STATUS,
   TEST_FRAMEWORK_VERSION,
+  TEST_IS_RUM_ACTIVE,
   getTestEnvironmentMetadata,
   CI_APP_ORIGIN,
   getTestParentSpan
@@ -66,18 +67,27 @@ module.exports = (on, config) => {
           }
         })
       }
-      return null
+      return activeSpan ? activeSpan._spanContext._traceId.toString(10) : null
     },
     'dd:afterEach': (test) => {
-      const { state, error } = test
+      const { state, error, isRUMActive } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)
         }
+        if (isRUMActive) {
+          activeSpan.setTag(TEST_IS_RUM_ACTIVE, true)
+        }
         activeSpan.finish()
       }
       activeSpan = null
+      return null
+    },
+    'dd:addTags': (tags) => {
+      if (activeSpan) {
+        activeSpan.addTags(tags)
+      }
       return null
     }
   })

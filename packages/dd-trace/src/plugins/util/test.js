@@ -24,6 +24,7 @@ const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
+const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.msg'
@@ -43,6 +44,7 @@ module.exports = {
   TEST_STATUS,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
+  TEST_IS_RUM_ACTIVE,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
@@ -54,7 +56,7 @@ module.exports = {
   getTestSuitePath
 }
 
-function getTestEnvironmentMetadata (testFramework) {
+function getTestEnvironmentMetadata (testFramework, config) {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
   const {
@@ -83,13 +85,17 @@ function getTestEnvironmentMetadata (testFramework) {
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
-  return {
+  const metadata = {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
   }
+  if (config && config.service) {
+    metadata['service.name'] = config.service
+  }
+  return metadata
 }
 
 function getTestParametersString (parametersByTestName, testName) {

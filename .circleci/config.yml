@@ -249,6 +249,18 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
 
+  node-ci-visibility-performance-benchmark:
+    docker:
+      - image: node
+    resource_class: medium
+    working_directory: ~/dd-trace-js
+
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: CI Visibility Performance Overhead Test
+          command: yarn bench:e2e:ci-visibility
+
   # Shimmer tests
 
   shimmer:
@@ -265,6 +277,29 @@ jobs:
           name: Unit tests
           command: yarn test:shimmer:ci
       - store-test-results-and-coverage
+
+  # Instrumentation tests
+
+  instrumentations:
+    parameters:
+      node-version:
+        type: string
+    docker:
+      - image: node:<< parameters.node-version >>
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: Install dependencies
+          command: |
+            export PLUGINS="bluebird|promise-js|promise|q|when"
+            node ./scripts/install_plugin_modules
+      - run:
+          name: Unit tests
+          command: yarn test:instrumentations:ci
+      - store-test-results-and-coverage
+
 
   # Core tests
 
@@ -654,9 +689,7 @@ jobs:
     <<: *node-upstream-base
     resource_class: large
 
-  node-upstream-pino:
-    <<: *node-upstream-base
-    resource_class: medium
+  node-upstream-pino: *node-upstream-base
 
   node-upstream-promise: *node-upstream-base
 
@@ -711,6 +744,7 @@ workflows:
               node-version: ["12", "14", "16", "latest"]
       - node-core-windows
       - shimmer: *matrix-supported-node-versions
+      - instrumentations: *matrix-supported-node-versions
       - node-integration: *matrix-supported-node-versions
       - node-amqplib: *matrix-supported-node-versions
       - node-amqp10: *matrix-supported-node-versions
@@ -784,6 +818,7 @@ workflows:
       - codecov:
           requires:
             - shimmer
+            - instrumentations
             - node-core
             - node-amqplib
             - node-amqp10
@@ -822,7 +857,7 @@ workflows:
             - node-next
             - node-oracledb
             - node-paperplane
-            - node-pino
+            # - node-pino
             - node-postgres
             - node-promise-js
             - node-promise
@@ -872,6 +907,7 @@ workflows:
             - node-bench-sirun-profiler
             - node-bench-sirun-plugin-dns
             - node-bench-sirun-plugin-graphql
+      - node-ci-visibility-performance-benchmark
   upstream: &upstream-jobs
     jobs:
       # - node-upstream-node
@@ -886,7 +922,8 @@ workflows:
       - node-upstream-connect: *matrix-supported-node-versions
       - node-upstream-graphql: *matrix-supported-node-versions
       - node-upstream-koa: *matrix-supported-node-versions
-      - node-upstream-pino: *matrix-supported-node-versions
+      # TODO: re-enable if it ever stops being flaky
+      # - node-upstream-pino: *matrix-supported-node-versions
       - node-upstream-promise: *matrix-supported-node-versions
       - node-upstream-q: *matrix-supported-node-versions
 

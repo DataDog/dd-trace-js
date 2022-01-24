@@ -4,6 +4,7 @@ const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
 const os = require('os')
+const path = require('path')
 const proxyquire = require('../proxyquire')
 const semver = require('semver')
 const metrics = require('../../src/metrics')
@@ -28,8 +29,22 @@ afterEach(() => {
   storage.enterWith(undefined)
 })
 
+function loadInst (plugin) {
+  const instrumentations = []
+  const instrument = {
+    addHook (instrumentation) {
+      instrumentations.push(instrumentation)
+    }
+  }
+  const instPath = path.join(__dirname, `../../../datadog-instrumentations/src/${plugin}.js`)
+  proxyquire.noPreserveCache()(instPath, {
+    './helpers/instrument': instrument
+  })
+  return instrumentations
+}
+
 function withVersions (plugin, modules, range, cb) {
-  const instrumentations = [].concat(plugin)
+  const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
   const names = [].concat(plugin).map(instrumentation => instrumentation.name)
 
   modules = [].concat(modules)
