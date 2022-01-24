@@ -20,16 +20,13 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          // debugger;
           return agent.load('couchbase').then(() => {
-            // couchbase = require(`../../../versions/couchbase@${version}`).get()
             couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
             N1qlQuery = couchbase.N1qlQuery
           })
         })
 
         beforeEach(done => {
-          // debugger;
           cluster = new couchbase.Cluster('localhost:8091')
           cluster.authenticate('Administrator', 'password')
           cluster.enableCbas('localhost:8095')
@@ -45,15 +42,12 @@ describe('Plugin', () => {
         })
 
         it('should run the Query callback in the parent context', done => {
-          debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.cb')
 
           tracer.scope().activate(span, () => {
-            debugger;
             cluster.query(n1qlQuery, (err, rows) => {
-              debugger;
               expect(tracer.scope().active()).to.equal(span)
               done(err)
             })
@@ -61,7 +55,6 @@ describe('Plugin', () => {
         })
 
         it('should run the Query event listener in the parent context', done => {
-          debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
@@ -69,9 +62,7 @@ describe('Plugin', () => {
           
 
           tracer.scope().activate(span, () => {
-            debugger;
             emitter.on('rows', () => {
-              debugger;
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
@@ -81,7 +72,6 @@ describe('Plugin', () => {
         it('should run the Bucket event listener in the parent context', done => {
           bucket.disconnect()
           const span = tracer.startSpan('test')
-
           bucket = cluster.openBucket('datadog-test')
 
           tracer.scope().activate(span, () => {
@@ -105,13 +95,11 @@ describe('Plugin', () => {
 
         describe('queries on cluster', () => {
           it('should handle N1QL queries', done => {
-            debugger;
             const query = 'SELECT 1+1'
             const n1qlQuery = N1qlQuery.fromString(query)
 
             agent
               .use(traces => {
-                debugger;
                 const span = traces[0][0]
                 expect(span).to.have.property('name', 'couchbase.query')
                 expect(span).to.have.property('service', 'test-couchbase')

@@ -121,13 +121,6 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
 }
 
 exports.bindEventEmitter = function bindEventEmitter (emitter) {
-  if (!isEmitter(emitter)) {
-    return emitter
-  }
-
-  if (emitter.__is_dd_emitter) {
-    return emitter
-  }
   shimmer.wrap(emitter, 'addListener', wrapAddListener)
   shimmer.wrap(emitter, 'prependListener', wrapAddListener)
   shimmer.wrap(emitter, 'on', wrapAddListener)
@@ -135,24 +128,18 @@ exports.bindEventEmitter = function bindEventEmitter (emitter) {
   shimmer.wrap(emitter, 'removeListener', wrapRemoveListener)
   shimmer.wrap(emitter, 'off', wrapRemoveListener)
   shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
-  // debugger;
   emitter.__is_dd_emitter = true
 }
 
 function wrapAddListener (addListener) {
   return function (name, fn) {
-    // debugger;
-    //
-    // const bound = exports.bind(fn)
     const ar = new AsyncResource('bound-anonymous-fn')
     const bound = function () {
-      console.log('we rannn')
       return ar.runInAsyncScope(() => {
         return fn.apply(this, arguments)
       })
     }
     bound._datadog_unbound = fn
-    debugger;
     this._datadog_events = this._datadog_events || {}
     if (!this._datadog_events[name]) {
       this._datadog_events[name] = new Map()
@@ -164,7 +151,6 @@ function wrapAddListener (addListener) {
 
 function wrapRemoveListener (removeListener) {
   return function (name, fn) {
-    debugger;
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
     listeners.delete(fn)
@@ -174,7 +160,6 @@ function wrapRemoveListener (removeListener) {
 
 function wrapRemoveAllListener (removeAllListeners) {
   return function (name, fn) {
-    // debugger;
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
     listeners.delete(fn)
@@ -185,12 +170,4 @@ function wrapRemoveAllListener (removeAllListeners) {
     }
     removeAllListeners.call(this, name, bound)
   }
-}
-
-function isEmitter(emitter) {
-  return emitter &&
-      typeof emitter.emit === 'function' &&
-      typeof emitter.on === 'function' &&
-      typeof emitter.addListener === 'function' &&
-      typeof emitter.removeListener === 'function'
 }
