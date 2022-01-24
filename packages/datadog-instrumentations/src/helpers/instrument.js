@@ -121,6 +121,13 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
 }
 
 exports.bindEventEmitter = function bindEventEmitter (emitter) {
+  if (!isEmitter(emitter)) {
+    return emitter
+  }
+
+  if (emitter.__is_dd_emitter) {
+    return emitter
+  }
   shimmer.wrap(emitter, 'addListener', wrapAddListener)
   shimmer.wrap(emitter, 'prependListener', wrapAddListener)
   shimmer.wrap(emitter, 'on', wrapAddListener)
@@ -128,6 +135,7 @@ exports.bindEventEmitter = function bindEventEmitter (emitter) {
   shimmer.wrap(emitter, 'removeListener', wrapRemoveListener)
   shimmer.wrap(emitter, 'off', wrapRemoveListener)
   shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
+  debugger;
   emitter.__is_dd_emitter = true
 }
 
@@ -167,4 +175,12 @@ function wrapRemoveAllListener (removeAllListeners) {
     }
     removeAllListeners.call(this, name, bound)
   }
+}
+
+function isEmitter(emitter) {
+  return emitter &&
+      typeof emitter.emit === 'function' &&
+      typeof emitter.on === 'function' &&
+      typeof emitter.addListener === 'function' &&
+      typeof emitter.removeListener === 'function'
 }
