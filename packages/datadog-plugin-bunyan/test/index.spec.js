@@ -65,6 +65,7 @@ describe('Plugin', () => {
             expect(stream.write).to.have.been.called
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
+            console.error(record)
 
             expect(record.dd).to.deep.include({
               trace_id: span.context().toTraceId(),

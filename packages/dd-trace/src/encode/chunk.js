@@ -19,11 +19,11 @@ class Chunk {
     const offset = this.length
 
     if (length < 0x20) { // fixstr
-      this._reserve(length + 1)
+      this.reserve(length + 1)
       this.buffer[this.length] = length | 0xa0
       this.length += 1
     } else if (length < 0x100000000) { // str 32
-      this._reserve(length + 5)
+      this.reserve(length + 5)
       this.buffer[this.length] = 0xdb
       this.buffer.writeUInt32BE(length, this.length + 1)
       this.length += 5
