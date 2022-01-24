@@ -152,6 +152,7 @@ function wrapAddListener (addListener) {
       })
     }
     bound._datadog_unbound = fn
+    debugger;
     this._datadog_events = this._datadog_events || {}
     if (!this._datadog_events[name]) {
       this._datadog_events[name] = new Map()
@@ -163,7 +164,7 @@ function wrapAddListener (addListener) {
 
 function wrapRemoveListener (removeListener) {
   return function (name, fn) {
-    // debugger;
+    debugger;
     const listeners = this._datadog_events && this._datadog_events[name]
     const bound = listeners.get(fn)
     listeners.delete(fn)

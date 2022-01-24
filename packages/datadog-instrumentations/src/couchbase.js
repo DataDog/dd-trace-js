@@ -48,8 +48,9 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   const endChPrepend = channel('apm:couchbase:prepend:end')
   const errorChPrepend = channel('apm:couchbase:prepend:error')
 
+  debugger;
   bindEventEmitter(Bucket.prototype)
-
+  bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
   shimmer.wrap(Bucket.prototype, '_maybeInvoke', _maybeInvoke => function (fn, args) {
     debugger;
     
@@ -64,7 +65,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     if (callback instanceof Function) {
       
       console.log(id, triggerAsyncId())
-      args[callbackIndex] = bindAsyncResource(ar, callback)
+      args[callbackIndex] = bind(callback)
     }
     // return _maybeInvoke.apply(this, arguments)
     
@@ -80,11 +81,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     callback = arguments[arguments.length - 1]
 
     if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = bindAsyncResource(ar, callback)
+      arguments[arguments.length - 1] = bind(callback)
     }
 
     // return query.apply(this, arguments)
     return ar.runInAsyncScope(() => {
+      // return query.apply(this, arguments)
       const res = query.apply(this, arguments)
       bindEventEmitter(res)
       return res
@@ -384,8 +386,11 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
     const id = executionAsyncId()
       
     return ar.runInAsyncScope(() => {
-      console.log(id, executionAsyncId(),triggerAsyncId())
-      return query.apply(this, arguments)
+      // console.log(id, executionAsyncId(),triggerAsyncId())
+      // return query.apply(this, arguments)
+      const res = query.apply(this, arguments)
+      bindEventEmitter(res)
+      return res
     })
   })
 

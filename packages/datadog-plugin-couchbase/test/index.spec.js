@@ -60,23 +60,18 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should run the Query event listener in the parent context', done => {
+        it('should run the Query event listener in the parent context', done => {
           debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
-
+          const emitter = cluster.query(n1qlQuery)
           
 
           tracer.scope().activate(span, () => {
             debugger;
-            // console.log(tracer.scope().active())
-            const emitter = cluster.query(n1qlQuery)
-            console.log(emitter)
             emitter.on('rows', () => {
               debugger;
-              console.trace(tracer.scope().active())
-              // console.log(tracer.scope().active())
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
@@ -110,11 +105,13 @@ describe('Plugin', () => {
 
         describe('queries on cluster', () => {
           it('should handle N1QL queries', done => {
+            debugger;
             const query = 'SELECT 1+1'
             const n1qlQuery = N1qlQuery.fromString(query)
 
             agent
               .use(traces => {
+                debugger;
                 const span = traces[0][0]
                 expect(span).to.have.property('name', 'couchbase.query')
                 expect(span).to.have.property('service', 'test-couchbase')

@@ -23,7 +23,8 @@ class CouchBasePlugin extends Plugin {
       'db.type': 'couchbase',
       'component': 'couchbase',
       'service.name': this.config.service || `${this.tracer._service}-couchbase`,
-      'resource.name': operation,
+      'resource.name': `couchbase.${operation}`,
+      'span.kind': 'client'
     }
 
     for (const tag in customTags) {
@@ -54,6 +55,7 @@ class CouchBasePlugin extends Plugin {
           'component': 'couchbase',
           'service.name': this.config.service || `${this.tracer._service}-couchbase`,
           'resource.name': resource,
+          'span.kind': 'client'
         }
       })
 
