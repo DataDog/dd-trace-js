@@ -11,11 +11,42 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
-  debugger;
+  // debugger;
   const startChn1qlReq = channel('apm:couchbase:_n1qlReq:start')
   const asyncEndChn1qlReq = channel('apm:couchbase:_n1qlReq:async-end')
   const endChn1qlReq = channel('apm:couchbase:_n1qlReq:end')
   const errorChn1qlReq = channel('apm:couchbase:_n1qlReq:error')
+  
+  // Bucket.prototype.upsert = wrap('apm:couchbase:upsert', Bucket.prototype.upsert, ar)
+  // Bucket.prototype.insert = wrap('apm:couchbase:insert', Bucket.prototype.insert, ar)
+  // Bucket.prototype.replace = wrap('apm:couchbase:replace', Bucket.prototype.replace, ar)
+  // Bucket.prototype.append = wrap('apm:couchbase:append', Bucket.prototype.append, ar)
+  // Bucket.prototype.prepend = wrap('apm:couchbase:prepend', Bucket.prototype.prepend, ar)
+
+  const startChUpsert = channel('apm:couchbase:upsert:start')
+  const asyncEndChUpsert = channel('apm:couchbase:upsert:async-end')
+  const endChUpsert = channel('apm:couchbase:upsert:end')
+  const errorChUpsert = channel('apm:couchbase:upsert:error')
+
+  const startChInsert = channel('apm:couchbase:insert:start')
+  const asyncEndChInsert = channel('apm:couchbase:insert:async-end')
+  const endChInsert = channel('apm:couchbase:insert:end')
+  const errorChInsert = channel('apm:couchbase:insert:error')
+
+  const startChReplace = channel('apm:couchbase:replace:start')
+  const asyncEndChReplace = channel('apm:couchbase:replace:async-end')
+  const endChReplace = channel('apm:couchbase:replace:end')
+  const errorChReplace = channel('apm:couchbase:replace:error')
+
+  const startChAppend = channel('apm:couchbase:append:start')
+  const asyncEndChAppend = channel('apm:couchbase:append:async-end')
+  const endChAppend = channel('apm:couchbase:append:end')
+  const errorChAppend = channel('apm:couchbase:append:error')
+
+  const startChPrepend = channel('apm:couchbase:prepend:start')
+  const asyncEndChPrepend = channel('apm:couchbase:prepend:async-end')
+  const endChPrepend = channel('apm:couchbase:prepend:end')
+  const errorChPrepend = channel('apm:couchbase:prepend:error')
 
   bindEventEmitter(Bucket.prototype)
 
@@ -64,19 +95,26 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     if (
       !startChn1qlReq.hasSubscribers
     ) {
-      return fn.apply(this, arguments)
+      console.log('yeee')
+      return  _n1qlReq.apply(this, arguments)
     }
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
 
     const n1qlQuery = q && q.statement
 
     startChn1qlReq.publish([n1qlQuery, this.config, this])
-
-    const cb = bind(() => {
+    let id2 = executionAsyncId()
+    const cb = bind(function () {
+      debugger;
+      console.log('sirrrr')
+      console.log('jahh', id2, triggerAsyncId())
       asyncEndChn1qlReq.publish(undefined)
     })
-
-    const cb2 = bind(error => {
+    id2 = executionAsyncId()
+    const cb2 = bind(function(error, result) {
+      debugger;
+      console.log('worrrr')
+      console.log('sahh', id2, triggerAsyncId())
       if (error) {
         errorChn1qlReq.publish(error)
       }
@@ -84,27 +122,32 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     })
 
     debugger;
-    emitter.once('rows', cb)
-    emitter.once('error', cb2)
+    // emitter.once('rows', bind(() => {
+    //   debugger;
+    //   console.log('sirrrr')
+    //   console.log('jahh', id2, triggerAsyncId())
+    //   asyncEndChn1qlReq.publish(undefined)
+    // }))
+    // emitter.once('error', bind((error) => {
+    //   debugger;
+    //   console.log('worrrr')
+    //   console.log('sahh', id2, triggerAsyncId())
+    //   if (error) {
+    //     errorChn1qlReq.publish(error)
+    //   }
+    //   asyncEndChn1qlReq.publish(undefined)
+    // }))
+
+    bindEventEmitter(emitter)
 
     try {
-      // return _n1qlReq.apply(this, arguments)
-      // const id = executionAsyncId()
-      // console.log(id)
-      // return AsyncResource.bind(() => {
-      //   console.log(triggerAsyncId())
-      //   return _n1qlReq.apply(this, arguments)
-      // })
-      // return function () {
-      //   return ar.runInAsyncScope(() => {
-      //     return _n1qlReq.apply(this, arguments)
-      //   })
-      // }
-      // _n1qlReq = bind(_n1qlReq)
-      // return _n1qlReq.apply(this, arguments)
       debugger;
       // return AsyncResource.bind(_n1qlReq.apply(this, arguments))
+      const id = executionAsyncId()
+      
+      
       return ar.runInAsyncScope(() => {
+        console.log('blah', id, triggerAsyncId())
         return _n1qlReq.apply(this, arguments)
       })
     } catch (err) {
@@ -117,22 +160,208 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     }
     
   })
-  debugger;
-  if (Bucket.prototype.upsert) {
-    Bucket.prototype.upsert = wrap('apm:couchbase:upsert', Bucket.prototype.upsert)
-  }
-  if (Bucket.prototype.insert) {
-    Bucket.prototype.insert = wrap('apm:couchbase:insert', Bucket.prototype.insert)
-  }
-  if (Bucket.prototype.replace) {
-    Bucket.prototype.replace = wrap('apm:couchbase:replace', Bucket.prototype.replace)
-  }
-  if (Bucket.prototype.append) {
-    Bucket.prototype.append = wrap('apm:couchbase:append', Bucket.prototype.append)
-  }
-  if (Bucket.prototype.prepend) {
-    Bucket.prototype.prepend = wrap('apm:couchbase:prepend', Bucket.prototype.prepend)
-  }
+  
+  shimmer.wrap(Bucket.prototype, 'upsert', upsert => function (key, value, options, callback) {
+    debugger;
+    const ar = new AsyncResource('bound-anonymous-fn')
+    if (
+      !startChUpsert.hasSubscribers
+    ) {
+      return upsert.apply(this, arguments)
+    }
+
+    const callbackIndex = findCallbackIndex(arguments)
+
+    if (callbackIndex < 0) return upsert.apply(this, arguments)
+
+    const cb = bind(arguments[callbackIndex])
+
+    startChUpsert.publish([this])
+
+    arguments[callbackIndex] = bind(function (error, result) {
+      if (error) {
+        errorChUpsert.publish(error)
+      }
+      asyncEndChUpsert.publish(result)
+      return cb.apply(this, arguments)
+    })
+
+    try {
+      // return fn.apply(this, arguments)
+      return ar.runInAsyncScope(() => {
+        return upsert.apply(this, arguments)
+      })
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      errorChUpsert.publish(error)
+
+      throw error
+    } finally {
+      endChUpsert.publish(undefined)
+    }
+  })
+  shimmer.wrap(Bucket.prototype, 'insert', insert => function (key, value, options, callback) {
+    debugger;
+    const ar = new AsyncResource('bound-anonymous-fn')
+    if (
+      !startChInsert.hasSubscribers
+    ) {
+      return insert.apply(this, arguments)
+    }
+
+    const callbackIndex = findCallbackIndex(arguments)
+
+    if (callbackIndex < 0) return insert.apply(this, arguments)
+
+    const cb = bind(arguments[callbackIndex])
+
+    startChInsert.publish([this])
+
+    arguments[callbackIndex] = bind(function (error, result) {
+      if (error) {
+        errorChInsert.publish(error)
+      }
+      asyncEndChInsert.publish(result)
+      return cb.apply(this, arguments)
+    })
+
+    try {
+      // return fn.apply(this, arguments)
+      return ar.runInAsyncScope(() => {
+        return insert.apply(this, arguments)
+      })
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      errorChInsert.publish(error)
+
+      throw error
+    } finally {
+      endChInsert.publish(undefined)
+    }
+  })
+  shimmer.wrap(Bucket.prototype, 'replace', replace => function (key, value, options, callback) {
+    debugger;
+    const ar = new AsyncResource('bound-anonymous-fn')
+    if (
+      !startChReplace.hasSubscribers
+    ) {
+      return replace.apply(this, arguments)
+    }
+
+    const callbackIndex = findCallbackIndex(arguments)
+
+    if (callbackIndex < 0) return replace.apply(this, arguments)
+
+    const cb = bind(arguments[callbackIndex])
+
+    startChReplace.publish([this])
+
+    arguments[callbackIndex] = bind(function (error, result) {
+      if (error) {
+        errorChReplace.publish(error)
+      }
+      asyncEndChReplace.publish(result)
+      return cb.apply(this, arguments)
+    })
+
+    try {
+      // return fn.apply(this, arguments)
+      return ar.runInAsyncScope(() => {
+        return replace.apply(this, arguments)
+      })
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      errorChReplace.publish(error)
+
+      throw error
+    } finally {
+      endChReplace.publish(undefined)
+    }
+  })
+  shimmer.wrap(Bucket.prototype, 'append', append => function (key, value, options, callback) {
+    debugger;
+    const ar = new AsyncResource('bound-anonymous-fn')
+    if (
+      !startChAppend.hasSubscribers
+    ) {
+      return append.apply(this, arguments)
+    }
+
+    const callbackIndex = findCallbackIndex(arguments)
+
+    if (callbackIndex < 0) return append.apply(this, arguments)
+
+    const cb = bind(arguments[callbackIndex])
+
+    startChAppend.publish([this])
+
+    arguments[callbackIndex] = bind(function (error, result) {
+      if (error) {
+        errorChAppend.publish(error)
+      }
+      asyncEndChAppend.publish(result)
+      return cb.apply(this, arguments)
+    })
+
+    try {
+      // return fn.apply(this, arguments)
+      return ar.runInAsyncScope(() => {
+        return append.apply(this, arguments)
+      })
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      errorChAppend.publish(error)
+
+      throw error
+    } finally {
+      endChAppend.publish(undefined)
+    }
+  })
+  shimmer.wrap(Bucket.prototype, 'prepend', prepend => function (key, value, options, callback) {
+    debugger;
+    const ar = new AsyncResource('bound-anonymous-fn')
+    if (
+      !startChPrepend.hasSubscribers
+    ) {
+      return prepend.apply(this, arguments)
+    }
+
+    const callbackIndex = findCallbackIndex(arguments)
+
+    if (callbackIndex < 0) return prepend.apply(this, arguments)
+
+    const cb = bind(arguments[callbackIndex])
+
+    startChPrepend.publish([this])
+
+    arguments[callbackIndex] = bind(function (error, result) {
+      if (error) {
+        errorChPrepend.publish(error)
+      }
+      asyncEndChPrepend.publish(result)
+      return cb.apply(this, arguments)
+    })
+
+    try {
+      // return fn.apply(this, arguments)
+      return ar.runInAsyncScope(() => {
+        return prepend.apply(this, arguments)
+      })
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      errorChPrepend.publish(error)
+
+      throw error
+    } finally {
+      endChPrepend.publish(undefined)
+    }
+  })
+  // Bucket.prototype.upsert = wrap('apm:couchbase:upsert', Bucket.prototype.upsert, ar)
+  // Bucket.prototype.insert = wrap('apm:couchbase:insert', Bucket.prototype.insert, ar)
+  // Bucket.prototype.replace = wrap('apm:couchbase:replace', Bucket.prototype.replace, ar)
+  // Bucket.prototype.append = wrap('apm:couchbase:append', Bucket.prototype.append, ar)
+  // Bucket.prototype.prepend = wrap('apm:couchbase:prepend', Bucket.prototype.prepend, ar)
+  
 
   // bindEventEmitter(Bucket.prototype)
   return Bucket
@@ -190,7 +419,7 @@ function findCallbackIndex (args) {
 }
 
 
-function wrap (prefix, fn) {
+function wrap (prefix, fn, ar) {
   debugger;
   const startCh = channel(prefix + ':start')
   const endCh = channel(prefix + ':end')
@@ -199,7 +428,7 @@ function wrap (prefix, fn) {
 
   const wrapped = function (key, value, options, callback) {
     debugger;
-    const ar = new AsyncResource('bound-anonymous-fn')
+    // create asyncResource method
     if (
       !startCh.hasSubscribers
     ) {
@@ -210,17 +439,18 @@ function wrap (prefix, fn) {
 
     if (callbackIndex < 0) return fn.apply(this, arguments)
 
-    const cb = bind(arguments[callbackIndex])
+    // const cb = bind(arguments[callbackIndex])
+    const cb = bindAsyncResource.call(ar, arguments[callbackIndex])
 
     startCh.publish([this])
 
-    arguments[callbackIndex] = function (error, result) {
+    arguments[callbackIndex] = bind(function (error, result) {
       if (error) {
         errorCh.publish(error)
       }
       asyncEndCh.publish(result)
-      cb.apply(this, arguments)
-    }
+      return cb.apply(this, arguments)
+    })
 
     try {
       // return fn.apply(this, arguments)

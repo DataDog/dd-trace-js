@@ -10,7 +10,7 @@ class CouchBasePlugin extends Plugin {
   }
   
   addSubs (func, start, asyncEnd = defaultAsyncEnd) {
-    debugger;
+    // debugger;
     this.addSub(`apm:couchbase:${func}:start`, start)
     this.addSub(`apm:couchbase:${func}:end`, this.exit.bind(this))
     this.addSub(`apm:couchbase:${func}:error`, errorHandler)

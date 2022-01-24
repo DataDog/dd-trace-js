@@ -120,7 +120,7 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
   }
 }
 
-exports.bindEventEmitter = function bindEventEmitter (emitter, ar) {
+exports.bindEventEmitter = function bindEventEmitter (emitter) {
   if (!isEmitter(emitter)) {
     return emitter
   }
@@ -141,10 +141,12 @@ exports.bindEventEmitter = function bindEventEmitter (emitter, ar) {
 
 function wrapAddListener (addListener) {
   return function (name, fn) {
-    // debugger;
+    debugger;
+    //
     // const bound = exports.bind(fn)
+    const ar = new AsyncResource('bound-anonymous-fn')
     const bound = function () {
-      return new AsyncResource('bound-anonymous-fn').runInAsyncScope(() => {
+      return ar.runInAsyncScope(() => {
         return fn.apply(this, arguments)
       })
     }
