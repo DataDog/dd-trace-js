@@ -83,6 +83,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
       asyncEndChn1qlReq.publish(undefined)
     })
 
+    debugger;
     emitter.once('rows', cb)
     emitter.once('error', cb2)
 
