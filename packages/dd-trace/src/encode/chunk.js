@@ -14,34 +14,11 @@ class Chunk {
     this._minSize = minSize
   }
 
-<<<<<<< HEAD
-=======
-  push (...bytes) {
-    this._reserve(bytes.length)
-
-    this.buffer.set(bytes, this.length);
-    this.length += bytes.length;
-  }
-
->>>>>>> 674ad7a6 (less closures and more direct assignment when creating msgpack)
   write (value) {
     const length = Buffer.byteLength(value)
     const offset = this.length
 
     if (length < 0x20) { // fixstr
-<<<<<<< HEAD
-      this.reserve(length + 1)
-      this.length += 1
-      this.buffer[offset] = length | 0xa0
-    } else if (length < 0x100000000) { // str 32
-      this.reserve(length + 5)
-      this.length += 5
-      this.buffer[offset] = 0xdb
-      this.buffer[offset + 1] = length >> 24
-      this.buffer[offset + 2] = length >> 16
-      this.buffer[offset + 3] = length >> 8
-      this.buffer[offset + 4] = length
-=======
       this._reserve(length + 1)
       this.buffer[this.length] = length | 0xa0
       this.length += 1
@@ -50,7 +27,6 @@ class Chunk {
       this.buffer[this.length] = 0xdb
       this.buffer.writeUInt32BE(length, this.length + 1)
       this.length += 5
->>>>>>> 674ad7a6 (less closures and more direct assignment when creating msgpack)
     }
 
     this.length += this.buffer.utf8Write(value, this.length, length)
