@@ -126,17 +126,19 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
       false
     )
-    // TODO(simon-id): add documentation for appsec config when we release it in public beta
+
+    let appsec = options.appsec || (options.experimental && options.experimental.appsec)
+
     const DD_APPSEC_ENABLED = coalesce(
-      options.experimental &&
-        options.experimental.appsec &&
-        (options.experimental.appsec === true || options.experimental.appsec.enabled === true),
-      process.env.DD_EXPERIMENTAL_APPSEC_ENABLED,
+      appsec && (appsec === true || appsec.enabled === true),
       process.env.DD_APPSEC_ENABLED,
       false
     )
+
+    appsec = appsec || {}
+
     const DD_APPSEC_RULES = coalesce(
-      options.experimental && options.experimental.appsec && options.experimental.appsec.rules,
+      appsec.rules,
       process.env.DD_APPSEC_RULES,
       path.join(__dirname, 'appsec', 'recommended.json')
     )

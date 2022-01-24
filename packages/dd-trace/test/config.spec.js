@@ -214,9 +214,9 @@ describe('Config', () => {
           sampleRate: 1,
           rateLimit: 1000
         },
-        internalErrors: true,
-        appsec: true
-      }
+        internalErrors: true
+      },
+      appsec: true
     })
 
     expect(config).to.have.property('enabled', false)
@@ -349,11 +349,11 @@ describe('Config', () => {
         runtimeId: false,
         exporter: 'agent',
         enableGetRumData: false,
-        internalErrors: false,
-        appsec: {
-          enabled: true,
-          rules: './path/rules.json'
-        }
+        internalErrors: false
+      },
+      appsec: {
+        enabled: true,
+        rules: './path/rules.json'
       }
     })
 
@@ -388,16 +388,28 @@ describe('Config', () => {
         sampleRate: 0.5,
         rateLimit: 500
       },
+      appsec: {
+        enabled: true,
+        rules: './path/rules.json'
+      },
       experimental: {
         sampler: {
           sampleRate: 0.1,
           rateLimit: 100
+        },
+        appsec: {
+          enabled: false,
+          rules: 'something'
         }
       }
     })
 
     expect(config).to.have.deep.nested.property('experimental.sampler', {
       sampleRate: 0.5, rateLimit: 500
+    })
+    expect(config).to.have.deep.property('appsec', {
+      enabled: true,
+      rules: './path/rules.json'
     })
   })
 
