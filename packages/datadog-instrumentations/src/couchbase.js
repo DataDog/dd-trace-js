@@ -17,35 +17,8 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
   bindEventEmitter(Bucket.prototype)
   bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
-
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', _maybeInvoke => function (fn, args) {
-    const ar = new AsyncResource('bound-anonymous-fn')
-    if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
-
-    const callbackIndex = args.length - 1
-    const callback = args[callbackIndex]
-
-    if (callback instanceof Function) {
-      args[callbackIndex] = bind(callback)
-    }
-
-    return ar.runInAsyncScope(() => {
-      return _maybeInvoke.apply(this, arguments)
-    })
-  })
-
-  shimmer.wrap(Bucket.prototype, 'query', query => function (q, params, callback) {
-    const ar = new AsyncResource('bound-anonymous-fn')
-    callback = arguments[arguments.length - 1]
-
-    if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = bind(callback)
-    }
-
-    return ar.runInAsyncScope(() => {
-      return query.apply(this, arguments)
-    })
-  })
+  Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
+  Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
     const ar = new AsyncResource('bound-anonymous-fn')
@@ -93,7 +66,20 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', _maybeInvoke => function (fn, args) {
+  Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
+  Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
+  return Cluster
+})
+
+function findCallbackIndex (args) {
+  for (let i = args.length - 1; i >= 2; i--) {
+    if (typeof args[i] === 'function') return i
+  }
+  return -1
+}
+
+function wrapMaybeInvoke (_maybeInvoke) {
+  const wrapped = function (fn, args) {
     const ar = new AsyncResource('bound-anonymous-fn')
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
@@ -107,9 +93,12 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
     return ar.runInAsyncScope(() => {
       return _maybeInvoke.apply(this, arguments)
     })
-  })
+  }
+  return shimmer.wrap(_maybeInvoke, wrapped)
+}
 
-  shimmer.wrap(Cluster.prototype, 'query', query => function (q, params, callback) {
+function wrapQuery (query) {
+  const wrapped = function (q, params, callback) {
     const ar = new AsyncResource('bound-anonymous-fn')
     callback = arguments[arguments.length - 1]
 
@@ -120,15 +109,8 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
     return ar.runInAsyncScope(() => {
       return query.apply(this, arguments)
     })
-  })
-  return Cluster
-})
-
-function findCallbackIndex (args) {
-  for (let i = args.length - 1; i >= 2; i--) {
-    if (typeof args[i] === 'function') return i
   }
-  return -1
+  return shimmer.wrap(query, wrapped)
 }
 
 function wrap (prefix, fn) {
