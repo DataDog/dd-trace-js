@@ -229,6 +229,8 @@ jobs:
   node-bench-sirun-plugin-dns: *node-bench-sirun-base
 
   node-bench-sirun-plugin-graphql: *node-bench-sirun-base
+  
+  node-bench-sirun-appsec: *node-bench-sirun-base
 
   node-bench-sirun-all:
     docker:
@@ -891,6 +893,7 @@ workflows:
       - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
+      - node-bench-sirun-appsec: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
             - node-bench-sirun-startup
@@ -907,6 +910,7 @@ workflows:
             - node-bench-sirun-profiler
             - node-bench-sirun-plugin-dns
             - node-bench-sirun-plugin-graphql
+            - node-bench-sirun-appsec
       - node-ci-visibility-performance-benchmark
   upstream: &upstream-jobs
     jobs:

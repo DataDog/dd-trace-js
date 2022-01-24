@@ -5,6 +5,7 @@ const agent = require('../agent')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
+const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -507,6 +508,22 @@ describe('plugins/util/web', () => {
 
           expect(tags).to.have.property('resource.name', 'GET /custom/route')
         })
+      })
+
+      it('should call diagnostics_channel', () => {
+        const spy = sinon.spy((data) => {
+          expect(data.req).to.equal(req)
+          expect(data.res).to.equal(res)
+        })
+
+        incomingHttpRequestEnd.subscribe(spy)
+
+        res.end()
+
+        incomingHttpRequestEnd.unsubscribe(spy)
+
+        expect(spy).to.have.been.calledOnce
+        expect(end).to.have.been.calledAfter(spy)
       })
     })
   })
