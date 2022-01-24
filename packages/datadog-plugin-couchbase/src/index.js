@@ -8,7 +8,7 @@ class CouchBasePlugin extends Plugin {
   static get name () {
     return 'couchbase'
   }
-  
+
   addSubs (func, start, asyncEnd = defaultAsyncEnd) {
     this.addSub(`apm:couchbase:${func}:start`, start)
     this.addSub(`apm:couchbase:${func}:end`, this.exit.bind(this))
@@ -112,12 +112,10 @@ class CouchBasePlugin extends Plugin {
 }
 
 function defaultAsyncEnd () {
-  debugger;
   storage.getStore().span.finish()
 }
 
 function errorHandler (error) {
-  debugger;
   storage.getStore().span.setTag('error', error)
 }
 

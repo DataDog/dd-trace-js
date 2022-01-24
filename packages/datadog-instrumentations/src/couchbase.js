@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncResource, executionAsyncId, triggerAsyncId } = require('async_hooks')
+const { AsyncResource } = require('async_hooks')
 const {
   channel,
   addHook,
@@ -24,11 +24,11 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
     const callbackIndex = args.length - 1
     const callback = args[callbackIndex]
-    
+
     if (callback instanceof Function) {
       args[callbackIndex] = bind(callback)
     }
-    
+
     return ar.runInAsyncScope(() => {
       return _maybeInvoke.apply(this, arguments)
     })
@@ -52,7 +52,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     if (
       !startChn1qlReq.hasSubscribers
     ) {
-      return  _n1qlReq.apply(this, arguments)
+      return _n1qlReq.apply(this, arguments)
     }
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
 
@@ -75,7 +75,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
       })
     } catch (err) {
       err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
+      errorChn1qlReq.publish(err)
 
       throw err
     } finally {
@@ -116,7 +116,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
     if (typeof callback === 'function') {
       arguments[arguments.length - 1] = bind(callback)
     }
-      
+
     return ar.runInAsyncScope(() => {
       return query.apply(this, arguments)
     })
