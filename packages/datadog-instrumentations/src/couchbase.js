@@ -64,13 +64,13 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     if (callback instanceof Function) {
       
       console.log(id, triggerAsyncId())
-      args[callbackIndex] = bind(callback)
+      args[callbackIndex] = bindAsyncResource(ar, callback)
     }
     // return _maybeInvoke.apply(this, arguments)
     
     
     return ar.runInAsyncScope(() => {
-      _maybeInvoke.apply(this, arguments)
+      return _maybeInvoke.apply(this, arguments)
     })
   })
 
@@ -80,12 +80,14 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     callback = arguments[arguments.length - 1]
 
     if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = bind(callback)
+      arguments[arguments.length - 1] = bindAsyncResource(ar, callback)
     }
 
     // return query.apply(this, arguments)
     return ar.runInAsyncScope(() => {
-      query.apply(this, arguments)
+      const res = query.apply(this, arguments)
+      bindEventEmitter(res)
+      return res
     })
   })
 
@@ -95,7 +97,6 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     if (
       !startChn1qlReq.hasSubscribers
     ) {
-      console.log('yeee')
       return  _n1qlReq.apply(this, arguments)
     }
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
@@ -103,42 +104,23 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     const n1qlQuery = q && q.statement
 
     startChn1qlReq.publish([n1qlQuery, this.config, this])
-    let id2 = executionAsyncId()
-    const cb = bind(function () {
-      debugger;
-      console.log('sirrrr')
-      console.log('jahh', id2, triggerAsyncId())
-      asyncEndChn1qlReq.publish(undefined)
-    })
-    id2 = executionAsyncId()
-    const cb2 = bind(function(error, result) {
-      debugger;
-      console.log('worrrr')
-      console.log('sahh', id2, triggerAsyncId())
-      if (error) {
-        errorChn1qlReq.publish(error)
-      }
-      asyncEndChn1qlReq.publish(undefined)
-    })
-
+    
     debugger;
-    // emitter.once('rows', bind(() => {
-    //   debugger;
-    //   console.log('sirrrr')
-    //   console.log('jahh', id2, triggerAsyncId())
-    //   asyncEndChn1qlReq.publish(undefined)
-    // }))
-    // emitter.once('error', bind((error) => {
-    //   debugger;
-    //   console.log('worrrr')
-    //   console.log('sahh', id2, triggerAsyncId())
-    //   if (error) {
-    //     errorChn1qlReq.publish(error)
-    //   }
-    //   asyncEndChn1qlReq.publish(undefined)
-    // }))
+    let id2 = executionAsyncId()
+    emitter.once('rows', bind(() => {
+      debugger;
+      // console.log('soso', id2, triggerAsyncId())
+      asyncEndChn1qlReq.publish(undefined)
+    }))
+    id2 = executionAsyncId()
+    emitter.once('error', bind((error) => {
+      debugger;
+      // console.log('ok', id2, triggerAsyncId())
+      errorChn1qlReq.publish(error)
+      asyncEndChn1qlReq.publish(undefined)
+    }))
 
-    bindEventEmitter(emitter)
+    // bindEventEmitter(emitter)
 
     try {
       debugger;

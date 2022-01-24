@@ -66,14 +66,17 @@ describe('Plugin', () => {
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
 
-          const emitter = cluster.query(n1qlQuery)
+          
 
           tracer.scope().activate(span, () => {
             debugger;
             // console.log(tracer.scope().active())
+            const emitter = cluster.query(n1qlQuery)
+            console.log(emitter)
             emitter.on('rows', () => {
               debugger;
-              console.log(tracer.scope().active())
+              console.trace(tracer.scope().active())
+              // console.log(tracer.scope().active())
               expect(tracer.scope().active()).to.equal(span)
               done()
             })

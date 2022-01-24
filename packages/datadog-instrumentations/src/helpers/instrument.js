@@ -141,11 +141,12 @@ exports.bindEventEmitter = function bindEventEmitter (emitter) {
 
 function wrapAddListener (addListener) {
   return function (name, fn) {
-    debugger;
+    // debugger;
     //
     // const bound = exports.bind(fn)
     const ar = new AsyncResource('bound-anonymous-fn')
     const bound = function () {
+      console.log('we rannn')
       return ar.runInAsyncScope(() => {
         return fn.apply(this, arguments)
       })
