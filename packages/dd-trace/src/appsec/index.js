@@ -17,7 +17,8 @@ function enable (config) {
 
     RuleManager.applyRules(rules)
   } catch (err) {
-    log.error(`Unable to apply AppSec rules: ${err}`)
+    log.error('Unable to start AppSec')
+    log.error(err)
 
     // abort AppSec start
     RuleManager.clearAllRules()

@@ -90,7 +90,8 @@ class WAFCallback {
 
       return this.applyResult(result, store)
     } catch (err) {
-      log.warn('Error while running the AppSec WAF')
+      log.error('Error while running the AppSec WAF')
+      log.error(err)
     }
   }
 

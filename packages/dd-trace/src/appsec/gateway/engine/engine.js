@@ -91,6 +91,7 @@ class Context {
   }
 
   constructor () {
+    // TODO: this probably don't need to be a Map()
     this.store = new Map()
     this.allAddresses = new Set()
     this.newAddresses = new Set()

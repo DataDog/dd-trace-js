@@ -86,9 +86,10 @@ function reportAttack (attackData, store) {
 
   const newTags = {
     'appsec.event': true,
-    'manual.keep': undefined
+    'manual.keep': true // TODO: figure out how to keep appsec traces with sampling revamp
   }
 
+  // TODO: maybe add this to format.js later (to take decision as late as possible)
   if (!currentTags['_dd.origin']) {
     newTags['_dd.origin'] = 'appsec'
   }
