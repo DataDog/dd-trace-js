@@ -105,7 +105,7 @@ class TextMapPropagator {
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
     if (spanContext._sampling.priority > AUTO_KEEP) {
-      carrier[b3FlagsKey] = '1' // debug flag means force trace
+      carrier[b3FlagsKey] = '1'
     }
 
     if (spanContext._parentId) {
