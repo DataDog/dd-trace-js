@@ -25,11 +25,6 @@ require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contr
 require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
 dev,@rollup/plugin-commonjs,MIT,Copyright 2019 RollupJS Plugin Contributors
 dev,@rollup/plugin-node-resolve,MIT,Copyright 2019 RollupJS Plugin Contributors
-dev,esbuild,MIT,Copyright 2020 Evan Wallace
-dev,rollup,MIT,Copyright 2017 Rollup Contributors
-dev,webpack,MIT,Copyright JS Foundation and other contributors
-dev,webpack-cli,MIT,Copyright JS Foundation and other contributors
-dev,puppeteer,Apache license 2.0,Copyright 2017 Google Inc.
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
@@ -40,14 +35,13 @@ dev,checksum,MIT,Copyright Daniel D. Shaw
 dev,cli-table3,MIT,Copyright 2014 James Talmage
 dev,codecov,MIT,Copyright 2014 Gregg Caines
 dev,dotenv,BSD-2-Clause,Copyright 2015 Scott Motte
+dev,esbuild,MIT,Copyright 2020 Evan Wallace
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
 dev,eslint-plugin-node,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
-dev,mocha-junit-reporter,MIT,Copyright 2015 Michael Allen
-dev,mocha-multi-reporters,MIT,Copyright 2015 Stanley Ng 2019 Yousaf Nabi
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
@@ -56,13 +50,19 @@ dev,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,mkdirp,MIT,Copyright 2010 James Halliday
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,mocha-junit-reporter,MIT,Copyright 2015 Michael Allen
+dev,mocha-multi-reporters,MIT,Copyright 2015 Stanley Ng 2019 Yousaf Nabi
 dev,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
+dev,puppeteer,Apache license 2.0,Copyright 2017 Google Inc.
 dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
+dev,rollup,MIT,Copyright 2017 Rollup Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
 dev,wait-on,MIT,Copyright 2015 Jeff Barczewski
+dev,webpack,MIT,Copyright JS Foundation and other contributors
+dev,webpack-cli,MIT,Copyright JS Foundation and other contributors
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
