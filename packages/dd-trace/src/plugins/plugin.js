@@ -6,7 +6,13 @@ const { storage } = require('../../../datadog-core')
 class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
-    this._handler = handler
+    this._handler = (message, name) => {
+      const store = storage.getStore()
+
+      if (!store || !store.noop) {
+        handler(message, name)
+      }
+    }
   }
 
   enable () {

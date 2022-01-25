@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { storage } = require('../../datadog-core')
+
 /* eslint-disable no-console */
 
 describe('log', () => {
@@ -41,6 +44,14 @@ describe('log', () => {
         .debug('debug')
         .reset()
     }).to.not.throw()
+  })
+
+  it('should call the logger in a noop context', () => {
+    logger.debug = () => {
+      expect(storage.getStore()).to.have.property('noop', true)
+    }
+
+    log.use(logger).debug('debug')
   })
 
   describe('debug', () => {
@@ -262,33 +273,6 @@ describe('log', () => {
       log.deprecate('test', 'message')
 
       expect(console.error).to.have.been.calledOnce
-    })
-  })
-
-  describe('tracing', () => {
-    it('should be disabled inside logging', (done) => {
-      let onceDone = () => {
-        onceDone = () => {}
-        done()
-      }
-      const tracer = require('../../dd-trace').init({
-        debug: true,
-        plugins: false,
-        service: 'test',
-        logger: {
-          debug: () => {
-            expect(!!tracer.scope().active().context()._noop).to.equal(true)
-            onceDone()
-          },
-          info: () => {},
-          warn: () => {},
-          error: () => {}
-        }
-      })
-      tracer.trace('testing.testing', () => {
-        expect(!!tracer.scope().active().context()._noop).to.equal(false)
-        log.debug()
-      })
     })
   })
 })

@@ -124,8 +124,7 @@ function finishAllTraceSpans (span) {
 function getTestParentSpan (tracer) {
   return tracer.extract('text_map', {
     'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-    'x-datadog-sampled': 1
+    'x-datadog-parent-id': '0000000000000000'
   })
 }
 /**

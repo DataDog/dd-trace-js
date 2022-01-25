@@ -9,6 +9,9 @@ const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
 const describe = () => {} // temporarily disable HTTP2 server plugin tests
 
+const { SAMPLING_PRIORITY_KEY } = require('../../dd-trace/src/constants')
+const { USER_REJECT } = require('../../../ext/priority')
+
 describe('Plugin', () => {
   let http2
   let app
@@ -29,6 +32,13 @@ describe('Plugin', () => {
       })
     })
 
+    afterEach(() => {
+      app = undefined
+      appListener && appListener.close()
+      client && client.close()
+      server && server.close()
+    })
+
     describe('without configuration', () => {
       beforeEach(() => {
         return agent.load('http2')
@@ -37,13 +47,7 @@ describe('Plugin', () => {
           })
       })
 
-      afterEach(() => {
-        app = undefined
-        appListener && appListener.close()
-        client && client.close()
-        server && server.close()
-        return agent.close()
-      })
+      afterEach(() => agent.close())
 
       describe('using the modern stream API', () => {
         beforeEach(done => {
@@ -139,6 +143,38 @@ describe('Plugin', () => {
             .request({ ':path': '/user' })
             .on('error', done)
         })
+      })
+    })
+
+    describe('with a blocklist configuration', () => {
+      beforeEach(() => {
+        return agent.load('http2', { blocklist: '/health' })
+          .then(() => {
+            http2 = require('http2')
+          })
+      })
+
+      afterEach(() => agent.close())
+
+      it('should drop filtered out requests', done => {
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('name', 'http.request')
+            expect(traces[0][0]).to.have.property('service', 'test')
+            expect(traces[0][0]).to.have.property('type', 'web')
+            expect(traces[0][0]).to.have.property('resource', 'GET /health')
+            expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+            expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/health`)
+            expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+            expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            expect(traces[0][0].metrics).to.have.property(SAMPLING_PRIORITY_KEY, USER_REJECT)
+          })
+          .then(done)
+          .catch(done)
+
+        client
+          .request({ ':path': '/user' })
+          .on('error', done)
       })
     })
   })

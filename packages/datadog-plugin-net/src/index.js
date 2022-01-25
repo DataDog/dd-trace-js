@@ -2,10 +2,15 @@
 
 const tx = require('../../dd-trace/src/plugins/util/tx')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { storage } = require('../../datadog-core')
 
 function createWrapConnect (tracer, config) {
   return function wrapConnect (connect) {
     return function connectWithTrace () {
+      const store = storage.getStore()
+
+      if (store && store.noop) return connect.apply(this, arguments)
+
       const scope = tracer.scope()
       const options = getOptions(arguments)
       const lastIndex = arguments.length - 1

@@ -6,6 +6,7 @@ const fs = require('fs')
 const path = require('path')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
+const { storage } = require('../../datadog-core')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 
@@ -750,7 +751,7 @@ describe('Plugin', () => {
         })
 
         if (protocol === 'http') {
-          it('should skip requests to the agent', done => {
+          it('should skip requests marked as noop', done => {
             const app = express()
 
             app.get('/user', (req, res) => {
@@ -762,15 +763,21 @@ describe('Plugin', () => {
 
               agent
                 .use(() => {
-                  done(new Error('Request to the agent was traced.'))
+                  done(new Error('Noop request was traced.'))
                   clearTimeout(timer)
                 })
 
               appListener = server(app, port, () => {
+                const store = storage.getStore()
+
+                storage.enterWith({ noop: true })
+
                 const req = http.request(tracer._tracer._url.href)
 
                 req.on('error', () => {})
                 req.end()
+
+                storage.enterWith(store)
               })
             })
           })
