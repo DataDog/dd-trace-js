@@ -35,7 +35,7 @@ class Kinesis {
         }
         const byteSize = Buffer.byteLength(request.params, 'base64')
         if (byteSize >= 1000000) {
-          log('Payload size too large to pass context')
+          log.info('Payload size too large to pass context')
           return
         }
         const traceData = {}
