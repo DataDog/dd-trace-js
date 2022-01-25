@@ -37,7 +37,6 @@ class DatadogTracer extends Tracer {
     this._tags = config.tags
     this._logInjection = config.logInjection
     this._debug = config.debug
-    this._internalErrors = config.experimental.internalErrors
     this._prioritySampler = new PrioritySampler(config.env, config.experimental.sampler)
     this._exporter = new Exporter(config, this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler)

@@ -121,11 +121,6 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
-    const DD_TRACE_INTERNAL_ERRORS_ENABLED = coalesce(
-      options.experimental && options.experimental.internalErrors,
-      process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
-      false
-    )
 
     let appsec = options.appsec || (options.experimental && options.experimental.appsec)
 
@@ -182,8 +177,7 @@ class Config {
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
-      sampler,
-      internalErrors: isTrue(DD_TRACE_INTERNAL_ERRORS_ENABLED)
+      sampler
     }
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE
