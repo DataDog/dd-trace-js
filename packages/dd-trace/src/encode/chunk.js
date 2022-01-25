@@ -24,9 +24,12 @@ class Chunk {
       this.length += 1
     } else if (length < 0x100000000) { // str 32
       this.reserve(length + 5)
-      this.buffer[this.length] = 0xdb
-      this.buffer.writeUInt32BE(length, this.length + 1)
       this.length += 5
+      this.buffer[offset] = 0xdb
+      this.buffer[offset + 1] = length >> 24
+      this.buffer[offset + 2] = length >> 16
+      this.buffer[offset + 3] = length >> 8
+      this.buffer[offset + 4] = length
     }
 
     this.length += this.buffer.utf8Write(value, this.length, length)
