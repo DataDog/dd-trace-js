@@ -56,10 +56,11 @@ describe('TracerProxy', () => {
     Instrumenter = sinon.stub().returns(instrumenter)
 
     config = {
-      enabled: true,
+      tracing: true,
       experimental: {},
       logger: 'logger',
       debug: true,
+      profiling: {},
       appsec: {}
     }
     Config = sinon.stub().returns(config)
@@ -122,7 +123,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not initialize when disabled', () => {
-        config.enabled = false
+        config.tracing = false
 
         proxy.init()
 

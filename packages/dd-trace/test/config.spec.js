@@ -51,7 +51,7 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.property('service', 'node')
-    expect(config).to.have.property('enabled', true)
+    expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
     expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
@@ -97,7 +97,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
-    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
@@ -118,7 +118,7 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('hostname', 'agent')
@@ -142,13 +142,13 @@ describe('Config', () => {
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
-    process.env.DD_TRACE_ENABLED = 'False'
+    process.env.DD_TRACING_ENABLED = 'False'
     process.env.DD_TRACE_DEBUG = 'TRUE'
     process.env.DD_RUNTIME_METRICS_ENABLED = '0'
 
     const config = new Config()
 
-    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('runtimeMetrics', false)
   })
@@ -158,14 +158,14 @@ describe('Config', () => {
     process.env.DD_SITE = 'datadoghq.eu'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
-    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_ENV = 'test'
 
     const config = new Config()
 
-    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
     expect(config).to.have.nested.property('url.protocol', 'https:')
