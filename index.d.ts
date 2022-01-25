@@ -358,12 +358,6 @@ export declare interface TracerOptions {
      * @default false
      */
     enableGetRumData?: boolean
-
-    /**
-     * Whether to set the error flag when an error occurs in an internal span.
-     * @default false
-     */
-    internalErrors?: boolean
   };
 
   /**

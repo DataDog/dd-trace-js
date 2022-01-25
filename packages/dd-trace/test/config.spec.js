@@ -69,7 +69,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('experimental.internalErrors', false)
     expect(config).to.have.nested.property('appsec.enabled', false)
     const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
     expect(config).to.have.nested.property('appsec.rules', rulePath)
@@ -137,7 +136,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('experimental.internalErrors', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
   })
@@ -213,8 +211,7 @@ describe('Config', () => {
         sampler: {
           sampleRate: 1,
           rateLimit: 1000
-        },
-        internalErrors: true
+        }
       },
       appsec: true
     })
@@ -249,7 +246,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('experimental.internalErrors', true)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
     expect(config).to.have.nested.property('appsec.enabled', true)
   })
@@ -348,8 +344,7 @@ describe('Config', () => {
         b3: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false,
-        internalErrors: false
+        enableGetRumData: false
       },
       appsec: {
         enabled: true,
@@ -377,7 +372,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('experimental.internalErrors', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
   })
