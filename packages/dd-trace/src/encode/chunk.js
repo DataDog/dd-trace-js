@@ -20,8 +20,8 @@ class Chunk {
 
     if (length < 0x20) { // fixstr
       this.reserve(length + 1)
-      this.buffer[this.length] = length | 0xa0
       this.length += 1
+      this.buffer[this.length] = length | 0xa0
     } else if (length < 0x100000000) { // str 32
       this.reserve(length + 5)
       this.length += 5
