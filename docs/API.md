@@ -446,6 +446,8 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | -               | `DD_TRACE_DISABLED_PLUGINS`       | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
 | logLevel        | `DD_TRACE_LOG_LEVEL`              | `debug`        | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
 | startupLogs     | `DD_TRACE_STARTUP_LOGS`           | `true`         | Enable tracer startup configuration and diagnostic log. |
+| appsec.enabled  | `DD_APPSEC_ENABLED`               | `false`        | Enable AppSec protection. |
+| appsec.rules    | `DD_APPSEC_RULES`                 | -              | A path to a custom AppSec rules file. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 
