@@ -115,11 +115,6 @@ class Tracer extends BaseTracer {
     return this._tracer.extract.apply(this._tracer, arguments)
   }
 
-  scopeManager () {
-    this._deprecate('scopeManager')
-    return this._tracer.scopeManager.apply(this._tracer, arguments)
-  }
-
   scope () {
     return this._tracer.scope.apply(this._tracer, arguments)
   }
