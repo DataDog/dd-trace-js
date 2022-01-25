@@ -524,6 +524,8 @@ jobs:
 
   node-mocha: *node-plugin-base
 
+  node-moleculer: *node-plugin-base
+
   node-tedious:
     <<: *node-plugin-base
     docker:
@@ -794,6 +796,7 @@ workflows:
       - node-memcached: *matrix-supported-node-versions
       - node-microgateway-core: *matrix-supported-node-versions
       - node-mocha: *matrix-supported-node-versions
+      - node-moleculer: *matrix-supported-node-versions
       - node-mongodb-core: *matrix-supported-node-versions
       - node-mongoose: *matrix-supported-node-versions
       - node-mysql: *matrix-supported-node-versions
@@ -852,6 +855,7 @@ workflows:
             - node-memcached
             - node-microgateway-core
             - node-mocha
+            - node-moleculer
             - node-mongodb-core
             - node-mongoose
             - node-mysql
