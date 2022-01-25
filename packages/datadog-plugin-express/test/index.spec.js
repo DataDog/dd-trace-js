@@ -550,6 +550,37 @@ describe('Plugin', () => {
           })
         })
 
+        it('should not lose the current path on next', done => {
+          const app = express()
+          const Router = express.Router
+
+          const router = Router()
+
+          router.get('/a', (req, res, next) => {
+            res.status(200).send()
+            next()
+          })
+
+          app.use('/v1', router)
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /v1/a')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/v1/a`)
+                .catch(() => {})
+            })
+          })
+        })
+
         it('should not leak the current scope to other requests when using a task queue', done => {
           const app = express()
 
