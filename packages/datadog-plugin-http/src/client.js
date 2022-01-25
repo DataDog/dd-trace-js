@@ -13,7 +13,6 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const MANUAL_DROP = tags.MANUAL_DROP
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
 
@@ -61,10 +60,6 @@ function patch (http, methodName, tracer, config) {
           'http.url': uri
         }
       })
-
-      if (!config.filter(uri)) {
-        span.setTag(MANUAL_DROP, true)
-      }
 
       if (!(hasAmazonSignature(options) || !config.propagationFilter(uri))) {
         tracer.inject(span, HTTP_HEADERS, options.headers)
@@ -299,14 +294,12 @@ function normalizeConfig (tracer, config) {
   config = config.client || config
 
   const validateStatus = getStatusValidator(config)
-  const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
   return Object.assign({}, config, {
     validateStatus,
-    filter,
     propagationFilter,
     headers,
     hooks

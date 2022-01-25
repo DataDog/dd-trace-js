@@ -5,7 +5,6 @@ const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
-const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const shimmer = require('../../datadog-shimmer')
 
@@ -13,7 +12,6 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const MANUAL_DROP = tags.MANUAL_DROP
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
 
@@ -86,26 +84,14 @@ function getStatusValidator (config) {
   return code => code < 400 || code >= 500
 }
 
-function getFilter (tracer, config) {
-  const blocklist = tracer._url ? [`${tracer._url.href}/v0.4/traces`] : []
-
-  config = Object.assign({}, config, {
-    blocklist: blocklist.concat(config.blocklist || [])
-  })
-
-  return urlFilter.getFilter(config)
-}
-
 function normalizeConfig (tracer, config) {
   config = config.client || config
 
   const validateStatus = getStatusValidator(config)
-  const filter = getFilter(tracer, config)
   const headers = getHeaders(config)
 
   return Object.assign({}, config, {
     validateStatus,
-    filter,
     headers
   })
 }
@@ -171,10 +157,6 @@ function startSpan (tracer, config, headers, sessionDetails) {
       'http.url': url.split('?')[0]
     }
   })
-
-  if (!config.filter(url)) {
-    span.setTag(MANUAL_DROP, true)
-  }
 
   if (!hasAmazonSignature(headers, path)) {
     tracer.inject(span, HTTP_HEADERS, headers)
