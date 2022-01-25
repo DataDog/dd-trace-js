@@ -142,6 +142,11 @@ class Config {
       process.env.DD_APPSEC_RULES,
       path.join(__dirname, 'appsec', 'recommended.json')
     )
+    const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
+      appsec.rateLimit,
+      process.env.DD_APPSEC_TRACE_RATE_LIMIT,
+      100
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
@@ -202,7 +207,8 @@ class Config {
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),
-      rules: DD_APPSEC_RULES
+      rules: DD_APPSEC_RULES,
+      rateLimit: DD_APPSEC_TRACE_RATE_LIMIT
     }
 
     tagger.add(this.tags, {
