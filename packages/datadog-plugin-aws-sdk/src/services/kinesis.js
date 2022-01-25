@@ -28,13 +28,16 @@ class Kinesis {
 
   requestInject (span, request, tracer) {
     const operation = request.operation
-    // CHECK 1MB SIZE
     if (operation === 'putRecord' || operation === 'putRecords') {
       try {
         if (!request.params) {
           return
         }
-
+        const byteSize = Buffer.byteLength(request.params, 'base64')
+        if (byteSize >= 1000000) {
+          log('Payload size too large to pass context')
+          return
+        }
         const traceData = {}
         tracer.inject(span, 'text_map', traceData)
         if (request.params.Records && request.params.Records.length > 0) {
