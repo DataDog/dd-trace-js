@@ -3,6 +3,7 @@
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
+const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
 
 describe('Plugin', () => {
   let http
@@ -66,8 +67,17 @@ describe('Plugin', () => {
       })
 
       it('should run the request listener in the request scope', done => {
+        const spy = sinon.spy(() => {
+          expect(tracer.scope().active()).to.not.be.null
+        })
+
+        incomingHttpRequestStart.subscribe(spy)
+
         app = (req, res) => {
           expect(tracer.scope().active()).to.not.be.null
+
+          expect(spy).to.have.been.calledOnceWithExactly({ req, res }, incomingHttpRequestStart.name)
+
           done()
         }
 

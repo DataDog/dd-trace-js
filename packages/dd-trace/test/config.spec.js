@@ -2,6 +2,8 @@
 
 const { expect } = require('chai')
 
+const path = require('path')
+
 describe('Config', () => {
   let Config
   let pkg
@@ -68,6 +70,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('experimental.internalErrors', false)
+    expect(config).to.have.nested.property('appsec.enabled', false)
+    const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
+    expect(config).to.have.nested.property('appsec.rules', rulePath)
   })
 
   it('should initialize from the default service', () => {
@@ -109,6 +114,8 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_APPSEC_ENABLED = 'true'
+    process.env.DD_APPSEC_RULES = './path/rules.json'
 
     const config = new Config()
 
@@ -131,6 +138,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('experimental.internalErrors', true)
+    expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -206,7 +215,8 @@ describe('Config', () => {
           rateLimit: 1000
         },
         internalErrors: true
-      }
+      },
+      appsec: true
     })
 
     expect(config).to.have.property('enabled', false)
@@ -241,6 +251,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('experimental.internalErrors', true)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
+    expect(config).to.have.nested.property('appsec.enabled', true)
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -311,6 +322,8 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_APPSEC_ENABLED = 'false'
+    process.env.DD_APPSEC_RULES = 'something'
 
     const config = new Config({
       enabled: true,
@@ -337,6 +350,10 @@ describe('Config', () => {
         exporter: 'agent',
         enableGetRumData: false,
         internalErrors: false
+      },
+      appsec: {
+        enabled: true,
+        rules: './path/rules.json'
       }
     })
 
@@ -361,6 +378,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('experimental.internalErrors', false)
+    expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
   })
 
   it('should give priority to non-experimental options', () => {
@@ -369,16 +388,28 @@ describe('Config', () => {
         sampleRate: 0.5,
         rateLimit: 500
       },
+      appsec: {
+        enabled: true,
+        rules: './path/rules.json'
+      },
       experimental: {
         sampler: {
           sampleRate: 0.1,
           rateLimit: 100
+        },
+        appsec: {
+          enabled: false,
+          rules: 'something'
         }
       }
     })
 
     expect(config).to.have.deep.nested.property('experimental.sampler', {
       sampleRate: 0.5, rateLimit: 500
+    })
+    expect(config).to.have.deep.property('appsec', {
+      enabled: true,
+      rules: './path/rules.json'
     })
   })
 

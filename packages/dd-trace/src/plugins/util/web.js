@@ -8,6 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
+const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -265,6 +266,8 @@ function wrapEnd (req) {
     }
 
     finishMiddleware(req, res)
+
+    if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.publish({ req, res })
 
     const returnValue = end.apply(res, arguments)
 

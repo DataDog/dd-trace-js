@@ -5,12 +5,28 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const web = require('../../dd-trace/src/plugins/util/web')
 
+// TODO: clean this up to not use web util internals
+// TODO: stop checking for fast star and fast slash
+
 const regexpCache = Object.create(null)
 
 function createWrapHandle (tracer, config) {
   return function wrapHandle (handle) {
     return function handleWithTrace (req, res, done) {
       web.patch(req)
+
+      if (!req._datadog.router) {
+        const context = {
+          route: '',
+          stack: []
+        }
+
+        web.beforeEnd(req, () => {
+          req._datadog.paths = [context.route]
+        })
+
+        req._datadog.router = context
+      }
 
       return handle.apply(this, arguments)
     }
@@ -82,8 +98,8 @@ function wrapNext (layer, req, next) {
   const originalNext = next
 
   return function (error) {
-    if (!error && layer.path && !isFastStar(layer) && !isFastSlash(layer)) {
-      web.exitRoute(req)
+    if (layer.path && !isFastStar(layer) && !isFastSlash(layer)) {
+      req._datadog.router.stack.pop()
     }
 
     web.finish(req, error)
@@ -99,7 +115,16 @@ function callHandle (layer, handle, req, args) {
     // Try to guess which path actually matched
     for (let i = 0; i < matchers.length; i++) {
       if (matchers[i].test(layer)) {
-        web.enterRoute(req, matchers[i].path)
+        const context = req._datadog.router
+
+        context.stack.push(matchers[i].path)
+
+        const route = context.stack.join('')
+
+        // Longer route is more likely to be the actual route handler route.
+        if (route.length > context.route.length) {
+          context.route = route
+        }
 
         break
       }

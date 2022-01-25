@@ -3,6 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const URL = require('url').URL
+const path = require('path')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
@@ -125,12 +126,21 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
       false
     )
-    // TODO(simon-id): add documentation for appsec config when we release it in public beta
+
+    let appsec = options.appsec || (options.experimental && options.experimental.appsec)
+
     const DD_APPSEC_ENABLED = coalesce(
-      options.experimental && options.experimental.appsec,
-      process.env.DD_EXPERIMENTAL_APPSEC_ENABLED,
+      appsec && (appsec === true || appsec.enabled === true),
       process.env.DD_APPSEC_ENABLED,
       false
+    )
+
+    appsec = appsec || {}
+
+    const DD_APPSEC_RULES = coalesce(
+      appsec.rules,
+      process.env.DD_APPSEC_RULES,
+      path.join(__dirname, 'appsec', 'recommended.json')
     )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
@@ -191,7 +201,8 @@ class Config {
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.appsec = {
-      enabled: isTrue(DD_APPSEC_ENABLED)
+      enabled: isTrue(DD_APPSEC_ENABLED),
+      rules: DD_APPSEC_RULES
     }
 
     tagger.add(this.tags, {
