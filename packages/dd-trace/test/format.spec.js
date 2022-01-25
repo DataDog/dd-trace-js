@@ -172,6 +172,15 @@ describe('format', () => {
       expect(trace.metrics).to.have.property('metric', 50)
     })
 
+    it('should extract boolean tags as metrics', () => {
+      spanContext._tags = { yes: true, no: false }
+
+      trace = format(span)
+
+      expect(trace.metrics).to.have.property('yes', 1)
+      expect(trace.metrics).to.have.property('no', 0)
+    })
+
     it('should ignore metrics with invalid type', () => {
       spanContext._metrics = { metric: 'test' }
 
