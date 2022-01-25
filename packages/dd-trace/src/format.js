@@ -2,7 +2,6 @@
 
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
-const log = require('./log')
 const id = require('./id')
 const { isError } = require('./util')
 
@@ -38,8 +37,8 @@ function formatSpan (span) {
     trace_id: spanContext._traceId,
     span_id: spanContext._spanId,
     parent_id: spanContext._parentId || id('0'),
-    name: serialize(spanContext._name),
-    resource: serialize(spanContext._name),
+    name: String(spanContext._name),
+    resource: String(spanContext._name),
     error: 0,
     meta: {},
     metrics: {},
@@ -133,7 +132,7 @@ function extractError (trace, span) {
   }
 }
 
-function addTag (meta, metrics, key, value, seen) {
+function addTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
       if (!value) break
@@ -143,6 +142,9 @@ function addTag (meta, metrics, key, value, seen) {
       if (isNaN(value)) break
       metrics[key] = value
       break
+    case 'boolean':
+      metrics[key] = value ? 1 : 0
+      break
     case 'undefined':
       break
     case 'object':
@@ -151,41 +153,15 @@ function addTag (meta, metrics, key, value, seen) {
       // Special case for Node.js Buffer and URL
       if (isNodeBuffer(value) || isUrl(value)) {
         metrics[key] = value.toString()
-        break
+      } else if (!Array.isArray(value) && !nested) {
+        for (const prop in value) {
+          if (!value.hasOwnProperty(prop)) continue
+
+          addTag(meta, metrics, `${key}.${prop}`, value[prop], true)
+        }
       }
 
-      if (!Array.isArray(value)) {
-        addObjectTag(meta, metrics, key, value, seen)
-        break
-      }
-
-    default: // eslint-disable-line no-fallthrough
-      addTag(meta, metrics, key, serialize(value))
-  }
-}
-
-function addObjectTag (meta, metrics, key, value, seen) {
-  seen = seen || []
-
-  if (~seen.indexOf(value)) {
-    meta[key] = '[Circular]'
-    return
-  }
-
-  seen.push(value)
-
-  for (const prop in value) {
-    addTag(meta, metrics, `${key}.${prop}`, value[prop], seen)
-  }
-
-  seen.pop()
-}
-
-function serialize (obj) {
-  try {
-    return obj && typeof obj.toString !== 'function' ? JSON.stringify(obj) : String(obj)
-  } catch (e) {
-    log.error(e)
+      break
   }
 }
 
