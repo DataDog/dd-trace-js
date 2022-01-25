@@ -125,11 +125,15 @@ function finishAttacks (req, context) {
   const topSpan = req && req._datadog && req._datadog.span
   if (!topSpan || !context) return false
 
-  const resolvedReponse = resolveHTTPResponse(context)
+  const resolvedResponse = resolveHTTPResponse(context)
 
-  topSpan.addTags(Object.assign({
-    'http.endpoint': resolvedReponse.endpoint
-  }, resolvedReponse.headers))
+  const newTags = resolvedResponse.headers
+
+  if (resolvedResponse.endpoint) {
+    newTags['http.endpoint'] = resolvedResponse.endpoint
+  }
+
+  topSpan.addTags(newTags)
 }
 
 module.exports = {
