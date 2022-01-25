@@ -30,8 +30,9 @@ function enable (config) {
 
   // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
 }
 
 function incomingHttpStartTranslator (data) {
@@ -87,7 +88,7 @@ function incomingHttpEndTranslator (data) {
   }
 
   if (data.req.route && typeof data.req.route.path === 'string') {
-    payload[addresses.HTTP_INCOMING_ROUTE] = data.req.route.path
+    payload[addresses.HTTP_INCOMING_ENDPOINT] = data.req.route.path
   }
 
   if (data.req.params && typeof data.req.params === 'object') {

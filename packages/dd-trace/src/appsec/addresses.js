@@ -7,7 +7,7 @@ module.exports = {
   // TODO: 'server.request.trailers',
   HTTP_INCOMING_URL: 'server.request.uri.raw',
   HTTP_INCOMING_METHOD: 'server.request.method',
-  HTTP_INCOMING_ROUTE: 'server.request.framework_endpoint',
+  HTTP_INCOMING_ENDPOINT: 'server.request.framework_endpoint',
   HTTP_INCOMING_PARAMS: 'server.request.path_params',
   HTTP_INCOMING_COOKIES: 'server.request.cookies',
   HTTP_INCOMING_RESPONSE_CODE: 'server.response.status',
