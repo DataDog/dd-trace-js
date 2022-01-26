@@ -73,6 +73,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.enabled', false)
     const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
     expect(config).to.have.nested.property('appsec.rules', rulePath)
+    expect(config).to.have.nested.property('appsec.rateLimit', 100)
   })
 
   it('should initialize from the default service', () => {
@@ -116,6 +117,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = './path/rules.json'
+    process.env.DD_APPSEC_TRACE_RATE_LIMIT = 42
 
     const config = new Config()
 
@@ -140,6 +142,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.internalErrors', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
+    expect(config).to.have.nested.property('appsec.rateLimit', 42)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -324,6 +327,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'false'
     process.env.DD_APPSEC_RULES = 'something'
+    process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
 
     const config = new Config({
       enabled: true,
@@ -353,7 +357,8 @@ describe('Config', () => {
       },
       appsec: {
         enabled: true,
-        rules: './path/rules.json'
+        rules: './path/rules.json',
+        rateLimit: 42
       }
     })
 
@@ -380,6 +385,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.internalErrors', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
+    expect(config).to.have.nested.property('appsec.rateLimit', 42)
   })
 
   it('should give priority to non-experimental options', () => {
@@ -390,7 +396,8 @@ describe('Config', () => {
       },
       appsec: {
         enabled: true,
-        rules: './path/rules.json'
+        rules: './path/rules.json',
+        rateLimit: 42
       },
       experimental: {
         sampler: {
@@ -399,7 +406,8 @@ describe('Config', () => {
         },
         appsec: {
           enabled: false,
-          rules: 'something'
+          rules: 'something',
+          rateLimit: 11
         }
       }
     })
@@ -409,7 +417,8 @@ describe('Config', () => {
     })
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: './path/rules.json'
+      rules: './path/rules.json',
+      rateLimit: 42
     })
   })
 
