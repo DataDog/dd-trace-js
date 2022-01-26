@@ -14,6 +14,7 @@ class MySQLPlugin extends Plugin {
     super(...args)
 
     this.addSub('apm:mysql:query:start', ([sql, conf]) => {
+      debugger;
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('mysql.query', {

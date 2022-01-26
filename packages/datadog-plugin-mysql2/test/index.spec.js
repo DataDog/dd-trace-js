@@ -35,15 +35,18 @@ describe('Plugin', () => {
           connection.connect()
         })
 
-        it('should propagate context to callbacks, with correct callback args', done => {
+        it.only('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
-
+            debugger;
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
+              debugger;
               expect(results).to.not.be.null
               expect(fields).to.not.be.null
+              console.log(1, tracer.scope().active())
+              console.log(2, span)
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
