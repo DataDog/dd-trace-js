@@ -49,19 +49,6 @@ function incomingHttpStartTranslator (data) {
 
   store.set('req', data.req)
   store.set('res', data.res)
-
-  const headers = Object.assign({}, data.req.headers)
-  delete headers.cookie
-
-  const context = store.get('context')
-
-  Gateway.propagate({
-    [addresses.HTTP_INCOMING_URL]: data.req.url,
-    [addresses.HTTP_INCOMING_HEADERS]: headers,
-    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
-    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
-    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
-  }, context)
 }
 
 function incomingHttpEndTranslator (data) {
@@ -69,13 +56,21 @@ function incomingHttpEndTranslator (data) {
 
   if (!context) return
 
+  const requestHeaders = Object.assign({}, data.req.headers)
+  delete requestHeaders.cookie
+
   // TODO: this doesn't support headers sent with res.writeHead()
-  const headers = Object.assign({}, data.res.getHeaders())
-  delete headers['set-cookie']
+  const responseHeaders = Object.assign({}, data.res.getHeaders())
+  delete responseHeaders['set-cookie']
 
   const payload = {
+    [addresses.HTTP_INCOMING_URL]: data.req.url,
+    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
+    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
+    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
+    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort,
     [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
-    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
+    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
