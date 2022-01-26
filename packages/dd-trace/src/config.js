@@ -24,7 +24,10 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
-    // Temporary disabled
+    const DD_TRACING_ENABLED = coalesce(
+      process.env.DD_TRACING_ENABLED,
+      true
+    )
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
@@ -86,10 +89,6 @@ class Config {
       options.startupLogs,
       process.env.DD_TRACE_STARTUP_LOGS,
       false
-    )
-    const DD_TRACE_ENABLED = coalesce(
-      process.env.DD_TRACE_ENABLED,
-      true
     )
     const DD_TRACE_DEBUG = coalesce(
       process.env.DD_TRACE_DEBUG,
@@ -153,7 +152,7 @@ class Config {
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
-    this.enabled = isTrue(DD_TRACE_ENABLED)
+    this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
