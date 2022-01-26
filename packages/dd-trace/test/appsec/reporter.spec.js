@@ -69,6 +69,7 @@ describe('reporter', () => {
       const context = new Context()
 
       context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
         [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
         [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
           'content-type': 'application/json',
@@ -80,6 +81,7 @@ describe('reporter', () => {
       const result = Reporter.resolveHTTPResponse(context)
 
       expect(result).to.deep.equal({
+        endpoint: '/path/:param',
         headers: {
           'http.response.headers.content-type': 'application/json',
           'http.response.headers.content-length': '42'
@@ -226,6 +228,30 @@ describe('reporter', () => {
     })
 
     it('should add http response data inside request span', () => {
+      const req = stubReq()
+
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
+        }
+      }))
+
+      const result = Reporter.finishAttacks(req, context)
+      expect(result).to.not.be.false
+
+      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+        'http.response.headers.content-type': 'application/json',
+        'http.response.headers.content-length': '42',
+        'http.endpoint': '/path/:param'
+      })
+    })
+
+    it('should add http response data inside request span without endpoint', () => {
       const req = stubReq()
 
       const context = new Context()

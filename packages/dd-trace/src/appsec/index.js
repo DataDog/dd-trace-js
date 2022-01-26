@@ -30,8 +30,9 @@ function enable (config) {
 
   // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
 }
 
 function incomingHttpStartTranslator (data) {
@@ -72,10 +73,29 @@ function incomingHttpEndTranslator (data) {
   const headers = Object.assign({}, data.res.getHeaders())
   delete headers['set-cookie']
 
-  Gateway.propagate({
+  const payload = {
     [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: headers
-  }, context)
+  }
+
+  // TODO: temporary express instrumentation, will use express plugin later
+  if (data.req.query && typeof data.req.query === 'object') {
+    payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
+  }
+
+  if (data.req.route && typeof data.req.route.path === 'string') {
+    payload[addresses.HTTP_INCOMING_ENDPOINT] = data.req.route.path
+  }
+
+  if (data.req.params && typeof data.req.params === 'object') {
+    payload[addresses.HTTP_INCOMING_PARAMS] = data.req.params
+  }
+
+  if (data.req.cookies && typeof data.req.cookies === 'object') {
+    payload[addresses.HTTP_INCOMING_COOKIES] = data.req.cookies
+  }
+
+  Gateway.propagate(payload, context)
 
   Reporter.finishAttacks(data.req, context)
 }

@@ -43,8 +43,9 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
       expect(Gateway.manager.addresses).to.have.all.keys(
         addresses.HTTP_INCOMING_HEADERS,
-        addresses.HTTP_INCOMING_REMOTE_IP,
-        addresses.HTTP_INCOMING_RESPONSE_HEADERS
+        addresses.HTTP_INCOMING_ENDPOINT,
+        addresses.HTTP_INCOMING_RESPONSE_HEADERS,
+        addresses.HTTP_INCOMING_REMOTE_IP
       )
     })
 
@@ -200,6 +201,92 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         }
+      }, context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+    })
+
+    it('should propagate incoming http end data with invalid framework properties', () => {
+      const context = {}
+
+      sinon.stub(Gateway, 'getContext').returns(context)
+
+      const req = {
+        body: null,
+        query: 'string',
+        route: {},
+        params: 'string',
+        cookies: 'string'
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishAttacks')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': {
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }
+      }, context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+    })
+
+    it('should propagate incoming http end data with express', () => {
+      const context = {}
+
+      sinon.stub(Gateway, 'getContext').returns(context)
+
+      const req = {
+        body: {
+          a: '1'
+        },
+        query: {
+          b: '2'
+        },
+        route: {
+          path: '/path/:c'
+        },
+        params: {
+          c: '3'
+        },
+        cookies: {
+          d: '4'
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishAttacks')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': {
+          'content-type': 'application/json',
+          'content-lenght': 42
+        },
+        'server.request.query': { b: '2' },
+        'server.request.framework_endpoint': '/path/:c',
+        'server.request.path_params': { c: '3' },
+        'server.request.cookies': { d: '4' }
       }, context)
       expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
     })

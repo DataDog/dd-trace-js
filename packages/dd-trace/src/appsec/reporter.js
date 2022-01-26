@@ -36,7 +36,6 @@ function resolveHTTPRequest (context) {
   const headers = context.resolve(addresses.HTTP_INCOMING_HEADERS)
 
   return {
-    // route: context.resolve(addresses.HTTP_INCOMING_ROUTE),
     remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
     headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST, 'http.request.headers.')
   }
@@ -48,6 +47,7 @@ function resolveHTTPResponse (context) {
   const headers = context.resolve(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
 
   return {
+    endpoint: context.resolve(addresses.HTTP_INCOMING_ENDPOINT),
     headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
   }
 }
@@ -116,8 +116,6 @@ function reportAttack (attackData, store) {
     }
 
     newTags['network.client.ip'] = resolvedRequest.remote_ip
-
-    // newTags['http.endpoint'] = resolvedRequest.route
   }
 
   topSpan.addTags(newTags)
@@ -127,9 +125,15 @@ function finishAttacks (req, context) {
   const topSpan = req && req._datadog && req._datadog.span
   if (!topSpan || !context) return false
 
-  const resolvedReponse = resolveHTTPResponse(context)
+  const resolvedResponse = resolveHTTPResponse(context)
 
-  topSpan.addTags(resolvedReponse.headers)
+  const newTags = resolvedResponse.headers
+
+  if (resolvedResponse.endpoint) {
+    newTags['http.endpoint'] = resolvedResponse.endpoint
+  }
+
+  topSpan.addTags(newTags)
 }
 
 module.exports = {
