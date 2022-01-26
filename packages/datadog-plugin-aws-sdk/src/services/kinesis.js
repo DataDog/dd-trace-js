@@ -33,23 +33,29 @@ class Kinesis {
         if (!request.params) {
           return
         }
-        const byteSize = Buffer.byteLength(request.params, 'base64')
+
+        const traceData = {}
+        tracer.inject(span, 'text_map', traceData)
+        let injectPath
+        if (request.params.Records && request.params.Records.length > 0) {
+          injectPath = request.params.Records[0]
+        } else if (request.params.Data) {
+          injectPath = request.params
+        } else {
+          log.error('No valid payload passed, unable to pass trace context')
+          return
+        }
+        const byteSize = Buffer.byteLength(injectPath.Data, 'base64')
         if (byteSize >= 1000000) {
           log.info('Payload size too large to pass context')
           return
         }
-        const traceData = {}
-        tracer.inject(span, 'text_map', traceData)
-        if (request.params.Records && request.params.Records.length > 0) {
-          const injectedData = Kinesis.tryParse(request.params.Records[0].data)
-          injectedData._datadog = traceData
-          // No need to re-b64, the sdk will do that for us
-          request.params.Records[0] = JSON.stringify(injectedData)
-        } else if (request.params.Data) {
-          const injectedData = Kinesis.tryParse(request.params.Data)
-          injectedData['_datadog'] = traceData
-          // No need to re-b64, the sdk will do that for us
-          request.params.Data = JSON.stringify(injectedData)
+        const parsedData = Kinesis.tryParse(injectPath.Data)
+        if (parsedData) {
+          parsedData._datadog = traceData
+          injectPath.Data = JSON.stringify(parsedData)
+        } else {
+          log.error('Unable to parse payload, unable to pass trace context')
         }
       } catch (e) {
         log.error(e)

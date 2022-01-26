@@ -1,4 +1,5 @@
 'use strict'
+const log = require('../../../dd-trace/src/log')
 
 class Sns {
   generateTags (params, operation, response) {
@@ -23,14 +24,22 @@ class Sns {
       if (!request.params) {
         request.params = {}
       }
-      if (!request.params.MessageAttributes) {
-        request.params.MessageAttributes = {}
-      } else if (Object.keys(request.params.MessageAttributes).length >= 10) { // SNS quota
+      let injectPath
+      if (request.params.PublishBatchRequestEntries && request.params.PublishBatchRequestEntries.length > 0) {
+        injectPath = request.params.PublishBatchRequestEntries[0]
+      } else if (request.params.Message) {
+        injectPath = request.params
+      }
+      if (!injectPath.MessageAttributes) {
+        injectPath.MessageAttributes = {}
+      }
+      if (Object.keys(injectPath.MessageAttributes).length >= 10) { // SNS quota
+        log.info('Message attributes full, skipping trace context injection')
         return
       }
       const ddInfo = {}
       tracer.inject(span, 'text_map', ddInfo)
-      request.params.MessageAttributes._datadog = {
+      injectPath.MessageAttributes._datadog = {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo)
       }

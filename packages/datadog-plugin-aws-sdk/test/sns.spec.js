@@ -1,140 +1,139 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const Sns = require('../src/services/sns')
 const plugin = require('../src')
-const { setup } = require('./spec_helpers')
-const getPort = require('get-port')
-const http = require('http')
-const { response } = require('express')
+const tracer = require('../../dd-trace').init()
 
-const topicOptions = {
-  Name: 'SNS_TOPIC_NAME'
-}
+describe('Sns', () => {
+  let span
+  withVersions(plugin, 'aws-sdk', version => {
+    let traceId
+    let parentId
+    let spanId
+    before(() => {
+      span = {
+        finish: sinon.spy(() => {}),
+        context: () => {
+          return {
+            _sampling: {
+              priority: 1
+            },
+            _trace: {
+              started: [],
+              origin: ''
+            },
+            _traceFlags: {
+              sampled: 1
+            },
+            'x-datadog-trace-id': traceId,
+            'x-datadog-parent-id': parentId,
+            'x-datadog-sampling-priority': '1',
+            toTraceId: () => {
+              return traceId
+            },
+            toSpanId: () => {
+              return spanId
+            }
+          }
+        },
+        addTags: sinon.stub(),
+        setTag: sinon.stub()
+      }
+      tracer._tracer.startSpan = sinon.spy(() => {
+        return span
+      })
+    })
 
-describe('Plugin', () => {
-  describe('aws-sdk (sns)', function () {
-    setup()
+    it('injects trace context to SNS publish', () => {
+      const sns = new Sns()
+      const request = {
+        params: {
+          Message: 'Here is my sns message',
+          TopicArn: 'some ARN'
+        },
+        operation: 'publish'
+      }
 
-    withVersions(plugin, 'aws-sdk', version => {
-      let AWS
-      let sns
-      let TopicArn
-      let tracer
-      let result
-      let server
+      traceId = '456853219676779160'
+      spanId = '456853219676779160'
+      parentId = '0000000000000000'
+      sns.requestInject(span.context(), request, tracer)
 
-      describe('without configuration', () => {
-        before(() => {
-          tracer = require('../../dd-trace')
+      expect(request.params).to.deep.equal({
+        Message: 'Here is my sns message',
+        MessageAttributes: {
+          '_datadog': {
+            'DataType': 'String',
+            'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampled":"1","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
+          }
+        },
+        'TopicArn': 'some ARN'
+      })
+    })
 
-          return agent.load('aws-sdk')
-        })
+    it('injects trace context to SNS publishBatch', () => {
+      const sns = new Sns()
+      const request = {
+        params: {
+          PublishBatchRequestEntries: [
+            { Message: 'Here is my SNS message' },
+            { Message: 'Here is another SNS Message' }
+          ],
+          TopicArn: 'some ARN'
+        },
+        operation: 'publishBatch'
+      }
 
-        before(done => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+      traceId = '456853219676779160'
+      spanId = '456853219676779160'
+      parentId = '0000000000000000'
+      sns.requestInject(span.context(), request, tracer)
 
-          const endpoint = new AWS.Endpoint('http://localhost:4575')
-
-          sns = new AWS.SNS({ endpoint, region: 'us-east-1' })
-          sns.createTopic(topicOptions, (err, res) => {
-            if (err) return done(err)
-            TopicArn = res.TopicArn
-
-            server = http.createServer((req, res) => {
-              let data = ''
-              req.on('data', chunk => {
-                console.log('GOT CHUNK')
-                data += chunk
-              })
-              req.on('end', () => {
-                console.log(JSON.parse(data))
-                result = data
-                res.end()
-              })
-            }).listen(7777)
-            sns.subscribe({
-              Protocol: 'http',
-              TopicArn,
-              Endpoint: `localhost:7777`
-            }, (err, res) => {
-              console.log('SUBSCRIBE RETURNED', res)
-              done()
-            })
-          })
-        })
-
-        after(done => {
-          server.close()
-          sns.deleteTopic({ TopicArn }, done)
-        })
-
-        after(() => {
-          return agent.close()
-        })
-
-        it('should propagate the tracing context from the producer to the consumer', (done) => {
-          let parentId
-          let traceId
-
-          // agent.use(traces => {
-          //   const span = traces[0][0]
-
-          //   expect(span.resource.startsWith('publish')).to.equal(true)
-
-          //   parentId = span.span_id.toString()
-          //   traceId = span.trace_id.toString()
-          // })
-
-          // agent.use(traces => {
-          //   const span = traces[0][0]
-          //   console.log("TRACES", traces)
-          //   expect(parentId).to.be.a('string')
-          //   expect(span.parent_id.toString()).to.equal(parentId)
-          //   expect(span.trace_id.toString()).to.equal(traceId)
-          // }).then(done, done)
-
-          sns.publish({
-            Message: 'test body',
-            TopicArn
-          }, (err, res) => {
-            if (err) return done(err)
-            console.log('publish res', res)
-            console.log(`GOT RESULT`, result)
-            const data = new TextEncoder().encode(
-              JSON.stringify({
-                todo: 'Buy the milk 🍼'
-              })
-            )
-            const options = {
-              hostname: 'localhost',
-              port: 7777,
-              path: '/',
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': data.length
+      expect(request.params).to.deep.equal({
+        PublishBatchRequestEntries: [
+          {
+            Message: 'Here is my SNS message',
+            MessageAttributes: {
+              '_datadog': {
+                'DataType': 'String',
+                'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampled":"1","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
               }
             }
-
-            const req = http.request(options, res => {
-              console.log(`statusCode: ${res.statusCode}`)
-
-              res.on('data', d => {
-                process.stdout.write(d)
-              })
-            })
-
-            req.on('error', error => {
-              console.log('errror')
-              console.error(error)
-            })
-
-            req.write(data)
-            req.end()
-            done()
-          })
-        })
+          },
+          {
+            Message: 'Here is another SNS Message'
+          }
+        ],
+        'TopicArn': 'some ARN'
       })
+    })
+    it('skips injecting trace context to SNS if message attributes are full', () => {
+      const sns = new Sns()
+      const request = {
+        params: {
+          Message: 'Here is my sns message',
+          TopicArn: 'some ARN',
+          MessageAttributes: {
+            keyOne: {},
+            keyTwo: {},
+            keyThree: {},
+            keyFour: {},
+            keyFive: {},
+            keySix: {},
+            keySeven: {},
+            keyEight: {},
+            keyNine: {},
+            keyTen: {}
+          }
+        },
+        operation: 'publish'
+      }
+
+      traceId = '456853219676779160'
+      spanId = '456853219676779160'
+      parentId = '0000000000000000'
+      sns.requestInject(span.context(), request, tracer)
+      expect(request.params).to.deep.equal(request.params)
     })
   })
 })
