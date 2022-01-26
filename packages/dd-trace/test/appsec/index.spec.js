@@ -283,7 +283,6 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         },
-        // 'server.request.body': { a: '1' },
         'server.request.query': { b: '2' },
         'server.request.framework_endpoint': '/path/:c',
         'server.request.path_params': { c: '3' },
