@@ -205,7 +205,7 @@ describe('AppSec Index', () => {
       expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
     })
 
-    it('should propagate incoming http end data with weird framework', () => {
+    it('should propagate incoming http end data with invalid framework properties', () => {
       const context = {}
 
       sinon.stub(Gateway, 'getContext').returns(context)
