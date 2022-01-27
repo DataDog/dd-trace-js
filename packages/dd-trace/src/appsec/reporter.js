@@ -82,7 +82,7 @@ function formatHeaderName (name) {
 }
 
 function reportAttack (attackData, store) {
-  if (!limiter.isAllowed()) return
+  if (!limiter.isAllowed()) return false
 
   const req = store && store.get('req')
   const topSpan = req && req._datadog && req._datadog.span

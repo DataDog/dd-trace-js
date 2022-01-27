@@ -22,6 +22,7 @@ describe('reporter', () => {
   afterEach(() => {
     sinon.restore()
     Engine.manager.clear()
+    Reporter.setRateLimit(100)
   })
 
   describe('resolveHTTPRequest', () => {
@@ -129,6 +130,24 @@ describe('reporter', () => {
   })
 
   describe('reportAttack', () => {
+    it('should do nothing when rate limit is reached', (done) => {
+      const store = new Map([[ 'req', stubReq() ]])
+
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+
+      Reporter.setRateLimit(1)
+
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.be.false
+
+      setTimeout(() => {
+        expect(Reporter.reportAttack('', store)).to.not.be.false
+        done()
+      }, 1e3)
+    })
+
     it('should do nothing when passed incomplete objects', () => {
       expect(Reporter.reportAttack('', null)).to.be.false
       expect(Reporter.reportAttack('', new Map())).to.be.false

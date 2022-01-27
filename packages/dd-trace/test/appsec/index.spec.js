@@ -16,12 +16,14 @@ describe('AppSec Index', () => {
     config = {
       appsec: {
         enabled: true,
-        rules: './path/rules.json'
+        rules: './path/rules.json',
+        rateLimit: 42
       }
     }
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
+    sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
     Gateway.manager.clear()
@@ -38,6 +40,7 @@ describe('AppSec Index', () => {
 
       expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] })
+      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
