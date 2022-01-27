@@ -9,22 +9,29 @@ const {
   bindEmit
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+// const storage = require('../../datadog-core').storage
+const { storage } = require('../../datadog-core')
+// const tracer =  require('../../dd-trace')
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
   const startChn1qlReq = channel('apm:couchbase:_n1qlReq:start')
   const asyncEndChn1qlReq = channel('apm:couchbase:_n1qlReq:async-end')
   const endChn1qlReq = channel('apm:couchbase:_n1qlReq:end')
   const errorChn1qlReq = channel('apm:couchbase:_n1qlReq:error')
-
-  // bindEventEmitter(Bucket.prototype)
-  // bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
-  bindEmit(Bucket.prototype)
-  bindEmit(Bucket.N1qlQueryResponse.prototype)
+  debugger;
+  
+  // console.log(0, storage.getStore())
+  bindEventEmitter(Bucket.prototype)
+  bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
+  // console.log(0, tracer.scope().active())
+  // bindEmit(Bucket.prototype, errorChn1qlReq, asyncEndChn1qlReq)
+  // bindEmit(Bucket.N1qlQueryResponse.prototype, errorChn1qlReq, asyncEndChn1qlReq)
 
   Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
   Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
+    debugger;
     const ar = new AsyncResource('bound-anonymous-fn')
     if (
       !startChn1qlReq.hasSubscribers
@@ -38,10 +45,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     startChn1qlReq.publish([n1qlQuery, this])
 
     emitter.once('rows', bind(() => {
+      debugger;
       asyncEndChn1qlReq.publish(undefined)
     }))
 
     emitter.once('error', bind((error) => {
+      debugger;
       errorChn1qlReq.publish(error)
       asyncEndChn1qlReq.publish(undefined)
     }))
@@ -70,6 +79,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
+  debugger;
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
   return Cluster
@@ -84,6 +94,8 @@ function findCallbackIndex (args) {
 
 function wrapMaybeInvoke (_maybeInvoke) {
   const wrapped = function (fn, args) {
+    debugger;
+    
     const ar = new AsyncResource('bound-anonymous-fn')
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
@@ -103,6 +115,7 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
 function wrapQuery (query) {
   const wrapped = function (q, params, callback) {
+    debugger;
     const ar = new AsyncResource('bound-anonymous-fn')
     callback = arguments[arguments.length - 1]
 
@@ -124,6 +137,7 @@ function wrap (prefix, fn) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function (key, value, options, callback) {
+    debugger;
     const ar = new AsyncResource('bound-anonymous-fn')
     if (
       !startCh.hasSubscribers

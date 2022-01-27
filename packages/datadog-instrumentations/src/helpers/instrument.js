@@ -9,6 +9,8 @@ const parse = require('module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { AsyncResource, executionAsyncId, triggerAsyncId } = require('async_hooks')
 const shimmer = require('../../../datadog-shimmer')
+const storage = require('../../../datadog-core').storage
+
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
@@ -121,6 +123,7 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
 }
 
 exports.bindEventEmitter = function bindEventEmitter (emitter) {
+  
   shimmer.wrap(emitter, 'addListener', wrapAddListener)
   shimmer.wrap(emitter, 'prependListener', wrapAddListener)
   shimmer.wrap(emitter, 'on', wrapAddListener)
@@ -172,8 +175,8 @@ function wrapRemoveAllListener (removeAllListeners) {
   }
 }
 
-exports.bindEmit = function bindEmit (emitter) {
-  debugger;
+exports.bindEmit = function bindEmit (emitter, errorChn1qlReq, asyncEndChn1qlReq) {
+  // debugger;
   // shimmer.wrap(emitter, 'addListener', wrapAddListener)
   // shimmer.wrap(emitter, 'prependListener', wrapAddListener)
   // shimmer.wrap(emitter, 'on', wrapAddListener)
@@ -182,15 +185,33 @@ exports.bindEmit = function bindEmit (emitter) {
   // shimmer.wrap(emitter, 'off', wrapRemoveListener)
   // shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
   // emitter.__is_dd_emitter = true
+  console.log(1, storage.getStore())
   const asyncResource = new AsyncResource('bound-anonymous-fn')
   shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
     debugger;
     const id = executionAsyncId()
-    console.log(id)
+    
+    // const oldEmit = asyncResource.bind(emit)
+    // // console.log(id)
+    // return emitter.emit = exports.bind(function() {
+      
+    //   return oldEmit.apply(emitter, arguments);
+    // })
+
+    
+
     return asyncResource.runInAsyncScope(() => {
+      // console.log(3, storage.getStore())
       debugger;
-      const res = emit.apply(this, arguments)
+
+      console.log(arguments)
+      // errorChn1qlReq.publish(error)
+      // asyncEndChn1qlReq.publish(undefined)
+
+
       console.log(id, triggerAsyncId())
+      const res = emit.apply(this, arguments)
+      
       return res
     })
   })

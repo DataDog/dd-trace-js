@@ -54,14 +54,16 @@ describe('Plugin', () => {
           })
         })
 
-        it('should run the Query event listener in the parent context', done => {
+        it.only('should run the Query event listener in the parent context', done => {
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
           const emitter = cluster.query(n1qlQuery)
-
+          debugger;
           tracer.scope().activate(span, () => {
+            debugger;
             emitter.on('rows', () => {
+              debugger;
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
