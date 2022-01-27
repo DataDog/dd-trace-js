@@ -3,7 +3,7 @@
 
 const Sns = require('../src/services/sns')
 const plugin = require('../src')
-const tracer = require('../../dd-trace').init()
+const tracer = require('../../dd-trace')
 
 describe('Sns', () => {
   let span
@@ -12,6 +12,7 @@ describe('Sns', () => {
     let parentId
     let spanId
     before(() => {
+      tracer.init()
       span = {
         finish: sinon.spy(() => {}),
         context: () => {

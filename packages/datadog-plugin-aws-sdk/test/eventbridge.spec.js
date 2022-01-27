@@ -3,7 +3,7 @@
 
 const Eventbridge = require('../src/services/eventbridge')
 const plugin = require('../src')
-const tracer = require('../../dd-trace').init()
+const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
 describe('Eventbridge', () => {
@@ -13,6 +13,7 @@ describe('Eventbridge', () => {
     let parentId
     let spanId
     before(() => {
+      tracer.init()
       span = {
         finish: sinon.spy(() => {}),
         context: () => {

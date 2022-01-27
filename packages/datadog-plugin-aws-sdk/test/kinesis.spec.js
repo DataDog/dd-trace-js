@@ -3,7 +3,7 @@
 
 const Kinesis = require('../src/services/kinesis')
 const plugin = require('../src')
-const tracer = require('../../dd-trace').init()
+const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
 describe('Kinesis', () => {
@@ -13,6 +13,7 @@ describe('Kinesis', () => {
     let parentId
     let spanId
     before(() => {
+      tracer.init()
       span = {
         finish: sinon.spy(() => {}),
         context: () => {
