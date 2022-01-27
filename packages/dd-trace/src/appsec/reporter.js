@@ -1,6 +1,10 @@
 'use strict'
 
 const addresses = require('./addresses')
+const Limiter = require('../rate_limiter')
+
+// default limiter, configurable with setRateLimit()
+let limiter = new Limiter(100)
 
 const REQUEST_HEADERS_PASSLIST = [
   'accept',
@@ -78,6 +82,8 @@ function formatHeaderName (name) {
 }
 
 function reportAttack (attackData, store) {
+  if (!limiter.isAllowed()) return
+
   const req = store && store.get('req')
   const topSpan = req && req._datadog && req._datadog.span
   if (!topSpan) return false
@@ -136,11 +142,16 @@ function finishAttacks (req, context) {
   topSpan.addTags(newTags)
 }
 
+function setRateLimit (rateLimit) {
+  limiter = new Limiter(rateLimit)
+}
+
 module.exports = {
   resolveHTTPRequest,
   resolveHTTPResponse,
   filterHeaders,
   formatHeaderName,
   reportAttack,
-  finishAttacks
+  finishAttacks,
+  setRateLimit
 }
