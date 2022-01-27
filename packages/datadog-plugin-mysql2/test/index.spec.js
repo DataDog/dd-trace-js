@@ -35,19 +35,22 @@ describe('Plugin', () => {
           connection.connect()
         })
 
-        it.only('should propagate context to callbacks, with correct callback args', done => {
+        it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
-            debugger;
+
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
-              debugger;
-              expect(results).to.not.be.null
-              expect(fields).to.not.be.null
-              console.log(1, tracer.scope().active())
-              console.log(2, span)
-              expect(tracer.scope().active()).to.equal(span)
+              try {
+                expect(results).to.not.be.null
+                expect(fields).to.not.be.null
+                // console.log(1, tracer.scope().active())
+                // console.log(2, span)
+                expect(tracer.scope().active()).to.equal(span)
+              } catch (e) {
+                done(e)
+              }
               done()
             })
           })
@@ -242,7 +245,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should propagate context to callbacks', done => {
+        it.only('should propagate context to callbacks', done => {
           const span1 = tracer.startSpan('test1')
           const span2 = tracer.startSpan('test2')
 
