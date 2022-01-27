@@ -1,27 +1,9 @@
 'use strict'
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 const {
   channel,
   addHook,
   AsyncResource
-=======
-const { AsyncResource, executionAsyncId, triggerAsyncId } = require('async_hooks')
-=======
-const { AsyncResource } = require('async_hooks')
->>>>>>> ea3bde2f (fix non-query commands executed in the wrong async context)
-const {
-  channel,
-  addHook,
-  bind,
-<<<<<<< HEAD
-  bindAsyncResource,
-  bindEventEmitter
->>>>>>> 69fd8602 (test)
-=======
-  bindAsyncResource
->>>>>>> ea3bde2f (fix non-query commands executed in the wrong async context)
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 

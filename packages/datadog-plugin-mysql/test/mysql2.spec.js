@@ -45,8 +45,6 @@ describe('Plugin', () => {
               try {
                 expect(results).to.not.be.null
                 expect(fields).to.not.be.null
-                // console.log(1, tracer.scope().active())
-                // console.log(2, span)
                 expect(tracer.scope().active()).to.equal(span)
               } catch (e) {
                 done(e)
