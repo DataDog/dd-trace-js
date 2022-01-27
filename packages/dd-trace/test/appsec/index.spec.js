@@ -103,9 +103,6 @@ describe('AppSec Index', () => {
       const store = new Map()
       sinon.stub(Gateway, 'startContext').returns(store)
 
-      const context = {}
-      store.set('context', context)
-
       const topSpan = {
         addTags: sinon.stub()
       }
@@ -139,16 +136,7 @@ describe('AppSec Index', () => {
       expect(Gateway.startContext).to.have.been.calledOnce
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080
-      }, context)
+      expect(Gateway.propagate).to.not.have.been.called
     })
   })
 
@@ -180,7 +168,19 @@ describe('AppSec Index', () => {
 
       sinon.stub(Gateway, 'getContext').returns(context)
 
-      const req = {}
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
@@ -196,6 +196,14 @@ describe('AppSec Index', () => {
 
       expect(Gateway.getContext).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -211,6 +219,17 @@ describe('AppSec Index', () => {
       sinon.stub(Gateway, 'getContext').returns(context)
 
       const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
         body: null,
         query: 'string',
         route: {},
@@ -232,6 +251,14 @@ describe('AppSec Index', () => {
 
       expect(Gateway.getContext).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -247,6 +274,17 @@ describe('AppSec Index', () => {
       sinon.stub(Gateway, 'getContext').returns(context)
 
       const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
         body: {
           a: '1'
         },
@@ -278,6 +316,14 @@ describe('AppSec Index', () => {
 
       expect(Gateway.getContext).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',

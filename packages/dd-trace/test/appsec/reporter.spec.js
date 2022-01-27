@@ -160,8 +160,8 @@ describe('reporter', () => {
       expect(result).to.not.be.false
 
       expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
-        'appsec.event': true,
-        'manual.keep': true,
+        'appsec.event': 'true',
+        'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
         'http.request.headers.host': 'localhost',
@@ -181,8 +181,8 @@ describe('reporter', () => {
       expect(result).to.not.be.false
 
       expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
-        'appsec.event': true,
-        'manual.keep': true,
+        'appsec.event': 'true',
+        'manual.keep': 'true',
         '_dd.appsec.json': '{"triggers":[]}'
       })
     })
@@ -209,8 +209,8 @@ describe('reporter', () => {
       expect(result).to.not.be.false
 
       expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
-        'appsec.event': true,
-        'manual.keep': true,
+        'appsec.event': 'true',
+        'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'http.request.headers.host': 'localhost',
