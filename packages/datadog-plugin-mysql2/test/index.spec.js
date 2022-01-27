@@ -8,7 +8,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('mysql2', () => {
-    withVersions('mysql', 'mysql2', version => {
+    withVersions('mysql2', 'mysql2', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
