@@ -245,7 +245,7 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should propagate context to callbacks', done => {
+        it('should propagate context to callbacks', done => {
           const span1 = tracer.startSpan('test1')
           const span2 = tracer.startSpan('test2')
 

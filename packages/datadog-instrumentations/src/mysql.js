@@ -1,19 +1,27 @@
 'use strict'
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 const {
   channel,
   addHook,
   AsyncResource
 =======
 const { AsyncResource, executionAsyncId, triggerAsyncId } = require('async_hooks')
+=======
+const { AsyncResource } = require('async_hooks')
+>>>>>>> ea3bde2f (fix non-query commands executed in the wrong async context)
 const {
   channel,
   addHook,
   bind,
+<<<<<<< HEAD
   bindAsyncResource,
   bindEventEmitter
 >>>>>>> 69fd8602 (test)
+=======
+  bindAsyncResource
+>>>>>>> ea3bde2f (fix non-query commands executed in the wrong async context)
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -83,24 +91,35 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
   const errorCh = channel('apm:mysql:query:error')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
-    if (!startCh.hasSubscribers) {
-      return addCommand.apply(this, arguments)
-    }
+    if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
 
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const name = cmd && cmd.constructor && cmd.constructor.name
     const isCommand = typeof cmd.execute === 'function'
-    const isSupported = name === 'Execute' || name === 'Query'
-    if (isCommand && isSupported) {
-      cmd.execute = wrapExecute(cmd, cmd.execute, this.config)
-    }
+    const isQuery = isCommand && (name === 'Execute' || name === 'Query')
 
-    return addCommand.apply(this, arguments)
+    // TODO: consider supporting all commands and not just queries
+    cmd.execute = isQuery
+      ? wrapExecute(cmd, cmd.execute, asyncResource, this.config)
+      : bindExecute(cmd, cmd.execute, asyncResource)
+
+    return bindAsyncResource.call(asyncResource, addCommand, this).apply(this, arguments)
   })
+
   return Connection
 
-  function wrapExecute (cmd, execute, config) {
-    return bind(function executeWithTrace (packet, connection) {
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
+  function bindExecute (cmd, execute, asyncResource) {
+    return bindAsyncResource.call(asyncResource, function executeWithTrace (packet, connection) {
+      if (this.onResult) {
+        this.onResult = bindAsyncResource.call(asyncResource, this.onResult)
+      }
+
+      return execute.apply(this, arguments)
+    }, cmd)
+  }
+
+  function wrapExecute (cmd, execute, asyncResource, config) {
+    return bindAsyncResource.call(asyncResource, function executeWithTrace (packet, connection) {
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
 
       startCh.publish([sql, config])
@@ -114,15 +133,11 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
           }
           asyncEndCh.publish(undefined)
           onResult.apply(this, arguments)
-        })
+        }, 'bound-anonymous-fn', this)
       } else {
-        const cb = bind(function () {
-          asyncEndCh.publish(undefined)
-        })
-
-        const cb2 = bind(error => errorCh.publish(error))
-        this.on('error', cb2)
-        this.on('end', cb)
+        // TODO: make sure these are tested as they aren't right now
+        this.on('error', bind(error => errorCh.publish(error)))
+        this.on('end', bind(() => asyncEndCh.publish(undefined)))
       }
 
       this.execute = execute
@@ -134,16 +149,6 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
       } finally {
         endCh.publish(undefined)
       }
-    }, 'bound-anonymous-fn', cmd)
+    }, cmd)
   }
 })
-
-// addHook({ name: 'mysql2', file: 'lib/commands/command.js', versions: ['>=1'] }, Command => {
-//   // shimmer.wrap(Command.prototype, 'on', on => function (name, fn) {
-//   //   const bound = bind(fn)
-//   //   on.call(this, name, bound)
-//   // })
-
-//   // bindEventEmitter(Command.prototype)
-//   return Command
-// })
