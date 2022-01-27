@@ -1,11 +1,9 @@
 'use strict'
 
-const { AsyncResource } = require('async_hooks')
 const {
   channel,
   addHook,
-  bind,
-  bindAsyncResource
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -27,9 +25,9 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
 
     const wrappedQueryCompiler = function () {
       const query = queryCompiler.apply(this, arguments)
-      const callback = bindAsyncResource.call(asyncResource, query.callback)
+      const callback = asyncResource.bind(query.callback)
 
-      query.callback = bind(function (err) {
+      query.callback = AsyncResource.bind(function (err) {
         if (err) {
           errorCh.publish(err)
         }
