@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 'use strict'
 
 const Sns = require('../src/services/sns')

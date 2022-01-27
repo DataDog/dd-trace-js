@@ -46,7 +46,8 @@ class Kinesis {
           return
         }
         const byteSize = Buffer.byteLength(injectPath.Data, 'base64')
-        if (byteSize >= 1000000) {
+        // DD trace context must be less than 512B
+        if (byteSize + 512 >= 1000000) {
           log.info('Payload size too large to pass context')
           return
         }
