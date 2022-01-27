@@ -1,5 +1,9 @@
 # Migrating
 
+This guide describes the steps to upgrade dd-trace from a major version to the
+next. If you are having any issues related to migrating, please feel free to
+open an issue or contact our [support](https://www.datadoghq.com/support/) team.
+
 ## 1.0 to 2.0
 
 ### Configuration
@@ -51,6 +55,8 @@ span.setTag('test', obj) // add test.a and test.b.c
 span.setTag('test', obj) // add test.a
 span.setTag('test.b', obj.b) // add test.b.c
 ```
+
+Arrays are no longer supported and must be converted to string manually.
 
 ### Outgoing request filtering
 
