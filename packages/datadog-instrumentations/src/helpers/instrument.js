@@ -95,7 +95,7 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
   exports.AsyncResource = class extends AsyncResource {
     static bind (fn, type, thisArg) {
       type = type || fn.name
-      return (new AsyncResource(type || 'bound-anonymous-fn')).bind(fn, thisArg)
+      return (new exports.AsyncResource(type || 'bound-anonymous-fn')).bind(fn, thisArg)
     }
 
     bind (fn, thisArg = this) {
