@@ -7,7 +7,7 @@ const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
-const { AsyncResource } = require('async_hooks')
+const { AsyncResource, executionAsyncId, triggerAsyncId } = require('async_hooks')
 const shimmer = require('../../../datadog-shimmer')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
@@ -170,4 +170,28 @@ function wrapRemoveAllListener (removeAllListeners) {
     }
     removeAllListeners.call(this, name, bound)
   }
+}
+
+exports.bindEmit = function bindEmit (emitter) {
+  debugger;
+  // shimmer.wrap(emitter, 'addListener', wrapAddListener)
+  // shimmer.wrap(emitter, 'prependListener', wrapAddListener)
+  // shimmer.wrap(emitter, 'on', wrapAddListener)
+  // shimmer.wrap(emitter, 'once', wrapAddListener)
+  // shimmer.wrap(emitter, 'removeListener', wrapRemoveListener)
+  // shimmer.wrap(emitter, 'off', wrapRemoveListener)
+  // shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
+  // emitter.__is_dd_emitter = true
+  const asyncResource = new AsyncResource('bound-anonymous-fn')
+  shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
+    debugger;
+    const id = executionAsyncId()
+    console.log(id)
+    return asyncResource.runInAsyncScope(() => {
+      debugger;
+      const res = emit.apply(this, arguments)
+      console.log(id, triggerAsyncId())
+      return res
+    })
+  })
 }

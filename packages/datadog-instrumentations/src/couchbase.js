@@ -5,7 +5,8 @@ const {
   channel,
   addHook,
   bind,
-  bindEventEmitter
+  bindEventEmitter,
+  bindEmit
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -15,8 +16,11 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   const endChn1qlReq = channel('apm:couchbase:_n1qlReq:end')
   const errorChn1qlReq = channel('apm:couchbase:_n1qlReq:error')
 
-  bindEventEmitter(Bucket.prototype)
-  bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
+  // bindEventEmitter(Bucket.prototype)
+  // bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
+  bindEmit(Bucket.prototype)
+  bindEmit(Bucket.N1qlQueryResponse.prototype)
+
   Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
   Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
