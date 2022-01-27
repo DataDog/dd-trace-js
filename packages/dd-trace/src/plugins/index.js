@@ -31,6 +31,7 @@ module.exports = {
   'memcached': require('../../../datadog-plugin-memcached/src'),
   'microgateway-core': require('../../../datadog-plugin-microgateway-core/src'),
   'mocha': require('../../../datadog-plugin-mocha/src'),
+  'moleculer': require('../../../datadog-plugin-moleculer/src'),
   'mongodb-core': require('../../../datadog-plugin-mongodb-core/src'),
   'mongoose': require('../../../datadog-plugin-mongoose/src'),
   'mysql': require('../../../datadog-plugin-mysql/src'),

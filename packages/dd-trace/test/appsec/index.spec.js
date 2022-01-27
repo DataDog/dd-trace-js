@@ -43,8 +43,9 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
       expect(Gateway.manager.addresses).to.have.all.keys(
         addresses.HTTP_INCOMING_HEADERS,
-        addresses.HTTP_INCOMING_REMOTE_IP,
-        addresses.HTTP_INCOMING_RESPONSE_HEADERS
+        addresses.HTTP_INCOMING_ENDPOINT,
+        addresses.HTTP_INCOMING_RESPONSE_HEADERS,
+        addresses.HTTP_INCOMING_REMOTE_IP
       )
     })
 
@@ -102,9 +103,6 @@ describe('AppSec Index', () => {
       const store = new Map()
       sinon.stub(Gateway, 'startContext').returns(store)
 
-      const context = {}
-      store.set('context', context)
-
       const topSpan = {
         addTags: sinon.stub()
       }
@@ -138,16 +136,7 @@ describe('AppSec Index', () => {
       expect(Gateway.startContext).to.have.been.calledOnce
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080
-      }, context)
+      expect(Gateway.propagate).to.not.have.been.called
     })
   })
 
@@ -179,7 +168,19 @@ describe('AppSec Index', () => {
 
       sinon.stub(Gateway, 'getContext').returns(context)
 
-      const req = {}
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
@@ -195,11 +196,143 @@ describe('AppSec Index', () => {
 
       expect(Gateway.getContext).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
           'content-lenght': 42
         }
+      }, context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+    })
+
+    it('should propagate incoming http end data with invalid framework properties', () => {
+      const context = {}
+
+      sinon.stub(Gateway, 'getContext').returns(context)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body: null,
+        query: 'string',
+        route: {},
+        params: 'string',
+        cookies: 'string'
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishAttacks')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': {
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }
+      }, context)
+      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+    })
+
+    it('should propagate incoming http end data with express', () => {
+      const context = {}
+
+      sinon.stub(Gateway, 'getContext').returns(context)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body: {
+          a: '1'
+        },
+        query: {
+          b: '2'
+        },
+        route: {
+          path: '/path/:c'
+        },
+        params: {
+          c: '3'
+        },
+        cookies: {
+          d: '4'
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishAttacks')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': {
+          'content-type': 'application/json',
+          'content-lenght': 42
+        },
+        'server.request.query': { b: '2' },
+        'server.request.framework_endpoint': '/path/:c',
+        'server.request.path_params': { c: '3' },
+        'server.request.cookies': { d: '4' }
       }, context)
       expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
     })

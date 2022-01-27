@@ -24,9 +24,12 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
-    // Temporary disabled
+    const DD_TRACING_ENABLED = coalesce(
+      process.env.DD_TRACING_ENABLED,
+      true
+    )
     const DD_PROFILING_ENABLED = coalesce(
-      options.profiling,
+      options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
       process.env.DD_PROFILING_ENABLED,
       false
@@ -42,7 +45,7 @@ class Config {
       false
     )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
-      options.runtimeMetrics,
+      options.runtimeMetrics, // TODO: remove when enabled by default
       process.env.DD_RUNTIME_METRICS_ENABLED,
       false
     )
@@ -85,15 +88,9 @@ class Config {
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,
       process.env.DD_TRACE_STARTUP_LOGS,
-      true
-    )
-    const DD_TRACE_ENABLED = coalesce(
-      options.enabled,
-      process.env.DD_TRACE_ENABLED,
-      true
+      false
     )
     const DD_TRACE_DEBUG = coalesce(
-      options.debug,
       process.env.DD_TRACE_DEBUG,
       false
     )
@@ -121,16 +118,11 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
-    const DD_TRACE_INTERNAL_ERRORS_ENABLED = coalesce(
-      options.experimental && options.experimental.internalErrors,
-      process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED,
-      false
-    )
 
     let appsec = options.appsec || (options.experimental && options.experimental.appsec)
 
     const DD_APPSEC_ENABLED = coalesce(
-      appsec && (appsec === true || appsec.enabled === true),
+      appsec && (appsec === true || appsec.enabled === true), // TODO: remove when enabled by default
       process.env.DD_APPSEC_ENABLED,
       false
     )
@@ -148,14 +140,19 @@ class Config {
     const dogstatsd = coalesce(options.dogstatsd, {})
 
     Object.assign(sampler, {
-      sampleRate: coalesce(ingestion.sampleRate, sampler.sampleRate, process.env.DD_TRACE_SAMPLE_RATE),
+      sampleRate: coalesce(
+        options.sampleRate,
+        ingestion.sampleRate,
+        sampler.sampleRate,
+        process.env.DD_TRACE_SAMPLE_RATE
+      ),
       rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, process.env.DD_TRACE_RATE_LIMIT)
     })
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
-    this.enabled = isTrue(DD_TRACE_ENABLED)
+    this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
@@ -164,7 +161,7 @@ class Config {
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
-    this.sampleRate = coalesce(Math.min(Math.max(options.sampleRate, 0), 1), 1)
+    this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
@@ -182,8 +179,7 @@ class Config {
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
-      sampler,
-      internalErrors: isTrue(DD_TRACE_INTERNAL_ERRORS_ENABLED)
+      sampler
     }
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE

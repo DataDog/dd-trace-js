@@ -268,8 +268,7 @@ export declare interface TracerOptions {
   version?: string;
 
   /**
-   * Percentage of spans to sample as a float between 0 and 1.
-   * @default 1
+   * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
    */
   sampleRate?: number;
 
@@ -358,12 +357,6 @@ export declare interface TracerOptions {
      * @default false
      */
     enableGetRumData?: boolean
-
-    /**
-     * Whether to set the error flag when an error occurs in an internal span.
-     * @default false
-     */
-    internalErrors?: boolean
   };
 
   /**
@@ -503,6 +496,7 @@ interface Plugins {
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
   "mocha": plugins.mocha;
+  "moleculer": plugins.moleculer;
   "mongodb-core": plugins.mongodb_core;
   "mongoose": plugins.mongoose;
   "mysql": plugins.mysql;
@@ -700,6 +694,16 @@ declare namespace plugins {
      * `variables => variables` would record all variables.
      */
     metadata?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+  }
+
+  /** @hidden */
+  interface Moleculer extends Instrumentation {
+    /**
+     * Whether to include context meta as tags.
+     *
+     * @default false
+     */
+    meta?: boolean;
   }
 
   /**
@@ -1095,6 +1099,24 @@ declare namespace plugins {
    * [mocha](https://mochajs.org/) module.
    */
   interface mocha extends Integration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [moleculer](https://moleculer.services/) module.
+   */
+   interface moleculer extends Moleculer {
+    /**
+     * Configuration for Moleculer clients. Set to false to disable client
+     * instrumentation.
+     */
+    client?: boolean | Moleculer;
+
+    /**
+     * Configuration for Moleculer servers. Set to false to disable server
+     * instrumentation.
+     */
+    server?: boolean | Moleculer;
+  }
 
   /**
    * This plugin automatically instruments the

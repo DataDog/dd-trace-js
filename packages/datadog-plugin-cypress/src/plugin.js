@@ -77,7 +77,7 @@ module.exports = (on, config) => {
           activeSpan.setTag('error', error)
         }
         if (isRUMActive) {
-          activeSpan.setTag(TEST_IS_RUM_ACTIVE, true)
+          activeSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
         activeSpan.finish()
       }

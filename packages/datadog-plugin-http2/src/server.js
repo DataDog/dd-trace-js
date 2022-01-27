@@ -20,6 +20,7 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP_STATUS_OK = 200
 const HTTP2_HEADER_AUTHORITY = ':authority'
@@ -73,9 +74,8 @@ function instrumentStream (tracer, config, stream, headers, name, callback) {
 
   const span = startStreamSpan(tracer, config, stream, headers, name)
 
-  // TODO: replace this with a REFERENCE_NOOP after we split http/express/etc
   if (!config.filter(headers[HTTP2_HEADER_PATH])) {
-    span.context()._traceFlags.sampled = false
+    span.setTag(MANUAL_DROP, true)
   }
 
   if (config.service) {

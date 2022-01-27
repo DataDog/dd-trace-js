@@ -172,6 +172,15 @@ describe('format', () => {
       expect(trace.metrics).to.have.property('metric', 50)
     })
 
+    it('should extract boolean tags as metrics', () => {
+      spanContext._tags = { yes: true, no: false }
+
+      trace = format(span)
+
+      expect(trace.metrics).to.have.property('yes', 1)
+      expect(trace.metrics).to.have.property('no', 0)
+    })
+
     it('should ignore metrics with invalid type', () => {
       spanContext._metrics = { metric: 'test' }
 
@@ -218,45 +227,6 @@ describe('format', () => {
       trace = format(span)
 
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
-    })
-
-    it('should extract unempty objects', () => {
-      spanContext._tags['root'] = {
-        level1: {
-          level2: {
-            level3: {}
-          },
-          array: ['hello']
-        }
-      }
-
-      trace = format(span)
-
-      expect(trace.meta['root.level1.array']).to.equal('hello')
-      expect(trace.meta['root.level1.level2']).to.be.undefined
-      expect(trace.meta['root.level1.level2.level3']).to.be.undefined
-    })
-
-    it('should support nested arrays', () => {
-      spanContext._tags['root'] = {
-        array: ['a', ['b', ['c']]]
-      }
-
-      trace = format(span)
-
-      expect(trace.meta['root.array']).to.equal('a,b,c')
-    })
-
-    it('should support objects in arrays', () => {
-      class Foo {}
-
-      spanContext._tags['root'] = {
-        array: ['a', { 'bar': 'baz' }, new Foo()]
-      }
-
-      trace = format(span)
-
-      expect(trace.meta['root.array']).to.equal('a,[object Object],[object Object]')
     })
 
     it('should add runtime tags', () => {
@@ -356,153 +326,22 @@ describe('format', () => {
       expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })
 
-    it('should support objects without a toString implementation', () => {
-      spanContext._tags['foo'] = []
-      spanContext._tags['foo'].toString = null
-      trace = format(span)
-      expect(trace.meta['foo']).to.equal('[]')
-    })
-
-    it('should support objects with a non-function toString property', () => {
-      spanContext._tags['foo'] = []
-      spanContext._tags['foo'].toString = 'baz'
-      trace = format(span)
-      expect(trace.meta['foo']).to.equal('[]')
-    })
-
-    it('should support direct circular references', () => {
-      const tag = { 'foo': 'bar' }
-
-      tag.self = tag
-      spanContext._tags['circularTag'] = tag
-
-      trace = format(span)
-
-      expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.self']).to.equal('[Circular]')
-    })
-
-    it('should support indirect circular references', () => {
-      const obj = { 'foo': 'bar' }
-      const tag = { obj, 'baz': 'qux' }
-
-      obj.self = tag
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.baz']).to.equal('qux')
-      expect(trace.meta['circularTag.obj.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.obj.self']).to.equal('[Circular]')
-    })
-
-    it('should support deep circular references', () => {
+    it('should support only the first level of depth for objects', () => {
       const tag = {
         A: {
-          B: {
-            C: {
-              D: {
-                E: {
-                  num: '6'
-                },
-                num: '5'
-              },
-              num: '4'
-            },
-            num: '3'
-          },
+          B: {},
           num: '2'
         },
         num: '1'
       }
 
-      tag.A.B.C.D.E.self = tag.A.B
-
-      spanContext._tags['circularTag'] = tag
+      spanContext._tags['nested'] = tag
       trace = format(span)
 
-      expect(trace.meta['circularTag.num']).to.equal('1')
-      expect(trace.meta['circularTag.A.num']).to.equal('2')
-      expect(trace.meta['circularTag.A.B.num']).to.equal('3')
-      expect(trace.meta['circularTag.A.B.C.num']).to.equal('4')
-      expect(trace.meta['circularTag.A.B.C.D.num']).to.equal('5')
-      expect(trace.meta['circularTag.A.B.C.D.E.num']).to.equal('6')
-      expect(trace.meta['circularTag.A.B.C.D.E.self']).to.equal('[Circular]')
-    })
-
-    it('should support circular references in a class', () => {
-      class CircularTag {
-        constructor () {
-          this.foo = 'bar'
-          this.self = this
-        }
-      }
-
-      const tag = new CircularTag()
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.self']).to.equal('[Circular]')
-    })
-
-    it('should support re-used objects', () => {
-      const obj = { foo: 'bar' }
-      const tag = {
-        baz: obj,
-        qux: obj
-      }
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.baz.foo']).to.equal('bar')
-      expect(trace.meta['circularTag.qux.foo']).to.equal('bar')
-    })
-
-    it('should support doubly-linked objects', () => {
-      const tag = {
-        selfA: { ghost: 'eater' },
-        selfB: { space: 'invader' }
-      }
-
-      tag.selfA.self = tag.selfB
-      tag.selfB.self = tag.selfA
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.selfA.ghost']).to.equal('eater')
-      expect(trace.meta['circularTag.selfA.self.self']).to.equal('[Circular]')
-      expect(trace.meta['circularTag.selfA.self.space']).to.equal('invader')
-      expect(trace.meta['circularTag.selfB.self.ghost']).to.equal('eater')
-      expect(trace.meta['circularTag.selfB.self.self']).to.equal('[Circular]')
-      expect(trace.meta['circularTag.selfB.space']).to.equal('invader')
-    })
-
-    it('should support re-used arrays', () => {
-      const obj = ['bar']
-      const tag = {
-        baz: obj,
-        qux: obj
-      }
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag.baz']).to.equal('bar')
-      expect(trace.meta['circularTag.qux']).to.equal('bar')
-    })
-
-    it('should support re-used arrays within arrays', () => {
-      const obj = {}
-      const tag = [obj, [obj]]
-
-      spanContext._tags['circularTag'] = tag
-      trace = format(span)
-
-      expect(trace.meta['circularTag']).to.equal('[object Object],[object Object]')
+      expect(trace.meta['nested.num']).to.equal('1')
+      expect(trace.meta['nested.A']).to.be.undefined
+      expect(trace.meta['nested.A.B']).to.be.undefined
+      expect(trace.meta['nested.A.num']).to.be.undefined
     })
 
     it('should accept a boolean for measured', () => {

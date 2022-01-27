@@ -1,10 +1,7 @@
 'use strict'
 
-const constants = require('../../src/constants')
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
-
-const SAMPLE_RATE_METRIC_KEY = constants.SAMPLE_RATE_METRIC_KEY
 
 describe('Span', () => {
   let Span
@@ -12,7 +9,6 @@ describe('Span', () => {
   let tracer
   let processor
   let prioritySampler
-  let sampler
   let now
   let metrics
   let handle
@@ -34,10 +30,6 @@ describe('Span', () => {
     id.onSecondCall().returns('456')
 
     tracer = {}
-
-    sampler = {
-      rate: sinon.stub().returns(1)
-    }
 
     processor = {
       process: sinon.stub()
@@ -64,14 +56,14 @@ describe('Span', () => {
   })
 
   it('should have a default context', () => {
-    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+    span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._spanId).to.deep.equal('123')
   })
 
   it('should add itself to the context trace started spans', () => {
-    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+    span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
     expect(span.context()._trace.started).to.deep.equal([span])
   })
@@ -81,7 +73,7 @@ describe('Span', () => {
     now.onSecondCall().returns(300)
     now.onThirdCall().returns(700)
 
-    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+    span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
     span.finish()
 
     expect(Math.round(span._startTime)).to.equal(1500000000200)
@@ -92,7 +84,7 @@ describe('Span', () => {
     now.onFirstCall().returns(100)
     now.onSecondCall().returns(100)
 
-    const parent = new Span(tracer, processor, sampler, prioritySampler, {
+    const parent = new Span(tracer, processor, prioritySampler, {
       operationName: 'parent'
     })
 
@@ -100,7 +92,7 @@ describe('Span', () => {
     now.onFirstCall().returns(300)
     now.onSecondCall().returns(700)
 
-    span = new Span(tracer, processor, sampler, prioritySampler, {
+    span = new Span(tracer, processor, prioritySampler, {
       operationName: 'operation',
       parent: parent.context()
     })
@@ -121,7 +113,7 @@ describe('Span', () => {
     now.onSecondCall().returns(300)
     now.onThirdCall().returns(700)
 
-    span = new Span(tracer, processor, sampler, prioritySampler, {
+    span = new Span(tracer, processor, prioritySampler, {
       operationName: 'operation',
       parent
     })
@@ -143,7 +135,7 @@ describe('Span', () => {
       }
     }
 
-    span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation', parent })
+    span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._parentId).to.deep.equal('456')
@@ -151,13 +143,9 @@ describe('Span', () => {
     expect(span.context()._trace).to.equal(parent._trace)
   })
 
-  it('should set the sample rate metric from the sampler', () => {
-    expect(span.context()._tags).to.have.property(SAMPLE_RATE_METRIC_KEY, 1)
-  })
-
   describe('tracer', () => {
     it('should return its parent tracer', () => {
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       expect(span.tracer()).to.equal(tracer)
     })
@@ -165,7 +153,7 @@ describe('Span', () => {
 
   describe('setOperationName', () => {
     it('should set the operation name', () => {
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'foo' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'foo' })
       span.setOperationName('bar')
 
       expect(span.context()._name).to.equal('bar')
@@ -184,7 +172,7 @@ describe('Span', () => {
         }
       }
 
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation', parent })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
       span.setBaggageItem('foo', 'bar')
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
@@ -204,7 +192,7 @@ describe('Span', () => {
         }
       }
 
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation', parent })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
     })
@@ -212,7 +200,7 @@ describe('Span', () => {
 
   describe('getBaggageItem', () => {
     it('should get a baggage item', () => {
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span._spanContext._baggageItems.foo = 'bar'
 
       expect(span.getBaggageItem('foo')).to.equal('bar')
@@ -221,7 +209,7 @@ describe('Span', () => {
 
   describe('setTag', () => {
     it('should set a tag', () => {
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
       expect(tagger.add).to.have.been.calledWith(span.context()._tags, { foo: 'bar' })
@@ -230,7 +218,7 @@ describe('Span', () => {
 
   describe('addTags', () => {
     beforeEach(() => {
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
     })
 
     it('should add tags', () => {
@@ -254,7 +242,7 @@ describe('Span', () => {
     it('should add itself to the context trace finished spans', () => {
       processor.process.returns(Promise.resolve())
 
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
       expect(span.context()._trace.finished).to.deep.equal([span])
@@ -263,7 +251,7 @@ describe('Span', () => {
     it('should record the span', () => {
       processor.process.returns(Promise.resolve())
 
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
 
       expect(processor.process).to.have.been.calledWith(span)
@@ -272,7 +260,7 @@ describe('Span', () => {
     it('should not record the span if already finished', () => {
       processor.process.returns(Promise.resolve())
 
-      span = new Span(tracer, processor, sampler, prioritySampler, { operationName: 'operation' })
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.finish()
       span.finish()
 

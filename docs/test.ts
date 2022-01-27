@@ -55,8 +55,7 @@ tracer.init({
         { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
         { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
       ]
-    },
-    internalErrors: true
+    }
   },
   hostname: 'agent',
   logger: {
@@ -163,6 +162,15 @@ const sharedbOptions = {
   },
 };
 
+const moleculerOptions = {
+  service: 'test',
+  client: false,
+  params: true,
+  server: {
+    meta: true
+  }
+}
+
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('aws-sdk', awsSdkOptions);
@@ -220,6 +228,7 @@ tracer.use('memcached');
 tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
+tracer.use('moleculer', moleculerOptions);
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');

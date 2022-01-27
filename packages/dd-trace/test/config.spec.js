@@ -51,7 +51,7 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.property('service', 'node')
-    expect(config).to.have.property('enabled', true)
+    expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
     expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
@@ -69,7 +69,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('experimental.internalErrors', false)
     expect(config).to.have.nested.property('appsec.enabled', false)
     const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
     expect(config).to.have.nested.property('appsec.rules', rulePath)
@@ -98,7 +97,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
-    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
@@ -119,7 +118,7 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('hostname', 'agent')
@@ -130,6 +129,7 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.property('sampleRate', 0.5)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
@@ -137,19 +137,18 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('experimental.internalErrors', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
-    process.env.DD_TRACE_ENABLED = 'False'
+    process.env.DD_TRACING_ENABLED = 'False'
     process.env.DD_TRACE_DEBUG = 'TRUE'
     process.env.DD_RUNTIME_METRICS_ENABLED = '0'
 
     const config = new Config()
 
-    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('runtimeMetrics', false)
   })
@@ -159,14 +158,14 @@ describe('Config', () => {
     process.env.DD_SITE = 'datadoghq.eu'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
-    process.env.DD_TRACE_ENABLED = 'false'
+    process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_ENV = 'test'
 
     const config = new Config()
 
-    expect(config).to.have.property('enabled', false)
+    expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
     expect(config).to.have.nested.property('url.protocol', 'https:')
@@ -213,14 +212,11 @@ describe('Config', () => {
         sampler: {
           sampleRate: 1,
           rateLimit: 1000
-        },
-        internalErrors: true
+        }
       },
       appsec: true
     })
 
-    expect(config).to.have.property('enabled', false)
-    expect(config).to.have.property('debug', true)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -249,17 +245,14 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('experimental.internalErrors', true)
-    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 1, rateLimit: 1000 })
     expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 0.5, rateLimit: 1000 })
   })
 
   it('should initialize from the options with url taking precedence', () => {
     const logger = {}
     const tags = { foo: 'bar' }
     const config = new Config({
-      enabled: false,
-      debug: true,
       hostname: 'agent',
       url: 'https://agent2:7777',
       site: 'datadoghq.eu',
@@ -273,8 +266,6 @@ describe('Config', () => {
       plugins: false
     })
 
-    expect(config).to.have.property('enabled', false)
-    expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
     expect(config).to.have.nested.property('url.port', '7777')
@@ -306,8 +297,6 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_PORT = '5218'
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '0.0.0'
@@ -326,8 +315,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_RULES = 'something'
 
     const config = new Config({
-      enabled: true,
-      debug: false,
       protocolVersion: '0.5',
       protocol: 'https',
       site: 'datadoghq.com',
@@ -348,8 +335,7 @@ describe('Config', () => {
         b3: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false,
-        internalErrors: false
+        enableGetRumData: false
       },
       appsec: {
         enabled: true,
@@ -357,8 +343,6 @@ describe('Config', () => {
       }
     })
 
-    expect(config).to.have.property('enabled', true)
-    expect(config).to.have.property('debug', false)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
@@ -377,7 +361,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('experimental.internalErrors', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
   })
@@ -417,14 +400,10 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_URL = 'http://agent2:6218'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
-    process.env.DD_TRACE_ENABLED = 'false'
-    process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_SERVICE_NAME = 'service'
     process.env.DD_ENV = 'test'
 
     const config = new Config({
-      enabled: true,
-      debug: false,
       url: 'https://agent3:7778',
       protocol: 'http',
       hostname: 'server',
@@ -433,8 +412,6 @@ describe('Config', () => {
       env: 'development'
     })
 
-    expect(config).to.have.property('enabled', true)
-    expect(config).to.have.property('debug', false)
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent3')
     expect(config).to.have.nested.property('url.port', '7778')

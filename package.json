@@ -61,7 +61,7 @@
     "node": ">=12"
   },
   "dependencies": {
-    "@datadog/native-appsec": "^0.7.0",
+    "@datadog/native-appsec": "^0.8.0",
     "@datadog/native-metrics": "^1.1.0",
     "@datadog/pprof": "^0.3.0",
     "@datadog/sketches-js": "^1.0.4",
