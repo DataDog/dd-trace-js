@@ -65,7 +65,7 @@ describe('Sns', () => {
         MessageAttributes: {
           '_datadog': {
             'DataType': 'String',
-            'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampled":"1","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
+            'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
           }
         },
         'TopicArn': 'some ARN'
@@ -97,7 +97,7 @@ describe('Sns', () => {
             MessageAttributes: {
               '_datadog': {
                 'DataType': 'String',
-                'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampled":"1","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
+                'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
               }
             }
           },

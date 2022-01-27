@@ -65,7 +65,7 @@ describe('Kinesis', () => {
       kinesis.requestInject(span.context(), request, tracer)
 
       expect(request.params).to.deep.equal({
-        Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampled":"1","x-datadog-sampling-priority":"1","x-datadog-tags":""}}'
+        Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}}'
       })
     })
 
@@ -94,7 +94,7 @@ describe('Kinesis', () => {
       expect(request.params).to.deep.equal({
         Records: [
           {
-            Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampled":"1","x-datadog-sampling-priority":"1","x-datadog-tags":""}}'
+            Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}}'
           }
         ]
       })
