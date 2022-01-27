@@ -156,6 +156,7 @@ class Instrumenter {
 
     if (!instrumented) {
       this._instrumented.set(instrumentation, instrumented = new Set())
+      telemetry.updateIntegrations()
     }
 
     if (!instrumented.has(this._defaultExport(moduleExports))) {
