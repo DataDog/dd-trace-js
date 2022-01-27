@@ -146,6 +146,10 @@ function setRateLimit (rateLimit) {
   limiter = new Limiter(rateLimit)
 }
 
+function setRateLimit (rateLimit) {
+  limiter = new Limiter(rateLimit)
+}
+
 module.exports = {
   resolveHTTPRequest,
   resolveHTTPResponse,
