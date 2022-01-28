@@ -120,11 +120,11 @@ module.exports = [
 
       const mixinSym = pino.symbols.mixinSym
 
-      const wrapped = this.wrapExport(pino, createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino))
+      const wrapper = createWrapPino(tracer, config, mixinSym, createWrapMixin)
 
-      wrapped.pino = this.wrapExport(pino.pino, createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino.pino))
-      wrapped.default = this.wrapExport(pino.default,
-        createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino.default))
+      const wrapped = this.wrapExport(pino, wrapper(pino))
+      wrapped.pino = this.wrapExport(pino.pino, wrapper(pino.pino))
+      wrapped.default = this.wrapExport(pino.default, wrapper(pino.default))
 
       return wrapped
     },
