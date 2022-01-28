@@ -1,11 +1,9 @@
 'use strict'
 
-const { AsyncResource } = require('async_hooks')
 const {
   channel,
   addHook,
-  bind,
-  bindAsyncResource
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -30,8 +28,8 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
       const res = query.apply(this, arguments)
 
       if (res._callback) {
-        const cb = bindAsyncResource.call(asyncResource, res._callback)
-        res._callback = bind(function (error, result) {
+        const cb = asyncResource.bind(res._callback)
+        res._callback = AsyncResource.bind(function (error, result) {
           if (error) {
             errorCh.publish(error)
           }
@@ -40,7 +38,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
           return cb.apply(this, arguments)
         })
       } else {
-        const cb = bind(function () {
+        const cb = AsyncResource.bind(function () {
           asyncEndCh.publish(undefined)
         })
         res.on('end', cb)
@@ -62,7 +60,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
-    arguments[0] = bind(cb)
+    arguments[0] = AsyncResource.bind(cb)
     return getConnection.apply(this, arguments)
   })
   return Pool
