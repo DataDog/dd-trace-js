@@ -1,0 +1,43 @@
+name: System Tests
+
+on:
+  pull_request:
+    branches:
+      - "**"
+  workflow_dispatch: {}
+  schedule:
+    - cron:  '00 04 * * 2-6'
+
+jobs:
+  system-tests:
+    runs-on: ubuntu-latest
+    env:
+      TEST_LIBRARY: nodejs
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - name: Checkout system tests
+        uses: actions/checkout@v2
+        with:
+          repository: 'DataDog/system-tests'
+
+      - name: Checkout dd-trace-js
+        uses: actions/checkout@v2
+        with:
+          path: 'binaries/dd-trace-js'
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Run
+        run: ./run.sh
+
+      - name: Compress artifact
+        if: ${{ always() }}
+        run: tar -czvf artifact.tar.gz $(ls | grep logs)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: logs_express-poc
+          path: artifact.tar.gz
