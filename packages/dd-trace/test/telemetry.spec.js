@@ -125,9 +125,20 @@ describe('telemetry', () => {
     return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
-          { name: 'foo', enabled: true, auto_enabled: true },
-          { name: 'bar', enabled: true, auto_enabled: true },
           { name: 'baz', enabled: true, auto_enabled: true }
+        ]
+      })
+    })
+  })
+
+  it('should send app-integrations-change', () => {
+    instrumentedMap.set({ name: 'boo' }, {})
+    telemetry.updateIntegrations()
+
+    return testSeq(4, 'app-integrations-change', payload => {
+      expect(payload).to.deep.equal({
+        integrations: [
+          { name: 'boo', enabled: true, auto_enabled: true }
         ]
       })
     })
@@ -136,7 +147,7 @@ describe('telemetry', () => {
   it('should send app-closing', () => {
     process.emit('beforeExit')
 
-    return testSeq(4, 'app-closing', payload => {
+    return testSeq(5, 'app-closing', payload => {
       expect(payload).to.deep.equal({})
     })
   })

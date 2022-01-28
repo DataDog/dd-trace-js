@@ -15,13 +15,22 @@ let seqId = 0
 let application
 let host
 let interval
+let sentIntegrations = new Set()
 
 function getIntegrations () {
-  return [...new Set(instrumenter._instrumented.keys())].map(plugin => ({
-    name: plugin.name,
-    enabled: true,
-    auto_enabled: true
-  }))
+  const newIntegrations = [];
+  for (const plugin of instrumenter._instrumented.keys()) {
+    if (sentIntegrations.has(plugin.name)) {
+      continue
+    }
+    newIntegrations.push({
+      name: plugin.name,
+      enabled: true,
+      auto_enabled: true
+    })
+    sentIntegrations.add(plugin.name)
+  }
+  return newIntegrations
 }
 
 function getDependencies () {
