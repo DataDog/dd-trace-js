@@ -1,6 +1,10 @@
 'use strict'
 
 const addresses = require('./addresses')
+const Limiter = require('../rate_limiter')
+
+// default limiter, configurable with setRateLimit()
+let limiter = new Limiter(100)
 
 const REQUEST_HEADERS_PASSLIST = [
   'accept',
@@ -85,8 +89,11 @@ function reportAttack (attackData, store) {
   const currentTags = topSpan.context()._tags
 
   const newTags = {
-    'appsec.event': 'true',
-    'manual.keep': 'true' // TODO: figure out how to keep appsec traces with sampling revamp
+    'appsec.event': 'true'
+  }
+
+  if (limiter.isAllowed()) {
+    newTags['manual.keep'] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -136,11 +143,16 @@ function finishAttacks (req, context) {
   topSpan.addTags(newTags)
 }
 
+function setRateLimit (rateLimit) {
+  limiter = new Limiter(rateLimit)
+}
+
 module.exports = {
   resolveHTTPRequest,
   resolveHTTPResponse,
   filterHeaders,
   formatHeaderName,
   reportAttack,
-  finishAttacks
+  finishAttacks,
+  setRateLimit
 }
