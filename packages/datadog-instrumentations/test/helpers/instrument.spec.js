@@ -5,7 +5,7 @@ const { expect } = require('chai')
 const { storage } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')
 
-describe.only('helpers/instrument', () => {
+describe('helpers/instrument', () => {
   describe('AsyncResource', () => {
     it('should bind statically', () => {
       storage.run('test1', () => {
