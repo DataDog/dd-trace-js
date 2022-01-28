@@ -122,16 +122,16 @@ module.exports = [
 
       const wrapped = this.wrapExport(pino, createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino))
 
-      wrapped.pino = this.wrapExport(pino.pino, createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino.pino))
-      wrapped.default = this.wrapExport(pino.default,
-        createWrapPino(tracer, config, mixinSym, createWrapMixin)(pino.default))
+      wrapped.pino = wrapped
+      wrapped.default = wrapped
 
       return wrapped
     },
     unpatch (pino) {
       const unwrapped = this.unwrapExport(pino)
-      unwrapped.pino = this.unwrapExport(pino.pino)
-      unwrapped.default = this.unwrapExport(pino.default)
+
+      unwrapped.pino = unwrapped
+      unwrapped.default = unwrapped
 
       return unwrapped
     }
