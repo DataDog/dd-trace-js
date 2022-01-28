@@ -151,7 +151,11 @@ function stop () {
 }
 
 function updateIntegrations () {
-  sendData('app-integrations-change', { integrations: getIntegrations() })
+  const integrations = getIntegrations()
+  if (integrations.length == 0) {
+    return
+  }
+  sendData('app-integrations-change', { integrations })
 }
 
 module.exports = {
