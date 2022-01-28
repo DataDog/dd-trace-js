@@ -187,8 +187,8 @@ describe('reporter', () => {
       Reporter.setRateLimit(1)
 
       expect(Reporter.reportAttack('', store)).to.not.be.false
-      expect(addTags.getCall(3).firstArg).to.have.property('manual.keep').that.equals('true')
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
+      expect(addTags.getCall(3).firstArg).to.have.property('manual.keep').that.equals('true')
       expect(Reporter.reportAttack('', store)).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(addTags.getCall(4).firstArg).to.not.have.property('manual.keep')
