@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
-// const { executionAsyncId, triggerAsyncId } 
 
 describe('Plugin', () => {
   let couchbase
@@ -56,18 +55,13 @@ describe('Plugin', () => {
         })
 
         it('should run the Query event listener in the parent context', done => {
-          debugger;
           const query = 'SELECT 1+1'
           const n1qlQuery = N1qlQuery.fromString(query)
           const span = tracer.startSpan('test.query.listener')
-          
-          debugger;
+
           tracer.scope().activate(span, () => {
             const emitter = cluster.query(n1qlQuery)
-            debugger;
             emitter.on('rows', () => {
-              debugger;
-              // console.trace()
               expect(tracer.scope().active()).to.equal(span)
               done()
             })
@@ -75,18 +69,11 @@ describe('Plugin', () => {
         })
 
         it('should run the Bucket event listener in the parent context', done => {
-          debugger;
           bucket.disconnect()
           const span = tracer.startSpan('test')
-          
-          debugger;
 
-          // console.log(bucket)
           tracer.scope().activate(span, () => {
-            debugger;
             bucket = cluster.openBucket('datadog-test')
-            debugger;
-            // console.log(bucket)
             bucket.on('connect', () => {
               expect(tracer.scope().active()).to.equal(span)
               done()

@@ -9,7 +9,6 @@ const parse = require('module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { AsyncResource } = require('async_hooks')
 const shimmer = require('../../../datadog-shimmer')
-const { storage } = require('../../../datadog-core')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
@@ -121,73 +120,9 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
   }
 }
 
-exports.bindEventEmitter = function bindEventEmitter (emitter) {
-  
-  shimmer.wrap(emitter, 'addListener', wrapAddListener)
-  shimmer.wrap(emitter, 'prependListener', wrapAddListener)
-  shimmer.wrap(emitter, 'on', wrapAddListener)
-  shimmer.wrap(emitter, 'once', wrapAddListener)
-  shimmer.wrap(emitter, 'removeListener', wrapRemoveListener)
-  shimmer.wrap(emitter, 'off', wrapRemoveListener)
-  shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
-  emitter.__is_dd_emitter = true
-}
-
-function wrapAddListener (addListener) {
-  return function (name, fn) {
-    const ar = new AsyncResource('bound-anonymous-fn')
-    // console.log(1, storage.getStore())
-    const bound = function () {
-      return ar.runInAsyncScope(() => {
-        // console.log(2, storage.getStore())
-        return fn.apply(this, arguments)
-      })
-    }
-    bound._datadog_unbound = fn
-    this._datadog_events = this._datadog_events || {}
-    if (!this._datadog_events[name]) {
-      this._datadog_events[name] = new Map()
-    }
-    this._datadog_events[name].set(fn, bound)
-    addListener.call(this, name, bound)
-  }
-}
-
-function wrapRemoveListener (removeListener) {
-  return function (name, fn) {
-    const listeners = this._datadog_events && this._datadog_events[name]
-    const bound = listeners.get(fn)
-    listeners.delete(fn)
-    removeListener.call(this, name, bound)
-  }
-}
-
-function wrapRemoveAllListener (removeAllListeners) {
-  return function (name, fn) {
-    const listeners = this._datadog_events && this._datadog_events[name]
-    const bound = listeners.get(fn)
-    listeners.delete(fn)
-    if (name) {
-      delete this._datadog_events[name]
-    } else {
-      delete this._datadog_events
-    }
-    removeAllListeners.call(this, name, bound)
-  }
-}
-
-exports.bindEmit = function bindEmit (emitter, ar) {
-  if (!emitter.emit) {
-    debugger;
-    return
-  }
+exports.bindEmit = function bindEmit (emitter, asyncResource) {
   shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
-    debugger;
-    console.log(10)
-    const asyncResource = ar ? ar : new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      debugger;
-      console.log(storage.getStore())
       return emit.apply(this, arguments)
     })
   })

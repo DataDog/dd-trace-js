@@ -4,13 +4,9 @@ const {
   channel,
   addHook,
   AsyncResource,
-  bindEventEmitter,
   bindEmit
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-// const storage = require('../../datadog-core').storage
-const { storage } = require('../../datadog-core')
-// const tracer =  require('../../dd-trace')
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
   const startChn1qlReq = channel('apm:couchbase:_n1qlReq:start')
@@ -18,29 +14,20 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   const endChn1qlReq = channel('apm:couchbase:_n1qlReq:end')
   const errorChn1qlReq = channel('apm:couchbase:_n1qlReq:error')
 
-  bindEmit(Bucket.prototype)
-  bindEmit(Bucket.N1qlQueryResponse.prototype)
-  // bindEventEmitter(Bucket.prototype)
-  // bindEventEmitter(Bucket.N1qlQueryResponse.prototype)
   Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
   Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
-    console.log(1)
-    debugger;
-    const ar = new AsyncResource('bound-anonymous-fn')
     if (
       !startChn1qlReq.hasSubscribers
     ) {
       return _n1qlReq.apply(this, arguments)
     }
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
-    // bindEmit(emitter, ar)
     const n1qlQuery = q && q.statement
 
     startChn1qlReq.publish([n1qlQuery, this])
-    
-    // console.log(0, tracer.scope().active())
+
     emitter.once('rows', AsyncResource.bind(() => {
       asyncEndChn1qlReq.publish(undefined)
     }))
@@ -49,15 +36,9 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
       errorChn1qlReq.publish(error)
       asyncEndChn1qlReq.publish(undefined)
     }))
-    
-    // emitter.once('connect', AsyncResource.bind(() => {
-    //   asyncEndChn1qlReq.publish(undefined)
-    // }))
 
     try {
-      const res = _n1qlReq.apply(this, arguments)
-      // bindEmit(res, ar)
-      return res
+      return _n1qlReq.apply(this, arguments)
     } catch (err) {
       err.stack // trigger getting the stack at the original throwing point
       errorChn1qlReq.publish(err)
@@ -80,13 +61,10 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
-  
 
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => function (name, callback) {
-    debugger;
     const ar = new AsyncResource('bound-anonymous-fn')
-
-    const res = ar.bind(openBucket, this).apply(this, arguments)
+    const res = openBucket.apply(this, arguments)
     bindEmit(res, ar)
     return res
   })
@@ -103,13 +81,6 @@ function findCallbackIndex (args) {
 
 function wrapMaybeInvoke (_maybeInvoke) {
   const wrapped = function (fn, args) {
-    debugger;
-    // console.log(2)
-    // console.log(fn)
-    // console.log(storage.getStore())
-    const ar = new AsyncResource('bound-anonymous-fn')
-    console.log(15, storage.getStore())
-    // bindEmit(this.__proto__, ar)
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
     const callbackIndex = args.length - 1
@@ -118,25 +89,19 @@ function wrapMaybeInvoke (_maybeInvoke) {
     if (callback instanceof Function) {
       args[callbackIndex] = AsyncResource.bind(callback)
     }
-    
 
-    const res = _maybeInvoke.apply(this, arguments)
-    // bindEmit(res, ar)
-    
-    return res
+    return _maybeInvoke.apply(this, arguments)
   }
   return shimmer.wrap(_maybeInvoke, wrapped)
 }
 
 function wrapQuery (query) {
   const wrapped = function (q, params, callback) {
-    debugger;
-    console.log(3)
     const ar = new AsyncResource('bound-anonymous-fn')
     callback = arguments[arguments.length - 1]
 
     if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = AsyncResource.bind(callback)
+      arguments[arguments.length - 1] = callback
     }
 
     const res = query.apply(this, arguments)
@@ -153,10 +118,6 @@ function wrap (prefix, fn) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function (key, value, options, callback) {
-    debugger;
-    console.log(4)
-    const ar = new AsyncResource('bound-anonymous-fn')
-    
     if (
       !startCh.hasSubscribers
     ) {
@@ -171,21 +132,16 @@ function wrap (prefix, fn) {
 
     startCh.publish([this])
 
-    arguments[callbackIndex] = AsyncResource.bind(function (error, result) {
+    arguments[callbackIndex] = function (error, result) {
       if (error) {
         errorCh.publish(error)
       }
       asyncEndCh.publish(result)
       return cb.apply(this, arguments)
-    })
+    }
 
     try {
-      const res = fn.apply(this, arguments)
-      // bindEmit(res, ar)
-      return res
-      // return ar.bind(() => {
-      //   return fn.apply(this, arguments)
-      // })
+      return fn.apply(this, arguments)
     } catch (error) {
       error.stack // trigger getting the stack at the original throwing point
       errorCh.publish(error)

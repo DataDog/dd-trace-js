@@ -42,41 +42,10 @@ class CouchBasePlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:couchbase:_n1qlReq:start', ([resource, bucket]) => {
+    this.addSubs('_n1qlReq', ([resource, bucket]) => {
       const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('couchbase.query', {
-        childOf,
-        tags: {
-          'db.type': 'couchbase',
-          'component': 'couchbase',
-          'service.name': this.config.service || `${this.tracer._service}-couchbase`,
-          'resource.name': resource,
-          'span.kind': 'client'
-        }
-      })
-
-      span.setTag('span.type', 'sql')
-      span.setTag('couchbase.bucket.name', bucket.name || bucket._name)
-
-      analyticsSampler.sample(span, this.config.measured)
+      const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource }, store, bucket)
       this.enter(span, store)
-    })
-
-    this.addSub('apm:couchbase:_n1qlReq:end', () => {
-      this.exit()
-    })
-
-    this.addSub('apm:couchbase:_n1qlReq:error', err => {
-      if (err) {
-        const span = storage.getStore().span
-        span.setTag('error', err)
-      }
-    })
-
-    this.addSub('apm:couchbase:_n1qlReq:async-end', () => {
-      const span = storage.getStore().span
-      span.finish()
     })
 
     this.addSubs('upsert', ([bucket]) => {
