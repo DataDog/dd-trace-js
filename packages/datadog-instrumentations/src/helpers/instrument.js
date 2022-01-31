@@ -7,10 +7,9 @@ const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
-const { AsyncResource, executionAsyncId, triggerAsyncId } = require('async_hooks')
+const { AsyncResource } = require('async_hooks')
 const shimmer = require('../../../datadog-shimmer')
-const storage = require('../../../datadog-core').storage
-
+const { storage } = require('../../../datadog-core')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
@@ -137,8 +136,10 @@ exports.bindEventEmitter = function bindEventEmitter (emitter) {
 function wrapAddListener (addListener) {
   return function (name, fn) {
     const ar = new AsyncResource('bound-anonymous-fn')
+    // console.log(1, storage.getStore())
     const bound = function () {
       return ar.runInAsyncScope(() => {
+        // console.log(2, storage.getStore())
         return fn.apply(this, arguments)
       })
     }
@@ -175,44 +176,19 @@ function wrapRemoveAllListener (removeAllListeners) {
   }
 }
 
-exports.bindEmit = function bindEmit (emitter, errorChn1qlReq, asyncEndChn1qlReq) {
-  // debugger;
-  // shimmer.wrap(emitter, 'addListener', wrapAddListener)
-  // shimmer.wrap(emitter, 'prependListener', wrapAddListener)
-  // shimmer.wrap(emitter, 'on', wrapAddListener)
-  // shimmer.wrap(emitter, 'once', wrapAddListener)
-  // shimmer.wrap(emitter, 'removeListener', wrapRemoveListener)
-  // shimmer.wrap(emitter, 'off', wrapRemoveListener)
-  // shimmer.wrap(emitter, 'removeAllListeners', wrapRemoveAllListener)
-  // emitter.__is_dd_emitter = true
-  console.log(1, storage.getStore())
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
+exports.bindEmit = function bindEmit (emitter, ar) {
+  if (!emitter.emit) {
+    debugger;
+    return
+  }
   shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
     debugger;
-    const id = executionAsyncId()
-    
-    // const oldEmit = asyncResource.bind(emit)
-    // // console.log(id)
-    // return emitter.emit = exports.bind(function() {
-      
-    //   return oldEmit.apply(emitter, arguments);
-    // })
-
-    
-
+    console.log(10)
+    const asyncResource = ar ? ar : new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      // console.log(3, storage.getStore())
       debugger;
-
-      console.log(arguments)
-      // errorChn1qlReq.publish(error)
-      // asyncEndChn1qlReq.publish(undefined)
-
-
-      console.log(id, triggerAsyncId())
-      const res = emit.apply(this, arguments)
-      
-      return res
+      console.log(storage.getStore())
+      return emit.apply(this, arguments)
     })
   })
 }

@@ -26,7 +26,6 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
-    console.log(1)
     debugger;
     const ar = new AsyncResource('bound-anonymous-fn')
     if (
@@ -35,12 +34,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
       return _n1qlReq.apply(this, arguments)
     }
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
-    // bindEmit(emitter, ar)
+    bindEmit(emitter, ar)
     const n1qlQuery = q && q.statement
 
     startChn1qlReq.publish([n1qlQuery, this])
     
-    // console.log(0, tracer.scope().active())
+    console.log(0, tracer.scope().active())
     emitter.once('rows', AsyncResource.bind(() => {
       asyncEndChn1qlReq.publish(undefined)
     }))
@@ -50,9 +49,6 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
       asyncEndChn1qlReq.publish(undefined)
     }))
     
-    // emitter.once('connect', AsyncResource.bind(() => {
-    //   asyncEndChn1qlReq.publish(undefined)
-    // }))
 
     try {
       const res = _n1qlReq.apply(this, arguments)
@@ -78,19 +74,9 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
+  debugger;
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
-  
-
-  shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => function (name, callback) {
-    debugger;
-    const ar = new AsyncResource('bound-anonymous-fn')
-
-    const res = ar.bind(openBucket, this).apply(this, arguments)
-    bindEmit(res, ar)
-    return res
-  })
-
   return Cluster
 })
 
@@ -104,12 +90,8 @@ function findCallbackIndex (args) {
 function wrapMaybeInvoke (_maybeInvoke) {
   const wrapped = function (fn, args) {
     debugger;
-    // console.log(2)
-    // console.log(fn)
-    // console.log(storage.getStore())
+    
     const ar = new AsyncResource('bound-anonymous-fn')
-    console.log(15, storage.getStore())
-    // bindEmit(this.__proto__, ar)
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
     const callbackIndex = args.length - 1
@@ -118,11 +100,9 @@ function wrapMaybeInvoke (_maybeInvoke) {
     if (callback instanceof Function) {
       args[callbackIndex] = AsyncResource.bind(callback)
     }
-    
 
     const res = _maybeInvoke.apply(this, arguments)
     // bindEmit(res, ar)
-    
     return res
   }
   return shimmer.wrap(_maybeInvoke, wrapped)
@@ -131,7 +111,6 @@ function wrapMaybeInvoke (_maybeInvoke) {
 function wrapQuery (query) {
   const wrapped = function (q, params, callback) {
     debugger;
-    console.log(3)
     const ar = new AsyncResource('bound-anonymous-fn')
     callback = arguments[arguments.length - 1]
 
@@ -154,9 +133,7 @@ function wrap (prefix, fn) {
 
   const wrapped = function (key, value, options, callback) {
     debugger;
-    console.log(4)
     const ar = new AsyncResource('bound-anonymous-fn')
-    
     if (
       !startCh.hasSubscribers
     ) {
