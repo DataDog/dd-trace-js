@@ -1,7 +1,6 @@
 'use strict'
 
 const url = require('url')
-const opentracing = require('opentracing')
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
@@ -10,15 +9,12 @@ const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { AsyncResource, AsyncLocalStorage } = require('async_hooks')
 
-const Reference = opentracing.Reference
-
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
-const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
 
 const asyncLocalStorage = new AsyncLocalStorage()
 
@@ -99,9 +95,8 @@ function diagnostics (tracer, config) {
         'http.url': uri,
         'service.name': getServiceName(tracer, config, request)
       })
+      requestSpansMap.set(request, span)
     }
-
-    requestSpansMap.set(request, span)
 
     if (!(hasAmazonSignature(request) || !config.propagationFilter(uri))) {
       const injectedHeaders = {}
@@ -115,7 +110,7 @@ function diagnostics (tracer, config) {
   }
 
   function handleRequestError ({ request, error }) {
-    const span = asyncLocalStorage.getStore()
+    const span = requestSpansMap.get(request)
     addError(span, error)
     finish(request, null, span, config)
   }
@@ -314,7 +309,7 @@ function patch (undici, methodName, tracer, config) {
       const scope = tracer.scope()
       const childOf = scope.active()
       const span = tracer.startSpan('http.request', {
-        references: [new Reference(REFERENCE_CHILD_OF, childOf)],
+        childOf,
         tags: {
           [SPAN_KIND]: CLIENT
         }
@@ -336,8 +331,9 @@ module.exports = [
       patch.call(this, undici, 'upgrade', tracer, config)
       patch.call(this, undici, 'connect', tracer, config)
       patch.call(this, undici, 'fetch', tracer, config)
+      patch.call(this, undici.Client.prototype, 'request', tracer, config)
 
-      // Stream take 3 arguments
+      // Stream take different args arguments
       // patch.call(this, undici, 'stream', tracer, config)
       this.unpatch = diagnostics.call(this, tracer, config)
     }

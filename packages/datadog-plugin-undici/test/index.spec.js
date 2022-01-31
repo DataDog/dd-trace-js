@@ -550,7 +550,9 @@ describe('undici', () => {
         })
       })
 
-      it('should skip requests to the agent', (done) => {
+      /// Undici is not the client making requests to the agent
+      // this seems irrelevant at that time
+      xit('should skip requests to the agent', (done) => {
         const app = express()
 
         app.get('/user', (req, res) => {
@@ -560,7 +562,7 @@ describe('undici', () => {
         getPort().then((port) => {
           const timer = setTimeout(done, 100)
 
-          agent.use(() => {
+          agent.use((traces) => {
             done(new Error('Request to the agent was traced.'))
             clearTimeout(timer)
           })
