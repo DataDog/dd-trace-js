@@ -1,5 +1,6 @@
 'use strict'
 
+const url = require('url')
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
@@ -29,6 +30,21 @@ const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
 
+function getHost (options) {
+  if (typeof options === 'string') {
+    return url.parse(options).host
+  }
+
+  const hostname = options.hostname || options.host || 'localhost'
+  const port = options.port
+
+  return [hostname, port].filter(val => val).join(':')
+}
+
+function startsWith (searchString) {
+  return (value) => String(value).startsWith(searchString)
+}
+
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
@@ -47,6 +63,22 @@ const web = {
       filter,
       middleware
     })
+  },
+
+  client: {
+    normalizeConfig (config) {
+      const validateStatus = getClientStatusValidator(config)
+      const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
+      const headers = getHeaders(config)
+      const hooks = getHooks(config)
+
+      return Object.assign({}, config, {
+        validateStatus,
+        propagationFilter,
+        headers,
+        hooks
+      })
+    }
   },
 
   // Start a span and activate a scope for a request.
@@ -142,6 +174,48 @@ const web = {
 
       span.finish()
     }
+  },
+
+  getServiceName (tracer, config, options) {
+    if (config.splitByDomain) {
+      return getHost(options)
+    } else if (config.service) {
+      return config.service
+    }
+
+    return `${tracer._service}-http-client`
+  },
+
+  addErrorToSpan(span, error) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
+    return error
+  },
+
+  hasAmazonSignature (options) {
+    if (!options) {
+      return false
+    }
+
+    if (options.headers) {
+      const headers = Object.keys(options.headers)
+          .reduce((prev, next) => Object.assign(prev, {
+            [next.toLowerCase()]: options.headers[next]
+          }), {})
+
+      if (headers['x-amz-signature']) {
+        return true
+      }
+
+      if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
+        return true
+      }
+    }
+
+    return options.path && options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
   },
 
   // Register a callback to run before res.end() is called.
@@ -449,6 +523,15 @@ function getStatusValidator (config) {
   return code => code < 500
 }
 
+function getClientStatusValidator (config) {
+  if (typeof config.validateStatus === 'function') {
+    return config.validateStatus
+  } else if (config.hasOwnProperty('validateStatus')) {
+    log.error('Expected `validateStatus` to be a function.')
+  }
+  return code => code < 400 || code >= 500
+}
+
 function getHooks (config) {
   const noop = () => {}
   const request = (config.hooks && config.hooks.request) || noop
@@ -465,5 +548,22 @@ function getMiddlewareSetting (config) {
 
   return true
 }
+
+function getFilter (config) {
+  config = Object.assign({}, config, {
+    blocklist: config.blocklist || []
+  })
+
+  return urlFilter.getFilter(config)
+}
+
+function getHeaders (config) {
+  if (!Array.isArray(config.headers)) return []
+
+  return config.headers
+    .filter(key => typeof key === 'string')
+    .map(key => key.toLowerCase())
+}
+
 
 module.exports = web

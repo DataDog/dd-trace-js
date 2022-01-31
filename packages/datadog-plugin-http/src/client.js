@@ -8,6 +8,7 @@ const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
+const { addErrorToSpan, getServiceName, hasAmazonSignature, client } = require('../../dd-trace/src/plugins/util/web')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -17,7 +18,7 @@ const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
 
 function patch (http, methodName, tracer, config) {
-  config = normalizeConfig(tracer, config)
+  config = normalizeConfig(config)
   this.wrap(http, methodName, fn => makeRequestTrace(fn))
 
   function makeRequestTrace (request) {
@@ -84,7 +85,7 @@ function patch (http, methodName, tracer, config) {
             break
           }
           case 'error':
-            addError(span, arg)
+            addErrorToSpan(span, arg)
           case 'abort': // eslint-disable-line no-fallthrough
           case 'timeout': // eslint-disable-line no-fallthrough
             finish(req, null, span, config)
@@ -117,16 +118,6 @@ function patch (http, methodName, tracer, config) {
     config.hooks.request(span, req, res)
 
     span.finish()
-  }
-
-  function addError (span, error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
-
-    return error
   }
 
   function addRequestHeaders (req, span, config) {
@@ -220,54 +211,6 @@ function patch (http, methodName, tracer, config) {
   }
 }
 
-function getHost (options) {
-  if (typeof options === 'string') {
-    return url.parse(options).host
-  }
-
-  const hostname = options.hostname || options.host || 'localhost'
-  const port = options.port
-
-  return [hostname, port].filter(val => val).join(':')
-}
-
-function getServiceName (tracer, config, options) {
-  if (config.splitByDomain) {
-    return getHost(options)
-  } else if (config.service) {
-    return config.service
-  }
-
-  return `${tracer._service}-http-client`
-}
-
-function hasAmazonSignature (options) {
-  if (!options) {
-    return false
-  }
-
-  if (options.headers) {
-    const headers = Object.keys(options.headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: options.headers[next]
-      }), {})
-
-    if (headers['x-amz-signature']) {
-      return true
-    }
-
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
-      return true
-    }
-  }
-
-  return options.path && options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
-}
-
-function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
-}
-
 function unpatch (http) {
   this.unwrap(http, 'request')
   this.unwrap(http, 'get')
@@ -290,20 +233,10 @@ function getFilter (config) {
   return urlFilter.getFilter(config)
 }
 
-function normalizeConfig (tracer, config) {
+function normalizeConfig (config) {
   config = config.client || config
 
-  const validateStatus = getStatusValidator(config)
-  const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
-  const headers = getHeaders(config)
-  const hooks = getHooks(config)
-
-  return Object.assign({}, config, {
-    validateStatus,
-    propagationFilter,
-    headers,
-    hooks
-  })
+  return client.normalizeConfig(config)
 }
 
 function getHeaders (config) {

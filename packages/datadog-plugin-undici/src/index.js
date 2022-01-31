@@ -8,6 +8,7 @@ const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { AsyncResource, AsyncLocalStorage } = require('async_hooks')
+const { addErrorToSpan, getServiceName, hasAmazonSignature, client: { normalizeConfig } } = require('../../dd-trace/src/plugins/util/web')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -17,15 +18,6 @@ const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
 
 const asyncLocalStorage = new AsyncLocalStorage()
-
-function addError (span, error) {
-  span.addTags({
-    'error.type': error.name,
-    'error.msg': error.message,
-    'error.stack': error.stack
-  })
-  return error
-}
 
 function parseHeaders (headers) {
   const pairs = headers
@@ -66,7 +58,7 @@ function diagnostics (tracer, config) {
     )
     return () => {}
   }
-  config = normalizeConfig(tracer, config)
+  config = normalizeConfig(config)
 
   channels.requestChannel = diagnosticsChannel.channel('undici:request:create')
   channels.headersChannel = diagnosticsChannel.channel(
@@ -93,12 +85,14 @@ function diagnostics (tracer, config) {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'service.name': getServiceName(tracer, config, request)
+        'service.name': getServiceName(tracer, config, request.origin)
       })
       requestSpansMap.set(request, span)
     }
 
-    if (!(hasAmazonSignature(request) || !config.propagationFilter(uri))) {
+    const headers = typeof request.headers == 'string' ? parseHeaders(request.headers) : request.headers;
+
+    if (!(hasAmazonSignature({ ...request, headers }) || !config.propagationFilter(uri))) {
       const injectedHeaders = {}
       tracer.inject(span, HTTP_HEADERS, injectedHeaders)
       Object.entries(injectedHeaders).forEach(([key, value]) => {
@@ -111,7 +105,7 @@ function diagnostics (tracer, config) {
 
   function handleRequestError ({ request, error }) {
     const span = requestSpansMap.get(request)
-    addError(span, error)
+    addErrorToSpan(span, error)
     finish(request, null, span, config)
   }
 
@@ -182,119 +176,6 @@ function finish (req, res, span, config) {
   config.hooks.request(span, req, res)
 
   span.finish()
-}
-
-function getHost (options) {
-  return url.parse(options.origin).host
-}
-
-function getServiceName (tracer, config, options) {
-  if (config.splitByDomain) {
-    return getHost(options)
-  } else if (config.service) {
-    return config.service
-  }
-
-  return `${tracer._service}-http-client`
-}
-
-function hasAmazonSignature (options) {
-  if (!options) {
-    return false
-  }
-
-  if (options.headers) {
-    let headers = {}
-    if (typeof options.headers === 'string') {
-      headers = parseHeaders(options.headers)
-    } else {
-      headers = Object.keys(options.headers).reduce(
-        (prev, next) =>
-          Object.assign(prev, {
-            [next.toLowerCase()]: options.headers[next]
-          }),
-        {}
-      )
-    }
-
-    if (headers['x-amz-signature']) {
-      return true
-    }
-
-    if (
-      [].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))
-    ) {
-      return true
-    }
-  }
-
-  return (
-    options.path &&
-    options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
-  )
-}
-
-function startsWith (searchString) {
-  return (value) => String(value).startsWith(searchString)
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return (code) => code < 400 || code >= 500
-}
-
-function getFilter (tracer, config) {
-  const blocklist = tracer._url ? [getAgentFilter(tracer._url)] : []
-
-  config = Object.assign({}, config, {
-    blocklist: blocklist.concat(config.blocklist || [])
-  })
-
-  return urlFilter.getFilter(config)
-}
-
-function getAgentFilter (url) {
-  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
-  const agentFilter = url.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-  return RegExp(`^${agentFilter}.*$`, 'i')
-}
-
-function normalizeConfig (tracer, config) {
-  const validateStatus = getStatusValidator(config)
-  const filter = getFilter(tracer, config)
-  const propagationFilter = getFilter(tracer, {
-    blocklist: config.propagationBlocklist
-  })
-  const headers = getHeaders(config)
-  const hooks = getHooks(config)
-
-  return Object.assign({}, config, {
-    validateStatus,
-    filter,
-    propagationFilter,
-    headers,
-    hooks
-  })
-}
-
-function getHeaders (config) {
-  if (!Array.isArray(config.headers)) return []
-
-  return config.headers
-    .filter((key) => typeof key === 'string')
-    .map((key) => key.toLowerCase())
-}
-
-function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
-
-  return { request }
 }
 
 function patch (undici, methodName, tracer, config) {
