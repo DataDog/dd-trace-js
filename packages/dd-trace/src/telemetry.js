@@ -15,10 +15,10 @@ let seqId = 0
 let application
 let host
 let interval
-let sentIntegrations = new Set()
+const sentIntegrations = new Set()
 
 function getIntegrations () {
-  const newIntegrations = [];
+  const newIntegrations = []
   for (const plugin of instrumenter._instrumented.keys()) {
     if (sentIntegrations.has(plugin.name)) {
       continue
@@ -152,7 +152,7 @@ function stop () {
 
 function updateIntegrations () {
   const integrations = getIntegrations()
-  if (integrations.length == 0) {
+  if (integrations.length === 0) {
     return
   }
   sendData('app-integrations-change', { integrations })
