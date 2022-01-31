@@ -114,6 +114,7 @@ describe('undici', () => {
           })
         })
       })
+
       it('should do automatic instrumentation for connect', (done) => {
         const app = express()
 
@@ -142,6 +143,73 @@ describe('undici', () => {
 
           appListener = server(app, port, () => {
             undici.connect(`http://localhost:${port}/user`)
+          })
+        })
+      })
+
+      xit('should do automatic instrumentation for pipeline', (done) => {
+        const app = express()
+
+        app.get('/user', (_, res) => {
+          res.status(200).send()
+        })
+
+        getPort().then((port) => {
+          agent
+            .use((traces) => {
+              console.log(traces)
+              expect(traces[0][0]).to.have.property(
+                'service',
+                'test-http-client'
+              )
+              expect(traces[0][0]).to.have.property('type', 'http')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property(
+                'http.url',
+                `http://localhost:${port}/user`
+              )
+              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port, () => {
+            undici.pipeline(`http://localhost:${port}/user`, (_) => {
+            })
+          })
+        })
+      })
+
+      xit('should do automatic instrumentation for stream', (done) => {
+        const app = express()
+
+        app.connect('/user', (_, res) => {
+          res.status(200).send()
+        })
+
+        getPort().then((port) => {
+          agent
+            .use((traces) => {
+              console.log(traces)
+              expect(traces[0][0]).to.have.property(
+                'service',
+                'test-http-client'
+              )
+              expect(traces[0][0]).to.have.property('type', 'http')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property(
+                'http.url',
+                `http://localhost:${port}/user`
+              )
+              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port, () => {
+            undici.stream(`http://localhost:${port}/user`)
           })
         })
       })

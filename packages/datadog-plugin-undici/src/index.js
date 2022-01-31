@@ -331,10 +331,10 @@ module.exports = [
       patch.call(this, undici, 'upgrade', tracer, config)
       patch.call(this, undici, 'connect', tracer, config)
       patch.call(this, undici, 'fetch', tracer, config)
+      patch.call(this, undici, 'pipeline', tracer, config)
+      patch.call(this, undici, 'stream', tracer, config)
       patch.call(this, undici.Client.prototype, 'request', tracer, config)
 
-      // Stream take different args arguments
-      // patch.call(this, undici, 'stream', tracer, config)
       this.unpatch = diagnostics.call(this, tracer, config)
     }
   }
