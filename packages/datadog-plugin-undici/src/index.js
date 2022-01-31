@@ -308,7 +308,7 @@ function patch (undici, methodName, tracer, config) {
       }
       const scope = tracer.scope()
       const childOf = scope.active()
-      const span = tracer.startSpan('http.request', {
+      const span = tracer.startSpan(`undici.${methodName}`, {
         childOf,
         tags: {
           [SPAN_KIND]: CLIENT
