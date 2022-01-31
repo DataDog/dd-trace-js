@@ -91,7 +91,9 @@ class TextMapPropagator {
     const header = tags.join(',')
 
     if (header.length <= 512) {
-      carrier[tagsKey] = header
+      if (header.length >= 1) {
+        carrier[tagsKey] = header
+      }
     } else {
       trace.tags['_dd.propagation_error:max_size'] = 1
     }
