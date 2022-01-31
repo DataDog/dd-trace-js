@@ -1,5 +1,5 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
-import { LookupFunction } from "net";
+import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 
@@ -81,15 +81,8 @@ export declare interface Tracer extends opentracing.Tracer {
    * If the `orphanable` option is set to false, the function will not be traced
    * unless there is already an active span or `childOf` option.
    */
-  trace<T>(
-    name: string,
-    fn: (span?: Span, fn?: (error?: Error) => any) => T
-  ): T;
-  trace<T>(
-    name: string,
-    options: TraceOptions & SpanOptions,
-    fn: (span?: Span, done?: (error?: Error) => string) => T
-  ): T;
+  trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -105,21 +98,9 @@ export declare interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any>(
-    name: string,
-    fn: T,
-    requiresParent?: boolean
-  ): T;
-  wrap<T = (...args: any[]) => any>(
-    name: string,
-    options: TraceOptions & SpanOptions,
-    fn: T
-  ): T;
-  wrap<T = (...args: any[]) => any>(
-    name: string,
-    options: (...args: any[]) => TraceOptions & SpanOptions,
-    fn: T
-  ): T;
+  wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 
   /**
    * Create and return a string that can be included in the <head> of a
@@ -134,18 +115,18 @@ export declare interface TraceOptions extends Analyzable {
    * The resource you are tracing. The resource name must not be longer than
    * 5000 characters.
    */
-  resource?: string;
+  resource?: string,
 
   /**
    * The service you are tracing. The service name must not be longer than
    * 100 characters.
    */
-  service?: string;
+  service?: string,
 
   /**
    * The type of request.
    */
-  type?: string;
+  type?: string
 }
 
 /**
@@ -188,17 +169,17 @@ export declare interface SamplingRule {
   /**
    * Sampling rate for this rule.
    */
-  sampleRate: Number;
+  sampleRate: Number
 
   /**
    * Service on which to apply this rule. The rule will apply to all services if not provided.
    */
-  service?: string | RegExp;
+  service?: string | RegExp
 
   /**
    * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
    */
-  name?: string | RegExp;
+  name?: string | RegExp
 }
 
 /**
@@ -222,13 +203,13 @@ export declare interface TracerOptions {
    * traces with logs.
    * @default false
    */
-  logInjection?: boolean;
+  logInjection?: boolean,
 
   /**
    * Whether to enable startup logs.
    * @default true
    */
-  startupLogs?: boolean;
+  startupLogs?: boolean,
 
   /**
    * The service name to be used for this program. If not set, the service name
@@ -257,7 +238,7 @@ export declare interface TracerOptions {
   /**
    * Whether to enable profiling.
    */
-  profiling?: boolean;
+  profiling?: boolean
 
   /**
    * Options specific for the Dogstatsd agent.
@@ -266,13 +247,13 @@ export declare interface TracerOptions {
     /**
      * The hostname of the Dogstatsd agent that the metrics will submitted to.
      */
-    hostname?: string;
+    hostname?: string
 
     /**
      * The port of the Dogstatsd agent that the metrics will submitted to.
      * @default 8125
      */
-    port?: number;
+    port?: number
   };
 
   /**
@@ -301,19 +282,19 @@ export declare interface TracerOptions {
    * Whether to enable runtime metrics.
    * @default false
    */
-  runtimeMetrics?: boolean;
+  runtimeMetrics?: boolean
 
   /**
    * Custom function for DNS lookups when sending requests to the agent.
    * @default dns.lookup()
    */
-  lookup?: LookupFunction;
+  lookup?: LookupFunction
 
   /**
    * Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped.
    * @default 0.4
    */
-  protocolVersion?: string;
+  protocolVersion?: string
 
   /**
    * Configuration of the ingestion between the agent and the backend.
@@ -322,63 +303,61 @@ export declare interface TracerOptions {
     /**
      * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
      */
-    sampleRate?: number;
+    sampleRate?: number
 
     /**
      * Controls the ingestion rate limit between the agent and the backend.
      */
-    rateLimit?: number;
+    rateLimit?: number
   };
 
   /**
    * Experimental features can be enabled all at once by using true or individually using key / value pairs.
    * @default {}
    */
-  experimental?:
-    | boolean
-    | {
-        b3?: boolean;
+  experimental?: boolean | {
+    b3?: boolean
 
-        /**
-         * Whether to add an auto-generated `runtime-id` tag to metrics.
-         * @default false
-         */
-        runtimeId?: boolean;
+    /**
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
+     * @default false
+     */
+    runtimeId?: boolean
 
-        /**
-         * Whether to write traces to log output, rather than send to an agent
-         * @default false
-         */
-        exporter?: "log" | "agent";
+    /**
+     * Whether to write traces to log output, rather than send to an agent
+     * @default false
+     */
+    exporter?: 'log' | 'agent'
 
-        /**
-         * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
-         */
-        sampler?: {
-          /**
-           * Sample rate to apply globally when no other rule is matched. Omit to fallback on the dynamic rates returned by the agent instead.
-           */
-          sampleRate?: Number;
+    /**
+     * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
+     */
+    sampler?: {
+      /**
+       * Sample rate to apply globally when no other rule is matched. Omit to fallback on the dynamic rates returned by the agent instead.
+       */
+      sampleRate?: Number,
 
-          /**
-           * Global rate limit that is applied on the global sample rate and all rules.
-           * @default 100
-           */
-          rateLimit?: Number;
+      /**
+       * Global rate limit that is applied on the global sample rate and all rules.
+       * @default 100
+       */
+      rateLimit?: Number,
 
-          /**
-           * Sampling rules to apply to priority sampling.
-           * @default []
-           */
-          rules?: SamplingRule[];
-        };
+      /**
+       * Sampling rules to apply to priority sampling.
+       * @default []
+       */
+      rules?: SamplingRule[]
+    }
 
-        /**
-         * Whether to enable the experimental `getRumData` method.
-         * @default false
-         */
-        enableGetRumData?: boolean;
-      };
+    /**
+     * Whether to enable the experimental `getRumData` method.
+     * @default false
+     */
+    enableGetRumData?: boolean
+  };
 
   /**
    * Whether to load all built-in plugins.
@@ -408,30 +387,25 @@ export declare interface TracerOptions {
    * implementation for the runtime. Only change this if you know what you are
    * doing.
    */
-  scope?:
-    | "async_hooks"
-    | "async_local_storage"
-    | "async_resource"
-    | "sync"
-    | "noop";
+  scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
 
   /**
    * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
    * @default false
    */
-  reportHostname?: boolean;
+  reportHostname?: boolean
 
   /**
    * A string representing the minimum tracer log level to use when debug logging is enabled
    * @default 'debug'
    */
-  logLevel?: "error" | "debug";
+  logLevel?: 'error' | 'debug'
 
   /**
    * If false, require a parent in order to trace.
    * @default true
    */
-  orphanable?: boolean;
+  orphanable?: boolean
 }
 
 /** @hidden */
@@ -439,14 +413,8 @@ interface EventEmitter {
   emit(eventName: string | symbol, ...args: any[]): any;
   on?(eventName: string | symbol, listener: (...args: any[]) => any): any;
   off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  addListener?(
-    eventName: string | symbol,
-    listener: (...args: any[]) => any
-  ): any;
-  removeListener?(
-    eventName: string | symbol,
-    listener: (...args: any[]) => any
-  ): any;
+  addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
+  removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
 }
 
 /** @hidden */
@@ -481,7 +449,7 @@ export declare interface Scope {
    * @param {Function} fn Function that will have the span activated on its scope.
    * @returns The return value of the provided function.
    */
-  activate<T>(span: Span, fn: (...args: any[]) => T): T;
+  activate<T>(span: Span, fn: ((...args: any[]) => T)): T;
 
   /**
    * Binds a target to the provided span, or the active span if omitted.
@@ -498,56 +466,55 @@ export declare interface Scope {
 
 /** @hidden */
 interface Plugins {
-  amqp10: plugins.amqp10;
-  amqplib: plugins.amqplib;
+  "amqp10": plugins.amqp10;
+  "amqplib": plugins.amqplib;
   "aws-sdk": plugins.aws_sdk;
-  bunyan: plugins.bunyan;
+  "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
-  connect: plugins.connect;
-  couchbase: plugins.couchbase;
-  cucumber: plugins.cucumber;
-  cypress: plugins.cypress;
-  dns: plugins.dns;
-  elasticsearch: plugins.elasticsearch;
-  express: plugins.express;
-  fastify: plugins.fastify;
-  fs: plugins.fs;
+  "connect": plugins.connect;
+  "couchbase": plugins.couchbase;
+  "cucumber": plugins.cucumber;
+  "cypress": plugins.cypress;
+  "dns": plugins.dns;
+  "elasticsearch": plugins.elasticsearch;
+  "express": plugins.express;
+  "fastify": plugins.fastify;
+  "fs": plugins.fs;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
-  graphql: plugins.graphql;
-  grpc: plugins.grpc;
-  hapi: plugins.hapi;
-  http: plugins.http;
-  http2: plugins.http2;
-  ioredis: plugins.ioredis;
-  jest: plugins.jest;
-  kafkajs: plugins.kafkajs;
-  knex: plugins.knex;
-  koa: plugins.koa;
+  "graphql": plugins.graphql;
+  "grpc": plugins.grpc;
+  "hapi": plugins.hapi;
+  "http": plugins.http;
+  "http2": plugins.http2;
+  "ioredis": plugins.ioredis;
+  "jest": plugins.jest;
+  "kafkajs": plugins.kafkajs
+  "knex": plugins.knex;
+  "koa": plugins.koa;
   "limitd-client": plugins.limitd_client;
-  memcached: plugins.memcached;
+  "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
-  mocha: plugins.mocha;
-  moleculer: plugins.moleculer;
+  "mocha": plugins.mocha;
+  "moleculer": plugins.moleculer;
   "mongodb-core": plugins.mongodb_core;
-  mongoose: plugins.mongoose;
-  mysql: plugins.mysql;
-  mysql2: plugins.mysql2;
-  net: plugins.net;
-  next: plugins.next;
-  oracledb: plugins.oracledb;
-  paperplane: plugins.paperplane;
-  pg: plugins.pg;
-  pino: plugins.pino;
-  redis: plugins.redis;
-  restify: plugins.restify;
-  rhea: plugins.rhea;
-  router: plugins.router;
-  sharedb: plugins.sharedb;
-  tedious: plugins.tedious;
-  undici: plugins.undici;
-  when: plugins.when;
-  winston: plugins.winston;
+  "mongoose": plugins.mongoose;
+  "mysql": plugins.mysql;
+  "mysql2": plugins.mysql2;
+  "net": plugins.net;
+  "next": plugins.next;
+  "oracledb": plugins.oracledb;
+  "paperplane": plugins.paperplane;
+  "pg": plugins.pg;
+  "pino": plugins.pino;
+  "redis": plugins.redis;
+  "restify": plugins.restify;
+  "rhea": plugins.rhea;
+  "router": plugins.router;
+  "sharedb": plugins.sharedb;
+  "tedious": plugins.tedious;
+  "undici": plugins.undici;
+  "winston": plugins.winston;
 }
 
 /** @hidden */
@@ -583,11 +550,7 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
-    allowlist?:
-      | string
-      | RegExp
-      | ((url: string) => boolean)
-      | (string | RegExp | ((url: string) => boolean))[];
+    allowlist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * Deprecated in favor of `allowlist`.
@@ -595,11 +558,7 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    whitelist?:
-      | string
-      | RegExp
-      | ((url: string) => boolean)
-      | (string | RegExp | ((url: string) => boolean))[];
+    whitelist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * List of URLs that should not be instrumented. Takes precedence over
@@ -607,11 +566,7 @@ declare namespace plugins {
      *
      * @default []
      */
-    blocklist?:
-      | string
-      | RegExp
-      | ((url: string) => boolean)
-      | (string | RegExp | ((url: string) => boolean))[];
+    blocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * Deprecated in favor of `blocklist`.
@@ -619,11 +574,7 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    blacklist?:
-      | string
-      | RegExp
-      | ((url: string) => boolean)
-      | (string | RegExp | ((url: string) => boolean))[];
+    blacklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * An array of headers to include in the span metadata.
@@ -660,11 +611,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (
-        span?: opentracing.Span,
-        req?: IncomingMessage,
-        res?: ServerResponse
-      ) => any;
+      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
 
     /**
@@ -700,21 +647,13 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (
-        span?: opentracing.Span,
-        req?: ClientRequest,
-        res?: IncomingMessage
-      ) => any;
+      request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
     };
 
     /**
      * List of urls to which propagation headers should not be injected
      */
-    propagationBlocklist?:
-      | string
-      | RegExp
-      | ((url: string) => boolean)
-      | (string | RegExp | ((url: string) => boolean))[];
+    propagationBlocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
   }
 
   /** @hidden */
@@ -755,9 +694,7 @@ declare namespace plugins {
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
      */
-    metadata?:
-      | string[]
-      | ((variables: { [key: string]: any }) => { [key: string]: any });
+    metadata?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
   }
 
   /** @hidden */
@@ -905,14 +842,14 @@ declare namespace plugins {
 
   /** @hidden */
   interface ExecutionArgs {
-    schema: any;
-    document: any;
-    rootValue?: any;
-    contextValue?: any;
-    variableValues?: any;
-    operationName?: string;
-    fieldResolver?: any;
-    typeResolver?: any;
+    schema: any,
+    document: any,
+    rootValue?: any,
+    contextValue?: any,
+    variableValues?: any,
+    operationName?: string,
+    fieldResolver?: any,
+    typeResolver?: any,
   }
 
   /**
@@ -963,9 +900,7 @@ declare namespace plugins {
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
      */
-    variables?:
-      | string[]
-      | ((variables: { [key: string]: any }) => { [key: string]: any });
+    variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
     /**
      * Whether to collapse list items into a single element. (i.e. single
@@ -994,7 +929,7 @@ declare namespace plugins {
       execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
       validate?: (span?: Span, document?: any, errors?: any) => void;
       parse?: (span?: Span, source?: any, document?: any) => void;
-    };
+    }
   }
 
   /**
@@ -1005,12 +940,12 @@ declare namespace plugins {
     /**
      * Configuration for gRPC clients.
      */
-    client?: Grpc;
+    client?: Grpc,
 
     /**
      * Configuration for gRPC servers.
      */
-    server?: Grpc;
+    server?: Grpc
   }
 
   /**
@@ -1031,12 +966,12 @@ declare namespace plugins {
     /**
      * Configuration for HTTP clients.
      */
-    client?: HttpClient | boolean;
+    client?: HttpClient | boolean,
 
     /**
      * Configuration for HTTP servers.
      */
-    server?: HttpServer | boolean;
+    server?: HttpServer | boolean
 
     /**
      * Hooks to run before spans are finished.
@@ -1065,12 +1000,12 @@ declare namespace plugins {
     /**
      * Configuration for HTTP clients.
      */
-    client?: Http2Client | boolean;
+    client?: Http2Client | boolean,
 
     /**
      * Configuration for HTTP servers.
      */
-    server?: Http2Server | boolean;
+    server?: Http2Server | boolean
   }
 
   /**
@@ -1083,11 +1018,7 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
-    allowlist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `allowlist`.
@@ -1095,11 +1026,7 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    whitelist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
@@ -1107,11 +1034,7 @@ declare namespace plugins {
      *
      * @default []
      */
-    blocklist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `blocklist`.
@@ -1119,11 +1042,7 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    blacklist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Whether to use a different service name for each Redis instance based
@@ -1186,7 +1105,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [moleculer](https://moleculer.services/) module.
    */
-  interface moleculer extends Moleculer {
+   interface moleculer extends Moleculer {
     /**
      * Configuration for Moleculer clients. Set to false to disable client
      * instrumentation.
@@ -1238,15 +1157,11 @@ declare namespace plugins {
     /**
      * Hooks to run before spans are finished.
      */
-    hooks?: {
+     hooks?: {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (
-        span?: opentracing.Span,
-        req?: IncomingMessage,
-        res?: ServerResponse
-      ) => any;
+      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
   }
 
@@ -1265,7 +1180,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
-  interface paperplane extends HttpServer {}
+   interface paperplane extends HttpServer {}
 
   /**
    * This plugin automatically instruments the
@@ -1296,11 +1211,7 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
-    allowlist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `allowlist`.
@@ -1308,11 +1219,7 @@ declare namespace plugins {
      * deprecated
      * @hidden
      */
-    whitelist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
@@ -1320,11 +1227,7 @@ declare namespace plugins {
      *
      * @default []
      */
-    blocklist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `blocklist`.
@@ -1332,11 +1235,7 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    blacklist?:
-      | string
-      | RegExp
-      | ((command: string) => boolean)
-      | (string | RegExp | ((command: string) => boolean))[];
+    blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
   }
 
   /**
@@ -1389,12 +1288,6 @@ declare namespace plugins {
    * [undici](https://github.com/nodejs/undici/)
    */
   interface undici extends HttpClient {}
-
-  /**
-   * This plugin patches the [when](https://github.com/cujojs/when)
-   * module to bind the promise callback the the caller context.
-   */
-  interface when extends Integration {}
 
   /**
    * This plugin patches the [winston](https://github.com/winstonjs/winston)

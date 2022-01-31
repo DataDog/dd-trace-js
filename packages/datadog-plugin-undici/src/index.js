@@ -3,12 +3,12 @@
 const url = require('url')
 const opentracing = require('opentracing')
 const log = require('../../dd-trace/src/log')
-const constants = require('../../dd-trace/src/constants')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { AsyncResource, AsyncLocalStorage } = require('async_hooks')
 
 const Reference = opentracing.Reference
 
@@ -19,7 +19,8 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const SPAN_KIND = tags.SPAN_KIND
 const CLIENT = kinds.CLIENT
 const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
-const REFERENCE_NOOP = constants.REFERENCE_NOOP
+
+const asyncLocalStorage = new AsyncLocalStorage()
 
 function addError (span, error) {
   span.addTags({
@@ -81,29 +82,24 @@ function diagnostics (tracer, config) {
   channels.errorChannel.subscribe(handleRequestError)
   channels.headersChannel.subscribe(handleRequestHeaders)
 
-  // We use a weakmap here to store the request / spans
   const requestSpansMap = new WeakMap()
 
   function handleRequestCreate ({ request }) {
     const method = (request.method || 'GET').toUpperCase()
 
-    const scope = tracer.scope()
-    const childOf = scope.active()
     const path = request.path ? request.path.split(/[?#]/)[0] : '/'
     const uri = `${request.origin}${path}`
-    const type = config.filter(uri) ? REFERENCE_CHILD_OF : REFERENCE_NOOP
 
-    const span = tracer.startSpan('http.request', {
-      references: [new Reference(type, childOf)],
-      tags: {
-        [SPAN_KIND]: CLIENT,
+    const span = asyncLocalStorage.getStore()
+    if (span) {
+      span.addTags({
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
         'service.name': getServiceName(tracer, config, request)
-      }
-    })
+      })
+    }
 
     requestSpansMap.set(request, span)
 
@@ -119,7 +115,7 @@ function diagnostics (tracer, config) {
   }
 
   function handleRequestError ({ request, error }) {
-    const span = requestSpansMap.get(request)
+    const span = asyncLocalStorage.getStore()
     addError(span, error)
     finish(request, null, span, config)
   }
@@ -306,11 +302,43 @@ function getHooks (config) {
   return { request }
 }
 
+function patch (undici, methodName, tracer, config) {
+  this.wrap(undici, methodName, fn => makeRequestTrace(fn))
+
+  function makeRequestTrace (request) {
+    return function requestTrace () {
+      // Bind the callback for async resources
+      if (arguments.length === 3) {
+        arguments[2] = AsyncResource.bind(arguments[2])
+      }
+      const scope = tracer.scope()
+      const childOf = scope.active()
+      const span = tracer.startSpan('http.request', {
+        references: [new Reference(REFERENCE_CHILD_OF, childOf)],
+        tags: {
+          [SPAN_KIND]: CLIENT
+        }
+      })
+
+      return asyncLocalStorage.run(span, () => {
+        return request.apply(this, arguments)
+      })
+    }
+  }
+}
+
 module.exports = [
   {
     name: 'undici',
     versions: ['>=4.7.1'],
-    patch: function (_, tracer, config) {
+    patch: function (undici, tracer, config) {
+      patch.call(this, undici, 'request', tracer, config)
+      patch.call(this, undici, 'upgrade', tracer, config)
+      patch.call(this, undici, 'connect', tracer, config)
+      patch.call(this, undici, 'fetch', tracer, config)
+
+      // Stream take 3 arguments
+      // patch.call(this, undici, 'stream', tracer, config)
       this.unpatch = diagnostics.call(this, tracer, config)
     }
   }
