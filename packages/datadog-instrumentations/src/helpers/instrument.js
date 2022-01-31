@@ -90,32 +90,31 @@ function getBasedir (id) {
 }
 
 if (semver.satisfies(process.versions.node, '>=16.0.0')) {
-  exports.bind = AsyncResource.bind
-  exports.bindAsyncResource = AsyncResource.prototype.bind
+  exports.AsyncResource = AsyncResource
 } else {
-  exports.bindAsyncResource = function bindAsyncResource (fn, thisArg) {
-    thisArg = thisArg || this
-    const ret = this.runInAsyncScope.bind(this, fn, thisArg)
-    Object.defineProperties(ret, {
-      'length': {
-        configurable: true,
-        enumerable: false,
-        value: fn.length,
-        writable: false
-      },
-      'asyncResource': {
-        configurable: true,
-        enumerable: true,
-        value: this,
-        writable: true
-      }
-    })
-    return ret
-  }
+  exports.AsyncResource = class extends AsyncResource {
+    static bind (fn, type, thisArg) {
+      type = type || fn.name
+      return (new exports.AsyncResource(type || 'bound-anonymous-fn')).bind(fn, thisArg)
+    }
 
-  exports.bind = function bind (fn, type, thisArg) {
-    type = type || fn.name
-    const ar = new AsyncResource(type || 'bound-anonymous-fn')
-    return exports.bindAsyncResource.call(ar, fn, thisArg)
+    bind (fn, thisArg = this) {
+      const ret = this.runInAsyncScope.bind(this, fn, thisArg)
+      Object.defineProperties(ret, {
+        'length': {
+          configurable: true,
+          enumerable: false,
+          value: fn.length,
+          writable: false
+        },
+        'asyncResource': {
+          configurable: true,
+          enumerable: true,
+          value: this,
+          writable: true
+        }
+      })
+      return ret
+    }
   }
 }

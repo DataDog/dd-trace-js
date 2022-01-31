@@ -25,6 +25,8 @@ function enable (config) {
     return
   }
 
+  Reporter.setRateLimit(config.appsec.rateLimit)
+
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
 

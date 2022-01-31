@@ -22,6 +22,7 @@ describe('reporter', () => {
   afterEach(() => {
     sinon.restore()
     Engine.manager.clear()
+    Reporter.setRateLimit(100)
   })
 
   describe('resolveHTTPRequest', () => {
@@ -169,6 +170,34 @@ describe('reporter', () => {
         'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
+    })
+
+    it('should not add manual.keep when rate limit is reached', (done) => {
+      const req = stubReq()
+      const addTags = req._datadog.span.addTags
+      const store = new Map([[ 'req', req ]])
+
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(addTags.getCall(0).firstArg).to.have.property('manual.keep').that.equals('true')
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(addTags.getCall(1).firstArg).to.have.property('manual.keep').that.equals('true')
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(addTags.getCall(2).firstArg).to.have.property('manual.keep').that.equals('true')
+
+      Reporter.setRateLimit(1)
+
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
+      expect(addTags.getCall(3).firstArg).to.have.property('manual.keep').that.equals('true')
+      expect(Reporter.reportAttack('', store)).to.not.be.false
+      expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
+      expect(addTags.getCall(4).firstArg).to.not.have.property('manual.keep')
+
+      setTimeout(() => {
+        expect(Reporter.reportAttack('', store)).to.not.be.false
+        expect(addTags.getCall(5).firstArg).to.have.property('manual.keep').that.equals('true')
+        done()
+      }, 1e3)
     })
 
     it('should not overwrite origin tag', () => {
