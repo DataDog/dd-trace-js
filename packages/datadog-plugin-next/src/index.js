@@ -115,10 +115,10 @@ function trace (tracer, config, req, res, handler) {
   // TODO: Use CLS when it will be available in core.
   span._nextReq = req
 
-  promise.then(() => finish(span, config, req, res), err => {
-    span.setTag('error', err)
-    finish(span, config, req, res)
-  })
+  promise.then(
+    () => finish(span, config, req, res),
+    err => finish(span, config, req, res, err)
+  )
 
   return promise
 }
@@ -132,7 +132,8 @@ function addPage (req, page) {
   })
 }
 
-function finish (span, config, req, res) {
+function finish (span, config, req, res, err) {
+  span.setTag('error', err || !config.validateStatus(res.statusCode))
   span.addTags({
     'http.status_code': res.statusCode
   })
@@ -142,8 +143,11 @@ function finish (span, config, req, res) {
 
 function normalizeConfig (config) {
   const hooks = getHooks(config)
+  const validateStatus = typeof config.validateStatus === 'function'
+    ? config.validateStatus
+    : code => code < 500
 
-  return Object.assign({}, config, { hooks })
+  return Object.assign({}, config, { hooks, validateStatus })
 }
 
 function getHooks (config) {
