@@ -7,13 +7,19 @@ function createWrapWrite (tracer, config) {
     return function writeWithTrace (chunk, encoding, callback) {
       const span = tracer.scope().active()
 
-      tracer.inject(span, LOG, chunk)
+      let newChunk
+      if (chunk instanceof Error) {
+        newChunk = new chunk.constructor(chunk.message)
+        newChunk.stack = chunk.stack
+      } else {
+        newChunk = {}
+      }
 
-      const result = write.apply(this, arguments)
+      arguments[0] = Object.assign(newChunk, chunk)
 
-      delete chunk.dd
+      tracer.inject(span, LOG, newChunk)
 
-      return result
+      return write.apply(this, arguments)
     }
   }
 }
@@ -42,15 +48,21 @@ function createWrapLog (tracer, config) {
     return function logWithTrace (level, msg, meta, callback) {
       const span = tracer.scope().active()
 
-      meta = arguments[2] = meta || {}
+      meta = meta || {}
 
-      tracer.inject(span, LOG, meta)
+      let newMeta
+      if (meta instanceof Error) {
+        newMeta = new meta.constructor(meta.message)
+        newMeta.stack = meta.stack
+      } else {
+        newMeta = {}
+      }
 
-      const result = log.apply(this, arguments)
+      arguments[2] = Object.assign(newMeta, meta)
 
-      delete meta.dd
+      tracer.inject(span, LOG, newMeta)
 
-      return result
+      return log.apply(this, arguments)
     }
   }
 }
