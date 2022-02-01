@@ -186,7 +186,7 @@ const web = {
     return `${tracer._service}-http-client`
   },
 
-  addErrorToSpan(span, error) {
+  addErrorToSpan (span, error) {
     span.addTags({
       'error.type': error.name,
       'error.msg': error.message,
@@ -202,9 +202,9 @@ const web = {
 
     if (options.headers) {
       const headers = Object.keys(options.headers)
-          .reduce((prev, next) => Object.assign(prev, {
-            [next.toLowerCase()]: options.headers[next]
-          }), {})
+        .reduce((prev, next) => Object.assign(prev, {
+          [next.toLowerCase()]: options.headers[next]
+        }), {})
 
       if (headers['x-amz-signature']) {
         return true
@@ -564,6 +564,5 @@ function getHeaders (config) {
     .filter(key => typeof key === 'string')
     .map(key => key.toLowerCase())
 }
-
 
 module.exports = web
