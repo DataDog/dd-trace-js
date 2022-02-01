@@ -179,6 +179,7 @@ describe('Plugin', function () {
         const config = {}
 
         before(() => {
+          config.validateStatus = code => false
           config.hooks = {
             request: sinon.spy()
           }
@@ -186,7 +187,7 @@ describe('Plugin', function () {
 
         setup(config)
 
-        it('should execute the hook', done => {
+        it('should execute the hook and validate the status', done => {
           agent
             .use(traces => {
               const spans = traces[0]
@@ -195,6 +196,7 @@ describe('Plugin', function () {
               expect(spans[0]).to.have.property('service', 'test')
               expect(spans[0]).to.have.property('type', 'web')
               expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
+              expect(spans[0]).to.have.property('error', 1)
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
