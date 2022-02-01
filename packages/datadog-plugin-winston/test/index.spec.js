@@ -5,7 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const http = require('http')
 
-function createLogServer() {
+function createLogServer () {
   return new Promise((resolve, reject) => {
     let getLogResolve
     const server = http.createServer((req, res) => {
