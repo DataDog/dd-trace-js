@@ -2,22 +2,35 @@
 
 const { LOG } = require('../../../ext/formats')
 
+function chunkProxy (chunk, holder) {
+  return new Proxy(chunk, {
+    get (target, p, receiver) {
+      switch (p) {
+        case Symbol.toStringTag:
+          return Object.prototype.toString.call(target).slice(8, -1)
+        case 'dd':
+          return holder.dd
+        default:
+          return Reflect.get(target, p, receiver)
+      }
+    },
+    ownKeys (target) {
+      return ['dd', ...Reflect.ownKeys(target)]
+    },
+    getOwnPropertyDescriptor (target, p) {
+      return Reflect.getOwnPropertyDescriptor(p === 'dd' ? holder : target, p)
+    }
+  })
+}
+
 function createWrapWrite (tracer, config) {
   return function wrapWrite (write) {
     return function writeWithTrace (chunk, encoding, callback) {
       const span = tracer.scope().active()
 
-      let newChunk
-      if (chunk instanceof Error) {
-        newChunk = new chunk.constructor(chunk.message)
-        newChunk.stack = chunk.stack
-      } else {
-        newChunk = {}
-      }
-
-      arguments[0] = Object.assign(newChunk, chunk)
-
-      tracer.inject(span, LOG, newChunk)
+      const holder = {}
+      tracer.inject(span, LOG, holder)
+      arguments[0] = chunkProxy(chunk, holder)
 
       return write.apply(this, arguments)
     }
@@ -50,17 +63,10 @@ function createWrapLog (tracer, config) {
 
       meta = meta || {}
 
-      let newMeta
-      if (meta instanceof Error) {
-        newMeta = new meta.constructor(meta.message)
-        newMeta.stack = meta.stack
-      } else {
-        newMeta = {}
-      }
+      const holder = {}
+      tracer.inject(span, LOG, holder)
 
-      arguments[2] = Object.assign(newMeta, meta)
-
-      tracer.inject(span, LOG, newMeta)
+      arguments[2] = chunkProxy(meta, holder)
 
       return log.apply(this, arguments)
     }
