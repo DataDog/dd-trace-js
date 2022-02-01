@@ -826,7 +826,7 @@ workflows:
       - node-undici:
           matrix:
             parameters:
-              node-version: ["16"]
+              node-version: ["14.9", "16"]
       - node-when: *matrix-supported-node-versions
       - node-winston: *matrix-supported-node-versions
       - codecov:

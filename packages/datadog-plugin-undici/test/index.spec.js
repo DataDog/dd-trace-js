@@ -200,7 +200,12 @@ describe('undici', () => {
         })
 
         it('should do automatic instrumentation for fetch', (done) => {
-          setup((port) => withUndici(port).fetch, done)
+          // fetch is not available on node 14
+          if (undici.fetch) {
+            setup((port) => withUndici(port).fetch, done)
+          } else {
+            done()
+          }
         })
       })
     })

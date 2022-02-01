@@ -254,7 +254,9 @@ module.exports = [
       patch.call(this, undici, 'request', tracer, config)
       patch.call(this, undici, 'upgrade', tracer, config)
       patch.call(this, undici, 'connect', tracer, config)
-      patch.call(this, undici, 'fetch', tracer, config)
+      if (undici.fetch) {
+        patch.call(this, undici, 'fetch', tracer, config)
+      }
       patch.call(this, undici, 'pipeline', tracer, config)
       patch.call(this, undici, 'stream', tracer, config)
 
@@ -270,7 +272,9 @@ module.exports = [
         this.unwrap(undici, 'request')
         this.unwrap(undici, 'upgrade')
         this.unwrap(undici, 'connect')
-        this.unwrap(undici, 'fetch')
+        if (undici.fetch) {
+          this.unwrap(undici, 'fetch')
+        }
         this.unwrap(undici, 'pipeline')
         this.unwrap(undici, 'stream')
 
