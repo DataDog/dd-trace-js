@@ -412,5 +412,26 @@ describe('TextMapPropagator', () => {
         expect(spanContext).to.be.null
       })
     })
+
+    describe('With traceparent propagation as single header', () => {
+      beforeEach(() => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+      })
+
+      it('should extract the header', () => {
+        textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: id('4d2', 16),
+          spanId: id('162e', 16),
+          sampling: {
+            priority: AUTO_KEEP
+          }
+        }))
+      })
+    })
   })
 })
