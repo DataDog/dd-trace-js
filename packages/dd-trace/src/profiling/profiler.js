@@ -2,7 +2,15 @@
 
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
-const { SourceMapper } = require('./mapper')
+
+function maybeSourceMap (sourceMap) {
+  if (!sourceMap) return
+
+  const { SourceMapper } = require('@datadog/pprof')
+  return SourceMapper.create([
+    process.cwd()
+  ])
+}
 
 class Profiler extends EventEmitter {
   constructor () {
@@ -15,18 +23,21 @@ class Profiler extends EventEmitter {
   }
 
   start (options) {
+    this._start(options).catch(() => {})
+    return this
+  }
+
+  async _start (options) {
     if (this._enabled) return
 
     const config = this._config = new Config(options)
-
     if (!config.enabled) return
 
     this._logger = config.logger
-
     this._enabled = true
 
     try {
-      const mapper = config.sourceMap ? new SourceMapper() : null
+      const mapper = await maybeSourceMap(config.sourceMap)
 
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
@@ -39,8 +50,6 @@ class Profiler extends EventEmitter {
       this._logger.error(e)
       this.stop()
     }
-
-    return this
   }
 
   stop () {
