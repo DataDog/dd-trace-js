@@ -20,7 +20,8 @@ const {
   DD_TRACE_AGENT_URL,
   DD_AGENT_HOST,
   DD_TRACE_AGENT_PORT,
-  DD_PROFILING_UPLOAD_TIMEOUT
+  DD_PROFILING_UPLOAD_TIMEOUT,
+  DD_PROFILING_SOURCE_MAP
 } = process.env
 
 class Config {
@@ -34,6 +35,8 @@ class Config {
     const flushInterval = coalesce(options.interval, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
       DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
+    const sourceMap = coalesce(options.sourceMap,
+      DD_PROFILING_SOURCE_MAP, true)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
@@ -49,6 +52,7 @@ class Config {
     this.logger = ensureLogger(options.logger)
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
+    this.sourceMap = sourceMap
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST, 'localhost')
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT, 8126)

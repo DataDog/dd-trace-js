@@ -24,10 +24,10 @@ const exporters = [{
   }
 }]
 
-profiler.start({
+profiler._start({
   profilers,
   exporters,
   interval: 0
+}).then(() => {
+  profiler._timer.ref()
 })
-
-profiler._timer.ref()
