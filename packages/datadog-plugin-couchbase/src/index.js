@@ -42,7 +42,7 @@ class CouchBasePlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSubs('_n1qlReq', ([resource, bucket]) => {
+    this.addSubs('query', ([resource, bucket]) => {
       const store = storage.getStore()
       const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource }, store, bucket)
       this.enter(span, store)

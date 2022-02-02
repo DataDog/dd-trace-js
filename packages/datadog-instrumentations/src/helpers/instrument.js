@@ -119,11 +119,3 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
     }
   }
 }
-
-exports.bindEmit = function bindEmit (emitter, asyncResource) {
-  shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
-    return asyncResource.runInAsyncScope(() => {
-      return emit.apply(this, arguments)
-    })
-  })
-}

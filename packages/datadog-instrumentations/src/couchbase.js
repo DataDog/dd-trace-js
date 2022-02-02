@@ -3,49 +3,47 @@
 const {
   channel,
   addHook,
-  AsyncResource,
-  bindEmit
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
-  const startChn1qlReq = channel('apm:couchbase:_n1qlReq:start')
-  const asyncEndChn1qlReq = channel('apm:couchbase:_n1qlReq:async-end')
-  const endChn1qlReq = channel('apm:couchbase:_n1qlReq:end')
-  const errorChn1qlReq = channel('apm:couchbase:_n1qlReq:error')
+  const startCh = channel('apm:couchbase:query:start')
+  const asyncEndCh = channel('apm:couchbase:query:async-end')
+  const endCh = channel('apm:couchbase:query:end')
+  const errorCh = channel('apm:couchbase:query:error')
 
   Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
   Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
-    if (
-      !startChn1qlReq.hasSubscribers
-    ) {
+    if (!startCh.hasSubscribers) {
       return _n1qlReq.apply(this, arguments)
     }
+
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
     const n1qlQuery = q && q.statement
 
-    startChn1qlReq.publish([n1qlQuery, this])
+    startCh.publish([n1qlQuery, this])
 
     emitter.once('rows', AsyncResource.bind(() => {
-      asyncEndChn1qlReq.publish(undefined)
+      asyncEndCh.publish(undefined)
     }))
 
     emitter.once('error', AsyncResource.bind((error) => {
-      errorChn1qlReq.publish(error)
-      asyncEndChn1qlReq.publish(undefined)
+      errorCh.publish(error)
+      asyncEndCh.publish(undefined)
     }))
 
     try {
       return _n1qlReq.apply(this, arguments)
     } catch (err) {
       err.stack // trigger getting the stack at the original throwing point
-      errorChn1qlReq.publish(err)
+      errorCh.publish(err)
 
       throw err
     } finally {
-      endChn1qlReq.publish(undefined)
+      endCh.publish(undefined)
     }
   })
 
@@ -65,6 +63,9 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => function (name, callback) {
     const ar = new AsyncResource('bound-anonymous-fn')
     const res = openBucket.apply(this, arguments)
+    debugger;
+    // console.log(res)
+    
     bindEmit(res, ar)
     return res
   })
@@ -105,6 +106,7 @@ function wrapQuery (query) {
     }
 
     const res = query.apply(this, arguments)
+    debugger;
     bindEmit(res, ar)
     return res
   }
@@ -118,9 +120,7 @@ function wrap (prefix, fn) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function (key, value, options, callback) {
-    if (
-      !startCh.hasSubscribers
-    ) {
+    if (!startCh.hasSubscribers) {
       return fn.apply(this, arguments)
     }
 
@@ -152,4 +152,13 @@ function wrap (prefix, fn) {
     }
   }
   return shimmer.wrap(fn, wrapped)
+}
+
+function bindEmit (emitter, asyncResource) {
+  shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
+    return asyncResource.runInAsyncScope(() => {
+      console.trace()
+      return emit.apply(this, arguments)
+    })
+  })
 }
