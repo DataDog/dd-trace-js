@@ -8,13 +8,14 @@ class NativeHeapProfiler {
     this._pprof = undefined
   }
 
-  start () {
+  start ({ mapper } = {}) {
+    this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     this._pprof.heap.start(this._samplingInterval, this._stackDepth)
   }
 
   profile () {
-    return this._pprof.heap.profile()
+    return this._pprof.heap.profile(undefined, this._mapper)
   }
 
   encode (profile) {

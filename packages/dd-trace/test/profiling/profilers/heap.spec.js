@@ -72,4 +72,15 @@ describe('profilers/native/heap', () => {
 
     sinon.assert.calledOnce(pprof.encode)
   })
+
+  it('should use mapper if given', () => {
+    const profiler = new NativeHeapProfiler()
+
+    const mapper = {}
+
+    profiler.start({ mapper })
+    profiler.profile()
+
+    sinon.assert.calledWith(pprof.heap.profile, undefined, mapper)
+  })
 })
