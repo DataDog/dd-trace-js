@@ -54,33 +54,6 @@ describe('Plugin', () => {
           })
         })
 
-        it('should run the Query event listener in the parent context', done => {
-          const query = 'SELECT 1+1'
-          const n1qlQuery = N1qlQuery.fromString(query)
-          const span = tracer.startSpan('test.query.listener')
-
-          tracer.scope().activate(span, () => {
-            const emitter = cluster.query(n1qlQuery)
-            emitter.on('rows', () => {
-              expect(tracer.scope().active()).to.equal(span)
-              done()
-            })
-          })
-        })
-
-        it('should run the Bucket event listener in the parent context', done => {
-          bucket.disconnect()
-          const span = tracer.startSpan('test')
-
-          tracer.scope().activate(span, () => {
-            bucket = cluster.openBucket('datadog-test')
-            bucket.on('connect', () => {
-              expect(tracer.scope().active()).to.equal(span)
-              done()
-            })
-          })
-        })
-
         it('should run any Bucket operations in the parent context', done => {
           const span = tracer.startSpan('test')
 

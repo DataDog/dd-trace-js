@@ -22,6 +22,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     }
 
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
+
     const n1qlQuery = q && q.statement
 
     startCh.publish([n1qlQuery, this])
@@ -60,16 +61,6 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
 
-  shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => function (name, callback) {
-    const ar = new AsyncResource('bound-anonymous-fn')
-    const res = openBucket.apply(this, arguments)
-    debugger;
-    // console.log(res)
-    
-    bindEmit(res, ar)
-    return res
-  })
-
   return Cluster
 })
 
@@ -98,16 +89,13 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
 function wrapQuery (query) {
   const wrapped = function (q, params, callback) {
-    const ar = new AsyncResource('bound-anonymous-fn')
-    callback = arguments[arguments.length - 1]
+    callback = AsyncResource.bind(arguments[arguments.length - 1])
 
     if (typeof callback === 'function') {
       arguments[arguments.length - 1] = callback
     }
 
     const res = query.apply(this, arguments)
-    debugger;
-    bindEmit(res, ar)
     return res
   }
   return shimmer.wrap(query, wrapped)
@@ -152,13 +140,4 @@ function wrap (prefix, fn) {
     }
   }
   return shimmer.wrap(fn, wrapped)
-}
-
-function bindEmit (emitter, asyncResource) {
-  shimmer.wrap(emitter, 'emit', emit => function (eventName, ...args) {
-    return asyncResource.runInAsyncScope(() => {
-      console.trace()
-      return emit.apply(this, arguments)
-    })
-  })
 }
