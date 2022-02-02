@@ -45,7 +45,7 @@ function loadInst (plugin) {
 
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
-  const names = [].concat(plugin).map(instrumentation => instrumentation.name)
+  const names = instrumentations.map(instrumentation => instrumentation.name)
 
   modules = [].concat(modules)
 

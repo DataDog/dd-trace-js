@@ -6,8 +6,16 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({
   name: 'q',
-  versions: ['>=1']
+  versions: ['1']
 }, Q => {
   shimmer.wrap(Q.makePromise.prototype, 'then', wrapThen)
+  return Q
+})
+
+addHook({
+  name: 'q',
+  versions: ['>=2']
+}, Q => {
+  shimmer.wrap(Q.Promise.prototype, 'then', wrapThen)
   return Q
 })
