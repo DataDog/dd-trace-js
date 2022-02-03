@@ -1,6 +1,7 @@
 'use strict'
 
 require('./src/dns')
+require('./src/elasticsearch')
 require('./src/memcached')
 require('./src/mysql')
 require('./src/bluebird')

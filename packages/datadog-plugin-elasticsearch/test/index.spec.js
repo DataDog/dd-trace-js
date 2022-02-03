@@ -1,7 +1,8 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+// const plugin = require('../src')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 // Retries and the initial request result in a trace with multiple spans.
 // The last span is the one that actually did the query.
@@ -11,7 +12,7 @@ describe('Plugin', () => {
   let elasticsearch
   let tracer
 
-  withVersions(plugin, ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
+  withVersions('elasticsearch', ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
     describe('elasticsearch', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -25,17 +26,21 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          // return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
-          elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
+          // elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
+          elasticsearch = proxyquire(`../../../versions/${moduleName}@${version}`, {}).get()
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })
         })
 
         it('should sanitize the resource name', done => {
+          // console.log('yerr')
+          debugger;
           agent
             .use(traces => {
               expect(last(traces[0])).to.have.property('resource', 'POST /logstash-?.?.?/_search')
@@ -150,7 +155,8 @@ describe('Plugin', () => {
             })
           })
 
-          it('should run the callback in the parent context', done => {
+          it.only('should run the callback in the parent context', done => {
+            debugger;
             client.ping(error => {
               expect(tracer.scope().active()).to.be.null
               done(error)
@@ -183,15 +189,19 @@ describe('Plugin', () => {
 
         describe('when using a promise', () => {
           it('should do automatic instrumentation', done => {
+            debugger;
             agent
               .use(traces => {
+                debugger;
+                // console.log(traces[0])
                 expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
                 expect(last(traces[0])).to.have.property('resource', 'HEAD /')
                 expect(last(traces[0])).to.have.property('type', 'elasticsearch')
               })
               .then(done)
               .catch(done)
-
+            
+            debugger;
             client.ping().catch(done)
           })
 
@@ -255,11 +265,13 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          // return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
-          elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
+          // elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
+          elasticsearch = proxyquire(`../../../versions/${moduleName}@${version}`, {}).get()
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })

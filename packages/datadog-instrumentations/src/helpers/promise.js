@@ -4,6 +4,7 @@ const { AsyncResource } = require('async_hooks')
 
 exports.wrapThen = function wrapThen (origThen) {
   return function then (onFulfilled, onRejected, onProgress) {
+    debugger;
     const ar = new AsyncResource('bound-anonymous-fn')
 
     arguments[0] = wrapCallback(ar, onFulfilled)
