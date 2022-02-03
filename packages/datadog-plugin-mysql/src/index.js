@@ -4,6 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+// This plugin supports both mysql and mysql2
 class MySQLPlugin extends Plugin {
   static get name () {
     return 'mysql'
