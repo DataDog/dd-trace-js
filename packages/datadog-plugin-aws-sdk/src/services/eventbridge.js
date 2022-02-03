@@ -2,14 +2,12 @@
 const log = require('../../../dd-trace/src/log')
 class Eventbridge {
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params || !params.source) return {}
 
-    if (!params || !params.source) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.source}`,
       'aws.eventbridge.source': params.source
-    })
+    }
   }
 
   /**
@@ -27,6 +25,7 @@ class Eventbridge {
     const operation = request.operation
     if (operation === 'putEvents' &&
       request.params &&
+      request.params.Entries &&
       request.params.Entries.length > 0 &&
       request.params.Entries[0].Detail) {
       try {

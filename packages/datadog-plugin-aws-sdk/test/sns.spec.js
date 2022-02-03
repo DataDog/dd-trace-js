@@ -137,5 +137,43 @@ describe('Sns', () => {
       sns.requestInject(span.context(), request, tracer)
       expect(request.params).to.deep.equal(request.params)
     })
+
+    it('generates tags for proper publish calls', () => {
+      const sns = new Sns()
+      const params = {
+        TopicArn: 'my-great-topic'
+      }
+      expect(sns.generateTags(params, 'publish', {})).to.deep.equal({
+        'aws.sns.topic_arn': 'my-great-topic',
+        'resource.name': 'publish my-great-topic'
+      })
+    })
+
+    it('generates tags for proper responses', () => {
+      const sns = new Sns()
+      const params = {}
+      const response = {
+        data: {
+          TopicArn: 'my-great-topic'
+        }
+      }
+      expect(sns.generateTags(params, 'publish', response)).to.deep.equal({
+        'aws.sns.topic_arn': 'my-great-topic',
+        'resource.name': 'publish my-great-topic'
+      })
+    })
+
+    it('returns empty tags for improper responses', () => {
+      const sns = new Sns()
+      const params = {}
+      const response = {}
+      expect(sns.generateTags(params, 'publish', response)).to.deep.equal({})
+    })
+
+    it('returns empty tags for empty requests', () => {
+      const sns = new Sns()
+      const response = {}
+      expect(sns.generateTags(null, 'publish', response)).to.deep.equal({})
+    })
   })
 })

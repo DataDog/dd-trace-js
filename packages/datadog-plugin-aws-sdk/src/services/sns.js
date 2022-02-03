@@ -3,16 +3,14 @@ const log = require('../../../dd-trace/src/log')
 
 class Sns {
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params) return {}
 
-    if (!params) return tags
+    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
 
-    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': params.TopicArn || response.data.TopicArn
-    })
+    }
 
     // TODO: should arn be sanitized or quantized in some way here,
     // for example if it contains a phone number?

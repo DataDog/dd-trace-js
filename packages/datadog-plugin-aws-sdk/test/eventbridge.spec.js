@@ -47,6 +47,24 @@ describe('Eventbridge', () => {
       })
     })
 
+    it('generates tags for an event', () => {
+      const eventbridge = new Eventbridge()
+      const params = {
+        source: 'my.event'
+      }
+      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
+        'aws.eventbridge.source': 'my.event',
+        'resource.name': 'putEvent my.event'
+      })
+    })
+    it('won\'t create tags for a malformed event', () => {
+      const eventbridge = new Eventbridge()
+      const params = {
+        foo: 'bar'
+      }
+      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({})
+    })
+
     it('injects trace context to Eventbridge putEvents', () => {
       const eventbridge = new Eventbridge()
       const request = {

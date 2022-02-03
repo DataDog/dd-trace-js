@@ -79,8 +79,8 @@ const helpers = {
   requestInject (span, request, serviceName, tracer) {
     if (!span) return
 
-    const inject = services[serviceName] && services[serviceName].requestInject
-    if (inject) inject(span, request, tracer)
+    const service = services[serviceName] && services[serviceName]
+    if (service.requestInject) service.requestInject(span, request, tracer)
   },
 
   wrapCb (cb, serviceName, tags, request, tracer, childOf) {
