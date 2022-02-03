@@ -13,7 +13,6 @@ class ElasticSearchPlugin extends Plugin {
     super(...args)
 
     this.addSub('apm:elasticsearch:query:start', ([params]) => {
-      debugger;
       this.config = normalizeConfig(this.config)
 
       const store = storage.getStore()
@@ -38,18 +37,15 @@ class ElasticSearchPlugin extends Plugin {
     })
 
     this.addSub('apm:elasticsearch:query:end', () => {
-      debugger;
       this.exit()
     })
 
     this.addSub('apm:elasticsearch:query:error', err => {
-      debugger;
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
     this.addSub('apm:elasticsearch:query:async-end', ([params]) => {
-      debugger;
       const span = storage.getStore().span
       this.config.hooks.query(span, params)
       span.finish()
