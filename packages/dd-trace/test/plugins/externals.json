@@ -139,8 +139,9 @@
     {
       "name": "q",
       "versions": ["2"]
-    },
-    "undici": [
+    }
+  ],
+  "undici": [
     {
       "name": "undici",
       "versions": [">=4.7.1"]
