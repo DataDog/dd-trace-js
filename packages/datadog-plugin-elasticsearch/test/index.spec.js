@@ -25,12 +25,10 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          // return agent.close()
           return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
-          // elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           elasticsearch = proxyquire(`../../../versions/${moduleName}@${version}`, {}).get()
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
@@ -257,12 +255,10 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          // return agent.close()
           return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
-          // elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           elasticsearch = proxyquire(`../../../versions/${moduleName}@${version}`, {}).get()
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
