@@ -130,7 +130,7 @@ function reportAttack (attackData, store) {
 
 function finishAttacks (req, context) {
   const topSpan = req && req._datadog && req._datadog.span
-  if (!topSpan || !context) return false
+  if (!topSpan || !context || topSpan.context()._tags['appsec.event'] !== 'true') return false
 
   const resolvedResponse = resolveHTTPResponse(context)
 
