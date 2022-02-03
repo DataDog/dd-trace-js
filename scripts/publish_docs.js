@@ -18,4 +18,4 @@ exec('git init', { cwd: './docs/out' }) // cloning would overwrite generated doc
 exec('git remote add origin git@github.com:DataDog/dd-trace-js.git', { cwd: './docs/out' })
 exec('git add -A', { cwd: './docs/out' })
 exec(`git commit -m "${msg}"`, { cwd: './docs/out' })
-exec('git push -f origin master:gh-pages', { cwd: './docs/out' })
+exec('git push -f origin main:gh-pages', { cwd: './docs/out' })
