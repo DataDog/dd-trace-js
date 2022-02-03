@@ -1,14 +1,14 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('Plugin', () => {
   let mysql2
   let tracer
 
   describe('mysql2', () => {
-    withVersions(plugin, 'mysql2', version => {
+    withVersions('mysql2', 'mysql2', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -16,16 +16,15 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         let connection
 
-        before(() => {
-          return agent.load('mysql2')
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(() => {
-          mysql2 = require(`../../../versions/mysql2@${version}`).get()
+        beforeEach(async () => {
+          await agent.load('mysql') // load the unified mysql plugin
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
             host: 'localhost',
@@ -36,10 +35,6 @@ describe('Plugin', () => {
           connection.connect()
         })
 
-        afterEach(done => {
-          connection.end(done)
-        })
-
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
 
@@ -47,9 +42,13 @@ describe('Plugin', () => {
             const span = tracer.scope().active()
 
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
-              expect(results).to.not.be.null
-              expect(fields).to.not.be.null
-              expect(tracer.scope().active()).to.equal(span)
+              try {
+                expect(results).to.not.be.null
+                expect(fields).to.not.be.null
+                expect(tracer.scope().active()).to.equal(span)
+              } catch (e) {
+                done(e)
+              }
               done()
             })
           })
@@ -169,16 +168,15 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         let connection
 
-        before(() => {
-          return agent.load('mysql2', { service: 'custom' })
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(() => {
-          mysql2 = require(`../../../versions/mysql2@${version}`).get()
+        beforeEach(async () => {
+          await agent.load('mysql', { service: 'custom' }) // load the unified mysql plugin
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
             host: 'localhost',
@@ -187,10 +185,6 @@ describe('Plugin', () => {
           })
 
           connection.connect()
-        })
-
-        afterEach(done => {
-          connection.end(done)
         })
 
         it('should be configured with the correct values', done => {
@@ -208,26 +202,21 @@ describe('Plugin', () => {
       describe('with a connection pool', () => {
         let pool
 
-        before(() => {
-          return agent.load('mysql2')
+        afterEach((done) => {
+          pool.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        beforeEach(() => {
-          mysql2 = require(`../../../versions/mysql2@${version}`).get()
+        beforeEach(async () => {
+          await agent.load('mysql') // load the unified mysql plugin
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           pool = mysql2.createPool({
             connectionLimit: 1,
             host: 'localhost',
             user: 'root'
           })
-        })
-
-        afterEach(done => {
-          pool.end(done)
         })
 
         it('should do automatic instrumentation', done => {
