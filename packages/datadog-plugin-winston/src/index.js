@@ -2,18 +2,37 @@
 
 const { LOG } = require('../../../ext/formats')
 
+function chunkProxy (chunk, holder) {
+  return new Proxy(chunk, {
+    get (target, p, receiver) {
+      switch (p) {
+        case Symbol.toStringTag:
+          return Object.prototype.toString.call(target).slice(8, -1)
+        case 'dd':
+          return holder.dd
+        default:
+          return Reflect.get(target, p, receiver)
+      }
+    },
+    ownKeys (target) {
+      return ['dd', ...Reflect.ownKeys(target)]
+    },
+    getOwnPropertyDescriptor (target, p) {
+      return Reflect.getOwnPropertyDescriptor(p === 'dd' ? holder : target, p)
+    }
+  })
+}
+
 function createWrapWrite (tracer, config) {
   return function wrapWrite (write) {
     return function writeWithTrace (chunk, encoding, callback) {
       const span = tracer.scope().active()
 
-      tracer.inject(span, LOG, chunk)
+      const holder = {}
+      tracer.inject(span, LOG, holder)
+      arguments[0] = chunkProxy(chunk, holder)
 
-      const result = write.apply(this, arguments)
-
-      delete chunk.dd
-
-      return result
+      return write.apply(this, arguments)
     }
   }
 }
@@ -42,15 +61,14 @@ function createWrapLog (tracer, config) {
     return function logWithTrace (level, msg, meta, callback) {
       const span = tracer.scope().active()
 
-      meta = arguments[2] = meta || {}
+      meta = meta || {}
 
-      tracer.inject(span, LOG, meta)
+      const holder = {}
+      tracer.inject(span, LOG, holder)
 
-      const result = log.apply(this, arguments)
+      arguments[2] = chunkProxy(meta, holder)
 
-      delete meta.dd
-
-      return result
+      return log.apply(this, arguments)
     }
   }
 }

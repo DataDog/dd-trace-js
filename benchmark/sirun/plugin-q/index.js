@@ -4,7 +4,7 @@ if (Number(process.env.USE_TRACER)) {
   require('../../..').init()
 }
 
-const Q = require('../../../versions/q/node_modules/q')
+const Q = require('../../../versions/q').get()
 
 const count = process.env.COUNT ? Number(process.env.COUNT) : 50000
 

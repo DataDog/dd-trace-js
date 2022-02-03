@@ -131,7 +131,16 @@
       "dep": true
     }
   ],
-  "undici": [
+  "q": [
+    {
+      "name": "collections",
+      "versions": ["5"]
+    },
+    {
+      "name": "q",
+      "versions": ["2"]
+    },
+    "undici": [
     {
       "name": "undici",
       "versions": [">=4.7.1"]

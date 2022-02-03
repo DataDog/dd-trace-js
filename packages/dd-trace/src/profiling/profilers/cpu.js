@@ -39,7 +39,7 @@ class NativeCpuProfiler {
 
   _record () {
     this._stop = this._pprof.time.start(this._samplingInterval, null,
-      this._mapper)
+      this._mapper, false)
   }
 }
 
