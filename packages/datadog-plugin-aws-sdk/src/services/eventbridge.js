@@ -34,7 +34,7 @@ class EventBridge {
         tracer.inject(span, 'text_map', details._datadog)
         const finalData = JSON.stringify(details)
         const byteSize = Buffer.byteLength(finalData)
-        if (byteSize >= 1 << 18) {
+        if (byteSize >= (1024 * 256)) {
           log.info('Payload size too large to pass context')
           return
         }
