@@ -1,6 +1,6 @@
 'use strict'
 const log = require('../../../dd-trace/src/log')
-class Eventbridge {
+class EventBridge {
   generateTags (params, operation, response) {
     if (!params || !params.source) return {}
 
@@ -29,19 +29,20 @@ class Eventbridge {
       request.params.Entries.length > 0 &&
       request.params.Entries[0].Detail) {
       try {
-        const byteSize = Buffer.byteLength(request.params.Entries[0].Detail)
-        if (byteSize + 512 >= 256000) {
-          log.info('Payload size too large to pass context')
-          return
-        }
         const details = JSON.parse(request.params.Entries[0].Detail)
         details._datadog = {}
         tracer.inject(span, 'text_map', details._datadog)
-        request.params.Entries[0].Detail = JSON.stringify(details)
+        const finalData = JSON.stringify(details)
+        const byteSize = Buffer.byteLength(finalData)
+        if (byteSize >= 1 << 18) {
+          log.info('Payload size too large to pass context')
+          return
+        }
+        request.params.Entries[0].Detail = finalData
       } catch (e) {
         log.error(e)
       }
     }
   }
 }
-module.exports = Eventbridge
+module.exports = EventBridge

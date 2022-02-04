@@ -44,17 +44,18 @@ class Kinesis {
         log.error('No valid payload passed, unable to pass trace context')
         return
       }
-      const byteSize = Buffer.byteLength(injectPath.Data, 'base64')
-      // Kinesis max payload size is 1MB
-      // So we must ensure adding DD context won't go over that (512b is an estimate)
-      if (byteSize + 512 >= 1000000) {
-        log.info('Payload size too large to pass context')
-        return
-      }
       const parsedData = this._tryParse(injectPath.Data)
       if (parsedData) {
         parsedData._datadog = traceData
-        injectPath.Data = JSON.stringify(parsedData)
+        const finalData = JSON.stringify(parsedData)
+        const byteSize = Buffer.byteLength(finalData, 'ascii')
+        // Kinesis max payload size is 1MB
+        // So we must ensure adding DD context won't go over that (512b is an estimate)
+        if (byteSize >= 1048576) {
+          log.info('Payload size too large to pass context')
+          return
+        }
+        injectPath.Data = finalData
       } else {
         log.error('Unable to parse payload, unable to pass trace context')
       }

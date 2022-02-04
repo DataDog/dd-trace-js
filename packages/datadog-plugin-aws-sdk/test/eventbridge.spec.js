@@ -1,12 +1,12 @@
 /* eslint-disable max-len */
 'use strict'
 
-const Eventbridge = require('../src/services/eventbridge')
+const EventBridge = require('../src/services/eventbridge')
 const plugin = require('../src')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
-describe('Eventbridge', () => {
+describe('EventBridge', () => {
   let span
   withVersions(plugin, 'aws-sdk', version => {
     let traceId
@@ -48,7 +48,7 @@ describe('Eventbridge', () => {
     })
 
     it('generates tags for an event', () => {
-      const eventbridge = new Eventbridge()
+      const eventbridge = new EventBridge()
       const params = {
         source: 'my.event'
       }
@@ -58,7 +58,7 @@ describe('Eventbridge', () => {
       })
     })
     it('won\'t create tags for a malformed event', () => {
-      const eventbridge = new Eventbridge()
+      const eventbridge = new EventBridge()
       const params = {
         foo: 'bar'
       }
@@ -66,7 +66,7 @@ describe('Eventbridge', () => {
     })
 
     it('injects trace context to Eventbridge putEvents', () => {
-      const eventbridge = new Eventbridge()
+      const eventbridge = new EventBridge()
       const request = {
         params: {
           Entries: [
@@ -91,7 +91,7 @@ describe('Eventbridge', () => {
     })
 
     it('skips injecting trace context to Eventbridge if message is full', () => {
-      const eventbridge = new Eventbridge()
+      const eventbridge = new EventBridge()
       const request = {
         params: {
           Entries: [
