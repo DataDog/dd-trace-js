@@ -10,7 +10,8 @@ const services = {
   s3: getService(require('./services/s3')),
   redshift: getService(require('./services/redshift')),
   sns: getService(require('./services/sns')),
-  sqs: getService(require('./services/sqs'))
+  sqs: getService(require('./services/sqs')),
+  eventbridge: getService(require('./services/eventbridge'))
 }
 
 function getService (Service) {
@@ -78,8 +79,8 @@ const helpers = {
   requestInject (span, request, serviceName, tracer) {
     if (!span) return
 
-    const inject = services[serviceName] && services[serviceName].requestInject
-    if (inject) inject(span, request, tracer)
+    const service = services[serviceName] && services[serviceName]
+    if (service.requestInject) service.requestInject(span, request, tracer)
   },
 
   wrapCb (cb, serviceName, tags, request, tracer, childOf) {
