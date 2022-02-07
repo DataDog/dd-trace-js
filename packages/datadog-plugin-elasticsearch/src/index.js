@@ -4,7 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class ElasticSearchPlugin extends Plugin {
+class ElasticsearchPlugin extends Plugin {
   static get name () {
     return 'elasticsearch'
   }
@@ -12,7 +12,7 @@ class ElasticSearchPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:elasticsearch:query:start', ([params]) => {
+    this.addSub('apm:elasticsearch:query:start', ({ params }) => {
       this.config = normalizeConfig(this.config)
 
       const store = storage.getStore()
@@ -45,7 +45,7 @@ class ElasticSearchPlugin extends Plugin {
       span.setTag('error', err)
     })
 
-    this.addSub('apm:elasticsearch:query:async-end', ([params]) => {
+    this.addSub('apm:elasticsearch:query:async-end', ({ params }) => {
       const span = storage.getStore().span
       this.config.hooks.query(span, params)
       span.finish()
@@ -76,4 +76,4 @@ function quantizePath (path) {
   return path && path.replace(/[0-9]+/g, '?')
 }
 
-module.exports = ElasticSearchPlugin
+module.exports = ElasticsearchPlugin

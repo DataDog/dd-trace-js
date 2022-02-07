@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const proxyquire = require('proxyquire').noPreserveCache()
 
 // Retries and the initial request result in a trace with multiple spans.
 // The last span is the one that actually did the query.
@@ -29,7 +28,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          elasticsearch = proxyquire(`../../../versions/${moduleName}@${version}`, {}).get()
+          elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })
@@ -259,7 +258,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          elasticsearch = proxyquire(`../../../versions/${moduleName}@${version}`, {}).get()
+          elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })

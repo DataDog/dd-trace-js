@@ -32,7 +32,7 @@ function wrapRequest (request) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    startCh.publish([params])
+    startCh.publish({ params })
     const lastIndex = arguments.length - 1
     cb = arguments[lastIndex]
 
@@ -63,7 +63,7 @@ function finish (params, error) {
   if (error) {
     errorCh.publish(error)
   }
-  asyncEndCh.publish([params])
+  asyncEndCh.publish({ params })
 }
 
 function wrapReturn (fn) {
