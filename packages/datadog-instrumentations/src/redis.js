@@ -23,16 +23,7 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
 
     startSpan(this, name, args)
 
-    try {
-      return wrap(addCommand.apply(this, arguments))
-    } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+    return wrapReturn(wrap(addCommand.apply(this, arguments)))
   })
   return redis
 })
@@ -51,16 +42,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     options.callback = AsyncResource.bind(wrap(cb))
 
-    try {
-      return internalSendCommand.apply(this, arguments)
-    } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+    return wrapReturn(internalSendCommand.apply(this, arguments))
   })
   return redis
 })
@@ -85,16 +67,7 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
       arguments[2] = AsyncResource.bind(wrap())
     }
 
-    try {
-      return sendCommand.apply(this, arguments)
-    } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+    return wrapReturn(sendCommand.apply(this, arguments))
   })
   return redis
 })
@@ -102,7 +75,7 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 function startSpan (client, command, args) {
   const db = client.selected_db
   const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || {}
-  startCh.publish([db, command, args, connectionOptions])
+  startCh.publish({ db, command, args, connectionOptions })
 }
 
 function wrap (done) {
@@ -157,4 +130,17 @@ function wrapArguments (args) {
   }
 
   return args
+}
+
+function wrapReturn (fn) {
+  try {
+    return fn
+  } catch (err) {
+    err.stack // trigger getting the stack at the original throwing point
+    errorCh.publish(err)
+
+    throw err
+  } finally {
+    endCh.publish(undefined)
+  }
 }

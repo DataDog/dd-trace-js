@@ -13,7 +13,7 @@ class RedisPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:redis:command:start', ([db, command, args, connectionOptions]) => {
+    this.addSub('apm:redis:command:start', ({ db, command, args, connectionOptions }) => {
       this.config = normalizeConfig(this.config)
       const store = storage.getStore()
       const childOf = store ? store.span : store
@@ -45,10 +45,8 @@ class RedisPlugin extends Plugin {
     })
 
     this.addSub('apm:redis:command:error', err => {
-      if (err) {
-        const span = storage.getStore().span
-        span.setTag('error', err)
-      }
+      const span = storage.getStore().span
+      span.setTag('error', err)
     })
 
     this.addSub('apm:redis:command:async-end', () => {
