@@ -21,7 +21,7 @@ function exec (...args) {
 
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
 
-const env = Object.assign({}, process.env, { DD_TRACE_STARTUP_LOGS: 'false' })
+const env = Object.assign({ RUST_BACKTRACE: 1 }, process.env, { DD_TRACE_STARTUP_LOGS: 'false' })
 
 function streamAddVersion (input) {
   input.rl = readline.createInterface({ input })
