@@ -1,14 +1,14 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+// const plugin = require('../src')
 
 describe('Plugin', () => {
   let redis
   let client
 
   describe('redis', () => {
-    withVersions(plugin, '@node-redis/client', version => {
+    withVersions('redis', '@node-redis/client', version => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('redis')
