@@ -41,7 +41,7 @@ describe('Plugin', () => {
           sub = redis.createClient()
         })
 
-        it.only('should do automatic instrumentation when using callbacks', done => {
+        it('should do automatic instrumentation when using callbacks', done => {
           debugger;
           client.on('error', done)
           debugger;
@@ -135,15 +135,18 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          // return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
           redis = require(`../../../versions/redis@${version}`).get()
+          // redis = proxyquire(`../../../versions/redis@${version}`, {}).get()
           client = redis.createClient()
         })
 
-        it('should be configured with the correct values', done => {
+        it.only('should be configured with the correct values', done => {
+          debugger;
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
@@ -176,7 +179,8 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          // return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -185,6 +189,7 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
+          
           agent.use(() => {}) // wait for initial command
           agent
             .use(traces => {
