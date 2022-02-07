@@ -12,6 +12,7 @@ describe('telemetry', () => {
   let origSetInterval
   let telemetry
   let instrumentedMap
+  let pluginsByName
 
   before(done => {
     origSetInterval = setInterval
@@ -62,6 +63,11 @@ describe('telemetry', () => {
       [{ name: 'bar' }, {}]
     ])
 
+    pluginsByName = {
+      foo2: { _enabled: true },
+      bar2: { _enabled: false }
+    }
+
     const circularObject = {
       child: { parent: null, field: 'child_value' },
       field: 'parent_value'
@@ -81,6 +87,8 @@ describe('telemetry', () => {
       circularObject
     }, {
       _instrumented: instrumentedMap
+    }, {
+      _pluginsByName: pluginsByName
     })
   })
 
@@ -95,7 +103,9 @@ describe('telemetry', () => {
       expect(payload).to.deep.include({
         integrations: [
           { name: 'foo', enabled: true, auto_enabled: true },
-          { name: 'bar', enabled: true, auto_enabled: true }
+          { name: 'bar', enabled: true, auto_enabled: true },
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
         ],
         dependencies: getMochaDeps()
       }).and.to.have.property('configuration').that.include.members([
@@ -120,12 +130,14 @@ describe('telemetry', () => {
 
   it('should send app-integrations-change', () => {
     instrumentedMap.set({ name: 'baz' }, {})
+    pluginsByName.baz2 = { _enabled: true }
     telemetry.updateIntegrations()
 
     return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
-          { name: 'baz', enabled: true, auto_enabled: true }
+          { name: 'baz', enabled: true, auto_enabled: true },
+          { name: 'baz2', enabled: true, auto_enabled: true }
         ]
       })
     })
@@ -133,12 +145,14 @@ describe('telemetry', () => {
 
   it('should send app-integrations-change', () => {
     instrumentedMap.set({ name: 'boo' }, {})
+    pluginsByName.boo2 = { _enabled: true }
     telemetry.updateIntegrations()
 
     return testSeq(4, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
-          { name: 'boo', enabled: true, auto_enabled: true }
+          { name: 'boo', enabled: true, auto_enabled: true },
+          { name: 'boo2', enabled: true, auto_enabled: true }
         ]
       })
     })

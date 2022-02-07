@@ -64,7 +64,7 @@ class Tracer extends BaseTracer {
         this._instrumenter.enable(config)
         this._pluginManager.configure(config)
         setStartupLogInstrumenter(this._instrumenter)
-        telemetry.start(config, this._instrumenter)
+        telemetry.start(config, this._instrumenter, this._pluginManager)
       }
     } catch (e) {
       log.error(e)

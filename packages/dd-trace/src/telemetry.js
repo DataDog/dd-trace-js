@@ -10,6 +10,7 @@ const os = require('os')
 
 let config
 let instrumenter
+let pluginManager
 
 let seqId = 0
 let application
@@ -29,6 +30,17 @@ function getIntegrations () {
       auto_enabled: true
     })
     sentIntegrations.add(plugin.name)
+  }
+  for (const pluginName in pluginManager._pluginsByName) {
+    if (sentIntegrations.has(pluginName)) {
+      continue
+    }
+    newIntegrations.push({
+      name: pluginName,
+      enabled: pluginManager._pluginsByName[pluginName]._enabled,
+      auto_enabled: true
+    })
+    sentIntegrations.add(pluginName)
   }
   return newIntegrations
 }
@@ -131,12 +143,13 @@ function sendData (reqType, payload = {}) {
   req.end()
 }
 
-function start (aConfig, theInstrumenter) {
+function start (aConfig, theInstrumenter, thePluginManager) {
   if (!aConfig.telemetryEnabled) {
     return
   }
   config = aConfig
   instrumenter = theInstrumenter
+  pluginManager = thePluginManager
   application = createAppObject()
   host = createHostObject()
   sendData('app-started', appStarted())
