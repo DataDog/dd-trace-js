@@ -42,39 +42,22 @@ class CouchBasePlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSubs('query', ([resource, bucket]) => {
+    this.addSubs('query', ({ resource, bucket }) => {
       const store = storage.getStore()
       const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource }, store, bucket)
       this.enter(span, store)
     })
 
-    this.addSubs('upsert', ([bucket]) => {
+    this._addCommandSubs('upsert')
+    this._addCommandSubs('insert')
+    this._addCommandSubs('replace')
+    this._addCommandSubs('append')
+    this._addCommandSubs('prepend')
+  }
+  _addCommandSubs (name) {
+    this.addSubs(name, ({ bucket }) => {
       const store = storage.getStore()
-      const span = this.startSpan('upsert', {}, store, bucket)
-      this.enter(span, store)
-    })
-
-    this.addSubs('insert', ([bucket]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('insert', {}, store, bucket)
-      this.enter(span, store)
-    })
-
-    this.addSubs('replace', ([bucket]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('replace', {}, store, bucket)
-      this.enter(span, store)
-    })
-
-    this.addSubs('append', ([bucket]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('append', {}, store, bucket)
-      this.enter(span, store)
-    })
-
-    this.addSubs('prepend', ([bucket]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('prepend', {}, store, bucket)
+      const span = this.startSpan(name, {}, store, bucket)
       this.enter(span, store)
     })
   }

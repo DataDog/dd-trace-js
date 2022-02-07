@@ -25,7 +25,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
     const n1qlQuery = q && q.statement
 
-    startCh.publish([n1qlQuery, this])
+    startCh.publish({ resource: n1qlQuery, bucket: this })
 
     emitter.once('rows', AsyncResource.bind(() => {
       asyncEndCh.publish(undefined)
@@ -118,7 +118,7 @@ function wrap (prefix, fn) {
 
     const cb = arguments[callbackIndex]
 
-    startCh.publish([this])
+    startCh.publish({ bucket: this })
 
     arguments[callbackIndex] = function (error, result) {
       if (error) {
