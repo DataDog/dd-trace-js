@@ -29,11 +29,12 @@ function parseHeaders (headers) {
     .map((r) => r.split(':').map((str) => str.trim()))
 
   const object = {}
-  pairs.forEach(([key, value]) => {
-    key = key.toLowerCase()
+  for (const pair of pairs) {
+    const value = pair[1]
     if (!value) {
-      return
+      continue
     }
+    const key = pair[0].toLowerCase()
     if (object[key]) {
       if (!Array.isArray(object[key])) {
         object[key] = [object[key], value]
@@ -43,7 +44,7 @@ function parseHeaders (headers) {
     } else {
       object[key] = value
     }
-  })
+  }
   return object
 }
 const channels = {
@@ -106,9 +107,9 @@ function diagnostics (tracer, config) {
     ) {
       const injectedHeaders = {}
       tracer.inject(span, HTTP_HEADERS, injectedHeaders)
-      Object.entries(injectedHeaders).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(injectedHeaders)) {
         request.addHeader(key, value)
-      })
+      }
     }
 
     analyticsSampler.sample(span, config.measured)
@@ -143,9 +144,9 @@ function diagnostics (tracer, config) {
 
 function addRequestHeaders (req, span, config) {
   const headers = parseHeaders(req.headers)
-  Object.entries(headers).forEach(([key, value]) => {
+  for (const [key, value] of Object.entries(headers)) {
     span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
-  })
+  }
 
   if (!headers.host) {
     // req.servername holds the value of the host header
@@ -174,13 +175,12 @@ function setStatusCode (res, span, config) {
 }
 
 function addResponseHeaders (res, span, config) {
-  config.headers.forEach((key) => {
+  for (const key of config.headers) {
     const value = res.headers[key]
-
     if (value) {
       span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function finishSpan (res, span, error, config) {
