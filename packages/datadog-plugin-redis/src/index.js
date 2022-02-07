@@ -37,7 +37,6 @@ class RedisPlugin extends Plugin {
         span.setTag('out.host', connectionOptions.host)
         span.setTag('out.port', connectionOptions.port)
       }
-      // console.log(3333, 'yerrr')
       this.enter(span, store)
     })
 

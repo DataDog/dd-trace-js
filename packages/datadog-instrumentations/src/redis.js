@@ -6,7 +6,6 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { storage } = require('../../datadog-core')
 
 const startCh = channel('apm:redis:command:start')
 const asyncEndCh = channel('apm:redis:command:async-end')
@@ -15,32 +14,17 @@ const errorCh = channel('apm:redis:command:error')
 
 addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
   shimmer.wrap(redis.default.prototype, 'addCommand', addCommand => function (command) {
-    debugger;
     if (!startCh.hasSubscribers) {
       return addCommand.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    
     const name = command[0]
     const args = command.slice(1)
 
-    // if (!config.filter(name)) return addCommand.apply(this, arguments)
-
-    
-
     startSpan(this, name, args)
-    debugger;
 
     try {
-      // return wrap(asyncResource, AsyncResource.bind(addCommand).apply(this, arguments))
-      
-      // return asyncResource.runInAsyncScope(() => { 
-        
-      //   return addCommand.apply(this, arguments)
-      // })
-      return addCommand.apply(this, arguments)
-
+      return wrap(addCommand.apply(this, arguments))
     } catch (err) {
       err.stack // trigger getting the stack at the original throwing point
       errorCh.publish(err)
@@ -55,44 +39,20 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
 
 addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'internal_send_command', internalSendCommand => function (options) {
-    debugger;
-    if (!startCh.hasSubscribers) {
-      return internalSendCommand.apply(this, arguments)
-    }
-    // console.log(33, this.config)
-    debugger;
-    // if (!this.config.filter(options.command)) return internalSendCommand.apply(this, arguments)
-    if (!options.callback) {
-      return internalSendCommand.apply(this, arguments)
-    }
+    if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
+
+    if (!options.callback) return internalSendCommand.apply(this, arguments)
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    
+
     const cb = asyncResource.bind(options.callback)
 
     startSpan(this, options.command, options.args)
 
-    debugger;
-    // console.log(wrap(asyncResource, cb).toString())
-    options.callback = AsyncResource.bind(wrap(asyncResource, cb))
-
-    // options.callback = AsyncResource.bind(function (error) {
-    //   finish(error)
-      
-    //   return cb.apply(this, arguments)
-    //   // return asyncResource.runInAsyncScope(() => {
-    //   //   return cb.apply(this, arguments)
-    //   // })
-    // })
+    options.callback = AsyncResource.bind(wrap(cb))
 
     try {
-      // return wrap(asyncResource, AsyncResource.bind(addCommand).apply(this, arguments))
-      // return AsyncResource.bind(internalSendCommand).apply(this, arguments)
-      // return asyncResource.bind(internalSendCommand).apply(this, arguments)
-      return asyncResource.runInAsyncScope(() => {
-        return internalSendCommand.apply(this, arguments)
-      })
-
+      return internalSendCommand.apply(this, arguments)
     } catch (err) {
       err.stack // trigger getting the stack at the original throwing point
       errorCh.publish(err)
@@ -107,45 +67,25 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
 addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'send_command', sendCommand => function (command, args, callback) {
-    debugger;
     if (!startCh.hasSubscribers) {
       return sendCommand.apply(this, arguments)
     }
-    
-    // if (!config.filter(command)) return sendCommand.apply(this, arguments)
-
-    // if (!callback) return sendCommand.apply(this, arguments)
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     startSpan(this, command, args)
 
-    
-    debugger;
-
     if (typeof callback === 'function') {
-      console.log(33)
       const cb = asyncResource.bind(callback)
-      arguments[2] = AsyncResource.bind(wrap(asyncResource, cb))
+      arguments[2] = AsyncResource.bind(wrap(cb))
     } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
-      console.log(63)
       const cb = asyncResource.bind(args[args.length - 1])
-      args[args.length - 1] = AsyncResource.bind(wrap(asyncResource, cb))
+      args[args.length - 1] = AsyncResource.bind(wrap(cb))
     } else {
-      console.log(93)
-      arguments[2] = AsyncResource.bind(wrap(asyncResource))
+      arguments[2] = AsyncResource.bind(wrap())
     }
 
-    debugger;
-
     try {
-      // return wrap(asyncResource, AsyncResource.bind(addCommand).apply(this, arguments))
-      // return AsyncResource.bind(sendCommand).apply(this, arguments)
-
-      // return asyncResource.runInAsyncScope(() => {
-        
-      //   return sendCommand.apply(this, arguments)
-      // })
       return sendCommand.apply(this, arguments)
     } catch (err) {
       err.stack // trigger getting the stack at the original throwing point
@@ -160,57 +100,34 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 })
 
 function startSpan (client, command, args) {
-  debugger;
   const db = client.selected_db
   const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || {}
   startCh.publish([db, command, args, connectionOptions])
 }
 
-function wrap(ar, done) {
-  debugger;
+function wrap (done) {
   if (typeof done === 'function' || !done) {
-    
-    debugger;
-    return wrapCallback(ar, done)
+    return wrapCallback(done)
   } else if (isPromise(done)) {
-    
-    debugger;
-    return wrapPromise(ar, done)
+    return wrapPromise(done)
   } else if (done && done.length) {
-    
-    debugger;
-    return wrapArguments(ar, done)
+    return wrapArguments(done)
   }
 }
 
-function wrapCallback (ar, callback) {
-  debugger;
-  // const asyncResource = new AsyncResource('bound-anonymous-fn')
+function wrapCallback (callback) {
   return function (err) {
     finish(err)
-    
     if (callback) {
-      
       return callback.apply(this, arguments)
-      // return ar.runInAsyncScope(() => {
-      //     // console.log(3000, storage.getStore())
-      //     return callback.apply(this, arguments)
-      // })
     }
-    // console.log(3000, storage.getStore())
-
-    // return callback.apply(this, arguments)
   }
 }
 
 function finish (error) {
-  debugger;
-  // console.log(3000, storage.getStore())
   if (error) {
     errorCh.publish(error)
   }
-  // console.trace()
-  // console.log(52, storage.getStore())
   asyncEndCh.publish(undefined)
 }
 
@@ -222,8 +139,7 @@ function isObject (obj) {
   return typeof obj === 'object' && obj !== null
 }
 
-function wrapPromise (ar, promise) {
-  debugger;
+function wrapPromise (promise) {
   promise.then(
     () => finish(),
     err => finish(err)
@@ -232,13 +148,12 @@ function wrapPromise (ar, promise) {
   return promise
 }
 
-function wrapArguments (ar, args) {
-  debugger;
+function wrapArguments (args) {
   const lastIndex = args.length - 1
   const callback = args[lastIndex]
 
   if (typeof callback === 'function') {
-    args[lastIndex] = wrapCallback(ar, args[lastIndex])
+    args[lastIndex] = wrapCallback(args[lastIndex])
   }
 
   return args

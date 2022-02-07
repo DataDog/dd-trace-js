@@ -1,8 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-// const plugin = require('../src')
-const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('Plugin', () => {
   let redis
@@ -29,22 +27,18 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          // return agent.close()
           return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
           redis = require(`../../../versions/redis@${version}`).get()
-          // redis = proxyquire(`../../../versions/redis@${version}`, {}).get()
           client = redis.createClient()
           pub = redis.createClient()
           sub = redis.createClient()
         })
 
         it('should do automatic instrumentation when using callbacks', done => {
-          debugger;
           client.on('error', done)
-          debugger;
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'redis.command')
@@ -135,18 +129,15 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          // return agent.close()
           return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
           redis = require(`../../../versions/redis@${version}`).get()
-          // redis = proxyquire(`../../../versions/redis@${version}`, {}).get()
           client = redis.createClient()
         })
 
-        it.only('should be configured with the correct values', done => {
-          debugger;
+        it('should be configured with the correct values', done => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
@@ -179,7 +170,6 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          // return agent.close()
           return agent.close({ ritmReset: false })
         })
 
@@ -189,7 +179,6 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          
           agent.use(() => {}) // wait for initial command
           agent
             .use(traces => {

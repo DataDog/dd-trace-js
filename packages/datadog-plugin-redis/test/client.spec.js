@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-// const plugin = require('../src')
 
 describe('Plugin', () => {
   let redis
@@ -15,7 +14,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(async () => {
@@ -74,7 +73,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(async () => {
