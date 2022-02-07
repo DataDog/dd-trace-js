@@ -13,7 +13,9 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
-  JEST_TEST_RUNNER
+  JEST_TEST_RUNNER,
+  CI_LIBRARY_LANGUAGE,
+  CI_LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -72,13 +74,15 @@ describe('Plugin', () => {
               [TEST_STATUS]: status,
               [TEST_SUITE_TAG]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-jasmine2'
+              [JEST_TEST_RUNNER]: 'jest-jasmine2',
+              [CI_LIBRARY_LANGUAGE]: 'javascript'
             })
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+            expect(testSpan.meta[CI_LIBRARY_VERSION]).not.to.be.undefined
           })
         })
 

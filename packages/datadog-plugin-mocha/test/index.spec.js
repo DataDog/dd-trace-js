@@ -19,7 +19,9 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   CI_APP_ORIGIN,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  CI_LIBRARY_LANGUAGE,
+  CI_LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 const ASYNC_TESTS = [
@@ -139,7 +141,8 @@ describe('Plugin', () => {
               [TEST_STATUS]: 'fail',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'mocha',
-              [TEST_SUITE]: testSuite
+              [TEST_SUITE]: testSuite,
+              [CI_LIBRARY_LANGUAGE]: 'javascript'
             })
             expect(testSpan.meta).to.contain({
               [ERROR_TYPE]: 'AssertionError',
@@ -151,6 +154,7 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('mocha.test')
             expect(testSpan.resource).to.equal(`${testSuite}.mocha-test-fail can fail`)
+            expect(testSpan.meta[CI_LIBRARY_VERSION]).not.to.be.undefined
           }).then(done, done)
 
         const mocha = new Mocha({
@@ -201,7 +205,8 @@ describe('Plugin', () => {
                 [TEST_STATUS]: test.status,
                 [TEST_TYPE]: 'test',
                 [TEST_FRAMEWORK]: 'mocha',
-                [TEST_SUITE]: testSuite
+                [TEST_SUITE]: testSuite,
+                [CI_LIBRARY_LANGUAGE]: 'javascript'
               })
               if (test.fileName === 'mocha-test-fail.js') {
                 expect(testSpan.meta).to.contain({
@@ -215,6 +220,7 @@ describe('Plugin', () => {
               expect(testSpan.type).to.equal('test')
               expect(testSpan.name).to.equal('mocha.test')
               expect(testSpan.resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
+              expect(testSpan.meta[CI_LIBRARY_VERSION]).not.to.be.undefined
             }).then(done, done)
 
           const mocha = new Mocha({

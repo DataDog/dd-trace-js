@@ -4,6 +4,7 @@ const { getGitMetadata } = require('./git')
 const { getUserProviderGitMetadata } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
+const ddPkg = require('./dd_pkg')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -26,6 +27,9 @@ const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 
+const CI_LIBRARY_LANGUAGE = 'ci_library.language'
+const CI_LIBRARY_VERSION = 'ci_library.version'
+
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.msg'
 const ERROR_STACK = 'error.stack'
@@ -35,6 +39,8 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
 module.exports = {
+  CI_LIBRARY_LANGUAGE,
+  CI_LIBRARY_VERSION,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
@@ -90,7 +96,9 @@ function getTestEnvironmentMetadata (testFramework, config) {
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
-    ...runtimeAndOSMetadata
+    ...runtimeAndOSMetadata,
+    [CI_LIBRARY_LANGUAGE]: 'javascript',
+    [CI_LIBRARY_VERSION]: ddPkg.version
   }
   if (config && config.service) {
     metadata['service.name'] = config.service

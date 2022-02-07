@@ -16,7 +16,9 @@ const {
   CI_APP_ORIGIN,
   ERROR_MESSAGE,
   TEST_SKIP_REASON,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  CI_LIBRARY_LANGUAGE,
+  CI_LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
@@ -80,13 +82,15 @@ describe('Plugin', () => {
               [TEST_NAME]: 'pass scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_STATUS]: 'pass'
+              [TEST_STATUS]: 'pass',
+              [CI_LIBRARY_LANGUAGE]: 'javascript'
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
             expect(testSpan.resource).to.equal('pass scenario')
+            expect(testSpan.meta[CI_LIBRARY_VERSION]).not.to.be.undefined
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'pass scenario')
           expect(result.success).to.equal(true)

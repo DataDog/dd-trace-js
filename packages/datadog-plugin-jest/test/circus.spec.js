@@ -16,7 +16,9 @@ const {
   ERROR_STACK,
   TEST_PARAMETERS,
   CI_APP_ORIGIN,
-  JEST_TEST_RUNNER
+  JEST_TEST_RUNNER,
+  CI_LIBRARY_LANGUAGE,
+  CI_LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', function () {
@@ -71,13 +73,15 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE_TAG]: TEST_SUITE,
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-circus'
+              [JEST_TEST_RUNNER]: 'jest-circus',
+              [CI_LIBRARY_LANGUAGE]: 'javascript'
             })
             expect(traces[0][0].type).to.equal('test')
             expect(traces[0][0].name).to.equal('jest.test')
             expect(traces[0][0].resource).to.equal(`${TEST_SUITE}.${TEST_NAME}`)
             expect(traces[0][0].service).to.equal('test')
             expect(traces[0][0].meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+            expect(traces[0][0].meta[CI_LIBRARY_VERSION]).not.to.be.undefined
           }).then(done).catch(done)
 
         const passingTestEvent = {
