@@ -159,11 +159,17 @@ function start (aConfig, theInstrumenter, thePluginManager) {
 }
 
 function stop () {
+  if (!config) {
+    return
+  }
   clearInterval(interval)
   process.removeListener('beforeExit', onBeforeExit)
 }
 
 function updateIntegrations () {
+  if (!config || !config.telemetryEnabled) {
+    return
+  }
   const integrations = getIntegrations()
   if (integrations.length === 0) {
     return
