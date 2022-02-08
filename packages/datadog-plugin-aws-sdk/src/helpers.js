@@ -80,7 +80,7 @@ const helpers = {
     if (!span) return
 
     const service = services[serviceName] && services[serviceName]
-    if (service.requestInject) service.requestInject(span, request, tracer)
+    if (service && service.requestInject) service.requestInject(span, request, tracer)
   },
 
   wrapCb (cb, serviceName, tags, request, tracer, childOf) {
