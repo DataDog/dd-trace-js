@@ -23,7 +23,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql') // load the unified mysql plugin
+          await agent.load('mysql2')
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
@@ -175,7 +175,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', { service: 'custom' }) // load the unified mysql plugin
+          await agent.load('mysql2', { service: 'custom' })
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
@@ -209,7 +209,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql') // load the unified mysql plugin
+          await agent.load('mysql2')
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           pool = mysql2.createPool({

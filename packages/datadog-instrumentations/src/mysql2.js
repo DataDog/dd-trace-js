@@ -8,10 +8,10 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connection => {
-  const startCh = channel('apm:mysql:query:start')
-  const asyncEndCh = channel('apm:mysql:query:async-end')
-  const endCh = channel('apm:mysql:query:end')
-  const errorCh = channel('apm:mysql:query:error')
+  const startCh = channel('apm:mysql2:query:start')
+  const asyncEndCh = channel('apm:mysql2:query:async-end')
+  const endCh = channel('apm:mysql2:query:end')
+  const errorCh = channel('apm:mysql2:query:error')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
@@ -45,7 +45,7 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
     return asyncResource.bind(function executeWithTrace (packet, connection) {
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
 
-      startCh.publish([sql, config])
+      startCh.publish({ sql, conf: config })
 
       if (this.onResult) {
         const onResult = asyncResource.bind(this.onResult)
