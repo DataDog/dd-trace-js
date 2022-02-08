@@ -1,41 +1,11 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/redis')
+const RedisPlugin = require('../../datadog-plugin-redis/src')
 
-function createWrapSendCommand (tracer, config) {
-  return function wrapSendCommand (sendCommand) {
-    return function sendCommandWithTrace (command, stream) {
-      if (!command || !command.promise || !config.filter(command.name)) return sendCommand.apply(this, arguments)
-
-      const options = this.options || {}
-      const connectionName = this.options.connectionName
-      const db = options.db
-      const span = tx.instrument(tracer, config, db, command.name, command.args)
-
-      tx.setHost(span, options.host, options.port)
-      tx.wrap(span, command.promise)
-
-      if (config.splitByInstance && connectionName) {
-        const service = config.service
-          ? `${config.service}-${connectionName}`
-          : connectionName
-
-        span.setTag('service.name', service)
-      }
-
-      return tracer.scope().bind(sendCommand, span).apply(this, arguments)
-    }
+class IORedisPlugin extends RedisPlugin {
+  static get name () {
+    return 'ioredis'
   }
 }
 
-module.exports = {
-  name: 'ioredis',
-  versions: ['>=2'],
-  patch (Redis, tracer, config) {
-    config = tx.normalizeConfig(config)
-    this.wrap(Redis.prototype, 'sendCommand', createWrapSendCommand(tracer, config))
-  },
-  unpatch (Redis) {
-    this.unwrap(Redis.prototype, 'sendCommand')
-  }
-}
+module.exports = IORedisPlugin

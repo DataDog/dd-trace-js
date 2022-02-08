@@ -15,7 +15,9 @@ class RedisPlugin extends Plugin {
 
     this.configNormalized = false
 
-    this.addSub('apm:redis:command:start', ({ db, command, args, connectionOptions }) => {
+    this.addSub(`apm:${this.constructor.name}:command:start`, (
+      { db, command, args, connectionOptions, connectionName }
+    ) => {
       if (!this.configNormalized) {
         this.config = normalizeConfig(this.config)
         this.configNormalized = true
@@ -31,7 +33,7 @@ class RedisPlugin extends Plugin {
           'span.type': 'redis',
           'db.type': 'redis',
           'db.name': db || '0',
-          'redis.raw_command': formatCommand(command, args),
+          'redis.raw_command': formatCommand(command, args)
         }
       })
 
@@ -45,19 +47,28 @@ class RedisPlugin extends Plugin {
           'out.port': connectionOptions.port
         })
       }
+
+      if (this.config.splitByInstance && connectionName) {
+        const service = this.config.service
+          ? `${this.config.service}-${connectionName}`
+          : connectionName
+
+        span.setTag('service.name', service)
+      }
+
       this.enter(span, store)
     })
 
-    this.addSub('apm:redis:command:end', () => {
+    this.addSub(`apm:${this.constructor.name}:command:end`, () => {
       this.exit()
     })
 
-    this.addSub('apm:redis:command:error', err => {
+    this.addSub(`apm:${this.constructor.name}:command:error`, err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub('apm:redis:command:async-end', () => {
+    this.addSub(`apm:${this.constructor.name}:command:async-end`, () => {
       const span = storage.getStore().span
       span.finish()
     })

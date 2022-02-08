@@ -6,6 +6,7 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const tx = require('./helpers/tx')
 
 const startCh = channel('apm:redis:command:start')
 const asyncEndCh = channel('apm:redis:command:async-end')
@@ -23,7 +24,7 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
 
     startSpan(this, name, args)
 
-    return wrapReturn(wrap(addCommand.apply(this, arguments)))
+    return wrapReturn(tx.wrap(asyncEndCh, errorCh, addCommand.apply(this, arguments)))
   })
   return redis
 })
@@ -40,7 +41,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     startSpan(this, options.command, options.args)
 
-    options.callback = AsyncResource.bind(wrap(cb))
+    options.callback = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh, cb))
 
     return wrapReturn(internalSendCommand.apply(this, arguments))
   })
@@ -59,12 +60,12 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 
     if (typeof callback === 'function') {
       const cb = asyncResource.bind(callback)
-      arguments[2] = AsyncResource.bind(wrap(cb))
+      arguments[2] = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh, cb))
     } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
       const cb = asyncResource.bind(args[args.length - 1])
-      args[args.length - 1] = AsyncResource.bind(wrap(cb))
+      args[args.length - 1] = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh, cb))
     } else {
-      arguments[2] = AsyncResource.bind(wrap())
+      arguments[2] = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh))
     }
 
     return wrapReturn(sendCommand.apply(this, arguments))
@@ -76,60 +77,6 @@ function startSpan (client, command, args) {
   const db = client.selected_db
   const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || {}
   startCh.publish({ db, command, args, connectionOptions })
-}
-
-function wrap (done) {
-  if (typeof done === 'function' || !done) {
-    return wrapCallback(done)
-  } else if (isPromise(done)) {
-    return wrapPromise(done)
-  } else if (done && done.length) {
-    return wrapArguments(done)
-  }
-}
-
-function wrapCallback (callback) {
-  return function (err) {
-    finish(err)
-    if (callback) {
-      return callback.apply(this, arguments)
-    }
-  }
-}
-
-function finish (error) {
-  if (error) {
-    errorCh.publish(error)
-  }
-  asyncEndCh.publish(undefined)
-}
-
-function isPromise (obj) {
-  return isObject(obj) && typeof obj.then === 'function'
-}
-
-function isObject (obj) {
-  return typeof obj === 'object' && obj !== null
-}
-
-function wrapPromise (promise) {
-  promise.then(
-    () => finish(),
-    err => finish(err)
-  )
-
-  return promise
-}
-
-function wrapArguments (args) {
-  const lastIndex = args.length - 1
-  const callback = args[lastIndex]
-
-  if (typeof callback === 'function') {
-    args[lastIndex] = wrapCallback(args[lastIndex])
-  }
-
-  return args
 }
 
 function wrapReturn (fn) {
