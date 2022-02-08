@@ -13,8 +13,14 @@ class RedisPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.configNormalized = false
+
     this.addSub('apm:redis:command:start', ({ db, command, args, connectionOptions }) => {
-      this.config = normalizeConfig(this.config)
+      if (!this.configNormalized) {
+        this.config = normalizeConfig(this.config)
+        this.configNormalized = true
+      }
+
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('redis.command', {
@@ -25,7 +31,7 @@ class RedisPlugin extends Plugin {
           'span.type': 'redis',
           'db.type': 'redis',
           'db.name': db || '0',
-          'redis.raw_command': formatCommand(command, args)
+          'redis.raw_command': formatCommand(command, args),
         }
       })
 
@@ -34,8 +40,10 @@ class RedisPlugin extends Plugin {
       analyticsSampler.sample(span, this.config.measured)
 
       if (connectionOptions) {
-        span.setTag('out.host', connectionOptions.host)
-        span.setTag('out.port', connectionOptions.port)
+        span.addTags({
+          'out.host': connectionOptions.host,
+          'out.port': connectionOptions.port
+        })
       }
       this.enter(span, store)
     })
