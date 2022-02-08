@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('Plugin', () => {
   let couchbase
@@ -13,7 +13,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('couchbase', () => {
-    withVersions(plugin, 'couchbase', version => {
+    withVersions('couchbase', 'couchbase', version => {
       beforeEach(() => {
         tracer = global.tracer = require('../../dd-trace')
       })
@@ -21,7 +21,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('couchbase').then(() => {
-            couchbase = require(`../../../versions/couchbase@${version}`).get()
+            couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
             N1qlQuery = couchbase.N1qlQuery
           })
         })
@@ -38,7 +38,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should run the Query callback in the parent context', done => {
@@ -50,35 +50,6 @@ describe('Plugin', () => {
             cluster.query(n1qlQuery, (err, rows) => {
               expect(tracer.scope().active()).to.equal(span)
               done(err)
-            })
-          })
-        })
-
-        it('should run the Query event listener in the parent context', done => {
-          const query = 'SELECT 1+1'
-          const n1qlQuery = N1qlQuery.fromString(query)
-          const span = tracer.startSpan('test.query.listener')
-
-          const emitter = cluster.query(n1qlQuery)
-
-          tracer.scope().activate(span, () => {
-            emitter.on('rows', () => {
-              expect(tracer.scope().active()).to.equal(span)
-              done()
-            })
-          })
-        })
-
-        it('should run the Bucket event listener in the parent context', done => {
-          bucket.disconnect()
-          const span = tracer.startSpan('test')
-
-          bucket = cluster.openBucket('datadog-test')
-
-          tracer.scope().activate(span, () => {
-            bucket.on('connect', () => {
-              expect(tracer.scope().active()).to.equal(span)
-              done()
             })
           })
         })
