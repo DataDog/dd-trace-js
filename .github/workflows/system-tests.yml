@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: 'DataDog/system-tests'
+          ref: 'simon-id/pack_install'
 
       - name: Checkout dd-trace-js
         uses: actions/checkout@v2
