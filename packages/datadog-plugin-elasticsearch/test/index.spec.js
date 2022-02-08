@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 // Retries and the initial request result in a trace with multiple spans.
 // The last span is the one that actually did the query.
@@ -11,7 +10,7 @@ describe('Plugin', () => {
   let elasticsearch
   let tracer
 
-  withVersions(plugin, ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
+  withVersions('elasticsearch', ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
     describe('elasticsearch', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -25,7 +24,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -255,7 +254,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {

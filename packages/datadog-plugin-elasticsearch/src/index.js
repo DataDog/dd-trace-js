@@ -1,23 +1,29 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapRequest (tracer, config) {
-  config = normalizeConfig(config)
-  return function wrapRequest (request) {
-    return function requestWithTrace (params, options, cb) {
-      if (!params) return request.apply(this, arguments)
+class ElasticsearchPlugin extends Plugin {
+  static get name () {
+    return 'elasticsearch'
+  }
 
-      const lastIndex = arguments.length - 1
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:elasticsearch:query:start', ({ params }) => {
+      this.config = normalizeConfig(this.config)
+
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
       const body = getBody(params.body || params.bulkBody)
-      const childOf = tracer.scope().active()
-      const span = tracer.startSpan('elasticsearch.query', {
+      const span = this.tracer.startSpan('elasticsearch.query', {
         childOf,
         tags: {
-          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
-          [Tags.DB_TYPE]: 'elasticsearch',
-          'service.name': config.service || `${tracer._service}-elasticsearch`,
+          'db.type': 'elasticsearch',
+          'span.kind': 'client',
+          'service.name': this.config.service || `${this.tracer._service}-elasticsearch`,
           'resource.name': `${params.method} ${quantizePath(params.path)}`,
           'span.type': 'elasticsearch',
           'elasticsearch.url': params.path,
@@ -26,57 +32,25 @@ function createWrapRequest (tracer, config) {
           'elasticsearch.params': JSON.stringify(params.querystring || params.query)
         }
       })
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
-      analyticsSampler.sample(span, config.measured)
+    this.addSub('apm:elasticsearch:query:end', () => {
+      this.exit()
+    })
 
-      cb = arguments[lastIndex]
+    this.addSub('apm:elasticsearch:query:error', err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
 
-      if (typeof cb === 'function') {
-        arguments[lastIndex] = wrapCallback(tracer, span, params, config, cb)
-
-        return tracer.scope().activate(span, () => request.apply(this, arguments))
-      } else {
-        const promise = request.apply(this, arguments)
-
-        if (promise && typeof promise.then === 'function') {
-          promise.then(() => finish(span, params, config), e => finish(span, params, config, e))
-        } else {
-          finish(span, params, config)
-        }
-
-        return promise
-      }
-    }
-  }
-}
-
-function wrapCallback (tracer, span, params, config, done) {
-  return tracer.scope().bind(function (err) {
-    finish(span, params, config, err)
-    done.apply(null, arguments)
-  })
-}
-
-function finish (span, params, config, err) {
-  if (err) {
-    span.addTags({
-      'error.type': err.name,
-      'error.msg': err.message,
-      'error.stack': err.stack
+    this.addSub('apm:elasticsearch:query:async-end', ({ params }) => {
+      const span = storage.getStore().span
+      this.config.hooks.query(span, params)
+      span.finish()
     })
   }
-
-  config.hooks.query(span, params)
-
-  span.finish()
-}
-
-function quantizePath (path) {
-  return path && path.replace(/[0-9]+/g, '?')
-}
-
-function getBody (body) {
-  return body && JSON.stringify(body)
 }
 
 function normalizeConfig (config) {
@@ -94,27 +68,12 @@ function getHooks (config) {
   return { query }
 }
 
-module.exports = [
-  {
-    name: 'elasticsearch',
-    file: 'src/lib/transport.js',
-    versions: ['>=10'],
-    patch (Transport, tracer, config) {
-      this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
-    },
-    unpatch (Transport) {
-      this.unwrap(Transport.prototype, 'request')
-    }
-  },
-  {
-    name: '@elastic/elasticsearch',
-    file: 'lib/Transport.js',
-    versions: ['>=5.6.16'], // initial version of this module
-    patch (Transport, tracer, config) {
-      this.wrap(Transport.prototype, 'request', createWrapRequest(tracer, config))
-    },
-    unpatch (Transport) {
-      this.unwrap(Transport.prototype, 'request')
-    }
-  }
-]
+function getBody (body) {
+  return body && JSON.stringify(body)
+}
+
+function quantizePath (path) {
+  return path && path.replace(/[0-9]+/g, '?')
+}
+
+module.exports = ElasticsearchPlugin
