@@ -42,6 +42,12 @@ module.exports = class Plugin {
     storage.enterWith({ ...store, span })
   }
 
+  skip () {
+    const store = storage.getStore()
+    this._storeStack.push(store)
+    storage.enterWith({ noop: true })
+  }
+
   exit () {
     storage.enterWith(this._storeStack.pop())
   }
