@@ -218,6 +218,27 @@ describe('Plugin', () => {
               expect(await logServer.logPromise).to.include(dd)
             })
           }
+
+          it('should overwrite any existing "dd" property', async () => {
+            const meta = {
+              dd: {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              }
+            }
+
+            tracer.scope().activate(span, () => {
+              const logObj = {
+                some: 'data',
+                dd: 'something else'
+              }
+              winston.info(logObj)
+              expect(logObj.dd).to.equal('something else')
+
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
+            })
+            expect(await logServer.logPromise).to.include(meta.dd)
+          })
         })
 
         describe('with splat formatting', () => {

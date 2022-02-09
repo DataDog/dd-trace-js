@@ -15,7 +15,8 @@ function chunkProxy (chunk, holder) {
       }
     },
     ownKeys (target) {
-      return ['dd', ...Reflect.ownKeys(target)]
+      const ownKeys = Reflect.ownKeys(target)
+      return ownKeys.includes('dd') ? ownKeys : ['dd', ...ownKeys]
     },
     getOwnPropertyDescriptor (target, p) {
       return Reflect.getOwnPropertyDescriptor(p === 'dd' ? holder : target, p)
