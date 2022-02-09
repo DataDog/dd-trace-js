@@ -76,6 +76,10 @@ function incomingHttpEndTranslator (data) {
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
+  if (data.req.body !== undefined && data.req.body !== null) {
+    payload[addresses.HTTP_INCOMING_BODY] = data.req.body
+  }
+
   if (data.req.query && typeof data.req.query === 'object') {
     payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
   }
