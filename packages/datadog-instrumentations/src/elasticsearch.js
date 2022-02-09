@@ -24,37 +24,43 @@ addHook({ name: 'elasticsearch', file: 'src/lib/transport.js', versions: ['>=10'
 
 function wrapRequest (request) {
   return function (params, options, cb) {
-    if (!startCh.hasSubscribers) {
-      return request.apply(this, arguments)
-    }
-
-    if (!params) return request.apply(this, arguments)
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    startCh.publish({ params })
-    const lastIndex = arguments.length - 1
-    cb = arguments[lastIndex]
-
-    if (typeof cb === 'function') {
-      cb = asyncResource.bind(cb)
-
-      arguments[lastIndex] = AsyncResource.bind(function (error) {
-        finish(params, error)
-        return cb.apply(null, arguments)
-      })
-
-      return wrapReturn(asyncResource.runInAsyncScope(() => {
+    try {
+      if (!startCh.hasSubscribers) {
         return request.apply(this, arguments)
-      }))
-    } else {
-      const promise = request.apply(this, arguments)
-      if (promise && typeof promise.then === 'function') {
-        promise.then(() => finish(params), e => finish(params, e))
-      } else {
-        finish(params)
       }
-      return promise
+
+      if (!params) return request.apply(this, arguments)
+
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+      startCh.publish({ params })
+      const lastIndex = arguments.length - 1
+      cb = arguments[lastIndex]
+
+      if (typeof cb === 'function') {
+        cb = asyncResource.bind(cb)
+
+        arguments[lastIndex] = AsyncResource.bind(function (error) {
+          finish(params, error)
+          return cb.apply(null, arguments)
+        })
+        return request.apply(this, arguments)
+      } else {
+        const promise = request.apply(this, arguments)
+        if (promise && typeof promise.then === 'function') {
+          promise.then(() => finish(params), e => finish(params, e))
+        } else {
+          finish(params)
+        }
+        return promise
+      }
+    } catch (err) {
+      err.stack // trigger getting the stack at the original throwing point
+      errorCh.publish(err)
+
+      throw err
+    } finally {
+      endCh.publish(undefined)
     }
   }
 }
@@ -64,17 +70,4 @@ function finish (params, error) {
     errorCh.publish(error)
   }
   asyncEndCh.publish({ params })
-}
-
-function wrapReturn (fn) {
-  try {
-    return fn
-  } catch (err) {
-    err.stack // trigger getting the stack at the original throwing point
-    errorCh.publish(err)
-
-    throw err
-  } finally {
-    endCh.publish(undefined)
-  }
 }
