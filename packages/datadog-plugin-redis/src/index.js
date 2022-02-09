@@ -13,16 +13,9 @@ class RedisPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.configNormalized = false
-
     this.addSub(`apm:${this.constructor.name}:command:start`, (
       { db, command, args, connectionOptions, connectionName }
     ) => {
-      if (!this.configNormalized) {
-        this.config = normalizeConfig(this.config)
-        this.configNormalized = true
-      }
-
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('redis.command', {
@@ -72,6 +65,11 @@ class RedisPlugin extends Plugin {
       const span = storage.getStore().span
       span.finish()
     })
+  }
+
+  configure (config) {
+    Plugin.prototype.configure.call(this, config)
+    return normalizeConfig(this.config)
   }
 }
 
