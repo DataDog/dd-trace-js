@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-// const plugin = require('../src')
 
 describe('Plugin', () => {
   let Redis
