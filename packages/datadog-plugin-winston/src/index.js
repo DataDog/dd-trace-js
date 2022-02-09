@@ -2,6 +2,8 @@
 
 const { LOG } = require('../../../ext/formats')
 
+const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
+
 function chunkProxy (chunk, holder) {
   return new Proxy(chunk, {
     get (target, p, receiver) {
@@ -16,7 +18,7 @@ function chunkProxy (chunk, holder) {
     },
     ownKeys (target) {
       const ownKeys = Reflect.ownKeys(target)
-      return ownKeys.includes('dd') ? ownKeys : ['dd', ...ownKeys]
+      return hasOwn(target, 'dd') ? ownKeys : ['dd', ...ownKeys]
     },
     getOwnPropertyDescriptor (target, p) {
       return Reflect.getOwnPropertyDescriptor(p === 'dd' ? holder : target, p)
