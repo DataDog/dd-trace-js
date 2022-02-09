@@ -68,8 +68,8 @@ class RedisPlugin extends Plugin {
   }
 
   configure (config) {
-    Plugin.prototype.configure.call(this, config)
-    return normalizeConfig(this.config)
+    normalizeConfig(config)
+    super.configure.call(this, config)
   }
 }
 
