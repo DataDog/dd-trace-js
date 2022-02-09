@@ -38,9 +38,8 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(last(traces[0])).to.have.property('resource', 'POST /logstash-?.?.?/_search')
+              done()
             })
-            .then(done)
-            .catch(done)
 
           client.search({
             index: 'logstash-2000.01.01',
@@ -57,9 +56,8 @@ describe('Plugin', () => {
               expect(last(traces[0]).meta).to.have.property('elasticsearch.url', '/docs/_search')
               expect(last(traces[0]).meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
               expect(last(traces[0]).meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
+              done()
             })
-            .then(done)
-            .catch(done)
 
           client.search({
             index: 'docs',
@@ -85,9 +83,8 @@ describe('Plugin', () => {
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
               expect(last(traces[0]).meta).to.have.property('elasticsearch.params', '{"size":100}')
+              done()
             })
-            .then(done)
-            .catch(done)
 
           client.msearch({
             size: 100,
@@ -112,11 +109,10 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(last(traces[0]).meta).to.not.have.property('elasticsearch.body')
+              done()
             })
-            .then(done)
-            .catch(done)
 
-          client.ping(err => err && done(err))
+          client.ping(err => err)
         })
 
         describe('when using a callback', () => {
@@ -126,11 +122,10 @@ describe('Plugin', () => {
                 expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
                 expect(last(traces[0])).to.have.property('resource', 'HEAD /')
                 expect(last(traces[0])).to.have.property('type', 'elasticsearch')
+                done()
               })
-              .then(done)
-              .catch(done)
 
-            client.ping(err => err && done(err))
+            client.ping(err => err)
           })
 
           it('should propagate context', done => {
@@ -138,9 +133,8 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(last(traces[0])).to.have.property('parent_id')
                 expect(last(traces[0]).parent_id).to.not.be.null
+                done()
               })
-              .then(done)
-              .catch(done)
 
             const span = tracer.startSpan('test')
 
@@ -164,9 +158,8 @@ describe('Plugin', () => {
                 expect(last(traces[0]).meta).to.have.property('error.type', error.name)
                 expect(last(traces[0]).meta).to.have.property('error.msg', error.message)
                 expect(last(traces[0]).meta).to.have.property('error.stack', error.stack)
+                done()
               })
-              .then(done)
-              .catch(done)
 
             client.search({ index: 'invalid' }, err => {
               error = err
@@ -187,11 +180,10 @@ describe('Plugin', () => {
                 expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
                 expect(last(traces[0])).to.have.property('resource', 'HEAD /')
                 expect(last(traces[0])).to.have.property('type', 'elasticsearch')
+                done()
               })
-              .then(done)
-              .catch(done)
 
-            client.ping().catch(done)
+            client.ping()
           })
 
           it('should propagate context', done => {
@@ -199,16 +191,14 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(last(traces[0])).to.have.property('parent_id')
                 expect(last(traces[0]).parent_id).to.not.be.null
+                done()
               })
-              .then(done)
-              .catch(done)
 
             const span = tracer.startSpan('test')
 
             tracer.scope().activate(span, () => {
               client.ping()
                 .then(() => span.finish())
-                .catch(done)
             })
           })
 
@@ -219,9 +209,8 @@ describe('Plugin', () => {
               expect(last(traces[0]).meta).to.have.property('error.type', error.name)
               expect(last(traces[0]).meta).to.have.property('error.msg', error.message)
               expect(last(traces[0]).meta).to.have.property('error.stack', error.stack)
+              done()
             })
-              .then(done)
-              .catch(done)
 
             client.search({ index: 'invalid' })
               .catch(err => {
@@ -281,11 +270,10 @@ describe('Plugin', () => {
               expect(last(traces[0])).to.have.property('service', 'test')
               expect(last(traces[0]).meta).to.have.property('elasticsearch.params', 'foo')
               expect(last(traces[0]).meta).to.have.property('elasticsearch.method', 'POST')
+              done()
             })
-            .then(done)
-            .catch(done)
 
-          client.ping(err => err && done(err))
+          client.ping(err => err)
         })
       })
     })
