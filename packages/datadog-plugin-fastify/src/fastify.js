@@ -165,7 +165,28 @@ function getRes (reply) {
 module.exports = [
   {
     name: 'fastify',
-    versions: ['>=1'],
+    versions: ['>=3'],
+    patch (fastify, tracer, config) {
+      // `fastify` is a function so we return a wrapper that will replace its export.
+      const wrapped = this.wrapExport(fastify, createWrapFastify(tracer, config)(fastify))
+
+      wrapped.fastify = wrapped
+      wrapped.default = wrapped
+
+      return wrapped
+    },
+    unpatch (fastify) {
+      const unwrapped = this.unwrapExport(fastify)
+
+      unwrapped.fastify = unwrapped
+      unwrapped.default = unwrapped
+
+      return unwrapped
+    }
+  },
+  {
+    name: 'fastify',
+    versions: ['1 - 2'],
     patch (fastify, tracer, config) {
       // `fastify` is a function so we return a wrapper that will replace its export.
       return this.wrapExport(fastify, createWrapFastify(tracer, config)(fastify))
