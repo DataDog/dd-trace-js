@@ -9,7 +9,8 @@
     "expect": true,
     "sinon": true,
     "proxyquire": true,
-    "withVersions": true
+    "withVersions": true,
+    "withExports": true
   },
   "rules": {
     "no-unused-expressions": 0,
