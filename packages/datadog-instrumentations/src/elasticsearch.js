@@ -24,16 +24,17 @@ addHook({ name: 'elasticsearch', file: 'src/lib/transport.js', versions: ['>=10'
 
 function wrapRequest (request) {
   return function (params, options, cb) {
+    if (!startCh.hasSubscribers) {
+      return request.apply(this, arguments)
+    }
+
+    if (!params) return request.apply(this, arguments)
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+    startCh.publish({ params })
+
     try {
-      if (!startCh.hasSubscribers) {
-        return request.apply(this, arguments)
-      }
-
-      if (!params) return request.apply(this, arguments)
-
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      startCh.publish({ params })
       const lastIndex = arguments.length - 1
       cb = arguments[lastIndex]
 
