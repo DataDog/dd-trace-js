@@ -6,7 +6,6 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const tx = require('./helpers/tx')
 
 const startCh = channel('apm:redis:command:start')
 const asyncEndCh = channel('apm:redis:command:async-end')
@@ -24,7 +23,16 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
 
     startSpan(this, name, args)
 
-    return wrapReturn(tx.wrap(asyncEndCh, errorCh, addCommand.apply(this, arguments)))
+    try {
+      return wrap(asyncEndCh, errorCh, addCommand.apply(this, arguments))
+    } catch (err) {
+      err.stack // trigger getting the stack at the original throwing point
+      errorCh.publish(err)
+
+      throw err
+    } finally {
+      endCh.publish(undefined)
+    }
   })
   return redis
 })
@@ -41,9 +49,18 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     startSpan(this, options.command, options.args)
 
-    options.callback = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh, cb))
+    options.callback = AsyncResource.bind(wrap(asyncEndCh, errorCh, cb))
 
-    return wrapReturn(internalSendCommand.apply(this, arguments))
+    try {
+      return internalSendCommand.apply(this, arguments)
+    } catch (err) {
+      err.stack // trigger getting the stack at the original throwing point
+      errorCh.publish(err)
+
+      throw err
+    } finally {
+      endCh.publish(undefined)
+    }
   })
   return redis
 })
@@ -60,15 +77,24 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 
     if (typeof callback === 'function') {
       const cb = asyncResource.bind(callback)
-      arguments[2] = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh, cb))
+      arguments[2] = AsyncResource.bind(wrap(asyncEndCh, errorCh, cb))
     } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
       const cb = asyncResource.bind(args[args.length - 1])
-      args[args.length - 1] = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh, cb))
+      args[args.length - 1] = AsyncResource.bind(wrap(asyncEndCh, errorCh, cb))
     } else {
-      arguments[2] = AsyncResource.bind(tx.wrap(asyncEndCh, errorCh))
+      arguments[2] = AsyncResource.bind(wrap(asyncEndCh, errorCh))
     }
 
-    return wrapReturn(sendCommand.apply(this, arguments))
+    try {
+      return sendCommand.apply(this, arguments)
+    } catch (err) {
+      err.stack // trigger getting the stack at the original throwing point
+      errorCh.publish(err)
+
+      throw err
+    } finally {
+      endCh.publish(undefined)
+    }
   })
   return redis
 })
@@ -79,15 +105,47 @@ function startSpan (client, command, args) {
   startCh.publish({ db, command, args, connectionOptions })
 }
 
-function wrapReturn (fn) {
-  try {
-    return fn
-  } catch (err) {
-    err.stack // trigger getting the stack at the original throwing point
-    errorCh.publish(err)
+function wrap (asyncEndCh, errorCh, done) {
+  if (typeof done === 'function' || !done) {
+    return wrapCallback(asyncEndCh, errorCh, done)
+  } else if (isPromise(done)) {
+    done.then(
+      () => finish(asyncEndCh, errorCh),
+      err => finish(asyncEndCh, errorCh, err)
+    )
+    return done
+  } else if (done && done.length) {
+    const lastIndex = done.length - 1
+    const callback = done[lastIndex]
 
-    throw err
-  } finally {
-    endCh.publish(undefined)
+    if (typeof callback === 'function') {
+      done[lastIndex] = wrapCallback(asyncEndCh, errorCh, done[lastIndex])
+    }
+
+    return done
   }
+}
+
+function wrapCallback (asyncEndCh, errorCh, callback) {
+  return function (err) {
+    finish(asyncEndCh, errorCh, err)
+    if (callback) {
+      return callback.apply(this, arguments)
+    }
+  }
+}
+
+function finish (asyncEndCh, errorCh, error) {
+  if (error) {
+    errorCh.publish(error)
+  }
+  asyncEndCh.publish(undefined)
+}
+
+function isPromise (obj) {
+  return isObject(obj) && typeof obj.then === 'function'
+}
+
+function isObject (obj) {
+  return typeof obj === 'object' && obj !== null
 }

@@ -5,7 +5,6 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const tx = require('./helpers/tx')
 
 const startCh = channel('apm:ioredis:command:start')
 const asyncEndCh = channel('apm:ioredis:command:async-end')
@@ -23,22 +22,64 @@ addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
     const db = options.db
     const connectionOptions = { host: options.host, port: options.port }
     startCh.publish({ db, command: command.name, args: command.args, connectionOptions, connectionName })
-    tx.wrap(asyncEndCh, errorCh, command.promise)
 
-    return wrapReturn(sendCommand.apply(this, arguments))
+    try {
+      wrap(asyncEndCh, errorCh, command.promise)
+
+      return sendCommand.apply(this, arguments)
+    } catch (err) {
+      err.stack // trigger getting the stack at the original throwing point
+      errorCh.publish(err)
+
+      throw err
+    } finally {
+      endCh.publish(undefined)
+    }
   })
   return Redis
 })
 
-function wrapReturn (fn) {
-  try {
-    return fn
-  } catch (err) {
-    err.stack // trigger getting the stack at the original throwing point
-    errorCh.publish(err)
+function wrap (asyncEndCh, errorCh, done) {
+  if (typeof done === 'function' || !done) {
+    return wrapCallback(asyncEndCh, errorCh, done)
+  } else if (isPromise(done)) {
+    done.then(
+      () => finish(asyncEndCh, errorCh),
+      err => finish(asyncEndCh, errorCh, err)
+    )
+    return done
+  } else if (done && done.length) {
+    const lastIndex = done.length - 1
+    const callback = done[lastIndex]
 
-    throw err
-  } finally {
-    endCh.publish(undefined)
+    if (typeof callback === 'function') {
+      done[lastIndex] = wrapCallback(asyncEndCh, errorCh, done[lastIndex])
+    }
+
+    return done
   }
+}
+
+function wrapCallback (asyncEndCh, errorCh, callback) {
+  return function (err) {
+    finish(asyncEndCh, errorCh, err)
+    if (callback) {
+      return callback.apply(this, arguments)
+    }
+  }
+}
+
+function finish (asyncEndCh, errorCh, error) {
+  if (error) {
+    errorCh.publish(error)
+  }
+  asyncEndCh.publish(undefined)
+}
+
+function isPromise (obj) {
+  return isObject(obj) && typeof obj.then === 'function'
+}
+
+function isObject (obj) {
+  return typeof obj === 'object' && obj !== null
 }
