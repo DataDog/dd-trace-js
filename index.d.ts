@@ -425,7 +425,7 @@ export declare interface TracerOptions {
     /**
      * Controls the maximum amount of traces sampled by AppSec attacks, per second.
      */
-    rateLimit: number
+    rateLimit?: number
   };
 }
 
