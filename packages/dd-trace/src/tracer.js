@@ -21,7 +21,7 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = Object.assign({}, {
+    options = Object.assign({
       childOf: this.scope().active()
     }, options)
 
