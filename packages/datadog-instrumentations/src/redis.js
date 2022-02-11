@@ -23,10 +23,16 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
 
     startSpan(this, name, args)
 
+    const res = addCommand.apply(this, arguments)
+
+    res.then(
+      () => finish(asyncEndCh, errorCh),
+      err => finish(asyncEndCh, errorCh, err)
+    )
+
     try {
-      return wrap(asyncEndCh, errorCh, addCommand.apply(this, arguments))
+      return res
     } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
       errorCh.publish(err)
 
       throw err
@@ -49,12 +55,11 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     startSpan(this, options.command, options.args)
 
-    options.callback = AsyncResource.bind(wrap(asyncEndCh, errorCh, cb))
+    options.callback = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
 
     try {
       return internalSendCommand.apply(this, arguments)
     } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
       errorCh.publish(err)
 
       throw err
@@ -77,18 +82,17 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 
     if (typeof callback === 'function') {
       const cb = asyncResource.bind(callback)
-      arguments[2] = AsyncResource.bind(wrap(asyncEndCh, errorCh, cb))
+      arguments[2] = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
     } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
       const cb = asyncResource.bind(args[args.length - 1])
-      args[args.length - 1] = AsyncResource.bind(wrap(asyncEndCh, errorCh, cb))
+      args[args.length - 1] = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
     } else {
-      arguments[2] = AsyncResource.bind(wrap(asyncEndCh, errorCh))
+      arguments[2] = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh))
     }
 
     try {
       return sendCommand.apply(this, arguments)
     } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
       errorCh.publish(err)
 
       throw err
@@ -105,27 +109,6 @@ function startSpan (client, command, args) {
   startCh.publish({ db, command, args, connectionOptions })
 }
 
-function wrap (asyncEndCh, errorCh, done) {
-  if (typeof done === 'function' || !done) {
-    return wrapCallback(asyncEndCh, errorCh, done)
-  } else if (isPromise(done)) {
-    done.then(
-      () => finish(asyncEndCh, errorCh),
-      err => finish(asyncEndCh, errorCh, err)
-    )
-    return done
-  } else if (done && done.length) {
-    const lastIndex = done.length - 1
-    const callback = done[lastIndex]
-
-    if (typeof callback === 'function') {
-      done[lastIndex] = wrapCallback(asyncEndCh, errorCh, done[lastIndex])
-    }
-
-    return done
-  }
-}
-
 function wrapCallback (asyncEndCh, errorCh, callback) {
   return function (err) {
     finish(asyncEndCh, errorCh, err)
@@ -140,12 +123,4 @@ function finish (asyncEndCh, errorCh, error) {
     errorCh.publish(error)
   }
   asyncEndCh.publish(undefined)
-}
-
-function isPromise (obj) {
-  return isObject(obj) && typeof obj.then === 'function'
-}
-
-function isObject (obj) {
-  return typeof obj === 'object' && obj !== null
 }
