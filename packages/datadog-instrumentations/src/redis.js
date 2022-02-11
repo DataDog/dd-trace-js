@@ -29,16 +29,8 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
       () => finish(asyncEndCh, errorCh),
       err => finish(asyncEndCh, errorCh, err)
     )
-
-    try {
-      return res
-    } catch (err) {
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+    endCh.publish(undefined)
+    return res
   })
   return redis
 })
