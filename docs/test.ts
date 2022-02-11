@@ -78,7 +78,16 @@ tracer.init({
     foo: 'bar'
   },
   reportHostname: true,
-  logLevel: 'debug'
+  logLevel: 'debug',
+  appsec: true
+});
+
+tracer.init({
+  appsec: {
+    enabled: true,
+    rules: './rules.json',
+    rateLimit: 100
+  }
 });
 
 const httpOptions = {
