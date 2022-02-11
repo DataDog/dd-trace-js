@@ -406,6 +406,12 @@ export declare interface TracerOptions {
    * @default true
    */
   orphanable?: boolean
+
+  appsec?: boolean | {
+    enabled?: boolean,
+    rules?: string,
+    rateLimit: number
+  };
 }
 
 /** @hidden */
