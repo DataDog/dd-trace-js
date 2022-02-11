@@ -82,6 +82,14 @@ tracer.init({
   appsec: true
 });
 
+tracer.init({
+  appsec: {
+    enabled: true,
+    rules: './rules.json',
+    rateLimit: 100
+  }
+});
+
 const httpOptions = {
   service: 'test',
   allowlist: ['url', /url/, url => true],
@@ -329,11 +337,3 @@ scope.bind(emitter, span);
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
-
-tracer.init({
-  appsec: {
-    enabled: true,
-    rules: './rules.json',
-    rateLimit: 100
-  }
-});
