@@ -406,6 +406,28 @@ export declare interface TracerOptions {
    * @default true
    */
   orphanable?: boolean
+
+  /**
+   * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
+   */
+  appsec?: boolean | {
+    /**
+     * Whether to enable AppSec.
+     * @default false
+     */
+    enabled?: boolean,
+
+    /**
+     * Specifies a path to a custom rules file.
+     */
+    rules?: string,
+
+    /**
+     * Controls the maximum amount of traces sampled by AppSec attacks, per second.
+     * @default 100
+     */
+    rateLimit?: number
+  };
 }
 
 /** @hidden */
