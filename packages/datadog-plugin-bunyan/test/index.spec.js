@@ -2,7 +2,6 @@
 
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let logger
@@ -24,14 +23,14 @@ describe('Plugin', () => {
   }
 
   describe('bunyan', () => {
-    withVersions(plugin, 'bunyan', version => {
+    withVersions('bunyan', 'bunyan', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('bunyan')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {

@@ -1,6 +1,7 @@
 'use strict'
 
 require('./src/bluebird')
+require('./src/bunyan')
 require('./src/couchbase')
 require('./src/dns')
 require('./src/elasticsearch')

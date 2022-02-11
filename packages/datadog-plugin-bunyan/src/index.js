@@ -1,27 +1,20 @@
 'use strict'
 
 const { LOG } = require('../../../ext/formats')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 
-function createWrapEmit (tracer, config) {
-  return function wrapEmit (emit) {
-    return function emitWithTrace (rec, noemit) {
-      const span = tracer.scope().active()
-
-      tracer.inject(span, LOG, rec)
-
-      return emit.apply(this, arguments)
-    }
+module.exports = class BunyanPlugin extends Plugin {
+  static get name() {
+    return 'bunyan'
   }
-}
 
-module.exports = {
-  name: 'bunyan',
-  versions: ['>=1'],
-  patch (Logger, tracer, config) {
-    if (!tracer._logInjection) return
-    this.wrap(Logger.prototype, '_emit', createWrapEmit(tracer, config))
-  },
-  unpatch (Logger) {
-    this.unwrap(Logger.prototype, '_emit')
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:bunyan:log', ({ logMessage }) => {
+      if (this.tracer._logInjection) {
+        this.tracer.inject(storage.getStore().span, LOG, logMessage)
+      }
+    })
   }
 }
