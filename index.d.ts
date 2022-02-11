@@ -408,7 +408,7 @@ export declare interface TracerOptions {
   orphanable?: boolean
 
   /**
-   * Configuration of the AppSec protection. Can be a boolean as an alias to appsec.enabled
+   * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
    */
   appsec?: boolean | {
     /**
