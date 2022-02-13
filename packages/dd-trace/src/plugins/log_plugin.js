@@ -32,6 +32,8 @@ module.exports = class LogPlugin extends Plugin {
   constructor (...args) {
     super(...args)
     this.addSub(`apm:${this.constructor.name}:log`, (arg) => {
+      // TODO rather than checking this every time, setting it ought to enable/disable any plugin
+      // extending from this one
       if (this.tracer._logInjection) {
         if ('receiver' in arg) {
           const holder = {}
