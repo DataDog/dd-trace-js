@@ -11,7 +11,7 @@ addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
   shimmer.wrap(Logger.prototype, '_emit', emit => {
     return function wrappedEmit (rec) {
       if (logCh.hasSubscribers) {
-        logCh.publish({ logMessage: rec })
+        logCh.publish({ message: rec })
       }
       return emit.apply(this, arguments)
     }

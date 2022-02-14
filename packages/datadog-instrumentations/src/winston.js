@@ -11,11 +11,9 @@ addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, L
   shimmer.wrap(Logger.prototype, 'write', write => {
     return function wrappedWrite (chunk, enc, cb) {
       if (logCh.hasSubscribers) {
-        const payload = { logMessage: chunk, receiver: null }
+        const payload = { message: chunk }
         logCh.publish(payload)
-        if (payload.receiver) {
-          arguments[0] = payload.receiver
-        }
+        arguments[0] = payload.message
       }
       return write.apply(this, arguments)
     }
@@ -44,11 +42,9 @@ function wrapMethod (method, logCh) {
 
         const log = transport.log
         transport.log = function wrappedLog (level, msg, meta, callback) {
-          const payload = { logMessage: meta || {}, receiver: null }
+          const payload = { message: meta || {} }
           logCh.publish(payload)
-          if (payload.receiver) {
-            arguments[2] = payload.receiver
-          }
+          arguments[2] = payload.message
           log.apply(this, arguments)
         }
         transport._dd_patched = true

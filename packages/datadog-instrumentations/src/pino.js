@@ -26,11 +26,9 @@ function wrapAsJson (asJson) {
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
 
-    const payload = { logMessage: obj, receiver: null }
+    const payload = { message: obj }
     ch.publish(payload)
-    if (payload.receiver) {
-      arguments[0] = payload.receiver
-    }
+    arguments[0] = payload.message
 
     return asJson.apply(this, arguments)
   }
@@ -45,7 +43,7 @@ function wrapMixin (mixin) {
       obj = mixin.apply(this, arguments)
     }
 
-    ch.publish({ logMessage: obj })
+    ch.publish({ message: obj })
 
     return obj
   }
@@ -54,7 +52,7 @@ function wrapMixin (mixin) {
 function wrapPrettifyObject (prettifyObject) {
   const ch = channel('apm:pino:log')
   return function prettifyObjectWithTrace (input) {
-    ch.publish({ logMessage: input.input })
+    ch.publish({ message: input.input })
     return prettifyObject.apply(this, arguments)
   }
 }
@@ -64,7 +62,7 @@ function wrapPrettyFactory (prettyFactory) {
   return function prettyFactoryWithTrace () {
     const pretty = prettyFactory.apply(this, arguments)
     return function prettyWithTrace (obj) {
-      ch.publish({ logMessage: obj })
+      ch.publish({ message: obj })
       return pretty.apply(this, arguments)
     }
   }

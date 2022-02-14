@@ -6,8 +6,8 @@ const { storage } = require('../../../datadog-core')
 
 const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 
-function logMessageProxy (logMessage, holder) {
-  return new Proxy(logMessage, {
+function messageProxy (message, holder) {
+  return new Proxy(message, {
     get (target, p, receiver) {
       switch (p) {
         case Symbol.toStringTag:
@@ -35,13 +35,9 @@ module.exports = class LogPlugin extends Plugin {
       // TODO rather than checking this every time, setting it ought to enable/disable any plugin
       // extending from this one
       if (this.tracer._logInjection) {
-        if ('receiver' in arg) {
-          const holder = {}
-          this.tracer.inject(storage.getStore().span, LOG, holder)
-          arg.receiver = logMessageProxy(arg.logMessage, holder)
-        } else {
-          this.tracer.inject(storage.getStore().span, LOG, arg.logMessage)
-        }
+        const holder = {}
+        this.tracer.inject(storage.getStore().span, LOG, holder)
+        arg.message = messageProxy(arg.message, holder)
       }
     })
   }
