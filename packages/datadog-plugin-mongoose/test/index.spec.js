@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let id
@@ -9,7 +8,7 @@ describe('Plugin', () => {
   let collection
 
   describe('mongoose', () => {
-    withVersions(plugin, ['mongoose'], (version) => {
+    withVersions('mongoose', ['mongoose'], (version) => {
       let mongoose
 
       // This needs to be called synchronously right before each test to make
@@ -23,7 +22,7 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        return agent.load(['mongoose', 'mongodb-core'])
+        return agent.load(['mongodb-core'])
       })
 
       beforeEach(() => {
@@ -40,7 +39,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       it('should propagate context with write operations', () => {
