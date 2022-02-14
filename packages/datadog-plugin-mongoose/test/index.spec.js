@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let id
@@ -9,7 +8,7 @@ describe('Plugin', () => {
   let collection
 
   describe('mongoose', () => {
-    withVersions(plugin, ['mongoose'], (version) => {
+    withVersions('mongoose', ['mongoose'], (version) => {
       let mongoose
 
       // This needs to be called synchronously right before each test to make
@@ -22,34 +21,34 @@ describe('Plugin', () => {
         })
       }
 
-      beforeEach(() => {
-        return agent.load(['mongoose', 'mongodb-core'])
+      before(() => {
+        return agent.load(['mongodb-core'])
       })
 
-      beforeEach(() => {
+      before(() => {
         id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
 
         collection = id().toString()
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
+
+        connect()
       })
 
-      afterEach(() => {
+      after(() => {
         return mongoose.disconnect()
       })
 
-      afterEach(() => {
-        return agent.close()
+      after(() => {
+        return agent.close({ ritmReset: false })
       })
 
       it('should propagate context with write operations', () => {
-        const Cat = mongoose.model('Cat', { name: String })
+        const Cat = mongoose.model('Cat1', { name: String })
 
         const span = {}
         const kitty = new Cat({ name: 'Zildjian' })
-
-        connect()
 
         return tracer.scope().activate(span, () => {
           return kitty.save().then(() => {
@@ -59,11 +58,9 @@ describe('Plugin', () => {
       })
 
       it('should propagate context with queries', done => {
-        const Cat = mongoose.model('Cat', { name: String })
+        const Cat = mongoose.model('Cat2', { name: String })
 
         const span = {}
-
-        connect()
 
         tracer.scope().activate(span, () => {
           Cat.find({ name: 'Zildjian' }).exec(() => {
@@ -78,11 +75,9 @@ describe('Plugin', () => {
       })
 
       it('should propagate context with aggregations', done => {
-        const Cat = mongoose.model('Cat', { name: String })
+        const Cat = mongoose.model('Cat3', { name: String })
 
         const span = {}
-
-        connect()
 
         tracer.scope().activate(span, () => {
           Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
