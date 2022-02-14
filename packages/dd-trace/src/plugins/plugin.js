@@ -42,7 +42,7 @@ module.exports = class Plugin {
     storage.enterWith({ ...store, span })
   }
 
-  // lets you skip the creation of a span
+  /** Prevents creation of spans here and for all async descendants. */
   skip () {
     const store = storage.getStore()
     this._storeStack.push(store)
