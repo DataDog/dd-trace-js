@@ -32,7 +32,6 @@ module.exports = {
   'mocha': require('../../../datadog-plugin-mocha/src'),
   'moleculer': require('../../../datadog-plugin-moleculer/src'),
   'mongodb-core': require('../../../datadog-plugin-mongodb-core/src'),
-  'mongoose': require('../../../datadog-plugin-mongoose/src'),
   'mysql': require('../../../datadog-plugin-mysql/src'),
   'mysql2': require('../../../datadog-plugin-mysql2/src'),
   'net': require('../../../datadog-plugin-net/src'),
