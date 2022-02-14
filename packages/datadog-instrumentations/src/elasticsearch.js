@@ -12,7 +12,12 @@ const asyncEndCh = channel('apm:elasticsearch:query:async-end')
 const endCh = channel('apm:elasticsearch:query:end')
 const errorCh = channel('apm:elasticsearch:query:error')
 
-addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16'] }, Transport => {
+addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8'] }, (exports) => {
+  shimmer.wrap(exports.default.prototype, 'request', wrapRequest)
+  return exports
+})
+
+addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16 <8', '>=8'] }, Transport => {
   shimmer.wrap(Transport.prototype, 'request', wrapRequest)
   return Transport
 })
