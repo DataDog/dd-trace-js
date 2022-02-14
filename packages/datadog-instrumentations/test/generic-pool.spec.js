@@ -1,28 +1,16 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+require('..')
+const { storage } = require('../../datadog-core')
 
-describe('Plugin', () => {
+describe('Instrumentation', () => {
   let genericPool
   let pool
-  let tracer
 
   describe('generic-pool', () => {
-    beforeEach(() => {
-      tracer = require('../../dd-trace')
-    })
-
-    afterEach(() => {
-      return agent.close()
-    })
-
-    withVersions(plugin, 'generic-pool', '2', version => {
+    withVersions('generic-pool', 'generic-pool', '2', version => {
       beforeEach(() => {
-        return agent.load('generic-pool')
-          .then(() => {
-            genericPool = require(`../../../versions/generic-pool@${version}`).get()
-          })
+        genericPool = require(`../../../versions/generic-pool@${version}`).get()
       })
 
       beforeEach(() => {
@@ -37,24 +25,21 @@ describe('Plugin', () => {
       })
 
       it('should run the acquire() callback in context where acquire() was called', done => {
-        const span = tracer.startSpan('test')
+        const store = 'store'
 
-        tracer.scope().activate(span, () => {
+        storage.run(store, () => {
           pool.acquire((err, resource) => {
             pool.release(resource)
-            expect(tracer.scope().active()).to.equal(span)
+            expect(storage.getStore()).to.equal(store)
             done()
           })
         })
       })
     })
 
-    withVersions(plugin, 'generic-pool', '>=3', version => {
+    withVersions('generic-pool', 'generic-pool', '>=3', version => {
       beforeEach(() => {
-        return agent.load('generic-pool')
-          .then(() => {
-            genericPool = require(`../../../versions/generic-pool@${version}`).get()
-          })
+        genericPool = require(`../../../versions/generic-pool@${version}`).get()
       })
 
       beforeEach(() => {
@@ -67,23 +52,23 @@ describe('Plugin', () => {
       })
 
       it('should run the acquire() callback in context where acquire() was called', done => {
-        const span = tracer.startSpan('test')
-        const span2 = tracer.startSpan('test')
+        const store = 'store'
+        const store2 = 'store2'
 
-        tracer.scope().activate(span, () => {
+        storage.run(store, () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(tracer.scope().active()).to.equal(span)
+              expect(storage.getStore()).to.equal(store)
             })
             .catch(done)
         })
 
-        tracer.scope().activate(span2, () => {
+        storage.run(store2, () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(tracer.scope().active()).to.equal(span2)
+              expect(storage.getStore()).to.equal(store2)
               done()
             })
             .catch(done)
