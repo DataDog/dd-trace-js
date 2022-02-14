@@ -11,6 +11,9 @@ describe('Plugin', () => {
   let tracer
 
   withVersions('elasticsearch', ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
+    const metaModule = require(`../../../versions/${moduleName}@${version}`)
+    const hasCallbackSupport = !(moduleName === '@elastic/elasticsearch' && metaModule.version().startsWith('8.'))
+
     describe('elasticsearch', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -28,7 +31,8 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
+          elasticsearch = metaModule.get()
+
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })
@@ -45,7 +49,7 @@ describe('Plugin', () => {
           client.search({
             index: 'logstash-2000.01.01',
             body: {}
-          }, () => {})
+          }, hasCallbackSupport ? () => {} : undefined)
         })
 
         it('should set the correct tags', done => {
@@ -55,8 +59,15 @@ describe('Plugin', () => {
               expect(last(traces[0]).meta).to.have.property('span.kind', 'client')
               expect(last(traces[0]).meta).to.have.property('elasticsearch.method', 'POST')
               expect(last(traces[0]).meta).to.have.property('elasticsearch.url', '/docs/_search')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
+              if (hasCallbackSupport) {
+                expect(last(traces[0]).meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
+                expect(last(traces[0]).meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
+              } else {
+                expect(last(traces[0]).meta).to.have.property(
+                  'elasticsearch.body',
+                  '{"query":{"match_all":{}},"sort":"name","size":100}'
+                )
+              }
             })
             .then(done)
             .catch(done)
@@ -70,7 +81,7 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
-          }, () => {})
+          }, hasCallbackSupport ? () => {} : undefined)
         })
 
         it('should set the correct tags on msearch', done => {
@@ -105,7 +116,7 @@ describe('Plugin', () => {
                 }
               }
             ]
-          }, () => {})
+          }, hasCallbackSupport ? () => {} : undefined)
         })
 
         it('should skip tags for unavailable fields', done => {
@@ -116,69 +127,75 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          client.ping(err => err && done(err))
-        })
-
-        describe('when using a callback', () => {
-          it('should do automatic instrumentation', done => {
-            agent
-              .use(traces => {
-                expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
-                expect(last(traces[0])).to.have.property('resource', 'HEAD /')
-                expect(last(traces[0])).to.have.property('type', 'elasticsearch')
-              })
-              .then(done)
-              .catch(done)
-
+          if (hasCallbackSupport) {
             client.ping(err => err && done(err))
-          })
-
-          it('should propagate context', done => {
-            agent
-              .use(traces => {
-                expect(last(traces[0])).to.have.property('parent_id')
-                expect(last(traces[0]).parent_id).to.not.be.null
-              })
-              .then(done)
-              .catch(done)
-
-            const span = tracer.startSpan('test')
-
-            tracer.scope().activate(span, () => {
-              client.ping(() => span.finish())
-            })
-          })
-
-          it('should run the callback in the parent context', done => {
-            client.ping(error => {
-              expect(tracer.scope().active()).to.be.null
-              done(error)
-            })
-          })
-
-          it('should handle errors', done => {
-            let error
-
-            agent
-              .use(traces => {
-                expect(last(traces[0]).meta).to.have.property('error.type', error.name)
-                expect(last(traces[0]).meta).to.have.property('error.msg', error.message)
-                expect(last(traces[0]).meta).to.have.property('error.stack', error.stack)
-              })
-              .then(done)
-              .catch(done)
-
-            client.search({ index: 'invalid' }, err => {
-              error = err
-            })
-          })
-
-          it('should support aborting the query', () => {
-            expect(() => {
-              client.ping(() => {}).abort()
-            }).not.to.throw()
-          })
+          } else {
+            client.ping().catch(done)
+          }
         })
+
+        if (hasCallbackSupport) {
+          describe('when using a callback', () => {
+            it('should do automatic instrumentation', done => {
+              agent
+                .use(traces => {
+                  expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
+                  expect(last(traces[0])).to.have.property('resource', 'HEAD /')
+                  expect(last(traces[0])).to.have.property('type', 'elasticsearch')
+                })
+                .then(done)
+                .catch(done)
+
+              client.ping(err => err && done(err))
+            })
+
+            it('should propagate context', done => {
+              agent
+                .use(traces => {
+                  expect(last(traces[0])).to.have.property('parent_id')
+                  expect(last(traces[0]).parent_id).to.not.be.null
+                })
+                .then(done)
+                .catch(done)
+
+              const span = tracer.startSpan('test')
+
+              tracer.scope().activate(span, () => {
+                client.ping(() => span.finish())
+              })
+            })
+
+            it('should run the callback in the parent context', done => {
+              client.ping(error => {
+                expect(tracer.scope().active()).to.be.null
+                done(error)
+              })
+            })
+
+            it('should handle errors', done => {
+              let error
+
+              agent
+                .use(traces => {
+                  expect(last(traces[0]).meta).to.have.property('error.type', error.name)
+                  expect(last(traces[0]).meta).to.have.property('error.msg', error.message)
+                  expect(last(traces[0]).meta).to.have.property('error.stack', error.stack)
+                })
+                .then(done)
+                .catch(done)
+
+              client.search({ index: 'invalid' }, err => {
+                error = err
+              })
+            })
+
+            it('should support aborting the query', () => {
+              expect(() => {
+                client.ping(() => {}).abort()
+              }).not.to.throw()
+            })
+          })
+        }
 
         describe('when using a promise', () => {
           it('should do automatic instrumentation', done => {
@@ -274,7 +291,7 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
-          }, () => {})
+          }, hasCallbackSupport ? () => {} : undefined)
 
           agent
             .use(traces => {
@@ -285,7 +302,11 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          client.ping(err => err && done(err))
+          if (hasCallbackSupport) {
+            client.ping(err => err && done(err))
+          } else {
+            client.ping().catch(done)
+          }
         })
       })
     })
