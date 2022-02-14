@@ -15,7 +15,6 @@ module.exports = {
   'express': require('../../../datadog-plugin-express/src'),
   'fastify': require('../../../datadog-plugin-fastify/src'),
   'fs': require('../../../datadog-plugin-fs/src'),
-  'generic-pool': require('../../../datadog-plugin-generic-pool/src'),
   'google-cloud-pubsub': require('../../../datadog-plugin-google-cloud-pubsub/src'),
   'graphql': require('../../../datadog-plugin-graphql/src'),
   'grpc': require('../../../datadog-plugin-grpc/src'),
