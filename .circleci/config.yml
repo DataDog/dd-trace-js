@@ -295,7 +295,7 @@ jobs:
       - run:
           name: Install dependencies
           command: |
-            export PLUGINS="bluebird|promise-js|promise|q|when"
+            export PLUGINS="bluebird|generic-pool|promise-js|promise|q|when"
             node ./scripts/install_plugin_modules
       - run:
           name: Unit tests
@@ -456,8 +456,6 @@ jobs:
       - image: node:<< parameters.node-version >>
         environment:
           - PLUGINS=fs
-
-  node-generic-pool: *node-plugin-base
 
   node-google-cloud-pubsub:
     <<: *node-plugin-base
@@ -773,7 +771,6 @@ workflows:
       - node-express: *matrix-supported-node-versions
       - node-fastify: *matrix-supported-node-versions
       - node-fs: *matrix-supported-node-versions
-      - node-generic-pool: *matrix-supported-node-versions
       - node-google-cloud-pubsub: *matrix-supported-node-versions
       - node-graphql: *matrix-supported-node-versions
       # The grpc version ranges we support only support up to Node 12. TODO fix this.
@@ -840,7 +837,6 @@ workflows:
             - node-express
             - node-fastify
             - node-fs
-            - node-generic-pool
             - node-google-cloud-pubsub
             - node-graphql
             - node-grpc
