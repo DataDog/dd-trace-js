@@ -187,18 +187,6 @@ export declare interface SamplingRule {
  */
 export declare interface TracerOptions {
   /**
-   * Whether to enable the tracer.
-   * @default true
-   */
-  enabled?: boolean;
-
-  /**
-   * Enable debug logging in the tracer.
-   * @default false
-   */
-  debug?: boolean;
-
-  /**
    * Whether to enable trace ID injection in log records to be able to correlate
    * traces with logs.
    * @default false

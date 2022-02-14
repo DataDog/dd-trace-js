@@ -32,8 +32,6 @@ let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
-  debug: true,
-  enabled: true,
   logInjection: true,
   startupLogs: false,
   env: 'test',
@@ -127,6 +125,7 @@ const http2ClientOptions = {
 const graphqlOptions = {
   service: 'test',
   depth: 2,
+  source: true,
   variables: ({ foo, baz }) => ({ foo }),
   collapse: false,
   signature: false,
