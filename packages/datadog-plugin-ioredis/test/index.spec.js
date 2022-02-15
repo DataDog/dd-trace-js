@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let Redis
@@ -9,7 +8,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('ioredis', () => {
-    withVersions(plugin, 'ioredis', version => {
+    withVersions('ioredis', 'ioredis', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Redis = require(`../../../versions/ioredis@${version}`).get()
@@ -22,7 +21,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => agent.load(['ioredis']))
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation when using callbacks', done => {
           agent.use(() => {}) // wait for initial info command
@@ -83,7 +82,7 @@ describe('Plugin', () => {
           splitByInstance: true,
           allowlist: ['get']
         }))
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should be configured with the correct values', done => {
           agent
@@ -113,7 +112,7 @@ describe('Plugin', () => {
         before(() => agent.load('ioredis', {
           whitelist: ['get']
         }))
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should be able to filter commands', done => {
           agent.use(() => {}) // wait for initial command
