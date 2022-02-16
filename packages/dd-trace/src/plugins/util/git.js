@@ -37,7 +37,7 @@ function getGitMetadata (ciMetadata) {
     committerName,
     committerEmail,
     committerDate
-  ] = sanitizedExec('git show -s --format=%an,%ae,%ad,%cn,%ce,%cd', { stdio: 'pipe' }).split(',')
+  ] = sanitizedExec('git show -s --format=%an,%ae,%aI,%cn,%ce,%cI', { stdio: 'pipe' }).split(',')
 
   return {
     [GIT_REPOSITORY_URL]:
