@@ -83,10 +83,14 @@ class WAFCallback {
       // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
       const result = wafContext.run(params, DEFAULT_MAX_BUDGET)
 
+      wafContext.dispose() // TODO: better wafContext management
+
       return this.applyResult(result, store)
     } catch (err) {
       log.error('Error while running the AppSec WAF')
       log.error(err)
+
+      wafContext.dispose()
     }
   }
 
