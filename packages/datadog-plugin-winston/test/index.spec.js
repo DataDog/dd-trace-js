@@ -2,8 +2,8 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const http = require('http')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 function createLogServer () {
   return new Promise((resolve, reject) => {
@@ -47,7 +47,7 @@ describe('Plugin', () => {
   async function setup (version, winstonConfiguration) {
     span = tracer.startSpan('test')
 
-    winston = require(`../../../versions/winston@${version}`).get()
+    winston = proxyquire(`../../../versions/winston@${version}`, {}).get()
 
     logServer = await createLogServer()
 
@@ -89,14 +89,14 @@ describe('Plugin', () => {
   }
 
   describe('winston', () => {
-    withVersions(plugin, 'winston', version => {
+    withVersions('winston', 'winston', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('winston')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
