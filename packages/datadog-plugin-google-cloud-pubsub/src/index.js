@@ -2,6 +2,8 @@
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+const messageSpans = new WeakMap()
+
 function createWrapRequest (tracer, config) {
   return function wrapRequest (request) {
     return function requestWithTrace (cfg = { reqOpts: {} }, cb) {
@@ -45,11 +47,11 @@ function createWrapRequest (tracer, config) {
 function createWrapSubscriptionEmit (tracer, config) {
   return function wrapSubscriptionEmit (emit) {
     return function emitWithTrace (eventName, message) {
-      if (eventName !== 'message' || !message || !message._datadog_span) {
-        return emit.apply(this, arguments)
-      }
+      if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
-      const span = message._datadog_span
+      const span = messageSpans.get(message)
+
+      if (!span) return emit.apply(this, arguments)
 
       return tracer.scope().activate(span, () => {
         try {
@@ -83,7 +85,7 @@ function createWrapLeaseDispense (tracer, config) {
 
       analyticsSampler.sample(span, config.measured, true)
 
-      message._datadog_span = span
+      messageSpans.set(message, span)
 
       return dispense.apply(this, arguments)
     }
@@ -119,7 +121,7 @@ function getTopic (cfg) {
 }
 
 function finish (message) {
-  const span = message._datadog_span
+  const span = messageSpans.get(message)
 
   if (!span) return
 
