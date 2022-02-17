@@ -70,7 +70,7 @@ class WAFCallback {
       }
     }
 
-    if (!wafContext) {
+    if (!wafContext || wafContext.disposed) {
       wafContext = this.ddwaf.createContext()
     }
 
