@@ -43,16 +43,19 @@ function wrapMixin (mixin) {
       obj = mixin.apply(this, arguments)
     }
 
-    ch.publish({ message: obj })
+    const payload = { message: obj }
+    ch.publish(payload)
 
-    return obj
+    return payload.message
   }
 }
 
 function wrapPrettifyObject (prettifyObject) {
   const ch = channel('apm:pino:log')
   return function prettifyObjectWithTrace (input) {
-    ch.publish({ message: input.input })
+    const payload = { message: input.input }
+    ch.publish(payload)
+    input.input = payload.message
     return prettifyObject.apply(this, arguments)
   }
 }
@@ -62,7 +65,9 @@ function wrapPrettyFactory (prettyFactory) {
   return function prettyFactoryWithTrace () {
     const pretty = prettyFactory.apply(this, arguments)
     return function prettyWithTrace (obj) {
-      ch.publish({ message: obj })
+      const payload = { message: obj }
+      ch.publish(payload)
+      arguments[0] = payload.message
       return pretty.apply(this, arguments)
     }
   }
