@@ -1,6 +1,7 @@
 'use strict'
 
 require('./src/bluebird')
+require('./src/bunyan')
 require('./src/couchbase')
 require('./src/dns')
 require('./src/elasticsearch')
@@ -10,8 +11,10 @@ require('./src/memcached')
 require('./src/mongoose')
 require('./src/mysql')
 require('./src/mysql2')
+require('./src/pino')
 require('./src/promise')
 require('./src/promise-js')
 require('./src/q')
 require('./src/redis')
 require('./src/when')
+require('./src/winston')

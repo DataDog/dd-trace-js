@@ -2,7 +2,6 @@
 
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const semver = require('semver')
 
 describe('Plugin', () => {
@@ -12,14 +11,14 @@ describe('Plugin', () => {
   let span
 
   describe('pino', () => {
-    withVersions(plugin, 'pino', version => {
+    withVersions('pino', 'pino', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('pino')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
