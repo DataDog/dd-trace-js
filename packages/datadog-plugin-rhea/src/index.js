@@ -6,6 +6,8 @@ const dd = Symbol('datadog')
 const circularBufferConstructor = Symbol('circularBufferConstructor')
 const inFlightDeliveries = Symbol('inFlightDeliveries')
 
+const patched = new WeakSet()
+
 function createWrapSend (tracer, config, instrumenter) {
   return function wrapSend (send) {
     return function sendWithTrace (msg, tag, format) {
@@ -133,9 +135,9 @@ function patchCircularBuffer (proto, instrumenter) {
         if (outgoing.deliveries) {
           CircularBuffer = outgoing.deliveries.constructor
         }
-        if (CircularBuffer && !CircularBuffer.prototype._datadog_patched) {
+        if (CircularBuffer && !patched.has(CircularBuffer.prototype)) {
           instrumenter.wrap(CircularBuffer.prototype, 'pop_if', createWrapCircularBufferPopIf())
-          CircularBuffer.prototype._datadog_patched = true
+          patched.add(CircularBuffer.prototype)
           const Session = proto.constructor
           if (Session) {
             Session[circularBufferConstructor] = CircularBuffer
@@ -260,9 +262,10 @@ module.exports = [
       patchCircularBuffer(Session.prototype, this)
     },
     unpatch (Session, tracer) {
-      if (Session[circularBufferConstructor]) {
-        delete Session[circularBufferConstructor].prototype._datadog_patched
-        this.unwrap(Session[circularBufferConstructor].prototype, 'pop_if')
+      const CircularBuffer = Session[circularBufferConstructor]
+      if (CircularBuffer) {
+        patched.delete(CircularBuffer.prototype)
+        this.unwrap(CircularBuffer.prototype, 'pop_if')
       }
     }
   }
