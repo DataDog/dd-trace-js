@@ -22,6 +22,8 @@ const {
   setSuppressedErrors
 } = require('./util')
 
+const originals = new WeakMap()
+
 function getVmContext (environment) {
   if (typeof environment.getVmContext === 'function') {
     return environment.getVmContext()
@@ -234,43 +236,37 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
   }
 }
 
+function patch (Environment, tracer, config) {
+  const testEnvironmentMetadata = getTestEnvironmentMetadata('jest', config)
+  const proto = Environment.prototype
+
+  this.wrap(proto, 'teardown', createWrapTeardown(tracer, this))
+
+  const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
+  originals.set(newHandleTestEvent, proto.handleTestEvent)
+  proto.handleTestEvent = newHandleTestEvent
+
+  return wrapEnvironment(Environment)
+}
+
+function unpatch (Environment) {
+  const proto = Environment.prototype
+
+  this.unwrap(Environment.prototype, 'teardown')
+  proto.handleTestEvent = originals.get(proto.handleTestEvent)
+}
+
 module.exports = [
   {
     name: 'jest-environment-node',
     versions: ['>=24.8.0'],
-    patch: function (NodeEnvironment, tracer, config) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest', config)
-
-      this.wrap(NodeEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
-
-      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
-      newHandleTestEvent._dd_original = NodeEnvironment.prototype.handleTestEvent
-      NodeEnvironment.prototype.handleTestEvent = newHandleTestEvent
-
-      return wrapEnvironment(NodeEnvironment)
-    },
-    unpatch: function (NodeEnvironment) {
-      this.unwrap(NodeEnvironment.prototype, 'teardown')
-      NodeEnvironment.prototype.handleTestEvent = NodeEnvironment.prototype.handleTestEvent._dd_original
-    }
+    patch,
+    unpatch
   },
   {
     name: 'jest-environment-jsdom',
     versions: ['>=24.8.0'],
-    patch: function (JsdomEnvironment, tracer, config) {
-      const testEnvironmentMetadata = getTestEnvironmentMetadata('jest', config)
-
-      this.wrap(JsdomEnvironment.prototype, 'teardown', createWrapTeardown(tracer, this))
-
-      const newHandleTestEvent = createHandleTestEvent(tracer, testEnvironmentMetadata, this)
-      newHandleTestEvent._dd_original = JsdomEnvironment.prototype.handleTestEvent
-      JsdomEnvironment.prototype.handleTestEvent = newHandleTestEvent
-
-      return wrapEnvironment(JsdomEnvironment)
-    },
-    unpatch: function (JsdomEnvironment) {
-      this.unwrap(JsdomEnvironment.prototype, 'teardown')
-      JsdomEnvironment.prototype.handleTestEvent = JsdomEnvironment.prototype.handleTestEvent._dd_original
-    }
+    patch,
+    unpatch
   }
 ]
