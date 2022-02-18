@@ -84,9 +84,7 @@ function wrapPluginInit (init) {
   return function initWithTrace (config, logging, stats) {
     const handler = init.apply(this, arguments)
 
-    if (!handler._dd_patched) {
-      wrapListeners(handler)
-    }
+    wrapListeners(handler)
 
     return handler
   }

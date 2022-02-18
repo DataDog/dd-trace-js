@@ -6,6 +6,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const patched = new WeakSet()
+
 addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, Logger => {
   const logCh = channel('apm:winston:log')
   shimmer.wrap(Logger.prototype, 'write', write => {
@@ -38,7 +40,7 @@ function wrapMethod (method, logCh) {
       for (const name in this.transports) {
         const transport = this.transports[name]
 
-        if (transport._dd_patched || typeof transport.log !== 'function') continue
+        if (patched.has(transport) || typeof transport.log !== 'function') continue
 
         const log = transport.log
         transport.log = function wrappedLog (level, msg, meta, callback) {
@@ -47,7 +49,7 @@ function wrapMethod (method, logCh) {
           arguments[2] = payload.message
           log.apply(this, arguments)
         }
-        transport._dd_patched = true
+        patched.add(transport)
       }
     }
     return result

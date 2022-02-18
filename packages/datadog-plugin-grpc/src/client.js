@@ -7,6 +7,8 @@ const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
+const patched = new WeakSet()
+
 function createWrapMakeRequest (tracer, config, methodKind) {
   const filter = getFilter(config, 'metadata')
 
@@ -80,7 +82,7 @@ function wrapClientConstructor (tracer, config, ServiceClient, methods) {
 }
 
 function wrapMethod (tracer, config, method, path, methodKind) {
-  if (typeof method !== 'function' || method._datadog_patched) {
+  if (typeof method !== 'function' || patched.has(method)) {
     return method
   }
 
@@ -94,7 +96,7 @@ function wrapMethod (tracer, config, method, path, methodKind) {
 
   Object.assign(methodWithTrace, method)
 
-  methodWithTrace._datadog_patched = true
+  patched.add(methodWithTrace)
 
   return methodWithTrace
 }
