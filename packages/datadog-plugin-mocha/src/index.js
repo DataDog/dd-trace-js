@@ -18,6 +18,8 @@ const {
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
+const skippedTests = new WeakSet()
+
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
 
@@ -131,12 +133,12 @@ function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
         // We call `getAllTestsInSuite` with the root suite so every skipped test
         // should already have an associated test span.
         // This function is called with every suite, so we need a way to mark
-        // the test as already accounted for. We do this through `__datadog_skipped`.
+        // the test as already accounted for. We do this through `skippedTests`.
         // If the test is already marked as skipped, we don't create an additional test span.
-        if (!isSkipped || test.__datadog_skipped) {
+        if (!isSkipped || skippedTests.has(test)) {
           return
         }
-        test.__datadog_skipped = true
+        skippedTests.add(test)
         const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(tracer, test, sourceRoot)
 
         const testSpan = tracer
