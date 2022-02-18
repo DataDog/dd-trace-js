@@ -2,6 +2,14 @@
 
 const { storage } = require('../../datadog-core')
 
+// TODO: deprecate binding event emitters in 3.0
+
+const originals = new WeakMap()
+const listenerMaps = new WeakMap()
+const emitterSpans = new WeakMap()
+const emitterScopes = new WeakMap()
+const emitters = new WeakSet()
+
 class Scope {
   active () {
     const store = storage.getStore()
@@ -58,7 +66,7 @@ class Scope {
       })
     }
 
-    bound._datadog_unbound = fn
+    originals.set(bound, fn)
 
     return bound
   }
@@ -66,16 +74,16 @@ class Scope {
   _unbindFn (fn) {
     if (typeof fn !== 'function') return fn
 
-    return fn._datadog_unbound || fn
+    return originals.get(fn) || fn
   }
 
   _bindEmitter (emitter, span) {
     if (!this._isEmitter(emitter)) return emitter
-    if (!emitter.__is_dd_emitter) {
+    if (!emitters.has(emitter)) {
       Scope._wrapEmitter(emitter)
     }
-    emitter.__dd_span = span
-    emitter.__dd_scope = this
+    emitterSpans.set(emitter, span)
+    emitterScopes.set(emitter, this)
     return emitter
   }
 
@@ -90,13 +98,13 @@ class Scope {
     wrapMethod(emitter, 'removeListener', wrapRemoveListener)
     wrapMethod(emitter, 'off', wrapRemoveListener)
     wrapMethod(emitter, 'removeAllListeners', wrapRemoveAllListeners)
-    emitter.__is_dd_emitter = true
+    emitters.add(emitter)
   }
 
   _unbindEmitter (emitter) {
     if (!this._isEmitter(emitter)) return emitter
-    delete emitter.__dd_scope
-    delete emitter.__dd_span
+    emitterScopes.delete(emitter)
+    emitterSpans.delete(emitter)
     return emitter
   }
 
@@ -111,7 +119,7 @@ class Scope {
   _unbindPromise (promise) {
     if (!this._isPromise(promise)) return promise
 
-    promise.then = promise.then._datadog_unbound || promise.then
+    promise.then = originals.get(promise.then) || promise.then
 
     return promise
   }
@@ -147,21 +155,22 @@ function wrapThen (then, scope, span) {
 
 function wrapAddListener (addListener) {
   return function addListenerWithTrace (eventName, listener) {
-    if (!this.__dd_scope || !listener || listener._datadog_unbound || listener.listener) {
+    const scope = emitterScopes.get(this)
+    if (!scope || !listener || originals.has(listener) || listener.listener) {
       return addListener.apply(this, arguments)
     }
-    const scope = this.__dd_scope
-    const span = this.__dd_span
+    const span = emitterSpans.get(this)
 
     const bound = scope.bind(listener, scope._spanOrActive(span))
+    const listenerMap = listenerMaps.get(this) || {}
 
-    this._datadog_events = this._datadog_events || {}
+    listenerMaps.set(this, listenerMap)
 
-    if (!this._datadog_events[eventName]) {
-      this._datadog_events[eventName] = new WeakMap()
+    if (!listenerMap[eventName]) {
+      listenerMap[eventName] = new WeakMap()
     }
 
-    const events = this._datadog_events[eventName]
+    const events = listenerMap[eventName]
 
     if (!events.has(listener)) {
       events.set(listener, [])
@@ -175,11 +184,12 @@ function wrapAddListener (addListener) {
 
 function wrapRemoveListener (removeListener) {
   return function removeListenerWithTrace (eventName, listener) {
-    if (!this.__dd_scope) {
+    if (!emitterScopes.has(this)) {
       return removeListener.apply(this, arguments)
     }
 
-    const listeners = this._datadog_events && this._datadog_events[eventName]
+    const listenerMap = listenerMaps.get(this)
+    const listeners = listenerMap && listenerMap[eventName]
 
     if (!listener || !listeners || !listeners.has(listener)) {
       return removeListener.apply(this, arguments)
@@ -197,11 +207,13 @@ function wrapRemoveListener (removeListener) {
 
 function wrapRemoveAllListeners (removeAllListeners) {
   return function removeAllListenersWithTrace (eventName) {
-    if (this.__dd_scope && this._datadog_events) {
+    const listenerMap = listenerMaps.get(this)
+
+    if (emitterScopes.has(this) && listenerMap) {
       if (eventName) {
-        delete this._datadog_events[eventName]
+        delete listenerMap[eventName]
       } else {
-        delete this._datadog_events
+        listenerMaps.delete(this)
       }
     }
 
@@ -210,12 +222,12 @@ function wrapRemoveAllListeners (removeAllListeners) {
 }
 
 function wrapMethod (target, name, wrapper, ...args) {
-  if (!target[name] || target[name]._datadog_unbound) return
+  if (!target[name] || originals.has(target[name])) return
 
   const original = target[name]
 
   target[name] = wrapper(target[name], ...args)
-  target[name]._datadog_unbound = original
+  originals.set(target[name], original)
 }
 
 module.exports = Scope
