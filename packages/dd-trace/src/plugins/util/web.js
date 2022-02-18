@@ -169,7 +169,7 @@ const web = {
 
   // Return the request root span.
   root (req) {
-    return req._datadog ? req._datadog.span : null
+    return req && req._datadog ? req._datadog.span : null
   },
 
   // Return the active span.
