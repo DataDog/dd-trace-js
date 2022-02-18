@@ -141,6 +141,18 @@ class Scope {
   }
 }
 
+function getScope (emitter) {
+  return emitterScopes.get(emitter) || emitterScopes.get(emitter.constructor.prototype)
+}
+
+function getSpan (emitter) {
+  return emitterSpans.get(emitter) || emitterSpans.get(emitter.constructor.prototype)
+}
+
+function hasScope (emitter) {
+  return emitterScopes.has(emitter) || emitterScopes.has(emitter.constructor.prototype)
+}
+
 function wrapThen (then, scope, span) {
   return function thenWithTrace (onFulfilled, onRejected) {
     const args = new Array(arguments.length)
@@ -155,11 +167,11 @@ function wrapThen (then, scope, span) {
 
 function wrapAddListener (addListener) {
   return function addListenerWithTrace (eventName, listener) {
-    const scope = emitterScopes.get(this)
+    const scope = getScope(this)
     if (!scope || !listener || originals.has(listener) || listener.listener) {
       return addListener.apply(this, arguments)
     }
-    const span = emitterSpans.get(this)
+    const span = getSpan(this)
 
     const bound = scope.bind(listener, scope._spanOrActive(span))
     const listenerMap = listenerMaps.get(this) || {}
@@ -184,7 +196,7 @@ function wrapAddListener (addListener) {
 
 function wrapRemoveListener (removeListener) {
   return function removeListenerWithTrace (eventName, listener) {
-    if (!emitterScopes.has(this)) {
+    if (!hasScope(this)) {
       return removeListener.apply(this, arguments)
     }
 
@@ -209,7 +221,7 @@ function wrapRemoveAllListeners (removeAllListeners) {
   return function removeAllListenersWithTrace (eventName) {
     const listenerMap = listenerMaps.get(this)
 
-    if (emitterScopes.has(this) && listenerMap) {
+    if (hasScope(this) && listenerMap) {
       if (eventName) {
         delete listenerMap[eventName]
       } else {
