@@ -657,17 +657,6 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('patch', () => {
-    it('should patch the request with Datadog metadata', () => {
-      web.patch(req)
-
-      expect(req._datadog).to.deep.include({
-        paths: [],
-        beforeEnd: []
-      })
-    })
-  })
-
   describe('root', () => {
     it('should return the request root span', () => {
       web.instrument(tracer, config, req, res, 'test.request', () => {
