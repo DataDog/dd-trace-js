@@ -144,7 +144,9 @@ describe('reporter', () => {
       expect(Reporter.reportAttack('', null)).to.be.false
       expect(Reporter.reportAttack('', new Map())).to.be.false
       expect(Reporter.reportAttack('', new Map([['req', null]]))).to.be.false
-      expect(Reporter.reportAttack('', new Map([['req', {}]]))).to.be.false
+      const req = {}
+      expect(Reporter.reportAttack('', new Map([['req', req]]))).to.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
     })
 
     it('should add tags to request span', () => {
