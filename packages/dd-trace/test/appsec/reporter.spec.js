@@ -170,6 +170,7 @@ describe('reporter', () => {
 
       const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]', store)
       expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
