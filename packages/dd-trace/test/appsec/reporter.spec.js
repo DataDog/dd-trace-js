@@ -269,7 +269,9 @@ describe('reporter', () => {
       web.root.returns(null)
 
       expect(Reporter.finishAttacks(null, {})).to.be.false
-      expect(Reporter.finishAttacks({}, {})).to.be.false
+      const req = {}
+      expect(Reporter.finishAttacks(req, {})).to.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
     })
 
     it('should add http response data inside request span', () => {
