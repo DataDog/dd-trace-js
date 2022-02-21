@@ -3,6 +3,7 @@
 require('./src/bluebird')
 require('./src/bunyan')
 require('./src/couchbase')
+require('./src/cucumber')
 require('./src/dns')
 require('./src/elasticsearch')
 require('./src/generic-pool')
