@@ -139,14 +139,14 @@ describe('reporter', () => {
 
   describe('reportAttack', () => {
     it('should do nothing when passed incomplete objects', () => {
+      const req = {}
+
       web.root.returns(null)
 
       expect(Reporter.reportAttack('', null)).to.be.false
       expect(Reporter.reportAttack('', new Map())).to.be.false
       expect(Reporter.reportAttack('', new Map([['req', null]]))).to.be.false
-      const req = {}
       expect(Reporter.reportAttack('', new Map([['req', req]]))).to.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
     })
 
     it('should add tags to request span', () => {
@@ -266,12 +266,12 @@ describe('reporter', () => {
 
   describe('finishAttacks', () => {
     it('should do nothing when passed incomplete objects', () => {
+      const req = {}
+
       web.root.returns(null)
 
       expect(Reporter.finishAttacks(null, {})).to.be.false
-      const req = {}
       expect(Reporter.finishAttacks(req, {})).to.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
     })
 
     it('should add http response data inside request span', () => {
