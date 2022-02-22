@@ -13,7 +13,8 @@ const {
   ERROR_MESSAGE,
   TEST_STATUS,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata
+  getTestEnvironmentMetadata,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -55,10 +56,13 @@ class CucumberPlugin extends Plugin {
     super(...args)
 
     const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber', this.config)
+    const sourceRoot = process.cwd()
 
     this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
+      const testSuite = getTestSuitePath(pickleUri, sourceRoot)
+
       const span = this.tracer.startSpan('cucumber.test', {
         childOf,
         tags: {
@@ -66,7 +70,7 @@ class CucumberPlugin extends Plugin {
           [RESOURCE_NAME]: pickleName,
           [TEST_TYPE]: 'test',
           [TEST_NAME]: pickleName,
-          [TEST_SUITE]: pickleUri,
+          [TEST_SUITE]: testSuite,
           [SAMPLING_RULE_DECISION]: 1,
           [TEST_FRAMEWORK_VERSION]: this.tracer._version,
           ...testEnvironmentMetadata
@@ -80,7 +84,7 @@ class CucumberPlugin extends Plugin {
       this.exit()
     })
 
-    this.addSub('ci:cucumber:runStep:start', ({ resource }) => {
+    this.addSub('ci:cucumber:run-step:start', ({ resource }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('cucumber.step', {
@@ -93,11 +97,11 @@ class CucumberPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:cucumber:runStep:end', () => {
+    this.addSub('ci:cucumber:run-step:end', () => {
       this.exit()
     })
 
-    this.addSub('ci:cucumber:runAsync:end', ({ result, isStep, isLatestVersion }) => {
+    this.addSub('ci:cucumber:run:async-end', ({ result, isStep, isLatestVersion }) => {
       const span = storage.getStore().span
       const tag = isStep ? 'step.status' : TEST_STATUS
       if (isLatestVersion) {

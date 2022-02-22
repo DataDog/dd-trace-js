@@ -5,9 +5,9 @@ const shimmer = require('../../datadog-shimmer')
 
 const runStartCh = channel('ci:cucumber:run:start')
 const runEndCh = channel('ci:cucumber:run:end')
-const runAsyncEndCh = channel('ci:cucumber:runAsync:end')
-const runStepStartCh = channel('ci:cucumber:runStep:start')
-const runStepEndCh = channel('ci:cucumber:runStep:end')
+const runAsyncEndCh = channel('ci:cucumber:run:async-end')
+const runStepStartCh = channel('ci:cucumber:run-step:start')
+const runStepEndCh = channel('ci:cucumber:run-step:end')
 const errorCh = channel('ci:cucumber:error')
 
 function wrapRun (pl, isLatestVersion) {
