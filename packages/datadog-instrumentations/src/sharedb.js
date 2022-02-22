@@ -32,10 +32,10 @@ const READABLE_ACTION_NAMES = {
 }
 
 addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {
-  const startCh = channel('apm:sharedb:_handleMessage:start')
-  const asyncEndCh = channel('apm:sharedb:_handleMessage:async-end')
-  const endCh = channel('apm:sharedb:_handleMessage:end')
-  const errorCh = channel('apm:sharedb:_handleMessage:error')
+  const startCh = channel('apm:sharedb:request:start')
+  const asyncEndCh = channel('apm:sharedb:request:async-end')
+  const endCh = channel('apm:sharedb:request:end')
+  const errorCh = channel('apm:sharedb:request:error')
 
   shimmer.wrap(Agent.prototype, '_handleMessage', origHandleMessageFn => function (request, callback) {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
