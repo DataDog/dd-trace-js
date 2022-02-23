@@ -22,8 +22,6 @@ require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
-require,source-map,BSD-3-Clause,Copyright 2009-2011 Mozilla Foundation and contributors
-require,source-map-resolve,MIT,Copyright 2014-2020 Simon Lydell 2019 Jinxiang
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
