@@ -23,20 +23,20 @@ addHook({ name: 'amqplib', file: 'lib/defs.js', versions: ['>=0.5'] }, defs => {
 
 addHook({ name: 'amqplib', file: 'lib/channel.js', versions: ['>=0.5'] }, channel => {
   shimmer.wrap(channel.Channel.prototype, 'sendImmediately', sendImmediately => function (method, fields) {
-    return sendWithTrace(sendImmediately, this, arguments, methods[method], fields)
+    return instrument(sendImmediately, this, arguments, methods[method], fields)
   })
 
   shimmer.wrap(channel.Channel.prototype, 'sendMessage', sendMessage => function (fields) {
-    return sendWithTrace(sendMessage, this, arguments, 'basic.publish', fields)
+    return instrument(sendMessage, this, arguments, 'basic.publish', fields)
   })
 
   shimmer.wrap(channel.BaseChannel.prototype, 'dispatchMessage', dispatchMessage => function (fields, message) {
-    return sendWithTrace(dispatchMessage, this, arguments, 'basic.deliver', fields, message)
+    return instrument(dispatchMessage, this, arguments, 'basic.deliver', fields, message)
   })
   return channel
 })
 
-function sendWithTrace (send, channel, args, method, fields, message) {
+function instrument (send, channel, args, method, fields, message) {
   if (!startCh.hasSubscribers) {
     return send.apply(this, arguments)
   }
