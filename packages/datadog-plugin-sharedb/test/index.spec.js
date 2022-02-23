@@ -1,13 +1,12 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let ShareDB
 
   describe('sharedb', () => {
-    withVersions(plugin, 'sharedb', version => {
+    withVersions('sharedb', 'sharedb', version => {
       beforeEach(() => {
         require('../../dd-trace')
       })
@@ -21,7 +20,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -168,7 +167,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -221,7 +220,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
