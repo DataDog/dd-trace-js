@@ -132,7 +132,7 @@ function assertFunction (target) {
 }
 
 function assertNotClass (target) {
-  if (target.toString && target.toString().startsWith('class')) {
+  if (Function.prototype.toString.call(target).startsWith('class')) {
     throw new Error('Target is a native class constructor and cannot be wrapped.')
   }
 }
