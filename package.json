@@ -83,9 +83,7 @@
     "path-to-regexp": "^0.1.2",
     "performance-now": "^2.1.0",
     "retry": "^0.10.1",
-    "semver": "^5.5.0",
-    "source-map": "^0.7.3",
-    "source-map-resolve": "^0.6.0"
+    "semver": "^5.5.0"
   },
   "devDependencies": {
     "autocannon": "^4.5.2",
