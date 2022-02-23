@@ -29,14 +29,22 @@ class EventBridge {
       request.params.Entries.length > 0 &&
       request.params.Entries[0].Detail) {
       try {
+        const currentMilliseconds = new Date().getMilliseconds()
         const details = JSON.parse(request.params.Entries[0].Detail)
         details._datadog = {}
         tracer.inject(span, 'text_map', details._datadog)
-        const finalData = JSON.stringify(details)
+        details._datadog.ms = currentMilliseconds
+        let finalData = JSON.stringify(details)
         const byteSize = Buffer.byteLength(finalData)
         if (byteSize >= (1024 * 256)) {
-          log.info('Payload size too large to pass context')
-          return
+          if (byteSize < (1024 * 256) + 11) {
+            // The ms field adds 11 bytes. I'd rather drop it and include the rest of the trace context if need be.
+            delete details._datadog.ms
+            finalData = JSON.stringify(details)
+          } else {
+            log.info('Payload size too large to pass context')
+            return
+          }
         }
         request.params.Entries[0].Detail = finalData
       } catch (e) {
