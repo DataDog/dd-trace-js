@@ -41,9 +41,9 @@ const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   return cli.run()
 }
 
-describe('Plugin', () => {
+describe('Plugin', function () {
   let Cucumber
-
+  this.timeout(4000)
   withVersions('cucumber', '@cucumber/cucumber', version => {
     afterEach(() => {
       // > If you want to run tests multiple times, you may need to clear Node's require cache
