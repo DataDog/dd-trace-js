@@ -1,8 +1,8 @@
 'use strict'
 
 const fs = require('fs')
+const proxyquire = require('proxyquire')
 const log = require('../../src/log')
-const AppSec = require('../../src/appsec')
 const RuleManager = require('../../src/appsec/rule_manager')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
 const Gateway = require('../../src/appsec/gateway/engine')
@@ -11,6 +11,8 @@ const Reporter = require('../../src/appsec/reporter')
 
 describe('AppSec Index', () => {
   let config
+  let AppSec
+  let web
 
   beforeEach(() => {
     config = {
@@ -20,6 +22,14 @@ describe('AppSec Index', () => {
         rateLimit: 42
       }
     }
+
+    web = {
+      root: sinon.stub()
+    }
+
+    AppSec = proxyquire('../../src/appsec', {
+      '../plugins/util/web': web
+    })
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
@@ -121,12 +131,11 @@ describe('AppSec Index', () => {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
-        },
-        _datadog: {
-          span: topSpan
         }
       }
       const res = {}
+
+      web.root.returns(topSpan)
 
       sinon.stub(Gateway, 'propagate')
 
