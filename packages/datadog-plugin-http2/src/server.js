@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: remove usage of req._datadog when the plugin is re-enabled
+
 const web = require('../../dd-trace/src/plugins/util/web')
 const shimmer = require('../../datadog-shimmer')
 

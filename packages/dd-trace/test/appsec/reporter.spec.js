@@ -1,23 +1,31 @@
 'use strict'
 
-const Reporter = require('../../src/appsec/reporter')
+const proxyquire = require('proxyquire')
 const Engine = require('../../src/appsec/gateway/engine')
 const { Context } = require('../../src/appsec/gateway/engine/engine')
 const addresses = require('../../src/appsec/addresses')
 
 describe('reporter', () => {
-  function stubReq (oldTags = {}) {
-    return {
-      _datadog: {
-        span: {
-          context: sinon.stub().returns({
-            _tags: oldTags
-          }),
-          addTags: sinon.stub()
-        }
-      }
+  let Reporter
+  let span
+  let web
+
+  beforeEach(() => {
+    span = {
+      context: sinon.stub().returns({
+        _tags: {}
+      }),
+      addTags: sinon.stub()
     }
-  }
+
+    web = {
+      root: sinon.stub().returns(span)
+    }
+
+    Reporter = proxyquire('../../src/appsec/reporter', {
+      '../plugins/util/web': web
+    })
+  })
 
   afterEach(() => {
     sinon.restore()
@@ -131,15 +139,18 @@ describe('reporter', () => {
 
   describe('reportAttack', () => {
     it('should do nothing when passed incomplete objects', () => {
+      const req = {}
+
+      web.root.returns(null)
+
       expect(Reporter.reportAttack('', null)).to.be.false
       expect(Reporter.reportAttack('', new Map())).to.be.false
       expect(Reporter.reportAttack('', new Map([['req', null]]))).to.be.false
-      expect(Reporter.reportAttack('', new Map([['req', {}]]))).to.be.false
-      expect(Reporter.reportAttack('', new Map([['req', { _datadog: {} }]]))).to.be.false
+      expect(Reporter.reportAttack('', new Map([['req', req]]))).to.be.false
     })
 
     it('should add tags to request span', () => {
-      const req = stubReq()
+      const req = {}
 
       const context = new Context()
 
@@ -159,8 +170,9 @@ describe('reporter', () => {
 
       const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]', store)
       expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
@@ -173,8 +185,8 @@ describe('reporter', () => {
     })
 
     it('should not add manual.keep when rate limit is reached', (done) => {
-      const req = stubReq()
-      const addTags = req._datadog.span.addTags
+      const req = {}
+      const addTags = span.addTags
       const store = new Map([[ 'req', req ]])
 
       expect(Reporter.reportAttack('', store)).to.not.be.false
@@ -201,15 +213,17 @@ describe('reporter', () => {
     })
 
     it('should not overwrite origin tag', () => {
-      const req = stubReq({ '_dd.origin': 'tracer' })
+      span.context()._tags = { '_dd.origin': 'tracer' }
 
+      const req = {}
       const store = new Map()
       store.set('req', req)
 
       const result = Reporter.reportAttack('[]', store)
       expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.appsec.json': '{"triggers":[]}'
@@ -217,8 +231,9 @@ describe('reporter', () => {
     })
 
     it('should merge attacks json', () => {
-      const req = stubReq({ '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' })
+      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
+      const req = {}
       const context = new Context()
 
       context.store = new Map(Object.entries({
@@ -236,8 +251,9 @@ describe('reporter', () => {
 
       const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]', store)
       expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
@@ -250,14 +266,16 @@ describe('reporter', () => {
 
   describe('finishAttacks', () => {
     it('should do nothing when passed incomplete objects', () => {
+      const req = {}
+
+      web.root.returns(null)
+
       expect(Reporter.finishAttacks(null, {})).to.be.false
-      expect(Reporter.finishAttacks({}, {})).to.be.false
-      expect(Reporter.finishAttacks({ _datadog: {} }, {})).to.be.false
-      expect(Reporter.finishAttacks({ _datadog: { span: {} } }, null)).to.be.false
+      expect(Reporter.finishAttacks(req, {})).to.be.false
     })
 
     it('should add http response data inside request span', () => {
-      const req = stubReq()
+      const req = {}
 
       const context = new Context()
 
@@ -272,8 +290,9 @@ describe('reporter', () => {
 
       const result = Reporter.finishAttacks(req, context)
       expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
         'http.endpoint': '/path/:param'
@@ -281,7 +300,7 @@ describe('reporter', () => {
     })
 
     it('should add http response data inside request span without endpoint', () => {
-      const req = stubReq()
+      const req = {}
 
       const context = new Context()
 
@@ -295,8 +314,9 @@ describe('reporter', () => {
 
       const result = Reporter.finishAttacks(req, context)
       expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(req._datadog.span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
       })
