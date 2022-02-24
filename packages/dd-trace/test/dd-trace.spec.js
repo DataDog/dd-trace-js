@@ -7,8 +7,6 @@ const Uint64BE = require('int64-buffer').Uint64BE
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 
-const { UPSTREAM_SERVICES_KEY } = require('../src/constants')
-
 describe('dd-trace', () => {
   let tracer
   let agent
@@ -56,7 +54,6 @@ describe('dd-trace', () => {
       expect(payload[0][0].resource).to.equal('/hello/:name')
       expect(payload[0][0].start).to.be.instanceof(Uint64BE)
       expect(payload[0][0].duration).to.be.instanceof(Uint64BE)
-      expect(payload[0][0].meta).to.have.property(UPSTREAM_SERVICES_KEY, 'dGVzdA==|1|0|1')
 
       res.status(200).send('OK')
 
