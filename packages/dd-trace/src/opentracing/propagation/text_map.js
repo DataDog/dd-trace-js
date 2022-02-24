@@ -11,7 +11,6 @@ const spanKey = 'x-datadog-parent-id'
 const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
 const sampleKey = 'x-datadog-sampled'
-const tagsKey = 'x-datadog-tags'
 const baggagePrefix = 'ot-baggage-'
 const b3TraceKey = 'x-b3-traceid'
 const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
@@ -42,7 +41,6 @@ class TextMapPropagator {
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
     this._injectB3(spanContext, carrier)
-    this._injectTags(spanContext, carrier)
 
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
@@ -55,7 +53,6 @@ class TextMapPropagator {
     this._extractOrigin(carrier, spanContext)
     this._extractBaggageItems(carrier, spanContext)
     this._extractSamplingPriority(carrier, spanContext)
-    this._extractTags(carrier, spanContext)
 
     log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
@@ -82,25 +79,6 @@ class TextMapPropagator {
     spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
-  }
-
-  _injectTags (spanContext, carrier) {
-    const trace = spanContext._trace
-    const tags = []
-
-    for (const key in trace.tags) {
-      if (!key.startsWith('_dd.p.')) continue
-
-      tags.push(`${key}=${trace.tags[key]}`)
-    }
-
-    const header = tags.join(',')
-
-    if (header.length <= 512) {
-      carrier[tagsKey] = header
-    } else {
-      trace.tags['_dd.propagation_error:max_size'] = 1
-    }
   }
 
   _injectB3 (spanContext, carrier) {
@@ -260,18 +238,6 @@ class TextMapPropagator {
 
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = parseInt(carrier[samplingKey], 10)
-    }
-  }
-
-  _extractTags (carrier, spanContext) {
-    if (!carrier[tagsKey]) return
-
-    const pairs = carrier[tagsKey].split(',')
-
-    for (const pair of pairs) {
-      const [key, value] = pair.split('=')
-
-      spanContext._trace.tags[key] = value
     }
   }
 
