@@ -94,15 +94,39 @@ function getResource (ns, query, operationName) {
   return parts.join(' ')
 }
 
+function shouldHide (input) {
+  return !isObject(input) || Buffer.isBuffer(input) || isBSON(input)
+}
+
 function sanitize (input) {
+  if (shouldHide(input)) return '?'
+
   const output = {}
+  const queue = [{
+    input,
+    output,
+    depth: 0
+  }]
 
-  if (!isObject(input) || Buffer.isBuffer(input) || isBSON(input)) return '?'
+  while (queue.length) {
+    const {
+      input, output, depth
+    } = queue.pop()
+    const nextDepth = depth + 1
+    for (const key in input) {
+      if (typeof input[key] === 'function') continue
 
-  for (const key in input) {
-    if (typeof input[key] === 'function') continue
-
-    output[key] = sanitize(input[key])
+      const child = input[key]
+      if (depth >= 20 || shouldHide(child)) {
+        output[key] = '?'
+      } else {
+        queue.push({
+          input: child,
+          output: output[key] = {},
+          depth: nextDepth
+        })
+      }
+    }
   }
 
   return output
