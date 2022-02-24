@@ -10,10 +10,5 @@ module.exports = {
   SAMPLING_RULE_DECISION: '_dd.rule_psr',
   SAMPLING_LIMIT_DECISION: '_dd.limit_psr',
   SAMPLING_AGENT_DECISION: '_dd.agent_psr',
-  SAMPLING_MECHANISM_DEFAULT: 0,
-  SAMPLING_MECHANISM_AGENT: 1,
-  SAMPLING_MECHANISM_RULE: 3,
-  SAMPLING_MECHANISM_MANUAL: 4,
-  DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
-  UPSTREAM_SERVICES_KEY: '_dd.p.upstream_services'
+  DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent'
 }
