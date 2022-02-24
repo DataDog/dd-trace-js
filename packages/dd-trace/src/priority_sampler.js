@@ -1,20 +1,14 @@
 'use strict'
 
-const coalesce = require('koalas')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const ext = require('../../../ext')
 const { setSamplingRules } = require('./startup-log')
 
 const {
-  SAMPLING_MECHANISM_DEFAULT,
-  SAMPLING_MECHANISM_AGENT,
-  SAMPLING_MECHANISM_RULE,
-  SAMPLING_MECHANISM_MANUAL,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
-  SAMPLING_AGENT_DECISION,
-  UPSTREAM_SERVICES_KEY
+  SAMPLING_AGENT_DECISION
 } = require('./constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
@@ -28,7 +22,6 @@ const USER_KEEP = ext.priority.USER_KEEP
 const DEFAULT_KEY = 'service:,env:'
 
 const defaultSampler = new Sampler(AUTO_KEEP)
-const serviceNames = new Map()
 
 class PrioritySampler {
   constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
@@ -59,14 +52,9 @@ class PrioritySampler {
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
-      context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
     } else if (auto) {
       context._sampling.priority = this._getPriorityFromAuto(root)
-    } else {
-      return
     }
-
-    this._addUpstreamService(root)
   }
 
   update (rates) {
@@ -127,7 +115,6 @@ class PrioritySampler {
 
   _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
-    context._sampling.mechanism = SAMPLING_MECHANISM_RULE
 
     return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context) ? USER_KEEP : USER_REJECT
   }
@@ -146,42 +133,7 @@ class PrioritySampler {
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
-    if (sampler === defaultSampler) {
-      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
-    } else {
-      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
-    }
-
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
-  }
-
-  _addUpstreamService (span) {
-    const context = span.context()
-    const trace = context._trace
-    const service = this._toBase64(context._tags['service.name'])
-    const priority = context._sampling.priority
-    const mechanism = context._sampling.mechanism
-    const rate = Math.ceil(coalesce(
-      context._trace[SAMPLING_RULE_DECISION],
-      context._trace[SAMPLING_AGENT_DECISION]
-    ) * 10000) / 10000
-    const group = `${service}|${priority}|${mechanism}|${rate}`
-    const groups = trace.tags[UPSTREAM_SERVICES_KEY]
-      ? `${trace.tags[UPSTREAM_SERVICES_KEY]};${group}`
-      : group
-
-    trace.tags[UPSTREAM_SERVICES_KEY] = groups
-  }
-
-  _toBase64 (serviceName) {
-    let encoded = serviceNames.get(serviceName)
-
-    if (!encoded) {
-      encoded = Buffer.from(serviceName).toString('base64')
-      serviceNames.set(serviceName, encoded)
-    }
-
-    return encoded
   }
 
   _normalizeRules (rules, sampleRate) {
