@@ -90,7 +90,7 @@ describe('EventBridge', () => {
       expect(request.params).to.have.all.keys('Entries')
       expect(request.params.Entries[0].Detail).to.be.a('string')
       const receivedDetail = JSON.parse(request.params.Entries[0].Detail)
-      expect(receivedDetail).to.have.all.keys('custom', 'for', 'from', '_datadog')
+      expect(receivedDetail).to.have.all.keys('custom', 'for', 'from')
       expect(receivedDetail._datadog).to.have.all.keys('x-datadog-trace-id', 'x-datadog-parent-id', 'x-datadog-sampling-priority', 'ms')
       // expect(request.params).to.deep.equal({ 'Entries': [{ 'Detail': '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}}' }] })
     })
