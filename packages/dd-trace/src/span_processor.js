@@ -22,6 +22,8 @@ class SpanProcessor {
     const { started, finished } = trace
 
     if (started.length === finished.length || finished.length >= flushMinSpans) {
+      this._prioritySampler.sample(spanContext)
+
       for (const span of started) {
         if (span._duration !== undefined) {
           formatted.push(format(span))
@@ -30,7 +32,6 @@ class SpanProcessor {
         }
       }
 
-      this._prioritySampler.sample(spanContext)
       this._exporter.export(formatted)
       this._erase(trace, active)
     }
