@@ -87,7 +87,7 @@ describe('EventBridge', () => {
       parentId = '0000000000000000'
       eventbridge.requestInject(span.context(), request, tracer)
 
-      const cleaned = request.params.replace(/"ms":\d\d\d/, '"ms":000')
+      const cleaned = request.params.Entries[0].Detail.replace(/"ms":\d\d\d/, '"ms":000')
       request.params.Entries[0].Detail = cleaned // replace the miliseconds with 000
       expect(request.params).to.deep.equal({ 'Entries': [{ 'Detail': '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}}' }] })
     })
