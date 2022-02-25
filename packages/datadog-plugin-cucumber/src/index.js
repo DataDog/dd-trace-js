@@ -19,34 +19,6 @@ const {
 const { SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 
-function setStatusFromResult (span, result, tag) {
-  if (result.status === 1) {
-    span.setTag(tag, 'pass')
-  } else if (result.status === 2) {
-    span.setTag(tag, 'skip')
-  } else if (result.status === 4) {
-    span.setTag(tag, 'skip')
-    span.setTag(TEST_SKIP_REASON, 'not implemented')
-  } else {
-    span.setTag(tag, 'fail')
-    span.setTag(ERROR_MESSAGE, result.message)
-  }
-}
-
-function setStatusFromResultLatest (span, result, tag) {
-  if (result.status === 'PASSED') {
-    span.setTag(tag, 'pass')
-  } else if (result.status === 'SKIPPED' || result.status === 'PENDING') {
-    span.setTag(tag, 'skip')
-  } else if (result.status === 'UNDEFINED') {
-    span.setTag(tag, 'skip')
-    span.setTag(TEST_SKIP_REASON, 'not implemented')
-  } else {
-    span.setTag(tag, 'fail')
-    span.setTag(ERROR_MESSAGE, result.message)
-  }
-}
-
 class CucumberPlugin extends Plugin {
   static get name () {
     return 'cucumber'
@@ -101,14 +73,20 @@ class CucumberPlugin extends Plugin {
       this.exit()
     })
 
-    this.addSub('ci:cucumber:run:async-end', ({ result, isStep, isLatestVersion }) => {
+    this.addSub('ci:cucumber:run:async-end', ({ isStep, status, skipReason, errorMessage }) => {
       const span = storage.getStore().span
-      const tag = isStep ? 'step.status' : TEST_STATUS
-      if (isLatestVersion) {
-        setStatusFromResultLatest(span, result, tag)
-      } else {
-        setStatusFromResult(span, result, tag)
+      const statusTag = isStep ? 'step.status' : TEST_STATUS
+
+      span.setTag(statusTag, status)
+
+      if (skipReason) {
+        span.setTag(TEST_SKIP_REASON, skipReason)
       }
+
+      if (errorMessage) {
+        span.setTag(ERROR_MESSAGE, errorMessage)
+      }
+
       span.finish()
       if (!isStep) {
         finishAllTraceSpans(span)

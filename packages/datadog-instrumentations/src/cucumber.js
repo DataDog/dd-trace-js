@@ -10,6 +10,32 @@ const runStepStartCh = channel('ci:cucumber:run-step:start')
 const runStepEndCh = channel('ci:cucumber:run-step:end')
 const errorCh = channel('ci:cucumber:error')
 
+function getStatusFromResult (result) {
+  if (result.status === 1) {
+    return { status: 'pass' }
+  }
+  if (result.status === 2) {
+    return { status: 'skip' }
+  }
+  if (result.status === 4) {
+    return { status: 'skip', skipReason: 'not implemented' }
+  }
+  return { status: 'fail', errorMessage: result.message }
+}
+
+function getStatusFromResultLatest (result) {
+  if (result.status === 'PASSED') {
+    return { status: 'pass' }
+  }
+  if (result.status === 'SKIPPED' || result.status === 'PENDING') {
+    return { status: 'skip' }
+  }
+  if (result.status === 'UNDEFINED') {
+    return { status: 'skip', skipReason: 'not implemented' }
+  }
+  return { status: 'fail', errorMessage: result.message }
+}
+
 function wrapRun (pl, isLatestVersion) {
   shimmer.wrap(pl.prototype, 'run', run => function () {
     if (!runStartCh.hasSubscribers) {
@@ -20,7 +46,11 @@ function wrapRun (pl, isLatestVersion) {
     try {
       const promise = run.apply(this, arguments)
       promise.finally(() => {
-        runAsyncEndCh.publish({ result: this.getWorstStepResult(), isLatestVersion })
+        const result = this.getWorstStepResult()
+        const { status, skipReason, errorMessage } = isLatestVersion
+          ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+
+        runAsyncEndCh.publish({ status, skipReason, errorMessage })
       })
       return promise
     } catch (err) {
@@ -45,8 +75,12 @@ function wrapRun (pl, isLatestVersion) {
     runStepStartCh.publish({ resource })
     try {
       const promise = runStep.apply(this, arguments)
+
       promise.then((result) => {
-        runAsyncEndCh.publish({ result, isStep: true, isLatestVersion })
+        const { status, skipReason, errorMessage } = isLatestVersion
+          ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+
+        runAsyncEndCh.publish({ isStep: true, status, skipReason, errorMessage })
       })
       return promise
     } catch (err) {
