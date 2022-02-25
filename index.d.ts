@@ -267,6 +267,12 @@ export declare interface TracerOptions {
   flushInterval?: number;
 
   /**
+   *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
+   * @default 1000
+   */
+   flushMinSpans?: number;
+
+  /**
    * Whether to enable runtime metrics.
    * @default false
    */
