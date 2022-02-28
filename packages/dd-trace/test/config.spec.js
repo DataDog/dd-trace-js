@@ -538,7 +538,7 @@ describe('Config', () => {
         const config = new Config()
 
         expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
-        expect(config.url.toString()).to.equal('file:///var/run/datadog/apm.socket')
+        expect(config.url.toString()).to.equal('unix:///var/run/datadog/apm.socket')
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {
