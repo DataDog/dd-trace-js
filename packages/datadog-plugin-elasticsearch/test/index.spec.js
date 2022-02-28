@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 
 describe('Plugin', () => {
   let elasticsearch
@@ -32,6 +33,10 @@ describe('Plugin', () => {
           client = new elasticsearch.Client({
             node: 'http://localhost:9200'
           })
+        })
+
+        afterEach(() => {
+          unbreakThen(Promise.prototype)
         })
 
         it('should sanitize the resource name', done => {
@@ -250,6 +255,21 @@ describe('Plugin', () => {
                 promise.abort()
               }
             }).not.to.throw()
+          })
+
+          it('should work with userland promises', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
+                expect(traces[0][0]).to.have.property('resource', 'HEAD /')
+                expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+              })
+              .then(done)
+              .catch(done)
+
+            breakThen(Promise.prototype)
+
+            client.ping().catch(done)
           })
         })
       })
