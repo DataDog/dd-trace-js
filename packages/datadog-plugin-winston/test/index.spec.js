@@ -3,6 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const http = require('http')
+const { expect } = require('chai')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 function createLogServer () {
@@ -240,17 +241,8 @@ describe('Plugin', () => {
             expect(await logServer.logPromise).to.include(meta.dd)
           })
 
-          it('should skip injection without an active span', async () => {
-            const meta = {
-              dd: {
-                trace_id: span.context().toTraceId(),
-                span_id: span.context().toSpanId()
-              }
-            }
-
-            winston.info('message')
-
-            expect(await logServer.logPromise).to.not.include(meta.dd)
+          it('should skip injection without a store', async () => {
+            expect(() => winston.info('message')).to.not.throw()
           })
         })
 
