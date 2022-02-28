@@ -153,7 +153,7 @@ describe('Plugin', function () {
             { name: 'run', stepStatus: 'pass' },
             { name: 'fail', stepStatus: 'fail' }
           ]
-          const errors = [undefined, undefined, 'AssertionError', 'AssertionError']
+          const errors = ['AssertionError', undefined, undefined, 'AssertionError']
           const checkTraces = agent.use(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')

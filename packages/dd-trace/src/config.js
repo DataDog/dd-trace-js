@@ -99,6 +99,11 @@ class Config {
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
       '0.4'
     )
+    const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
+      parseInt(options.flushMinSpans),
+      parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
+      1000
+    )
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
@@ -166,6 +171,7 @@ class Config {
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
