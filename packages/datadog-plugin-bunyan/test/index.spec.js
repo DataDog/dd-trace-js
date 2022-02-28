@@ -82,6 +82,16 @@ describe('Plugin', () => {
             expect(record).to.not.have.property('dd')
           })
         })
+
+        it('should skip injection without an active span', () => {
+          logger.info('message')
+
+          expect(stream.write).to.have.been.called
+
+          const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+          expect(record).to.not.have.property('dd')
+        })
       })
     })
   })

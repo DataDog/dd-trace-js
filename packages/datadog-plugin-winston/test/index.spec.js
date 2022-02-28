@@ -239,6 +239,19 @@ describe('Plugin', () => {
             })
             expect(await logServer.logPromise).to.include(meta.dd)
           })
+
+          it('should skip injection without an active span', async () => {
+            const meta = {
+              dd: {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              }
+            }
+
+            winston.info('message')
+
+            expect(await logServer.logPromise).to.not.include(meta.dd)
+          })
         })
 
         describe('with splat formatting', () => {
