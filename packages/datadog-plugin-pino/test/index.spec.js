@@ -136,6 +136,17 @@ describe('Plugin', () => {
             })
           })
 
+          it('should skip injection when there is no active span', () => {
+            logger.info('message')
+
+            expect(stream.write).to.have.been.called
+
+            const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+            expect(record).to.not.have.property('dd')
+            expect(record).to.have.deep.property('msg', 'message')
+          })
+
           if (semver.intersects(version, '>=5.14.0')) {
             it('should not alter pino mixin behavior', () => {
               const opts = { mixin: () => ({ addedMixin: true }) }
