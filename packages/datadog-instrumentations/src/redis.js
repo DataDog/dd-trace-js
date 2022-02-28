@@ -21,14 +21,14 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
     const name = command[0]
     const args = command.slice(1)
 
-    startSpan(this, name, args)
+    start(this, name, args)
 
     const res = addCommand.apply(this, arguments)
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const onResolve = asyncResource.bind(() => finish(asyncEndCh, errorCh))
+    const onReject = asyncResource.bind(err => finish(asyncEndCh, errorCh, err))
 
-    res.then(
-      () => finish(asyncEndCh, errorCh),
-      err => finish(asyncEndCh, errorCh, err)
-    )
+    res.then(onResolve, onReject)
     endCh.publish(undefined)
     return res
   })
@@ -45,7 +45,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     const cb = asyncResource.bind(options.callback)
 
-    startSpan(this, options.command, options.args)
+    start(this, options.command, options.args)
 
     options.callback = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
 
@@ -70,7 +70,7 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    startSpan(this, command, args)
+    start(this, command, args)
 
     if (typeof callback === 'function') {
       const cb = asyncResource.bind(callback)
@@ -95,7 +95,7 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   return redis
 })
 
-function startSpan (client, command, args) {
+function start (client, command, args) {
   const db = client.selected_db
   const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || {}
   startCh.publish({ db, command, args, connectionOptions })

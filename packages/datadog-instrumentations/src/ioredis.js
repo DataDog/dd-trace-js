@@ -2,7 +2,8 @@
 
 const {
   channel,
-  addHook
+  addHook,
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -21,12 +22,14 @@ addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
     const connectionName = options.connectionName
     const db = options.db
     const connectionOptions = { host: options.host, port: options.port }
+
     startCh.publish({ db, command: command.name, args: command.args, connectionOptions, connectionName })
 
-    command.promise.then(
-      () => finish(asyncEndCh, errorCh),
-      err => finish(asyncEndCh, errorCh, err)
-    )
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const onResolve = asyncResource.bind(() => finish(asyncEndCh, errorCh))
+    const onReject = asyncResource.bind(err => finish(asyncEndCh, errorCh, err))
+
+    command.promise.then(onResolve, onReject)
 
     try {
       return sendCommand.apply(this, arguments)

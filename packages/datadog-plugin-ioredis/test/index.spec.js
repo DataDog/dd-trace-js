@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 
 describe('Plugin', () => {
   let Redis
@@ -16,6 +17,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
+        unbreakThen(Promise.prototype)
         redis.quit()
       })
 
@@ -73,6 +75,29 @@ describe('Plugin', () => {
             .catch(err => {
               error = err
             })
+        })
+
+        it('should work with userland promises', done => {
+          agent.use(() => {}) // wait for initial info command
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'redis.command')
+              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('resource', 'get')
+              expect(traces[0][0]).to.have.property('type', 'redis')
+              expect(traces[0][0].meta).to.have.property('db.name', '0')
+              expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].metrics).to.have.property('out.port', 6379)
+            })
+            .then(done)
+            .catch(done)
+
+          breakThen(Promise.prototype)
+
+          redis.get('foo').catch(done)
         })
       })
 
