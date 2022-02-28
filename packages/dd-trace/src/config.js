@@ -235,7 +235,7 @@ function getAgentUrl (url, options) {
     !process.env.DD_TRACE_AGENT_PORT &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
-    return new URL('file:///var/run/datadog/apm.socket')
+    return new URL('unix:///var/run/datadog/apm.socket')
   }
 }
 
