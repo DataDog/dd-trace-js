@@ -34,7 +34,7 @@ class EventBridge {
         request.params.Entries.forEach((entry, index) => {
           // eslint-disable-next-line no-console
           console.log('AGOCS 2')
-          const details = JSON.stringify(entry.Detail)
+          const details = JSON.parse(entry.Detail)
           details._datadog = {}
           tracer.inject(span, 'text_map', details._datadog)
           details._datadog.ms = currentMilliseconds
@@ -52,6 +52,15 @@ class EventBridge {
           }
           request.params.Entries[index].Detail = finalData
         })
+
+        // for let i = 0; i < request.params.Entries.length; i++ {
+        //   const entry = request.params.Entries[i]
+        //   const details = JSON.(entry.Detail)
+        //   details._datadog = {}
+        //   tracer.inject(span, 'text_map', details._datadog)
+        //   details._datadog.ms = currentMilliseconds
+
+        // }
       } catch (e) {
         log.error(e)
       }
