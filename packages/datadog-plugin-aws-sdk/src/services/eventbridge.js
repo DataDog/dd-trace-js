@@ -29,7 +29,7 @@ class EventBridge {
       request.params.Entries.length > 0) {
       try {
         const currentMilliseconds = new Date().getMilliseconds()
-        request.Entries.forEach(entry => {
+        request.params.Entries.forEach((entry => {
           const details = JSON.stringify(entry.Detail)
           details._datadog = {}
           tracer.inject(span, 'text_map', details._datadog)
