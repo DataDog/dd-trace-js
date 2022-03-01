@@ -52,15 +52,6 @@ class EventBridge {
           }
           request.params.Entries[index].Detail = finalData
         })
-
-        // for let i = 0; i < request.params.Entries.length; i++ {
-        //   const entry = request.params.Entries[i]
-        //   const details = JSON.(entry.Detail)
-        //   details._datadog = {}
-        //   tracer.inject(span, 'text_map', details._datadog)
-        //   details._datadog.ms = currentMilliseconds
-
-        // }
       } catch (e) {
         log.error(e)
       }
