@@ -66,7 +66,7 @@ describe('Sns', () => {
         MessageAttributes: {
           '_datadog': {
             'DataType': 'Binary',
-            'StringValue': 'eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI0NTY4NTMyMTk2NzY3NzkxNjAiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiNDU2ODUzMjE5Njc2Nzc5MTYwIiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSJ9'
+            'BinaryValue': 'eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI0NTY4NTMyMTk2NzY3NzkxNjAiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiNDU2ODUzMjE5Njc2Nzc5MTYwIiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSJ9'
           }
         },
         'TopicArn': 'some ARN'
@@ -98,7 +98,7 @@ describe('Sns', () => {
             MessageAttributes: {
               '_datadog': {
                 'DataType': 'Binary',
-                'StringValue': 'eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI0NTY4NTMyMTk2NzY3NzkxNjAiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiNDU2ODUzMjE5Njc2Nzc5MTYwIiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSJ9'
+                'BinaryValue': 'eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI0NTY4NTMyMTk2NzY3NzkxNjAiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiNDU2ODUzMjE5Njc2Nzc5MTYwIiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSJ9'
               }
             }
           },

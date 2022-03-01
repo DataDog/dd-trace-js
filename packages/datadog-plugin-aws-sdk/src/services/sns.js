@@ -40,7 +40,7 @@ class Sns {
       const b64EncodedTraceContext = Buffer.from(JSON.stringify(ddInfo), 'ascii').toString('base64')
       injectPath.MessageAttributes._datadog = {
         DataType: 'Binary',
-        StringValue: b64EncodedTraceContext
+        BinaryValue: b64EncodedTraceContext
       }
     }
   }
