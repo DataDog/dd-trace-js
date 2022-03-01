@@ -3,7 +3,7 @@
   "rules": [
     {
       "id": "crs-913-110",
-      "name": "Found request header associated with Acunetix security scanner",
+      "name": "Acunetix",
       "tags": {
         "type": "security_scanner",
         "crs_id": "913110",
@@ -21,7 +21,8 @@
               "acunetix-product",
               "(acunetix web vulnerability scanner",
               "acunetix-scanning-agreement",
-              "acunetix-user-agreement"
+              "acunetix-user-agreement",
+              "md5(acunetix_wvs_security_test)"
             ]
           },
           "operator": "phrase_match"
@@ -33,7 +34,7 @@
     },
     {
       "id": "crs-913-120",
-      "name": "Found request filename/argument associated with security scanner",
+      "name": "Known security scanner filename/argument",
       "tags": {
         "type": "security_scanner",
         "crs_id": "913120",
@@ -228,7 +229,9 @@
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "normalizePath"
+      ]
     },
     {
       "id": "crs-930-110",
@@ -1400,12 +1403,13 @@
         }
       ],
       "transformers": [
-        "lowercase"
+        "lowercase",
+        "normalizePath"
       ]
     },
     {
       "id": "crs-931-110",
-      "name": "Possible Remote File Inclusion (RFI) Attack: Common RFI Vulnerable Parameter Name used w/URL Payload",
+      "name": "RFI: Common RFI Vulnerable Parameter Name used w/ URL Payload",
       "tags": {
         "type": "rfi",
         "crs_id": "931110",
@@ -1431,7 +1435,7 @@
     },
     {
       "id": "crs-931-120",
-      "name": "Possible Remote File Inclusion (RFI) Attack: URL Payload Used w/Trailing Question Mark Character (?)",
+      "name": "RFI: URL Payload Used w/Trailing Question Mark Character (?)",
       "tags": {
         "type": "rfi",
         "crs_id": "931120",
@@ -2868,44 +2872,6 @@
       ]
     },
     {
-      "id": "crs-942-140",
-      "name": "SQL Injection Attack: Common DB Names Detected",
-      "tags": {
-        "type": "sql_injection",
-        "crs_id": "942140",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              },
-              {
-                "address": "grpc.server.request.message"
-              }
-            ],
-            "regex": "\\b(?:(?:m(?:s(?:ys(?:ac(?:cess(?:objects|storage|xml)|es)|(?:relationship|object|querie)s|modules2?)|db)|aster\\.\\.sysdatabases|ysql\\.db)|pg_(?:catalog|toast)|information_schema|northwind|tempdb)\\b|s(?:(?:ys(?:\\.database_name|aux)|qlite(?:_temp)?_master)\\b|chema(?:_name\\b|\\W*\\())|d(?:atabas|b_nam)e\\W*\\()",
-            "options": {
-              "min_length": 4
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "crs-942-160",
       "name": "Detects blind sqli tests using sleep() or benchmark()",
       "tags": {
@@ -2975,45 +2941,6 @@
             "regex": "(?:\\b(?:(?:c(?:onnection_id|urrent_user)|database)\\s*?\\([^\\)]*?|u(?:nion(?:[\\w(?:\\s]*?select| select @)|ser\\s*?\\([^\\)]*?)|s(?:chema\\s*?\\([^\\)]*?|elect.*?\\w?user\\()|into[\\s+]+(?:dump|out)file\\s*?[\\\"'`]|from\\W+information_schema\\W|exec(?:ute)?\\s+master\\.)|[\\\"'`](?:;?\\s*?(?:union\\b\\s*?(?:(?:distin|sele)ct|all)|having|select)\\b\\s*?[^\\s]|\\s*?!\\s*?[\\\"'`\\w])|\\s*?exec(?:ute)?.*?\\Wxp_cmdshell|\\Wiif\\s*?\\()",
             "options": {
               "min_length": 3
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
-      "id": "crs-942-220",
-      "name": "Looking for integer overflow attacks, these are taken from skipfish, except 2.2.2250738585072011e-308 is the \\\"magic number\\\" crash",
-      "tags": {
-        "type": "sql_injection",
-        "crs_id": "942220",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              },
-              {
-                "address": "grpc.server.request.message"
-              }
-            ],
-            "regex": "^(?i:-0000023456|4294967295|4294967296|2147483648|2147483647|0000012345|-2147483648|-2147483649|0000023456|2.2250738585072007e-308|2.2250738585072011e-308|1e309)$",
-            "options": {
-              "case_sensitive": true,
-              "min_length": 5
             }
           },
           "operator": "match_regex"
@@ -3100,7 +3027,7 @@
     },
     {
       "id": "crs-942-270",
-      "name": "Looking for basic sql injection. Common attack string for mysql, oracle and others",
+      "name": "Basic SQL injection",
       "tags": {
         "type": "sql_injection",
         "crs_id": "942270",
@@ -3138,7 +3065,7 @@
     },
     {
       "id": "crs-942-280",
-      "name": "Detects Postgres pg_sleep injection, waitfor delay attacks and database shutdown attempts",
+      "name": "SQL Injection with delay functions",
       "tags": {
         "type": "sql_injection",
         "crs_id": "942280",
@@ -3527,6 +3454,116 @@
       "transformers": [
         "lowercase"
       ]
+    },
+    {
+      "id": "dog-000-001",
+      "name": "Look for Cassandra injections",
+      "tags": {
+        "type": "nosql_injection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "regex": "\\ballow\\s+filtering\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeComments"
+      ]
+    },
+    {
+      "id": "dog-000-002",
+      "name": "OGNL - Look for formatting injection patterns",
+      "tags": {
+        "type": "java_code_injection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.cookies"
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "[#%$]{[^}]+[^\\w\\s][^}]+}",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-000-003",
+      "name": "OGNL - Detect OGNL exploitation primitives",
+      "tags": {
+        "type": "java_code_injection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.cookies"
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "[@#]ognl",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "transformers": []
     },
     {
       "id": "nfd-000-001",
@@ -5230,31 +5267,6 @@
       "transformers": []
     },
     {
-      "id": "ua0-600-41x",
-      "name": "Acunetix",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              }
-            ],
-            "regex": "md5\\(acunetix_wvs_security_test\\)"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "ua0-600-42x",
       "name": "OpenVAS",
       "tags": {
@@ -5506,7 +5518,7 @@
     },
     {
       "id": "ua0-600-52x",
-      "name": "Nuclei is a fast tool for configurable targeted scanning based on templates offering massive extensibility and ease of use",
+      "name": "Nuclei",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
@@ -5531,7 +5543,7 @@
     },
     {
       "id": "ua0-600-53x",
-      "name": "Tsunami is a general purpose network security scanner with an extensible plugin system for detecting high severity vulnerabilities with high confidence",
+      "name": "Tsunami",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
@@ -5556,7 +5568,7 @@
     },
     {
       "id": "ua0-600-54x",
-      "name": "Nimbostratus is a vulnerability scanner that scan websites unprompted",
+      "name": "Nimbostratus",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
@@ -5595,6 +5607,12 @@
                 "key_path": [
                   "user-agent"
                 ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
               }
             ],
             "regex": "^dd-test-scanner-log$"
@@ -5606,7 +5624,7 @@
     },
     {
       "id": "ua0-600-5xx",
-      "name": "Blind Sql Injection Brute Forcer",
+      "name": "Blind SQL Injection Brute Forcer",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
