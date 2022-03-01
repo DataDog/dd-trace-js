@@ -37,9 +37,10 @@ class Sns {
       }
       const ddInfo = {}
       tracer.inject(span, 'text_map', ddInfo)
+      const b64EncodedTraceContext = Buffer.from(JSON.stringify(ddInfo), 'ascii').toString('base64')
       injectPath.MessageAttributes._datadog = {
-        DataType: 'String',
-        StringValue: JSON.stringify(ddInfo)
+        DataType: 'Binary',
+        StringValue: b64EncodedTraceContext
       }
     }
   }
