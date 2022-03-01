@@ -66,7 +66,7 @@ describe('Sns', () => {
         MessageAttributes: {
           '_datadog': {
             'DataType': 'Binary',
-            'BinaryValue': 'eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI0NTY4NTMyMTk2NzY3NzkxNjAiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiNDU2ODUzMjE5Njc2Nzc5MTYwIiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSJ9'
+            'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
           }
         },
         'TopicArn': 'some ARN'
@@ -98,7 +98,7 @@ describe('Sns', () => {
             MessageAttributes: {
               '_datadog': {
                 'DataType': 'Binary',
-                'BinaryValue': 'eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI0NTY4NTMyMTk2NzY3NzkxNjAiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiNDU2ODUzMjE5Njc2Nzc5MTYwIiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSJ9'
+                'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
               }
             }
           },
