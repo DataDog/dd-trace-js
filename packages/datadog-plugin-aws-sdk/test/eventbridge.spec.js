@@ -92,6 +92,40 @@ describe('EventBridge', () => {
       expect(request.params).to.deep.equal({ 'Entries': [{ 'Detail': '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":"","ms":000}}' }] })
     })
 
+    it('injects trace context to every EventBridge event', () => {
+      const eventbridge = new EventBridge()
+      const request = {
+        params: {
+          Entries: [
+            {
+              Detail: JSON.stringify({
+                custom: 'data',
+                for: 'my users',
+                from: 'Aaron Stuyvenberg'
+              })
+            },
+            {
+              Detail: JSON.stringify({
+                custom: 'data',
+                for: 'more users',
+                from: 'Chris Agocs'
+              })
+            }
+          ]
+        },
+        operation: 'putEvents'
+      }
+
+      traceId = '456853219676779160'
+      spanId = '456853219676779160'
+      parentId = '0000000000000000'
+      eventbridge.requestInject(span.context(), request, tracer)
+
+      const cleaned = request.params.Entries[0].Detail.replace(/"ms":\d+/, '"ms":000')
+      request.params.Entries[0].Detail = cleaned // replace the miliseconds with 000
+      expect(request.params).to.deep.equal({ 'Entries': [{ 'Detail': '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":"","ms":000}}' },{ 'Detail': '{"custom":"data","for":"more users","from":"Chris Agocs","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":"","ms":000}}' }] })
+    })
+
     it('skips injecting trace context to Eventbridge if message is full', () => {
       const eventbridge = new EventBridge()
       const request = {
@@ -110,6 +144,28 @@ describe('EventBridge', () => {
       parentId = '0000000000000000'
       eventbridge.requestInject(span.context(), request, tracer)
       expect(request.params).to.deep.equal(request.params)
+    })
+    it('only removes the ms field if the ms field won\'t fit', () => {
+      const eventbridge = new EventBridge()
+      const myGreatData = randomBytes(256000 - 500).toString('base64')
+      const request = {
+        params: {
+          Entries: [
+            {
+              Detail: JSON.stringify({ myGreatData: myGreatData })
+            }
+          ]
+        },
+        operation: 'putEvents'
+      }
+
+      traceId = '456853219676779160'
+      spanId = '456853219676779160'
+      parentId = '0000000000000000'
+      eventbridge.requestInject(span.context(), request, tracer)
+      // eslint-disable-next-line no-console
+      console.log('AGOCS!! ' + request.params.Entries[0].Detail.length)
+      expect(request.params).to.deep.equal('a')
     })
   })
 })
