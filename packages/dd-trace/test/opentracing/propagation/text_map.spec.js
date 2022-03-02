@@ -154,6 +154,21 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-b3-flags', '1')
     })
 
+    it('should inject the traceparent header', () => {
+      const carrier = {}
+      const spanContext = new SpanContext({
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456'),
+        sampling: {
+          priority: USER_KEEP
+        }
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('traceparent', '01-0000000000000123-0000000000000456-01')
+    })
+
     it('should skip injection of B3 headers without the feature flag', () => {
       const carrier = {}
       const spanContext = new SpanContext({

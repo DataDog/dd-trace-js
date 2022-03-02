@@ -43,6 +43,7 @@ class TextMapPropagator {
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
     this._injectB3(spanContext, carrier)
+    this._injectTraceparent(spanContext, carrier)
     this._injectTags(spanContext, carrier)
 
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
@@ -113,6 +114,13 @@ class TextMapPropagator {
     if (spanContext._parentId) {
       carrier[b3ParentKey] = spanContext._parentId.toString('hex')
     }
+  }
+
+  _injectTraceparent (spanContext, carrier) {
+    const sampling = spanContext._sampling.priority >= AUTO_KEEP ? '01' : '00'
+    const traceId = spanContext._traceId.toString('hex').padStart(16, '0')
+    const spanId = spanContext._spanId.toString('hex').padStart(16, '0')
+    carrier[traceparentKey] = `01-${traceId}-${spanId}-${sampling}`
   }
 
   _extractSpanContext (carrier) {
