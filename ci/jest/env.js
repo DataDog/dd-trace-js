@@ -1,13 +1,26 @@
 const tracer = require('../../packages/dd-trace')
 const { ORIGIN_KEY } = require('../../packages/dd-trace/src/constants')
 
-tracer.init({
+const options = {
   startupLogs: false,
-  flushInterval: 400000,
   tags: {
     [ORIGIN_KEY]: 'ciapp-test'
   }
-})
+}
+
+if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED && (process.env.DATADOG_API_KEY || process.env.DD_API_KEY)) {
+  tracer.init({
+    ...options,
+    experimental: {
+      exporter: 'ci'
+    }
+  })
+} else {
+  tracer.init({
+    ...options,
+    flushInterval: 400000
+  })
+}
 
 tracer.use('fs', false)
 

@@ -3,7 +3,7 @@
 const URL = require('url').URL
 const log = require('../../log')
 const Writer = require('./writer')
-const Scheduler = require('./scheduler')
+const Scheduler = require('../scheduler')
 
 class AgentExporter {
   constructor ({ url, hostname, port, flushInterval, lookup, protocolVersion }, prioritySampler) {

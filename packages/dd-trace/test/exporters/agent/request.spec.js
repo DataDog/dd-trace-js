@@ -28,7 +28,7 @@ describe('request', () => {
     nock.enableNetConnect()
   })
 
-  it('should send an http request with a buffer', () => {
+  it('should send an http request with a buffer', (done) => {
     nock('http://test:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
@@ -38,7 +38,7 @@ describe('request', () => {
       .put('/path', { foo: 'bar' })
       .reply(200, 'OK')
 
-    return request({
+    request({
       protocol: 'http:',
       hostname: 'test',
       port: 123,
@@ -50,10 +50,11 @@ describe('request', () => {
       data: Buffer.from(JSON.stringify({ foo: 'bar' }))
     }, (err, res) => {
       expect(res).to.equal('OK')
+      done(err)
     })
   })
 
-  it('should send an http request with a buffer array', () => {
+  it('should send an http request with a buffer array', (done) => {
     nock('http://test:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
@@ -63,7 +64,7 @@ describe('request', () => {
       .put('/path', 'fizzbuzz')
       .reply(200, 'OK')
 
-    return request({
+    request({
       protocol: 'http:',
       hostname: 'test',
       port: 123,
@@ -75,6 +76,7 @@ describe('request', () => {
       data: [Buffer.from('fizz', 'utf-8'), Buffer.from('buzz', 'utf-8')]
     }, (err, res) => {
       expect(res).to.equal('OK')
+      done(err)
     })
   })
 
