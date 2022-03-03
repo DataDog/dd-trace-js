@@ -10,8 +10,7 @@ const origRequire = Module.prototype.require
 
 module.exports = Hook
 
-const moduleHooks = new Map()
-
+let moduleHooks = {}
 let cache = {}
 let patching = {}
 let patchedRequire = null
@@ -29,18 +28,18 @@ function Hook (modules, options, onrequire) {
 
   options = options || {}
 
-  this.modules = modules || [undefined]
+  this.modules = modules || ['']
   this.options = options
   this.onrequire = onrequire
 
   if (Array.isArray(modules)) {
     for (const mod of modules) {
-      const hooks = moduleHooks.get(mod)
+      const hooks = moduleHooks[mod]
 
       if (hooks) {
         hooks.push(onrequire)
       } else {
-        moduleHooks.set(mod, [onrequire])
+        moduleHooks[mod] = [onrequire]
       }
     }
   }
@@ -79,7 +78,7 @@ function Hook (modules, options, onrequire) {
     delete patching[filename]
 
     if (core) {
-      hooks = moduleHooks.get(filename)
+      hooks = moduleHooks[filename]
       if (!hooks) return exports // abort if module name isn't on whitelist
       name = filename
     } else {
@@ -88,7 +87,7 @@ function Hook (modules, options, onrequire) {
       name = stat.name
       basedir = stat.basedir
 
-      hooks = moduleHooks.get(name)
+      hooks = moduleHooks[name]
       if (!hooks) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
@@ -123,21 +122,21 @@ Hook.reset = function () {
   patchedRequire = null
   patching = {}
   cache = {}
-  moduleHooks.clear()
+  moduleHooks = {}
 }
 
 Hook.prototype.unhook = function () {
   for (const mod of this.modules) {
-    const hooks = moduleHooks.get(mod).filter(hook => hook !== this.onrequire)
+    const hooks = moduleHooks[mod].filter(hook => hook !== this.onrequire)
 
     if (hooks.length > 0) {
-      moduleHooks.set(mod, hooks)
+      moduleHooks[mod] = hooks
     } else {
-      moduleHooks.delete()
+      delete moduleHooks[mod]
     }
   }
 
-  if (moduleHooks.size === 0) {
+  if (Object.keys(moduleHooks).length === 0) {
     Hook.reset()
   }
 
