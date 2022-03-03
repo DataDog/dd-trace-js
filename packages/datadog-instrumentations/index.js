@@ -1,6 +1,7 @@
 'use strict'
 
 require('./src/amqplib')
+require('./src/amqp10')
 require('./src/bluebird')
 require('./src/bunyan')
 require('./src/couchbase')

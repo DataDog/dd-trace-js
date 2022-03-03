@@ -1,120 +1,100 @@
 'use strict'
 
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapSend (tracer, config) {
-  return function wrapSend (send) {
-    return function sendWithTrace (msg, options) {
-      const span = startSendSpan(tracer, config, this)
-
-      try {
-        const promise = tracer.scope().activate(span, () => {
-          return send.apply(this, arguments)
-        })
-
-        return wrapPromise(promise, span)
-      } catch (e) {
-        finish(span, e)
-        throw e
-      }
-    }
+class Amqp10Plugin extends Plugin {
+  static get name () {
+    return 'amqp10'
   }
-}
 
-function createWrapMessageReceived (tracer, config) {
-  return function wrapMessageReceived (messageReceived) {
-    return function messageReceivedWithTrace (transferFrame) {
-      if (!transferFrame || transferFrame.aborted || transferFrame.more) {
-        return messageReceived.apply(this, arguments)
-      }
+  constructor (...args) {
+    super(...args)
 
-      const span = startReceiveSpan(tracer, config, this)
+    this.addSub(`apm:amqp10:send:start`, ({ link }) => {
+      const address = getAddress(link)
+      const target = getShortName(link)
 
-      return tracer.scope().activate(span, () => {
-        messageReceived.apply(this, arguments)
-        span.finish()
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+
+      const span = this.tracer.startSpan('amqp.send', {
+        childOf,
+        tags: {
+          'resource.name': ['send', target].filter(v => v).join(' '),
+          'span.kind': 'producer',
+          'amqp.link.target.address': target,
+          'amqp.link.role': 'sender',
+          'out.host': address.host,
+          'out.port': address.port,
+          'service.name': this.config.service || `${this.tracer._service}-amqp`,
+          'amqp.link.name': link.name,
+          'amqp.link.handle': link.handle,
+          'amqp.connection.host': address.host,
+          'amqp.connection.port': address.port,
+          'amqp.connection.user': address.user
+        }
       })
-    }
-  }
-}
 
-function startSendSpan (tracer, config, link) {
-  const address = getAddress(link)
-  const target = getShortName(link)
+      analyticsSampler.sample(span, this.config.measured)
 
-  const span = tracer.startSpan(`amqp.send`, {
-    tags: {
-      'resource.name': ['send', target].filter(v => v).join(' '),
-      'span.kind': 'producer',
-      'amqp.link.target.address': target,
-      'amqp.link.role': 'sender',
-      'out.host': address.host,
-      'out.port': address.port
-    }
-  })
+      this.enter(span, store)
+    })
 
-  addTags(tracer, config, span, link)
+    this.addSub(`apm:amqp10:send:end`, () => {
+      this.exit()
+    })
 
-  analyticsSampler.sample(span, config.measured)
+    this.addSub(`apm:amqp10:send:error`, err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
 
-  return span
-}
+    this.addSub(`apm:amqp10:send:async-end`, () => {
+      const span = storage.getStore().span
+      span.finish()
+    })
 
-function startReceiveSpan (tracer, config, link) {
-  const source = getShortName(link)
-  const span = tracer.startSpan(`amqp.receive`, {
-    tags: {
-      'resource.name': ['receive', source].filter(v => v).join(' '),
-      'span.kind': 'consumer',
-      'span.type': 'worker',
-      'amqp.link.source.address': source,
-      'amqp.link.role': 'receiver'
-    }
-  })
+    this.addSub(`apm:amqp10:receive:start`, ({ link }) => {
+      const source = getShortName(link)
+      const address = getAddress(link)
 
-  addTags(tracer, config, span, link)
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
 
-  analyticsSampler.sample(span, config.measured, true)
+      const span = this.tracer.startSpan('amqp.receive', {
+        childOf,
+        tags: {
+          'resource.name': ['receive', source].filter(v => v).join(' '),
+          'span.kind': 'consumer',
+          'span.type': 'worker',
+          'amqp.link.source.address': source,
+          'amqp.link.role': 'receiver',
+          'service.name': this.config.service || `${this.tracer._service}-amqp`,
+          'amqp.link.name': link.name,
+          'amqp.link.handle': link.handle,
+          'amqp.connection.host': address.host,
+          'amqp.connection.port': address.port,
+          'amqp.connection.user': address.user
+        }
+      })
 
-  return span
-}
+      analyticsSampler.sample(span, this.config.measured)
 
-function addTags (tracer, config, span, link = {}) {
-  const address = getAddress(link)
+      this.enter(span, store)
+    })
 
-  span.addTags({
-    'service.name': config.service || `${tracer._service}-amqp`,
-    'amqp.link.name': link.name,
-    'amqp.link.handle': link.handle,
-    'amqp.connection.host': address.host,
-    'amqp.connection.port': address.port,
-    'amqp.connection.user': address.user
-  })
+    this.addSub(`apm:amqp10:receive:end`, () => {
+      storage.getStore().span.finish()
+      this.exit()
+    })
 
-  return span
-}
-
-function finish (span, error) {
-  if (error) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
+    this.addSub(`apm:amqp10:receive:error`, err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
     })
   }
-
-  span.finish()
-}
-
-function wrapPromise (promise, span) {
-  if (!promise) {
-    finish(span)
-    return promise
-  }
-
-  promise.then(() => finish(span), e => finish(span, e))
-
-  return promise
 }
 
 function getShortName (link) {
@@ -129,27 +109,4 @@ function getAddress (link) {
   return link.session.connection.address || {}
 }
 
-module.exports = [
-  {
-    name: 'amqp10',
-    file: 'lib/sender_link.js',
-    versions: ['>=3'],
-    patch (SenderLink, tracer, config) {
-      this.wrap(SenderLink.prototype, 'send', createWrapSend(tracer, config))
-    },
-    unpatch (SenderLink) {
-      this.unwrap(SenderLink.prototype, 'send')
-    }
-  },
-  {
-    name: 'amqp10',
-    file: 'lib/receiver_link.js',
-    versions: ['>=3'],
-    patch (ReceiverLink, tracer, config) {
-      this.wrap(ReceiverLink.prototype, '_messageReceived', createWrapMessageReceived(tracer, config))
-    },
-    unpatch (ReceiverLink) {
-      this.unwrap(ReceiverLink.prototype, '_messageReceived')
-    }
-  }
-]
+module.exports = Amqp10Plugin

@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -11,7 +10,7 @@ describe('Plugin', () => {
   let callbackPolicy
 
   describe('amqp10', () => {
-    withVersions(plugin, 'amqp10', version => {
+    withVersions('amqp10', 'amqp10', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -25,7 +24,7 @@ describe('Plugin', () => {
         return promise
           .then(() => {
             client.disconnect()
-            agent.close()
+            agent.close({ ritmReset: false })
             agent.wipe()
           })
       })
@@ -131,7 +130,6 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-
                 expect(span).to.have.property('name', 'amqp.receive')
                 expect(span).to.have.property('service', 'test-amqp')
                 expect(span).to.have.property('resource', 'receive amq.topic')
