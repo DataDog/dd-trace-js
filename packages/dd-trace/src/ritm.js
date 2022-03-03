@@ -110,7 +110,7 @@ function Hook (modules, options, onrequire) {
     cache[filename].original = exports
 
     for (const hook of hooks) {
-      cache[filename].exports = hook(exports, name, basedir)
+      cache[filename].exports = hook(cache[filename].exports, name, basedir)
     }
 
     return cache[filename].exports

@@ -23,8 +23,7 @@ exports.addHook = function addHook ({ name, versions, file }, hook) {
   const fullFilename = filename(name, file)
   const loaderHook = (moduleExports, moduleName, moduleBaseDir) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
-    const moduleVersion = getVersion(moduleBaseDir)
-    if (moduleName !== fullFilename || !matchVersion(moduleVersion, versions)) {
+    if (moduleName !== fullFilename || !matchVersion(getVersion(moduleBaseDir), versions)) {
       return moduleExports
     }
     return hook(moduleExports)
