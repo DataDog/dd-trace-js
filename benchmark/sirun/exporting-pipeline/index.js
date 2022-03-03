@@ -8,13 +8,15 @@ const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler
 const id = require('../../../packages/dd-trace/src/id')
 const hostname = require('os').hostname()
 
-const prioritySampler = new PrioritySampler()
-const exporter = new Exporter({
+const config = {
   url: 'http://localhost:8126',
   flushInterval: 2000,
+  flushMinSpans: 1000,
   protocolVersion: process.env.ENCODER_VERSION
-}, prioritySampler)
-const sp = new SpanProcessor(exporter, prioritySampler)
+}
+const prioritySampler = new PrioritySampler()
+const exporter = new Exporter(config, prioritySampler)
+const sp = new SpanProcessor(exporter, prioritySampler, config)
 
 const finished = []
 const trace = { finished, started: finished, tags: {} }

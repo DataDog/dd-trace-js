@@ -69,6 +69,7 @@ tracer.init({
     port: 8888
   },
   flushInterval: 1000,
+  flushMinSpans: 500,
   lookup: () => {},
   sampleRate: 0.1,
   service: 'test',

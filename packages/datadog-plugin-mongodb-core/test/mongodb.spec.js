@@ -108,11 +108,16 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize the query', done => {
+          it('should sanitize the query', function (done) {
+            const queryObjectDepth = 200
+            const maxSupportedObjectDepth = 20
+
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const query = '{"foo":"?","bar":{"baz":"?"}}'
+                const query = (`{"foo":"?","bar":{"baz":"?"},"deep":${
+                  '{"x":'.repeat(maxSupportedObjectDepth) + '"?"' + '}'.repeat(maxSupportedObjectDepth)
+                }}`)
                 const resource = `find test.${collectionName} ${query}`
 
                 expect(span).to.have.property('resource', resource)
@@ -125,7 +130,10 @@ describe('Plugin', () => {
               foo: 1,
               bar: {
                 baz: [1, 2, 3]
-              }
+              },
+              deep: Array(queryObjectDepth).fill('x').reduce((acc) => {
+                return { x: acc }
+              }, 'sanitize me')
             }).toArray()
           })
 
