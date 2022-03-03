@@ -111,7 +111,7 @@ class Config {
     )
     const DD_TRACE_TRACEPARENT_ENABLED = coalesce(
       options.experimental && options.experimental.traceparent,
-      process.env.DD_TRACE_TRACEPARENT_ENABLED,
+      process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED,
       false
     )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
