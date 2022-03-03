@@ -106,9 +106,9 @@ class TextMapPropagator {
 
   _extractSpanContext (carrier) {
     return this._extractDatadogContext(carrier) ||
+      this._extractTraceparentContext(carrier) ||
       this._extractB3Context(carrier) ||
-      this._extractSqsdContext(carrier) ||
-      this._extractTraceparentContext(carrier)
+      this._extractSqsdContext(carrier)
   }
 
   _extractDatadogContext (carrier) {
