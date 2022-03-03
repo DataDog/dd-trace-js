@@ -38,8 +38,8 @@ class Sns {
       const ddInfo = {}
       tracer.inject(span, 'text_map', ddInfo)
       injectPath.MessageAttributes._datadog = {
-        DataType: 'String',
-        StringValue: JSON.stringify(ddInfo)
+        DataType: 'Binary',
+        BinaryValue: JSON.stringify(ddInfo) // BINARY types are automatically base64 encoded
       }
     }
   }
