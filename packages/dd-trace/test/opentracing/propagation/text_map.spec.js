@@ -387,7 +387,7 @@ describe('TextMapPropagator', () => {
         delete textMap['x-datadog-parent-id']
       })
 
-      it('should skip extraction without the feature flag, () => {
+      it('should skip extraction without the feature flag', () => {
         textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
         config.experimental.traceparent = false
 
