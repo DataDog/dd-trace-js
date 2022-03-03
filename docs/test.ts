@@ -32,8 +32,6 @@ let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
-  debug: true,
-  enabled: true,
   logInjection: true,
   startupLogs: false,
   env: 'test',
@@ -71,6 +69,7 @@ tracer.init({
     port: 8888
   },
   flushInterval: 1000,
+  flushMinSpans: 500,
   lookup: () => {},
   sampleRate: 0.1,
   service: 'test',
@@ -78,7 +77,16 @@ tracer.init({
     foo: 'bar'
   },
   reportHostname: true,
-  logLevel: 'debug'
+  logLevel: 'debug',
+  appsec: true
+});
+
+tracer.init({
+  appsec: {
+    enabled: true,
+    rules: './rules.json',
+    rateLimit: 100
+  }
 });
 
 const httpOptions = {
@@ -118,6 +126,7 @@ const http2ClientOptions = {
 const graphqlOptions = {
   service: 'test',
   depth: 2,
+  source: true,
   variables: ({ foo, baz }) => ({ foo }),
   collapse: false,
   signature: false,

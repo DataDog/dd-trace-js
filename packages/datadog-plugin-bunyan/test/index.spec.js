@@ -2,7 +2,6 @@
 
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let logger
@@ -24,14 +23,14 @@ describe('Plugin', () => {
   }
 
   describe('bunyan', () => {
-    withVersions(plugin, 'bunyan', version => {
+    withVersions('bunyan', 'bunyan', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('bunyan')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
@@ -82,6 +81,16 @@ describe('Plugin', () => {
             expect(stream.write).to.have.been.called
             expect(record).to.not.have.property('dd')
           })
+        })
+
+        it('should skip injection without an active span', () => {
+          logger.info('message')
+
+          expect(stream.write).to.have.been.called
+
+          const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+          expect(record).to.not.have.property('dd')
         })
       })
     })

@@ -3,6 +3,8 @@
 const expect = require('chai').expect
 const sinon = require('sinon')
 
+const pprof = require('@datadog/pprof')
+
 const INTERVAL = 65 * 1000
 
 describe('profiler', () => {
@@ -79,41 +81,43 @@ describe('profiler', () => {
     clock.restore()
   })
 
-  it('should start the internal time profilers', () => {
-    profiler.start({ profilers, exporters })
+  it('should start the internal time profilers', async () => {
+    await profiler._start({ profilers, exporters })
 
     sinon.assert.calledOnce(cpuProfiler.start)
     sinon.assert.calledOnce(heapProfiler.start)
   })
 
-  it('should start only once', () => {
-    profiler.start({ profilers, exporters })
-    profiler.start({ profilers, exporters })
+  it('should start only once', async () => {
+    await profiler._start({ profilers, exporters })
+    await profiler._start({ profilers, exporters })
 
     sinon.assert.calledOnce(cpuProfiler.start)
     sinon.assert.calledOnce(heapProfiler.start)
   })
 
-  it('should allow configuring exporters by string name', () => {
-    profiler.start({ exporters: 'agent' })
-    expect(profiler._config.exporters[0].export).to.be.a('function')
-
-    profiler.start({ exporters: ['agent'] })
+  it('should allow configuring exporters by string name', async () => {
+    await profiler._start({ exporters: 'agent' })
     expect(profiler._config.exporters[0].export).to.be.a('function')
   })
 
-  it('should stop the internal profilers', () => {
-    profiler.start({ profilers, exporters })
+  it('should allow configuring exporters by string array', async () => {
+    await profiler._start({ exporters: ['agent'] })
+    expect(profiler._config.exporters[0].export).to.be.a('function')
+  })
+
+  it('should stop the internal profilers', async () => {
+    await profiler._start({ profilers, exporters })
     profiler.stop()
 
     sinon.assert.calledOnce(cpuProfiler.stop)
     sinon.assert.calledOnce(heapProfiler.stop)
   })
 
-  it('should stop when starting failed', () => {
+  it('should stop when starting failed', async () => {
     cpuProfiler.start.throws()
 
-    profiler.start({ profilers, exporters, logger })
+    await profiler._start({ profilers, exporters, logger })
 
     sinon.assert.calledOnce(cpuProfiler.stop)
     sinon.assert.calledOnce(heapProfiler.stop)
@@ -124,7 +128,7 @@ describe('profiler', () => {
     const rejected = Promise.reject(new Error('boom'))
     cpuProfiler.encode.returns(rejected)
 
-    profiler.start({ profilers, exporters, logger })
+    await profiler._start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
 
@@ -136,7 +140,7 @@ describe('profiler', () => {
   })
 
   it('should flush when the interval is reached', async () => {
-    profiler.start({ profilers, exporters })
+    await profiler._start({ profilers, exporters })
 
     clock.tick(INTERVAL)
 
@@ -146,7 +150,7 @@ describe('profiler', () => {
   })
 
   it('should export profiles', async () => {
-    profiler.start({ profilers, exporters, tags: { foo: 'foo' } })
+    await profiler._start({ profilers, exporters, tags: { foo: 'foo' } })
 
     clock.tick(INTERVAL)
 
@@ -162,8 +166,8 @@ describe('profiler', () => {
     expect(tags).to.have.property('foo', 'foo')
   })
 
-  it('should not start when disabled', () => {
-    profiler.start({ profilers, exporters, enabled: false })
+  it('should not start when disabled', async () => {
+    await profiler._start({ profilers, exporters, enabled: false })
 
     sinon.assert.notCalled(cpuProfiler.start)
     sinon.assert.notCalled(heapProfiler.start)
@@ -172,7 +176,7 @@ describe('profiler', () => {
   it('should log exporter errors', async () => {
     exporter.export.rejects(new Error('boom'))
 
-    profiler.start({ profilers, exporters, logger })
+    await profiler._start({ profilers, exporters, logger })
 
     clock.tick(INTERVAL)
 
@@ -193,7 +197,7 @@ describe('profiler', () => {
   })
 
   it('should have a new start time for each capture', async () => {
-    profiler.start({ profilers, exporters })
+    await profiler._start({ profilers, exporters })
 
     clock.tick(INTERVAL)
     await waitForExport()
@@ -217,5 +221,20 @@ describe('profiler', () => {
     expect(end2 - start2).to.equal(65000)
 
     sinon.assert.calledOnce(exporter.export)
+  })
+
+  it('should not pass source mapper to profilers when disabled', async () => {
+    await profiler._start({ profilers, exporters, sourceMap: false })
+
+    const options = profilers[0].start.args[0][0]
+    expect(options).to.have.property('mapper', undefined)
+  })
+
+  it('should pass source mapper to profilers when enabled', async () => {
+    await profiler._start({ profilers, exporters, sourceMap: true })
+
+    const options = profilers[0].start.args[0][0]
+    expect(options).to.have.property('mapper')
+      .with.instanceOf(pprof.SourceMapper)
   })
 })

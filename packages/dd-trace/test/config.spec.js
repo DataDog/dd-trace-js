@@ -57,6 +57,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
+    expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -206,6 +207,7 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
+      flushMinSpans: 500,
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
@@ -240,6 +242,7 @@ describe('Config', () => {
     expect(config.tags).to.have.property('version', '0.1.0')
     expect(config.tags).to.have.property('env', 'test')
     expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
@@ -271,6 +274,7 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
+      flushMinSpans: 500,
       plugins: false
     })
 
@@ -284,6 +288,7 @@ describe('Config', () => {
     expect(config).to.have.property('logger', logger)
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('plugins', false)
   })
 
@@ -306,6 +311,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
@@ -335,6 +341,7 @@ describe('Config', () => {
       },
       runtimeMetrics: false,
       reportHostname: false,
+      flushMinSpans: 500,
       service: 'test',
       version: '1.0.0',
       env: 'development',
@@ -364,6 +371,7 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
+    expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
@@ -538,7 +546,7 @@ describe('Config', () => {
         const config = new Config()
 
         expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
-        expect(config.url.toString()).to.equal('file:///var/run/datadog/apm.socket')
+        expect(config.url.toString()).to.equal('unix:///var/run/datadog/apm.socket')
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {

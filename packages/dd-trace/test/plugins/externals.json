@@ -130,5 +130,15 @@
       "name": "pino-pretty",
       "dep": true
     }
+  ],
+  "q": [
+    {
+      "name": "collections",
+      "versions": ["5"]
+    },
+    {
+      "name": "q",
+      "versions": ["2"]
+    }
   ]
 }

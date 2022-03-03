@@ -7,6 +7,9 @@ const { ERROR } = require('../../../ext/tags')
 const kinds = require('./kinds')
 const { addMethodTags, addMetadataTags, getFilter } = require('./util')
 
+const patched = new WeakSet()
+const instances = new WeakMap()
+
 function createWrapMakeRequest (tracer, config, methodKind) {
   const filter = getFilter(config, 'metadata')
 
@@ -80,7 +83,7 @@ function wrapClientConstructor (tracer, config, ServiceClient, methods) {
 }
 
 function wrapMethod (tracer, config, method, path, methodKind) {
-  if (typeof method !== 'function' || method._datadog_patched) {
+  if (typeof method !== 'function' || patched.has(method)) {
     return method
   }
 
@@ -94,7 +97,7 @@ function wrapMethod (tracer, config, method, path, methodKind) {
 
   Object.assign(methodWithTrace, method)
 
-  methodWithTrace._datadog_patched = true
+  patched.add(methodWithTrace)
 
   return methodWithTrace
 }
@@ -186,7 +189,9 @@ function startSpan (tracer, config, path, methodKind) {
 }
 
 function ensureMetadata (client, args, index) {
-  if (!client || !client._datadog) return args
+  const grpc = getGrpc(client)
+
+  if (!client || !grpc) return args
 
   const meta = args[index]
   const normalized = []
@@ -196,7 +201,7 @@ function ensureMetadata (client, args, index) {
   }
 
   if (!meta || !meta.constructor || meta.constructor.name !== 'Metadata') {
-    normalized.push(new client._datadog.grpc.Metadata())
+    normalized.push(new grpc.Metadata())
   }
 
   if (meta) {
@@ -238,6 +243,15 @@ function getMethodKind (definition) {
   return kinds.unary
 }
 
+function getGrpc (client) {
+  let proto = client
+
+  do {
+    const instance = instances.get(proto)
+    if (instance) return instance
+  } while ((proto = Object.getPrototypeOf(proto)))
+}
+
 function patch (grpc, tracer, config) {
   if (config.client === false) return
 
@@ -245,7 +259,7 @@ function patch (grpc, tracer, config) {
 
   const proto = grpc.Client.prototype
 
-  proto._datadog = { grpc }
+  instances.set(proto, grpc)
 
   this.wrap(proto, 'makeBidiStreamRequest', createWrapMakeRequest(tracer, config, kinds.bidi))
   this.wrap(proto, 'makeClientStreamRequest', createWrapMakeRequest(tracer, config, kinds.clientStream))
@@ -256,7 +270,7 @@ function patch (grpc, tracer, config) {
 function unpatch (grpc) {
   const proto = grpc.Client.prototype
 
-  delete proto._datadog
+  instances.delete(proto)
 
   this.unwrap(proto, 'makeBidiStreamRequest')
   this.unwrap(proto, 'makeClientStreamRequest')

@@ -2,16 +2,7 @@
 
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const semver = require('semver')
-
-const withAdditionalExports = (additionalExports, fn) => {
-  describe('with the default export', () => fn())
-
-  for (const additionalExport of additionalExports) {
-    describe(`with export.${additionalExport}`, () => fn(additionalExport))
-  }
-}
 
 describe('Plugin', () => {
   let logger
@@ -20,21 +11,19 @@ describe('Plugin', () => {
   let span
 
   describe('pino', () => {
-    withVersions(plugin, 'pino', version => {
+    withVersions('pino', 'pino', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('pino')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
-      withAdditionalExports(['default', 'pino'], additionalExport => {
-        function setup (version, options) {
-          const pino = additionalExport
-            ? require(`../../../versions/pino@${version}`).get()[additionalExport]
-            : require(`../../../versions/pino@${version}`).get()
+      withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
+        function setup (options) {
+          const pino = getExport()
 
           span = tracer.startSpan('test')
 
@@ -48,7 +37,7 @@ describe('Plugin', () => {
 
         describe('without configuration', () => {
           beforeEach(function () {
-            setup(version)
+            setup()
 
             if (!logger) {
               this.skip()
@@ -70,7 +59,7 @@ describe('Plugin', () => {
 
           if (semver.intersects(version, '>=5')) {
             it('should not alter the default behavior with pretty print', () => {
-              setup(version, { prettyPrint: true })
+              setup({ prettyPrint: true })
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
@@ -91,7 +80,7 @@ describe('Plugin', () => {
           beforeEach(function () {
             tracer._tracer._logInjection = true
 
-            setup(version)
+            setup()
 
             if (!logger) {
               this.skip()
@@ -147,13 +136,24 @@ describe('Plugin', () => {
             })
           })
 
+          it('should skip injection when there is no active span', () => {
+            logger.info('message')
+
+            expect(stream.write).to.have.been.called
+
+            const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+            expect(record).to.not.have.property('dd')
+            expect(record).to.have.deep.property('msg', 'message')
+          })
+
           if (semver.intersects(version, '>=5.14.0')) {
             it('should not alter pino mixin behavior', () => {
               const opts = { mixin: () => ({ addedMixin: true }) }
 
               sinon.spy(opts, 'mixin')
 
-              setup(version, opts)
+              setup(opts)
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
@@ -179,7 +179,7 @@ describe('Plugin', () => {
           //       and we cannot control the version of pino-pretty internally required by pino
           if (semver.intersects(version, '>=5')) {
             it('should add the trace identifiers to logger instances with pretty print', () => {
-              setup(version, { prettyPrint: true })
+              setup({ prettyPrint: true })
 
               tracer.scope().activate(span, () => {
                 logger.info('message')

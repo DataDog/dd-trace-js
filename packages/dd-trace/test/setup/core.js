@@ -19,6 +19,7 @@ global.sinon = sinon
 global.expect = chai.expect
 global.proxyquire = proxyquire
 global.withVersions = withVersions
+global.withExports = withExports
 
 afterEach(() => {
   agent.reset()
@@ -45,7 +46,7 @@ function loadInst (plugin) {
 
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
-  const names = [].concat(plugin).map(instrumentation => instrumentation.name)
+  const names = instrumentations.map(instrumentation => instrumentation.name)
 
   modules = [].concat(modules)
 
@@ -106,4 +107,21 @@ function withVersions (plugin, modules, range, cb) {
         })
       })
   })
+}
+
+function withExports (moduleName, version, exportNames, versionRange, fn) {
+  const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()
+  describe('with the default export', () => fn(getExport))
+
+  if (typeof versionRange === 'function') {
+    fn = versionRange
+    versionRange = '*'
+  }
+
+  if (!semver.intersects(version, versionRange)) return
+
+  for (const exportName of exportNames) {
+    const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()[exportName]
+    describe(`with exports.${exportName}`, () => fn(getExport))
+  }
 }

@@ -187,18 +187,6 @@ export declare interface SamplingRule {
  */
 export declare interface TracerOptions {
   /**
-   * Whether to enable the tracer.
-   * @default true
-   */
-  enabled?: boolean;
-
-  /**
-   * Enable debug logging in the tracer.
-   * @default false
-   */
-  debug?: boolean;
-
-  /**
    * Whether to enable trace ID injection in log records to be able to correlate
    * traces with logs.
    * @default false
@@ -277,6 +265,12 @@ export declare interface TracerOptions {
    * @default 2000
    */
   flushInterval?: number;
+
+  /**
+   *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
+   * @default 1000
+   */
+   flushMinSpans?: number;
 
   /**
    * Whether to enable runtime metrics.
@@ -407,6 +401,28 @@ export declare interface TracerOptions {
    * @default true
    */
   orphanable?: boolean
+
+  /**
+   * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
+   */
+  appsec?: boolean | {
+    /**
+     * Whether to enable AppSec.
+     * @default false
+     */
+    enabled?: boolean,
+
+    /**
+     * Specifies a path to a custom rules file.
+     */
+    rules?: string,
+
+    /**
+     * Controls the maximum amount of traces sampled by AppSec attacks, per second.
+     * @default 100
+     */
+    rateLimit?: number
+  };
 }
 
 /** @hidden */

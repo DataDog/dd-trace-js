@@ -1,3 +1,5 @@
+'use strict'
+
 const log = require('./log')
 const format = require('./format')
 
@@ -5,24 +7,37 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler) {
+  constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
+    this._config = config
   }
 
   process (span) {
     const spanContext = span.context()
+    const active = []
+    const formatted = []
     const trace = spanContext._trace
+    const { flushMinSpans } = this._config
+    const { started, finished } = trace
 
-    if (trace.started.length === trace.finished.length) {
+    if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
-      const formattedSpans = trace.finished.map(format)
-      this._exporter.export(formattedSpans)
-      this._erase(trace)
+
+      for (const span of started) {
+        if (span._duration !== undefined) {
+          formatted.push(format(span))
+        } else {
+          active.push(span)
+        }
+      }
+
+      this._exporter.export(formatted)
+      this._erase(trace, active)
     }
   }
 
-  _erase (trace) {
+  _erase (trace, active) {
     if (process.env.DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
       const started = new Set()
       const startedIds = new Set()
@@ -98,7 +113,7 @@ class SpanProcessor {
       span.context()._tags = {}
     }
 
-    trace.started = []
+    trace.started = active
     trace.finished = []
   }
 }

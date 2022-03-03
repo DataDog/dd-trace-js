@@ -88,4 +88,14 @@ describe('profilers/native/cpu', () => {
 
     sinon.assert.calledOnce(pprof.encode)
   })
+
+  it('should use mapper if given', () => {
+    const profiler = new NativeCpuProfiler()
+
+    const mapper = {}
+
+    profiler.start({ mapper })
+
+    sinon.assert.calledWith(pprof.time.start, 10000, null, mapper, false)
+  })
 })

@@ -7,6 +7,7 @@ const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/
 const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
+const web = require('../plugins/util/web')
 
 function enable (config) {
   try {
@@ -39,7 +40,7 @@ function enable (config) {
 
 function incomingHttpStartTranslator (data) {
   // TODO: get span from datadog-core storage instead
-  const topSpan = data.req._datadog && data.req._datadog.span
+  const topSpan = web.root(data.req)
   if (topSpan) {
     topSpan.addTags({
       '_dd.appsec.enabled': 1,
@@ -76,6 +77,10 @@ function incomingHttpEndTranslator (data) {
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
+  if (data.req.body !== undefined && data.req.body !== null) {
+    payload[addresses.HTTP_INCOMING_BODY] = data.req.body
+  }
+
   if (data.req.query && typeof data.req.query === 'object') {
     payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
   }
