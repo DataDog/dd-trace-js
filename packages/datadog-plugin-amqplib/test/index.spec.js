@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -9,7 +8,7 @@ describe('Plugin', () => {
   let channel
 
   describe('amqplib', () => {
-    withVersions(plugin, 'amqplib', version => {
+    withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -24,7 +23,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         describe('when using a callback', () => {
@@ -49,7 +48,6 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-
                   expect(span).to.have.property('name', 'amqp.command')
                   expect(span).to.have.property('service', 'test-amqp')
                   expect(span).to.have.property('resource', 'queue.declare test')
@@ -160,7 +158,6 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-
                   expect(span).to.have.property('name', 'amqp.command')
                   expect(span).to.have.property('service', 'test-amqp')
                   expect(span).to.have.property('resource', `basic.deliver ${queue}`)
@@ -256,7 +253,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
