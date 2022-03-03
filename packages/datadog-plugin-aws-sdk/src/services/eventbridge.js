@@ -28,12 +28,8 @@ class EventBridge {
       request.params.Entries &&
       request.params.Entries.length > 0) {
       try {
-        // eslint-disable-next-line no-console
-        console.log('AGOCS 1')
         const currentMilliseconds = new Date().getMilliseconds()
         request.params.Entries.forEach((entry, index) => {
-          // eslint-disable-next-line no-console
-          console.log('AGOCS 2')
           const details = JSON.parse(entry.Detail)
           details._datadog = {}
           tracer.inject(span, 'text_map', details._datadog)
