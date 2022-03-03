@@ -157,16 +157,18 @@ describe('TextMapPropagator', () => {
     it('should inject the traceparent header', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: id('0000000000000123'),
-        spanId: id('0000000000000456'),
+        traceId: id('123', 16),
+        spanId: id('456', 16),
         sampling: {
           priority: USER_KEEP
         }
       })
 
+      config.experimental.traceparent = true
+
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('traceparent', '01-0000000000000123-0000000000000456-01')
+      expect(carrier).to.have.property('traceparent', '01-00000000000000000000000000000123-0000000000000456-01')
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {
@@ -434,8 +436,18 @@ describe('TextMapPropagator', () => {
         delete textMap['x-datadog-parent-id']
       })
 
+      it('should skip extraction the header', () => {
+        textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
+        config.experimental.traceparent = false
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        expect(spanContext).to.be.null
+      })
+
       it('should extract the header', () => {
         textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
+        config.experimental.traceparent = true
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)

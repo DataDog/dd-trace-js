@@ -117,8 +117,10 @@ class TextMapPropagator {
   }
 
   _injectTraceparent (spanContext, carrier) {
+    if (!this._config.experimental.traceparent) return
+
     const sampling = spanContext._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = spanContext._traceId.toString('hex').padStart(16, '0')
+    const traceId = spanContext._traceId.toString('hex').padStart(32, '0')
     const spanId = spanContext._spanId.toString('hex').padStart(16, '0')
     carrier[traceparentKey] = `01-${traceId}-${spanId}-${sampling}`
   }
@@ -182,6 +184,8 @@ class TextMapPropagator {
   }
 
   _extractTraceparentContext (carrier) {
+    if (!this._config.experimental.traceparent) return null
+
     const headerValue = carrier[traceparentKey]
     if (!headerValue) {
       return null
