@@ -22,7 +22,7 @@ describe('pkg', () => {
   })
 
   it('should load the service name from the main module', () => {
-    expect(pkg.name).to.equal('mocha')
+    expect(pkg.name).to.equal('dd-trace')
   })
 
   it('should load the version number from the main module', () => {

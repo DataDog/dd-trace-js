@@ -23,7 +23,7 @@ describe('Plugin', function () {
         })
 
         after(() => {
-          listener.close()
+          listener && listener.close()
           return agent.close()
         })
 

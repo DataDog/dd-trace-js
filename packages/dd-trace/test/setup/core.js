@@ -1,5 +1,9 @@
 'use strict'
 
+if ('TAP_CHILD_ID' in process.env) {
+  require('tap').mochaGlobals()
+}
+
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')

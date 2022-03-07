@@ -126,6 +126,7 @@ describe('profiler', () => {
 
   it('should stop when capturing failed', async () => {
     const rejected = Promise.reject(new Error('boom'))
+    rejected.catch(e => {}) // avoid unhandled rejection error
     cpuProfiler.encode.returns(rejected)
 
     await profiler._start({ profilers, exporters, logger })

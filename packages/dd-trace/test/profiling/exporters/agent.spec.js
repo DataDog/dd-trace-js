@@ -48,7 +48,7 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
-const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
+const describeOnUnix = os.platform() === 'win32' ? () => {} : describe
 
 describe('exporters/agent', () => {
   let AgentExporter
@@ -236,7 +236,7 @@ describe('exporters/agent', () => {
     })
 
     it('should log exports and handle http errors gracefully', async function () {
-      this.timeout(10000)
+      this.setTimeout(10000)
       const expectedLogs = [
         /^Building agent export report: (\n {2}[a-z-_]+(\[\])?: [a-z0-9-TZ:.]+)+$/m,
         /^Adding cpu profile to agent export:( [0-9a-f]{2})+$/,
