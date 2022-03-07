@@ -199,6 +199,7 @@ class EncoderV4 {
     length += this._encodeMetaProperty(bytes, 'env', this._config.env)
     length += this._encodeMetaProperty(bytes, 'version', this._config.version)
     length += this._encodeMetaProperty(bytes, 'runtime-id', runtimeId)
+    length += this._encodeMetaProperty(bytes, 'span.kind', span.kind)
     length += this._encodeMetaProperty(bytes, '_dd.origin', span.trace.origin)
     length += this._encodeMetaProperty(bytes, '_dd.hostname', this._config.hostname)
 
@@ -249,6 +250,7 @@ class EncoderV4 {
   _encodeMetrics (bytes, span) {
     const buffer = bytes.buffer
     const offset = bytes.length
+    const measured = span.measured || span.kind !== 'internal'
 
     bytes.reserve(5)
     bytes.length += 5
@@ -256,7 +258,7 @@ class EncoderV4 {
     let length = 0
 
     length += this._encodeMetricsProperty(bytes, '_sampling_priority_v1', span.trace.samplingPriority)
-    length += this._encodeMetricsProperty(bytes, '_dd.measured', span.measured ? 1 : 0)
+    length += this._encodeMetricsProperty(bytes, '_dd.measured', measured)
 
     for (const key in span.tracer.config.metrics) {
       length += this._encodeMetricsProperty(bytes, key, span.tracer.config.metrics[key])

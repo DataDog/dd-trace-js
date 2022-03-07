@@ -79,11 +79,14 @@ class Span {
   }
 
   finish (finishTime) {
-    const trace = this.trace
+    if (this.duration > 0) return
 
-    this.duration = finishTime
+    const trace = this.trace
+    const duration = finishTime
       ? finishTime - trace.start
       : now() - trace.ticks
+
+    this.duration = Math.max(duration, 1)
 
     trace.finished++
 

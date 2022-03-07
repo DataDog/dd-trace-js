@@ -37,6 +37,7 @@ class Formatter {
     setTag(spanData, 'env', this._config.env)
     setTag(spanData, 'version', this._config.version)
     setTag(spanData, 'runtime-id', runtimeId)
+    setTag(spanData, 'span.kind', span.kind)
     setTag(spanData, '_dd.origin', span.trace.origin)
     setTag(spanData, '_dd.hostname', this._config.hostname)
 
@@ -60,8 +61,10 @@ class Formatter {
   }
 
   _extractMetrics (spanData, span) {
+    const measured = span.measured || span.kind !== 'internal'
+
     setTag(spanData, '_sampling_priority_v1', span.trace.samplingPriority)
-    setTag(spanData, '_dd.measured', span.measured ? 1 : 0)
+    setTag(spanData, '_dd.measured', measured ? 1 : 0)
     addTags(span.tracer.config.metrics)
     addTags(span.metrics)
 

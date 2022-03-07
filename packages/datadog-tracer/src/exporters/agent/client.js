@@ -78,6 +78,7 @@ class Client {
 
       req.setTimeout(timeout, req.abort)
       req.write(data)
+      req.end()
     }
 
     makeRequest(() => makeRequest(done)) // retry once on error
