@@ -19,8 +19,6 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-
-// is this needed in cucumber too???
 const { AUTO_KEEP } = require('../../../ext/priority')
 
 const skippedTests = new WeakSet()
@@ -96,7 +94,7 @@ class MochaPlugin extends Plugin {
       this.exit()
     })
 
-    // programmatically skipped tests (that do go through `runTest`)
+    // This covers programmatically skipped tests (that do go through `runTest`)
     this.addSub('ci:mocha:run-test:skip', () => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, 'skip')
