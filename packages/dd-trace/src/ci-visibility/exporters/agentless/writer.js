@@ -1,6 +1,4 @@
 'use strict'
-const retry = require('retry')
-
 const request = require('./request')
 const log = require('../../../log')
 
@@ -11,9 +9,6 @@ class Writer {
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })
-
-    this._backoffTime = 1000
-    this._backoffTries = numRetries
   }
 
   append (trace) {
@@ -23,27 +18,14 @@ class Writer {
   }
 
   _sendPayload (data, done) {
-    const operation = retry.operation({
-      retries: this._backoffTries,
-      minTimeout: this._backoffTime,
-      randomize: true
-    })
-
-    operation.attempt((attempt) => {
-      const timeout = this._backoffTime * Math.pow(2, attempt)
-      makeRequest(data, this._url, timeout, (err, res) => {
-        if (operation.retry(err)) {
-          log.error(err)
-          return
-        }
-        if (err) {
-          log.error(err)
-          done()
-          return
-        }
-        log.debug(`Response from the intake: ${res}`)
+    makeRequest(data, this._url, 2000, (err, res) => {
+      if (err) {
+        log.error(err)
         done()
-      })
+        return
+      }
+      log.debug(`Response from the intake: ${res}`)
+      done()
     })
   }
 
