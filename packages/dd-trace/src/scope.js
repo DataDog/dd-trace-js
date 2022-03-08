@@ -18,38 +18,32 @@ class Scope {
 
   active () {
     const store = storage.getStore()
+    const span = store && store.span
 
-    return (store && new Span(this._tracer, store.span)) || null
+    if (!span) return null
+
+    return span._span || new Span(this._tracer, span)
   }
 
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    span = span && typeof span.context === 'function' && span.context()._span
-
     const oldStore = storage.getStore()
-    const oldSpan = oldStore && oldStore.span
 
-    if (oldStore) {
-      oldStore.span = span
-    } else {
-      storage.enterWith({ span })
-    }
+    span = span && span._spanContext && span._spanContext._span
+
+    storage.enterWith({ ...oldStore, span })
 
     try {
       return callback()
     } catch (e) {
-      if (span && typeof span.setTag === 'function') {
-        span.setTag('error', e)
+      if (span && typeof span.addError === 'function') {
+        span.addError(e)
       }
 
       throw e
     } finally {
-      if (oldStore) {
-        oldStore.span = oldSpan
-      } else {
-        storage.enterWith(oldStore)
-      }
+      storage.enterWith(oldStore)
     }
   }
 

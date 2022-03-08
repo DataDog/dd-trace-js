@@ -21,6 +21,8 @@ class DatadogSpan extends Span {
   constructor (parentTracer, span) {
     super()
 
+    span._span = this
+
     this._parentTracer = parentTracer
     this._span = span
     this._spanContext = new SpanContext(span)
