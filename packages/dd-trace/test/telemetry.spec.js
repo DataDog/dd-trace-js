@@ -24,23 +24,14 @@ describe('telemetry', () => {
     }
 
     traceAgent = http.createServer(async (req, res) => {
-      try {
-        const chunks = []
-        for await (const chunk of req) {
-          chunks.push(chunk)
-        }
-        req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        traceAgent.reqs.push(req)
-        traceAgent.emit('handled-req')
-        await traceAgent.handlers.shift()(req)
-        res.end(() => {
-          if (traceAgent.handlers.length === 0) {
-            traceAgent.resolveHandled()
-          }
-        })
-      } catch (e) {
-        traceAgent.rejectHandled(e)
+      const chunks = []
+      for await (const chunk of req) {
+        chunks.push(chunk)
       }
+      req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      traceAgent.reqs.push(req)
+      traceAgent.emit('handled-req')
+      res.end()
     }).listen(0, done)
 
     traceAgent.reqs = []
@@ -160,7 +151,6 @@ describe('telemetry', () => {
 
   it('should send app-closing', () => {
     process.emit('beforeExit')
-
     return testSeq(5, 'app-closing', payload => {
       expect(payload).to.deep.equal({})
     })
@@ -178,7 +168,10 @@ describe('telemetry', () => {
         port: server.address().port
       })
 
-      setTimeout(done, 10)
+      setTimeout(() => {
+        server.close()
+        done()
+      }, 10)
     })
   })
 })
@@ -221,10 +214,10 @@ async function testSeq (seqId, reqType, validatePayload) {
 // Since the entrypoint file is actually a mocha script, the deps will be mocha's deps
 function getMochaDeps () {
   const mochaPkgJsonFile = require.resolve('mocha/package.json')
-  require('mocha') // ensure mocha is cached so we have a module to grab
+  require('mocha')
   const mochaModule = require.cache[require.resolve('mocha')]
   const mochaDeps = require(mochaPkgJsonFile).dependencies
-  return Object.keys(mochaDeps).map(name => ({
+  return Object.keys(mochaDeps).map((name) => ({
     name,
     version: requirePackageJson(name, mochaModule).version
   }))
