@@ -18,6 +18,8 @@ class DatadogTracer extends Tracer {
     super()
 
     this._service = config.service
+    this._env = config.env
+    this._version = config.version
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._enableGetRumData = config.experimental.enableGetRumData
@@ -69,6 +71,10 @@ class DatadogTracer extends Tracer {
       metrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
+  }
+
+  _flush (done = () => {}) {
+    tracer.flush(() => done())
   }
 }
 

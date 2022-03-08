@@ -124,7 +124,7 @@ function getAllTestsInSuite (root) {
 function createWrapRunTests (tracer, testEnvironmentMetadata, sourceRoot) {
   return function wrapRunTests (runTests) {
     return function runTestsWithTrace () {
-      this.once('end', () => tracer._exporter._writer.flush())
+      this.once('end', () => tracer._flush())
       runTests.apply(this, arguments)
       const suite = arguments[0]
       const tests = getAllTestsInSuite(suite)

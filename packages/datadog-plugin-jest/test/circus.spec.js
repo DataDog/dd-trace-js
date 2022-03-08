@@ -242,7 +242,7 @@ describe('Plugin', function () {
       })
 
       it('should call flush on teardown', async () => {
-        tracer._tracer._exporter._writer.flush = sinon.spy((done) => {
+        tracer._tracer._flush = sinon.spy((done) => {
           done()
         })
         const thisArg = {
@@ -254,7 +254,7 @@ describe('Plugin', function () {
           }
         }
         await datadogJestEnv.teardown.call(thisArg)
-        expect(tracer._tracer._exporter._writer.flush).to.have.been.called
+        expect(tracer._tracer._flush).to.have.been.called
       })
 
       it('should set testSuite on the constructor', () => {

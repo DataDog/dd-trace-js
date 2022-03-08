@@ -115,9 +115,7 @@ function getTestParametersString (parametersByTestName, testName) {
 
 function finishAllTraceSpans (span) {
   span.context()._trace.started.forEach(traceSpan => {
-    if (traceSpan !== span) {
-      traceSpan.finish()
-    }
+    traceSpan.finish()
   })
 }
 

@@ -42,7 +42,7 @@ module.exports = (on, config) => {
   let activeSpan = null
   on('after:run', () => {
     return new Promise(resolve => {
-      tracer._tracer._exporter._writer.flush(() => resolve(null))
+      tracer._tracer._flush(() => resolve(null))
     })
   })
   on('task', {
