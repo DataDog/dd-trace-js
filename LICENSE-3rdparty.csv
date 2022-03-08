@@ -57,4 +57,6 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tape,MIT,Copyright James Halliday
 dev,wait-on,MIT,Copyright 2015 Jeff Barczewski
+dev,webpack,MIT,Copyright JS Foundation and other contributors
+dev,webpack-cli,MIT,Copyright JS Foundation and other contributors
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
