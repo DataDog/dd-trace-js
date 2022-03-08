@@ -738,139 +738,137 @@ jobs:
 
 workflows:
   version: 2
-  # build: &build-jobs
-  #   jobs:
-  #     - lint
-  #     - typescript
-  #     - node-core: &matrix-supported-node-versions
-  #         matrix:
-  #           parameters:
-  #             node-version: ["12", "14", "16", "latest"]
-  #     - node-core-windows
-  #     - shimmer: *matrix-supported-node-versions
-  #     - node-integration: *matrix-supported-node-versions
-  #     - node-amqplib: *matrix-supported-node-versions
-  #     - node-amqp10: *matrix-supported-node-versions
-  #     - node-aws-sdk: *matrix-supported-node-versions
-  #     - node-bluebird: *matrix-supported-node-versions
-  #     - node-bunyan: *matrix-supported-node-versions
-  #     - node-cassandra: *matrix-supported-node-versions
-  #     - node-connect: *matrix-supported-node-versions
-  #     # The couchbase version range we support only supports up to Node 12. TODO fix this.
-  #     - node-couchbase:
-  #         matrix:
-  #           parameters:
-  #             node-version: ["12"]
-  #     - node-cucumber: *matrix-supported-node-versions
-  #     # There's no cypress/base image for node 16
-  #     - node-cypress:
-  #         matrix:
-  #             parameters:
-  #               node-version: ["12", "14"]
-  #     - node-dns: *matrix-supported-node-versions
-  #     - node-elasticsearch: *matrix-supported-node-versions
-  #     - node-express: *matrix-supported-node-versions
-  #     - node-fastify: *matrix-supported-node-versions
-  #     - node-fs: *matrix-supported-node-versions
-  #     - node-generic-pool: *matrix-supported-node-versions
-  #     - node-google-cloud-pubsub: *matrix-supported-node-versions
-  #     - node-graphql: *matrix-supported-node-versions
-  #     # The grpc version ranges we support only support up to Node 12. TODO fix this.
-  #     - node-grpc:
-  #         matrix:
-  #           parameters:
-  #             node-version: ["12"]
-  #     # The hapi version ranges we support only support up to Node 12. TODO fix this.
-  #     - node-hapi:
-  #         matrix:
-  #           parameters:
-  #             node-version: ["12"]
-  #     - node-http: *matrix-supported-node-versions
-  #     - node-http2: *matrix-supported-node-versions
-  #     - node-jest: *matrix-supported-node-versions
-  #     - node-kafkajs: *matrix-supported-node-versions
-  #     - node-knex: *matrix-supported-node-versions
-  #     - node-koa: *matrix-supported-node-versions
-  #     # - node-limitd-client
-  #     - node-memcached: *matrix-supported-node-versions
-  #     - node-microgateway-core: *matrix-supported-node-versions
-  #     - node-mocha: *matrix-supported-node-versions
-  #     - node-mongodb-core: *matrix-supported-node-versions
-  #     - node-mongoose: *matrix-supported-node-versions
-  #     - node-mysql: *matrix-supported-node-versions
-  #     - node-net: *matrix-supported-node-versions
-  #     - node-next: *matrix-supported-node-versions
-  #     - node-oracledb: *matrix-supported-node-versions
-  #     - node-paperplane: *matrix-supported-node-versions
-  #     - node-pino: *matrix-supported-node-versions
-  #     # The pg version range we support doesn't work beyond Node 12. TODO fix this.
-  #     - node-postgres:
-  #         matrix:
-  #           parameters:
-  #             node-version: ["12"]
-  #     - node-promise-js: *matrix-supported-node-versions
-  #     - node-promise: *matrix-supported-node-versions
-  #     - node-q: *matrix-supported-node-versions
-  #     - node-redis: *matrix-supported-node-versions
-  #     - node-restify: *matrix-supported-node-versions
-  #     - node-router: *matrix-supported-node-versions
-  #     - node-sharedb: *matrix-supported-node-versions
-  #     - node-tedious: *matrix-supported-node-versions
-  #     - node-when: *matrix-supported-node-versions
-  #     - node-winston: *matrix-supported-node-versions
-  #     - codecov:
-  #         requires:
-  #           - shimmer
-  #           - node-core
-  #           - node-amqplib
-  #           - node-amqp10
-  #           - node-aws-sdk
-  #           - node-bluebird
-  #           - node-bunyan
-  #           - node-cassandra
-  #           - node-connect
-  #           - node-couchbase
-  #           - node-cucumber
-  #           - node-cypress
-  #           - node-dns
-  #           - node-elasticsearch
-  #           - node-express
-  #           - node-fastify
-  #           - node-fs
-  #           - node-generic-pool
-  #           - node-google-cloud-pubsub
-  #           - node-graphql
-  #           - node-grpc
-  #           - node-hapi
-  #           - node-http
-  #           - node-http2
-  #           - node-jest
-  #           - node-kafkajs
-  #           - node-knex
-  #           - node-koa
-  #           # - node-limitd-client
-  #           - node-memcached
-  #           - node-microgateway-core
-  #           - node-mocha
-  #           - node-mongodb-core
-  #           - node-mongoose
-  #           - node-mysql
-  #           - node-net
-  #           - node-next
-  #           - node-oracledb
-  #           - node-paperplane
-  #           # - node-pino
-  #           - node-postgres
-  #           - node-promise-js
-  #           - node-promise
-  #           - node-q
-  #           - node-redis
-  #           - node-restify
-  #           - node-router
-  #           - node-sharedb
-  #           - node-tedious
-  #           - node-when
-  #           - node-winston
+  build: &build-jobs
+    jobs:
+      - lint
+      - typescript
+      - node-core: &matrix-supported-node-versions
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16", "latest"]
+      - node-core-windows
+      - shimmer: *matrix-supported-node-versions
+      - node-integration: *matrix-supported-node-versions
+      - node-amqplib: *matrix-supported-node-versions
+      - node-amqp10: *matrix-supported-node-versions
+      - node-aws-sdk: *matrix-supported-node-versions
+      - node-bluebird: *matrix-supported-node-versions
+      - node-bunyan: *matrix-supported-node-versions
+      - node-cassandra: *matrix-supported-node-versions
+      - node-connect: *matrix-supported-node-versions
+      # The couchbase version range we support only supports up to Node 12. TODO fix this.
+      - node-couchbase:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      - node-cucumber: *matrix-supported-node-versions
+      # There's no cypress/base image for node 16
+      - node-cypress:
+          matrix:
+              parameters:
+                node-version: ["12", "14"]
+      - node-dns: *matrix-supported-node-versions
+      - node-elasticsearch: *matrix-supported-node-versions
+      - node-express: *matrix-supported-node-versions
+      - node-fastify: *matrix-supported-node-versions
+      - node-fs: *matrix-supported-node-versions
+      - node-google-cloud-pubsub: *matrix-supported-node-versions
+      - node-graphql: *matrix-supported-node-versions
+      # The grpc version ranges we support only support up to Node 12. TODO fix this.
+      - node-grpc:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      # The hapi version ranges we support only support up to Node 12. TODO fix this.
+      - node-hapi:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      - node-http: *matrix-supported-node-versions
+      - node-http2: *matrix-supported-node-versions
+      - node-jest: *matrix-supported-node-versions
+      - node-kafkajs: *matrix-supported-node-versions
+      - node-knex: *matrix-supported-node-versions
+      - node-koa: *matrix-supported-node-versions
+      # - node-limitd-client
+      - node-memcached: *matrix-supported-node-versions
+      - node-microgateway-core: *matrix-supported-node-versions
+      - node-mocha: *matrix-supported-node-versions
+      - node-mongodb-core: *matrix-supported-node-versions
+      - node-mongoose: *matrix-supported-node-versions
+      - node-mysql: *matrix-supported-node-versions
+      - node-net: *matrix-supported-node-versions
+      - node-next: *matrix-supported-node-versions
+      - node-oracledb: *matrix-supported-node-versions
+      - node-paperplane: *matrix-supported-node-versions
+      - node-pino: *matrix-supported-node-versions
+      # The pg version range we support doesn't work beyond Node 12. TODO fix this.
+      - node-postgres:
+          matrix:
+            parameters:
+              node-version: ["12"]
+      - node-promise-js: *matrix-supported-node-versions
+      - node-promise: *matrix-supported-node-versions
+      - node-q: *matrix-supported-node-versions
+      - node-redis: *matrix-supported-node-versions
+      - node-restify: *matrix-supported-node-versions
+      - node-router: *matrix-supported-node-versions
+      - node-sharedb: *matrix-supported-node-versions
+      - node-tedious: *matrix-supported-node-versions
+      - node-when: *matrix-supported-node-versions
+      - node-winston: *matrix-supported-node-versions
+      - codecov:
+          requires:
+            - shimmer
+            - node-core
+            - node-amqplib
+            - node-amqp10
+            - node-aws-sdk
+            - node-bluebird
+            - node-bunyan
+            - node-cassandra
+            - node-connect
+            - node-couchbase
+            - node-cucumber
+            - node-cypress
+            - node-dns
+            - node-elasticsearch
+            - node-express
+            - node-fastify
+            - node-fs
+            - node-google-cloud-pubsub
+            - node-graphql
+            - node-grpc
+            - node-hapi
+            - node-http
+            - node-http2
+            - node-jest
+            - node-kafkajs
+            - node-knex
+            - node-koa
+            # - node-limitd-client
+            - node-memcached
+            - node-microgateway-core
+            - node-mocha
+            - node-mongodb-core
+            - node-mongoose
+            - node-mysql
+            - node-net
+            - node-next
+            - node-oracledb
+            - node-paperplane
+            # - node-pino
+            - node-postgres
+            - node-promise-js
+            - node-promise
+            - node-q
+            - node-redis
+            - node-restify
+            - node-router
+            - node-sharedb
+            - node-tedious
+            - node-when
+            - node-winston
   bench: &bench-jobs
     jobs:
       # - node-bench-latest
