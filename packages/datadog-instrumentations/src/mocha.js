@@ -1,17 +1,31 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const runTestStartCh = channel('ci:mocha:run-test:start')
-const errorCh = channel('ci:mocha:run-test:error')
-const skipCh = channel('ci:mocha:run-test:skip')
-const runTestEndCh = channel('ci:mocha:run-test:end')
-const runTestEndAsyncCh = channel('ci:mocha:run-test:async-end')
-const runTestsEndCh = channel('ci:mocha:run-tests:end')
-const hookErrorCh = channel('ci:mocha:hook-error')
-const mochaEachCh = channel('ci:mocha:mocha-each')
+const testStartCh = channel('ci:mocha:test:start')
+const errorCh = channel('ci:mocha:test:error')
+const skipCh = channel('ci:mocha:test:skip')
+const testEndCh = channel('ci:mocha:test:end')
+const testAsyncEndCh = channel('ci:mocha:test:async-end')
+const suiteEndCh = channel('ci:mocha:suite:end')
+const hookErrorCh = channel('ci:mocha:hook:error')
+const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
+}
+
+function getAllTestsInSuite (root) {
+  const tests = []
+  function getTests (suiteOrTest) {
+    suiteOrTest.tests.forEach(test => {
+      tests.push(test)
+    })
+    suiteOrTest.suites.forEach(suite => {
+      getTests(suite)
+    })
+  }
+  getTests(root)
+  return tests
 }
 
 addHook({
@@ -20,16 +34,26 @@ addHook({
   file: 'lib/runner.js'
 }, (Runner) => {
   shimmer.wrap(Runner.prototype, 'runTest', runTest => function () {
-    if (!runTestStartCh.hasSubscribers) {
+    if (!testStartCh.hasSubscribers) {
       return runTest.apply(this, arguments)
     }
 
     if (!isRetry(this.test)) {
-      runTestStartCh.publish(this.test)
+      testStartCh.publish(this.test)
     }
 
     this.once('test end', AsyncResource.bind(() => {
-      runTestEndAsyncCh.publish(this.test)
+      let status
+
+      if (this.test.pending) {
+        status = 'skipped'
+      } else if (this.test.state !== 'failed' && !this.test.timedOut) {
+        status = 'pass'
+      } else {
+        status = 'fail'
+      }
+
+      testAsyncEndCh.publish(status)
     }))
 
     this.once('fail', AsyncResource.bind((test, err) => {
@@ -46,17 +70,20 @@ addHook({
       errorCh.publish(err)
       throw err
     } finally {
-      runTestEndCh.publish(undefined)
+      testEndCh.publish(undefined)
     }
   })
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function () {
-    if (!runTestsEndCh.hasSubscribers) {
+    if (!suiteEndCh.hasSubscribers) {
       return runTests.apply(this, arguments)
     }
     runTests.apply(this, arguments)
     const suite = arguments[0]
-    runTestsEndCh.publish(suite)
+    // We call `getAllTestsInSuite` with the root suite so every skipped test
+    // should already have an associated test span.
+    const tests = getAllTestsInSuite(suite)
+    suiteEndCh.publish(tests)
   })
 
   shimmer.wrap(Runner.prototype, 'fail', fail => function (hook, error) {
@@ -82,7 +109,7 @@ addHook({
     const { it, ...rest } = mochaEach.apply(this, arguments)
     return {
       it: function (name) {
-        mochaEachCh.publish({ name, params })
+        parameterizedTestCh.publish({ name, params })
         it.apply(this, arguments)
       },
       ...rest

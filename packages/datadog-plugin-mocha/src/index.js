@@ -23,20 +23,6 @@ const { AUTO_KEEP } = require('../../../ext/priority')
 
 const skippedTests = new WeakSet()
 
-function getAllTestsInSuite (root) {
-  const tests = []
-  function getTests (suiteOrTest) {
-    suiteOrTest.tests.forEach(test => {
-      tests.push(test)
-    })
-    suiteOrTest.suites.forEach(suite => {
-      getTests(suite)
-    })
-  }
-  getTests(root)
-  return tests
-}
-
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
 
@@ -66,42 +52,38 @@ class MochaPlugin extends Plugin {
 
     this._testNameToParams = {}
 
-    this.addSub('ci:mocha:run-test:start', (test) => {
+    this.addSub('ci:mocha:test:start', (test) => {
       const store = storage.getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
     })
 
-    this.addSub('ci:mocha:run-test:async-end', (test) => {
-      // skipped test
-      if (test.pending) {
+    this.addSub('ci:mocha:test:async-end', (status) => {
+      // if the status is skipped the span has already been finished
+      if (status === 'skipped') {
         return
       }
       const span = storage.getStore().span
 
-      if (test.state !== 'failed' && !test.timedOut) {
-        span.setTag(TEST_STATUS, 'pass')
-      } else {
-        span.setTag(TEST_STATUS, 'fail')
-      }
+      span.setTag(TEST_STATUS, status)
 
       span.finish()
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:mocha:run-test:end', () => {
+    this.addSub('ci:mocha:test:end', () => {
       this.exit()
     })
 
     // This covers programmatically skipped tests (that do go through `runTest`)
-    this.addSub('ci:mocha:run-test:skip', () => {
+    this.addSub('ci:mocha:test:skip', () => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
     })
 
-    this.addSub('ci:mocha:run-test:error', (err) => {
+    this.addSub('ci:mocha:test:error', (err) => {
       if (err) {
         const span = storage.getStore().span
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
@@ -113,13 +95,10 @@ class MochaPlugin extends Plugin {
       }
     })
 
-    this.addSub('ci:mocha:run-tests:end', suite => {
-      const tests = getAllTestsInSuite(suite)
+    this.addSub('ci:mocha:suite:end', tests => {
       tests.forEach(test => {
         const { pending: isSkipped } = test
-        // We call `getAllTestsInSuite` with the root suite so every skipped test
-        // should already have an associated test span.
-        // This function is called with every suite, so we need a way to mark
+        // `tests` includes every test, so we need a way to mark
         // the test as already accounted for. We do this through `skippedTests`.
         // If the test is already marked as skipped, we don't create an additional test span.
         if (!isSkipped || skippedTests.has(test)) {
@@ -134,14 +113,14 @@ class MochaPlugin extends Plugin {
       })
     })
 
-    this.addSub('ci:mocha:hook-error', ({ test, error }) => {
+    this.addSub('ci:mocha:hook:error', ({ test, error }) => {
       const testSpan = this.startTestSpan(test)
       testSpan.setTag(TEST_STATUS, 'fail')
       testSpan.setTag('error', error)
       testSpan.finish()
     })
 
-    this.addSub('ci:mocha:mocha-each', ({ name, params }) => {
+    this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {
       this._testNameToParams[name] = params
     })
   }
