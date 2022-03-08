@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const Span = require('./opentracing/span')
 
 // TODO: deprecate binding event emitters in 3.0
 
@@ -11,19 +12,29 @@ const emitterScopes = new WeakMap()
 const emitters = new WeakSet()
 
 class Scope {
+  constructor (tracer) {
+    this._tracer = tracer
+  }
+
   active () {
     const store = storage.getStore()
 
-    return (store && store.span) || null
+    return (store && new Span(this._tracer, store.span)) || null
   }
 
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    const oldStore = storage.getStore()
-    const newStore = span ? span._store : oldStore
+    span = span && typeof span.context === 'function' && span.context()._span
 
-    storage.enterWith({ ...newStore, span })
+    const oldStore = storage.getStore()
+    const oldSpan = oldStore && oldStore.span
+
+    if (oldStore) {
+      oldStore.span = span
+    } else {
+      storage.enterWith({ span })
+    }
 
     try {
       return callback()
@@ -34,7 +45,11 @@ class Scope {
 
       throw e
     } finally {
-      storage.enterWith(oldStore)
+      if (oldStore) {
+        oldStore.span = oldSpan
+      } else {
+        storage.enterWith(oldStore)
+      }
     }
   }
 

@@ -16,7 +16,7 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
 
-    this._scope = new Scope()
+    this._scope = new Scope(this)
     setStartupLogConfig(config)
   }
 
