@@ -82,7 +82,7 @@ class EncoderV4 {
       this._encodeString(bytes, 'name')
       this._encodeString(bytes, span.name)
       this._encodeString(bytes, 'resource')
-      this._encodeString(bytes, span.resource)
+      this._encodeString(bytes, span.resource || span.name)
       this._encodeString(bytes, 'service')
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, 'error')

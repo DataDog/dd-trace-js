@@ -34,7 +34,7 @@ class Span {
     this.tracer = tracer
     this.service = service || tracer.config.service
     this.name = name
-    this.resource = resource || name
+    this.resource = resource
     this.error = 0
     this.meta = meta || {}
     this.metrics = metrics || {}

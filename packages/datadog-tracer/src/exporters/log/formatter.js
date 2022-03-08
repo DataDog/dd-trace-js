@@ -14,7 +14,7 @@ class Formatter {
       span_id: span.spanId,
       parent_id: span.parentId,
       name: span.name,
-      resource: span.resource,
+      resource: span.resource || span.name,
       service: span.service,
       type: span.type,
       error: span.error ? 1 : 0,
