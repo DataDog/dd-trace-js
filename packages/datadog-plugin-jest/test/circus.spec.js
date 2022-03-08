@@ -40,7 +40,14 @@ describe('Plugin', function () {
         .reply(200, 'OK')
 
       tracer = require('../../dd-trace')
-      return agent.load(['jest', 'fs', 'http'], { service: 'test' }).then(() => {
+
+      const configs = [
+        { service: 'test' },
+        { service: 'test' },
+        { service: 'test', server: false }
+      ]
+
+      return agent.load(['jest', 'fs', 'http'], configs).then(() => {
         DatadogJestEnvironment = require(`../../../versions/${moduleName}@${version}`).get()
         datadogJestEnv = new DatadogJestEnvironment({
           rootDir: BUILD_SOURCE_ROOT,
