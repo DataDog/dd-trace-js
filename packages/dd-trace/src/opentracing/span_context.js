@@ -30,7 +30,16 @@ class DatadogSpanContext extends SpanContext {
   }
 
   get _tags () {
-    return Object.assign({}, this._span.meta, this._span.metrics)
+    const span = this._span
+    const tags = Object.assign({}, span.meta, span.metrics)
+
+    return {
+      'resource.name': span.resource,
+      'service.name': span.service || span.tracer.config.service,
+      'span.kind': span.kind,
+      'span.type': span.type,
+      ...tags
+    }
   }
 
   get _baggageItems () {
