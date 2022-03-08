@@ -17,6 +17,7 @@ class DatadogTracer extends Tracer {
   constructor (config) {
     super()
 
+    this._service = config.service
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._enableGetRumData = config.experimental.enableGetRumData
@@ -30,15 +31,19 @@ class DatadogTracer extends Tracer {
 
     name = fields.operationName || name
 
-    const span = tracer.startSpan(name, { childOf })
+    const internalSpan = tracer.startSpan(name, { childOf })
+    const span = new Span(this, internalSpan)
 
     span.addTags(fields.tags)
 
-    return new Span(this, span)
+    return span
   }
 
   _inject (spanContext, format, carrier) {
     if (!spanContext) return this
+    if (format === 'http_headers') {
+      format = 'text_map'
+    }
 
     try {
       tracer.inject(spanContext._span, format, carrier)
@@ -51,8 +56,14 @@ class DatadogTracer extends Tracer {
   }
 
   _extract (format, carrier) {
+    if (format === 'http_headers') {
+      format = 'text_map'
+    }
+
     try {
-      return tracer.extract(format, carrier)
+      const internalSpan = tracer.extract(format, carrier)
+      const spanContext = new SpanContext(internalSpan)
+      return spanContext
     } catch (e) {
       log.error(e)
       metrics.increment('datadog.tracer.node.extract.errors', true)

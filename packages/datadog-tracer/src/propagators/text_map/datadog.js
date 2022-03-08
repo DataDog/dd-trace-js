@@ -14,7 +14,7 @@ const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 class DatadogPropagator {
   inject (span, carrier) {
     carrier[traceKey] = span.trace.traceId.toString()
-    carrier[spanKey] = span.spanId.toSpanId()
+    carrier[spanKey] = span.spanId.toString()
 
     this._injectOrigin(span, carrier)
     this._injectSamplingPriority(span, carrier)
