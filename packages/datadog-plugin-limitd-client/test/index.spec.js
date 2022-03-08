@@ -25,7 +25,7 @@ describe('Plugin', () => {
       })
 
       it('should propagate context', done => {
-        const span = {}
+        const span = tracer.startSpan('parent')
 
         tracer.scope().activate(span, () => {
           limitd.take('user', 'test', function (err, resp) {

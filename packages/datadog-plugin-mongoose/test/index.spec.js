@@ -47,7 +47,7 @@ describe('Plugin', () => {
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
 
-        const span = {}
+        const span = tracer.startSpan('parent')
         const kitty = new Cat({ name: 'Zildjian' })
 
         return tracer.scope().activate(span, () => {
@@ -60,7 +60,7 @@ describe('Plugin', () => {
       it('should propagate context with queries', done => {
         const Cat = mongoose.model('Cat2', { name: String })
 
-        const span = {}
+        const span = tracer.startSpan('parent')
 
         tracer.scope().activate(span, () => {
           Cat.find({ name: 'Zildjian' }).exec(() => {
@@ -77,7 +77,7 @@ describe('Plugin', () => {
       it('should propagate context with aggregations', done => {
         const Cat = mongoose.model('Cat3', { name: String })
 
-        const span = {}
+        const span = tracer.startSpan('parent')
 
         tracer.scope().activate(span, () => {
           Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
@@ -98,7 +98,7 @@ describe('Plugin', () => {
           setImmediate(resolve)
         })
 
-        const span = {}
+        const span = tracer.startSpan('parent')
 
         return tracer.scope().activate(span, () => {
           return promise.then(() => {

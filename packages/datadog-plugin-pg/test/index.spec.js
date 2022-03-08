@@ -139,7 +139,7 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            const span = {}
+            const span = tracer.startSpan('parent')
 
             tracer.scope().activate(span, () => {
               const span = tracer.scope().active()

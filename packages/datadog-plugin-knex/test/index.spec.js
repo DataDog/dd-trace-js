@@ -34,7 +34,7 @@ describe('Plugin', () => {
             })
         })
         it('should propagate context', () => {
-          const span = {}
+          const span = tracer.startSpan('parent')
 
           return tracer.scope().activate(span, () => {
             return client.raw('PRAGMA user_version')

@@ -419,7 +419,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate the parent scope to the callback', done => {
-              const span = {}
+              const span = tracer.startSpan('parent')
 
               buildClient({
                 getUnary: (call, callback) => callback()
@@ -434,7 +434,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate the parent scope to event listeners', done => {
-              const span = {}
+              const span = tracer.startSpan('parent')
 
               buildClient({
                 getServerStream: stream => {

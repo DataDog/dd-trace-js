@@ -111,7 +111,7 @@ describe('Plugin', () => {
         }
 
         it('should bind callbacks to the correct active span', (done) => {
-          const span = {}
+          const span = tracer.startSpan('parent')
 
           tracer.scope().activate(span, () => {
             s3.listBuckets(() => {
