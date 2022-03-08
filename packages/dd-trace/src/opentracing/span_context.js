@@ -25,6 +25,10 @@ class DatadogSpanContext extends SpanContext {
     return this._span.name
   }
 
+  set _name (value) {
+    this._span.name = value
+  }
+
   get _tags () {
     return Object.assign({}, this._span.meta, this._span.metrics)
   }
