@@ -35,7 +35,10 @@ commands:
           when: always
       - run:
           name: Upload JUnit XML Report
-          command: yarn junit:upload
+          command: |
+            curl -L "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci-linux-x64" --output "/usr/bin/datadog-ci"
+            chmod +x "/usr/bin/datadog-ci"
+            yarn junit:upload
           when: always
       - run:
           name: Merge coverage report
@@ -229,7 +232,7 @@ jobs:
   node-bench-sirun-plugin-dns: *node-bench-sirun-base
 
   node-bench-sirun-plugin-graphql: *node-bench-sirun-base
-  
+
   node-bench-sirun-appsec: *node-bench-sirun-base
 
   node-bench-sirun-all:

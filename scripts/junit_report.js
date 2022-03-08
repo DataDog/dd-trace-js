@@ -7,8 +7,6 @@ function uploadJUnitXMLReport () {
     console.log('Running in a fork. Skipping step.')
     return
   }
-  // we install @datadog/datadog-ci
-  execSync('yarn global add @datadog/datadog-ci@0.13.2', { stdio: 'inherit' })
   const service = process.env.PLUGINS ? 'plugins' : 'core'
   // we execute the upload command
   execSync(
