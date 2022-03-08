@@ -15,6 +15,7 @@ const {
   ERROR,
   HTTP_STATUS_CODE
 } = require('../../../../ext/tags')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../plugins/util/test')
 
 class DatadogSpan extends Span {
   constructor (parentTracer, span) {
@@ -72,6 +73,18 @@ class DatadogSpan extends Span {
       switch (key) {
         case ERROR:
           span.addError(value)
+          break
+        case ERROR_MESSAGE:
+          span.setTag(key, value)
+          span.addError(true)
+          break
+        case ERROR_STACK:
+          span.setTag(key, value)
+          span.addError(true)
+          break
+        case ERROR_TYPE:
+          span.setTag(key, value)
+          span.addError(true)
           break
         case HTTP_STATUS_CODE: // HACK: numeric but backend expects string
           span.setTag(key, String(value))
