@@ -93,7 +93,7 @@ class DatadogPropagator {
   _extractBaggageItems (carrier) {
     const baggage = {}
 
-    for (const key of carrier) {
+    for (const key in carrier) {
       const match = key.match(baggageExpr)
 
       if (match) {
