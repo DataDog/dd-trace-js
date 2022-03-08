@@ -47,10 +47,8 @@ class DatadogTracer extends Tracer {
       format = 'text_map'
     }
 
-    const span = spanContext.trace ? spanContext : spanContext._span
-
     try {
-      tracer.inject(span, format, carrier)
+      tracer.inject(spanContext._span, format, carrier)
     } catch (e) {
       log.error(e)
       metrics.increment('datadog.tracer.node.inject.errors', true)
