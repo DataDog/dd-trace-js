@@ -221,6 +221,20 @@ const web = {
       const context = contexts.get(req)
       context.error = context.error || error
     }
+  },
+
+  setUser (req, user) {
+    if (req || !user || !user.id) return false
+    
+    span = web.root(req)
+
+    if (!span) return false
+
+    for (const [k, v] of Object.entries(user)) {
+      span.setTag(`usr.${k}`, '' + v)
+    }
+
+    return true
   }
 }
 
