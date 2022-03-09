@@ -36,7 +36,7 @@ commands:
       - run:
           name: Upload JUnit XML Report
           command: |
-            curl -L "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci-linux-x64" --output "/usr/bin/datadog-ci"
+            curl -L "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/bin/datadog-ci"
             chmod +x "/usr/bin/datadog-ci"
             yarn junit:upload
           when: always
