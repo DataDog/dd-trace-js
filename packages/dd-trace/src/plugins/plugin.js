@@ -38,7 +38,7 @@ module.exports = class Plugin {
   startSpan (name, options) {
     const store = storage.getStore()
 
-    if (options.childOf === undefined) {
+    if (store && options.childOf === undefined) {
       options.childOf = store.span
     }
 
