@@ -1,51 +1,38 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class CouchBasePlugin extends Plugin {
+class CouchbasePlugin extends Plugin {
   static get name () {
     return 'couchbase'
   }
 
-  addSubs (func, start, asyncEnd = defaultAsyncEnd) {
+  addSubs (func, start) {
     this.addSub(`apm:couchbase:${func}:start`, start)
     this.addSub(`apm:couchbase:${func}:end`, this.exit.bind(this))
-    this.addSub(`apm:couchbase:${func}:error`, errorHandler)
-    this.addSub(`apm:couchbase:${func}:async-end`, asyncEnd)
+    this.addSub(`apm:couchbase:${func}:error`, this.addError.bind(this))
+    this.addSub(`apm:couchbase:${func}:async-end`, this.finishSpan.bind(this))
   }
 
-  startSpan (operation, customTags, store, bucket) {
-    const tags = {
-      'db.type': 'couchbase',
-      'component': 'couchbase',
-      'service.name': this.config.service || `${this.tracer._service}-couchbase`,
-      'resource.name': `couchbase.${operation}`,
-      'span.kind': 'client'
-    }
-
-    for (const tag in customTags) {
-      tags[tag] = customTags[tag]
-    }
-    const span = this.tracer.startSpan(`couchbase.${operation}`, {
-      childOf: store ? store.span : null,
-      tags
+  startSpan (operation, bucket, type, resource) {
+    return super.startSpan(`couchbase.${operation}`, {
+      service: this.config.service || `${this.tracer._service}-couchbase`,
+      resource,
+      type,
+      kind: 'client',
+      meta: {
+        'db.type': 'couchbase',
+        'component': 'couchbase',
+        'couchbase.bucket.name': bucket.name || bucket._name
+      }
     })
-
-    span.setTag('couchbase.bucket.name', bucket.name || bucket._name)
-
-    analyticsSampler.sample(span, this.config.measured)
-    return span
   }
 
   constructor (...args) {
     super(...args)
 
     this.addSubs('query', ({ resource, bucket }) => {
-      const store = storage.getStore()
-      const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource }, store, bucket)
-      this.enter(span, store)
+      this.startSpan('query', bucket, 'sql', resource)
     })
 
     this._addCommandSubs('upsert')
@@ -54,21 +41,12 @@ class CouchBasePlugin extends Plugin {
     this._addCommandSubs('append')
     this._addCommandSubs('prepend')
   }
+
   _addCommandSubs (name) {
     this.addSubs(name, ({ bucket }) => {
-      const store = storage.getStore()
-      const span = this.startSpan(name, {}, store, bucket)
-      this.enter(span, store)
+      this.startSpan(name, bucket)
     })
   }
 }
 
-function defaultAsyncEnd () {
-  storage.getStore().span.finish()
-}
-
-function errorHandler (error) {
-  storage.getStore().span.setTag('error', error)
-}
-
-module.exports = CouchBasePlugin
+module.exports = CouchbasePlugin

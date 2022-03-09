@@ -2,6 +2,7 @@
 
 const dc = require('diagnostics_channel')
 const { storage } = require('../../../datadog-core')
+const { tracer } = require('../../../datadog-tracer')
 
 class Subscription {
   constructor (event, handler) {
@@ -25,15 +26,38 @@ class Subscription {
 }
 
 module.exports = class Plugin {
-  constructor (tracer) {
+  constructor () {
     this._subscriptions = []
     this._enabled = false
     this._storeStack = []
-    this._tracer = tracer
   }
 
-  get tracer () {
-    return this._tracer._tracer
+  startSpan (name, options) {
+    const store = storage.getStore()
+
+    if (options.childOf === undefined) {
+      options.childOf = store.span
+    }
+
+    const span = tracer.startSpan(name, options)
+
+    this._storeStack.push(store)
+
+    storage.enterWith({ ...store, span })
+
+    return span
+  }
+
+  finishSpan () {
+    const span = storage.getStore().span
+
+    this._measure(span)
+
+    span.finish()
+  }
+
+  addError (error) {
+    storage.getStore().span.addError(error)
   }
 
   enter (span, store) {
@@ -65,6 +89,17 @@ module.exports = class Plugin {
     } else if (!config.enabled && this._enabled) {
       this._enabled = false
       this._subscriptions.forEach(sub => sub.disable())
+    }
+  }
+
+  // TODO: replace with unified sampler
+  _measure (span) {
+    const measured = typeof this.config.measured === 'object'
+      ? this.config.measured[span.name]
+      : this.config.measured
+
+    if (measured !== undefined) {
+      span.measured = measured
     }
   }
 }

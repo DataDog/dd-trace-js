@@ -1,9 +1,17 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { tracer } = require('../../datadog-tracer')
 const { TEXT_MAP } = require('../../../ext/formats')
+
+const fieldNames = [
+  'queue',
+  'exchange',
+  'routingKey',
+  'consumerTag',
+  'source',
+  'destination'
+]
 
 class AmqplibPlugin extends Plugin {
   static get name () {
@@ -14,77 +22,46 @@ class AmqplibPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:amqplib:command:start`, ({ channel, method, fields, message }) => {
-      const store = storage.getStore()
-      let childOf
+      fields.headers = fields.headers || {}
 
-      if (method === 'basic.deliver') {
-        childOf = extract(this.tracer, message)
-      } else {
-        fields.headers = fields.headers || {}
-        childOf = store ? store.span : store
-      }
-
-      const span = this.tracer.startSpan('amqp.command', {
+      const stream = channel && channel.connection && channel.connection.stream
+      const childOf = method === 'basic.deliver' && extract(tracer, message)
+      const span = this.startSpan('amqp.command', {
         childOf,
-        tags: {
-          'service.name': this.config.service || `${this.tracer._service}-amqp`,
-          'resource.name': getResourceName(method, fields)
-        }
+        service: this.config.service || `${tracer.config.service}-amqp`,
+        resource: getResourceName(method, fields),
+        kind: 'client',
+        meta: stream ? {
+          'out.host': stream._host,
+          'out.port': String(stream.remotePort)
+        } : {}
       })
-
-      if (channel && channel.connection && channel.connection.stream) {
-        span.addTags({
-          'out.host': channel.connection.stream._host,
-          'out.port': channel.connection.stream.remotePort
-        })
-      }
-      const fieldNames = [
-        'queue',
-        'exchange',
-        'routingKey',
-        'consumerTag',
-        'source',
-        'destination'
-      ]
 
       switch (method) {
         case 'basic.publish':
-          span.setTag('span.kind', 'producer')
+          span.kind = 'producer'
+          tracer.inject(span, TEXT_MAP, fields.headers)
           break
         case 'basic.consume':
         case 'basic.get':
         case 'basic.deliver':
-          span.addTags({
-            'span.kind': 'consumer',
-            'span.type': 'worker'
-          })
+          span.type = 'worker'
+          span.kind = 'consumer'
           break
-        default:
-          span.setTag('span.kind', 'client')
       }
 
-      fieldNames.forEach(field => {
-        fields[field] !== undefined && span.setTag(`amqp.${field}`, fields[field])
-      })
-      if (method === 'basic.deliver') {
-        analyticsSampler.sample(span, this.config.measured, true)
-      } else {
-        this.tracer.inject(span, TEXT_MAP, fields.headers)
-        analyticsSampler.sample(span, this.config.measured)
+      for (const field of fieldNames) {
+        span.setTag(`amqp.${field}`, fields[field])
       }
-
-      this.enter(span, store)
     })
 
     this.addSub(`apm:amqplib:command:end`, () => {
-      const span = storage.getStore().span
-      span.finish()
+      this.finishSpan()
       this.exit()
     })
 
     this.addSub(`apm:amqplib:command:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
+      this.addError(err)
     })
   }
 }
