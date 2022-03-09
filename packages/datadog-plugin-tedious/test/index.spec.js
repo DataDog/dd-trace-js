@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const semver = require('semver')
 
 const MSSQL_USERNAME = 'sa'
@@ -13,7 +12,7 @@ describe('Plugin', () => {
   let connection
   let connectionIsClosed
 
-  withVersions(plugin, 'tedious', version => {
+  withVersions('tedious', 'tedious', version => {
     beforeEach(() => {
       tracer = require('../../dd-trace')
     })
@@ -28,7 +27,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       beforeEach((done) => {
@@ -73,42 +72,29 @@ describe('Plugin', () => {
 
       it('should run the Request callback in the parent context', done => {
         const span = tracer.startSpan('test')
-        const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
-          expect(tracer.scope().active()).to.equal(span)
-          done(err)
-        })
 
         tracer.scope().activate(span, () => {
+          const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
+            expect(tracer.scope().active()).to.equal(span)
+            done(err)
+          })
           connection.execSql(request)
         })
       })
 
       it('should run the Request event listeners in the parent context', done => {
         const span = tracer.startSpan('test')
-        const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
-          if (err) done(err)
-        })
 
         tracer.scope().activate(span, () => {
+          const request = new tds.Request('SELECT 1 + 1 AS solution', (err) => {
+            if (err) done(err)
+          })
           request.on('requestCompleted', () => {
             expect(tracer.scope().active()).to.equal(span)
             done()
           })
+          connection.execSql(request)
         })
-        connection.execSql(request)
-      })
-
-      it('should run the Connection event listeners in the parent context', done => {
-        const span = tracer.startSpan('test')
-
-        tracer.scope().activate(span, () => {
-          connection.on('end', () => {
-            expect(tracer.scope().active()).to.equal(span)
-            connectionIsClosed = true
-            done()
-          })
-        })
-        connection.close()
       })
 
       it('should do automatic instrumentation', done => {
