@@ -27,6 +27,9 @@ class Subscription {
 
 module.exports = class Plugin {
   constructor () {
+    this.tracer = tracer
+    this.config = null
+
     this._subscriptions = []
     this._enabled = false
     this._storeStack = []

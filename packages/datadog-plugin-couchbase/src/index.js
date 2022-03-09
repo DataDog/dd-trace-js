@@ -16,7 +16,7 @@ class CouchbasePlugin extends Plugin {
 
   startSpan (operation, bucket, type, resource) {
     return super.startSpan(`couchbase.${operation}`, {
-      service: this.config.service || `${this.tracer._service}-couchbase`,
+      service: this.config.service || `${this.tracer.config.service}-couchbase`,
       resource,
       type,
       kind: 'client',
