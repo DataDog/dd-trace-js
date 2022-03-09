@@ -90,17 +90,20 @@ describe('Plugin', () => {
   }
 
   describe('winston', () => {
-    withVersions('winston', 'winston', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-        return agent.load('winston')
-      })
+    beforeEach(() => {
+      tracer = require('../../dd-trace')
+    })
 
+    withVersions('winston', 'winston', version => {
       afterEach(() => {
         return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
+        beforeEach(() => {
+          return agent.load('winston')
+        })
+
         beforeEach(() => {
           return setup(version)
         })
@@ -125,7 +128,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          tracer._tracer._logInjection = true
+          return agent.load('winston', { logInjection: true })
         })
 
         describe('without formatting', () => {

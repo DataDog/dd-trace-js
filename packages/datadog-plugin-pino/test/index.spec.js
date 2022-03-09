@@ -14,7 +14,6 @@ describe('Plugin', () => {
     withVersions('pino', 'pino', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        return agent.load('pino')
       })
 
       afterEach(() => {
@@ -36,6 +35,10 @@ describe('Plugin', () => {
         }
 
         describe('without configuration', () => {
+          beforeEach(() => {
+            return agent.load('pino')
+          })
+
           beforeEach(function () {
             setup()
 
@@ -77,6 +80,10 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
+          beforeEach(() => {
+            return agent.load('pino', { logInjection: true })
+          })
+
           beforeEach(function () {
             tracer._tracer._logInjection = true
 

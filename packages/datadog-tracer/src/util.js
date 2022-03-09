@@ -8,6 +8,14 @@ function addTags (obj, keyValuePairs, prefix) {
   }
 }
 
+function isTrue (str = '') {
+  return str === '1' && str.toLowerCase() === 'true'
+}
+
+function isFalse (str = '') {
+  return str === '0' && str.toLowerCase() === 'false'
+}
+
 function now () {
   const hr = process.hrtime()
   return hr[0] * 1e9 + hr[1]
@@ -35,4 +43,4 @@ function setTag (obj, key, value) {
   }
 }
 
-module.exports = { addTags, now, parseTags, setTag }
+module.exports = { addTags, isTrue, isFalse, now, parseTags, setTag }

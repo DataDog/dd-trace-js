@@ -1,7 +1,7 @@
 'use strict'
 
 const { existsSync } = require('fs')
-const { addTags, parseTags } = require('./util')
+const { addTags, isTrue, parseTags } = require('./util')
 const pkg = require('./pkg')
 
 const env = process.env
@@ -15,12 +15,11 @@ const DD_TRACE_AGENT_URL = env.DD_TRACE_AGENT_URL || env.DD_TRACE_URL
 const DD_TRACE_AGENT_HOSTNAME = env.DD_AGENT_HOST || env.DD_TRACE_AGENT_HOSTNAME
 const DD_TRACE_AGENT_PORT = env.DD_TRACE_AGENT_PORT
 const DD_TRACE_AGENT_PROTOCOL_VERSION = env.DD_TRACE_AGENT_PROTOCOL_VERSION
-const DD_TRACE_REPORT_HOSTNAME = (env.DD_TRACE_REPORT_HOSTNAME || '').toLowerCase()
+const DD_TRACE_REPORT_HOSTNAME = env.DD_TRACE_REPORT_HOSTNAME
+const DD_LOGS_INJECTION = env.DD_LOGS_INJECTION
 
 class Config {
   constructor (options) {
-    const reportHostname = DD_TRACE_REPORT_HOSTNAME === 'true' || DD_TRACE_REPORT_HOSTNAME === '1'
-
     this.service = DD_SERVICE || pkg.name || 'node'
     this.env = DD_ENV
     this.version = DD_VERSION
@@ -32,7 +31,8 @@ class Config {
     this.meta = {}
     this.metrics = {}
     this.url = this._getUrl(DD_TRACE_AGENT_URL, DD_TRACE_AGENT_HOSTNAME, DD_TRACE_AGENT_PORT)
-    this.hostname = reportHostname && require('os').hostname()
+    this.hostname = isTrue(DD_TRACE_REPORT_HOSTNAME) && require('os').hostname()
+    this.logInjection = isTrue(DD_LOGS_INJECTION)
 
     parseTags(this, env.DD_TAGS)
     parseTags(this, env.DD_TRACE_TAGS)
