@@ -2,6 +2,7 @@
 
 const https = require('https')
 const http = require('http')
+const log = require('../../../log')
 
 function retriableRequest (data, options, callback) {
   const client = options.protocol === 'https:' ? https : http
@@ -34,16 +35,13 @@ function retriableRequest (data, options, callback) {
 function request (data, options, callback) {
   const firstRequest = retriableRequest(data, options, callback)
 
-  // The first request will be retried if it fails due to a socket connection close
-  const firstRequestErrorHandler = error => {
-    if (firstRequest.reusedSocket && (error.code === 'ECONNRESET' || error.code === 'EPIPE')) {
-      const retriedReq = retriableRequest(data, options, callback)
-      // The retried request will fail normally
-      retriedReq.on('error', e => callback(new Error(`Network error trying to reach the intake: ${e.message}`)))
-      retriedReq.end()
-    } else {
-      callback(new Error(`Network error trying to reach the intake: ${error.message}`))
-    }
+  // The first request will be retried
+  const firstRequestErrorHandler = () => {
+    log.debug('Retrying request to the intake')
+    const retriedReq = retriableRequest(data, options, callback)
+    // The retried request will fail normally
+    retriedReq.on('error', e => callback(new Error(`Network error trying to reach the intake: ${e.message}`)))
+    retriedReq.end()
   }
 
   firstRequest.on('error', firstRequestErrorHandler)

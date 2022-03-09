@@ -18,7 +18,7 @@ class Writer {
   }
 
   _sendPayload (data, done) {
-    makeRequest(data, this._url, 2000, (err, res) => {
+    makeRequest(data, this._url, 15000, (err, res) => {
       if (err) {
         log.error(err)
         done()

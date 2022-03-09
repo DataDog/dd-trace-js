@@ -247,8 +247,6 @@ class AgentlessCiVisibilityEncoder {
         runtime_id: this.runtimeId,
         'language': 'javascript',
         'library_version': tracerVersion,
-        'language_interpreter': 'nodejs',
-        'language_version': process.version,
         'env': this.env,
         'service': this.service,
         'runtime.name': 'node',
