@@ -25,7 +25,10 @@ addHook({ name: 'amqp10', file: 'lib/sender_link.js', versions: ['>=3'] }, Sende
         return promise
       }
 
-      promise.then(() => AsyncResource.bind(finish(asyncEndCh, errorCh)), e => AsyncResource.bind(finish(asyncEndCh, errorCh, e)))
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+      promise.then(asyncResource.bind(() => finish(asyncEndCh, errorCh)),
+        asyncResource.bind(e => finish(asyncEndCh, errorCh, e)))
 
       return promise
     } catch (err) {
