@@ -61,6 +61,7 @@ module.exports = class Plugin {
     return span
   }
 
+  // TODO: make this bindable without an explicit null argument
   finishSpan (span) {
     if (!span) {
       span = storage.getStore().span

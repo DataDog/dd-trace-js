@@ -11,7 +11,7 @@ class CouchbasePlugin extends Plugin {
     this.addSub(`apm:couchbase:${func}:start`, start)
     this.addSub(`apm:couchbase:${func}:end`, this.exit.bind(this))
     this.addSub(`apm:couchbase:${func}:error`, this.addError.bind(this))
-    this.addSub(`apm:couchbase:${func}:async-end`, this.finishSpan.bind(this))
+    this.addSub(`apm:couchbase:${func}:async-end`, this.finishSpan.bind(this, null))
   }
 
   startSpan (operation, bucket, type, resource) {
