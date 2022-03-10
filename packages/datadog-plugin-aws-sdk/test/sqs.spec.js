@@ -22,13 +22,13 @@ describe('Plugin', () => {
       let tracer
 
       describe('without configuration', () => {
-        before(() => {
+        beforeEach(() => {
           tracer = require('../../dd-trace')
 
           return agent.load('aws-sdk')
         })
 
-        before(done => {
+        beforeEach(done => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
           const endpoint = new AWS.Endpoint('http://localhost:4576')
@@ -43,11 +43,11 @@ describe('Plugin', () => {
           })
         })
 
-        after(done => {
+        afterEach(done => {
           sqs.deleteQueue({ QueueUrl }, done)
         })
 
-        after(() => {
+        afterEach(() => {
           return agent.close()
         })
 

@@ -1,49 +1,24 @@
 /* eslint-disable max-len */
 'use strict'
 
+const agent = require('../../dd-trace/test/plugins/agent')
 const Sns = require('../src/services/sns')
 const plugin = require('../src')
-const tracer = require('../../dd-trace')
 
 describe('Sns', () => {
+  let tracer
   let span
   withVersions(plugin, 'aws-sdk', version => {
     let traceId
-    let parentId
     let spanId
+
+    beforeEach(() => agent.load('aws-sdk'))
+    afterEach(() => agent.close())
+
     before(() => {
-      tracer.init()
-      span = {
-        finish: sinon.spy(() => {}),
-        context: () => {
-          return {
-            _sampling: {
-              priority: 1
-            },
-            _trace: {
-              started: [],
-              origin: ''
-            },
-            _traceFlags: {
-              sampled: 1
-            },
-            'x-datadog-trace-id': traceId,
-            'x-datadog-parent-id': parentId,
-            'x-datadog-sampling-priority': '1',
-            toTraceId: () => {
-              return traceId
-            },
-            toSpanId: () => {
-              return spanId
-            }
-          }
-        },
-        addTags: sinon.stub(),
-        setTag: sinon.stub()
-      }
-      tracer._tracer.startSpan = sinon.spy(() => {
-        return span
-      })
+      tracer = require('../../dd-trace')
+      span = tracer.startSpan()
+      span.context()._sampling.priority = 1
     })
 
     it('injects trace context to SNS publish', () => {
@@ -56,9 +31,8 @@ describe('Sns', () => {
         operation: 'publish'
       }
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
+      traceId = span.context().toTraceId()
+      spanId = span.context().toSpanId()
       sns.requestInject(span.context(), request, tracer)
 
       expect(request.params).to.deep.equal({
@@ -66,7 +40,7 @@ describe('Sns', () => {
         MessageAttributes: {
           '_datadog': {
             'DataType': 'Binary',
-            'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
+            'BinaryValue': `{"x-datadog-trace-id":"${traceId}","x-datadog-parent-id":"${spanId}","x-datadog-sampling-priority":"1"}`
           }
         },
         'TopicArn': 'some ARN'
@@ -86,9 +60,8 @@ describe('Sns', () => {
         operation: 'publishBatch'
       }
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
+      traceId = span.context().toTraceId()
+      spanId = span.context().toSpanId()
       sns.requestInject(span.context(), request, tracer)
 
       expect(request.params).to.deep.equal({
@@ -98,7 +71,7 @@ describe('Sns', () => {
             MessageAttributes: {
               '_datadog': {
                 'DataType': 'Binary',
-                'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
+                'BinaryValue': `{"x-datadog-trace-id":"${traceId}","x-datadog-parent-id":"${spanId}","x-datadog-sampling-priority":"1"}`
               }
             }
           },
@@ -131,9 +104,6 @@ describe('Sns', () => {
         operation: 'publish'
       }
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
       sns.requestInject(span.context(), request, tracer)
       expect(request.params).to.deep.equal(request.params)
     })
