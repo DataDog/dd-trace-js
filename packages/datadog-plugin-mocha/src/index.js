@@ -32,13 +32,14 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
 
   return {
     childOf,
-    resource: `${testSuite}.${fullTestName}`,
+    [SPAN_TYPE]: 'test',
     [TEST_TYPE]: 'test',
     [TEST_NAME]: fullTestName,
     [TEST_SUITE]: testSuite,
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [TEST_FRAMEWORK_VERSION]: tracer._version
+    [TEST_FRAMEWORK_VERSION]: tracer._version,
+    [RESOURCE_NAME]: `${testSuite}.${fullTestName}`
   }
 }
 
@@ -51,6 +52,8 @@ class MochaPlugin extends Plugin {
     super(...args)
 
     this._testNameToParams = {}
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
+    this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test:start', (test) => {
       const store = storage.getStore()
@@ -126,10 +129,7 @@ class MochaPlugin extends Plugin {
   }
 
   startTestSpan (test) {
-    const testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
-    const sourceRoot = process.cwd()
-
-    const { childOf, resource, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, sourceRoot)
+    const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, this.sourceRoot)
 
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)
     if (testParametersString) {
@@ -140,10 +140,8 @@ class MochaPlugin extends Plugin {
       .startSpan('mocha.test', {
         childOf,
         tags: {
-          [SPAN_TYPE]: 'test',
-          [RESOURCE_NAME]: resource,
-          ...testSpanMetadata,
-          ...testEnvironmentMetadata
+          ...this.testEnvironmentMetadata,
+          ...testSpanMetadata
         }
       })
     testSpan.context()._trace.origin = CI_APP_ORIGIN
