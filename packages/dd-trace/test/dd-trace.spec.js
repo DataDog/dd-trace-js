@@ -15,6 +15,9 @@ describe('dd-trace', () => {
   let listener
 
   beforeEach(() => {
+    delete require.cache[require.resolve('../')]
+    delete global._ddtrace
+
     tracer = require('../')
 
     return getPort().then(port => {
