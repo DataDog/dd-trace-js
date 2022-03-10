@@ -63,7 +63,7 @@ function createWrapIt (tracer, globalConfig, globalInput, testEnvironmentMetadat
             }
             throw error
           } finally {
-            finishAllTraceSpans(testSpan)
+            finishAllTraceSpans(testSpan._span)
           }
           if (done) {
             done(result)

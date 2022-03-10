@@ -96,7 +96,7 @@ function createWrapRunTest (tracer, testEnvironmentMetadata, sourceRoot) {
             }
             throw error
           } finally {
-            finishAllTraceSpans(activeSpan)
+            finishAllTraceSpans(activeSpan._span)
           }
           return result
         }

@@ -1,7 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
 
 const {
   CI_APP_ORIGIN,
@@ -16,8 +15,6 @@ const {
   getTestEnvironmentMetadata,
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
-const { SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
 
 class CucumberPlugin extends Plugin {
   static get name () {
@@ -31,25 +28,22 @@ class CucumberPlugin extends Plugin {
     const sourceRoot = process.cwd()
 
     this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
       const testSuite = getTestSuitePath(pickleUri, sourceRoot)
 
-      const span = this.tracer.startSpan('cucumber.test', {
-        childOf,
-        tags: {
-          [SPAN_TYPE]: 'test',
-          [RESOURCE_NAME]: pickleName,
+      const span = this.startSpan('cucumber.test', {
+        resource: pickleName,
+        type: 'test',
+        meta: {
           [TEST_TYPE]: 'test',
           [TEST_NAME]: pickleName,
           [TEST_SUITE]: testSuite,
-          [SAMPLING_RULE_DECISION]: 1,
-          [TEST_FRAMEWORK_VERSION]: this.tracer._version,
+          [TEST_FRAMEWORK_VERSION]: this.tracer.config.version,
           ...testEnvironmentMetadata
         }
       })
-      span.context()._trace.origin = CI_APP_ORIGIN
-      this.enter(span, store)
+
+      span.trace.samplingPiority = 1 // TODO: go through a sampler
+      span.trace.origin = CI_APP_ORIGIN
     })
 
     this.addSub('ci:cucumber:run:end', () => {
@@ -57,16 +51,12 @@ class CucumberPlugin extends Plugin {
     })
 
     this.addSub('ci:cucumber:run-step:start', ({ resource }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('cucumber.step', {
-        childOf,
-        tags: {
-          'cucumber.step': resource,
-          [RESOURCE_NAME]: resource
+      this.startSpan('cucumber.step', {
+        resource,
+        meta: {
+          'cucumber.step': resource
         }
       })
-      this.enter(span, store)
     })
 
     this.addSub('ci:cucumber:run-step:end', () => {
@@ -74,30 +64,22 @@ class CucumberPlugin extends Plugin {
     })
 
     this.addSub('ci:cucumber:run:async-end', ({ isStep, status, skipReason, errorMessage }) => {
-      const span = storage.getStore().span
+      const span = this.activeSpan
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
-      span.setTag(statusTag, status)
+      span.meta[statusTag] = status
+      span.meta[TEST_SKIP_REASON] = skipReason
+      span.meta[ERROR_MESSAGE] = errorMessage
 
-      if (skipReason) {
-        span.setTag(TEST_SKIP_REASON, skipReason)
-      }
+      this.finishSpan(span)
 
-      if (errorMessage) {
-        span.setTag(ERROR_MESSAGE, errorMessage)
-      }
-
-      span.finish()
       if (!isStep) {
         finishAllTraceSpans(span)
       }
     })
 
     this.addSub('ci:cucumber:error', (err) => {
-      if (err) {
-        const span = storage.getStore().span
-        span.setTag('error', err)
-      }
+      this.addError(err)
     })
   }
 }

@@ -228,7 +228,7 @@ function createHandleTestEvent (tracer, testEnvironmentMetadata, instrumenter) {
           testSpan.setTag('error', error)
           throw error
         } finally {
-          finishAllTraceSpans(testSpan)
+          finishAllTraceSpans(testSpan._span)
         }
         return result
       }

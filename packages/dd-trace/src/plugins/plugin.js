@@ -28,11 +28,17 @@ class Subscription {
 module.exports = class Plugin {
   constructor () {
     this.tracer = tracer
+    this.storage = storage
     this.config = null
 
     this._subscriptions = []
     this._enabled = false
     this._storeStack = []
+  }
+
+  get activeSpan () {
+    const store = this.storage.getStore()
+    return store && store.span
   }
 
   startSpan (name, options) {
@@ -51,8 +57,10 @@ module.exports = class Plugin {
     return span
   }
 
-  finishSpan () {
-    const span = storage.getStore().span
+  finishSpan (span) {
+    if (!span) {
+      span = storage.getStore().span
+    }
 
     this._measure(span)
 
