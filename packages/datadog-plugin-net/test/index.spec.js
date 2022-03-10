@@ -65,7 +65,7 @@ describe('Plugin', () => {
           'span.kind': 'client',
           'ipc.path': '/tmp/dd-trace.sock'
         },
-        parent_id: new Int64BE(parent.context()._spanId._buffer)
+        parent_id: new Int64BE(parent._span.spanId.toArray())
       }).then(done).catch(done)
 
       tracer.scope().activate(parent, () => {
@@ -94,7 +94,7 @@ describe('Plugin', () => {
               'tcp.remote.port': port,
               'tcp.local.port': socket.localPort
             },
-            parent_id: new Int64BE(parent.context()._spanId._buffer)
+            parent_id: new Int64BE(parent._span.spanId.toArray())
           }, 2000).then(done).catch(done)
         })
       })
@@ -124,7 +124,7 @@ describe('Plugin', () => {
               'tcp.remote.port': port,
               'tcp.local.port': socket.localPort
             },
-            parent_id: new Int64BE(parent.context()._spanId._buffer)
+            parent_id: new Int64BE(parent._span.spanId.toArray())
           }).then(done).catch(done)
         })
       })
@@ -139,7 +139,7 @@ describe('Plugin', () => {
           'span.kind': 'client',
           'ipc.path': '/tmp/dd-trace.sock'
         },
-        parent_id: new Int64BE(parent.context()._spanId._buffer)
+        parent_id: new Int64BE(parent._span.spanId.toArray())
       }).then(done).catch(done)
 
       tracer.scope().activate(parent, () => {
