@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class MemcachedPlugin extends Plugin {
   static get name () {
@@ -13,19 +11,16 @@ class MemcachedPlugin extends Plugin {
     super(...args)
 
     this.addSub('apm:memcached:command:start', () => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('memcached.command', {
-        childOf,
-        tags: {
-          'span.kind': 'client',
-          'span.type': 'memcached',
-          'service.name': this.config.service || `${this.tracer._service}-memcached`
+      this.startSpan('memcached.command', {
+        service: this.config.service || `${this.tracer.config.service}-memcached`,
+        kind: 'client',
+        type: 'memcached',
+        meta: {
+          'memcached.command': '',
+          'out.host': '',
+          'out.port': ''
         }
       })
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
     })
 
     this.addSub('apm:memcached:command:end', () => {
@@ -33,34 +28,26 @@ class MemcachedPlugin extends Plugin {
     })
 
     this.addSub('apm:memcached:command:start:with-args', ({ client, server, query }) => {
-      const span = storage.getStore().span
-      span.addTags({
-        'resource.name': query.type,
-        'memcached.command': query.command
-      })
-
       const address = getAddress(client, server, query)
+      const span = this.activeSpan
 
-      if (address) {
-        span.addTags({
-          'out.host': address[0],
-          'out.port': address[1]
-        })
-      }
+      span.resource = query.type
+      span.meta['memcached.command'] = query.command
+      span.meta['out.host'] = address[0]
+      span.meta['out.port'] = address[1]
     })
 
     this.addSub('apm:memcached:command:error', err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
+      this.addError(err)
     })
 
     this.addSub('apm:memcached:command:async-end', () => {
-      const span = storage.getStore().span
-      span.finish()
+      this.finishSpan()
     })
   }
 }
 
+// TODO: move to the publisher
 function getAddress (client, server, query) {
   if (!server) {
     if (client.servers.length === 1) {
