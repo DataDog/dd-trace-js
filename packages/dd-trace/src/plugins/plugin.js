@@ -4,6 +4,10 @@ const dc = require('diagnostics_channel')
 const { storage } = require('../../../datadog-core')
 const { tracer } = require('../../../datadog-tracer')
 
+// TODO: default service name
+// TODO: split subscription class
+// TODO: span hooks
+
 class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)

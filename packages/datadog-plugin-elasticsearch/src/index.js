@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class ElasticsearchPlugin extends Plugin {
   static get name () {
@@ -13,27 +11,19 @@ class ElasticsearchPlugin extends Plugin {
     super(...args)
 
     this.addSub('apm:elasticsearch:query:start', ({ params }) => {
-      this.config = normalizeConfig(this.config)
-
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const body = getBody(params.body || params.bulkBody)
-      const span = this.tracer.startSpan('elasticsearch.query', {
-        childOf,
-        tags: {
+      this.startSpan('elasticsearch.query', {
+        service: this.config.service || `${this.tracer.config.service}-elasticsearch`,
+        resource: `${params.method} ${quantizePath(params.path)}`,
+        type: 'elasticsearch',
+        kind: 'client',
+        meta: {
           'db.type': 'elasticsearch',
-          'span.kind': 'client',
-          'service.name': this.config.service || `${this.tracer._service}-elasticsearch`,
-          'resource.name': `${params.method} ${quantizePath(params.path)}`,
-          'span.type': 'elasticsearch',
           'elasticsearch.url': params.path,
           'elasticsearch.method': params.method,
-          'elasticsearch.body': body,
+          'elasticsearch.body': getBody(params.body || params.bulkBody),
           'elasticsearch.params': JSON.stringify(params.querystring || params.query)
         }
       })
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
     })
 
     this.addSub('apm:elasticsearch:query:end', () => {
@@ -41,15 +31,18 @@ class ElasticsearchPlugin extends Plugin {
     })
 
     this.addSub('apm:elasticsearch:query:error', err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
+      this.addError(err)
     })
 
     this.addSub('apm:elasticsearch:query:async-end', ({ params }) => {
-      const span = storage.getStore().span
+      const span = this.activeSpan
       this.config.hooks.query(span, params)
       span.finish()
     })
+  }
+
+  configure (config) {
+    super.configure(normalizeConfig(config))
   }
 }
 
