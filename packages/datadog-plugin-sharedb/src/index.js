@@ -1,7 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
 
 class SharedbPlugin extends Plugin {
   static get name () {
@@ -12,23 +11,18 @@ class SharedbPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:sharedb:request:start`, ({ actionName, request }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('sharedb.request', {
-        childOf,
-        tags: {
-          'service.name': this.config.service || this.tracer._service,
-          'span.kind': 'server',
-          'sharedb.action': actionName,
-          'resource.name': getReadableResourceName(actionName, request.c, request.q)
+      const span = this.startSpan('sharedb.request', {
+        service: this.config.service,
+        resource: getReadableResourceName(actionName, request.c, request.q),
+        kind: 'server',
+        meta: {
+          'sharedb.action': actionName
         }
       })
 
       if (this.config.hooks && this.config.hooks.receive) {
         this.config.hooks.receive(span, request)
       }
-
-      this.enter(span, store)
     })
 
     this.addSub(`apm:sharedb:request:end`, () => {
@@ -36,16 +30,15 @@ class SharedbPlugin extends Plugin {
     })
 
     this.addSub(`apm:sharedb:request:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
+      this.addError(err)
     })
 
     this.addSub(`apm:sharedb:request:async-end`, ({ request, res }) => {
-      const span = storage.getStore().span
+      const span = this.activeSpan
       if (this.config.hooks && this.config.hooks.reply) {
         this.config.hooks.reply(span, request, res)
       }
-      span.finish()
+      this.finishSpan(span)
     })
   }
 }
