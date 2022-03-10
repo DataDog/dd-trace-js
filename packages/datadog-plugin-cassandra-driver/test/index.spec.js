@@ -2,14 +2,13 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let cassandra
   let tracer
 
   describe('cassandra-driver', () => {
-    withVersions(plugin, 'cassandra-driver', version => {
+    withVersions('cassandra-driver', 'cassandra-driver', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         global.tracer = tracer
@@ -23,7 +22,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
@@ -44,7 +43,6 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           const query = 'SELECT now() FROM local;'
-
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-cassandra')
@@ -141,19 +139,6 @@ describe('Plugin', () => {
             })
           })
         })
-
-        it('should run event listeners in the correct scope', done => {
-          const emitter = client.stream('SELECT now() FROM local;')
-          const span = tracer.startSpan('test')
-          const scope = tracer.scope()
-
-          scope.activate(span, () => {
-            emitter.once('readable', () => {
-              expect(scope.active()).to.equal(span)
-              done()
-            })
-          })
-        })
       })
 
       describe('with configuration', () => {
@@ -164,7 +149,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
@@ -205,7 +190,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close()
+            return agent.close({ ritmReset: false })
           })
 
           beforeEach(done => {
