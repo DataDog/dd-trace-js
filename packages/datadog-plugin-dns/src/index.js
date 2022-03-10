@@ -1,88 +1,60 @@
 'use strict'
 
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
 
 class DNSPlugin extends Plugin {
   static get name () {
     return 'dns'
   }
 
-  addSubs (func, start, asyncEnd = defaultAsyncEnd) {
+  addSubs (func, start, asyncEnd) {
     this.addSub(`apm:dns:${func}:start`, start)
     this.addSub(`apm:dns:${func}:end`, this.exit.bind(this))
-    this.addSub(`apm:dns:${func}:error`, errorHandler)
-    this.addSub(`apm:dns:${func}:async-end`, asyncEnd)
+    this.addSub(`apm:dns:${func}:error`, this.addError.bind(this))
+    this.addSub(`apm:dns:${func}:async-end`, asyncEnd || this.finishSpan.bind(this, null))
   }
 
-  startSpan (name, customTags, store) {
-    const tags = {
-      'service.name': this.config.service || this.tracer._service,
-      'span.kind': 'client'
-    }
-    for (const tag in customTags) {
-      tags[tag] = customTags[tag]
-    }
-    const span = this.tracer.startSpan(name, {
-      childOf: store ? store.span : null,
-      tags
+  startSpan (name, resource, meta) {
+    return super.startSpan(name, {
+      service: this.config.service || this.tracer._service,
+      resource,
+      kind: 'client',
+      meta
     })
-    analyticsSampler.sample(span, this.config.measured)
-    return span
   }
 
   constructor (...args) {
     super(...args)
 
     this.addSubs('lookup', ([hostname]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('dns.lookup', {
-        'resource.name': hostname,
+      this.startSpan('dns.lookup', hostname, {
         'dns.hostname': hostname
-      }, store)
-      this.enter(span, store)
+      })
     }, (result) => {
-      const { span } = storage.getStore()
-      span.setTag('dns.address', result)
-      span.finish()
+      const span = this.activeSpan
+      span.meta['dns.address'] = result
+      this.finishSpan(span)
     })
 
     this.addSubs('lookup_service', ([address, port]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('dns.lookup_service', {
-        'resource.name': `${address}:${port}`,
+      this.startSpan('dns.lookup_service', `${address}:${port}`, {
         'dns.address': address,
-        'dns.port': port
-      }, store)
-      this.enter(span, store)
+        'dns.port': String(port)
+      })
     })
 
     this.addSubs('resolve', ([hostname, maybeType]) => {
-      const store = storage.getStore()
       const rrtype = typeof maybeType === 'string' ? maybeType : 'A'
-      const span = this.startSpan('dns.resolve', {
-        'resource.name': `${rrtype} ${hostname}`,
+      this.startSpan('dns.resolve', `${rrtype} ${hostname}`, {
         'dns.hostname': hostname,
         'dns.rrtype': rrtype
-      }, store)
-      this.enter(span, store)
+      })
     })
 
     this.addSubs('reverse', ([ip]) => {
-      const store = storage.getStore()
-      const span = this.startSpan('dns.reverse', { 'resource.name': ip, 'dns.ip': ip }, store)
-      this.enter(span, store)
+      this.startSpan('dns.reverse', ip, { 'dns.ip': ip })
     })
   }
-}
-
-function defaultAsyncEnd () {
-  storage.getStore().span.finish()
-}
-
-function errorHandler (error) {
-  storage.getStore().span.setTag('error', error)
 }
 
 module.exports = DNSPlugin

@@ -69,13 +69,13 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     }
     startCh.publish(startArgs)
 
-    arguments[arguments.length - 1] = function (error, result) {
+    arguments[arguments.length - 1] = AsyncResource.bind(function (error, result) {
       if (error) {
         errorCh.publish(error)
       }
       asyncEndCh.publish(result)
       cb.apply(this, arguments)
-    }
+    })
 
     try {
       return fn.apply(this, arguments)
