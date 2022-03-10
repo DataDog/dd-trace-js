@@ -15,15 +15,18 @@ describe('dd-trace', () => {
   let listener
 
   beforeEach(() => {
+    delete require.cache[require.resolve('../')]
+    delete global._ddtrace
+
     tracer = require('../')
 
     return getPort().then(port => {
       agent = express()
-      listener = agent.listen()
+      listener = agent.listen(port)
 
       tracer.init({
         service: 'test',
-        port: listener.address().port,
+        port,
         flushInterval: 0,
         plugins: false
       })
