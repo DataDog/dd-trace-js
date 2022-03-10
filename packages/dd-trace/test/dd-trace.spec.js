@@ -19,11 +19,11 @@ describe('dd-trace', () => {
 
     return getPort().then(port => {
       agent = express()
-      listener = agent.listen()
+      listener = agent.listen(port)
 
       tracer.init({
         service: 'test',
-        port: listener.address().port,
+        port,
         flushInterval: 0,
         plugins: false
       })
