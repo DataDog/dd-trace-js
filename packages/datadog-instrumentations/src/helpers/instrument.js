@@ -20,11 +20,11 @@ exports.channel = function channel (name) {
 }
 
 exports.addHook = function addHook ({ name, versions, file }, hook) {
-  file = filename(name, file)
+  const fullFilename = filename(name, file)
   const loaderHook = (moduleExports, moduleName, moduleBaseDir) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
     const moduleVersion = getVersion(moduleBaseDir)
-    if (moduleName !== file || !matchVersion(moduleVersion, versions)) {
+    if (moduleName !== fullFilename || !matchVersion(moduleVersion, versions)) {
       return moduleExports
     }
     return hook(moduleExports)
@@ -65,7 +65,7 @@ function cjsPostLoad (instrumentation, hook) {
     if (!id.includes(`/node_modules/${instrumentation.name}/`)) continue
 
     if (instrumentation.file) {
-      if (!id.endsWith(`/node_modules/${filename(instrumentation)}`)) continue
+      if (!id.endsWith(`/node_modules/${filename(instrumentation.name, instrumentation.file)}`)) continue
 
       const basedir = getBasedir(ids[i])
 
