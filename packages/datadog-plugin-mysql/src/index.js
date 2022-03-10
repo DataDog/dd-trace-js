@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class MySQLPlugin extends Plugin {
   static get name () {
@@ -13,28 +11,19 @@ class MySQLPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:${this.constructor.name}:query:start`, ({ sql, conf }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('mysql.query', {
-        childOf,
-        tags: {
-          'service.name': this.config.service || `${this.tracer._service}-mysql`,
-          'span.type': 'sql',
-          'span.kind': 'client',
+      this.startSpan('mysql.query', {
+        service: this.config.service || `${this.tracer.config.service}-mysql`,
+        resource: sql,
+        type: 'sql',
+        kind: 'client',
+        meta: {
           'db.type': 'mysql',
           'db.user': conf.user,
+          'db.name': conf.database,
           'out.host': conf.host,
-          'out.port': conf.port,
-          'resource.name': sql
+          'out.port': conf.port
         }
       })
-
-      if (conf.database) {
-        span.setTag('db.name', conf.database)
-      }
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
     })
 
     this.addSub(`apm:${this.constructor.name}:query:end`, () => {
@@ -42,15 +31,11 @@ class MySQLPlugin extends Plugin {
     })
 
     this.addSub(`apm:${this.constructor.name}:query:error`, err => {
-      if (err) {
-        const span = storage.getStore().span
-        span.setTag('error', err)
-      }
+      this.addError(err)
     })
 
     this.addSub(`apm:${this.constructor.name}:query:async-end`, () => {
-      const span = storage.getStore().span
-      span.finish()
+      this.finishSpan()
     })
   }
 }
