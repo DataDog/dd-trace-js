@@ -3,6 +3,7 @@
 require('./src/amqplib')
 require('./src/bluebird')
 require('./src/bunyan')
+require('./src/cassandra-driver')
 require('./src/couchbase')
 require('./src/cucumber')
 require('./src/dns')
