@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class RedisPlugin extends Plugin {
@@ -19,40 +17,20 @@ class RedisPlugin extends Plugin {
       if (!this.config.filter(command)) {
         return this.skip()
       }
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('redis.command', {
-        childOf,
-        tags: {
-          'span.kind': 'client',
-          'resource.name': command,
-          'span.type': 'redis',
+
+      this.startSpan('redis.command', {
+        service: getService(this.tracer, this.config, connectionName),
+        resource: command,
+        type: 'redis',
+        kind: 'client',
+        meta: {
           'db.type': 'redis',
           'db.name': db || '0',
-          'redis.raw_command': formatCommand(command, args)
+          'redis.raw_command': formatCommand(command, args),
+          'out.host': connectionOptions.host,
+          'out.port': String(connectionOptions.port || '')
         }
       })
-
-      span.setTag('service.name', this.config.service || `${span.context()._tags['service.name']}-redis`)
-
-      analyticsSampler.sample(span, this.config.measured)
-
-      if (connectionOptions) {
-        span.addTags({
-          'out.host': connectionOptions.host,
-          'out.port': connectionOptions.port
-        })
-      }
-
-      if (this.config.splitByInstance && connectionName) {
-        const service = this.config.service
-          ? `${this.config.service}-${connectionName}`
-          : connectionName
-
-        span.setTag('service.name', service)
-      }
-
-      this.enter(span, store)
     })
 
     this.addSub(`apm:${this.constructor.name}:command:end`, () => {
@@ -60,19 +38,27 @@ class RedisPlugin extends Plugin {
     })
 
     this.addSub(`apm:${this.constructor.name}:command:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
+      this.addError(err)
     })
 
     this.addSub(`apm:${this.constructor.name}:command:async-end`, () => {
-      const span = storage.getStore().span
-      span.finish()
+      this.finishSpan()
     })
   }
 
   configure (config) {
     super.configure(normalizeConfig(config))
   }
+}
+
+function getService (tracer, config, connectionName) {
+  if (config.splitByInstance && connectionName) {
+    return config.service
+      ? `${config.service}-${connectionName}`
+      : connectionName
+  }
+
+  return config.service || `${tracer.config.service}-redis`
 }
 
 function formatCommand (command, args) {
