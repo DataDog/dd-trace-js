@@ -86,7 +86,7 @@ class EncoderV4 {
       this._encodeString(bytes, 'service')
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, 'error')
-      this._encodeInteger(bytes, span.error && span.kind !== 'internal' ? 1 : 0)
+      this._encodeInteger(bytes, span.error ? 1 : 0)
       this._encodeString(bytes, 'start')
       this._encodeLong(bytes, span.start)
       this._encodeString(bytes, 'duration')
