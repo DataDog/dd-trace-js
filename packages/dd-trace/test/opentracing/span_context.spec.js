@@ -1,83 +1,62 @@
 'use strict'
 
-const id = require('../../src/id')
+const { expect } = require('chai')
+const { id } = require('../../../datadog-tracer/src/id')
 
 describe('SpanContext', () => {
   let SpanContext
+  let span
 
   beforeEach(() => {
     SpanContext = require('../../src/opentracing/span_context')
+
+    span = {
+      spanId: id('456'),
+      parentId: id('789'),
+      service: 'test',
+      name: 'test',
+      duration: 1000,
+      meta: { str: 'test' },
+      metrics: { num: 1 },
+      baggage: { foo: 'bar' },
+      trace: {
+        traceId: id('123'),
+        spans: [],
+        started: 0,
+        finished: 0,
+        samplingPriority: 2,
+        meta: { foo: 'bar' }
+      }
+    }
   })
 
   it('should instantiate with the given properties', () => {
-    const noop = {}
-    const props = {
-      traceId: '123',
-      spanId: '456',
-      parentId: '789',
-      name: 'test',
-      isFinished: true,
-      tags: {},
-      metrics: {},
-      sampling: { priority: 2 },
-      baggageItems: { foo: 'bar' },
-      noop,
-      trace: {
-        started: ['span1', 'span2'],
-        finished: ['span1'],
-        tags: { foo: 'bar' }
-      }
-    }
-    const spanContext = new SpanContext(props)
+    const span1 = { duration: 1234 }
+    const span2 = { duration: 0 }
 
-    expect(spanContext).to.deep.equal({
-      _traceId: '123',
-      _spanId: '456',
-      _parentId: '789',
-      _name: 'test',
-      _isFinished: true,
-      _tags: {},
-      _sampling: { priority: 2 },
-      _baggageItems: { foo: 'bar' },
-      _noop: noop,
-      _trace: {
-        started: ['span1', 'span2'],
-        finished: ['span1'],
-        tags: { foo: 'bar' }
-      }
-    })
-  })
+    span.trace.spans = [span1, span2]
+    span.started = 2
+    span.finished = 1
 
-  it('should have the correct default values', () => {
-    const spanContext = new SpanContext({
-      traceId: '123',
-      spanId: '456'
-    })
+    const spanContext = new SpanContext(span)
 
-    expect(spanContext).to.deep.equal({
-      _traceId: '123',
-      _spanId: '456',
-      _parentId: null,
-      _name: undefined,
-      _isFinished: false,
-      _tags: {},
-      _sampling: {},
-      _baggageItems: {},
-      _noop: null,
-      _trace: {
-        started: [],
-        finished: [],
-        tags: {}
-      }
+    expect(spanContext._traceId).to.equal(span.trace.traceId)
+    expect(spanContext._spanId).to.equal(span.spanId)
+    expect(spanContext._parentId).to.equal(span.parentId)
+    expect(spanContext._name).to.equal(span.name)
+    expect(spanContext._tags).to.include({ str: 'test', num: 1 })
+    expect(spanContext._sampling).to.have.property('priority', 2)
+    expect(spanContext._baggageItems).to.include({ foo: 'bar' })
+    expect(spanContext._trace).to.deep.include({
+      started: [span1, span2],
+      finished: [span1],
+      tags: { foo: 'bar' }
     })
   })
 
   describe('toTraceId()', () => {
     it('should return the trace ID as string', () => {
-      const spanContext = new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('456', 10)
-      })
+      const spanContext = new SpanContext(span)
 
       expect(spanContext.toTraceId()).to.equal('123')
     })
@@ -85,10 +64,7 @@ describe('SpanContext', () => {
 
   describe('toSpanId()', () => {
     it('should return the span ID as string', () => {
-      const spanContext = new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('456', 10)
-      })
+      const spanContext = new SpanContext(span)
 
       expect(spanContext.toSpanId()).to.equal('456')
     })
