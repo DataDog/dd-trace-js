@@ -1,15 +1,14 @@
 'use strict'
 
-const Span = require('opentracing').Span
-const Scope = require('../src/scope')
-
 describe('Scope', () => {
+  let tracer
   let scope
   let span
 
   beforeEach(() => {
-    scope = new Scope()
-    span = new Span()
+    tracer = require('../../..').init({ plugins: false })
+    scope = tracer.scope()
+    span = tracer.startSpan('test')
   })
 
   describe('active()', () => {
@@ -120,7 +119,7 @@ describe('Scope', () => {
           throw error
         })
       } catch (e) {
-        expect(span.setTag).to.have.been.calledWith('error', e)
+        expect(span._span.error).to.be.an('error')
       }
     })
   })
