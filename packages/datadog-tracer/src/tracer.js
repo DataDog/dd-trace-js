@@ -6,6 +6,10 @@ const { Config } = require('./config')
 const { TextMapPropagator } = require('./propagators/text_map')
 const { LogPropagator } = require('./propagators/log')
 
+// TODO: consider moving the exporters out
+// TODO: add an option to pass an exporter
+// TODO: add an option to pass a custom propagator
+
 class Tracer {
   constructor (options) {
     const config = this.config = new Config(options)
