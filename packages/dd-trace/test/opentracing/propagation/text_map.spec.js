@@ -10,7 +10,7 @@ describe('TextMapPropagator', () => {
   let config
 
   beforeEach(() => {
-    config = { experimental: { b3: false } }
+    config = { experimental: { b3: false }, plugins: false }
     tracer = require('../../../../..')
     tracer.init(config)
   })
@@ -72,7 +72,8 @@ describe('TextMapPropagator', () => {
       spanContext = span.context()
       spanContext._sampling.priority = 2
 
-      tracer.init({ experimental: { b3: true } })
+      config.experimental.b3 = true
+      tracer.init(config)
       tracer.inject(spanContext, 'text_map', carrier)
 
       expect(carrier).to.have.property('x-b3-traceid', spanContext._traceId.toString(16).padStart(32, '0'))
@@ -133,7 +134,8 @@ describe('TextMapPropagator', () => {
 
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
-        tracer.init({ experimental: { b3: true } })
+        config.experimental.b3 = true
+        tracer.init(config)
 
         delete carrier['x-datadog-trace-id']
         delete carrier['x-datadog-parent-id']
@@ -193,7 +195,8 @@ describe('TextMapPropagator', () => {
       })
 
       it('should skip extraction without the feature flag', () => {
-        tracer.init({ experimental: { b3: false } })
+        config.experimental.b3 = false
+        tracer.init(config)
 
         carrier = {
           'x-b3-traceid': '0000000000000123',
@@ -209,7 +212,8 @@ describe('TextMapPropagator', () => {
 
     describe('with B3 propagation as a single header', () => {
       beforeEach(() => {
-        tracer.init({ experimental: { b3: true } })
+        config.experimental.b3 = true
+        tracer.init(config)
       })
 
       it('should extract the header', () => {
@@ -287,7 +291,8 @@ describe('TextMapPropagator', () => {
       })
 
       it('should skip extraction without the feature flag', () => {
-        tracer.init({ experimental: { b3: false } })
+        config.experimental.b3 = false
+        tracer.init(config)
 
         carrier = {
           'b3': '0000000000000123-0000000000000456-1-0000000000000789'

@@ -7,7 +7,8 @@ describe('LogPropagator', () => {
     tracer = require('../../../../..').init({
       service: 'test',
       env: 'dev',
-      version: '1.0.0'
+      version: '1.0.0',
+      plugins: false
     })
   })
 
