@@ -42,9 +42,10 @@ describe('plugins/util/tx', () => {
         const callback = sinon.spy()
         const error = new Error('boom')
         const wrapper = tx.wrap(span, callback)
-        const tags = span.context()._tags
 
         wrapper(error)
+
+        const tags = span.context()._tags
 
         expect(tags).to.have.property('error.msg', error.message)
         expect(tags).to.have.property('error.type', error.name)
@@ -52,8 +53,8 @@ describe('plugins/util/tx', () => {
       })
 
       it('should return a wrapper that runs in the current scope', done => {
-        const parent = {}
-        const child = {}
+        const parent = tracer.startSpan('parent')
+        const child = tracer.startSpan('child')
 
         tracer.scope().activate(parent, () => {
           const wrapper = tx.wrap(span, () => {
@@ -83,11 +84,12 @@ describe('plugins/util/tx', () => {
       it('should set the error tags when the promise is rejected', () => {
         const error = new Error('boom')
         const promise = Promise.reject(error)
-        const tags = span.context()._tags
 
         tx.wrap(span, promise)
 
         return promise.catch(err => {
+          const tags = span.context()._tags
+
           expect(err).to.equal(error)
           expect(tags).to.have.property('error.msg', error.message)
           expect(tags).to.have.property('error.type', error.name)
@@ -113,11 +115,12 @@ describe('plugins/util/tx', () => {
         const callback = sinon.spy()
         const args = [1, 2, callback]
         const error = new Error('boom')
-        const tags = span.context()._tags
 
         tx.wrap(span, args)
 
         args[2](error)
+
+        const tags = span.context()._tags
 
         expect(tags).to.have.property('error.msg', error.message)
         expect(tags).to.have.property('error.type', error.name)
@@ -125,8 +128,8 @@ describe('plugins/util/tx', () => {
       })
 
       it('should replace a callback with a wrapper that runs in the current scope', done => {
-        const parent = {}
-        const child = {}
+        const parent = tracer.startSpan('parent')
+        const child = tracer.startSpan('child')
 
         tracer.scope().activate(parent, () => {
           const callback = () => {
