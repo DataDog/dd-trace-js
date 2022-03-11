@@ -17,15 +17,15 @@ const headerExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|
 
 class B3Propagator {
   inject (span, carrier) {
-    carrier[traceKey] = span.trace.traceId.toString(16)
-    carrier[spanKey] = span.spanId.toString(16)
+    carrier[traceKey] = span.trace.traceId.toString(16).padStart(32, '0')
+    carrier[spanKey] = span.spanId.toString(16).padStart(16, '0')
     carrier[sampledKey] = span.trace.samplingPriority > 0 ? '1' : '0'
 
     if (span.trace.samplingPriority > 1) {
       carrier[flagsKey] = '1' // debug flag means force trace
     }
 
-    const parentId = span.parentId.toString()
+    const parentId = span.parentId.toString(16).padStart(16, '0')
 
     if (parentId !== '0') {
       carrier[parentKey] = parentId
@@ -58,7 +58,7 @@ class B3Propagator {
         trace: new Trace({
           samplingPriority
         }),
-        spanId: id(),
+        spanId: zeroId,
         parentId: zeroId,
         baggage: {}
       }

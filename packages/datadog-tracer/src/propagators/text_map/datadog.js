@@ -58,7 +58,7 @@ class DatadogPropagator {
   }
 
   _injectBaggageItems (span, carrier) {
-    for (const key in span.trace.baggage) {
+    for (const key in span.baggage) {
       carrier[baggagePrefix + key] = String(span.baggage[key])
     }
   }

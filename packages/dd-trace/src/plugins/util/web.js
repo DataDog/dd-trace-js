@@ -198,7 +198,7 @@ const web = {
 
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
-    const childOf = tracer.scope().active() || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const childOf = tracer.scope().active() || extract(tracer, headers)
     const span = tracer.startSpan(name, { childOf })
 
     return span
@@ -482,6 +482,20 @@ function getMiddlewareSetting (config) {
   }
 
   return true
+}
+
+function extract (tracer, headers) {
+  const spanContext = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
+  if (spanContext) return spanContext
+
+  try {
+    headers = JSON.parse(headers['x-aws-sqsd-attr-_datadog'])
+    return tracer.extract(FORMAT_HTTP_HEADERS, headers)
+  } catch (e) {
+    // ignore error
+    return null
+  }
 }
 
 module.exports = web

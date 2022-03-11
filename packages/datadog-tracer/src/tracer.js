@@ -37,7 +37,7 @@ class Tracer {
   inject (span, format, carrier) {
     const propagator = this._propagators[format]
 
-    if (!span || !propagator) return
+    if (!propagator) return
 
     this._sampler.sample(span)
 

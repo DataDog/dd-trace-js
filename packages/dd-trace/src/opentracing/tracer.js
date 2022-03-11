@@ -42,13 +42,12 @@ class DatadogTracer extends Tracer {
   }
 
   _inject (spanContext, format, carrier) {
-    if (!spanContext) return this
     if (format === 'http_headers') {
       format = 'text_map'
     }
 
     try {
-      tracer.inject(spanContext._span, format, carrier)
+      tracer.inject(spanContext && spanContext._span, format, carrier)
     } catch (e) {
       log.error(e)
       metrics.increment('datadog.tracer.node.inject.errors', true)
@@ -64,8 +63,7 @@ class DatadogTracer extends Tracer {
 
     try {
       const internalSpan = tracer.extract(format, carrier)
-      const spanContext = new SpanContext(internalSpan)
-      return spanContext
+      return internalSpan ? new SpanContext(internalSpan) : null
     } catch (e) {
       log.error(e)
       metrics.increment('datadog.tracer.node.extract.errors', true)

@@ -30,7 +30,6 @@ describe('plugins/util/web', () => {
   let res
   let end
   let config
-  let tags
 
   beforeEach(() => {
     // `req` should only have common properties exposed and not things like
@@ -136,6 +135,22 @@ describe('plugins/util/web', () => {
         })
       })
 
+      it('should set the parent from an aws-sqsd header', () => {
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456'
+        }
+
+        req.headers = {
+          'x-aws-sqsd-attr-_datadog': JSON.stringify(carrier)
+        }
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          expect(span.context()._traceId.toString(10)).to.equal('123')
+          expect(span.context()._parentId.toString(10)).to.equal('456')
+        })
+      })
+
       it('should set the parent from the active context if any', () => {
         tracer.trace('aws.lambda', parentSpan => {
           web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -165,9 +180,9 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
           res.end()
+
+          const tags = span.context()._tags
 
           expect(tags).to.include({
             [SPAN_TYPE]: WEB,
@@ -182,9 +197,9 @@ describe('plugins/util/web', () => {
         config.headers = ['host', 'server']
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
           res.end()
+
+          const tags = span.context()._tags
 
           expect(tags).to.include({
             [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
@@ -235,9 +250,9 @@ describe('plugins/util/web', () => {
 
         web.instrument(tracer, config, req, res, 'test.request', () => {
           web.instrument(tracer, override, req, res, 'test.request', span => {
-            const tags = span.context()._tags
-
             res.end()
+
+            const tags = span.context()._tags
 
             expect(tags).to.include({
               [`${HTTP_REQUEST_HEADERS}.date`]: 'now'
@@ -252,9 +267,9 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
           res.end()
+
+          const tags = span.context()._tags
 
           expect(tags).to.include({
             [HTTP_URL]: 'http://localhost/user/123'
@@ -341,9 +356,9 @@ describe('plugins/util/web', () => {
         req.socket = { encrypted: true }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
           res.end()
+
+          const tags = span.context()._tags
 
           expect(tags).to.include({
             [SPAN_TYPE]: WEB,
@@ -366,9 +381,9 @@ describe('plugins/util/web', () => {
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
           res.end()
+
+          const tags = span.context()._tags
 
           expect(tags).to.include({
             [SPAN_TYPE]: WEB,
@@ -396,7 +411,6 @@ describe('plugins/util/web', () => {
       beforeEach(() => {
         web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
           span = reqSpan
-          tags = span.context()._tags
         })
       })
 
@@ -455,9 +469,11 @@ describe('plugins/util/web', () => {
 
         res.end()
 
+        const tags = span.context()._tags
+
         expect(tags).to.include({
           [RESOURCE_NAME]: 'GET',
-          [HTTP_STATUS_CODE]: 200
+          [HTTP_STATUS_CODE]: '200'
         })
       })
 
@@ -465,6 +481,8 @@ describe('plugins/util/web', () => {
         res.statusCode = 500
 
         res.end()
+
+        const tags = span.context()._tags
 
         expect(tags).to.include({
           [ERROR]: true
@@ -476,6 +494,8 @@ describe('plugins/util/web', () => {
 
         res.end()
 
+        const tags = span.context()._tags
+
         expect(tags).to.include({
           [ERROR]: true
         })
@@ -485,6 +505,8 @@ describe('plugins/util/web', () => {
         span.setTag('http.route', '/custom/route')
 
         res.end()
+
+        const tags = span.context()._tags
 
         expect(tags).to.include({
           [HTTP_ROUTE]: '/custom/route'
@@ -519,6 +541,8 @@ describe('plugins/util/web', () => {
         web.instrument(tracer, config, req, res, 'test.request', span => {
           res.end()
 
+          const tags = span.context()._tags
+
           expect(tags).to.have.property('resource.name', 'GET /custom/route')
         })
       })
@@ -546,7 +570,6 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
       })
     })
 
@@ -556,6 +579,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, '/foo')
       web.enterRoute(req, '/bar')
       res.end()
+
+      const tags = span.context()._tags
 
       expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
       expect(tags).to.have.property(HTTP_ROUTE, '/foo/bar')
@@ -568,6 +593,8 @@ describe('plugins/util/web', () => {
       web.enterRoute(req, 1337)
       res.end()
 
+      const tags = span.context()._tags
+
       expect(tags).to.have.property(RESOURCE_NAME, 'GET')
       expect(tags).to.not.have.property(HTTP_ROUTE)
     })
@@ -578,7 +605,6 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
         span = reqSpan
-        tags = span.context()._tags
       })
     })
 
@@ -590,6 +616,8 @@ describe('plugins/util/web', () => {
       web.exitRoute(req)
       res.end()
 
+      const tags = span.context()._tags
+
       expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo')
     })
   })
@@ -599,7 +627,6 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
       })
     })
 
@@ -618,7 +645,6 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
       })
     })
 
@@ -640,11 +666,12 @@ describe('plugins/util/web', () => {
     it('should add an error if provided', (done) => {
       const fn = () => {
         const span = tracer.scope().active()
-        const tags = span.context()._tags
         const error = new Error('boom')
 
         sinon.spy(span, 'finish')
         web.finish(req, error)
+
+        const tags = span.context()._tags
 
         expect(tags['error.type']).to.equal(error.name)
         expect(tags['error.msg']).to.equal(error.message)
@@ -701,7 +728,6 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
       })
     })
 
@@ -711,9 +737,11 @@ describe('plugins/util/web', () => {
       web.addError(req, error)
       web.addStatusError(req, 500)
 
-      expect(tags).to.include({
-        [ERROR]: error
-      })
+      const tags = span.context()._tags
+
+      expect(tags['error.type']).to.equal(error.name)
+      expect(tags['error.msg']).to.equal(error.message)
+      expect(tags['error.stack']).to.equal(error.stack)
     })
 
     it('should not override an existing error', () => {
@@ -723,9 +751,11 @@ describe('plugins/util/web', () => {
       web.addError(req, new Error('prrr'))
       web.addStatusError(req, 500)
 
-      expect(tags).to.include({
-        [ERROR]: error
-      })
+      const tags = span.context()._tags
+
+      expect(tags['error.type']).to.equal(error.name)
+      expect(tags['error.msg']).to.equal(error.message)
+      expect(tags['error.stack']).to.equal(error.stack)
     })
   })
 
@@ -734,12 +764,13 @@ describe('plugins/util/web', () => {
       config = web.normalizeConfig(config)
       web.instrument(tracer, config, req, res, 'test.request', () => {
         span = tracer.scope().active()
-        tags = span.context()._tags
       })
     })
 
     it('should flag the request as an error', () => {
       web.addStatusError(req, 500)
+
+      const tags = span.context()._tags
 
       expect(tags).to.include({
         [ERROR]: true
@@ -750,6 +781,8 @@ describe('plugins/util/web', () => {
       config.validateStatus = () => true
 
       web.addStatusError(req, 500)
+
+      const tags = span.context()._tags
 
       expect(tags).to.not.have.property(ERROR)
     })

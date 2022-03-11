@@ -27,6 +27,8 @@ class Sampler {
   }
 
   sample (span) {
+    if (!span) return
+
     const trace = span.trace
     const root = trace.spans[0]
 

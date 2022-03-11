@@ -1,7 +1,7 @@
 'use strict'
 
 const { existsSync } = require('fs')
-const { addTags, isTrue, parseTags } = require('./util')
+const { addTags, coalesce, isTrue, parseTags } = require('./util')
 const pkg = require('./pkg')
 
 const env = process.env
@@ -25,14 +25,17 @@ class Config {
     this.version = DD_VERSION
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION || '0.4'
     this.exporter = env.AWS_LAMBDA_FUNCTION_NAME ? 'log' : 'agent'
+    this.url = this._getUrl(DD_TRACE_AGENT_URL, DD_TRACE_AGENT_HOSTNAME, DD_TRACE_AGENT_PORT)
     this.sampleRate = DD_TRACE_SAMPLE_RATE && parseInt(DD_TRACE_SAMPLE_RATE)
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100
     this.flushInterval = 2000
     this.meta = {}
     this.metrics = {}
-    this.url = this._getUrl(DD_TRACE_AGENT_URL, DD_TRACE_AGENT_HOSTNAME, DD_TRACE_AGENT_PORT)
-    this.hostname = isTrue(DD_TRACE_REPORT_HOSTNAME) && require('os').hostname()
     this.logInjection = isTrue(DD_LOGS_INJECTION)
+    this.b3 = false // TODO: finalize feature and remove option
+    this.w3c = false // TODO: finalize feature and remove option
+
+    this.hostname = isTrue(DD_TRACE_REPORT_HOSTNAME) && require('os').hostname()
 
     parseTags(this, env.DD_TAGS)
     parseTags(this, env.DD_TRACE_TAGS)
@@ -46,16 +49,13 @@ class Config {
     this.env = options.env || this.env
     this.version = options.version || this.version
     this.protocolVersion = options.protocolVersion || this.protocolVersion
-    this.sampleRate = typeof options.sampleRate === 'number'
-      ? options.sampleRate
-      : this.sampleRate
-    this.rateLimit = typeof options.rateLimit === 'number'
-      ? options.rateLimit
-      : this.rateLimit
-    this.flushInterval = typeof options.flushInterval === 'number'
-      ? options.flushInterval
-      : this.flushInterval
     this.url = this._getUrl(options.url, options.hostname, options.port)
+    this.sampleRate = coalesce(options.sampleRate, this.sampleRate)
+    this.rateLimit = coalesce(options.rateLimit, this.rateLimit)
+    this.flushInterval = coalesce(options.flushInterval, this.flushInterval)
+    this.logInjection = coalesce(options.logInjection, this.logInjection)
+    this.b3 = coalesce(options.b3, this.b3)
+    this.w3c = coalesce(options.w3c, this.w3c)
 
     if (options.reportHostname === true) {
       this.hostname = require('os').hostname()

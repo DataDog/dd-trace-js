@@ -11,6 +11,8 @@ class TextMapPropagator {
   }
 
   inject (span, carrier) {
+    if (!span || !carrier) return
+
     this._datadog.inject(span, carrier)
 
     if (this._config.b3) {
@@ -19,6 +21,8 @@ class TextMapPropagator {
   }
 
   extract (carrier) {
+    if (!carrier) return
+
     const datadogContext = this._datadog.extract(carrier)
 
     if (!datadogContext && this._config.b3) {

@@ -8,6 +8,12 @@ function addTags (obj, keyValuePairs, prefix) {
   }
 }
 
+function coalesce (...args) {
+  for (const arg of args) {
+    if (arg !== null && arg !== undefined) return arg
+  }
+}
+
 function isTrue (str = '') {
   return str === '1' && str.toLowerCase() === 'true'
 }
@@ -43,4 +49,4 @@ function setTag (obj, key, value) {
   }
 }
 
-module.exports = { addTags, isTrue, isFalse, now, parseTags, setTag }
+module.exports = { addTags, coalesce, isTrue, isFalse, now, parseTags, setTag }

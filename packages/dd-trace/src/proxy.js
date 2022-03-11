@@ -10,6 +10,7 @@ const metrics = require('./metrics')
 const log = require('./log')
 const { isFalse } = require('./util')
 const { setStartupLogInstrumenter } = require('./startup-log')
+const { tracer } = require('../../datadog-tracer')
 
 const noop = new NoopTracer()
 
@@ -29,12 +30,34 @@ class Tracer extends BaseTracer {
   }
 
   init (options) {
-    if (isFalse(process.env.DD_TRACE_ENABLED) || this._initialized) return this
+    if (isFalse(process.env.DD_TRACE_ENABLED)) return this
+
+    const initialized = this._initialized
 
     this._initialized = true
 
     try {
       const config = new Config(options) // TODO: support dynamic config
+
+      // internal tracer supports dynamic configuration
+      tracer.configure({
+        service: config.service,
+        env: config.env,
+        version: config.version,
+        protocolVersion: config.protocolVersion,
+        exporter: config.experimental.exporter,
+        sampleRate: config.sampleRate,
+        rateLimit: config.rateLimit,
+        flushInterval: config.flushInterval,
+        url: config.url,
+        reportHostname: config.reportHostname,
+        logInjection: config.logInjection,
+        b3: config.experimental.b3,
+        w3c: config.experimental.w3c,
+        tags: config.tags
+      })
+
+      if (initialized) return this
 
       log.use(config.logger)
       log.toggle(config.debug, config.logLevel, this)
@@ -54,29 +77,12 @@ class Tracer extends BaseTracer {
       }
 
       if (config.tracing) {
-        const { tracer } = require('../../datadog-tracer')
-
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
           require('./appsec').enable(config)
         }
 
         this._tracer = new DatadogTracer(config)
-
-        tracer.configure({
-          service: config.service,
-          env: config.env,
-          version: config.version,
-          protocolVersion: config.protocolVersion,
-          exporter: config.experimental.exporter,
-          sampleRate: config.sampleRate,
-          rateLimit: config.rateLimit,
-          flushInterval: config.flushInterval,
-          url: this._tracer._url, // TODO: don't use the tracer URL
-          reportHostname: config.reportHostname,
-          tags: config.tags
-        })
-
         this._instrumenter.enable(config)
         this._pluginManager.configure(config)
         setStartupLogInstrumenter(this._instrumenter)

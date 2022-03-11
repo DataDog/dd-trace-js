@@ -31,14 +31,27 @@ class DatadogSpanContext extends SpanContext {
 
   get _tags () {
     const span = this._span
-    const tags = Object.assign({}, span.meta, span.metrics)
+    const spanTags = Object.assign({}, span.meta, span.metrics)
+    const errorTags = {}
+
+    if (span.error) {
+      if (typeof span.error === 'object') {
+        errorTags['error'] = 1
+        errorTags['error.type'] = span.error.name
+        errorTags['error.msg'] = span.error.message
+        errorTags['error.stack'] = span.error.stack
+      } else {
+        errorTags['error'] = span.error
+      }
+    }
 
     return {
       'resource.name': span.resource,
       'service.name': span.service || span.tracer.config.service,
       'span.kind': span.kind,
       'span.type': span.type,
-      ...tags
+      ...errorTags,
+      ...spanTags
     }
   }
 
