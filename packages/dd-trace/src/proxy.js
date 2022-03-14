@@ -29,7 +29,7 @@ class Tracer extends BaseTracer {
     ].join(' '))
   }
 
-  init (options) {
+  init (options = {}) {
     if (isFalse(process.env.DD_TRACE_ENABLED)) return this
 
     const initialized = this._initialized
@@ -37,30 +37,32 @@ class Tracer extends BaseTracer {
     this._initialized = true
 
     try {
-      const config = new Config(options) // TODO: support dynamic config
+      const experimental = options.experimental || {}
 
       // internal tracer supports dynamic configuration
       tracer.configure({
-        service: config.service,
-        env: config.env,
-        version: config.version,
-        protocolVersion: config.protocolVersion,
-        exporter: config.experimental.exporter,
-        sampleRate: config.sampleRate,
-        rateLimit: config.rateLimit,
-        flushInterval: config.flushInterval,
-        flushMinSpans: config.flushMinSpans,
-        url: config.url,
-        hostname: config.hostname,
-        port: config.port,
-        reportHostname: config.reportHostname,
-        logInjection: config.logInjection,
-        b3: config.experimental.b3,
-        w3c: config.experimental.w3c,
-        tags: config.tags
+        service: options.service,
+        env: options.env,
+        version: options.version,
+        protocolVersion: options.protocolVersion,
+        exporter: experimental.exporter,
+        sampleRate: options.sampleRate,
+        rateLimit: options.rateLimit,
+        flushInterval: options.flushInterval,
+        flushMinSpans: options.flushMinSpans,
+        url: options.url,
+        hostname: options.hostname,
+        port: options.port,
+        reportHostname: options.reportHostname,
+        logInjection: options.logInjection,
+        b3: experimental.b3,
+        w3c: experimental.w3c,
+        tags: options.tags
       })
 
       if (initialized) return this
+
+      const config = new Config(options) // TODO: support dynamic config
 
       log.use(config.logger)
       log.toggle(config.debug, config.logLevel, this)

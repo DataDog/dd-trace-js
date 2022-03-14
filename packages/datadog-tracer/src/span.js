@@ -16,19 +16,19 @@ const startedChannel = channel('datadog:apm:span:started')
 const finishedChannel = channel('datadog:apm:span:finished')
 
 class Span {
-  constructor (tracer, name, { childOf, service, resource, type, kind, measured, meta, metrics } = {}) {
+  constructor (tracer, name, { childOf, service, resource, type, kind, measured, start, meta, metrics } = {}) {
     if (childOf) {
       this.trace = childOf.trace
       this.spanId = id()
       this.parentId = childOf.spanId
       this.baggage = childOf.baggage
-      this.start = this.trace.start + now() - this.trace.ticks
+      this.start = start || this.trace.start + now() - this.trace.ticks
     } else {
       this.trace = new Trace()
       this.spanId = this.trace.traceId
       this.parentId = zeroId
       this.baggage = {}
-      this.start = this.trace.start
+      this.start = start || this.trace.start
     }
 
     this.tracer = tracer

@@ -30,10 +30,11 @@ class DatadogTracer extends Tracer {
     const reference = getParent(fields.references)
     const parent = reference && reference.referencedContext()
     const childOf = parent ? parent._span : null
+    const start = fields.startTime
 
     name = fields.operationName || name
 
-    const internalSpan = tracer.startSpan(name, { childOf })
+    const internalSpan = tracer.startSpan(name, { childOf, start })
     const span = new Span(this, internalSpan)
 
     span.addTags(fields.tags)

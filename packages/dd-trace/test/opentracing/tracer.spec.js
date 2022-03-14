@@ -1,104 +1,22 @@
 'use strict'
 
+const { expect } = require('chai')
 const opentracing = require('opentracing')
 const os = require('os')
-const SpanContext = require('../../src/opentracing/span_context')
+const agent = require('../plugins/agent')
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
-  let Tracer
   let tracer
-  let Span
-  let span
-  let PrioritySampler
-  let prioritySampler
-  let AgentExporter
-  let SpanProcessor
-  let processor
-  let exporter
-  let agentExporter
-  let spanContext
   let fields
-  let carrier
-  let TextMapPropagator
-  let HttpPropagator
-  let BinaryPropagator
-  let propagator
-  let config
-  let log
+
+  beforeEach(() => {
+    return agent.load()
+  })
 
   beforeEach(() => {
     fields = {}
-
-    span = {
-      addTags: sinon.stub().returns(span)
-    }
-    Span = sinon.stub().returns(span)
-
-    prioritySampler = {
-      sample: sinon.stub()
-    }
-    PrioritySampler = sinon.stub().returns(prioritySampler)
-
-    agentExporter = {
-      export: sinon.spy()
-    }
-    AgentExporter = sinon.stub().returns(agentExporter)
-
-    processor = {
-      process: sinon.spy()
-    }
-    SpanProcessor = sinon.stub().returns(processor)
-
-    spanContext = {}
-    carrier = {}
-
-    TextMapPropagator = sinon.stub()
-    HttpPropagator = sinon.stub()
-    BinaryPropagator = sinon.stub()
-    propagator = {
-      inject: sinon.stub(),
-      extract: sinon.stub()
-    }
-
-    config = {
-      service: 'service',
-      url: 'http://test:7777',
-      flushInterval: 2000,
-      sampleRate: 0.5,
-      logger: 'logger',
-      tags: {},
-      debug: true,
-      experimental: {}
-    }
-
-    log = {
-      use: sinon.spy(),
-      toggle: sinon.spy(),
-      error: sinon.spy()
-    }
-
-    exporter = sinon.stub().returns(AgentExporter)
-
-    Tracer = proxyquire('../src/opentracing/tracer', {
-      './span': Span,
-      './span_context': SpanContext,
-      '../priority_sampler': PrioritySampler,
-      '../span_processor': SpanProcessor,
-      './propagation/text_map': TextMapPropagator,
-      './propagation/http': HttpPropagator,
-      './propagation/binary': BinaryPropagator,
-      '../log': log,
-      '../exporter': exporter
-    })
-  })
-
-  it('should support recording', () => {
-    tracer = new Tracer(config)
-
-    expect(AgentExporter).to.have.been.called
-    expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler, config)
+    tracer = require('../../../..')
   })
 
   describe('startSpan', () => {
@@ -106,121 +24,91 @@ describe('Tracer', () => {
       fields.tags = { foo: 'bar' }
       fields.startTime = 1234567890000000000
 
-      tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
+      const internalSpan = testSpan._span
 
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null,
-        tags: {
-          'service.name': 'service'
+      expect(internalSpan).to.deep.include({
+        name: 'name',
+        service: 'test',
+        meta: {
+          foo: 'bar'
         },
-        startTime: fields.startTime,
-        hostname: undefined
-      }, true)
-
-      expect(span.addTags).to.have.been.calledWith({
-        'foo': 'bar'
+        start: fields.startTime
       })
-
-      expect(testSpan).to.equal(span)
     })
 
     it('should start a span that is the child of a span', () => {
-      const parent = new SpanContext()
+      const parent = tracer.startSpan('parent')
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
+        new Reference(opentracing.REFERENCE_CHILD_OF, parent.context())
       ]
 
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const child = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent
-      })
+      expect(parent.context().toTraceId()).to.equal(child.context().toTraceId())
+      expect(parent.context().toSpanId()).to.equal(child.context()._parentId.toString())
     })
 
     it('should start a span that follows from a span', () => {
-      const parent = new SpanContext()
+      const parent = tracer.startSpan('parent')
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent)
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent.context())
       ]
 
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const child = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent
-      })
+      expect(parent.context().toTraceId()).to.equal(child.context().toTraceId())
+      expect(parent.context().toSpanId()).to.equal(child.context()._parentId.toString())
     })
 
-    it('should start a span with the system hostname if reportHostname is enabled', () => {
-      fields.tags = { foo: 'bar' }
-      fields.startTime = 1234567890000000000
-      config.reportHostname = true
-      tracer = new Tracer(config)
-      const testSpan = tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null,
-        tags: {
-          'service.name': 'service'
-        },
-        startTime: fields.startTime,
-        hostname: os.hostname()
+    it('should start a span with the system hostname if reportHostname is enabled', done => {
+      tracer.init({
+        reportHostname: true
       })
 
-      expect(testSpan).to.equal(span)
+      agent.use(traces => {
+        expect(traces[0][0].meta).to.have.property('_dd.hostname', os.hostname())
+      }).then(done, done)
+
+      const testSpan = tracer.startSpan('name', fields)
+
+      testSpan.finish()
     })
 
     it('should ignore additional follow references', () => {
-      const parent = new SpanContext()
+      const parent = tracer.startSpan('parent')
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent),
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext())
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent.context()),
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, tracer.startSpan('sibling').context())
       ]
 
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const child = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent
-      })
+      expect(parent.context().toTraceId()).to.equal(child.context().toTraceId())
+      expect(parent.context().toSpanId()).to.equal(child.context()._parentId.toString())
     })
 
     it('should ignore unknown references', () => {
-      const parent = new SpanContext()
+      const parent = tracer.startSpan('parent')
 
       fields.references = [
-        new Reference('test', parent)
+        new Reference('test', parent.context())
       ]
 
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const child = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
+      expect(child.context()._parentId.toString()).to.equal('0')
     })
 
     it('should ignore references that are not references', () => {
       fields.references = [{}]
 
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const child = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
+      expect(child.context()._parentId.toString()).to.equal('0')
     })
 
     it('should ignore references to objects other than span contexts', () => {
@@ -228,116 +116,35 @@ describe('Tracer', () => {
         new Reference(opentracing.REFERENCE_CHILD_OF, {})
       ]
 
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
+      const child = tracer.startSpan('name', fields)
 
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
+      expect(child.context()._parentId.toString()).to.equal('0')
     })
 
-    it('should merge default tracer tags with span tags', () => {
-      config.tags = {
-        'foo': 'tracer',
-        'bar': 'tracer'
-      }
+    it('should merge default tracer tags with span tags', done => {
+      tracer.init({
+        tags: {
+          'foo': 'tracer',
+          'bar': 'tracer'
+        }
+      })
 
       fields.tags = {
         'bar': 'span',
         'baz': 'span'
       }
 
-      tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      expect(span.addTags).to.have.been.calledWith(config.tags)
-      expect(span.addTags).to.have.been.calledWith(fields.tags)
-    })
-  })
+      agent.use(traces => {
+        expect(traces[0][0].meta).to.have.property('foo', 'tracer')
+        expect(traces[0][0].meta).to.have.property('bar', 'span')
+        expect(traces[0][0].meta).to.have.property('baz', 'span')
+      }).then(done, done)
 
-  describe('inject', () => {
-    it('should support text map format', () => {
-      TextMapPropagator.returns(propagator)
+      const testSpan = tracer.startSpan('name', fields)
 
-      tracer = new Tracer(config)
-      tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
-
-      expect(TextMapPropagator).to.have.been.calledWith(config)
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
-    })
-
-    it('should support http headers format', () => {
-      HttpPropagator.returns(propagator)
-
-      tracer = new Tracer(config)
-      tracer.inject(spanContext, opentracing.FORMAT_HTTP_HEADERS, carrier)
-
-      expect(HttpPropagator).to.have.been.calledWith(config)
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
-    })
-
-    it('should support binary format', () => {
-      BinaryPropagator.returns(propagator)
-
-      tracer = new Tracer(config)
-      tracer.inject(spanContext, opentracing.FORMAT_BINARY, carrier)
-
-      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
-    })
-
-    it('should handle errors', () => {
-      tracer = new Tracer(config)
-
-      expect(() => tracer.inject({})).not.to.throw()
-      expect(log.error).to.have.been.calledOnce
-    })
-
-    it('should generate the sampling priority', () => {
-      TextMapPropagator.returns(propagator)
-
-      tracer = new Tracer(config)
-      tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
-
-      expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
-    })
-  })
-
-  describe('extract', () => {
-    it('should support text map format', () => {
-      TextMapPropagator.returns(propagator)
-      propagator.extract.withArgs(carrier).returns('spanContext')
-
-      tracer = new Tracer(config)
-      const spanContext = tracer.extract(opentracing.FORMAT_TEXT_MAP, carrier)
-
-      expect(spanContext).to.equal('spanContext')
-    })
-
-    it('should support http headers format', () => {
-      HttpPropagator.returns(propagator)
-      propagator.extract.withArgs(carrier).returns('spanContext')
-
-      tracer = new Tracer(config)
-      const spanContext = tracer.extract(opentracing.FORMAT_HTTP_HEADERS, carrier)
-
-      expect(spanContext).to.equal('spanContext')
-    })
-
-    it('should support binary format', () => {
-      BinaryPropagator.returns(propagator)
-      propagator.extract.withArgs(carrier).returns('spanContext')
-
-      tracer = new Tracer(config)
-      const spanContext = tracer.extract(opentracing.FORMAT_BINARY, carrier)
-
-      expect(spanContext).to.equal('spanContext')
-    })
-
-    it('should handle errors', () => {
-      tracer = new Tracer(config)
-
-      expect(() => tracer.extract()).not.to.throw()
+      testSpan.finish()
     })
   })
 })
