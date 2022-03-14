@@ -72,6 +72,8 @@ class Tracer {
       this._exporter.add(finished)
 
       trace.spans = unfinished
+      trace.started = unfinished.length
+      trace.finished = 0
     }
   }
 
