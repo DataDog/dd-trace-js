@@ -19,6 +19,10 @@ describe('Tracer', () => {
     tracer = require('../../../..')
   })
 
+  afterEach(() => {
+    return agent.close()
+  })
+
   describe('startSpan', () => {
     it('should start a span', () => {
       fields.tags = { foo: 'bar' }

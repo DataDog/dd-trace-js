@@ -99,10 +99,6 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  setUrl (url) {
-    this._exporter.setUrl(url)
-  }
-
   scope () {
     return this._scope
   }

@@ -43,7 +43,7 @@ module.exports = {
 
         server.on('connection', socket => sockets.push(socket))
 
-        listener = server.listen(port, () => resolve())
+        listener = server.listen(port, 'localhost', () => resolve())
 
         pluginName = pluginName ? [].concat(pluginName) : []
         plugins = pluginName
