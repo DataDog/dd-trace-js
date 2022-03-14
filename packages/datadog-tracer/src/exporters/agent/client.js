@@ -2,7 +2,7 @@
 
 const http = require('http')
 const https = require('https')
-const { dockerId } = require('../../../../datadog-core')
+const { dockerId, storage } = require('../../../../datadog-core')
 const tracerVersion = require('../../../../dd-trace/lib/version') // TODO: use package.json
 
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 1 })
@@ -72,6 +72,10 @@ class Client {
     }
 
     const makeRequest = onError => {
+      const store = storage.getStore()
+
+      storage.enterWith({ noop: true })
+
       const req = client.request(httpOptions, onResponse)
 
       req.on('error', onError)
@@ -79,6 +83,8 @@ class Client {
       req.setTimeout(timeout, req.abort)
       req.write(data)
       req.end()
+
+      storage.enterWith(store)
     }
 
     makeRequest(() => makeRequest(done)) // retry once on error
