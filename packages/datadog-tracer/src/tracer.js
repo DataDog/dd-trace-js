@@ -53,13 +53,25 @@ class Tracer {
   }
 
   process (span) {
+    const { flushMinSpans } = this.config
     const trace = span.trace
+    const unfinished = []
+    const finished = []
 
-    if (trace.started === trace.finished) {
+    if (trace.started === trace.finished || trace.finished >= flushMinSpans) {
       this._sampler.sample(span)
-      this._exporter.add(trace.spans)
 
-      trace.spans = []
+      for (const span of trace.spans) {
+        if (span.duration > 0) {
+          finished.push(span)
+        } else {
+          unfinished.push(span)
+        }
+      }
+
+      this._exporter.add(finished)
+
+      trace.spans = unfinished
     }
   }
 

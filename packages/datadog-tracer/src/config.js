@@ -9,6 +9,7 @@ const env = process.env
 const DD_SERVICE = env.DD_SERVICE || env.DD_SERVICE_NAME || env.AWS_LAMBDA_FUNCTION_NAME
 const DD_ENV = env.DD_ENV
 const DD_VERSION = env.DD_VERSION
+const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
 const DD_TRACE_SAMPLE_RATE = env.DD_TRACE_SAMPLE_RATE
 const DD_TRACE_RATE_LIMIT = env.DD_TRACE_RATE_LIMIT
 const DD_TRACE_AGENT_URL = env.DD_TRACE_AGENT_URL || env.DD_TRACE_URL
@@ -29,6 +30,7 @@ class Config {
     this.sampleRate = DD_TRACE_SAMPLE_RATE && parseInt(DD_TRACE_SAMPLE_RATE)
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100
     this.flushInterval = 2000
+    this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS ? parseInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS) : 1000
     this.meta = {}
     this.metrics = {}
     this.logInjection = isTrue(DD_LOGS_INJECTION)
@@ -53,6 +55,7 @@ class Config {
     this.sampleRate = coalesce(options.sampleRate, this.sampleRate)
     this.rateLimit = coalesce(options.rateLimit, this.rateLimit)
     this.flushInterval = coalesce(options.flushInterval, this.flushInterval)
+    this.flushMinSpans = coalesce(options.flushMinSpans, this.flushMinSpans)
     this.logInjection = coalesce(options.logInjection, this.logInjection)
     this.b3 = coalesce(options.b3, this.b3)
     this.w3c = coalesce(options.w3c, this.w3c)
