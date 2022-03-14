@@ -122,6 +122,24 @@ class DatadogTracer extends Tracer {
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
   }
+
+  setUser (user) {
+    if (!user || !user.id) return false
+
+    const span = this.currentSpan()
+    if (!span) return false
+
+    const rootSpan = span._context._trace.started[0]
+    if (!rootSpan) return false
+
+    rootSpan.setTag('usr.id', user.id)
+
+    for (const [k, v] of Object.entries(user)) {
+      rootSpan.setTag(`usr.${k}`, '' + v)
+    }
+
+    return true
+  }
 }
 
 function addError (span, error) {
