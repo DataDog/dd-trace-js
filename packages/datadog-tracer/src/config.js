@@ -23,7 +23,7 @@ class Config {
   constructor (options) {
     this.service = DD_SERVICE || pkg.name || 'node'
     this.env = DD_ENV
-    this.version = DD_VERSION
+    this.version = DD_VERSION || pkg.version
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION || '0.4'
     this.exporter = env.AWS_LAMBDA_FUNCTION_NAME ? 'log' : 'agent'
     this.url = this._getUrl(DD_TRACE_AGENT_URL, DD_TRACE_AGENT_HOSTNAME, DD_TRACE_AGENT_PORT)
