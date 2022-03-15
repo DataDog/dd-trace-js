@@ -1,8 +1,10 @@
 'use strict'
 
 require('./src/amqplib')
+require('./src/amqp10')
 require('./src/bluebird')
 require('./src/bunyan')
+require('./src/cassandra-driver')
 require('./src/couchbase')
 require('./src/cucumber')
 require('./src/dns')
