@@ -105,19 +105,6 @@ describe('CI Visibility Writer', () => {
           done()
         })
       })
-      it('should retry once', done => {
-        const error = new Error('boom')
-
-        request.yields(error)
-
-        encoder.count.returns(1)
-
-        writer.flush(() => {
-          expect(request.callCount).to.equal(2)
-          expect(log.error.callCount).to.equal(2)
-          done()
-        })
-      })
     })
   })
 })

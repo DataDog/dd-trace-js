@@ -7,7 +7,7 @@ const log = require('../../../log')
 function retriableRequest (data, options, callback) {
   const client = options.protocol === 'https:' ? https : http
 
-  const timeout = options.timeout || 2000
+  const timeout = options.timeout || 15000
 
   const request = client.request(options, res => {
     let responseData = ''

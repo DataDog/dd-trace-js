@@ -61,14 +61,16 @@ describe('CI Visibility request', () => {
   })
 
   it('should handle an http error', done => {
-    nock('http://localhost:80')
+    nock('http://test:123')
       .post('/path')
       .reply(400)
 
     request('data', {
       protocol: 'http:',
       path: '/path',
-      method: 'POST'
+      method: 'POST',
+      hostname: 'test',
+      port: 123
     }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('Error from the intake: 400 Bad Request')
@@ -76,16 +78,21 @@ describe('CI Visibility request', () => {
     })
   })
 
-  it('should timeout after 2 seconds by default', done => {
-    nock('http://localhost:80')
+  it('should timeout after "timeout" seconds', function (done) {
+    this.timeout(3000)
+    nock('http://test:123')
       .post('/path')
+      .times(2)
       .delay(2001)
       .reply(200)
 
     request('data', {
       protocol: 'http:',
       path: '/path',
-      method: 'POST'
+      method: 'POST',
+      hostname: 'test',
+      port: 123,
+      timeout: 2000
     }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('Network error trying to reach the intake: socket hang up')
@@ -93,18 +100,67 @@ describe('CI Visibility request', () => {
     })
   })
 
-  it('should not timeout after 1.9 seconds', done => {
-    nock('http://localhost:80')
+  it('should not timeout after less than "timeout" seconds', function (done) {
+    this.timeout(3000)
+    nock('http://test:123')
       .post('/path')
+      .times(2)
       .delay(1900)
       .reply(200)
 
     request('data', {
       protocol: 'http:',
       path: '/path',
-      method: 'POST'
+      method: 'POST',
+      hostname: 'test',
+      port: 123,
+      timeout: 2000
     }, err => {
       expect(err).to.be.null
+      done()
+    })
+  })
+
+  it('should retry once and eventually success', function (done) {
+    this.timeout(3000)
+    nock('http://test:123')
+      .post('/path')
+      .delay(2100)
+      .reply(500)
+      .post('/path')
+      .reply(200)
+
+    request('data', {
+      protocol: 'http:',
+      path: '/path',
+      method: 'POST',
+      hostname: 'test',
+      port: 123,
+      timeout: 2000
+    }, err => {
+      expect(err).to.be.null
+      done()
+    })
+  })
+
+  it('should not retry more than once', function (done) {
+    this.timeout(3000)
+    nock('http://test:123')
+      .post('/path')
+      .times(2)
+      .delay(2100)
+      .reply(200)
+
+    request('data', {
+      protocol: 'http:',
+      path: '/path',
+      method: 'POST',
+      hostname: 'test',
+      port: 123,
+      timeout: 2000
+    }, err => {
+      expect(err).to.be.instanceof(Error)
+      expect(err.message).to.equal('Network error trying to reach the intake: socket hang up')
       done()
     })
   })
