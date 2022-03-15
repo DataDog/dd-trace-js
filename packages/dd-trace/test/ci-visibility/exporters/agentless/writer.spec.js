@@ -11,8 +11,6 @@ let encoder
 let url
 let log
 
-const NUM_RETRIES = 1
-
 describe('CI Visibility Writer', () => {
   beforeEach(() => {
     span = 'formatted'
@@ -43,7 +41,7 @@ describe('CI Visibility Writer', () => {
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../log': log
     })
-    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, numRetries: NUM_RETRIES })
+    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
   })
 
   describe('append', () => {
@@ -107,7 +105,7 @@ describe('CI Visibility Writer', () => {
           done()
         })
       })
-      it('should retry up to NUM_RETRIES times', done => {
+      it('should retry once', done => {
         const error = new Error('boom')
 
         request.yields(error)
@@ -115,8 +113,8 @@ describe('CI Visibility Writer', () => {
         encoder.count.returns(1)
 
         writer.flush(() => {
-          expect(request.callCount).to.equal(NUM_RETRIES + 1)
-          expect(log.error.callCount).to.equal(NUM_RETRIES + 1)
+          expect(request.callCount).to.equal(2)
+          expect(log.error.callCount).to.equal(2)
           done()
         })
       })

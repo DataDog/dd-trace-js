@@ -5,7 +5,7 @@ const log = require('../../../log')
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 
 class Writer {
-  constructor ({ url, tags, numRetries = 5 }) {
+  constructor ({ url, tags }) {
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })

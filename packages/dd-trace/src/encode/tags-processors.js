@@ -9,6 +9,8 @@ const MAX_META_KEY_LENGTH = 200
 const MAX_META_VALUE_LENGTH = 25000
 // MAX_METRIC_KEY_LENGTH the maximum length of a metric name key
 const MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH
+// MAX_METRIC_VALUE_LENGTH the maximum length of a metric name value
+const MAX_METRIC_VALUE_LENGTH = MAX_META_VALUE_LENGTH
 
 // From agent normalizer:
 // https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize.go
@@ -47,7 +49,7 @@ function truncateSpan (span) {
         ))]
       case 'metrics':
         return ['metrics', fromEntries(Object.entries(value).map(([metricsKey, metricsValue]) =>
-          [truncateToLength(metricsKey, MAX_METRIC_KEY_LENGTH), metricsValue]
+          [truncateToLength(metricsKey, MAX_METRIC_KEY_LENGTH), truncateToLength(metricsValue, MAX_METRIC_VALUE_LENGTH)]
         ))]
       default:
         return [key, value]
@@ -56,7 +58,7 @@ function truncateSpan (span) {
 }
 
 function normalizeSpan (span) {
-  return fromEntries(Object.entries(span).map(([key, value]) => {
+  const normalizedSpan = fromEntries(Object.entries(span).map(([key, value]) => {
     switch (key) {
       case 'span_id':
       case 'trace_id':
@@ -93,6 +95,26 @@ function normalizeSpan (span) {
     }
     return [key, value]
   }))
+  if (!normalizedSpan.service) {
+    normalizedSpan.service = DEFAULT_SERVICE_NAME
+  }
+  if (!normalizedSpan.name) {
+    normalizedSpan.name = DEFAULT_SPAN_NAME
+  }
+  return normalizedSpan
 }
 
-module.exports = { truncateSpan, normalizeSpan }
+module.exports = {
+  truncateSpan,
+  normalizeSpan,
+  MAX_META_KEY_LENGTH,
+  MAX_META_VALUE_LENGTH,
+  MAX_METRIC_KEY_LENGTH,
+  MAX_METRIC_VALUE_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_SERVICE_LENGTH,
+  MAX_TYPE_LENGTH,
+  MAX_RESOURCE_NAME_LENGTH,
+  DEFAULT_SPAN_NAME,
+  DEFAULT_SERVICE_NAME
+}
