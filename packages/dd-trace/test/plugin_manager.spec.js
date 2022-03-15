@@ -41,7 +41,7 @@ describe('Plugin Manager', () => {
     Four.prototype.configure = sinon.spy()
 
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
-      './plugins': plugins,
+      './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {}
     })
     pm = new PluginManager(tracer)
