@@ -13,11 +13,8 @@ const {
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
   USER_KEEP,
-  USER_REJECT,
-  UPSTREAM_SERVICES_KEY
+  USER_REJECT
 } = require('./constants')
-
-const serviceNames = new Map()
 
 class Sampler {
   constructor ({ sampleRate, rateLimit = 100, rules = [] } = {}) {
@@ -103,45 +100,6 @@ class Sampler {
     if (typeof rule.service === 'string' && rule.service !== service) return false
 
     return true
-  }
-
-  _addUpstreamService (span) {
-    const context = span.context()
-    const trace = context._trace
-    const service = this._toBase64(context._tags['service.name'])
-    const priority = context._sampling.priority
-    const mechanism = context._sampling.mechanism
-    const rate = this._getRate(span)
-    const group = `${service}|${priority}|${mechanism}|${rate}`
-    const groups = trace.meta[UPSTREAM_SERVICES_KEY]
-      ? `${trace.meta[UPSTREAM_SERVICES_KEY]};${group}`
-      : group
-
-    trace.meta[UPSTREAM_SERVICES_KEY] = groups
-  }
-
-  _toBase64 (serviceName) {
-    let encoded = serviceNames.get(serviceName)
-
-    if (!encoded) {
-      encoded = Buffer.from(serviceName).toString('base64')
-      serviceNames.set(serviceName, encoded)
-    }
-
-    return encoded
-  }
-
-  _getRate (span) {
-    const trace = span.trace
-
-    switch (trace.samplingMechanism) {
-      case SAMPLING_MECHANISM_RULE:
-        return Math.ceil(trace.metrics[SAMPLING_RULE_DECISION] * 10000) / 10000
-      case SAMPLING_MECHANISM_AGENT:
-        return Math.ceil(trace.metrics[SAMPLING_AGENT_DECISION] * 10000) / 10000
-      default:
-        return ''
-    }
   }
 }
 

@@ -8,7 +8,6 @@ module.exports = {
   SAMPLING_RULE_DECISION: '_dd.rule_psr',
   SAMPLING_LIMIT_DECISION: '_dd.limit_psr',
   SAMPLING_AGENT_DECISION: '_dd.agent_psr',
-  UPSTREAM_SERVICES_KEY: '_dd.p.upstream_services',
   USER_REJECT: -1,
   AUTO_REJECT: 0,
   AUTO_KEEP: 1,
