@@ -55,6 +55,7 @@ function wrapRun (pl, isLatestVersion) {
       return promise
     } catch (err) {
       errorCh.publish(err)
+      throw err
     } finally {
       runEndCh.publish(undefined)
     }
@@ -85,6 +86,7 @@ function wrapRun (pl, isLatestVersion) {
       return promise
     } catch (err) {
       errorCh.publish(err)
+      throw err
     } finally {
       runStepEndCh.publish(undefined)
     }
