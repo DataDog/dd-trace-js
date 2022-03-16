@@ -13,9 +13,7 @@ const runtimeId = uuid()
 
 function coalesce (...args) {
   for (const arg of args) {
-    if (arg !== undefined) {
-      return arg
-    }
+    if (arg !== null && arg !== undefined) return arg
   }
 }
 
