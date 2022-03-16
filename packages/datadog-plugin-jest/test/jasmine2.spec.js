@@ -57,7 +57,8 @@ describe('Plugin', () => {
           { name: 'jest-test-suite passes', status: 'pass' },
           { name: 'jest-test-suite fails', status: 'fail' },
           { name: 'jest-test-suite skips', status: 'skip' },
-          { name: 'jest-test-suite skips with test too', status: 'skip' }
+          { name: 'jest-test-suite skips with test too', status: 'skip' },
+          { name: 'jest-test-suite does not crash with missing stack', status: 'fail' }
         ]
         const assertionPromises = tests.map(({ name, status }) => {
           return agent.use(trace => {
