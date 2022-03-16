@@ -6,9 +6,8 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY } = require('../../../ext/tags')
-const { AUTO_KEEP } = require('../../../ext/priority')
+const { ORIGIN_KEY, SAMPLING_PRIORITY_KEY } = require('../../dd-trace/src/constants')
+const { USER_KEEP } = require('../../../ext/priority')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -85,7 +84,7 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass'
             })
             expect(testSpan.metrics).to.contain({
-              [SAMPLING_PRIORITY]: AUTO_KEEP
+              [SAMPLING_PRIORITY_KEY]: USER_KEEP
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
