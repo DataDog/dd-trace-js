@@ -209,7 +209,7 @@ class EncoderV4 {
       length += this._encodeMetaProperty(bytes, 'error.stack', error.stack)
 
       for (const key in error) {
-        length += this._encodeMetaProperty(bytes, key, error[key])
+        length += this._encodeMetaProperty(bytes, `error.${key}`, error[key])
       }
     }
 
@@ -239,10 +239,10 @@ class EncoderV4 {
   }
 
   _encodeMetaProperty (bytes, key, value) {
-    if (!value || typeof value !== 'string') return 0
+    if (value === null || value === undefined || value === '') return 0
 
     this._encodeString(bytes, key)
-    this._encodeString(bytes, value)
+    this._encodeString(bytes, String(value))
 
     return 1
   }
