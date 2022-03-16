@@ -22,17 +22,59 @@ module.exports = {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
-    agent.use((req, res, next) => {
+
+    agent.put('/v0.5/traces', (req, res, next) => {
+      if (!req.body.length) return res.status(200).send()
+      const decoded = msgpack.decode(req.body, { codec })
+      const stringMap = decoded[0]
+      const traces = decoded[1]
+
+      req.body = traces.map(trace => {
+        return trace.map(span => {
+          const meta = {}
+          const metrics = {}
+
+          for (const index in span[9]) {
+            const key = stringMap[parseInt(index)]
+            const value = stringMap[parseInt(span[9][index])]
+
+            meta[key] = value
+          }
+
+          for (const index in span[10]) {
+            const key = stringMap[parseInt(index)]
+            const value = span[10][index]
+
+            metrics[key] = value
+          }
+
+          return {
+            service: stringMap[span[0]],
+            name: stringMap[span[1]],
+            resource: stringMap[span[2]],
+            trace_id: span[3],
+            span_id: span[4],
+            parent_id: span[5],
+            start: span[6],
+            duration: span[7],
+            error: span[8],
+            meta,
+            metrics,
+            type: stringMap[span[11]]
+          }
+        })
+      })
+
+      next()
+    })
+
+    agent.put('/v0.4/traces', (req, res, next) => {
       if (!req.body.length) return res.status(200).send()
       req.body = msgpack.decode(req.body, { codec })
       next()
     })
 
-    agent.put('/v0.5/traces', (req, res) => {
-      res.status(404).end()
-    })
-
-    agent.put('/v0.4/traces', (req, res) => {
+    agent.put('/v0.:version/traces', (req, res) => {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       handlers.forEach(handler => handler(req.body))
     })

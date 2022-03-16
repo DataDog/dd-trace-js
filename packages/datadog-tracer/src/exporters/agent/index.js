@@ -47,15 +47,16 @@ class AgentExporter {
       done(err)
     })
 
-    this._protocolVersion = this._config.protocolVersion
     this._encoder = this._getEncoder()
+    this._protocolVersion = this._config.protocolVersion
+    this._timer = clearTimeout(this._timer)
   }
 
   _getEncoder () {
     const config = this._config
-    const protocolVersion = this._protocolVersion
+    const protocolVersion = config.protocolVersion
 
-    if (this._encoder && protocolVersion === config.protocolVersion) {
+    if (this._encoder && protocolVersion === this._protocolVersion) {
       return this._encoder
     }
 

@@ -25,7 +25,7 @@ class Config {
     this.env = DD_ENV
     this.version = DD_VERSION || pkg.version
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION || '0.4'
-    this.exporter = env.AWS_LAMBDA_FUNCTION_NAME ? 'log' : 'agent'
+    this.exporter = env.AWS_LAMBDA_FUNCTION_NAME && !existsSync('/opt/extensions/datadog-agent') ? 'log' : 'agent'
     this.url = this._getUrl(DD_TRACE_AGENT_URL, DD_TRACE_AGENT_HOSTNAME, DD_TRACE_AGENT_PORT)
     this.sampleRate = DD_TRACE_SAMPLE_RATE && parseInt(DD_TRACE_SAMPLE_RATE)
     this.rateLimit = DD_TRACE_RATE_LIMIT ? parseInt(DD_TRACE_RATE_LIMIT) : 100

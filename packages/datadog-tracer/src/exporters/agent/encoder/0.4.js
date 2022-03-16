@@ -250,7 +250,7 @@ class EncoderV4 {
   _encodeMetrics (bytes, span) {
     const buffer = bytes.buffer
     const offset = bytes.length
-    const measured = span.measured || span.kind !== 'internal'
+    const measured = span.measured || span.kind !== 'internal' ? 1 : 0
 
     bytes.reserve(5)
     bytes.length += 5
