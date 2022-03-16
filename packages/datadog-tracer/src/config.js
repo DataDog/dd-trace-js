@@ -1,9 +1,8 @@
 'use strict'
 
 const { existsSync } = require('fs')
-const { coalesce } = require('../../datadog-core')
+const { coalesce, pkg } = require('../../datadog-core')
 const { addTags, isTrue, parseTags } = require('./util')
-const pkg = require('./pkg')
 
 const env = process.env
 

@@ -4,11 +4,10 @@ const fs = require('fs')
 const os = require('os')
 const URL = require('url').URL
 const path = require('path')
-const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
-const uuid = require('crypto-randomuuid')
+const { pkg, runtimeId } = require('../../datadog-core')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -217,7 +216,7 @@ class Config {
       service: this.service,
       env: this.env,
       version: this.version,
-      'runtime-id': uuid()
+      'runtime-id': runtimeId
     })
   }
 }
