@@ -14,7 +14,7 @@ const {
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH
 } = require('./tags')
-const id = require('../../id')
+const { id } = require('../../id')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
