@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class CassandraDriverPlugin extends Plugin {
   static get name () {
@@ -11,36 +9,24 @@ class CassandraDriverPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:cassandra:query:start`, ({ keyspace, query, connectionOptions }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-
+    this.addSub(`apm:cassandra:query:start`, ({ keyspace, query }) => {
       if (Array.isArray(query)) {
         query = combine(query)
       }
 
-      const span = this.tracer.startSpan('cassandra.query', {
-        childOf,
-        tags: {
-          'service.name': this.config.service || `${this.tracer._service}-cassandra`,
-          'resource.name': trim(query, 5000),
-          'span.type': 'cassandra',
-          'span.kind': 'client',
+      this.startSpan('cassandra.query', {
+        resource: trim(query, 5000),
+        service: this.config.service || `${this.tracer.config.service}-cassandra`,
+        kind: 'client',
+        type: 'cassandra',
+        meta: {
           'db.type': 'cassandra',
           'cassandra.query': query,
-          'cassandra.keyspace': keyspace
+          'cassandra.keyspace': keyspace,
+          'out.host': '',
+          'out.port': ''
         }
       })
-
-      if (connectionOptions) {
-        span.addTags({
-          'out.host': connectionOptions.host,
-          'out.port': connectionOptions.port
-        })
-      }
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
     })
 
     this.addSub(`apm:cassandra:query:end`, () => {
@@ -48,23 +34,21 @@ class CassandraDriverPlugin extends Plugin {
     })
 
     this.addSub(`apm:cassandra:query:error`, err => {
-      storage.getStore().span.setTag('error', err)
+      this.addError(err)
     })
 
     this.addSub(`apm:cassandra:query:async-end`, () => {
-      storage.getStore().span.finish()
+      this.finishSpan()
     })
 
     this.addSub(`apm:cassandra:query:addConnection`, connectionOptions => {
-      const store = storage.getStore()
-      if (!store) {
-        return
-      }
-      const span = store.span
-      span.addTags({
-        'out.host': connectionOptions.address,
-        'out.port': connectionOptions.port
-      })
+      const span = this.activeSpan
+
+      // TODO: this should not be needed if the context is propagated properly
+      if (!span) return
+
+      span.meta['out.host'] = connectionOptions.address
+      span.meta['out.port'] = connectionOptions.port
     })
   }
 }
