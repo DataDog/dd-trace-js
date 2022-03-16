@@ -97,9 +97,11 @@ function createWrapOnException (tracer, globalInput) {
       if (isActiveSpanFailing && !testStatus) {
         activeTestSpan.setTag(TEST_STATUS, 'fail')
         // If we don't do this, jest will show this file on its error message
-        const stackFrames = err.stack.split('\n')
-        const filteredStackFrames = stackFrames.filter(frame => !frame.includes(__dirname)).join('\n')
-        err.stack = filteredStackFrames
+        if (err.stack) {
+          const stackFrames = err.stack.split('\n')
+          const filteredStackFrames = stackFrames.filter(frame => !frame.includes(__dirname)).join('\n')
+          err.stack = filteredStackFrames
+        }
         activeTestSpan.setTag('error', err)
         // need to manually finish, as it will not be caught in `itWithTrace`
         activeTestSpan.finish()

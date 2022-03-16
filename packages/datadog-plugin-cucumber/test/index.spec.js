@@ -7,6 +7,8 @@ const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { SAMPLING_PRIORITY } = require('../../../ext/tags')
+const { AUTO_KEEP } = require('../../../ext/priority')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -81,6 +83,9 @@ describe('Plugin', function () {
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
               [TEST_STATUS]: 'pass'
+            })
+            expect(testSpan.metrics).to.contain({
+              [SAMPLING_PRIORITY]: AUTO_KEEP
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)

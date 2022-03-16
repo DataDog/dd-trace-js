@@ -2,10 +2,9 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const withTopologies = fn => {
-  withVersions(plugin, ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
+  withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
     describe('using the server topology', () => {
       fn(() => {
         const { CoreServer, Server } = require(`../../../versions/${moduleName}@${version}`).get()
@@ -54,7 +53,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
@@ -326,7 +325,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
