@@ -123,19 +123,28 @@ class DatadogTracer extends Tracer {
 <meta name="dd-trace-time" content="${traceTime}" />`
   }
 
+  /**
+   * Links an authenticated user to the current trace
+   * @param {object} user Properties of the authenticated user. Accepts custom fields
+   * @param {string} user.id Unique identifier of the user. Mandatory
+   * @param {string} [user.email] Email of the user
+   * @param {string} [user.name] User-friendly name of the user
+   * @param {string} [user.session_id] Session ID of the user
+   * @param {string} [user.role]
+   * @param {string} [user.scope]
+   * @returns {boolean} If the operation succeeded
+   */
   setUser (user) {
     if (!user || !user.id) return false
 
-    const span = this.currentSpan()
+    const span = this.scope().active()
     if (!span) return false
 
-    const rootSpan = span._context._trace.started[0]
+    const rootSpan = span._spanContext._trace.started[0]
     if (!rootSpan) return false
 
-    rootSpan.setTag('usr.id', user.id)
-
-    for (const [k, v] of Object.entries(user)) {
-      rootSpan.setTag(`usr.${k}`, '' + v)
+    for (const k of Object.keys(user)) {
+      rootSpan.setTag(`usr.${k}`, '' + user[k])
     }
 
     return true
