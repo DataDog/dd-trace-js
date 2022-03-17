@@ -5,6 +5,7 @@ const { storage } = require('../../datadog-core')
 
 const {
   CI_APP_ORIGIN,
+  TEST_CODE_OWNERS,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -15,7 +16,9 @@ const {
   getTestEnvironmentMetadata,
   getTestSuitePath,
   getTestParentSpan,
-  getTestParametersString
+  getTestParametersString,
+  getCodeOwnersFileEntries,
+  getCodeOwnersForFilename
 } = require('../../dd-trace/src/plugins/util/test')
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -54,6 +57,7 @@ class MochaPlugin extends Plugin {
     this._testNameToParams = {}
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
+    this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
 
     this.addSub('ci:mocha:test:start', (test) => {
       const store = storage.getStore()
@@ -138,6 +142,11 @@ class MochaPlugin extends Plugin {
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)
     if (testParametersString) {
       testSpanMetadata[TEST_PARAMETERS] = testParametersString
+    }
+    const codeOwners = getCodeOwnersForFilename(testSpanMetadata[TEST_SUITE])
+
+    if (codeOwners) {
+      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
     }
 
     const testSpan = this.tracer
