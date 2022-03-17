@@ -59,10 +59,8 @@ describe('Plugin', () => {
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
-                  'out.host': 'localhost'
-                })
-                expect(span.metrics).to.include({
-                  'out.port': 5673
+                  'out.host': 'localhost',
+                  'out.port': '5673'
                 })
               })
                 .then(done, done)
