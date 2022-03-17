@@ -108,6 +108,19 @@ export declare interface Tracer extends opentracing.Tracer {
    * should not be cached.
    */
   getRumData(): string;
+
+  /**
+   * Links an authenticated user to the current trace.
+   * @param {object} user Properties of the authenticated user. Accepts custom fields.
+   * @param {string} user.id Unique identifier of the user. Mandatory.
+   * @param {string} [user.email] Email of the user.
+   * @param {string} [user.name] User-friendly name of the user.
+   * @param {string} [user.session_id] Session ID of the user.
+   * @param {string} [user.role]
+   * @param {string} [user.scope]
+   * @returns {boolean} If the operation succeeded.
+   */
+  setUser(user: object): boolean;
 }
 
 export declare interface TraceOptions extends Analyzable {
