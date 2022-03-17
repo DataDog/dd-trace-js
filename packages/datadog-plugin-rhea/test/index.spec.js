@@ -2,13 +2,12 @@
 
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
 
   describe('rhea', () => {
-    withVersions(plugin, 'rhea', version => {
+    withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {
         let container
         let context
@@ -18,7 +17,7 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close()
+          agent.close({ ritmReset: false })
           agent.wipe()
           context.connection.once('connection_close', () => done())
           context.connection.close()
@@ -70,12 +69,14 @@ describe('Plugin', () => {
               context.sender.send({ body: 'Hello World!' })
             })
 
-            it('should inject span context', () => {
-              container.on('message', msg => {
+            it('should inject span context', (done) => {
+              container.once('message', msg => {
                 const keys = Object.keys(msg.message.delivery_annotations)
                 expect(keys).to.include('x-datadog-trace-id')
                 expect(keys).to.include('x-datadog-parent-id')
+                done()
               })
+              context.sender.send({ body: 'Hello World!' })
             })
           })
 
@@ -101,7 +102,7 @@ describe('Plugin', () => {
             })
 
             it('should extract the span context', done => {
-              container.on('message', msg => {
+              container.once('message', msg => {
                 const span = tracer.scope().active()
                 expect(span._spanContext._parentId).to.not.be.null
                 done()
@@ -166,7 +167,7 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close()
+          agent.close({ ritmReset: false })
           agent.wipe()
           if (connection.socket_ready) {
             connection.once('connection_close', () => done())
