@@ -513,7 +513,7 @@ const tracer = require('dd-trace').init()
 function handle () {
   tracer.setUser({
     id: '123456789', // required
-     // all other fields are optional
+    // all other fields are optional
     email: 'jane.doe@example.com',
     name: 'Jane Doe',
     // abitrary fields are also accepted
