@@ -499,3 +499,37 @@ tracer.use('express', {
 Right now this functionality is limited to Web frameworks.
 
 More information on which hooks are supported for each integration can be found in each individual [plugins](./modules/plugins.html).
+
+<h3 id="set-user">User Identification</h3>
+
+The tracer provides a convenience function to link an actor to a trace. For example to correlate users to web requests.
+You have to pass an object with at least an `id` property.
+
+For example:
+
+```javascript
+const tracer = require('dd-trace').init()
+
+function handle () {
+  tracer.setUser({
+    id: '123456789', // required
+     // all other fields are optional
+    email: 'jane.doe@example.com',
+    name: 'Jane Doe',
+    // abitrary fields are also accepted
+    custom_tag: 'custom data'
+  })
+}
+```
+
+List of standardized tags:
+
+| Tag | Description | Example |
+| --- | ----------- | ------- |
+| `usr.id` | **REQUIRED** Unique identifier | `123456789` |
+| `usr.email` | Email of the user | `jane.doe@example.com` |
+| `usr.name` | User-friendly name of the user | `Jane Doe` |
+| `usr.session_id` | Session ID of the user | `987654321` |
+| `usr.role` | Role the user is making the request under | `admin` |
+| `usr.scope` | Scopes or granted authorizations the user currently possesses. The value could come from the scope associated with an OAuth2 Access Token or an attribute value in a SAML 2 Assertion. | `read:message, write:files` |
+| `usr.*` | Custom data to attach to the user (RBAC, Oauth, etc…) | - |
