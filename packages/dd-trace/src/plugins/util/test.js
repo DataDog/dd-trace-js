@@ -165,6 +165,9 @@ function getCodeOwnersFileEntries (rootDir = process.cwd()) {
       // retry with next path
     }
   })
+  if (!codeOwnersContent) {
+    return
+  }
 
   const entries = []
   const lines = codeOwnersContent.split('\n')
@@ -181,6 +184,9 @@ function getCodeOwnersFileEntries (rootDir = process.cwd()) {
 }
 
 function getCodeOwnersForFilename (filename, entries) {
+  if (!entries) {
+    return null
+  }
   for (const entry of entries) {
     const isResponsible = ignore().add(entry.pattern).ignores(filename)
     if (isResponsible) {
