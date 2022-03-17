@@ -40,6 +40,7 @@ class NoopTracer extends Tracer {
   }
 
   setUser () {
+    return this
   }
 }
 

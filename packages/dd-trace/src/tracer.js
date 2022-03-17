@@ -124,19 +124,19 @@ class DatadogTracer extends Tracer {
   }
 
   setUser (user) {
-    if (!user || !user.id) return false
+    if (!user || !user.id) return this
 
     const span = this.scope().active()
-    if (!span) return false
+    if (!span) return this
 
     const rootSpan = span._spanContext._trace.started[0]
-    if (!rootSpan) return false
+    if (!rootSpan) return this
 
     for (const k of Object.keys(user)) {
       rootSpan.setTag(`usr.${k}`, '' + user[k])
     }
 
-    return true
+    return this
   }
 }
 

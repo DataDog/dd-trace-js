@@ -118,7 +118,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param {string} [user.session_id] Session ID of the user.
    * @param {string} [user.role]
    * @param {string} [user.scope]
-   * @returns {boolean} If the operation succeeded.
+   * @returns {Tracer} The Tracer instance for chaining.
    */
   setUser(user: object): boolean;
 }
