@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class MongodbCorePlugin extends Plugin {
   static get name () {
@@ -14,33 +12,19 @@ class MongodbCorePlugin extends Plugin {
 
     this.addSub(`apm:mongodb:query:start`, ({ ns, ops, options, name }) => {
       const query = getQuery(ops)
-      const resource = getResource(ns, query, name)
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('mongodb.query', {
-        childOf,
-        tags: {
-          'service.name': this.config.service || `${this.tracer._service}-mongodb`,
-          'resource.name': resource,
-          'span.type': 'mongodb',
-          'span.kind': 'client',
-          'db.name': ns
-        }
-      })
 
-      if (query) {
-        span.setTag('mongodb.query', query)
-      }
-
-      if (options && options.host && options.port) {
-        span.addTags({
+      this.startSpan('mongodb.query', {
+        resource: getResource(ns, query, name),
+        service: this.config.service || `${this.tracer.config.service}-mongodb`,
+        kind: 'client',
+        type: 'mongodb',
+        meta: {
+          'db.name': ns,
+          'mongodb.query': query,
           'out.host': options.host,
           'out.port': options.port
-        })
-      }
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
+        }
+      })
     })
 
     this.addSub(`apm:mongodb:query:end`, () => {
@@ -48,11 +32,11 @@ class MongodbCorePlugin extends Plugin {
     })
 
     this.addSub(`apm:mongodb:query:error`, err => {
-      storage.getStore().span.setTag('error', err)
+      this.addError(err)
     })
 
     this.addSub(`apm:mongodb:query:async-end`, () => {
-      storage.getStore().span.finish()
+      this.finishSpan()
     })
   }
 }

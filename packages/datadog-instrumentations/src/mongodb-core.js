@@ -151,7 +151,7 @@ function instrument (ar, operation, command, ctx, args, server, ns, ops, options
 
   callback = ar.bind(callback)
 
-  const serverInfo = server && server.s && server.s.options
+  const serverInfo = (server && server.s && server.s.options) || {}
 
   startCh.publish({ ns, ops, options: serverInfo, name })
 
