@@ -533,3 +533,6 @@ List of standardized tags:
 | `usr.role` | Role the user is making the request under | `admin` |
 | `usr.scope` | Scopes or granted authorizations the user currently possesses. The value could come from the scope associated with an OAuth2 Access Token or an attribute value in a SAML 2 Assertion. | `read:message, write:files` |
 | `usr.*` | Custom data to attach to the user (RBAC, Oauth, etc…) | - |
+
+**We recommended against setting those tags manually (with the `setTag()` function), as the syntax could change. Instead use the convenience function that abtracts it for you.**
+
