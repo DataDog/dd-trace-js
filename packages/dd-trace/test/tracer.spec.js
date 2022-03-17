@@ -320,8 +320,8 @@ describe('Tracer', () => {
       tracer.trace('http', {}, span => {
         sinon.stub(span, 'setTag')
 
-        expect(tracer.setUser()).to.be.false
-        expect(tracer.setUser({})).to.be.false
+        expect(tracer.setUser()).to.equal(tracer)
+        expect(tracer.setUser({})).to.equal(tracer)
 
         expect(span.setTag).to.not.have.been.called
       })
@@ -330,14 +330,18 @@ describe('Tracer', () => {
     it('should do nothing when no active span is found', () => {
       const result = tracer.setUser({ id: '123' })
 
-      expect(result).to.be.false
+      expect(result).to.equal(tracer)
     })
 
     it('should do nothing when no top span is found', () => {
       tracer.trace('http', {}, span => {
         span.finish()
+        
+        sinon.stub(span, 'setTag')
 
-        expect(tracer.setUser({ id: '123' })).to.be.false
+        expect(tracer.setUser({ id: '123' })).to.equal(tracer)
+        
+        expect(span.setTag).to.not.have.been.called
       })
     })
 
@@ -349,7 +353,7 @@ describe('Tracer', () => {
           id: '123',
           email: 'a@b.c',
           custom: 'hello'
-        })).to.be.true
+        })).to.equal(tracer)
 
         expect(span.setTag).to.have.been.calledThrice
         expect(span.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
