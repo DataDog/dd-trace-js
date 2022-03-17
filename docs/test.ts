@@ -337,3 +337,11 @@ scope.bind(emitter, span);
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
+
+tracer.setUser({ id: '123' })
+
+tracer.setUser({
+  id: '123',
+  email: 'a@b.c',
+  custom: 'hello'
+})
