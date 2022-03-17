@@ -148,7 +148,12 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   return testSuitePath.replace(path.sep, '/')
 }
 
-const POSSIBLE_CODEOWNERS_LOCATIONS = ['CODEOWNERS', '.github/CODEOWNERS', 'docs/CODEOWNERS']
+const POSSIBLE_CODEOWNERS_LOCATIONS = [
+  'CODEOWNERS',
+  '.github/CODEOWNERS',
+  'docs/CODEOWNERS',
+  '.gitlab/CODEOWNERS'
+]
 
 function getCodeOwnersFileEntries (rootDir = process.cwd()) {
   let codeOwnersContent
