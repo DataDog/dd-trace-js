@@ -336,11 +336,11 @@ describe('Tracer', () => {
     it('should do nothing when no top span is found', () => {
       tracer.trace('http', {}, span => {
         span.finish()
-        
+
         sinon.stub(span, 'setTag')
 
         expect(tracer.setUser({ id: '123' })).to.equal(tracer)
-        
+
         expect(span.setTag).to.not.have.been.called
       })
     })
