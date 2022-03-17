@@ -120,7 +120,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param {string} [user.scope]
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser(user: object): boolean;
+  setUser(user: object): Tracer;
 }
 
 export declare interface TraceOptions extends Analyzable {
