@@ -1,8 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class TediousPlugin extends Plugin {
   static get name () {
@@ -13,17 +11,14 @@ class TediousPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:tedious:request:start`, ({ queryOrProcedure, connectionConfig }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('tedious.request', {
-        childOf,
+      this.startSpan('tedious.request', {
+        resource: queryOrProcedure,
+        service: this.config.service || `${this.tracer.config.service}-mssql`,
+        kind: 'client',
+        type: 'sql',
         tags: {
-          'span.kind': 'client',
           'db.type': 'mssql',
-          'span.type': 'sql',
           'component': 'tedious',
-          'service.name': this.config.service || `${this.tracer._service}-mssql`,
-          'resource.name': queryOrProcedure,
           'out.host': connectionConfig.server,
           'out.port': connectionConfig.options.port,
           'db.user': connectionConfig.userName || connectionConfig.authentication.options.userName,
@@ -31,8 +26,6 @@ class TediousPlugin extends Plugin {
           'db.instance': connectionConfig.options.instanceName
         }
       })
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
     })
 
     this.addSub(`apm:tedious:request:end`, () => {
@@ -40,13 +33,11 @@ class TediousPlugin extends Plugin {
     })
 
     this.addSub(`apm:tedious:request:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
+      this.activeSpan.addError(err)
     })
 
     this.addSub(`apm:tedious:request:async-end`, () => {
-      const span = storage.getStore().span
-      span.finish()
+      this.finishSpan()
     })
   }
 }
