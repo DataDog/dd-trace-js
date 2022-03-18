@@ -60,6 +60,7 @@ function truncateSpan (span) {
 function normalizeSpan (span) {
   const normalizedSpan = fromEntries(Object.entries(span).map(([key, value]) => {
     switch (key) {
+      // TO BE DELETED SOON
       case 'span_id':
       case 'trace_id':
       case 'parent_id':

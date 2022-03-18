@@ -195,8 +195,6 @@ class AgentEncoder {
     let length = 0
 
     for (const key of keys) {
-      if (typeof value[key] !== 'string' && typeof value[key] !== 'number') return
-
       length++
 
       this._encodeString(bytes, key)

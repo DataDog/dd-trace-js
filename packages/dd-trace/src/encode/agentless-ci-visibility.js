@@ -3,14 +3,9 @@ const tracerVersion = require('../../lib/version')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const log = require('../log')
+const { AgentEncoder } = require('./0.4')
 
 const ENCODING_VERSION = 1
-const float64Array = new Float64Array(1)
-const uInt8Float64Array = new Uint8Array(float64Array.buffer)
-
-float64Array[0] = -1
-
-const bigEndian = uInt8Float64Array[7] === 0
 
 function formatSpan (span) {
   return {
@@ -20,8 +15,9 @@ function formatSpan (span) {
   }
 }
 
-class AgentlessCiVisibilityEncoder {
+class AgentlessCiVisibilityEncoder extends AgentEncoder {
   constructor ({ runtimeId, service, env }) {
+    super(...arguments)
     this._events = []
     this.runtimeId = runtimeId
     this.service = service
@@ -42,86 +38,6 @@ class AgentlessCiVisibilityEncoder {
     this._events = this._events.concat(trace)
   }
 
-  _cacheString (value) {
-    if (!(value in this._stringMap)) {
-      this._stringCount++
-      this._stringMap[value] = {
-        start: this._stringBytes.length,
-        end: this._stringBytes.length + this._stringBytes.write(value)
-      }
-    }
-  }
-
-  _encodeMap (bytes, value) {
-    const keys = Object.keys(value)
-    const buffer = bytes.buffer
-    const offset = bytes.length
-
-    const length = keys.length
-
-    if (length < 0x10) { // fixmap
-      bytes.reserve(1)
-      bytes.length += 1
-      buffer[offset] = length | 0x80
-    } else if (length < 0x10000) { // map 16
-      bytes.reserve(3)
-      bytes.length += 3
-      buffer[offset] = 0xde
-      buffer[offset + 1] = length >> 8
-      buffer[offset + 2] = length
-    } else if (length < 0x100000000) { // map 32
-      bytes.reserve(5)
-      bytes.length += 5
-      buffer[offset] = 0xdf
-      buffer[offset + 1] = length >> 24
-      buffer[offset + 2] = length >> 16
-      buffer[offset + 3] = length >> 8
-      buffer[offset + 4] = length
-    }
-
-    for (const key of keys) {
-      this._encodeString(bytes, key)
-      this._encodeValue(bytes, value[key])
-    }
-  }
-
-  _encodeString (bytes, value = '') {
-    this._cacheString(value)
-
-    const { start, end } = this._stringMap[value]
-
-    this._stringBytes.copy(bytes, start, end)
-  }
-
-  _encodeFloat (bytes, value) {
-    float64Array[0] = value
-
-    const buffer = bytes.buffer
-    const offset = bytes.length
-
-    bytes.reserve(9)
-    bytes.length += 9
-
-    buffer[offset] = 0xcb
-
-    if (bigEndian) {
-      for (let i = 0; i <= 7; i++) {
-        buffer[offset + i + 1] = uInt8Float64Array[i]
-      }
-    } else {
-      for (let i = 7; i >= 0; i--) {
-        buffer[bytes.length - i - 1] = uInt8Float64Array[i]
-      }
-    }
-  }
-
-  _encodeNumber (bytes, value) {
-    if (Math.floor(value) !== value) { // float 64
-      return this._encodeFloat(bytes, value)
-    }
-    return this._encodeInteger(bytes, value)
-  }
-
   _encodeValue (bytes, value) {
     switch (typeof value) {
       case 'string':
@@ -138,6 +54,10 @@ class AgentlessCiVisibilityEncoder {
           }
           return
         }
+        if (value.constructor && value.constructor.name === 'Identifier') {
+          this._encodeId(bytes, value)
+          return
+        }
         this._encodeMap(bytes, value)
         break
       default:
@@ -145,34 +65,11 @@ class AgentlessCiVisibilityEncoder {
     }
   }
 
-  _encodeArrayPrefix (bytes, value) {
-    const length = value.length
-    const buffer = bytes.buffer
-    const offset = bytes.length
-
-    if (length < 0x10) { // fixarray
-      bytes.reserve(1)
-      bytes.length += 1
-      buffer[offset] = length | 0x90
-      return
+  _encodeNumber (bytes, value) {
+    if (Math.floor(value) !== value) { // float 64
+      return this._encodeFloat(bytes, value)
     }
-    if (length < 0x10000) { // array 16
-      bytes.reserve(3)
-      bytes.length += 3
-      buffer[offset] = 0xdc
-      buffer[offset + 1] = length >> 8
-      buffer[offset + 2] = length
-      return
-    }
-    if (length < 0x100000000) { // array 32
-      bytes.reserve(5)
-      bytes.length += 5
-      buffer[offset] = 0xdd
-      buffer[offset + 1] = length >> 24
-      buffer[offset + 2] = length >> 16
-      buffer[offset + 3] = length >> 8
-      buffer[offset + 4] = length
-    }
+    return this._encodeInteger(bytes, value)
   }
 
   _encodeInteger (bytes, value) {
@@ -340,12 +237,7 @@ class AgentlessCiVisibilityEncoder {
   }
 
   reset () {
-    this._traceBytes.length = 0
-    this._stringCount = 0
-    this._stringBytes.length = 0
-    this._stringMap = {}
-
-    this._cacheString('')
+    this._reset()
     this._events = []
   }
 }

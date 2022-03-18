@@ -47,9 +47,9 @@ describe('agentless-ci-visibility-encode', () => {
         bar: 'baz'
       },
       metrics: {
-        positive: 1234567,
-        negative: -1234567,
-        float: 1.234567
+        positive: 123456712345,
+        negative: -123456712345,
+        float: 1.23456712345
       },
       start: 123,
       duration: 456
@@ -72,10 +72,10 @@ describe('agentless-ci-visibility-encode', () => {
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
     expect(spanEvent.version).to.equal(1)
+    expect(spanEvent.content.trace_id.toString(10)).to.equal(trace[0].trace_id.toString(10))
+    expect(spanEvent.content.span_id.toString(10)).to.equal(trace[0].span_id.toString(10))
+    expect(spanEvent.content.parent_id.toString(10)).to.equal(trace[0].parent_id.toString(10))
     expect(spanEvent.content).to.contain({
-      trace_id: id('1234abcd1234abcd').toString(10),
-      span_id: id('1234abcd1234abcd').toString(10),
-      parent_id: id('1234abcd1234abcd').toString(10),
       name: 'test',
       resource: 'test-r',
       service: 'test-s',
@@ -88,9 +88,9 @@ describe('agentless-ci-visibility-encode', () => {
       bar: 'baz'
     })
     expect(spanEvent.content.metrics).to.eql({
-      positive: 1234567,
-      negative: -1234567,
-      float: 1.234567
+      positive: 123456712345,
+      negative: -123456712345,
+      float: 1.23456712345
     })
   })
 
