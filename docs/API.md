@@ -526,5 +526,3 @@ function handle () {
   })
 }
 ```
-
-**We recommended against setting those tags manually (with the `setTag()` function), as the syntax could change. Instead use the convenience function that abtracts it for you.**
