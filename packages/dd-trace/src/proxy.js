@@ -141,6 +141,10 @@ class Tracer extends BaseTracer {
   getRumData () {
     return this._tracer.getRumData.apply(this._tracer, arguments)
   }
+
+  setUser () {
+    return this._tracer.setUser.apply(this.tracer, arguments)
+  }
 }
 
 module.exports = Tracer
