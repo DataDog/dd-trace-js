@@ -8,7 +8,6 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
-const producerMessageCh = channel(`apm:kafkajs:produce:message`)
 const producerFinishCh = channel('apm:kafkajs:produce:finish')
 const producerErrorCh = channel('apm:kafkajs:produce:error')
 
@@ -30,29 +29,26 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
           return send.apply(this, arguments)
         }
 
-        producerStartCh.publish(undefined)
         try {
           const { topic, messages = [] } = arguments[0]
           for (const message of messages) {
-            message.headers = message.headers || {}
+            if (typeof message === 'object') {
+              message.headers = message.headers || {}
+            }
           }
-          producerMessageCh.publish({ topic, messages })
+          producerStartCh.publish({ topic, messages })
 
           const result = send.apply(this, arguments)
 
-          if (result && typeof result.then === 'function') {
-            result.then(
-              innerAsyncResource.bind(() => producerFinishCh.publish(undefined)),
-              innerAsyncResource.bind(err => {
-                if (err) {
-                  producerErrorCh.publish(err)
-                }
-                producerFinishCh.publish(undefined)
-              })
-            )
-          } else {
-            producerFinishCh.publish(undefined)
-          }
+          result.then(
+            innerAsyncResource.bind(() => producerFinishCh.publish(undefined)),
+            innerAsyncResource.bind(err => {
+              if (err) {
+                producerErrorCh.publish(err)
+              }
+              producerFinishCh.publish(undefined)
+            })
+          )
 
           return result
         } catch (e) {

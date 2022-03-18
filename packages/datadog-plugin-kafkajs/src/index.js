@@ -12,7 +12,7 @@ class KafkajsPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:kafkajs:produce:start`, () => {
+    this.addSub(`apm:kafkajs:produce:start`, ({ topic, messages }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('kafka.produce', {
@@ -26,17 +26,16 @@ class KafkajsPlugin extends Plugin {
 
       analyticsSampler.sample(span, this.config.measured)
       this.enter(span, store)
-    })
 
-    this.addSub(`apm:kafkajs:produce:message`, ({ topic, messages }) => {
-      const span = storage.getStore().span
       span.addTags({
         'resource.name': topic,
         'kafka.topic': topic,
         'kafka.batch_size': messages.length
       })
       for (const message of messages) {
-        this.tracer.inject(span, 'text_map', message.headers)
+        if (typeof message === 'object') {
+          this.tracer.inject(span, 'text_map', message.headers)
+        }
       }
     })
 
