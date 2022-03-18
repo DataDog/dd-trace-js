@@ -466,7 +466,12 @@ export declare interface TracerOptions {
    * The value could come from the scope associated with an OAuth2
    * Access Token or an attribute value in a SAML 2 Assertion.
    */
-  scope?: string
+  scope?: string,
+
+  /**
+   * Custom fields to attach to the user (RBAC, Oauth, etc…).
+   */
+  [key: string]: string
 }
 
 /** @hidden */
