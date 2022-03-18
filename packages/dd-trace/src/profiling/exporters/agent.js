@@ -4,11 +4,8 @@ const retry = require('retry')
 const { request } = require('http')
 const FormData = require('form-data')
 
-// TODO: avoid using dd-trace internals. Make this a separate module?
-const docker = require('../../exporters/agent/docker')
+const { dockerId } = require('../../../../datadog-core')
 const version = require('../../../lib/version')
-
-const containerId = docker.id()
 
 function sendRequest (options, form, callback) {
   const req = request(options, res => {
@@ -117,8 +114,8 @@ class AgentExporter {
           timeout: this._backoffTime * Math.pow(2, attempt)
         }
 
-        if (containerId) {
-          options.headers['Datadog-Container-ID'] = containerId
+        if (dockerId) {
+          options.headers['Datadog-Container-ID'] = dockerId
         }
 
         if (this._url.protocol === 'unix:') {
