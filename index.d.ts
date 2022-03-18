@@ -471,7 +471,7 @@ export declare interface TracerOptions {
   /**
    * Custom fields to attach to the user (RBAC, Oauth, etc…).
    */
-  [key: string]: string
+  [key: string]: string | undefined
 }
 
 /** @hidden */
