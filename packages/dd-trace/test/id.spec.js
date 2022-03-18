@@ -1,67 +1,48 @@
 'use strict'
 
-describe('id', () => {
+const unsignedHexExpr = /^[0-7][0-9a-f]{15}$/
+
+describe.only('id', () => {
   let id
-  let crypto
 
   beforeEach(() => {
-    crypto = {
-      randomFillSync: data => {
-        for (let i = 0; i < data.length; i += 8) {
-          data[i] = 0xFF
-          data[i + 1] = 0x00
-          data[i + 2] = 0xFF
-          data[i + 3] = 0x00
-          data[i + 4] = 0xFF
-          data[i + 5] = 0x00
-          data[i + 6] = 0xFF
-          data[i + 7] = 0x00
-        }
-      }
+    id = require('../src/id')
+  })
+
+  it('should return a random ID limited to unsigned integers', () => {
+    const ids = new Set()
+
+    // loop to ensure ID never has the sign bit set and doesn't collide
+    for (let i = 0; i < 1000; i++) {
+      const testId = id()
+
+      expect(testId.toString(16).padStart(16, '0')).to.match(unsignedHexExpr)
+      expect(ids.has(testId.toString())).to.be.false
+
+      ids.add(testId.toString())
     }
-
-    sinon.stub(Math, 'random')
-
-    id = proxyquire('../src/id', {
-      'crypto': crypto
-    })
-  })
-
-  afterEach(() => {
-    Math.random.restore()
-  })
-
-  it('should return a random 63bit ID', () => {
-    Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
-
-    expect(id().toString()).to.equal('7f00ff00ff00ff00')
-  })
-
-  it('should be serializable to an integer', () => {
-    Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
-
-    const spanId = id()
-
-    expect(spanId.toString(10)).to.equal('9151594822560186112')
-  })
-
-  it('should be serializable to JSON', () => {
-    Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
-
-    const json = JSON.stringify(id())
-
-    expect(json).to.equal('"7f00ff00ff00ff00"')
   })
 
   it('should support hex strings', () => {
-    const spanId = id('abcd')
+    const spanId = id('abcd', 16)
 
-    expect(spanId.toString()).to.equal('abcd')
+    expect(spanId.toString(16)).to.equal('abcd')
   })
 
   it('should support number strings', () => {
     const spanId = id('1234', 10)
 
     expect(spanId.toString(10)).to.equal('1234')
+  })
+
+  it('should be serializable to various formats', () => {
+    const testId = id('7f00ff00ff00ff00', 16)
+    const numToHex = num => num.toString(16).padStart(2, 0)
+
+    expect(JSON.stringify(testId)).to.equal('"9151594822560186112"')
+    expect(testId.toString()).to.equal('9151594822560186112')
+    expect(testId.toString(10)).to.equal('9151594822560186112')
+    expect(testId.toString(16)).to.equal('7f00ff00ff00ff00')
+    expect(testId.toArray().map(numToHex).join('')).to.equal('7f00ff00ff00ff00')
   })
 })
