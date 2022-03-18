@@ -338,7 +338,7 @@ tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
 
-tracer.setUser({ id: '123' })
+const result: Tracer = tracer.setUser({ id: '123' })
 
 tracer.setUser({
   id: '123',

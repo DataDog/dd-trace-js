@@ -114,7 +114,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser(user: User): boolean;
+  setUser(user: User): Tracer;
 }
 
 export declare interface TraceOptions extends Analyzable {

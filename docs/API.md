@@ -513,7 +513,7 @@ const tracer = require('dd-trace').init()
 function handle () {
   tracer.setUser({
     id: '123456789', // required
-     // all other fields are optional
+    // all other fields are optional
     email: 'jane.doe@example.com',
     name: 'Jane Doe',
     // abitrary fields are also accepted
@@ -533,3 +533,6 @@ List of standardized tags:
 | `usr.role` | Role the user is making the request under | `admin` |
 | `usr.scope` | Scopes or granted authorizations the user currently possesses. The value could come from the scope associated with an OAuth2 Access Token or an attribute value in a SAML 2 Assertion. | `read:message, write:files` |
 | `usr.*` | Custom data to attach to the user (RBAC, Oauth, etc…) | - |
+
+**We recommended against setting those tags manually (with the `setTag()` function), as the syntax could change. Instead use the convenience function that abtracts it for you.**
+
