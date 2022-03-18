@@ -315,6 +315,54 @@ describe('Tracer', () => {
     })
   })
 
+  describe('setUser', () => {
+    it('should do nothing when passed invalid data', () => {
+      tracer.trace('http', {}, span => {
+        sinon.stub(span, 'setTag')
+
+        expect(tracer.setUser()).to.equal(tracer)
+        expect(tracer.setUser({})).to.equal(tracer)
+
+        expect(span.setTag).to.not.have.been.called
+      })
+    })
+
+    it('should do nothing when no active span is found', () => {
+      const result = tracer.setUser({ id: '123' })
+
+      expect(result).to.equal(tracer)
+    })
+
+    it('should do nothing when no top span is found', () => {
+      tracer.trace('http', {}, span => {
+        span.finish()
+
+        sinon.stub(span, 'setTag')
+
+        expect(tracer.setUser({ id: '123' })).to.equal(tracer)
+
+        expect(span.setTag).to.not.have.been.called
+      })
+    })
+
+    it('should add user tags to top span', () => {
+      tracer.trace('http', {}, span => {
+        sinon.stub(span, 'setTag')
+
+        expect(tracer.setUser({
+          id: '123',
+          email: 'a@b.c',
+          custom: 'hello'
+        })).to.equal(tracer)
+
+        expect(span.setTag).to.have.been.calledThrice
+        expect(span.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
+        expect(span.setTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
+        expect(span.setTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
+      })
+    })
+  })
+
   describe('wrap', () => {
     it('should return a new function that automatically calls tracer.trace()', () => {
       const it = {}
