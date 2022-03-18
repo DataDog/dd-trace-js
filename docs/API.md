@@ -512,27 +512,19 @@ const tracer = require('dd-trace').init()
 
 function handle () {
   tracer.setUser({
-    id: '123456789', // required
-    // all other fields are optional
-    email: 'jane.doe@example.com',
-    name: 'Jane Doe',
-    // abitrary fields are also accepted
+    id: '123456789', // *REQUIRED* Unique identifier of the user.
+    
+    // All other fields are optional.
+    email: 'jane.doe@example.com', // Email of the user.
+    name: 'Jane Doe', // User-friendly name of the user.
+    session_id: '987654321', // Session ID of the user.
+    role: 'admin', // Role the user is making the request under.
+    scope: 'read:message, write:files', // Scopes or granted authorizations the user currently possesses.
+    
+    // Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)
     custom_tag: 'custom data'
   })
 }
 ```
 
-List of standardized tags:
-
-| Tag | Description | Example |
-| --- | ----------- | ------- |
-| `usr.id` | **REQUIRED** Unique identifier | `123456789` |
-| `usr.email` | Email of the user | `jane.doe@example.com` |
-| `usr.name` | User-friendly name of the user | `Jane Doe` |
-| `usr.session_id` | Session ID of the user | `987654321` |
-| `usr.role` | Role the user is making the request under | `admin` |
-| `usr.scope` | Scopes or granted authorizations the user currently possesses. The value could come from the scope associated with an OAuth2 Access Token or an attribute value in a SAML 2 Assertion. | `read:message, write:files` |
-| `usr.*` | Custom data to attach to the user (RBAC, Oauth, etc…) | - |
-
 **We recommended against setting those tags manually (with the `setTag()` function), as the syntax could change. Instead use the convenience function that abtracts it for you.**
-
