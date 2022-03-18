@@ -111,16 +111,10 @@ export declare interface Tracer extends opentracing.Tracer {
 
   /**
    * Links an authenticated user to the current trace.
-   * @param {object} user Properties of the authenticated user. Accepts custom fields.
-   * @param {string} user.id Unique identifier of the user. Mandatory.
-   * @param {string} [user.email] Email of the user.
-   * @param {string} [user.name] User-friendly name of the user.
-   * @param {string} [user.session_id] Session ID of the user.
-   * @param {string} [user.role]
-   * @param {string} [user.scope]
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser(user: object): boolean;
+  setUser(user: User): boolean;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -435,6 +429,44 @@ export declare interface TracerOptions {
      */
     rateLimit?: number
   };
+}
+
+/**
+ * User object that can be passed to `tracer.setUser()`.
+ */
+ export declare interface User {
+  /**
+   * Unique identifier of the user.
+   * Mandatory.
+   */
+  id: string,
+
+  /**
+   * Email of the user.
+   */
+  email?: string,
+
+  /**
+   * User-friendly name of the user.
+   */
+  name?: string,
+
+  /**
+   * Session ID of the user.
+   */
+  session_id?: string,
+
+  /**
+   * Role the user is making the request under.
+   */
+  role?: string,
+
+  /**
+   * Scopes or granted authorizations the user currently possesses.
+   * The value could come from the scope associated with an OAuth2
+   * Access Token or an attribute value in a SAML 2 Assertion.
+   */
+  scope?: string
 }
 
 /** @hidden */
