@@ -35,8 +35,8 @@ module.exports = {
           const metrics = {}
 
           for (const index in span[9]) {
-            const key = stringMap[parseInt(index)]
-            const value = stringMap[parseInt(span[9][index])]
+            const key = stringMap[index]
+            const value = stringMap[span[9][index]]
 
             meta[key] = value
           }

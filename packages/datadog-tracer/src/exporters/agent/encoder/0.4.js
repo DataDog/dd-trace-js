@@ -239,7 +239,8 @@ class EncoderV4 {
   }
 
   _encodeMetaProperty (bytes, key, value) {
-    if (value === null || value === undefined || value === '') return 0
+    if (value === '' || key === '') return 0
+    if (typeof value !== 'string' && typeof value !== 'number') return 0
 
     this._encodeString(bytes, key)
     this._encodeString(bytes, String(value))
