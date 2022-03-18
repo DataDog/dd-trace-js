@@ -166,7 +166,7 @@ function getCodeOwnersFileEntries (rootDir = process.cwd()) {
     }
   })
   if (!codeOwnersContent) {
-    return
+    return null
   }
 
   const entries = []
