@@ -311,10 +311,10 @@ class AgentlessCiVisibilityEncoder {
       payload.metadata.service = this.service
     }
     if (this.env) {
-      payload.metadata.end = this.env
+      payload.metadata.env = this.env
     }
     if (this.runtimeId) {
-      payload.metadata.runtime_id = this.runtimeId
+      payload.metadata['runtime-id'] = this.runtimeId
     }
 
     log.debug(() => {
