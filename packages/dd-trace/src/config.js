@@ -109,6 +109,11 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
+    const DD_TRACE_TRACEPARENT_ENABLED = coalesce(
+      options.experimental && options.experimental.traceparent,
+      process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED,
+      false
+    )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
       options.experimental && options.experimental.runtimeId,
       process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -187,6 +192,7 @@ class Config {
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
     this.experimental = {
       b3: isTrue(DD_TRACE_B3_ENABLED),
+      traceparent: isTrue(DD_TRACE_TRACEPARENT_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
