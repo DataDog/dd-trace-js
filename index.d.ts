@@ -318,6 +318,7 @@ export declare interface TracerOptions {
    */
   experimental?: boolean | {
     b3?: boolean
+    traceparent?: boolean
 
     /**
      * Whether to add an auto-generated `runtime-id` tag to metrics.
