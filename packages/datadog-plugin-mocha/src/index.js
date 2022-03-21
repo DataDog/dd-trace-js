@@ -126,6 +126,10 @@ class MochaPlugin extends Plugin {
     this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {
       this._testNameToParams[name] = params
     })
+
+    this.addSub('ci:mocha:run:end', () => {
+      this.tracer._exporter._writer.flush()
+    })
   }
 
   startTestSpan (test) {
