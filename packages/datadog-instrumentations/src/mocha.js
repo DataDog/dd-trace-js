@@ -9,6 +9,7 @@ const testAsyncEndCh = channel('ci:mocha:test:async-end')
 const suiteEndCh = channel('ci:mocha:suite:end')
 const hookErrorCh = channel('ci:mocha:hook:error')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
+const testRunEndCh = channel('ci:mocha:run:end')
 
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
@@ -78,6 +79,9 @@ addHook({
     if (!suiteEndCh.hasSubscribers) {
       return runTests.apply(this, arguments)
     }
+    this.once('end', AsyncResource.bind(() => {
+      testRunEndCh.publish(undefined)
+    }))
     runTests.apply(this, arguments)
     const suite = arguments[0]
     // We call `getAllTestsInSuite` with the root suite so every skipped test
