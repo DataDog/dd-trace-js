@@ -4,41 +4,11 @@ const http = require('http')
 const https = require('https')
 const docker = require('./docker')
 const log = require('../../log')
-const { storage } = require('../../../../datadog-core')
+const retriableRequest = require('../common/request')
 
 const httpAgent = new http.Agent({ keepAlive: true })
 const httpsAgent = new https.Agent({ keepAlive: true })
 const containerId = docker.id()
-
-function retriableRequest (options, callback, client, data) {
-  const store = storage.getStore()
-
-  storage.enterWith({ noop: true })
-
-  const req = client.request(options, res => {
-    let data = ''
-
-    res.setTimeout(options.timeout)
-
-    res.on('data', chunk => { data += chunk })
-    res.on('end', () => {
-      if (res.statusCode >= 200 && res.statusCode <= 299) {
-        callback(null, data, res.statusCode)
-      } else {
-        const error = new Error(`Error from the agent: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
-        error.status = res.statusCode
-
-        callback(error, null, res.statusCode)
-      }
-    })
-  })
-  req.setTimeout(options.timeout, req.abort)
-  data.forEach(buffer => req.write(buffer))
-
-  storage.enterWith(store)
-
-  return req
-}
 
 function request (options, callback) {
   options = Object.assign({
@@ -58,13 +28,15 @@ function request (options, callback) {
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
   }
-  const firstRequest = retriableRequest(options, callback, client, data)
+  const firstRequest = retriableRequest(options, client, callback)
+  data.forEach(buffer => firstRequest.write(buffer))
 
   // The first request will be retried if it fails due to a socket connection close
   const firstRequestErrorHandler = error => {
     if (firstRequest.reusedSocket && (error.code === 'ECONNRESET' || error.code === 'EPIPE')) {
       log.debug('Retrying request due to socket connection error')
-      const retriedReq = retriableRequest(options, callback, client, data)
+      const retriedReq = retriableRequest(options, client, callback)
+      data.forEach(buffer => retriedReq.write(buffer))
       // The retried request will fail normally
       retriedReq.on('error', e => callback(new Error(`Network error trying to reach the agent: ${e.message}`)))
       retriedReq.end()
