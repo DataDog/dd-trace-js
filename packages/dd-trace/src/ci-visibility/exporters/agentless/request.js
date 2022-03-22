@@ -2,8 +2,8 @@
 
 const https = require('https')
 const http = require('http')
-const log = require('../../../log')
 
+const log = require('../../../log')
 const retriableRequest = require('../../../exporters/common/request')
 
 function request (data, options, callback) {

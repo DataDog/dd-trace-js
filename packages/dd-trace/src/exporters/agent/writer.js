@@ -5,18 +5,19 @@ const { startupLog } = require('../../startup-log')
 const metrics = require('../../metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
+const BaseWriter = require('../common/writer')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
-class Writer {
-  constructor ({ url, prioritySampler, lookup, protocolVersion }) {
+class Writer extends BaseWriter {
+  constructor ({ prioritySampler, lookup, protocolVersion }) {
+    super(...arguments)
     const AgentEncoder = getEncoder(protocolVersion)
 
-    this._url = url
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoderForVersion = new AgentEncoder(this)
+    this._encoder = new AgentEncoder(this)
   }
 
   append (spans) {
@@ -63,24 +64,8 @@ class Writer {
     })
   }
 
-  setUrl (url) {
-    this._url = url
-  }
-
   _encode (trace) {
-    this._encoderForVersion.encode(trace)
-  }
-
-  flush (done = () => {}) {
-    const count = this._encoderForVersion.count()
-
-    if (count > 0) {
-      const payload = this._encoderForVersion.makePayload()
-
-      this._sendPayload(payload, count, done)
-    } else {
-      done()
-    }
+    this._encoder.encode(trace)
   }
 }
 
