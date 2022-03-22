@@ -3,8 +3,13 @@
 const https = require('https')
 const http = require('http')
 const log = require('../../../log')
+const { storage } = require('../../../../../datadog-core')
 
 function retriableRequest (data, options, callback) {
+  const store = storage.getStore()
+
+  storage.enterWith({ noop: true })
+
   const client = options.protocol === 'https:' ? https : http
 
   const timeout = options.timeout || 15000
@@ -28,6 +33,8 @@ function retriableRequest (data, options, callback) {
   })
   request.setTimeout(timeout, request.abort)
   request.write(data)
+
+  storage.enterWith(store)
 
   return request
 }

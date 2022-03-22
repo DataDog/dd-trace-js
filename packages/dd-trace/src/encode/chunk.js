@@ -22,17 +22,6 @@ class Chunk {
       this.reserve(length + 1)
       this.length += 1
       this.buffer[offset] = length | 0xa0
-    } else if (length < 0x100) { // str 8
-      this.reserve(2)
-      this.length += 2
-      this.buffer[offset] = 0xd9
-      this.buffer[offset + 1] = length
-    } else if (length < 0x10000) { // str 16
-      this.reserve(3)
-      this.length += 3
-      this.buffer[offset] = 0xda
-      this.buffer[offset + 1] = length >> 8
-      this.buffer[offset + 2] = length
     } else if (length < 0x100000000) { // str 32
       this.reserve(length + 5)
       this.length += 5

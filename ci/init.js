@@ -10,7 +10,7 @@ const options = {
 
 if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED && (process.env.DATADOG_API_KEY || process.env.DD_API_KEY)) {
   options.experimental = {
-    exporter: 'ci'
+    exporter: 'datadog'
   }
 }
 

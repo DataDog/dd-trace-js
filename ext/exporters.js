@@ -2,5 +2,5 @@
 module.exports = {
   LOG: 'log',
   AGENT: 'agent',
-  CI: 'ci'
+  DATADOG: 'datadog'
 }

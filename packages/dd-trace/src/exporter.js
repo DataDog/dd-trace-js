@@ -16,7 +16,7 @@ module.exports = name => {
       return LogExporter
     case exporters.AGENT:
       return AgentExporter
-    case exporters.CI:
+    case exporters.DATADOG:
       return AgentlessCiVisibilityExporter
     default:
       return inAWSLambda && !usingLambdaExtension ? LogExporter : AgentExporter

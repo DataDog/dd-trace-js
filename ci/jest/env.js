@@ -12,7 +12,7 @@ if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED && (process.env.DATADOG_API_KE
   tracer.init({
     ...options,
     experimental: {
-      exporter: 'ci'
+      exporter: 'datadog'
     }
   })
 } else {

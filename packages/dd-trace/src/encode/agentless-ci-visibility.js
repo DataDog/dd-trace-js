@@ -69,120 +69,24 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     if (Math.floor(value) !== value) { // float 64
       return this._encodeFloat(bytes, value)
     }
-    return this._encodeInteger(bytes, value)
+    return this._encodeLong(bytes, value)
   }
 
-  _encodeInteger (bytes, value) {
-    if (value >= 0) {
-      this._encodePositiveLong(bytes, value)
-    } else {
-      this._encodeNegativeLong(bytes, value)
-    }
-  }
+  _encodeLong (bytes, value) {
+    const isPositive = value >= 0
 
-  _encodeNegativeLong (bytes, value) {
+    const hi = isPositive ? (value / Math.pow(2, 32)) >> 0 : Math.floor(value / Math.pow(2, 32))
+    const lo = value >>> 0
+    const flag = isPositive ? 0xcf : 0xd3
+
     const buffer = bytes.buffer
     const offset = bytes.length
-
-    if (value >= -0x20) { // negative fixnum
-      bytes.reserve(1)
-      bytes.length += 1
-      buffer[offset] = value
-      return
-    }
-
-    if (value >= -0x80) { // int 8
-      bytes.reserve(2)
-      bytes.length += 2
-      buffer[offset] = 0xd0
-      buffer[offset + 1] = value
-      return
-    }
-
-    if (value >= -0x8000) { // int 16
-      bytes.reserve(3)
-      bytes.length += 3
-      buffer[offset] = 0xd1
-      buffer[offset + 1] = value >> 8
-      buffer[offset + 2] = value
-      return
-    }
-
-    if (value >= -0x80000000) { // int 32
-      bytes.reserve(5)
-      bytes.length += 5
-      buffer[offset] = 0xd2
-      buffer[offset + 1] = value >> 24
-      buffer[offset + 2] = value >> 16
-      buffer[offset + 3] = value >> 8
-      buffer[offset + 4] = value
-      return
-    }
 
     // int 64
-    const hi = Math.floor(value / Math.pow(2, 32))
-    const lo = value >>> 0
-
     bytes.reserve(9)
     bytes.length += 9
 
-    buffer[offset] = 0xd3
-    buffer[offset + 1] = hi >> 24
-    buffer[offset + 2] = hi >> 16
-    buffer[offset + 3] = hi >> 8
-    buffer[offset + 4] = hi
-    buffer[offset + 5] = lo >> 24
-    buffer[offset + 6] = lo >> 16
-    buffer[offset + 7] = lo >> 8
-    buffer[offset + 8] = lo
-  }
-
-  _encodePositiveLong (bytes, value) {
-    const buffer = bytes.buffer
-    const offset = bytes.length
-
-    if (value < 0x80) { // positive fixnum
-      bytes.reserve(1)
-      bytes.length += 1
-      buffer[offset] = value
-      return
-    }
-
-    if (value < 0x100) { // uint 8
-      bytes.reserve(2)
-      bytes.length += 2
-      buffer[offset] = 0xcc
-      buffer[offset + 1] = value
-      return
-    }
-
-    if (value < 0x10000) { // uint 16
-      bytes.reserve(3)
-      bytes.length += 3
-      buffer[offset] = 0xcd
-      buffer[offset + 1] = value >> 8
-      buffer[offset + 2] = value
-      return
-    }
-
-    if (value < 0x100000000) { // uint 32
-      bytes.reserve(5)
-      bytes.length += 5
-      buffer[offset] = 0xce
-      buffer[offset + 1] = value >> 24
-      buffer[offset + 2] = value >> 16
-      buffer[offset + 3] = value >> 8
-      buffer[offset + 4] = value
-      return
-    }
-
-    const hi = (value / Math.pow(2, 32)) >> 0
-    const lo = value >>> 0
-
-    bytes.reserve(9)
-    bytes.length += 9
-
-    buffer[offset] = 0xcf
+    buffer[offset] = flag
     buffer[offset + 1] = hi >> 24
     buffer[offset + 2] = hi >> 16
     buffer[offset + 3] = hi >> 8

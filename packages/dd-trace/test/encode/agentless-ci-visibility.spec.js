@@ -49,7 +49,10 @@ describe('agentless-ci-visibility-encode', () => {
       metrics: {
         positive: 123456712345,
         negative: -123456712345,
-        float: 1.23456712345
+        float: 1.23456712345,
+        negativefloat: -1.23456789,
+        bigfloat: 12345678.9,
+        bignegativefloat: -12345678.9
       },
       start: 123,
       duration: 456
@@ -62,7 +65,7 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })
 
-    expect(decodedTrace.version).to.equal(1)
+    expect(decodedTrace.version.toNumber()).to.equal(1)
     expect(decodedTrace.metadata).to.contain({
       language: 'javascript',
       'runtime.name': 'node',
@@ -71,7 +74,7 @@ describe('agentless-ci-visibility-encode', () => {
     })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
-    expect(spanEvent.version).to.equal(1)
+    expect(spanEvent.version.toNumber()).to.equal(1)
     expect(spanEvent.content.trace_id.toString(10)).to.equal(trace[0].trace_id.toString(10))
     expect(spanEvent.content.span_id.toString(10)).to.equal(trace[0].span_id.toString(10))
     expect(spanEvent.content.parent_id.toString(10)).to.equal(trace[0].parent_id.toString(10))
@@ -79,19 +82,24 @@ describe('agentless-ci-visibility-encode', () => {
       name: 'test',
       resource: 'test-r',
       service: 'test-s',
-      type: 'foo',
-      error: 0,
-      start: 123,
-      duration: 456
+      type: 'foo'
     })
+    expect(spanEvent.content.error.toNumber()).to.equal(0)
+    expect(spanEvent.content.start.toNumber()).to.equal(123)
+    expect(spanEvent.content.duration.toNumber()).to.equal(456)
+
     expect(spanEvent.content.meta).to.eql({
       bar: 'baz'
     })
-    expect(spanEvent.content.metrics).to.eql({
-      positive: 123456712345,
-      negative: -123456712345,
-      float: 1.23456712345
+    expect(spanEvent.content.metrics).to.contain({
+      float: 1.23456712345,
+      negativefloat: -1.23456789,
+      bigfloat: 12345678.9,
+      bignegativefloat: -12345678.9
     })
+
+    expect(spanEvent.content.metrics.positive.toNumber()).to.equal(123456712345)
+    expect(spanEvent.content.metrics.negative.toNumber()).to.equal(-123456712345)
   })
 
   it('should report its count', () => {

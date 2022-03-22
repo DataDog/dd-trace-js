@@ -1,7 +1,7 @@
 declare const exporters: {
   LOG: 'log',
   AGENT: 'agent',
-  CI: 'ci'
+  DATADOG: 'datadog'
 }
 
 export = exporters
