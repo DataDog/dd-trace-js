@@ -24,7 +24,7 @@
     "test:core": "mocha --file packages/datadog-core/test/setup.js 'packages/datadog-core/test/**/*.spec.js'",
     "test:core:ci": "nyc --include 'packages/datadog-core/src/**/*.js' -- npm run test:core -- --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter-config.json",
     "test:plugins": "mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
-    "test:plugins:ci": "yarn services && nyc --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins -- --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter-config.json",
+    "test:plugins:ci": "yarn services && nyc --include \"packages/datadog-instrumentations/src/**/*.js\" --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins -- --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter-config.json",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "mocha --exit --file \"packages/dd-trace/test/setup/core.js\" \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:integration": "mocha --timeout 30000 \"integration-tests/**/*.spec.js\"",
