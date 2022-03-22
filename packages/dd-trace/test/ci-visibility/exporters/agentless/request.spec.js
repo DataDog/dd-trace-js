@@ -73,7 +73,7 @@ describe('CI Visibility request', () => {
       port: 123
     }, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from the intake: 400 Bad Request')
+      expect(err.message).to.equal('Error from the endpoint: 400 Bad Request')
       done()
     })
   })

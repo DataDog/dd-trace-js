@@ -90,7 +90,7 @@ describe('request', () => {
       method: 'PUT'
     }, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from the agent: 400 Bad Request')
+      expect(err.message).to.equal('Error from the endpoint: 400 Bad Request')
       done()
     })
   })
