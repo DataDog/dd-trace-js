@@ -42,7 +42,7 @@ describe('Plugin', () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
@@ -56,11 +56,9 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           const app = express()
-
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
-
           getPort().then(port => {
             agent
               .use(traces => {
@@ -113,7 +111,6 @@ describe('Plugin', () => {
 
         it('should support configuration as an URL object', done => {
           const app = express()
-
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
@@ -459,7 +456,6 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send('OK')
           })
-
           getPort().then(port => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
@@ -492,6 +488,94 @@ describe('Plugin', () => {
               })
 
               req.end()
+            })
+          })
+        })
+
+        it('should run the response event in the correct context', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send('OK')
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
+              const span = tracer.scope().active()
+
+              req.on('response', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+
+              req.end()
+            })
+          })
+        })
+
+        it('should run the abort event in the correct context', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send('OK')
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
+              const span = tracer.scope().active()
+
+              req.on('abort', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+
+              req.abort()
+            })
+          })
+        })
+
+        it('should run the error event in the correct context', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send('OK')
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
+              const span = tracer.scope().active()
+
+              req.on('error', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+
+              req.destroy()
+            })
+          })
+        })
+
+        it('should run the timeout event in the correct context', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send('OK')
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
+              const span = tracer.scope().active()
+
+              req.on('timeout', () => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+
+              req.setTimeout(1)
             })
           })
         })
@@ -771,7 +855,6 @@ describe('Plugin', () => {
                 const store = storage.getStore()
 
                 storage.enterWith({ noop: true })
-
                 const req = http.request(tracer._tracer._url.href)
 
                 req.on('error', () => {})
