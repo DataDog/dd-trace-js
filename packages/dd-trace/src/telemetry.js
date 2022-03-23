@@ -141,6 +141,7 @@ function sendData (reqType, payload = {}) {
     host
   }))
   req.end()
+  req.unref()
 }
 
 function start (aConfig, theInstrumenter, thePluginManager) {
