@@ -55,6 +55,10 @@ module.exports = class PluginManager {
         }
         this.configurePlugin(name, pluginConfig)
       }
+    } else {
+      for (const name in this._pluginsByName) {
+        this.configurePlugin(name, false)
+      }
     }
   }
 

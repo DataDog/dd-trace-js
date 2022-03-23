@@ -31,7 +31,7 @@ describe('Plugin', () => {
 
     afterEach(() => {
       appListener && appListener.close()
-      return agent.close()
+      return agent.close({ ritmReset: false })
     })
 
     describe('without configuration', () => {
@@ -79,6 +79,44 @@ describe('Plugin', () => {
           expect(spy).to.have.been.calledOnceWithExactly({ req, res }, incomingHttpRequestStart.name)
 
           done()
+        }
+
+        axios.get(`http://localhost:${port}/user`).catch(done)
+      })
+
+      it(`should run the request's close event in the correct context`, done => {
+        app = (req, res) => {
+          req.on('close', () => {
+            expect(tracer.scope().active()).to.equal(null)
+            done()
+          })
+          res.end()
+        }
+
+        axios.get(`http://localhost:${port}/user`).catch(done)
+      })
+
+      it(`should run the response's close event in the correct context`, done => {
+        app = (req, res) => {
+          const span = tracer.scope().active()
+
+          res.on('close', () => {
+            expect(tracer.scope().active()).to.equal(span)
+            done()
+          })
+        }
+
+        axios.get(`http://localhost:${port}/user`).catch(done)
+      })
+
+      it(`should run the finish event in the correct context`, done => {
+        app = (req, res) => {
+          const span = tracer.scope().active()
+
+          res.on('finish', () => {
+            expect(tracer.scope().active()).to.equal(span)
+            done()
+          })
         }
 
         axios.get(`http://localhost:${port}/user`).catch(done)
