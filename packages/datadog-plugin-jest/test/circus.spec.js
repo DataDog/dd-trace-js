@@ -57,7 +57,34 @@ describe('Plugin', function () {
         })
       })
     })
+    describe('jest with http', () => {
+      it('works with http integration', (done) => {
+        agent
+          .use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            const httpSpan = trace[0].find(span => span.name === 'http.request')
+            expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+          }).then(done).catch(done)
 
+        const passingTestEvent = {
+          name: 'test_start',
+          test: {
+            fn: () => {
+              const http = require('http')
+              http.request('http://test:123')
+            },
+            name: TEST_NAME
+          }
+        }
+
+        datadogJestEnv.handleTestEvent(passingTestEvent)
+        passingTestEvent.test.fn()
+      })
+    })
     describe('jest with jest-circus', () => {
       it('should create a test span for a passing test', (done) => {
         agent
@@ -532,33 +559,6 @@ describe('Plugin', function () {
               [ERROR_MESSAGE]: 'snapshot error message'
             })
           }).then(done).catch(done)
-      })
-
-      it('works with http integration', (done) => {
-        agent
-          .use(trace => {
-            const testSpan = trace[0].find(span => span.type === 'test')
-            const httpSpan = trace[0].find(span => span.name === 'http.request')
-            expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
-            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-            expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-            expect(testSpan.parent_id.toString()).to.equal('0')
-            expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
-          }).then(done).catch(done)
-
-        const passingTestEvent = {
-          name: 'test_start',
-          test: {
-            fn: () => {
-              const http = require('http')
-              http.request('http://test:123')
-            },
-            name: TEST_NAME
-          }
-        }
-
-        datadogJestEnv.handleTestEvent(passingTestEvent)
-        passingTestEvent.test.fn()
       })
 
       it('handles errors in hooks', (done) => {

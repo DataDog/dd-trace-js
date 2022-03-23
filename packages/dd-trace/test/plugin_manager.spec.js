@@ -150,10 +150,13 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
-    it('skips configuring plugins entirely when plugins is false', () => {
-      pm.configurePlugin = sinon.spy()
+    afterEach(() => {
       pm.configure({ plugins: false })
-      expect(pm.configurePlugin).not.to.have.been.called
+    })
+    it('configures plugins when plugins is false', () => {
+      pm.configure({ plugins: false })
+      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
+      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: false })
     })
     it('observes serviceMapping', () => {
       pm.configure({

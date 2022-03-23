@@ -52,10 +52,36 @@ const web = {
     })
   },
 
+  startSpan (tracer, config, req, res, name) {
+    const context = this.patch(req)
+    context.config = config
+
+    let span
+
+    if (context.span) {
+      context.span.context()._name = name
+      span = context.span
+    } else {
+      span = web.startChildSpan(tracer, name, req.headers)
+    }
+
+    context.tracer = tracer
+    context.span = span
+    context.res = res
+
+    return span
+  },
+  wrap (req) {
+    const context = contexts.get(req)
+    if (!context.instrumented) {
+      this.wrapEnd(context)
+      this.wrapEvents(context)
+      context.instrumented = true
+    }
+  },
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
-    const context = this.patch(req)
-    const span = startSpan(tracer, config, req, res, name)
+    const span = this.startSpan(tracer, config, req, res, name)
 
     if (!config.filter(req.url)) {
       span.setTag(MANUAL_DROP, true)
@@ -67,12 +93,7 @@ const web = {
 
     analyticsSampler.sample(span, config.measured, true)
 
-    if (!context.instrumented) {
-      wrapEnd(context)
-      wrapEvents(context)
-
-      context.instrumented = true
-    }
+    this.wrap(req)
 
     return callback && tracer.scope().activate(span, () => callback(span))
   },
@@ -199,6 +220,7 @@ const web = {
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
     const childOf = tracer.scope().active() || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
     const span = tracer.startSpan(name, { childOf })
 
     return span
@@ -221,103 +243,94 @@ const web = {
       const context = contexts.get(req)
       context.error = context.error || error
     }
-  }
-}
+  },
 
-function startSpan (tracer, config, req, res, name) {
-  const context = contexts.get(req)
+  finishMiddleware (context) {
+    if (context.finished) return
 
-  context.config = config
+    let span
 
-  let span
-
-  if (context.span) {
-    context.span.context()._name = name
-    span = context.span
-  } else {
-    span = web.startChildSpan(tracer, name, req.headers)
-  }
-
-  context.tracer = tracer
-  context.span = span
-  context.res = res
-
-  return span
-}
-
-function finish (context) {
-  const { req, res } = context
-
-  if (context.finished && !req.stream) return
-
-  addRequestTags(context)
-  addResponseTags(context)
-
-  context.config.hooks.request(context.span, req, res)
-  addResourceTag(context)
-
-  context.span.finish()
-  context.finished = true
-}
-
-function finishMiddleware (context) {
-  if (context.finished) return
-
-  let span
-
-  while ((span = context.middleware.pop())) {
-    span.finish()
-  }
-}
-
-function wrapEnd (context) {
-  const scope = context.tracer.scope()
-  const req = context.req
-  const res = context.res
-  const end = res.end
-
-  res.writeHead = wrapWriteHead(context)
-
-  ends.set(res, function () {
-    for (const beforeEnd of context.beforeEnd) {
-      beforeEnd()
+    while ((span = context.middleware.pop())) {
+      span.finish()
     }
+  },
 
-    finishMiddleware(context)
+  finishSpan (context) {
+    const { req, res } = context
 
-    if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.publish({ req, res })
+    if (context.finished && !req.stream) return
 
-    const returnValue = end.apply(res, arguments)
+    addRequestTags(context)
+    addResponseTags(context)
 
-    finish(context)
+    context.config.hooks.request(context.span, req, res)
+    addResourceTag(context)
 
-    return returnValue
-  })
+    context.span.finish()
+    context.finished = true
+  },
+  wrapWriteHead (context) {
+    const { req, res } = context
+    const writeHead = res.writeHead
 
-  Object.defineProperty(res, 'end', {
-    configurable: true,
-    get () {
-      return ends.get(this)
-    },
-    set (value) {
-      ends.set(this, scope.bind(value, context.span))
+    return function (statusCode, statusMessage, headers) {
+      headers = typeof statusMessage === 'string' ? headers : statusMessage
+      headers = Object.assign(res.getHeaders(), headers)
+
+      if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
+        addAllowHeaders(req, res, headers)
+      }
+
+      return writeHead.apply(this, arguments)
     }
-  })
-}
+  },
+  getContext (req) {
+    return contexts.get(req)
+  },
+  wrapRes (context, req, res, end) {
+    return function () {
+      for (const beforeEnd of context.beforeEnd) {
+        beforeEnd()
+      }
 
-function wrapWriteHead (context) {
-  const { req, res } = context
-  const writeHead = res.writeHead
+      web.finishMiddleware(context)
 
-  return function (statusCode, statusMessage, headers) {
-    headers = typeof statusMessage === 'string' ? headers : statusMessage
-    headers = Object.assign(res.getHeaders(), headers)
+      if (incomingHttpRequestEnd.hasSubscribers) {
+        incomingHttpRequestEnd.publish({ req, res })
+      }
 
-    if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
-      addAllowHeaders(req, res, headers)
+      const returnValue = end.apply(res, arguments)
+
+      web.finishSpan(context)
+
+      return returnValue
     }
+  },
+  wrapEnd (context) {
+    const scope = context.tracer.scope()
+    const req = context.req
+    const res = context.res
+    const end = res.end
 
-    return writeHead.apply(this, arguments)
+    res.writeHead = web.wrapWriteHead(context)
+
+    ends.set(res, this.wrapRes(context, req, res, end))
+
+    Object.defineProperty(res, 'end', {
+      configurable: true,
+      get () {
+        return ends.get(this)
+      },
+      set (value) {
+        ends.set(this, scope.bind(value, context.span))
+      }
+    })
+  },
+  wrapEvents (context) {
+    const scope = context.tracer.scope()
+    const res = context.res
+
+    scope.bind(res, context.span)
   }
 }
 
@@ -352,13 +365,6 @@ function isOriginAllowed (req, headers) {
 
 function splitHeader (str) {
   return typeof str === 'string' ? str.split(/\s*,\s*/) : []
-}
-
-function wrapEvents (context) {
-  const scope = context.tracer.scope()
-  const res = context.res
-
-  scope.bind(res, context.span)
 }
 
 function reactivate (req, fn) {
