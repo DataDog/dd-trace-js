@@ -8,6 +8,7 @@ const { execSync } = require('child_process')
 const { parse } = require('url')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
+const { writeFileSync } = require('fs')
 
 describe('Plugin', function () {
   let next
@@ -31,22 +32,26 @@ describe('Plugin', function () {
           this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
           const { createServer } = require('http')
+          const cwd = __dirname
+          const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
+
+          delete pkg.workspaces
+
+          writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
+
+          execSync('npm --loglevel=warn install', { cwd })
 
           // building in-process makes tests fail for an unknown reason
-          execSync('node build', {
-            cwd: __dirname,
+          execSync('npx next build', {
+            cwd,
             env: {
               ...process.env,
-              version,
-              // needed for webpack 5
-              NODE_PATH: [
-                `${__dirname}/../../../versions/next@${version}/node_modules`
-              ].join(':')
+              version
             },
             stdio: ['pipe', 'ignore', 'pipe']
           })
 
-          next = require(`../../../versions/next@${version}`).get()
+          next = require('next') // eslint-disable-line import/no-extraneous-dependencies
           app = next({ dir: __dirname, dev: false, quiet: true })
 
           const handle = app.getRequestHandler()
@@ -61,7 +66,16 @@ describe('Plugin', function () {
         })
 
         after(() => {
+          execSync(`rm ${__dirname}/package.json`)
+          execSync(`rm ${__dirname}/package-lock.json`)
+          execSync(`rm -rf ${__dirname}/node_modules`)
           execSync(`rm -rf ${__dirname}/.next`)
+
+          for (const key in require.cache) {
+            if (key.includes(`${__dirname}/node_modules`) || key.includes(`${__dirname}/.next`)) {
+              delete require.cache[key]
+            }
+          }
         })
 
         before(done => {
@@ -119,13 +133,34 @@ describe('Plugin', function () {
                 expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '404')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/api/missing`)
+              .catch(() => {})
+          })
+
+          it.only('should handle invalid catch all parameters', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'next.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET /_error')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '400')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/api/invalid/%ff`)
               .catch(() => {})
           })
         })
