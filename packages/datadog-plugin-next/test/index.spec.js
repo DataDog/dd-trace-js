@@ -136,7 +136,7 @@ describe('Plugin', function () {
                 expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('http.status_code', '404')
               })
               .then(done)
               .catch(done)
@@ -146,7 +146,7 @@ describe('Plugin', function () {
               .catch(() => {})
           })
 
-          it.only('should handle invalid catch all parameters', done => {
+          it('should handle invalid catch all parameters', done => {
             agent
               .use(traces => {
                 const spans = traces[0]
