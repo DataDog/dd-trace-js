@@ -51,16 +51,14 @@ function Hook (modules, options, onrequire) {
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
 
-    if (require.cache[filename]) {
-      // return known patched modules immediately
-      if (cache.hasOwnProperty(filename)) {
-        // require.cache was potentially altered externally
-        if (require.cache[filename].exports !== cache[filename].original) {
-          return require.cache[filename].exports
-        }
-
-        return cache[filename].exports
+    // return known patched modules immediately
+    if (cache.hasOwnProperty(filename)) {
+      // require.cache was potentially altered externally
+      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
+        return require.cache[filename].exports
       }
+
+      return cache[filename].exports
     }
 
     // Check if this module has a patcher in-progress already.
@@ -112,7 +110,7 @@ function Hook (modules, options, onrequire) {
     cache[filename].original = exports
 
     for (const hook of hooks) {
-      cache[filename].exports = hook(cache[filename].exports, name, basedir)
+      cache[filename].exports = hook(exports, name, basedir)
     }
 
     return cache[filename].exports
@@ -129,7 +127,7 @@ Hook.reset = function () {
 
 Hook.prototype.unhook = function () {
   for (const mod of this.modules) {
-    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
+    const hooks = moduleHooks[mod].filter(hook => hook !== this.onrequire)
 
     if (hooks.length > 0) {
       moduleHooks[mod] = hooks
@@ -141,4 +139,6 @@ Hook.prototype.unhook = function () {
   if (Object.keys(moduleHooks).length === 0) {
     Hook.reset()
   }
+
+  this.unhook = () => {}
 }
