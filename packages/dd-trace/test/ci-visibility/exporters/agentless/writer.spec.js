@@ -18,7 +18,7 @@ describe('CI Visibility Writer', () => {
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
 
     encoder = {
-      append: sinon.stub(),
+      encode: sinon.stub(),
       count: sinon.stub().returns(0),
       makePayload: sinon.stub().returns([])
     }
@@ -37,7 +37,7 @@ describe('CI Visibility Writer', () => {
     }
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
-      './request': request,
+      '../../../exporters/common/request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../log': log
     })
@@ -45,10 +45,10 @@ describe('CI Visibility Writer', () => {
   })
 
   describe('append', () => {
-    it('should append a trace', () => {
+    it('should encode a trace', () => {
       writer.append([span])
 
-      expect(encoder.append).to.have.been.calledWith([span])
+      expect(encoder.encode).to.have.been.calledWith([span])
     })
   })
 

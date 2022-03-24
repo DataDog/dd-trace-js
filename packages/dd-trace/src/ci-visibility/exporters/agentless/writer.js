@@ -1,5 +1,5 @@
 'use strict'
-const request = require('./request')
+const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
@@ -43,7 +43,7 @@ function makeRequest (data, url, cb) {
 
   log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
 
-  request(data, options, (err, res) => {
+  request(data, options, false, (err, res) => {
     cb(err, res)
   })
 }

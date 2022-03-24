@@ -1,9 +1,52 @@
 'use strict'
 
 const http = require('http')
+const https = require('https')
+const log = require('../../log')
+const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
 
-function request (options, client, callback) {
+const httpAgent = new http.Agent({ keepAlive: true })
+const httpsAgent = new https.Agent({ keepAlive: true })
+const containerId = docker.id()
+
+function request (data, options, keepAlive, callback) {
+  if (!options.headers) {
+    options.headers = {}
+  }
+  const isSecure = options.protocol === 'https:'
+  const client = isSecure ? https : http
+  const firstRequest = retriableRequest(options, client, callback)
+
+  const dataArray = [].concat(data)
+  options.headers['Content-Length'] = byteLength(dataArray)
+  dataArray.forEach(buffer => firstRequest.write(buffer))
+
+  if (containerId) {
+    options.headers['Datadog-Container-ID'] = containerId
+  }
+
+  if (keepAlive) {
+    options.agent = isSecure ? httpsAgent : httpAgent
+  }
+
+  // The first request will be retried
+  const firstRequestErrorHandler = () => {
+    log.debug('Retrying request to the intake')
+    const retriedReq = retriableRequest(options, client, callback)
+    dataArray.forEach(buffer => retriedReq.write(buffer))
+    // The retried request will fail normally
+    retriedReq.on('error', e => callback(new Error(`Network error trying to reach the intake: ${e.message}`)))
+    retriedReq.end()
+  }
+
+  firstRequest.on('error', firstRequestErrorHandler)
+  firstRequest.end()
+
+  return firstRequest
+}
+
+function retriableRequest (options, client, callback) {
   const store = storage.getStore()
 
   storage.enterWith({ noop: true })
@@ -31,6 +74,10 @@ function request (options, client, callback) {
   storage.enterWith(store)
 
   return request
+}
+
+function byteLength (data) {
+  return data.length > 0 ? data.reduce((prev, next) => prev + next.length, 0) : 0
 }
 
 module.exports = request
