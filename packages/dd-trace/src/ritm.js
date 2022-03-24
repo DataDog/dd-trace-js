@@ -110,7 +110,7 @@ function Hook (modules, options, onrequire) {
     cache[filename].original = exports
 
     for (const hook of hooks) {
-      cache[filename].exports = hook(exports, name, basedir)
+      cache[filename].exports = hook(cache[filename].exports, name, basedir)
     }
 
     return cache[filename].exports
@@ -127,7 +127,7 @@ Hook.reset = function () {
 
 Hook.prototype.unhook = function () {
   for (const mod of this.modules) {
-    const hooks = moduleHooks[mod].filter(hook => hook !== this.onrequire)
+    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
 
     if (hooks.length > 0) {
       moduleHooks[mod] = hooks
@@ -139,6 +139,4 @@ Hook.prototype.unhook = function () {
   if (Object.keys(moduleHooks).length === 0) {
     Hook.reset()
   }
-
-  this.unhook = () => {}
 }
