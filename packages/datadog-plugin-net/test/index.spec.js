@@ -207,14 +207,12 @@ describe('Plugin', () => {
     it('should run event listeners in the correct scope', done => {
       const socket = new net.Socket()
 
-      tracer.scope().activate(parent, () => {
-        socket.once('close', () => {
-          expect(tracer.scope().active()).to.equal(parent)
+      socket.connect({ port,
+        lookup: function () {
+          expect(tracer.scope().active()).to.not.be.null
+          expect(tracer.scope().active()._spanContext._name).to.equal('tcp.connect')
           done()
-        })
-      })
-
-      socket.connect({ port })
+        } })
       socket.destroy()
     })
 
