@@ -53,35 +53,38 @@ function patch (http, methodName) {
       if (callback) {
         callback = asyncResource.bind(callback)
       }
+
       const options = args.options
-      const req = AsyncResource.bind(request).call(this, options, callback)
+      const req = ar.bind(request).call(this, options, callback)
       const emit = req.emit
 
       req.emit = function (eventName, arg) {
-        switch (eventName) {
-          case 'response': {
-            const res = arg
-            res.on('end', AsyncResource.bind(() => asyncEndClientCh.publish({ req, res })))
-            break
+        ar.runInAsyncScope(() => {
+          switch (eventName) {
+            case 'response': {
+              const res = arg
+              const finish = ar.bind(() => asyncEndClientCh.publish({ req, res }))
+              res.on('end', finish)
+              res.on('error', finish)
+              break
+            }
+            case 'connect':
+            case 'upgrade':
+              asyncEndClientCh.publish({ req, res: arg })
+              break
+            case 'error':
+              errorClientCh.publish(arg)
+            case 'abort': // eslint-disable-line no-fallthrough
+            case 'timeout': // eslint-disable-line no-fallthrough
+              asyncEndClientCh.publish({ req, res: null })
           }
-          case 'error':
-            errorClientCh.publish(arg)
-          case 'abort': // eslint-disable-line no-fallthrough
-          case 'timeout': // eslint-disable-line no-fallthrough
-            ar.runInAsyncScope(() => {
-              return asyncEndClientCh.publish({ req, res: null })
-            })
-        }
-        try {
-          return emit.apply(this, arguments)
-        } catch (err) {
-          errorClientCh.publish(err)
+        })
 
-          throw err
-        } finally {
-          endClientCh.publish(undefined)
-        }
+        return emit.apply(this, arguments)
       }
+
+      endClientCh.publish(undefined)
+
       return req
     }
   }
