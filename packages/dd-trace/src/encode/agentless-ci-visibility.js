@@ -2,7 +2,6 @@
 const tracerVersion = require('../../lib/version')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
-const log = require('../log')
 const { AgentEncoder } = require('./0.4')
 
 const ENCODING_VERSION = 1
@@ -27,21 +26,19 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._stringCount = 0
     this._stringMap = {}
 
+    // Used to keep track of the number of encoded events to update the
+    // length of `payload.events` when calling `makePayload`
+    this._eventCount = 0
+
     this.reset()
-  }
-
-  count () {
-    return this._events.length
-  }
-
-  append (trace) {
-    this._events = this._events.concat(trace)
   }
 
   _encodeEventContent (bytes, content) {
     this._encodeMapPrefix(bytes, content)
-    this._encodeString(bytes, 'type')
-    this._encodeString(bytes, content.type)
+    if (content.type) {
+      this._encodeString(bytes, 'type')
+      this._encodeString(bytes, content.type)
+    }
     this._encodeString(bytes, 'trace_id')
     this._encodeId(bytes, content.trace_id)
     this._encodeString(bytes, 'span_id')
@@ -124,20 +121,38 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     buffer[offset + 4] = keys.length
   }
 
-  _encodePayload (bytes, payload) {
-    this._encodeMapPrefix(bytes, payload)
-    this._encodeString(bytes, 'version')
-    this._encodeNumber(bytes, payload.version)
-    this._encodeString(bytes, 'metadata')
-    this._encodeMap(bytes, payload.metadata)
-    this._encodeString(bytes, 'events')
-    this._encodeArrayPrefix(bytes, payload.events)
-    for (const event of payload.events) {
+  _encode (bytes, trace) {
+    this._eventCount += trace.length
+    const events = trace.map(formatSpan)
+
+    for (const event of events) {
       this._encodeEvent(bytes, event)
     }
   }
 
-  _encode (bytes) {
+  makePayload () {
+    const bytes = this._traceBytes
+    const eventsOffset = this._eventsOffset
+    const eventsCount = this._eventCount
+
+    bytes.buffer[eventsOffset] = 0xdd
+    bytes.buffer[eventsOffset + 1] = eventsCount >> 24
+    bytes.buffer[eventsOffset + 2] = eventsCount >> 16
+    bytes.buffer[eventsOffset + 3] = eventsCount >> 8
+    bytes.buffer[eventsOffset + 4] = eventsCount
+
+    const traceSize = bytes.length
+    const buffer = Buffer.allocUnsafe(traceSize)
+
+    bytes.buffer.copy(buffer, 0, 0, bytes.length)
+
+    this.reset()
+
+    return buffer
+  }
+
+  _encodePayloadStart (bytes) {
+    // encodes the payload up to `events`. `events` will be encoded via _encode
     const payload = {
       version: ENCODING_VERSION,
       metadata: {
@@ -146,8 +161,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         'runtime.name': 'node',
         'runtime.version': process.version
       },
-      events: this._events.map(formatSpan)
+      events: []
     }
+
     if (this.service) {
       payload.metadata.service = this.service
     }
@@ -158,31 +174,22 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       payload.metadata['runtime-id'] = this.runtimeId
     }
 
-    log.debug(() => {
-      return `Adding encoded trace to buffer: ${JSON.stringify(payload)}`
-    })
-
-    this._encodePayload(bytes, payload)
-  }
-
-  makePayload () {
-    const bytes = this._traceBytes
-
-    this._encode(bytes)
-
-    const traceSize = this._traceBytes.length
-    const buffer = Buffer.allocUnsafe(traceSize)
-
-    this._traceBytes.buffer.copy(buffer, 0, 0, this._traceBytes.length)
-
-    this.reset()
-
-    return buffer
+    this._encodeMapPrefix(bytes, payload)
+    this._encodeString(bytes, 'version')
+    this._encodeNumber(bytes, payload.version)
+    this._encodeString(bytes, 'metadata')
+    this._encodeMap(bytes, payload.metadata)
+    this._encodeString(bytes, 'events')
+    // Get offset of the events list to update the length of the array when calling `makePayload`
+    this._eventsOffset = bytes.length
+    bytes.reserve(5)
+    bytes.length += 5
   }
 
   reset () {
     this._reset()
-    this._events = []
+    this._eventCount = 0
+    this._encodePayloadStart(this._traceBytes)
   }
 }
 

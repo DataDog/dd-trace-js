@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
-const Chunk = require('../../src/encode/chunk')
 const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
@@ -60,7 +59,7 @@ describe('agentless-ci-visibility-encode', () => {
   })
 
   it('should encode to msgpack', () => {
-    encoder.append(trace)
+    encoder.encode(trace)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })
@@ -105,28 +104,20 @@ describe('agentless-ci-visibility-encode', () => {
   it('should report its count', () => {
     expect(encoder.count()).to.equal(0)
 
-    encoder.append(trace)
+    encoder.encode(trace)
 
     expect(encoder.count()).to.equal(1)
 
-    encoder.append(trace)
+    encoder.encode(trace)
 
     expect(encoder.count()).to.equal(2)
   })
 
   it('should reset after making a payload', () => {
-    encoder.append(trace)
+    encoder.encode(trace)
     encoder.makePayload()
 
     expect(encoder.count()).to.equal(0)
-  })
-
-  it('should log adding an encoded trace to the buffer', () => {
-    encoder._encode(new Chunk())
-
-    const message = logger.debug.firstCall.args[0]()
-
-    expect(message).to.match(/Adding encoded trace to buffer/)
   })
 
   it('should truncate name, service, type and resource when they are too long', () => {
@@ -148,7 +139,7 @@ describe('agentless-ci-visibility-encode', () => {
       start: 123,
       duration: 456
     }]
-    encoder.append(traceToTruncate)
+    encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })
@@ -176,7 +167,7 @@ describe('agentless-ci-visibility-encode', () => {
       start: 123,
       duration: 456
     }]
-    encoder.append(traceToTruncate)
+    encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })
@@ -208,7 +199,7 @@ describe('agentless-ci-visibility-encode', () => {
       resource: '',
       service: ''
     }]
-    encoder.append(traceToTruncate)
+    encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })

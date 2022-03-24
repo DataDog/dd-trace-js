@@ -13,12 +13,6 @@ class Writer extends BaseWriter {
     this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })
   }
 
-  append (trace) {
-    log.debug(() => `Appending trace: ${JSON.stringify(trace)}`)
-
-    this._encoder.append(trace)
-  }
-
   _sendPayload (data, _, done) {
     makeRequest(data, this._url, (err, res) => {
       if (err) {

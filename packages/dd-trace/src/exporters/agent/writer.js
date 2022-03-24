@@ -20,12 +20,6 @@ class Writer extends BaseWriter {
     this._encoder = new AgentEncoder(this)
   }
 
-  append (spans) {
-    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
-
-    this._encode(spans)
-  }
-
   _sendPayload (data, count, done) {
     metrics.increment(`${METRIC_PREFIX}.requests`, true)
 
@@ -62,10 +56,6 @@ class Writer extends BaseWriter {
       }
       done()
     })
-  }
-
-  _encode (trace) {
-    this._encoder.encode(trace)
   }
 }
 

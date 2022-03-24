@@ -1,4 +1,6 @@
 'use strict'
+const log = require('../../log')
+
 class Writer {
   constructor ({ url }) {
     this._url = url
@@ -14,6 +16,16 @@ class Writer {
     } else {
       done()
     }
+  }
+
+  append (spans) {
+    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
+
+    this._encode(spans)
+  }
+
+  _encode (trace) {
+    this._encoder.encode(trace)
   }
 
   setUrl (url) {
