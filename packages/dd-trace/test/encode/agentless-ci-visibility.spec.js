@@ -98,8 +98,8 @@ describe('agentless-ci-visibility-encode', () => {
       bignegativefloat: -12345678.9
     })
 
-    expect(spanEvent.content.metrics.positive.toNumber()).to.equal(123456712345)
-    expect(spanEvent.content.metrics.negative.toNumber()).to.equal(-123456712345)
+    expect(spanEvent.content.metrics.positive).to.equal(123456712345)
+    expect(spanEvent.content.metrics.negative).to.equal(-123456712345)
   })
 
   it('should report its count', () => {
@@ -133,10 +133,20 @@ describe('agentless-ci-visibility-encode', () => {
     const tooLongString = new Array(500).fill('a').join('')
     const resourceTooLongString = new Array(10000).fill('a').join('')
     const traceToTruncate = [{
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      error: 0,
+      meta: {
+        bar: 'baz'
+      },
+      metrics: {},
       name: tooLongString,
       resource: resourceTooLongString,
       type: tooLongString,
-      service: tooLongString
+      service: tooLongString,
+      start: 123,
+      duration: 456
     }]
     encoder.append(traceToTruncate)
 
@@ -154,7 +164,17 @@ describe('agentless-ci-visibility-encode', () => {
 
   it('should fallback to a default name and service if they are not present', () => {
     const traceToTruncate = [{
-      resource: 'resource'
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      error: 0,
+      meta: {
+        bar: 'baz'
+      },
+      metrics: {},
+      resource: 'resource',
+      start: 123,
+      duration: 456
     }]
     encoder.append(traceToTruncate)
 
@@ -171,19 +191,27 @@ describe('agentless-ci-visibility-encode', () => {
     const tooLongKey = new Array(300).fill('a').join('')
     const tooLongValue = new Array(26000).fill('a').join('')
     const traceToTruncate = [{
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      error: 0,
       meta: {
         [tooLongKey]: tooLongValue
       },
       metrics: {
         [tooLongKey]: tooLongValue
-      }
+      },
+      start: 123,
+      duration: 456,
+      type: 'foo',
+      name: '',
+      resource: '',
+      service: ''
     }]
     encoder.append(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { codec })
-
-    expect(decodedTrace)
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.content.meta).to.eql({
       [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`

@@ -38,31 +38,44 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._events = this._events.concat(trace)
   }
 
-  _encodeValue (bytes, value) {
-    switch (typeof value) {
-      case 'string':
-        this._encodeString(bytes, value)
-        break
-      case 'number':
-        this._encodeNumber(bytes, value)
-        break
-      case 'object':
-        if (Array.isArray(value)) {
-          this._encodeArrayPrefix(bytes, value)
-          for (const event of value) {
-            this._encodeMap(bytes, event)
-          }
-          return
-        }
-        if (value.constructor && value.constructor.name === 'Identifier') {
-          this._encodeId(bytes, value)
-          return
-        }
-        this._encodeMap(bytes, value)
-        break
-      default:
-        // should not happen
-    }
+  _encodeEventContent (bytes, content) {
+    this._encodeMapPrefix(bytes, content)
+    this._encodeString(bytes, 'type')
+    this._encodeString(bytes, content.type)
+    this._encodeString(bytes, 'trace_id')
+    this._encodeId(bytes, content.trace_id)
+    this._encodeString(bytes, 'span_id')
+    this._encodeId(bytes, content.span_id)
+    this._encodeString(bytes, 'parent_id')
+    this._encodeId(bytes, content.parent_id)
+    this._encodeString(bytes, 'name')
+    this._encodeString(bytes, content.name)
+    this._encodeString(bytes, 'resource')
+    this._encodeString(bytes, content.resource)
+    this._encodeString(bytes, 'service')
+    this._encodeString(bytes, content.service)
+    this._encodeString(bytes, 'error')
+    this._encodeNumber(bytes, content.error)
+    this._encodeString(bytes, 'start')
+    this._encodeNumber(bytes, content.start)
+    this._encodeString(bytes, 'duration')
+    this._encodeNumber(bytes, content.duration)
+    this._encodeString(bytes, 'meta')
+    this._encodeMap(bytes, content.meta)
+    this._encodeString(bytes, 'metrics')
+    this._encodeMap(bytes, content.metrics)
+  }
+
+  _encodeEvent (bytes, event) {
+    this._encodeMapPrefix(bytes, event)
+    this._encodeString(bytes, 'type')
+    this._encodeString(bytes, event.type)
+
+    this._encodeString(bytes, 'version')
+    this._encodeNumber(bytes, event.version)
+
+    this._encodeString(bytes, 'content')
+    this._encodeEventContent(bytes, event.content)
   }
 
   _encodeNumber (bytes, value) {
@@ -97,6 +110,33 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     buffer[offset + 8] = lo
   }
 
+  _encodeMapPrefix (bytes, map) {
+    const keys = Object.keys(map)
+    const buffer = bytes.buffer
+    const offset = bytes.length
+
+    bytes.reserve(5)
+    bytes.length += 5
+    buffer[offset] = 0xdf
+    buffer[offset + 1] = keys.length >> 24
+    buffer[offset + 2] = keys.length >> 16
+    buffer[offset + 3] = keys.length >> 8
+    buffer[offset + 4] = keys.length
+  }
+
+  _encodePayload (bytes, payload) {
+    this._encodeMapPrefix(bytes, payload)
+    this._encodeString(bytes, 'version')
+    this._encodeNumber(bytes, payload.version)
+    this._encodeString(bytes, 'metadata')
+    this._encodeMap(bytes, payload.metadata)
+    this._encodeString(bytes, 'events')
+    this._encodeArrayPrefix(bytes, payload.events)
+    for (const event of payload.events) {
+      this._encodeEvent(bytes, event)
+    }
+  }
+
   _encode (bytes) {
     const payload = {
       version: ENCODING_VERSION,
@@ -122,7 +162,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       return `Adding encoded trace to buffer: ${JSON.stringify(payload)}`
     })
 
-    this._encodeMap(bytes, payload)
+    this._encodePayload(bytes, payload)
   }
 
   makePayload () {
