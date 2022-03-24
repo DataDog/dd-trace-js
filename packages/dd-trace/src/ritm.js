@@ -51,14 +51,16 @@ function Hook (modules, options, onrequire) {
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
 
-    // return known patched modules immediately
-    if (cache.hasOwnProperty(filename)) {
-      // require.cache was potentially altered externally
-      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
-        return require.cache[filename].exports
-      }
+    if (require.cache[filename]) {
+      // return known patched modules immediately
+      if (cache.hasOwnProperty(filename)) {
+        // require.cache was potentially altered externally
+        if (require.cache[filename].exports !== cache[filename].original) {
+          return require.cache[filename].exports
+        }
 
-      return cache[filename].exports
+        return cache[filename].exports
+      }
     }
 
     // Check if this module has a patcher in-progress already.

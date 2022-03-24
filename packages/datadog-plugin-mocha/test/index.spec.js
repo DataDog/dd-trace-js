@@ -2,7 +2,6 @@
 
 const path = require('path')
 const fs = require('fs')
-const proxyquire = require('proxyquire').noPreserveCache()
 
 const nock = require('nock')
 
@@ -94,7 +93,7 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       return agent.load(['mocha', 'fs', 'http']).then(() => {
-        Mocha = proxyquire(`../../../versions/mocha@${version}`, {}).get()
+        Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
     describe('mocha', () => {
