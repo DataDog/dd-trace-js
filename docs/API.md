@@ -499,3 +499,30 @@ tracer.use('express', {
 Right now this functionality is limited to Web frameworks.
 
 More information on which hooks are supported for each integration can be found in each individual [plugins](./modules/plugins.html).
+
+<h3 id="set-user">User Identification</h3>
+
+The tracer provides a convenience function to link an actor to a trace. For example to correlate users to web requests.
+You have to pass an object with at least an `id` property.
+
+For example:
+
+```javascript
+const tracer = require('dd-trace').init()
+
+function handle () {
+  tracer.setUser({
+    id: '123456789', // *REQUIRED* Unique identifier of the user.
+    
+    // All other fields are optional.
+    email: 'jane.doe@example.com', // Email of the user.
+    name: 'Jane Doe', // User-friendly name of the user.
+    session_id: '987654321', // Session ID of the user.
+    role: 'admin', // Role the user is making the request under.
+    scope: 'read:message, write:files', // Scopes or granted authorizations the user currently possesses.
+    
+    // Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)
+    custom_tag: 'custom data'
+  })
+}
+```

@@ -17,6 +17,7 @@ describe('TracerProxy', () => {
   let appsec
 
   beforeEach(() => {
+    process.env.DD_TRACE_MOCHA_ENABLED = false
     tracer = {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),

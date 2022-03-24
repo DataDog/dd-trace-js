@@ -2,12 +2,12 @@
 
 const path = require('path')
 const fs = require('fs')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
-const plugin = require('../src')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -75,7 +75,7 @@ const ASYNC_TESTS = [
 
 describe('Plugin', () => {
   let Mocha
-  withVersions(plugin, 'mocha', version => {
+  withVersions('mocha', 'mocha', version => {
     afterEach(() => {
       // This needs to be done when using the programmatic API:
       // https://github.com/mochajs/mocha/wiki/Using-Mocha-programmatically
@@ -85,7 +85,7 @@ describe('Plugin', () => {
       mochaTestFiles.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
       })
-      return agent.close()
+      return agent.close({ ritmReset: false })
     })
     beforeEach(() => {
       // for http integration tests
@@ -94,7 +94,7 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       return agent.load(['mocha', 'fs', 'http']).then(() => {
-        Mocha = require(`../../../versions/mocha@${version}`).get()
+        Mocha = proxyquire(`../../../versions/mocha@${version}`, {}).get()
       })
     })
     describe('mocha', () => {
@@ -374,32 +374,21 @@ Timeout of 100ms exceeded. For async tests and hooks, ensure "done()" is called;
       it('works with retries', (done) => {
         const testFilePath = path.join(__dirname, 'mocha-test-retries.js')
 
-        let numTestSpans = 0
+        const testNames = [
+          ['mocha-test-retries will be retried and pass', 'pass'],
+          ['mocha-test-retries will be retried and fail', 'fail']
+        ]
 
-        // Handler that always fails to be run for every trace that is generated.
-        // This way, the number of test spans is counted.
-        agent.use(trace => {
-          const testSpan = trace[0][0]
-          if (testSpan.type === 'test') {
-            numTestSpans++
-          }
-          expect(true).to.equal(false)
-        })
-
-        const assertionPromises = ['fail', 'pass'].map((testStatus, index) => {
+        const assertionPromises = testNames.map(([testName, status]) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
-            // expect(testSpan.meta.attempt).to.equal(`${index}`)
-            expect(testSpan.meta[TEST_STATUS]).to.equal(testStatus)
+            expect(testSpan.meta[TEST_STATUS]).to.equal(status)
+            expect(testSpan.meta[TEST_NAME]).to.equal(testName)
           })
         })
 
         Promise.all(assertionPromises)
-          .then(() => {
-            // it will fail twice and pass at the third time
-            expect(numTestSpans).to.equal(3)
-            done()
-          })
+          .then(() => done())
           .catch(done)
 
         const mocha = new Mocha({

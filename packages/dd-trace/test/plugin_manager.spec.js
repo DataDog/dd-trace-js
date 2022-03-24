@@ -41,7 +41,7 @@ describe('Plugin Manager', () => {
     Four.prototype.configure = sinon.spy()
 
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
-      './plugins': plugins,
+      './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {}
     })
     pm = new PluginManager(tracer)
@@ -150,10 +150,13 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
-    it('skips configuring plugins entirely when plugins is false', () => {
-      pm.configurePlugin = sinon.spy()
+    afterEach(() => {
       pm.configure({ plugins: false })
-      expect(pm.configurePlugin).not.to.have.been.called
+    })
+    it('configures plugins when plugins is false', () => {
+      pm.configure({ plugins: false })
+      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
+      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: false })
     })
     it('observes serviceMapping', () => {
       pm.configure({

@@ -38,6 +38,10 @@ class NoopTracer extends Tracer {
   _startSpan (name, options) {
     return this._span
   }
+
+  setUser () {
+    return this
+  }
 }
 
 module.exports = NoopTracer

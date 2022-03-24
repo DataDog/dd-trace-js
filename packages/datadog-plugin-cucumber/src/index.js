@@ -16,8 +16,9 @@ const {
   getTestEnvironmentMetadata,
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
-const { SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
+const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
+const { AUTO_KEEP } = require('../../../ext/priority')
 
 class CucumberPlugin extends Plugin {
   static get name () {
@@ -44,6 +45,7 @@ class CucumberPlugin extends Plugin {
           [TEST_NAME]: pickleName,
           [TEST_SUITE]: testSuite,
           [SAMPLING_RULE_DECISION]: 1,
+          [SAMPLING_PRIORITY]: AUTO_KEEP,
           [TEST_FRAMEWORK_VERSION]: this.tracer._version,
           ...testEnvironmentMetadata
         }

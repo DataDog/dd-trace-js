@@ -2,7 +2,6 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const clients = {
   pg: pg => pg.Client
@@ -18,7 +17,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('pg', () => {
-    withVersions(plugin, 'pg', version => {
+    withVersions('pg', 'pg', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -30,7 +29,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close()
+            return agent.close({ ritmReset: false })
           })
 
           beforeEach(done => {
@@ -163,7 +162,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
@@ -201,7 +200,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {

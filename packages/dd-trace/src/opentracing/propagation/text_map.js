@@ -26,6 +26,8 @@ const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const logKeys = ddKeys.concat(b3Keys)
+const traceparentExpr = /^(\d{2})-([A-Fa-f0-9]{32})-([A-Fa-f0-9]{16})-(\d{2})$/i
+const traceparentKey = 'traceparent'
 
 class TextMapPropagator {
   constructor (config) {
@@ -40,6 +42,7 @@ class TextMapPropagator {
     this._injectSamplingPriority(spanContext, carrier)
     this._injectBaggageItems(spanContext, carrier)
     this._injectB3(spanContext, carrier)
+    this._injectTraceparent(spanContext, carrier)
 
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
@@ -92,8 +95,20 @@ class TextMapPropagator {
     }
   }
 
+  _injectTraceparent (spanContext, carrier) {
+    if (!this._config.experimental.traceparent) return
+
+    const sampling = spanContext._sampling.priority >= AUTO_KEEP ? '01' : '00'
+    const traceId = spanContext._traceId.toString('hex').padStart(32, '0')
+    const spanId = spanContext._spanId.toString('hex').padStart(16, '0')
+    carrier[traceparentKey] = `01-${traceId}-${spanId}-${sampling}`
+  }
+
   _extractSpanContext (carrier) {
-    return this._extractDatadogContext(carrier) || this._extractB3Context(carrier) || this._extractSqsdContext(carrier)
+    return this._extractDatadogContext(carrier) ||
+      this._extractTraceparentContext(carrier) ||
+      this._extractB3Context(carrier) ||
+      this._extractSqsdContext(carrier)
   }
 
   _extractDatadogContext (carrier) {
@@ -144,6 +159,24 @@ class TextMapPropagator {
       return null
     }
     return this._extractDatadogContext(parsed)
+  }
+
+  _extractTraceparentContext (carrier) {
+    if (!this._config.experimental.traceparent) return null
+
+    const headerValue = carrier[traceparentKey]
+    if (!headerValue) {
+      return null
+    }
+    const matches = headerValue.match(traceparentExpr)
+    if (matches.length) {
+      return new DatadogSpanContext({
+        traceId: id(matches[2], 16),
+        spanId: id(matches[3], 16),
+        sampling: { priority: matches[4] === '01' ? 1 : 0 }
+      })
+    }
+    return null
   }
 
   _extractGenericContext (carrier, traceKey, spanKey, radix) {
