@@ -24,7 +24,6 @@ describe('Plugin', function () {
         })
 
         after(() => {
-          listener.close()
           return agent.close()
         })
 
@@ -39,7 +38,7 @@ describe('Plugin', function () {
 
           writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
 
-          execSync('npm --loglevel=warn install', { cwd })
+          execSync('npm --loglevel=error install', { cwd })
 
           // building in-process makes tests fail for an unknown reason
           execSync('npx next build', {
@@ -84,6 +83,10 @@ describe('Plugin', function () {
               port = _port
               listener.listen(port, 'localhost', () => done())
             })
+        })
+
+        after(done => {
+          listener.close(() => done())
         })
       }
 
