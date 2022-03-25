@@ -4,94 +4,79 @@
 
 const axios = require('axios')
 const getPort = require('get-port')
-const { execSync } = require('child_process')
-const { parse } = require('url')
+const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
 const { writeFileSync } = require('fs')
 
 describe('Plugin', function () {
-  let next
-  let app
-  let listener
   let port
 
   describe('next', () => {
     withVersions(plugin, 'next', version => {
-      const setup = config => {
-        before(() => {
-          return agent.load('next', config)
+      const startServer = withConfig => {
+        before(async () => {
+          port = await getPort()
+
+          return agent.load('next')
         })
 
-        after(() => {
-          return agent.close()
-        })
-
-        before(async function () {
-          this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
-
-          const { createServer } = require('http')
+        before(function (done) {
           const cwd = __dirname
-          const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
-
-          delete pkg.workspaces
-
-          writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
-
-          execSync('npm --loglevel=error install', { cwd })
-
-          // building in-process makes tests fail for an unknown reason
-          execSync('npx next build', {
+          const server = spawn('node', ['server'], {
             cwd,
             env: {
               ...process.env,
-              version
-            },
-            stdio: ['pipe', 'ignore', 'pipe']
-          })
-
-          next = require('next') // eslint-disable-line import/no-extraneous-dependencies
-          app = next({ dir: __dirname, dev: false, quiet: true })
-
-          const handle = app.getRequestHandler()
-
-          await app.prepare()
-
-          listener = createServer((req, res) => {
-            const parsedUrl = parse(req.url, true)
-
-            handle(req, res, parsedUrl)
-          })
-        })
-
-        after(() => {
-          execSync(`rm ${__dirname}/package.json`)
-          execSync(`rm ${__dirname}/package-lock.json`)
-          execSync(`rm -rf ${__dirname}/node_modules`)
-          execSync(`rm -rf ${__dirname}/.next`)
-
-          for (const key in require.cache) {
-            if (key.includes(`${__dirname}/node_modules`) || key.includes(`${__dirname}/.next`)) {
-              delete require.cache[key]
+              VERSION: version,
+              PORT: port,
+              DD_TRACE_AGENT_PORT: agent.server.address().port,
+              WITH_CONFIG: withConfig
             }
-          }
+          })
+
+          server.on('error', done)
+          server.stderr.on('data', done)
+          server.stdout.on('data', () => done())
         })
 
-        before(done => {
-          getPort()
-            .then(_port => {
-              port = _port
-              listener.listen(port, 'localhost', () => done())
-            })
-        })
-
-        after(done => {
-          listener.close(() => done())
+        after(async () => {
+          await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
+          await agent.close()
         })
       }
 
+      before(async function () {
+        this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+
+        const cwd = __dirname
+        const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
+
+        delete pkg.workspaces
+
+        writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
+
+        execSync('npm --loglevel=error install', { cwd })
+
+        // building in-process makes tests fail for an unknown reason
+        execSync('npx next build', {
+          cwd,
+          env: {
+            ...process.env,
+            version
+          },
+          stdio: ['pipe', 'ignore', 'pipe']
+        })
+      })
+
+      after(() => {
+        execSync(`rm ${__dirname}/package.json`)
+        execSync(`rm ${__dirname}/package-lock.json`)
+        execSync(`rm -rf ${__dirname}/node_modules`)
+        execSync(`rm -rf ${__dirname}/.next`)
+      })
+
       describe('without configuration', () => {
-        setup()
+        startServer()
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -214,16 +199,7 @@ describe('Plugin', function () {
       })
 
       describe('with configuration', () => {
-        const config = {}
-
-        before(() => {
-          config.validateStatus = code => false
-          config.hooks = {
-            request: sinon.spy()
-          }
-        })
-
-        setup(config)
+        startServer(true)
 
         it('should execute the hook and validate the status', done => {
           agent
@@ -238,6 +214,7 @@ describe('Plugin', function () {
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
+              expect(spans[0].meta).to.have.property('foo', 'bar')
             })
             .then(done)
             .catch(done)
