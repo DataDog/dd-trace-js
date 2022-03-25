@@ -7,6 +7,8 @@ const requirePackageJson = require('./require-package-json')
 const path = require('path')
 const http = require('http')
 const os = require('os')
+const { storage } = require('../../datadog-core')
+
 
 let config
 let instrumenter
@@ -118,30 +120,33 @@ function sendData (reqType, payload = {}) {
     hostname,
     port
   } = config
-  const req = http.request({
-    hostname,
-    port,
-    method: 'POST',
-    path: '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: {
-      'content-type': 'application/json',
-      'dd-telemetry-api-version': 'v1',
-      'dd-telemetry-request-type': reqType
-    }
+  // Force telemetry requests to not produce spans.
+  storage.run({ noop: true }, () => {
+    const req = http.request({
+      hostname,
+      port,
+      method: 'POST',
+      path: '/telemetry/proxy/api/v2/apmtelemetry',
+      headers: {
+        'content-type': 'application/json',
+        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-request-type': reqType
+      }
+    })
+    req.on('error', () => {}) // Ignore errors
+    req.write(JSON.stringify({
+      api_version: 'v1',
+      request_type: reqType,
+      tracer_time: Math.floor(Date.now() / 1000),
+      runtime_id: config.tags['runtime-id'],
+      seq_id: ++seqId,
+      payload,
+      application,
+      host
+    }))
+    req.end()
+    req.unref()
   })
-  req.on('error', () => {}) // Ignore errors
-  req.write(JSON.stringify({
-    api_version: 'v1',
-    request_type: reqType,
-    tracer_time: Math.floor(Date.now() / 1000),
-    runtime_id: config.tags['runtime-id'],
-    seq_id: ++seqId,
-    payload,
-    application,
-    host
-  }))
-  req.end()
-  req.unref()
 }
 
 function start (aConfig, theInstrumenter, thePluginManager) {
