@@ -5,6 +5,7 @@ const proxyquire = require('proxyquire')
 const requirePackageJson = require('../src/require-package-json')
 const http = require('http')
 const { once } = require('events')
+const { storage } = require('../../datadog-core')
 
 let traceAgent
 
@@ -23,16 +24,22 @@ describe('telemetry', () => {
       return setImmediate(fn)
     }
 
-    traceAgent = http.createServer(async (req, res) => {
-      const chunks = []
-      for await (const chunk of req) {
-        chunks.push(chunk)
-      }
-      req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-      traceAgent.reqs.push(req)
-      traceAgent.emit('handled-req')
-      res.end()
-    }).listen(0, done)
+    // I'm not sure how, but some other test in some other file keeps context
+    // alive after it's done, meaning this test here runs in its async context.
+    // If we don't no-op the server inside it, it will trace it, which will
+    // screw up this test file entirely. -- bengl
+    storage.run({ noop: true }, () => {
+      traceAgent = http.createServer(async (req, res) => {
+        const chunks = []
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+        req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        traceAgent.reqs.push(req)
+        traceAgent.emit('handled-req')
+        res.end()
+      }).listen(0, done)
+    })
 
     traceAgent.reqs = []
 
