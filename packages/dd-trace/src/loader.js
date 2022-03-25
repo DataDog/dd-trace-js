@@ -28,8 +28,11 @@ class Loader {
     this._names = new Set(instrumentations
       .map(instrumentation => filename(instrumentation)))
 
-    hook(instrumentedModules, this._hookModule.bind(this))
-    esmHook(instrumentedModules, this._hookModule.bind(this))
+    this._hook && this._hook.unhook()
+    this._hook = hook(instrumentedModules, this._hookModule.bind(this))
+
+    this._esmHook && this._esmHook.unhook()
+    this._esmHook = esmHook(instrumentedModules, this._hookModule.bind(this))
   }
 
   load (instrumentation, config) {
