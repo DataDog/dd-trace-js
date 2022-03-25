@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-fallthrough */
+
 const url = require('url')
 const {
   channel,
@@ -59,24 +61,33 @@ function patch (http, methodName) {
       const emit = req.emit
 
       req.emit = function (eventName, arg) {
+        const finished = false
+        const finish = (finished, req, res) => {
+          if (!finished) {
+            finished = true
+            asyncEndClientCh.publish({ req, res })
+          }
+        }
+
         ar.runInAsyncScope(() => {
           switch (eventName) {
             case 'response': {
               const res = arg
-              const finish = ar.bind(() => asyncEndClientCh.publish({ req, res }))
-              res.on('end', finish)
-              res.on('error', finish)
+              const listener = ar.bind(() => finish(finished, req, res))
+              res.on('end', listener)
+              res.on('error', listener)
               break
             }
             case 'connect':
             case 'upgrade':
-              asyncEndClientCh.publish({ req, res: arg })
+              finish(finished, req, arg)
               break
             case 'error':
               errorClientCh.publish(arg)
-            case 'abort': // eslint-disable-line no-fallthrough
-            case 'timeout': // eslint-disable-line no-fallthrough
-              asyncEndClientCh.publish({ req, res: null })
+            case 'abort': // deprecated and replaced by `close` in node 17
+            case 'timeout':
+            case 'close':
+              finish(finished, req)
           }
         })
 
