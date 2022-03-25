@@ -20,15 +20,15 @@ function createWrapHandleApiRequest (tracer, config) {
       return trace(tracer, config, req, res, () => {
         const promise = handleApiRequest.apply(this, arguments)
 
-        promise.then(handled => {
-          if (!handled) return
+        return promise.then(handled => {
+          if (!handled) return handled
 
           const page = getPageFromPath(pathname, this.dynamicRoutes)
 
           addPage(req, page)
-        })
 
-        return promise
+          return handled
+        })
       })
     }
   }
@@ -118,12 +118,10 @@ function trace (tracer, config, req, res, handler) {
   // TODO: Use CLS when it will be available in core.
   span._nextReq = req
 
-  promise.then(
-    () => finish(span, config, req, res),
-    err => finish(span, config, req, res, err)
+  return promise.then(
+    result => finish(span, config, req, res, result),
+    err => finish(span, config, req, res, null, err)
   )
-
-  return promise
 }
 
 function addPage (req, page) {
@@ -137,13 +135,15 @@ function addPage (req, page) {
   })
 }
 
-function finish (span, config, req, res, err) {
+function finish (span, config, req, res, result, err) {
   span.setTag('error', err || !config.validateStatus(res.statusCode))
   span.addTags({
     'http.status_code': res.statusCode
   })
   config.hooks.request(span, req, res)
   span.finish()
+
+  return result || err
 }
 
 function normalizeConfig (config) {
