@@ -5,10 +5,8 @@ const pkg = require('./pkg')
 const containerId = require('./exporters/agent/docker').id()
 const requirePackageJson = require('./require-package-json')
 const path = require('path')
-const http = require('http')
 const os = require('os')
-const { storage } = require('../../datadog-core')
-
+const request = require('./exporters/agent/request')
 
 let config
 let instrumenter
@@ -94,6 +92,7 @@ function appStarted () {
 }
 
 function onBeforeExit () {
+  process.removeListener('beforeExit', onBeforeExit)
   sendData('app-closing')
 }
 
@@ -120,21 +119,17 @@ function sendData (reqType, payload = {}) {
     hostname,
     port
   } = config
-  // Force telemetry requests to not produce spans.
-  storage.run({ noop: true }, () => {
-    const req = http.request({
-      hostname,
-      port,
-      method: 'POST',
-      path: '/telemetry/proxy/api/v2/apmtelemetry',
-      headers: {
-        'content-type': 'application/json',
-        'dd-telemetry-api-version': 'v1',
-        'dd-telemetry-request-type': reqType
-      }
-    })
-    req.on('error', () => {}) // Ignore errors
-    req.write(JSON.stringify({
+  const options = {
+    hostname,
+    port,
+    method: 'POST',
+    path: '/telemetry/proxy/api/v2/apmtelemetry',
+    headers: {
+      'content-type': 'application/json',
+      'dd-telemetry-api-version': 'v1',
+      'dd-telemetry-request-type': reqType
+    },
+    data: JSON.stringify({
       api_version: 'v1',
       request_type: reqType,
       tracer_time: Math.floor(Date.now() / 1000),
@@ -143,9 +138,10 @@ function sendData (reqType, payload = {}) {
       payload,
       application,
       host
-    }))
-    req.end()
-    req.unref()
+    })
+  }
+  request(options, () => {
+    // ignore errors
   })
 }
 
