@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-fallthrough */
+
 const url = require('url')
 const {
   channel,
@@ -53,35 +55,47 @@ function patch (http, methodName) {
       if (callback) {
         callback = asyncResource.bind(callback)
       }
+
       const options = args.options
-      const req = AsyncResource.bind(request).call(this, options, callback)
+      const req = ar.bind(request).call(this, options, callback)
       const emit = req.emit
 
       req.emit = function (eventName, arg) {
-        switch (eventName) {
-          case 'response': {
-            const res = arg
-            res.on('end', AsyncResource.bind(() => asyncEndClientCh.publish({ req, res })))
-            break
+        const finished = false
+        const finish = (finished, req, res) => {
+          if (!finished) {
+            finished = true
+            asyncEndClientCh.publish({ req, res })
           }
-          case 'error':
-            errorClientCh.publish(arg)
-          case 'abort': // eslint-disable-line no-fallthrough
-          case 'timeout': // eslint-disable-line no-fallthrough
-            ar.runInAsyncScope(() => {
-              return asyncEndClientCh.publish({ req, res: null })
-            })
         }
-        try {
-          return emit.apply(this, arguments)
-        } catch (err) {
-          errorClientCh.publish(err)
 
-          throw err
-        } finally {
-          endClientCh.publish(undefined)
-        }
+        ar.runInAsyncScope(() => {
+          switch (eventName) {
+            case 'response': {
+              const res = arg
+              const listener = ar.bind(() => finish(finished, req, res))
+              res.on('end', listener)
+              res.on('error', listener)
+              break
+            }
+            case 'connect':
+            case 'upgrade':
+              finish(finished, req, arg)
+              break
+            case 'error':
+              errorClientCh.publish(arg)
+            case 'abort': // deprecated and replaced by `close` in node 17
+            case 'timeout':
+            case 'close':
+              finish(finished, req)
+          }
+        })
+
+        return emit.apply(this, arguments)
       }
+
+      endClientCh.publish(undefined)
+
       return req
     }
   }
