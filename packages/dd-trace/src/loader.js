@@ -30,10 +30,6 @@ class Loader {
 
     this._hook && this._hook.unhook()
     this._hook = Hook(instrumentedModules, (moduleExports, moduleName, moduleBaseDir) => {
-      if (this._patched[moduleName]) return moduleExports
-
-      this._patched[moduleName] = true
-
       return this._hookModule(moduleExports, moduleName, moduleBaseDir)
     })
   }
