@@ -22,6 +22,7 @@ function Hook (modules, onrequire) {
 
   this._ritmHook = ritm(modules, {}, safeHook)
   this._iitmHook = iitm(modules, {}, (moduleExports, moduleName, moduleBaseDir) => {
+    // Default export is always moved to `default` for CommonJS modules.
     if (moduleExports && moduleExports.default) {
       moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
       return moduleExports
