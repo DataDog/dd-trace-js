@@ -814,7 +814,11 @@ workflows:
       - node-mongoose: *matrix-supported-node-versions
       - node-mysql: *matrix-supported-node-versions
       - node-net: *matrix-supported-node-versions
-      - node-next: *matrix-supported-node-versions
+      # Next consistently fails on Node.js 17 for strange OpenSSL reasons.
+      - node-next:
+          matrix:
+            parameters:
+              node-version: ["12", "14", "16"]
       - node-oracledb: *matrix-supported-node-versions
       - node-paperplane: *matrix-supported-node-versions
       - node-pino: *matrix-supported-node-versions
