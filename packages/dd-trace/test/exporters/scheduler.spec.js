@@ -7,7 +7,7 @@ describe('Scheduler', () => {
   let removeListener
 
   beforeEach(() => {
-    Scheduler = require('../../../src/exporters/agent/scheduler')
+    Scheduler = require('../../src/exporters/scheduler')
 
     clock = sinon.useFakeTimers()
     once = process.once

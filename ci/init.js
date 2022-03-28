@@ -11,6 +11,12 @@ const options = {
   }
 }
 
+if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED && (process.env.DATADOG_API_KEY || process.env.DD_API_KEY)) {
+  options.experimental = {
+    exporter: 'datadog'
+  }
+}
+
 // TODO: remove this in a later major version since we now recommend using
 // `NODE_OPTIONS='-r dd-trace/ci/init'`.
 try {
