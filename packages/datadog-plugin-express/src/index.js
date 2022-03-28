@@ -1,33 +1,22 @@
 'use strict'
 
-const web = require('../../dd-trace/src/plugins/util/web')
-const routerPlugin = require('../../datadog-plugin-router/src')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ExpressRequestPlugin = require('./request')
+const ExpressMiddlewarePlugin = require('./middleware')
 
-function createWrapHandle (tracer, config) {
-  config = web.normalizeConfig(config)
-
-  return function wrapHandle (handle) {
-    return function handleWithTrace (req, res) {
-      web.instrument(tracer, config, req, res, 'express.request')
-
-      return handle.apply(this, arguments)
-    }
+class ExpressPlugin extends Plugin {
+  static get name () {
+    return 'express'
+  }
+  constructor (...args) {
+    super(...args)
+    this.request = new ExpressRequestPlugin(...args)
+    this.middleware = new ExpressMiddlewarePlugin(...args)
+  }
+  configure (config) {
+    this.request.configure(config)
+    this.middleware.configure(config)
   }
 }
 
-function patch (express, tracer, config) {
-  this.wrap(express.application, 'handle', createWrapHandle(tracer, config))
-  routerPlugin.patch.call(this, { prototype: express.Router }, tracer, config)
-}
-
-function unpatch (express) {
-  this.unwrap(express.application, 'handle')
-  routerPlugin.unpatch.call(this, { prototype: express.Router })
-}
-
-module.exports = {
-  name: 'express',
-  versions: ['>=4'],
-  patch,
-  unpatch
-}
+module.exports = ExpressPlugin

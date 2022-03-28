@@ -13,7 +13,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('express', () => {
-    withVersions(plugin, 'express', version => {
+    withVersions('express', 'express', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -29,7 +29,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1004,7 +1004,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1099,7 +1099,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
