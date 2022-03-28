@@ -44,7 +44,7 @@ describe('telemetry', () => {
     traceAgent.reqs = []
 
     telemetry = proxyquire('../src/telemetry', {
-      './exporters/agent/docker': {
+      './exporters/common/docker': {
         id () {
           return 'test docker id'
         }

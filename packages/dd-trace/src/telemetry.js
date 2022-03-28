@@ -2,11 +2,11 @@
 
 const tracerVersion = require('../lib/version')
 const pkg = require('./pkg')
-const containerId = require('./exporters/agent/docker').id()
+const containerId = require('./exporters/common/docker').id()
 const requirePackageJson = require('./require-package-json')
 const path = require('path')
 const os = require('os')
-const request = require('./exporters/agent/request')
+const request = require('./exporters/common/request')
 
 let config
 let instrumenter
@@ -128,19 +128,20 @@ function sendData (reqType, payload = {}) {
       'content-type': 'application/json',
       'dd-telemetry-api-version': 'v1',
       'dd-telemetry-request-type': reqType
-    },
-    data: JSON.stringify({
-      api_version: 'v1',
-      request_type: reqType,
-      tracer_time: Math.floor(Date.now() / 1000),
-      runtime_id: config.tags['runtime-id'],
-      seq_id: ++seqId,
-      payload,
-      application,
-      host
-    })
+    }
   }
-  request(options, () => {
+  const data = JSON.stringify({
+    api_version: 'v1',
+    request_type: reqType,
+    tracer_time: Math.floor(Date.now() / 1000),
+    runtime_id: config.tags['runtime-id'],
+    seq_id: ++seqId,
+    payload,
+    application,
+    host
+  })
+
+  request(data, options, true, () => {
     // ignore errors
   })
 }
