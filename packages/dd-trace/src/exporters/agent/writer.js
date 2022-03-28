@@ -1,28 +1,23 @@
 'use strict'
 
-const request = require('./request')
+const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
 const metrics = require('../../metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../lib/version')
+const BaseWriter = require('../common/writer')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
-class Writer {
-  constructor ({ url, prioritySampler, lookup, protocolVersion }) {
+class Writer extends BaseWriter {
+  constructor ({ prioritySampler, lookup, protocolVersion }) {
+    super(...arguments)
     const AgentEncoder = getEncoder(protocolVersion)
 
-    this._url = url
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoderForVersion = new AgentEncoder(this)
-  }
-
-  append (spans) {
-    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
-
-    this._encode(spans)
+    this._encoder = new AgentEncoder(this)
   }
 
   _sendPayload (data, count, done) {
@@ -61,26 +56,6 @@ class Writer {
       }
       done()
     })
-  }
-
-  setUrl (url) {
-    this._url = url
-  }
-
-  _encode (trace) {
-    this._encoderForVersion.encode(trace)
-  }
-
-  flush (done = () => {}) {
-    const count = this._encoderForVersion.count()
-
-    if (count > 0) {
-      const payload = this._encoderForVersion.makePayload()
-
-      this._sendPayload(payload, count, done)
-    } else {
-      done()
-    }
   }
 }
 
@@ -124,7 +99,7 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  request(Object.assign({ data }, options), (err, res, status) => {
+  request(data, options, true, (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({

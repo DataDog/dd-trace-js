@@ -1,5 +1,7 @@
 'use strict'
 
+const { expect } = require('chai')
+
 const URL = require('url').URL
 
 function describeWriter (protocolVersion) {
@@ -49,7 +51,7 @@ function describeWriter (protocolVersion) {
     }
 
     Writer = proxyquire('../src/exporters/agent/writer', {
-      './request': request,
+      '../common/request': request,
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
       '../../../lib/version': 'tracerVersion',
@@ -76,7 +78,7 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([Buffer.alloc(0)])
       writer.flush()
-      expect(request).to.have.been.calledWithMatch({
+      expect(request.getCall(0).args[1]).to.contain({
         protocol: url.protocol,
         hostname: url.hostname,
         port: url.port
@@ -109,7 +111,8 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(2)
       encoder.makePayload.returns([expectedData])
       writer.flush(() => {
-        expect(request).to.have.been.calledWithMatch({
+        expect(request.getCall(0).args[0]).to.eql([expectedData])
+        expect(request.getCall(0).args[1]).to.eql({
           protocol: url.protocol,
           hostname: url.hostname,
           port: url.port,
@@ -123,7 +126,6 @@ function describeWriter (protocolVersion) {
             'Datadog-Meta-Tracer-Version': 'tracerVersion',
             'X-Datadog-Trace-Count': '2'
           },
-          data: [expectedData],
           lookup: undefined
         })
         done()
@@ -164,7 +166,7 @@ function describeWriter (protocolVersion) {
         encoder.count.returns(1)
         writer.flush()
         setImmediate(() => {
-          expect(request).to.have.been.calledWithMatch({
+          expect(request.getCall(0).args[1]).to.contain({
             socketPath: url.pathname
           })
         })
