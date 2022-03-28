@@ -585,7 +585,33 @@ jobs:
 
   node-net: *node-plugin-base
 
-  node-next: *node-plugin-base
+  node-next:
+    <<: *node-plugin-base
+    steps:
+      - checkout-and-yarn-install:
+          yarn-args: ""
+      - when:
+          condition:
+            not:
+              or:
+                - equal: [ "12", << parameters.node-version >> ]
+                - equal: [ "14", << parameters.node-version >> ]
+                - equal: [ "16", << parameters.node-version >> ]
+          steps:
+            - run:
+                name: Unit tests
+                command: PLUGINS=next NODE_OPTIONS=--openssl-legacy-provider yarn test:plugins:ci
+      - when:
+          condition:
+            or:
+              - equal: [ "12", << parameters.node-version >> ]
+              - equal: [ "14", << parameters.node-version >> ]
+              - equal: [ "16", << parameters.node-version >> ]
+          steps:
+            - run:
+                name: Unit tests
+                command: PLUGINS=next yarn test:plugins:ci
+      - store-test-results-and-coverage
 
   node-oracledb:
     <<: *node-plugin-base
@@ -814,11 +840,7 @@ workflows:
       - node-mongoose: *matrix-supported-node-versions
       - node-mysql: *matrix-supported-node-versions
       - node-net: *matrix-supported-node-versions
-      # Next consistently fails on Node.js 17 for strange OpenSSL reasons.
-      - node-next:
-          matrix:
-            parameters:
-              node-version: ["12", "14", "16"]
+      - node-next: *matrix-supported-node-versions
       - node-oracledb: *matrix-supported-node-versions
       - node-paperplane: *matrix-supported-node-versions
       - node-pino: *matrix-supported-node-versions
