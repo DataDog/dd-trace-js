@@ -88,7 +88,9 @@ function getBasedir (id) {
   return parse(id).basedir.replace(pathSepExpr, '/')
 }
 
-if (semver.satisfies(process.versions.node, '>=16.0.0')) {
+// AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
+// https://nodejs.org/api/async_context.html#asyncresourcebindfn-thisarg
+if (semver.satisfies(process.versions.node, '>=17.8.0')) {
   exports.AsyncResource = AsyncResource
 } else {
   exports.AsyncResource = class extends AsyncResource {
@@ -97,9 +99,18 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
       return (new exports.AsyncResource(type || 'bound-anonymous-fn')).bind(fn, thisArg)
     }
 
-    bind (fn, thisArg = this) {
-      const ret = this.runInAsyncScope.bind(this, fn, thisArg)
-      Object.defineProperties(ret, {
+    bind (fn, thisArg) {
+      let bound
+      if (thisArg === undefined) {
+        const resource = this
+        bound = function (...args) {
+          args.unshift(fn, this)
+          return Reflect.apply(resource.runInAsyncScope, resource, args)
+        }
+      } else {
+        bound = this.runInAsyncScope.bind(this, fn, thisArg)
+      }
+      Object.defineProperties(bound, {
         'length': {
           configurable: true,
           enumerable: false,
@@ -113,7 +124,7 @@ if (semver.satisfies(process.versions.node, '>=16.0.0')) {
           writable: true
         }
       })
-      return ret
+      return bound
     }
   }
 }
