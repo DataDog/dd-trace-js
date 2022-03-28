@@ -220,7 +220,8 @@ describe('Plugin', () => {
       const socket = new net.Socket()
 
       tracer.scope().activate(parent, () => {
-        socket.connect({ port }, () => {
+        socket.connect({ port }, function () {
+          expect(this).to.equal(socket)
           expect(tracer.scope().active()).to.equal(parent)
           socket.destroy()
           done()
