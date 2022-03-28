@@ -7,7 +7,7 @@ const ritm = require('../../../dd-trace/src/ritm')
 function Hook (modules, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, onrequire)
 
-  this._patched = {}
+  this._patched = Object.create(null)
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir) => {
     const parts = [moduleBaseDir, moduleName].filter(v => v)
@@ -35,7 +35,7 @@ function Hook (modules, onrequire) {
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
-  this._patched = {}
+  this._patched = Object.create(null)
 }
 
 module.exports = Hook

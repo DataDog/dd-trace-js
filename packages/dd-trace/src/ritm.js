@@ -11,8 +11,8 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
-let cache = {}
-let patching = {}
+let cache = Object.create(null)
+let patching = Object.create(null)
 let patchedRequire = null
 
 function Hook (modules, options, onrequire) {
@@ -121,8 +121,8 @@ function Hook (modules, options, onrequire) {
 Hook.reset = function () {
   Module.prototype.require = origRequire
   patchedRequire = null
-  patching = {}
-  cache = {}
+  patching = Object.create(null)
+  cache = Object.create(null)
   moduleHooks = Object.create(null)
 }
 
