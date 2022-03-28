@@ -237,6 +237,7 @@ tracer.use('amqplib');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('bunyan');
+tracer.use('browser-bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('connect');

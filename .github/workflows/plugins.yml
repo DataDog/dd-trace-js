@@ -157,6 +157,25 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
+  browser-bunyan:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: browser-bunyan
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
+
   cassandra:
     runs-on: ubuntu-latest
     services:

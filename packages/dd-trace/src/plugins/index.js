@@ -19,6 +19,7 @@ module.exports = {
   get 'amqplib' () { return require('../../../datadog-plugin-amqplib/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get 'bunyan' () { return require('../../../datadog-plugin-bunyan/src') },
+  get 'browser-bunyan' () { return require('../../../datadog-plugin-browser-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
   get 'connect' () { return require('../../../datadog-plugin-connect/src') },
   get 'couchbase' () { return require('../../../datadog-plugin-couchbase/src') },

@@ -753,6 +753,7 @@ interface Plugins {
   "amqplib": plugins.amqplib;
   "aws-sdk": plugins.aws_sdk;
   "bunyan": plugins.bunyan;
+  "browser-bunyan": plugins.browser_bunyan;
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
   "couchbase": plugins.couchbase;
@@ -1041,6 +1042,14 @@ declare namespace plugins {
    * on the tracer.
    */
   interface bunyan extends Integration {}
+
+  /**
+   * This plugin patches the [browser-bunyan](https://github.com/philmander/browser-bunyan)
+   * to automatically inject trace identifiers in log records when the
+   * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+   * on the tracer.
+   */
+  interface browser_bunyan extends Integration {}
 
   /**
    * This plugin automatically instruments the
