@@ -10,7 +10,7 @@ const origRequire = Module.prototype.require
 
 module.exports = Hook
 
-let moduleHooks = {}
+let moduleHooks = Object.create(null)
 let cache = {}
 let patching = {}
 let patchedRequire = null
@@ -26,9 +26,10 @@ function Hook (modules, options, onrequire) {
     options = {}
   }
 
+  modules = modules || []
   options = options || {}
 
-  this.modules = modules || ['']
+  this.modules = modules
   this.options = options
   this.onrequire = onrequire
 
@@ -122,7 +123,7 @@ Hook.reset = function () {
   patchedRequire = null
   patching = {}
   cache = {}
-  moduleHooks = {}
+  moduleHooks = Object.create(null)
 }
 
 Hook.prototype.unhook = function () {
