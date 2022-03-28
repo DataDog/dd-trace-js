@@ -53,7 +53,7 @@ function Hook (modules, options, onrequire) {
     let name, basedir, hooks
 
     // return known patched modules immediately
-    if (cache.hasOwnProperty(filename)) {
+    if (cache[filename]) {
       // require.cache was potentially altered externally
       if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
         return require.cache[filename].exports
