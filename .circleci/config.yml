@@ -148,7 +148,7 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Get plugin name
         command: |
-          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
+          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace('-latest', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
     - run:
         name: Unit tests
         command: PLUGINS=$(cat /tmp/dd_plugins_var) yarn test:plugins:ci
@@ -169,7 +169,7 @@ node-upstream-base: &node-upstream-base
     - run:
         name: Library test suite
         command: |
-          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace(/-\d*$/, '')")
+          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace('-latest', '').replace(/-\d*$/, '')")
           node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
 
 jobs:
