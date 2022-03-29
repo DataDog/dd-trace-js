@@ -16,11 +16,8 @@ function request (data, options, keepAlive, callback) {
   }
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  const firstRequest = retriableRequest(options, client, callback)
-
   const dataArray = [].concat(data)
   options.headers['Content-Length'] = byteLength(dataArray)
-  dataArray.forEach(buffer => firstRequest.write(buffer))
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
@@ -29,6 +26,9 @@ function request (data, options, keepAlive, callback) {
   if (keepAlive) {
     options.agent = isSecure ? httpsAgent : httpAgent
   }
+
+  const firstRequest = retriableRequest(options, client, callback)
+  dataArray.forEach(buffer => firstRequest.write(buffer))
 
   // The first request will be retried
   const firstRequestErrorHandler = () => {
