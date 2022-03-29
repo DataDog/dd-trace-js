@@ -3,11 +3,10 @@
 const dc = require('diagnostics_channel')
 const path = require('path')
 const semver = require('semver')
-const iitm = require('../../../dd-trace/src/iitm')
-const ritm = require('../../../dd-trace/src/ritm')
-const parse = require('module-details-from-path')
+const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { AsyncResource } = require('async_hooks')
+const log = require('../../../dd-trace/src/log')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
@@ -21,16 +20,21 @@ exports.channel = function channel (name) {
 
 exports.addHook = function addHook ({ name, versions, file }, hook) {
   const fullFilename = filename(name, file)
-  const loaderHook = (moduleExports, moduleName, moduleBaseDir) => {
+
+  Hook([name], (moduleExports, moduleName, moduleBaseDir) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
+
     if (moduleName !== fullFilename || !matchVersion(getVersion(moduleBaseDir), versions)) {
       return moduleExports
     }
-    return hook(moduleExports)
-  }
-  ritm([name], loaderHook)
-  cjsPostLoad({ name, versions, file }, hook)
-  iitm([name], loaderHook)
+
+    try {
+      return hook(moduleExports)
+    } catch (e) {
+      log.error(e)
+      return moduleExports
+    }
+  })
 }
 
 function matchVersion (version, ranges) {
@@ -45,47 +49,6 @@ function getVersion (moduleBaseDir) {
 
 function filename (name, file) {
   return [name, file].filter(val => val).join('/')
-}
-
-// TODO this is basically Loader#_getModules + running the hook. DRY up.
-function cjsPostLoad (instrumentation, hook) {
-  const ids = Object.keys(require.cache)
-
-  let pkg
-
-  for (let i = 0, l = ids.length; i < l; i++) {
-    if (ids[i] === instrumentation.name) {
-      hook(require.cache[ids[i]].exports)
-      continue
-    }
-
-    const id = ids[i].replace(pathSepExpr, '/')
-
-    if (!id.includes(`/node_modules/${instrumentation.name}/`)) continue
-
-    if (instrumentation.file) {
-      if (!id.endsWith(`/node_modules/${filename(instrumentation.name, instrumentation.file)}`)) continue
-
-      const basedir = getBasedir(ids[i])
-
-      pkg = requirePackageJson(basedir, module)
-    } else {
-      const basedir = getBasedir(ids[i])
-
-      pkg = requirePackageJson(basedir, module)
-
-      const mainFile = path.posix.normalize(pkg.main || 'index.js')
-      if (!id.endsWith(`/node_modules/${instrumentation.name}/${mainFile}`)) continue
-    }
-
-    if (!matchVersion(pkg.version, instrumentation.versions)) continue
-
-    hook(require.cache[ids[i]].exports)
-  }
-}
-
-function getBasedir (id) {
-  return parse(id).basedir.replace(pathSepExpr, '/')
 }
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
