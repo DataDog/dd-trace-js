@@ -10,6 +10,7 @@ const plugin = require('../src')
 const { writeFileSync } = require('fs')
 
 describe('Plugin', function () {
+  let server
   let port
 
   describe('next', () => {
@@ -23,7 +24,8 @@ describe('Plugin', function () {
 
         before(function (done) {
           const cwd = __dirname
-          const server = spawn('node', ['server'], {
+
+          server = spawn('node', ['server'], {
             cwd,
             env: {
               ...process.env,
@@ -35,11 +37,12 @@ describe('Plugin', function () {
           })
 
           server.on('error', done)
-          server.stderr.on('data', done)
+          server.stderr.on('data', () => {})
           server.stdout.on('data', () => done())
         })
 
         after(async () => {
+          server.kill()
           await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
           await agent.close()
         })
@@ -118,7 +121,6 @@ describe('Plugin', function () {
                 expect(spans[0]).to.have.property('name', 'next.request')
                 expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '404')
@@ -183,7 +185,6 @@ describe('Plugin', function () {
                 expect(spans[0]).to.have.property('name', 'next.request')
                 expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /404')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '404')
