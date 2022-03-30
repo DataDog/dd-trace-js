@@ -32,17 +32,6 @@ function getAllTestsInSuite (root) {
   return tests
 }
 
-addHook({
-  name: 'mocha',
-  versions: ['>=5.2.0'],
-  file: 'lib/runner.js'
-}, mochaHook)
-
-addHook({
-  name: 'mocha-each',
-  versions: ['>=2.0.1']
-}, mochaEachHook)
-
 function mochaHook (Runner) {
   if (patched.has(Runner)) return Runner
 
@@ -135,5 +124,16 @@ function mochaEachHook (mochaEach) {
     }
   })
 }
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/runner.js'
+}, mochaHook)
+
+addHook({
+  name: 'mocha-each',
+  versions: ['>=2.0.1']
+}, mochaEachHook)
 
 module.exports = { mochaHook, mochaEachHook }

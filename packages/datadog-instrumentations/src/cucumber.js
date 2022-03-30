@@ -100,28 +100,32 @@ function wrapRun (pl, isLatestVersion) {
   })
 }
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['7.0.0 - 7.2.1'],
-  file: 'lib/runtime/pickle_runner.js'
-}, (PickleRunner) => {
+function pickleHook (PickleRunner) {
   const pl = PickleRunner.default
 
   wrapRun(pl, false)
 
   return PickleRunner
-})
+}
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
-  file: 'lib/runtime/test_case_runner.js'
-}, (TestCaseRunner) => {
+function testCaseHook (TestCaseRunner) {
   const pl = TestCaseRunner.default
 
   wrapRun(pl, true)
 
   return TestCaseRunner
-})
+}
 
-module.exports = { wrapRun }
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['7.0.0 - 7.2.1'],
+  file: 'lib/runtime/pickle_runner.js'
+}, pickleHook)
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/test_case_runner.js'
+}, testCaseHook)
+
+module.exports = { pickleHook, testCaseHook }
