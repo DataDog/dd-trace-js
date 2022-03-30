@@ -19,16 +19,20 @@ if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED && (process.env.DATADOG_API_KE
 
 // TODO: remove this in a later major version since we now recommend using
 // `NODE_OPTIONS='-r dd-trace/ci/init'`.
-for (const filename in require.cache) {
-  const id = filename.split(path.sep).join('/')
+try {
+  for (const filename in require.cache) {
+    const id = filename.split(path.sep).join('/')
 
-  if (id.includes('/node_modules/mocha/lib/runner.js')) {
-    mochaHook(require.cache[filename].exports)
-  } else if (id.includes('/node_modules/@cucumber/cucumber/lib/runtime/pickle_runner.js')) {
-    wrapRun(require.cache[filename].exports, false)
-  } else if (id.includes('/node_modules/@cucumber/cucumber/lib/runtime/test_case_runner.js')) {
-    wrapRun(require.cache[filename].exports, true)
+    if (id.includes('/node_modules/mocha/lib/runner.js')) {
+      mochaHook(require.cache[filename].exports)
+    } else if (id.includes('/node_modules/@cucumber/cucumber/lib/runtime/pickle_runner.js')) {
+      wrapRun(require.cache[filename].exports, false)
+    } else if (id.includes('/node_modules/@cucumber/cucumber/lib/runtime/test_case_runner.js')) {
+      wrapRun(require.cache[filename].exports, true)
+    }
   }
+} catch (e) {
+  // ignore error and let the tracer initialize anyway
 }
 
 tracer.init(options)
