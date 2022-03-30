@@ -10,6 +10,9 @@ const runStepStartCh = channel('ci:cucumber:run-step:start')
 const runStepEndCh = channel('ci:cucumber:run-step:end')
 const errorCh = channel('ci:cucumber:error')
 
+// TODO: remove in a later major version
+const patched = new WeakSet()
+
 function getStatusFromResult (result) {
   if (result.status === 1) {
     return { status: 'pass' }
@@ -37,6 +40,10 @@ function getStatusFromResultLatest (result) {
 }
 
 function wrapRun (pl, isLatestVersion) {
+  if (patched.has(pl)) return
+
+  patched.add(pl)
+
   shimmer.wrap(pl.prototype, 'run', run => function () {
     if (!runStartCh.hasSubscribers) {
       return run.apply(this, arguments)
@@ -93,26 +100,32 @@ function wrapRun (pl, isLatestVersion) {
   })
 }
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['7.0.0 - 7.2.1'],
-  file: 'lib/runtime/pickle_runner.js'
-}, (PickleRunner) => {
+function pickleHook (PickleRunner) {
   const pl = PickleRunner.default
 
   wrapRun(pl, false)
 
   return PickleRunner
-})
+}
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
-  file: 'lib/runtime/test_case_runner.js'
-}, (TestCaseRunner) => {
+function testCaseHook (TestCaseRunner) {
   const pl = TestCaseRunner.default
 
   wrapRun(pl, true)
 
   return TestCaseRunner
-})
+}
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['7.0.0 - 7.2.1'],
+  file: 'lib/runtime/pickle_runner.js'
+}, pickleHook)
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/test_case_runner.js'
+}, testCaseHook)
+
+module.exports = { pickleHook, testCaseHook }

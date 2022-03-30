@@ -11,6 +11,9 @@ const hookErrorCh = channel('ci:mocha:hook:error')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 const testRunEndCh = channel('ci:mocha:run:end')
 
+// TODO: remove when root hooks and fixtures are implemented
+const patched = new WeakSet()
+
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
 }
@@ -29,11 +32,11 @@ function getAllTestsInSuite (root) {
   return tests
 }
 
-addHook({
-  name: 'mocha',
-  versions: ['>=5.2.0'],
-  file: 'lib/runner.js'
-}, (Runner) => {
+function mochaHook (Runner) {
+  if (patched.has(Runner)) return Runner
+
+  patched.add(Runner)
+
   shimmer.wrap(Runner.prototype, 'runTest', runTest => function () {
     if (!testStartCh.hasSubscribers) {
       return runTest.apply(this, arguments)
@@ -102,12 +105,13 @@ addHook({
   })
 
   return Runner
-})
+}
 
-addHook({
-  name: 'mocha-each',
-  versions: ['>=2.0.1']
-}, (mochaEach) => {
+function mochaEachHook (mochaEach) {
+  if (patched.has(mochaEach)) return mochaEach
+
+  patched.add(mochaEach)
+
   return shimmer.wrap(mochaEach, function () {
     const [params] = arguments
     const { it, ...rest } = mochaEach.apply(this, arguments)
@@ -119,4 +123,17 @@ addHook({
       ...rest
     }
   })
-})
+}
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/runner.js'
+}, mochaHook)
+
+addHook({
+  name: 'mocha-each',
+  versions: ['>=2.0.1']
+}, mochaEachHook)
+
+module.exports = { mochaHook, mochaEachHook }
