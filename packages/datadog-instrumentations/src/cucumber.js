@@ -116,3 +116,5 @@ addHook({
 
   return TestCaseRunner
 })
+
+module.exports = { wrapRun }
