@@ -10,6 +10,9 @@ const runStepStartCh = channel('ci:cucumber:run-step:start')
 const runStepEndCh = channel('ci:cucumber:run-step:end')
 const errorCh = channel('ci:cucumber:error')
 
+// TODO: remove in a later major version
+const patched = new WeakSet()
+
 function getStatusFromResult (result) {
   if (result.status === 1) {
     return { status: 'pass' }
@@ -37,6 +40,10 @@ function getStatusFromResultLatest (result) {
 }
 
 function wrapRun (pl, isLatestVersion) {
+  if (patched.has(pl)) return
+
+  patched.add(pl)
+
   shimmer.wrap(pl.prototype, 'run', run => function () {
     if (!runStartCh.hasSubscribers) {
       return run.apply(this, arguments)
