@@ -18,4 +18,11 @@ tracer.init(options)
 
 tracer.use('fs', false)
 
+// TODO: remove this in a later major version since we now recommend
+// `NODE_OPTIONS='-r dd-trace/ci/init'` instead of `mocha -r dd-trace/ci/init`.
+tracer.mochaGlobalSetup = function () {
+  const { mochaHook } = require('../packages/datadog-instrumentations/src/mocha')
+  mochaHook(this.constructor)
+}
+
 module.exports = tracer
