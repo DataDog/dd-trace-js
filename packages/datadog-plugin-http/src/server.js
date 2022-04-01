@@ -18,8 +18,6 @@ class HttpServerPlugin extends Plugin {
 
     this.addSub('apm:http:server:request:start', ({ req, res }) => {
       const store = storage.getStore()
-      this.config = web.normalizeConfig(this.config)
-
       const span = web.startSpan(this.tracer, this.config, req, res, 'http.request')
 
       if (this.config.service) {
@@ -58,6 +56,10 @@ class HttpServerPlugin extends Plugin {
       const context = web.getContext(req)
       web.wrapRes(context, context.req, context.res, context.res.end)()
     })
+  }
+
+  configure (config) {
+    return super.configure(web.normalizeConfig(config))
   }
 }
 
