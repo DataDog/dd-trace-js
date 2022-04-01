@@ -50,6 +50,7 @@ function patch (http, methodName) {
 
       const ar = new AsyncResource('bound-anonymous-fn')
 
+      let finished = false
       let callback = args.callback
 
       if (callback) {
@@ -60,34 +61,33 @@ function patch (http, methodName) {
       const req = ar.bind(request).call(this, options, callback)
       const emit = req.emit
 
-      req.emit = function (eventName, arg) {
-        const finished = false
-        const finish = (finished, req, res) => {
-          if (!finished) {
-            finished = true
-            asyncEndClientCh.publish({ req, res })
-          }
+      const finish = (req, res) => {
+        if (!finished) {
+          finished = true
+          asyncEndClientCh.publish({ req, res })
         }
+      }
 
+      req.emit = function (eventName, arg) {
         ar.runInAsyncScope(() => {
           switch (eventName) {
             case 'response': {
               const res = arg
-              const listener = ar.bind(() => finish(finished, req, res))
+              const listener = ar.bind(() => finish(req, res))
               res.on('end', listener)
               res.on('error', listener)
               break
             }
             case 'connect':
             case 'upgrade':
-              finish(finished, req, arg)
+              finish(req, arg)
               break
             case 'error':
               errorClientCh.publish(arg)
             case 'abort': // deprecated and replaced by `close` in node 17
             case 'timeout':
             case 'close':
-              finish(finished, req)
+              finish(req)
           }
         })
 
