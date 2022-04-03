@@ -38,7 +38,7 @@ addHook({ name: 'amqplib', file: 'lib/channel.js', versions: ['>=0.5'] }, channe
 
 function instrument (send, channel, args, method, fields, message) {
   if (!startCh.hasSubscribers) {
-    return send.apply(this, arguments)
+    return send.apply(channel, args)
   }
   startCh.publish({ channel, method, fields, message })
 
