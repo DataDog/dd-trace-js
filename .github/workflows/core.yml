@@ -1,0 +1,16 @@
+name: Core
+
+on: push
+
+jobs:
+  shimmer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:shimmer:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:shimmer:ci
+      - run: yarn codecov

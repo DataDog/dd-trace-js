@@ -38,8 +38,6 @@ dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
 dev,eslint-plugin-node,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
-dev,mocha-junit-reporter,MIT,Copyright 2015 Michael Allen
-dev,mocha-multi-reporters,MIT,Copyright 2015 Stanley Ng 2019 Yousaf Nabi
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
 dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
