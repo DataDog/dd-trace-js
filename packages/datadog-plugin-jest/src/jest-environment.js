@@ -56,8 +56,10 @@ function createWrapTeardown (tracer, instrumenter) {
       }
 
       instrumenter.unwrap(this.global.test, 'each')
-      await teardown.apply(this, arguments)
-      return new Promise(resolve => tracer._exporter._writer.flush(resolve))
+
+      return teardown.apply(this, arguments).finally(() => {
+        return new Promise(resolve => tracer._exporter._writer.flush(resolve))
+      })
     }
   }
 }
