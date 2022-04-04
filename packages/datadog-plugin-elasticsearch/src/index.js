@@ -51,7 +51,7 @@ class ElasticsearchPlugin extends Plugin {
   }
 
   configure (config) {
-    super.configure(normalizeConfig(config))
+    return super.configure(normalizeConfig(config))
   }
 }
 
