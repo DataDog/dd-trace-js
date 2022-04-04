@@ -13,8 +13,6 @@ class ElasticsearchPlugin extends Plugin {
     super(...args)
 
     this.addSub('apm:elasticsearch:query:start', ({ params }) => {
-      this.config = normalizeConfig(this.config)
-
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const body = getBody(params.body || params.bulkBody)
@@ -50,6 +48,10 @@ class ElasticsearchPlugin extends Plugin {
       this.config.hooks.query(span, params)
       span.finish()
     })
+  }
+
+  configure (config) {
+    super.configure(normalizeConfig(config))
   }
 }
 
