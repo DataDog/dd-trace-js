@@ -18,29 +18,35 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('amqplib')
+        beforeEach(done => {
+          require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
+            .connect((err, conn) => {
+              connection = conn
+
+              if (err != null) {
+                return done(err)
+              }
+
+              conn.createChannel((err, ch) => {
+                channel = ch
+                done(err)
+              })
+            })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        describe('without plugin', () => {
+          it('should run commands normally', done => {
+            channel.assertQueue('test', {}, () => { done() })
+          })
         })
 
         describe('when using a callback', () => {
-          beforeEach(done => {
-            require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
-              .connect((err, conn) => {
-                connection = conn
+          before(() => {
+            return agent.load('amqplib')
+          })
 
-                if (err != null) {
-                  return done(err)
-                }
-
-                conn.createChannel((err, ch) => {
-                  channel = ch
-                  done(err)
-                })
-              })
+          after(() => {
+            return agent.close({ ritmReset: false })
           })
 
           describe('when sending commands', () => {
