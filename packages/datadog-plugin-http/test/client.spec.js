@@ -856,6 +856,38 @@ describe('Plugin', () => {
           })
         })
 
+        it('should not update the span after the request is finished', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][1]).to.have.property('error', 0)
+                expect(traces[0][1].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][1].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              tracer.trace('test.request', (span, finish) => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => {})
+                  res.on('end', () => {
+                    setTimeout(finish)
+                  })
+                })
+
+                req.end()
+              })
+            })
+          })
+        })
+
         if (protocol === 'http') {
           it('should skip requests marked as noop', done => {
             const app = express()
