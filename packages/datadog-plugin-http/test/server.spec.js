@@ -121,6 +121,15 @@ describe('Plugin', () => {
 
         axios.get(`http://localhost:${port}/user`).catch(done)
       })
+
+      it('should not instrument manually instantiated server responses', () => {
+        const { IncomingMessage, ServerResponse } = http
+
+        const req = new IncomingMessage()
+        const res = new ServerResponse(req)
+
+        expect(() => res.emit('finish')).to.not.throw()
+      })
     })
   })
 })
