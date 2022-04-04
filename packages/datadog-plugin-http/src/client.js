@@ -24,7 +24,6 @@ class HttpClientPlugin extends Plugin {
 
     this.addSub('apm:http:client:request:start', ({ args, http }) => {
       const store = storage.getStore()
-      this.config = normalizeClientConfig(this.config)
       const options = args.options
       const agent = options.agent || options._defaultAgent || http.globalAgent
       const protocol = options.protocol || agent.protocol || 'http:'
@@ -78,6 +77,10 @@ class HttpClientPlugin extends Plugin {
     })
 
     this.addSub('apm:http:client:request:error', errorHandler)
+  }
+
+  configure (config) {
+    return super.configure(normalizeClientConfig(config))
   }
 }
 
