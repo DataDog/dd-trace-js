@@ -1,5 +1,3 @@
-const { expect } = require("chai")
-
 describe('jest-circus-hook-failure', () => {
   beforeEach(() => {
     throw new Error('hey')
