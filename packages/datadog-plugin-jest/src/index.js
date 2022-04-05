@@ -36,6 +36,23 @@ function getTestSpanMetadata (tracer, test) {
   }
 }
 
+// based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
+function formatJestError (errors) {
+  let error
+  if (Array.isArray(errors)) {
+    const [originalError, asyncError] = errors
+    if (originalError === null || !originalError.stack) {
+      error = asyncError
+      error.message = originalError
+    } else {
+      error = originalError
+    }
+  } else {
+    error = errors
+  }
+  return error
+}
+
 class JestPlugin extends Plugin {
   static get name () {
     return 'jest'
@@ -68,12 +85,19 @@ class JestPlugin extends Plugin {
       this.tracer._exporter._writer.flush()
     })
 
-    this.addSub('ci:jest:test:err', (err) => {
-      if (err) {
+    this.addSub('ci:jest:test:err', (errors) => {
+      if (errors) {
+        const error = formatJestError(errors)
         const span = storage.getStore().span
         span.setTag(TEST_STATUS, 'fail')
-        span.setTag('error', err)
+        span.setTag('error', error)
       }
+    })
+
+    this.addSub('ci:jest:test:skip', (test) => {
+      const span = this.startTestSpan(test)
+      span.setTag(TEST_STATUS, 'skip')
+      span.finish()
     })
   }
 
@@ -88,6 +112,7 @@ class JestPlugin extends Plugin {
           ...testSpanMetadata
         }
       })
+
     testSpan.context()._trace.origin = CI_APP_ORIGIN
 
     return testSpan

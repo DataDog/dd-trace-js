@@ -3,6 +3,7 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:jest:test:start')
+const testSkippedCh = channel('ci:jest:test:skip')
 const testRunEndCh = channel('ci:jest:test:end')
 const testErrCh = channel('ci:jest:test:err')
 const testSuiteEnd = channel('ci:jest:test-suite:end')
@@ -28,20 +29,27 @@ function getWrappedEnvironment (NodeEnvironment) {
         await super.handleTestEvent(event, state)
       }
       this.ar.runInAsyncScope(() => {
+        let context
+        if (this.getVmContext) {
+          context = this.getVmContext()
+        } else {
+          context = this.context
+        }
         if (event.name === 'test_start') {
-          let context
-          if (this.getVmContext) {
-            context = this.getVmContext()
-          } else {
-            context = this.context
-          }
           testStartCh.publish({ name: context.expect.getState().currentTestName, suite: this.testSuite })
+          this.originalTestFn = event.test.fn
+          event.test.fn = this.ar.bind(event.test.fn)
         }
         if (event.name === 'test_done') {
-          if (event.test.errors) {
+          if (event.test.errors && event.test.errors.length) {
             testErrCh.publish(event.test.errors[0])
           }
           testRunEndCh.publish(undefined)
+          // restore in case it is retried
+          event.test.fn = this.originalTestFn
+        }
+        if (event.name === 'test_skip' || event.name === 'test_todo') {
+          testSkippedCh.publish({ name: context.expect.getState().currentTestName, suite: this.testSuite })
         }
       })
     }
