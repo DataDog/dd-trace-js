@@ -1,6 +1,7 @@
 'use strict'
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const shimmer = require('../../datadog-shimmer')
 
 const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
@@ -36,7 +37,11 @@ function getWrappedEnvironment (NodeEnvironment) {
           context = this.context
         }
         if (event.name === 'test_start') {
-          testStartCh.publish({ name: context.expect.getState().currentTestName, suite: this.testSuite })
+          testStartCh.publish({
+            name: context.expect.getState().currentTestName,
+            suite: this.testSuite,
+            runner: 'jest-circus'
+          })
           this.originalTestFn = event.test.fn
           event.test.fn = this.ar.bind(event.test.fn)
         }
@@ -49,7 +54,11 @@ function getWrappedEnvironment (NodeEnvironment) {
           event.test.fn = this.originalTestFn
         }
         if (event.name === 'test_skip' || event.name === 'test_todo') {
-          testSkippedCh.publish({ name: context.expect.getState().currentTestName, suite: this.testSuite })
+          testSkippedCh.publish({
+            name: context.expect.getState().currentTestName,
+            suite: this.testSuite,
+            runner: 'jest-circus'
+          })
         }
       })
     }
@@ -68,4 +77,36 @@ addHook({
   versions: ['>=24.8.0']
 }, (JsdomEnvironment) => {
   return getWrappedEnvironment(JsdomEnvironment)
+})
+
+addHook({
+  name: 'jest-jasmine2',
+  versions: ['>=24.8.0'],
+  file: 'build/jasmineAsyncInstall.js'
+}, (jasmineAsyncInstallExport) => {
+  return function (globalConfig, globalInput) {
+    shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+      asyncResource.runInAsyncScope(() => {
+        const testSuite = getTestSuitePath(this.result.testPath, globalConfig.rootDir)
+        testStartCh.publish({
+          name: this.getFullName(),
+          suite: testSuite,
+          runner: 'jest-jasmine2'
+        })
+        const spec = this
+        const callback = asyncResource.bind(function () {
+          if (spec.result.failedExpectations && spec.result.failedExpectations.length) {
+            testErrCh.publish(spec.result.failedExpectations[0].error)
+          }
+          testRunEndCh.publish(undefined)
+          onComplete.apply(this, arguments)
+        })
+        arguments[0] = callback
+        execute.apply(this, arguments)
+      })
+    })
+    return jasmineAsyncInstallExport.default(globalConfig, globalInput)
+  }
 })

@@ -18,7 +18,7 @@ const {
   ERROR_MESSAGE
 } = require('../../dd-trace/src/plugins/util/test')
 
-describe.only('Plugin', function () {
+describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
@@ -197,10 +197,11 @@ describe.only('Plugin', function () {
           options.projects
         )
       })
-      // parameterized tests
+      // TODO parameterized tests
 
-      // integration
-      it.only('should work with integrations', (done) => {
+      // TODO focused tests
+
+      it('should work with integrations', (done) => {
         agent.use(trace => {
           const httpSpan = trace[0].find(span => span.name === 'http.request')
           const testSpan = trace[0].find(span => span.type === 'test')

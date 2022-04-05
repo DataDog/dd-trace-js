@@ -4,16 +4,16 @@ const path = require('path')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
-  TEST_NAME: TEST_NAME_TAG,
-  TEST_SUITE: TEST_SUITE_TAG,
+  TEST_NAME,
+  TEST_SUITE,
   TEST_STATUS,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
-  JEST_TEST_RUNNER
+  JEST_TEST_RUNNER,
+  ERROR_MESSAGE
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -31,13 +31,13 @@ describe('Plugin', () => {
     maxWorkers: '50%'
   }
 
-  withVersions(plugin, ['jest-jasmine2'], (version, moduleName) => {
+  withVersions('jest', ['jest-jasmine2'], (version, moduleName) => {
     afterEach(() => {
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
       })
-      return agent.close()
+      return agent.close({ ritmReset: false })
     })
     beforeEach(() => {
       return agent.load(['jest'], { service: 'test' }).then(() => {
@@ -56,8 +56,8 @@ describe('Plugin', () => {
           { name: 'jest-test-suite timeout', status: 'fail' },
           { name: 'jest-test-suite passes', status: 'pass' },
           { name: 'jest-test-suite fails', status: 'fail' },
-          { name: 'jest-test-suite skips', status: 'skip' },
-          { name: 'jest-test-suite skips with test too', status: 'skip' },
+          // { name: 'jest-test-suite skips', status: 'skip' },
+          // { name: 'jest-test-suite skips with test too', status: 'skip' },
           { name: 'jest-test-suite does not crash with missing stack', status: 'fail' }
         ]
         const assertionPromises = tests.map(({ name, status }) => {
@@ -69,16 +69,16 @@ describe('Plugin', () => {
               service: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_FRAMEWORK]: 'jest',
-              [TEST_NAME_TAG]: name,
+              [TEST_NAME]: name,
               [TEST_STATUS]: status,
-              [TEST_SUITE_TAG]: 'packages/datadog-plugin-jest/test/jest-test.js',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-jasmine-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2'
             })
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
-            expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
+            expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-jasmine-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         })
@@ -87,7 +87,7 @@ describe('Plugin', () => {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-test.js'
+          testRegex: 'jest-jasmine-test.js'
         }
 
         jestExecutable.runCLI(
@@ -96,18 +96,43 @@ describe('Plugin', () => {
         )
       })
 
-      it('instruments test suites with focused tests', function (done) {
-        agent.use(trace => {
-          const testSpan = trace[0][0]
-          expect(testSpan.parent_id.toString()).to.equal('0')
-          expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
-          expect(testSpan.meta[TEST_NAME_TAG]).to.equal('jest-only-test will run')
-          expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-        }).then(done).catch(done)
+      it('works when there is a hook error', (done) => {
+        const tests = [
+          { name: 'jest-test-suite-hook-failure will not run', error: 'hey, hook error before' },
+          { name: 'jest-test-suite-hook-failure-after will not run', error: 'hey, hook error after' }
+        ]
+
+        const assertionPromises = tests.map(({ name, error }) => {
+          return agent.use(trace => {
+            const testSpan = trace[0][0]
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(testSpan.meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_NAME]: name,
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-jasmine-hook.js',
+              [TEST_TYPE]: 'test',
+              [JEST_TEST_RUNNER]: 'jest-jasmine2'
+            })
+            expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
+            expect(testSpan.type).to.equal('test')
+            expect(testSpan.name).to.equal('jest.test')
+            expect(testSpan.service).to.equal('test')
+            expect(testSpan.resource).to.equal(
+              `packages/datadog-plugin-jest/test/jest-jasmine-hook.js.${name}`
+            )
+            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+          })
+        })
+
+        Promise.all(assertionPromises).then(() => done()).catch(done)
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-only-test.js'
+          testRegex: 'jest-jasmine-hook.js'
         }
 
         jestExecutable.runCLI(
@@ -116,26 +141,13 @@ describe('Plugin', () => {
         )
       })
 
-      it('works with jsdom too', function (done) {
-        agent.use(trace => {
-          const testSpan = trace[0][0]
-          expect(testSpan.parent_id.toString()).to.equal('0')
-          expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
-          expect(testSpan.meta[TEST_NAME_TAG]).to.equal('jest-jsdom-test will run with jsdom')
-          expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-        }).then(done).catch(done)
+      // TODO skipped tests
 
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-jsdom-test.js',
-          testEnvironment: 'jsdom'
-        }
+      // TODO focused tests
 
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
+      // TODO integration
+
+      // TODO test with jsdom
     })
   })
 })
