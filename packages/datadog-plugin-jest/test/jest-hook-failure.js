@@ -1,15 +1,15 @@
-describe('jest-circus-hook-failure', () => {
+describe('jest-hook-failure', () => {
   beforeEach(() => {
-    throw new Error('hey')
+    throw new Error('hey, hook error before')
   })
   it('will not run', () => {
     expect(true).toEqual(true)
   })
 })
 
-describe('jest-circus-hook-failure-after', () => {
+describe('jest-hook-failure-after', () => {
   afterEach(() => {
-    throw new Error('hey')
+    throw new Error('hey, hook error after')
   })
   it('will not run', () => {
     expect(true).toEqual(true)

@@ -19,7 +19,7 @@ const {
   TEST_PARAMETERS
 } = require('../../dd-trace/src/plugins/util/test')
 
-describe.only('Plugin', function () {
+describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
@@ -61,15 +61,17 @@ describe.only('Plugin', function () {
     describe('jest with jest-circus', () => {
       it('should create test spans for sync and async tests', (done) => {
         const tests = [
-          { name: 'jest-circus-test-suite passes', status: 'pass' },
-          { name: 'jest-circus-test-suite fails', status: 'fail' },
-          { name: 'jest-circus-test-suite done', status: 'pass' },
-          { name: 'jest-circus-test-suite done fail', status: 'fail' },
-          { name: 'jest-circus-test-suite done fail uncaught', status: 'fail' },
-          { name: 'jest-circus-test-suite promise passes', status: 'pass' },
-          { name: 'jest-circus-test-suite promise fails', status: 'fail' },
-          { name: 'jest-circus-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
-          { name: 'jest-circus-test-suite skip', status: 'skip' }
+          { name: 'jest-test-suite done', status: 'pass' },
+          { name: 'jest-test-suite done fail', status: 'fail' },
+          { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+          { name: 'jest-test-suite promise passes', status: 'pass' },
+          { name: 'jest-test-suite promise fails', status: 'fail' },
+          { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
+          { name: 'jest-test-suite passes', status: 'pass' },
+          { name: 'jest-test-suite fails', status: 'fail' },
+          { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
+          { name: 'jest-test-suite skips', status: 'skip' },
+          { name: 'jest-test-suite skips todo', status: 'skip' }
         ]
 
         const assertionPromises = tests.map(({ name, status, error }) => {
@@ -83,7 +85,7 @@ describe.only('Plugin', function () {
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME]: name,
               [TEST_STATUS]: status,
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-test.js',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-circus'
             })
@@ -93,7 +95,7 @@ describe.only('Plugin', function () {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
-            expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-circus-test.js.${name}`)
+            expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         })
@@ -102,7 +104,7 @@ describe.only('Plugin', function () {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-circus-test.js'
+          testRegex: 'jest-test.js'
         }
 
         jestExecutable.runCLI(
@@ -155,10 +157,10 @@ describe.only('Plugin', function () {
       })
       it('should detect an error in hooks', (done) => {
         const tests = [
-          { name: 'jest-circus-hook-failure will not run' },
-          { name: 'jest-circus-hook-failure-after will not run' }
+          { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
+          { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
         ]
-        const assertionPromises = tests.map(({ name }) => {
+        const assertionPromises = tests.map(({ name, error }) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
@@ -169,15 +171,16 @@ describe.only('Plugin', function () {
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME]: name,
               [TEST_STATUS]: 'fail',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-hook-failure.js',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-circus'
             })
+            expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(
-              `packages/datadog-plugin-jest/test/jest-circus-hook-failure.js.${name}`
+              `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
@@ -187,7 +190,7 @@ describe.only('Plugin', function () {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-circus-hook-failure.js'
+          testRegex: 'jest-hook-failure.js'
         }
 
         jestExecutable.runCLI(
@@ -213,7 +216,7 @@ describe.only('Plugin', function () {
               [TEST_NAME]: 'jest-test-parameterized can do parameterized test',
               [TEST_STATUS]: 'pass',
               [TEST_FRAMEWORK]: 'jest',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-parameterized.js'
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-parameterized.js'
             })
             expect(testSpan.meta[TEST_PARAMETERS]).to.equal(JSON.stringify(parameters))
           })
@@ -223,7 +226,7 @@ describe.only('Plugin', function () {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-circus-parameterized.js'
+          testRegex: 'jest-parameterized.js'
         }
 
         jestExecutable.runCLI(
@@ -250,7 +253,7 @@ describe.only('Plugin', function () {
               [TEST_NAME]: name,
               [TEST_STATUS]: status,
               [TEST_FRAMEWORK]: 'jest',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-focus.js'
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
             })
           })
         })
@@ -259,7 +262,7 @@ describe.only('Plugin', function () {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-circus-focus.js'
+          testRegex: 'jest-focus.js'
         }
 
         jestExecutable.runCLI(
@@ -283,13 +286,13 @@ describe.only('Plugin', function () {
             [TEST_NAME]: 'jest-test-integration-http can do integration http',
             [TEST_STATUS]: 'pass',
             [TEST_FRAMEWORK]: 'jest',
-            [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-integration.js'
+            [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-integration.js'
           })
         }).then(() => done()).catch(done)
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-circus-integration.js'
+          testRegex: 'jest-integration.js'
         }
 
         jestExecutable.runCLI(
@@ -297,6 +300,7 @@ describe.only('Plugin', function () {
           options.projects
         )
       })
+      // TODO stack frames include our files??
     })
   })
 })

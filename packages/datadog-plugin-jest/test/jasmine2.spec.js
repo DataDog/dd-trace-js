@@ -2,6 +2,8 @@
 const fs = require('fs')
 const path = require('path')
 
+const nock = require('nock')
+
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
@@ -40,7 +42,11 @@ describe('Plugin', () => {
       return agent.close({ ritmReset: false })
     })
     beforeEach(() => {
-      return agent.load(['jest'], { service: 'test' }).then(() => {
+      // for http integration tests
+      nock('http://test:123')
+        .get('/')
+        .reply(200, 'OK')
+      return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
         jestExecutable = require(`../../../versions/jest@${version}`).get()
       })
     })
@@ -56,11 +62,11 @@ describe('Plugin', () => {
           { name: 'jest-test-suite timeout', status: 'fail' },
           { name: 'jest-test-suite passes', status: 'pass' },
           { name: 'jest-test-suite fails', status: 'fail' },
-          // { name: 'jest-test-suite skips', status: 'skip' },
-          // { name: 'jest-test-suite skips with test too', status: 'skip' },
-          { name: 'jest-test-suite does not crash with missing stack', status: 'fail' }
+          { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
+          { name: 'jest-test-suite skips', status: 'skip' },
+          { name: 'jest-test-suite skips todo', status: 'skip' }
         ]
-        const assertionPromises = tests.map(({ name, status }) => {
+        const assertionPromises = tests.map(({ name, status, error }) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
@@ -71,14 +77,17 @@ describe('Plugin', () => {
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME]: name,
               [TEST_STATUS]: status,
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-jasmine-test.js',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2'
             })
+            if (error) {
+              expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
+            }
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
-            expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-jasmine-test.js.${name}`)
+            expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         })
@@ -87,7 +96,7 @@ describe('Plugin', () => {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-jasmine-test.js'
+          testRegex: 'jest-test.js'
         }
 
         jestExecutable.runCLI(
@@ -98,8 +107,8 @@ describe('Plugin', () => {
 
       it('works when there is a hook error', (done) => {
         const tests = [
-          { name: 'jest-test-suite-hook-failure will not run', error: 'hey, hook error before' },
-          { name: 'jest-test-suite-hook-failure-after will not run', error: 'hey, hook error after' }
+          { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
+          { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
         ]
 
         const assertionPromises = tests.map(({ name, error }) => {
@@ -113,7 +122,7 @@ describe('Plugin', () => {
               [TEST_FRAMEWORK]: 'jest',
               [TEST_NAME]: name,
               [TEST_STATUS]: 'fail',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-jasmine-hook.js',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2'
             })
@@ -122,7 +131,7 @@ describe('Plugin', () => {
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(
-              `packages/datadog-plugin-jest/test/jest-jasmine-hook.js.${name}`
+              `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
@@ -132,7 +141,7 @@ describe('Plugin', () => {
 
         const options = {
           ...jestCommonOptions,
-          testRegex: 'jest-jasmine-hook.js'
+          testRegex: 'jest-hook-failure.js'
         }
 
         jestExecutable.runCLI(
@@ -141,11 +150,73 @@ describe('Plugin', () => {
         )
       })
 
-      // TODO skipped tests
+      it('should work with focused tests', (done) => {
+        const tests = [
+          { name: 'jest-test-focused will be skipped', status: 'skip' },
+          { name: 'jest-test-focused-2 will be skipped too', status: 'skip' },
+          { name: 'jest-test-focused can do focused test', status: 'pass' }
+        ]
 
-      // TODO focused tests
+        const assertionPromises = tests.map(({ name, status }) => {
+          return agent.use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              [TEST_NAME]: name,
+              [TEST_STATUS]: status,
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
+            })
+          })
+        })
 
-      // TODO integration
+        Promise.all(assertionPromises).then(() => done()).catch(done)
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-focus.js'
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        )
+      })
+
+      it('should work with integrations', (done) => {
+        agent.use(trace => {
+          const httpSpan = trace[0].find(span => span.name === 'http.request')
+          const testSpan = trace[0].find(span => span.type === 'test')
+          expect(testSpan.parent_id.toString()).to.equal('0')
+          expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+          expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+          expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+          expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+          expect(testSpan.meta).to.contain({
+            language: 'javascript',
+            service: 'test',
+            [TEST_NAME]: 'jest-test-integration-http can do integration http',
+            [TEST_STATUS]: 'pass',
+            [TEST_FRAMEWORK]: 'jest',
+            [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-integration.js'
+          })
+        }).then(() => done()).catch(done)
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-integration.js'
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        )
+      })
+
+      // TODO stack frames include our files??
     })
   })
 })

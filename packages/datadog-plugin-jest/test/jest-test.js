@@ -53,12 +53,6 @@ describe('jest-test-suite', () => {
   it('fails', () => {
     expect(true).toEqual(false)
   })
-  // it.skip('skips', () => {
-  //   expect(100).toEqual(100)
-  // })
-  // test.skip('skips with test too', () => {
-  //   expect(100).toEqual(100)
-  // })
   it('does not crash with missing stack', (done) => {
     setTimeout(() => {
       const error = new Error('fail')
@@ -66,4 +60,8 @@ describe('jest-test-suite', () => {
       throw error
     }, 100)
   })
+  it.skip('skips', () => {
+    expect(100).toEqual(100)
+  })
+  it.todo('skips todo')
 })

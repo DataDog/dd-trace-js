@@ -16,6 +16,14 @@ const {
 
 const { getFormattedJestTestParameters } = require('../../datadog-plugin-jest/src/util')
 
+const specStatusToTestStatus = {
+  'pending': 'skip',
+  'disabled': 'skip',
+  'todo': 'skip',
+  'passed': 'pass',
+  'failed': 'fail'
+}
+
 function getWrappedEnvironment (NodeEnvironment) {
   return class DatadogEnvironment extends NodeEnvironment {
     constructor (config, context) {
@@ -68,10 +76,12 @@ function getWrappedEnvironment (NodeEnvironment) {
           event.test.fn = this.ar.bind(event.test.fn)
         }
         if (event.name === 'test_done') {
+          let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
+            status = 'fail'
             testErrCh.publish(event.test.errors[0])
           }
-          testRunEndCh.publish(undefined)
+          testRunEndCh.publish(status)
           // restore in case it is retried
           event.test.fn = this.originalTestFn
         }
@@ -109,7 +119,6 @@ addHook({
   return function (globalConfig, globalInput) {
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
-
       asyncResource.runInAsyncScope(() => {
         const testSuite = getTestSuitePath(this.result.testPath, globalConfig.rootDir)
         testStartCh.publish({
@@ -122,7 +131,7 @@ addHook({
           if (spec.result.failedExpectations && spec.result.failedExpectations.length) {
             testErrCh.publish(spec.result.failedExpectations[0].error)
           }
-          testRunEndCh.publish(undefined)
+          testRunEndCh.publish(specStatusToTestStatus[spec.result.status])
           onComplete.apply(this, arguments)
         })
         arguments[0] = callback

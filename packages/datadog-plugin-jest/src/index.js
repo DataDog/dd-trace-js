@@ -72,12 +72,9 @@ class JestPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:jest:test:end', () => {
+    this.addSub('ci:jest:test:end', (status) => {
       const span = storage.getStore().span
-
-      if (!span._spanContext._tags[TEST_STATUS]) {
-        span.setTag(TEST_STATUS, 'pass')
-      }
+      span.setTag(TEST_STATUS, status)
       span.finish()
       finishAllTraceSpans(span)
       this.exit()
