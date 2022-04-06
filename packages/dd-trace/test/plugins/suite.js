@@ -10,6 +10,8 @@ const url = require('url')
 const { once } = require('events')
 const { expect } = require('chai')
 
+process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+
 const mkdtemp = util.promisify(fs.mkdtemp)
 
 const ddTraceInit = path.resolve(__dirname, '../../../../init')

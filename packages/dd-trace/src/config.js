@@ -90,6 +90,10 @@ class Config {
       process.env.DD_TRACE_STARTUP_LOGS,
       false
     )
+    const DD_TRACE_TELEMETRY_ENABLED = coalesce(
+      process.env.DD_TRACE_TELEMETRY_ENABLED,
+      true
+    )
     const DD_TRACE_DEBUG = coalesce(
       process.env.DD_TRACE_DEBUG,
       false
@@ -212,6 +216,7 @@ class Config {
     }
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
+    this.telemetryEnabled = isTrue(DD_TRACE_TELEMETRY_ENABLED)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),

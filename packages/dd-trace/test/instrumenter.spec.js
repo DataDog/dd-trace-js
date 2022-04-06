@@ -12,6 +12,7 @@ describe('Instrumenter', () => {
   let instrumenter
   let integrations
   let tracer
+  let telemetry
 
   before(() => {
     process.env.DD_TRACE_DISABLED_PLUGINS = 'mocha'
@@ -61,6 +62,10 @@ describe('Instrumenter', () => {
       }
     }
 
+    telemetry = {
+      updateIntegrations: sinon.spy()
+    }
+
     Instrumenter = proxyquire('../src/instrumenter', {
       './plugins': {
         'http': integrations.http,
@@ -71,7 +76,8 @@ describe('Instrumenter', () => {
       '../../datadog-plugin-http/src': integrations.http,
       '../../datadog-plugin-express-mock/src': integrations.express,
       '../../datadog-plugin-mysql-mock/src': integrations.mysql,
-      '../../datadog-plugin-other/src': integrations.other
+      '../../datadog-plugin-other/src': integrations.other,
+      './telemetry': telemetry
     })
 
     instrumenter = new Instrumenter(tracer)
@@ -210,6 +216,12 @@ describe('Instrumenter', () => {
 
       it('should not interfere with userland modules masking core modules', () => {
         expect(require('http2/foo.js')).to.equal('Hello, World!')
+      })
+
+      it('should call updateIntegrations on telemetry', () => {
+        instrumenter.use('express-mock')
+
+        expect(telemetry.updateIntegrations).to.have.been.called
       })
     })
 

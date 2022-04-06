@@ -21,6 +21,8 @@ global.proxyquire = proxyquire
 global.withVersions = withVersions
 global.withExports = withExports
 
+process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+
 afterEach(() => {
   agent.reset()
   metrics.stop()
