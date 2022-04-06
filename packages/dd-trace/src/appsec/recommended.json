@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.3.0"
+    "rules_version": "1.3.1"
   },
   "rules": [
     {
@@ -3040,7 +3040,9 @@
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "keys_only"
+      ]
     },
     {
       "id": "crs-942-360",
@@ -4097,15 +4099,23 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.headers.no_cookies"
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
               }
             ],
-            "regex": "\\$(eq|ne|lte?|gte?|n?in)\\b"
+            "regex": "^\\$(eq|ne|(l|g)te?|n?in|not|(n|x|)or|and|regex|where|expr|exists)$"
           },
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "keys_only"
+      ]
     },
     {
       "id": "sqr-000-008",
