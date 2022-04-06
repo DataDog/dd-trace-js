@@ -4,6 +4,8 @@ const childProcess = require('child_process')
 const path = require('path')
 const readline = require('readline')
 
+process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+
 function exec (...args) {
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(...args)
