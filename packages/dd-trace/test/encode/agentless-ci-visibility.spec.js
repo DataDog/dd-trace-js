@@ -65,11 +65,8 @@ describe('agentless-ci-visibility-encode', () => {
     const decodedTrace = msgpack.decode(buffer, { codec })
 
     expect(decodedTrace.version.toNumber()).to.equal(1)
-    expect(decodedTrace.metadata).to.contain({
-      language: 'javascript',
-      'runtime.name': 'node',
-      'runtime.version':
-      process.version
+    expect(decodedTrace.metadata['*']).to.contain({
+      language: 'javascript'
     })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
