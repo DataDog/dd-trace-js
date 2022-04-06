@@ -1,5 +1,4 @@
 'use strict'
-const tracerVersion = require('../../lib/version')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const { AgentEncoder } = require('./0.4')
@@ -156,29 +155,27 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const payload = {
       version: ENCODING_VERSION,
       metadata: {
-        'language': 'javascript',
-        'library_version': tracerVersion,
-        'runtime.name': 'node',
-        'runtime.version': process.version
+        '*': {
+          'language': 'javascript'
+        }
       },
       events: []
     }
 
-    if (this.service) {
-      payload.metadata.service = this.service
-    }
     if (this.env) {
-      payload.metadata.env = this.env
+      payload.metadata['*'].env = this.env
     }
     if (this.runtimeId) {
-      payload.metadata['runtime-id'] = this.runtimeId
+      payload.metadata['*']['runtime-id'] = this.runtimeId
     }
 
     this._encodeMapPrefix(bytes, payload)
     this._encodeString(bytes, 'version')
     this._encodeNumber(bytes, payload.version)
     this._encodeString(bytes, 'metadata')
-    this._encodeMap(bytes, payload.metadata)
+    this._encodeMapPrefix(bytes, payload.metadata)
+    this._encodeString(bytes, '*')
+    this._encodeMap(bytes, payload.metadata['*'])
     this._encodeString(bytes, 'events')
     // Get offset of the events list to update the length of the array when calling `makePayload`
     this._eventsOffset = bytes.length
