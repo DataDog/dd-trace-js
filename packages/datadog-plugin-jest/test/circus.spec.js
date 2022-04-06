@@ -15,10 +15,11 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE
+  ERROR_MESSAGE,
+  TEST_PARAMETERS
 } = require('../../dd-trace/src/plugins/util/test')
 
-describe('Plugin', function () {
+describe.only('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
@@ -35,9 +36,6 @@ describe('Plugin', function () {
       return agent.close({ ritmReset: false })
     })
     beforeEach(() => {
-      // THERE'S A LEAK WITH THIS
-      // process.env.DD_TRACE_DISABLED_PLUGINS = 'fs'
-
       // for http integration tests
       nock('http://test:123')
         .get('/')
@@ -197,9 +195,78 @@ describe('Plugin', function () {
           options.projects
         )
       })
-      // TODO parameterized tests
 
-      // TODO focused tests
+      it('should work with parameterized tests', (done) => {
+        const tests = [
+          { arguments: [1, 2, 3], metadata: {} },
+          { arguments: [2, 3, 5], metadata: {} }
+        ]
+
+        const assertionPromises = tests.map((parameters) => {
+          return agent.use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              [TEST_NAME]: 'jest-test-parameterized can do parameterized test',
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-parameterized.js'
+            })
+            expect(testSpan.meta[TEST_PARAMETERS]).to.equal(JSON.stringify(parameters))
+          })
+        })
+
+        Promise.all(assertionPromises).then(() => done()).catch(done)
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-circus-parameterized.js'
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        )
+      })
+
+      it('should work with focused tests', (done) => {
+        const tests = [
+          { name: 'jest-test-focused will be skipped', status: 'skip' },
+          { name: 'jest-test-focused-2 will be skipped too', status: 'skip' },
+          { name: 'jest-test-focused can do focused test', status: 'pass' }
+        ]
+
+        const assertionPromises = tests.map(({ name, status }) => {
+          return agent.use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            expect(testSpan.parent_id.toString()).to.equal('0')
+            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.meta).to.contain({
+              language: 'javascript',
+              service: 'test',
+              [TEST_NAME]: name,
+              [TEST_STATUS]: status,
+              [TEST_FRAMEWORK]: 'jest',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-focus.js'
+            })
+          })
+        })
+
+        Promise.all(assertionPromises).then(() => done()).catch(done)
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-circus-focus.js'
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        )
+      })
 
       it('should work with integrations', (done) => {
         agent.use(trace => {

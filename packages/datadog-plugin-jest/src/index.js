@@ -11,7 +11,8 @@ const {
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestEnvironmentMetadata,
-  getTestParentSpan
+  getTestParentSpan,
+  TEST_PARAMETERS
 } = require('../../dd-trace/src/plugins/util/test')
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -20,7 +21,7 @@ const { AUTO_KEEP } = require('../../../ext/priority')
 function getTestSpanMetadata (tracer, test) {
   const childOf = getTestParentSpan(tracer)
 
-  const { suite, name, runner } = test
+  const { suite, name, runner, testParameters } = test
 
   return {
     childOf,
@@ -32,7 +33,8 @@ function getTestSpanMetadata (tracer, test) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_FRAMEWORK_VERSION]: tracer._version,
     [RESOURCE_NAME]: `${suite}.${name}`,
-    [JEST_TEST_RUNNER]: runner
+    [JEST_TEST_RUNNER]: runner,
+    [TEST_PARAMETERS]: testParameters
   }
 }
 
@@ -64,7 +66,6 @@ class JestPlugin extends Plugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
 
     this.addSub('ci:jest:test:start', (test) => {
-      debugger
       const store = storage.getStore()
       const span = this.startTestSpan(test)
 
@@ -72,7 +73,6 @@ class JestPlugin extends Plugin {
     })
 
     this.addSub('ci:jest:test:end', () => {
-      debugger
       const span = storage.getStore().span
 
       if (!span._spanContext._tags[TEST_STATUS]) {

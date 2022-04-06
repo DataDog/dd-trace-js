@@ -10,8 +10,11 @@ const testErrCh = channel('ci:jest:test:err')
 const testSuiteEnd = channel('ci:jest:test-suite:end')
 
 const {
-  getTestSuitePath
+  getTestSuitePath,
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
+
+const { getFormattedJestTestParameters } = require('../../datadog-plugin-jest/src/util')
 
 function getWrappedEnvironment (NodeEnvironment) {
   return class DatadogEnvironment extends NodeEnvironment {
@@ -19,10 +22,12 @@ function getWrappedEnvironment (NodeEnvironment) {
       super(config, context)
       this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
       this.ar = new AsyncResource('bound-anonymous-fn')
+      this.nameToParams = {}
     }
     async teardown () {
-      await super.teardown()
-      testSuiteEnd.publish()
+      super.teardown().finally(() => {
+        testSuiteEnd.publish()
+      })
     }
 
     async handleTestEvent (event, state) {
@@ -36,11 +41,28 @@ function getWrappedEnvironment (NodeEnvironment) {
         } else {
           context = this.context
         }
+
+        const setNameToParams = (name, params) => { this.nameToParams[name] = params }
+
+        if (event.name === 'setup') {
+          shimmer.wrap(this.global.test, 'each', each => function () {
+            const testParameters = getFormattedJestTestParameters(arguments)
+            const eachBind = each.apply(this, arguments)
+            return function () {
+              const [testName] = arguments
+              setNameToParams(testName, testParameters)
+              return eachBind.apply(this, arguments)
+            }
+          })
+        }
         if (event.name === 'test_start') {
+          const testParameters = getTestParametersString(this.nameToParams, event.test.name)
+
           testStartCh.publish({
             name: context.expect.getState().currentTestName,
             suite: this.testSuite,
-            runner: 'jest-circus'
+            runner: 'jest-circus',
+            testParameters
           })
           this.originalTestFn = event.test.fn
           event.test.fn = this.ar.bind(event.test.fn)

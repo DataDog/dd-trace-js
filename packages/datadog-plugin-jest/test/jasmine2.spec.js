@@ -146,8 +146,6 @@ describe('Plugin', () => {
       // TODO focused tests
 
       // TODO integration
-
-      // TODO test with jsdom
     })
   })
 })
