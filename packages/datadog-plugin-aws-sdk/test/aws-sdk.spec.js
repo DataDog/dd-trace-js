@@ -130,7 +130,7 @@ describe('Plugin', () => {
         before(() => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
-          const endpoint = new AWS.Endpoint('http://localhost:4572')
+          const endpoint = new AWS.Endpoint('http://localhost:5000')
 
           s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
@@ -141,6 +141,11 @@ describe('Plugin', () => {
             hooks: {
               request (span, response) {
                 span.setTag('hook.operation', response.request.operation)
+                if (response.error.code === 'NetworkingError' || response.error.code === 'UnknownEndpoint') {
+                  span.addTags({
+                    'error': 0
+                  })
+                }
               }
             }
           })
@@ -153,19 +158,18 @@ describe('Plugin', () => {
         it('should be configured', (done) => {
           agent.use(traces => {
             const span = sort(traces[0])[0]
-
             expect(span).to.include({
               name: 'aws.request',
               resource: 'listBuckets',
               service: 'test'
             })
-
+            expect(span).to.have.property('error', 0)
             expect(span.meta).to.include({
               'hook.operation': 'listBuckets'
             })
           }).then(done, done)
 
-          s3.listBuckets(() => {})
+          s3.listBuckets({}, () => {})
         })
       })
 
