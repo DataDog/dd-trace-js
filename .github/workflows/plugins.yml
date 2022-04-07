@@ -1,6 +1,9 @@
 name: Plugins
 
-on: push
+on:
+  push:
+  schedule:
+    - cron: '0 4 * * *'
 
 # TODO: upstream jobs
 

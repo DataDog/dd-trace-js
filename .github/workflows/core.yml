@@ -1,6 +1,9 @@
 name: Core
 
-on: push
+on:
+  push:
+  schedule:
+    - cron: '0 4 * * *'
 
 jobs:
   shimmer:
