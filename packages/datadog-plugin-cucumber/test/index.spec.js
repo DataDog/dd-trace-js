@@ -18,8 +18,7 @@ const {
   CI_APP_ORIGIN,
   ERROR_MESSAGE,
   TEST_SKIP_REASON,
-  TEST_FRAMEWORK_VERSION,
-  TEST_CODE_OWNERS
+  TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
@@ -86,8 +85,7 @@ describe('Plugin', function () {
               [TEST_NAME]: 'pass scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_STATUS]: 'pass',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js'])
+              [TEST_STATUS]: 'pass'
             })
             expect(testSpan.metrics).to.contain({
               [SAMPLING_PRIORITY]: AUTO_KEEP
