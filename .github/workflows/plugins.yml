@@ -100,6 +100,20 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn codecov
 
+  axios:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: axios
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:upstream
+      - run: yarn codecov
+
   bluebird:
     runs-on: ubuntu-latest
     env:
@@ -124,8 +138,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - run: yarn codecov
 
   cassandra:
@@ -179,8 +195,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - run: yarn codecov
 
   cucumber:
@@ -339,8 +357,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - run: yarn codecov
 
   # The grpc version ranges we support only support up to Node 12.
@@ -467,8 +487,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - run: yarn codecov
 
   limitd-client:
@@ -686,6 +708,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn codecov
 
+  # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
     runs-on: ubuntu-latest
     env:
@@ -696,8 +719,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      # - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      # - run: yarn test:plugins:upstream
       - run: yarn codecov
 
   # The pg version range we support doesn't work beyond Node 12.
@@ -732,8 +757,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - run: yarn codecov
 
   promise-js:

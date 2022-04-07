@@ -190,58 +190,6 @@ jobs:
           name: CI Visibility Performance Overhead Test
           command: yarn bench:e2e:ci-visibility
 
-  # Plugin upstream tests
-
-  node-upstream-amqp10:
-    <<: *node-upstream-base
-    docker:
-      - image: node:<< parameters.node-version >>
-        environment:
-          - SERVICES=qpid
-          - PLUGINS=amqp10
-      - image: scholzj/qpid-cpp:1.38.0
-        command: -p 5673
-        environment:
-          - QPIDD_ADMIN_USERNAME=admin
-          - QPIDD_ADMIN_PASSWORD=admin
-
-  node-upstream-amqplib:
-    <<: *node-upstream-base
-    resource_class: medium
-    docker:
-      - image: node:<< parameters.node-version >>
-        environment:
-          - SERVICES=rabbitmq
-          - PLUGINS=amqplib
-      - image: rabbitmq:3.6-alpine
-
-  node-upstream-axios: *node-upstream-base
-
-  node-upstream-bunyan: *node-upstream-base
-
-  node-upstream-connect: *node-upstream-base
-
-  node-upstream-couchbase:
-    <<: *node-upstream-base
-    docker:
-      - image: node:<< parameters.node-version >>
-        environment:
-          - SERVICES=couchbase
-          - PLUGINS=couchbase
-      - image: rishabhdev/couchbase-server-sandbox:latest
-
-  node-upstream-graphql: *node-upstream-base
-
-  node-upstream-koa:
-    <<: *node-upstream-base
-    resource_class: large
-
-  node-upstream-pino: *node-upstream-base
-
-  node-upstream-promise: *node-upstream-base
-
-  node-upstream-q: *node-upstream-base
-
   # Node upstream tests
 
   node-upstream-node:
@@ -304,21 +252,6 @@ workflows:
             - node-bench-sirun-plugin-graphql
             - node-bench-sirun-appsec
       - node-ci-visibility-performance-benchmark
-  upstream: &upstream-jobs
-    jobs:
-      # - node-upstream-node
-      - node-upstream-axios: &matrix-supported-node-versions
-          matrix:
-            parameters:
-              node-version: ["12", "14", "16", "latest"]
-      - node-upstream-bunyan: *matrix-supported-node-versions
-      - node-upstream-connect: *matrix-supported-node-versions
-      - node-upstream-graphql: *matrix-supported-node-versions
-      - node-upstream-koa: *matrix-supported-node-versions
-      # TODO: re-enable if it ever stops being flaky
-      # - node-upstream-pino: *matrix-supported-node-versions
-      - node-upstream-promise: *matrix-supported-node-versions
-      - node-upstream-q: *matrix-supported-node-versions
 
   nightly-bench:
     triggers:
@@ -330,14 +263,3 @@ workflows:
                 - master
                 - profiler
     <<: *bench-jobs
-
-  nightly-upstream:
-    triggers:
-      - schedule:
-          cron: "0 0 * * *"
-          filters:
-            branches:
-              only:
-                - master
-                - profiler
-    <<: *upstream-jobs
