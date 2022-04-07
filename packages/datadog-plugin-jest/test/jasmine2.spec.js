@@ -215,8 +215,6 @@ describe('Plugin', () => {
           options.projects
         )
       })
-
-      // TODO stack frames include our files??
     })
   })
 })

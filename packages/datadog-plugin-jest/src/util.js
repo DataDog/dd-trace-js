@@ -38,27 +38,4 @@ function getFormattedJestTestParameters (testParameters) {
   return formattedParameters
 }
 
-function getTestSpanTags (tracer, testEnvironmentMetadata) {
-  const childOf = getTestParentSpan(tracer)
-
-  const commonSpanTags = {
-    [TEST_TYPE]: 'test',
-    [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [SPAN_TYPE]: 'test',
-    ...testEnvironmentMetadata
-  }
-  return {
-    childOf,
-    commonSpanTags
-  }
-}
-
-function setSuppressedErrors (suppressedErrors, testSpan) {
-  if (suppressedErrors && suppressedErrors.length) {
-    testSpan.setTag('error', suppressedErrors[0])
-    testSpan.setTag(TEST_STATUS, 'fail')
-  }
-}
-
-module.exports = { getFormattedJestTestParameters, getTestSpanTags, setSuppressedErrors }
+module.exports = { getFormattedJestTestParameters }

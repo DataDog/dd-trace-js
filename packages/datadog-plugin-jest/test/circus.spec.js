@@ -300,7 +300,6 @@ describe('Plugin', function () {
           options.projects
         )
       })
-      // TODO stack frames include our files??
     })
   })
 })
