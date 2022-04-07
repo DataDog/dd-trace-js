@@ -28,24 +28,6 @@ commands:
           paths:
             - ./node_modules
             - ./yarn.lock
-  store-test-results-and-coverage:
-    steps:
-      - store_test_results:
-          path: test-results
-          when: always
-      - run:
-          name: Upload JUnit XML Report
-          command: yarn junit:upload
-          when: always
-      - run:
-          name: Merge coverage report
-          command: yarn cover:merge
-      - store_artifacts:
-          path: ./coverage
-      - persist_to_workspace:
-          root: ~/dd-trace-js
-          paths:
-            - .nyc_merge/*
 
 node-bench-base: &node-bench-base
   resource_class: small
