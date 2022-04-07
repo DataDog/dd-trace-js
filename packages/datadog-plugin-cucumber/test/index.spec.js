@@ -23,6 +23,7 @@ const {
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
+  const stderr = new PassThrough()
   const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
   const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
   const argv = [
@@ -37,7 +38,9 @@ const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const cli = new Cucumber.Cli({
     argv,
     cwd,
-    stdout
+    stdout,
+    stderr,
+    env: process.env
   })
 
   return cli.run()
