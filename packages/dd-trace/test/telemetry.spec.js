@@ -21,7 +21,7 @@ describe('telemetry', () => {
     global.setInterval = (fn, interval) => {
       expect(interval).to.equal(60000)
       // we only want one of these
-      return setImmediate(fn)
+      return setTimeout(fn, 100)
     }
 
     // I'm not sure how, but some other test in some other file keeps context
@@ -213,7 +213,7 @@ async function testSeq (seqId, reqType, validatePayload) {
       container_id: 'test docker id'
     }
   })
-  expect(Math.floor(Date.now() / 1000 - req.body.tracer_time)).to.equal(0)
+  expect([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time)).to.be.true
 
   validatePayload(req.body.payload)
 }
