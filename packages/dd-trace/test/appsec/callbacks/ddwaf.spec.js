@@ -123,7 +123,11 @@ describe('WAFCallback', () => {
     beforeEach(() => {
       sinon.stub(WAFCallback, 'loadDDWAF').returns({
         createContext: sinon.spy(() => ({
-          run: sinon.stub().returns({ action: 'monitor', data: '[]' })
+          run: sinon.stub().returns({ action: 'monitor', data: '[]' }),
+          dispose: sinon.stub(),
+          get disposed () {
+            return this.dispose.called
+          }
         })),
         dispose: sinon.stub()
       })
@@ -151,6 +155,7 @@ describe('WAFCallback', () => {
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(wafContext.dispose).to.have.been.calledOnce
       })
 
       it('should create wafContext and cache it', () => {
@@ -163,6 +168,7 @@ describe('WAFCallback', () => {
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(wafContext.dispose).to.have.been.calledOnce
       })
 
       it('should create wafContext and not cache it when no request context is found', () => {
@@ -175,6 +181,7 @@ describe('WAFCallback', () => {
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(waf.ddwaf.createContext.firstCall.returnValue.dispose).to.have.been.calledOnce
       })
 
       it('should create wafContext and not cache it when no store is passed', () => {
@@ -185,6 +192,37 @@ describe('WAFCallback', () => {
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, undefined)
+        expect(waf.ddwaf.createContext.firstCall.returnValue.dispose).to.have.been.calledOnce
+      })
+
+      it('should create wafContext and not cache it when found wafContext is disposed', () => {
+        sinon.spy(waf.wafContextCache, 'set')
+
+        const wafContext = waf.ddwaf.createContext()
+
+        wafContext.dispose()
+
+        waf.wafContextCache.set(store.get('context'), wafContext)
+
+        waf.ddwaf.createContext.resetHistory()
+        waf.wafContextCache.set.resetHistory()
+        wafContext.dispose.resetHistory()
+
+        sinon.stub(wafContext, 'disposed').get(() => true)
+
+        waf.action({ a: 1, b: 2 }, store)
+
+        expect(waf.ddwaf.createContext).to.have.been.calledOnce
+        expect(waf.wafContextCache.set).to.not.have.been.called
+
+        expect(wafContext.run).to.not.have.been.called
+        expect(wafContext.dispose).to.not.have.been.called
+
+        const newWafContext = waf.ddwaf.createContext.firstCall.returnValue
+        expect(newWafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
+        expect(newWafContext.dispose).to.have.been.calledOnce
+
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
       })
 
       it('should cast status code into string', () => {
@@ -211,6 +249,8 @@ describe('WAFCallback', () => {
             b: '2'
           }
         }, DEFAULT_MAX_BUDGET)
+
+        expect(wafContext.dispose).to.have.been.calledOnce
       })
 
       it('should catch and log exceptions', () => {
@@ -218,9 +258,9 @@ describe('WAFCallback', () => {
 
         const err = new Error('Empty params')
 
-        const wafContext = {
-          run: sinon.stub().throws(err)
-        }
+        const wafContext = waf.ddwaf.createContext()
+
+        wafContext.run.throws(err)
 
         waf.wafContextCache.set(store.get('context'), wafContext)
 
@@ -230,6 +270,7 @@ describe('WAFCallback', () => {
         expect(log.error).to.have.been.calledTwice
         expect(log.error.firstCall).to.have.been.calledWithExactly('Error while running the AppSec WAF')
         expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+        expect(wafContext.dispose).to.have.been.calledOnce
       })
     })
 
