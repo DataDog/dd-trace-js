@@ -108,6 +108,13 @@ export declare interface Tracer extends opentracing.Tracer {
    * should not be cached.
    */
   getRumData(): string;
+
+  /**
+   * Links an authenticated user to the current trace.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @returns {Tracer} The Tracer instance for chaining.
+   */
+  setUser(user: User): Tracer;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -267,6 +274,12 @@ export declare interface TracerOptions {
   flushInterval?: number;
 
   /**
+   *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
+   * @default 1000
+   */
+   flushMinSpans?: number;
+
+  /**
    * Whether to enable runtime metrics.
    * @default false
    */
@@ -305,6 +318,7 @@ export declare interface TracerOptions {
    */
   experimental?: boolean | {
     b3?: boolean
+    traceparent?: boolean
 
     /**
      * Whether to add an auto-generated `runtime-id` tag to metrics.
@@ -416,6 +430,49 @@ export declare interface TracerOptions {
      */
     rateLimit?: number
   };
+}
+
+/**
+ * User object that can be passed to `tracer.setUser()`.
+ */
+ export declare interface User {
+  /**
+   * Unique identifier of the user.
+   * Mandatory.
+   */
+  id: string,
+
+  /**
+   * Email of the user.
+   */
+  email?: string,
+
+  /**
+   * User-friendly name of the user.
+   */
+  name?: string,
+
+  /**
+   * Session ID of the user.
+   */
+  session_id?: string,
+
+  /**
+   * Role the user is making the request under.
+   */
+  role?: string,
+
+  /**
+   * Scopes or granted authorizations the user currently possesses.
+   * The value could come from the scope associated with an OAuth2
+   * Access Token or an attribute value in a SAML 2 Assertion.
+   */
+  scope?: string,
+
+  /**
+   * Custom fields to attach to the user (RBAC, Oauth, etc…).
+   */
+  [key: string]: string | undefined
 }
 
 /** @hidden */

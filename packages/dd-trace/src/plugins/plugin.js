@@ -8,7 +8,6 @@ class Subscription {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
       const store = storage.getStore()
-
       if (!store || !store.noop) {
         handler(message, name)
       }
@@ -58,6 +57,9 @@ module.exports = class Plugin {
   }
 
   configure (config) {
+    if (typeof config === 'boolean') {
+      config = { enabled: config }
+    }
     this.config = config
     if (config.enabled && !this._enabled) {
       this._enabled = true

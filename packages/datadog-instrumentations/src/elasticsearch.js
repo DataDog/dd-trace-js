@@ -35,18 +35,20 @@ function wrapRequest (request) {
 
     if (!params) return request.apply(this, arguments)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const parentResource = new AsyncResource('bound-anonymous-fn')
 
     startCh.publish({ params })
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     try {
       const lastIndex = arguments.length - 1
       cb = arguments[lastIndex]
 
       if (typeof cb === 'function') {
-        cb = asyncResource.bind(cb)
+        cb = parentResource.bind(cb)
 
-        arguments[lastIndex] = AsyncResource.bind(function (error) {
+        arguments[lastIndex] = asyncResource.bind(function (error) {
           finish(params, error)
           return cb.apply(null, arguments)
         })
@@ -54,7 +56,10 @@ function wrapRequest (request) {
       } else {
         const promise = request.apply(this, arguments)
         if (promise && typeof promise.then === 'function') {
-          promise.then(() => finish(params), e => finish(params, e))
+          const onResolve = asyncResource.bind(() => finish(params))
+          const onReject = asyncResource.bind(e => finish(params, e))
+
+          promise.then(onResolve, onReject)
         } else {
           finish(params)
         }

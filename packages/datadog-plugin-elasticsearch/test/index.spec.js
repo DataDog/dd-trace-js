@@ -1,10 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-
-// Retries and the initial request result in a trace with multiple spans.
-// The last span is the one that actually did the query.
-const last = spans => spans[spans.length - 1]
+const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 
 describe('Plugin', () => {
   let elasticsearch
@@ -38,10 +35,14 @@ describe('Plugin', () => {
           })
         })
 
+        afterEach(() => {
+          unbreakThen(Promise.prototype)
+        })
+
         it('should sanitize the resource name', done => {
           agent
             .use(traces => {
-              expect(last(traces[0])).to.have.property('resource', 'POST /logstash-?.?.?/_search')
+              expect(traces[0][0]).to.have.property('resource', 'POST /logstash-?.?.?/_search')
             })
             .then(done)
             .catch(done)
@@ -55,15 +56,15 @@ describe('Plugin', () => {
         it('should set the correct tags', done => {
           agent
             .use(traces => {
-              expect(last(traces[0]).meta).to.have.property('db.type', 'elasticsearch')
-              expect(last(traces[0]).meta).to.have.property('span.kind', 'client')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.method', 'POST')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.url', '/docs/_search')
+              expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
               if (hasCallbackSupport) {
-                expect(last(traces[0]).meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
-                expect(last(traces[0]).meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
+                expect(traces[0][0].meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
+                expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
               } else {
-                expect(last(traces[0]).meta).to.have.property(
+                expect(traces[0][0].meta).to.have.property(
                   'elasticsearch.body',
                   '{"query":{"match_all":{}},"sort":"name","size":100}'
                 )
@@ -87,15 +88,15 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .use(traces => {
-              expect(last(traces[0]).meta).to.have.property('db.type', 'elasticsearch')
-              expect(last(traces[0]).meta).to.have.property('span.kind', 'client')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.method', 'POST')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.url', '/_msearch')
-              expect(last(traces[0]).meta).to.have.property(
+              expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/_msearch')
+              expect(traces[0][0].meta).to.have.property(
                 'elasticsearch.body',
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.params', '{"size":100}')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"size":100}')
             })
             .then(done)
             .catch(done)
@@ -122,7 +123,7 @@ describe('Plugin', () => {
         it('should skip tags for unavailable fields', done => {
           agent
             .use(traces => {
-              expect(last(traces[0]).meta).to.not.have.property('elasticsearch.body')
+              expect(traces[0][0].meta).to.not.have.property('elasticsearch.body')
             })
             .then(done)
             .catch(done)
@@ -139,9 +140,9 @@ describe('Plugin', () => {
             it('should do automatic instrumentation', done => {
               agent
                 .use(traces => {
-                  expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
-                  expect(last(traces[0])).to.have.property('resource', 'HEAD /')
-                  expect(last(traces[0])).to.have.property('type', 'elasticsearch')
+                  expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
+                  expect(traces[0][0]).to.have.property('resource', 'HEAD /')
+                  expect(traces[0][0]).to.have.property('type', 'elasticsearch')
                 })
                 .then(done)
                 .catch(done)
@@ -152,8 +153,8 @@ describe('Plugin', () => {
             it('should propagate context', done => {
               agent
                 .use(traces => {
-                  expect(last(traces[0])).to.have.property('parent_id')
-                  expect(last(traces[0]).parent_id).to.not.be.null
+                  expect(traces[0][0]).to.have.property('parent_id')
+                  expect(traces[0][0].parent_id).to.not.be.null
                 })
                 .then(done)
                 .catch(done)
@@ -177,9 +178,9 @@ describe('Plugin', () => {
 
               agent
                 .use(traces => {
-                  expect(last(traces[0]).meta).to.have.property('error.type', error.name)
-                  expect(last(traces[0]).meta).to.have.property('error.msg', error.message)
-                  expect(last(traces[0]).meta).to.have.property('error.stack', error.stack)
+                  expect(traces[0][0].meta).to.have.property('error.type', error.name)
+                  expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+                  expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
                 })
                 .then(done)
                 .catch(done)
@@ -201,9 +202,9 @@ describe('Plugin', () => {
           it('should do automatic instrumentation', done => {
             agent
               .use(traces => {
-                expect(last(traces[0])).to.have.property('service', 'test-elasticsearch')
-                expect(last(traces[0])).to.have.property('resource', 'HEAD /')
-                expect(last(traces[0])).to.have.property('type', 'elasticsearch')
+                expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
+                expect(traces[0][0]).to.have.property('resource', 'HEAD /')
+                expect(traces[0][0]).to.have.property('type', 'elasticsearch')
               })
               .then(done)
               .catch(done)
@@ -214,8 +215,8 @@ describe('Plugin', () => {
           it('should propagate context', done => {
             agent
               .use(traces => {
-                expect(last(traces[0])).to.have.property('parent_id')
-                expect(last(traces[0]).parent_id).to.not.be.null
+                expect(traces[0][0]).to.have.property('parent_id')
+                expect(traces[0][0].parent_id).to.not.be.null
               })
               .then(done)
               .catch(done)
@@ -233,9 +234,9 @@ describe('Plugin', () => {
             let error
 
             agent.use(traces => {
-              expect(last(traces[0]).meta).to.have.property('error.type', error.name)
-              expect(last(traces[0]).meta).to.have.property('error.msg', error.message)
-              expect(last(traces[0]).meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property('error.type', error.name)
+              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
             })
               .then(done)
               .catch(done)
@@ -254,6 +255,21 @@ describe('Plugin', () => {
                 promise.abort()
               }
             }).not.to.throw()
+          })
+
+          it('should work with userland promises', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
+                expect(traces[0][0]).to.have.property('resource', 'HEAD /')
+                expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+              })
+              .then(done)
+              .catch(done)
+
+            breakThen(Promise.prototype)
+
+            client.ping().catch(done)
           })
         })
       })
@@ -295,9 +311,9 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(last(traces[0])).to.have.property('service', 'test')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.params', 'foo')
-              expect(last(traces[0]).meta).to.have.property('elasticsearch.method', 'POST')
+              expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.params', 'foo')
+              expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
             })
             .then(done)
             .catch(done)

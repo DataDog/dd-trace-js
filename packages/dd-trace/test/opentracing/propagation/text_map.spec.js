@@ -95,43 +95,6 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-datadog-origin', 'synthetics')
     })
 
-    it('should inject trace tags prefixed for propagation', () => {
-      const carrier = {}
-      const spanContext = new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('-456', 10),
-        trace: {
-          tags: {
-            '_dd.p.foo': 'foo',
-            'bar': 'bar',
-            '_dd.p.baz': 'baz'
-          }
-        }
-      })
-
-      propagator.inject(spanContext, carrier)
-
-      expect(carrier).to.have.property('x-datadog-tags', '_dd.p.foo=foo,_dd.p.baz=baz')
-    })
-
-    it('should drop trace tags if too large', () => {
-      const carrier = {}
-      const spanContext = new SpanContext({
-        traceId: id('123', 10),
-        spanId: id('-456', 10),
-        trace: {
-          tags: {
-            '_dd.p.foo': 'a'.repeat(512)
-          }
-        }
-      })
-
-      propagator.inject(spanContext, carrier)
-
-      expect(carrier).to.not.have.property('x-datadog-tags')
-      expect(spanContext._trace.tags).to.have.property('_dd.propagation_error:max_size', 1)
-    })
-
     it('should inject the trace B3 headers', () => {
       const carrier = {}
       const spanContext = new SpanContext({
@@ -152,6 +115,23 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-b3-parentspanid', '0000000000000789')
       expect(carrier).to.have.property('x-b3-sampled', '1')
       expect(carrier).to.have.property('x-b3-flags', '1')
+    })
+
+    it('should inject the traceparent header', () => {
+      const carrier = {}
+      const spanContext = new SpanContext({
+        traceId: id('123', 16),
+        spanId: id('456', 16),
+        sampling: {
+          priority: USER_KEEP
+        }
+      })
+
+      config.experimental.traceparent = true
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('traceparent', '01-00000000000000000000000000000123-0000000000000456-01')
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {
@@ -207,18 +187,6 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext._trace).to.have.property('origin', 'synthetics')
-    })
-
-    it('should extract trace tags', () => {
-      textMap['x-datadog-tags'] = 'foo=bar,baz=qux'
-
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
-
-      expect(spanContext._trace.tags).to.include({
-        foo: 'bar',
-        baz: 'qux'
-      })
     })
 
     it('should extract from an aws-sqsd header', () => {
@@ -410,6 +378,37 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.be.null
+      })
+    })
+
+    describe('With traceparent propagation as single header', () => {
+      beforeEach(() => {
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+      })
+
+      it('should skip extraction without the feature flag', () => {
+        textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
+        config.experimental.traceparent = false
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        expect(spanContext).to.be.null
+      })
+
+      it('should extract the header', () => {
+        textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
+        config.experimental.traceparent = true
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        expect(spanContext).to.deep.equal(new SpanContext({
+          traceId: id('4d2', 16),
+          spanId: id('162e', 16),
+          sampling: {
+            priority: AUTO_KEEP
+          }
+        }))
       })
     })
   })

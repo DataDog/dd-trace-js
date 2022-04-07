@@ -69,6 +69,7 @@ tracer.init({
     port: 8888
   },
   flushInterval: 1000,
+  flushMinSpans: 500,
   lookup: () => {},
   sampleRate: 0.1,
   service: 'test',
@@ -335,4 +336,12 @@ scope.bind(emitter, span);
 
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
+})
+
+const result: Tracer = tracer.setUser({ id: '123' })
+
+tracer.setUser({
+  id: '123',
+  email: 'a@b.c',
+  custom: 'hello'
 })

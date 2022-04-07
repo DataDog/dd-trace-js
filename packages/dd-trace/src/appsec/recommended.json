@@ -1,10 +1,12 @@
 {
-  "version": "2.1",
-  "a": "a",
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.3.1"
+  },
   "rules": [
     {
       "id": "crs-913-110",
-      "name": "Found request header associated with Acunetix security scanner",
+      "name": "Acunetix",
       "tags": {
         "type": "security_scanner",
         "crs_id": "913110",
@@ -22,7 +24,8 @@
               "acunetix-product",
               "(acunetix web vulnerability scanner",
               "acunetix-scanning-agreement",
-              "acunetix-user-agreement"
+              "acunetix-user-agreement",
+              "md5(acunetix_wvs_security_test)"
             ]
           },
           "operator": "phrase_match"
@@ -34,7 +37,7 @@
     },
     {
       "id": "crs-913-120",
-      "name": "Found request filename/argument associated with security scanner",
+      "name": "Known security scanner filename/argument",
       "tags": {
         "type": "security_scanner",
         "crs_id": "913120",
@@ -229,7 +232,9 @@
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "normalizePath"
+      ]
     },
     {
       "id": "crs-930-110",
@@ -276,9 +281,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -292,53 +294,54 @@
               }
             ],
             "list": [
-              ".htaccess",
-              ".htdigest",
-              ".htpasswd",
-              ".addressbook",
-              ".aptitude/config",
-              ".bash_config",
-              ".bash_history",
-              ".bash_logout",
-              ".bash_profile",
-              ".bashrc",
+              "/.htaccess",
+              "/.htdigest",
+              "/.htpasswd",
+              "/.addressbook",
+              "/.aptitude/config",
+              "/.bash_config",
+              "/.bash_history",
+              "/.bash_logout",
+              "/.bash_profile",
+              "/.bashrc",
               ".cache/notify-osd.log",
               ".config/odesk/odesk team.conf",
-              ".cshrc",
-              ".dockerignore",
+              "/.cshrc",
+              "/.dockerignore",
               ".drush/",
-              ".eslintignore",
-              ".fbcindex",
-              ".forward",
-              ".git",
-              ".gitattributes",
-              ".gitconfig",
+              "/.eslintignore",
+              "/.fbcindex",
+              "/.forward",
+              "/.git",
+              ".git/",
+              "/.gitattributes",
+              "/.gitconfig",
               ".gnupg/",
               ".hplip/hplip.conf",
-              ".ksh_history",
-              ".lesshst",
+              "/.ksh_history",
+              "/.lesshst",
               ".lftp/",
-              ".lhistory",
-              ".lldb-history",
+              "/.lhistory",
+              "/.lldb-history",
               ".local/share/mc/",
-              ".lynx_cookies",
-              ".my.cnf",
-              ".mysql_history",
-              ".nano_history",
-              ".node_repl_history",
-              ".pearrc",
-              ".php_history",
-              ".pinerc",
+              "/.lynx_cookies",
+              "/.my.cnf",
+              "/.mysql_history",
+              "/.nano_history",
+              "/.node_repl_history",
+              "/.pearrc",
+              "/.php_history",
+              "/.pinerc",
               ".pki/",
-              ".proclog",
-              ".procmailrc",
-              ".psql_history",
-              ".python_history",
-              ".rediscli_history",
-              ".rhistory",
-              ".rhosts",
-              ".sh_history",
-              ".sqlite_history",
+              "/.proclog",
+              "/.procmailrc",
+              "/.psql_history",
+              "/.python_history",
+              "/.rediscli_history",
+              "/.rhistory",
+              "/.rhosts",
+              "/.sh_history",
+              "/.sqlite_history",
               ".ssh/authorized_keys",
               ".ssh/config",
               ".ssh/id_dsa",
@@ -352,17 +355,17 @@
               ".subversion/config",
               ".subversion/servers",
               ".tconn/tconn.conf",
-              ".tcshrc",
+              "/.tcshrc",
               ".vidalia/vidalia.conf",
-              ".viminfo",
-              ".vimrc",
-              ".www_acl",
-              ".wwwacl",
-              ".xauthority",
-              ".zhistory",
-              ".zshrc",
-              ".zsh_history",
-              ".nsconfig",
+              "/.viminfo",
+              "/.vimrc",
+              "/.www_acl",
+              "/.wwwacl",
+              "/.xauthority",
+              "/.zhistory",
+              "/.zshrc",
+              "/.zsh_history",
+              "/.nsconfig",
               "etc/redis.conf",
               "etc/redis-sentinel.conf",
               "etc/php.ini",
@@ -1344,26 +1347,26 @@
               "etc/vmware-tools/vmware-tools-libraries.conf",
               "var/log/vmware/hostd.log",
               "var/log/vmware/hostd-1.log",
-              "wp-config.php",
-              "wp-config.bak",
-              "wp-config.old",
-              "wp-config.temp",
-              "wp-config.tmp",
-              "wp-config.txt",
-              "config.yml",
-              "config_dev.yml",
-              "config_prod.yml",
-              "config_test.yml",
-              "parameters.yml",
-              "routing.yml",
-              "security.yml",
-              "services.yml",
+              "/wp-config.php",
+              "/wp-config.bak",
+              "/wp-config.old",
+              "/wp-config.temp",
+              "/wp-config.tmp",
+              "/wp-config.txt",
+              "/config.yml",
+              "/config_dev.yml",
+              "/config_prod.yml",
+              "/config_test.yml",
+              "/parameters.yml",
+              "/routing.yml",
+              "/security.yml",
+              "/services.yml",
               "sites/default/default.settings.php",
               "sites/default/settings.php",
               "sites/default/settings.local.php",
               "app/etc/local.xml",
-              "sftp-config.json",
-              "web.config",
+              "/sftp-config.json",
+              "/web.config",
               "includes/config.php",
               "includes/configure.php",
               "config.inc.php",
@@ -1387,26 +1390,27 @@
               "system32/config/system",
               "system32/config/software",
               "winnt/repair/sam._",
-              "package.json",
-              "package-lock.json",
-              "gruntfile.js",
-              "npm-debug.log",
-              "ormconfig.json",
-              "tsconfig.json",
-              "webpack.config.js",
-              "yarn.lock"
+              "/package.json",
+              "/package-lock.json",
+              "/gruntfile.js",
+              "/npm-debug.log",
+              "/ormconfig.json",
+              "/tsconfig.json",
+              "/webpack.config.js",
+              "/yarn.lock"
             ]
           },
           "operator": "phrase_match"
         }
       ],
       "transformers": [
-        "lowercase"
+        "lowercase",
+        "normalizePath"
       ]
     },
     {
       "id": "crs-931-110",
-      "name": "Possible Remote File Inclusion (RFI) Attack: Common RFI Vulnerable Parameter Name used w/URL Payload",
+      "name": "RFI: Common RFI Vulnerable Parameter Name used w/ URL Payload",
       "tags": {
         "type": "rfi",
         "crs_id": "931110",
@@ -1432,7 +1436,7 @@
     },
     {
       "id": "crs-931-120",
-      "name": "Possible Remote File Inclusion (RFI) Attack: URL Payload Used w/Trailing Question Mark Character (?)",
+      "name": "RFI: URL Payload Used w/Trailing Question Mark Character (?)",
       "tags": {
         "type": "rfi",
         "crs_id": "931120",
@@ -1475,9 +1479,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -1776,9 +1777,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -1833,9 +1831,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -1872,9 +1867,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -1909,9 +1901,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -1992,9 +1981,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2029,9 +2015,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.headers.no_cookies"
               },
@@ -2072,9 +2055,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2113,9 +2093,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2151,9 +2128,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
@@ -2199,9 +2173,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
@@ -2252,9 +2223,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
                   "user-agent"
@@ -2303,9 +2271,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.headers.no_cookies",
                 "key_path": [
@@ -2356,9 +2321,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2402,9 +2364,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2442,9 +2401,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -2484,9 +2440,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2525,9 +2478,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2564,9 +2514,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -2607,9 +2554,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2646,9 +2590,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -2687,9 +2628,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2726,9 +2664,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -2767,9 +2702,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2805,9 +2737,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -2845,9 +2774,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2869,44 +2795,6 @@
       ]
     },
     {
-      "id": "crs-942-140",
-      "name": "SQL Injection Attack: Common DB Names Detected",
-      "tags": {
-        "type": "sql_injection",
-        "crs_id": "942140",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              },
-              {
-                "address": "grpc.server.request.message"
-              }
-            ],
-            "regex": "\\b(?:(?:m(?:s(?:ys(?:ac(?:cess(?:objects|storage|xml)|es)|(?:relationship|object|querie)s|modules2?)|db)|aster\\.\\.sysdatabases|ysql\\.db)|pg_(?:catalog|toast)|information_schema|northwind|tempdb)\\b|s(?:(?:ys(?:\\.database_name|aux)|qlite(?:_temp)?_master)\\b|chema(?:_name\\b|\\W*\\())|d(?:atabas|b_nam)e\\W*\\()",
-            "options": {
-              "min_length": 4
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "crs-942-160",
       "name": "Detects blind sqli tests using sleep() or benchmark()",
       "tags": {
@@ -2918,9 +2806,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -2958,9 +2843,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -2984,45 +2866,6 @@
       "transformers": []
     },
     {
-      "id": "crs-942-220",
-      "name": "Looking for integer overflow attacks, these are taken from skipfish, except 2.2.2250738585072011e-308 is the \\\"magic number\\\" crash",
-      "tags": {
-        "type": "sql_injection",
-        "crs_id": "942220",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              },
-              {
-                "address": "grpc.server.request.message"
-              }
-            ],
-            "regex": "^(?i:-0000023456|4294967295|4294967296|2147483648|2147483647|0000012345|-2147483648|-2147483649|0000023456|2.2250738585072007e-308|2.2250738585072011e-308|1e309)$",
-            "options": {
-              "case_sensitive": true,
-              "min_length": 5
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "crs-942-240",
       "name": "Detects MySQL charset switch and MSSQL DoS attempts",
       "tags": {
@@ -3034,9 +2877,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -3073,9 +2913,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -3101,7 +2938,7 @@
     },
     {
       "id": "crs-942-270",
-      "name": "Looking for basic sql injection. Common attack string for mysql, oracle and others",
+      "name": "Basic SQL injection",
       "tags": {
         "type": "sql_injection",
         "crs_id": "942270",
@@ -3111,9 +2948,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -3139,7 +2973,7 @@
     },
     {
       "id": "crs-942-280",
-      "name": "Detects Postgres pg_sleep injection, waitfor delay attacks and database shutdown attempts",
+      "name": "SQL Injection with delay functions",
       "tags": {
         "type": "sql_injection",
         "crs_id": "942280",
@@ -3149,9 +2983,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -3188,9 +3019,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -3212,7 +3040,9 @@
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "keys_only"
+      ]
     },
     {
       "id": "crs-942-360",
@@ -3226,9 +3056,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -3265,9 +3092,6 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.query"
               },
               {
@@ -3303,9 +3127,6 @@
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.cookies"
-              },
               {
                 "address": "server.request.query"
               },
@@ -3349,9 +3170,6 @@
                 "address": "server.request.path_params"
               },
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.headers.no_cookies"
               },
               {
@@ -3393,9 +3211,6 @@
                 "address": "server.request.path_params"
               },
               {
-                "address": "server.request.cookies"
-              },
-              {
                 "address": "server.request.headers.no_cookies"
               },
               {
@@ -3421,9 +3236,6 @@
               },
               {
                 "address": "server.request.path_params"
-              },
-              {
-                "address": "server.request.cookies"
               },
               {
                 "address": "server.request.headers.no_cookies"
@@ -3465,9 +3277,6 @@
               },
               {
                 "address": "server.request.path_params"
-              },
-              {
-                "address": "server.request.cookies"
               },
               {
                 "address": "server.request.headers.no_cookies"
@@ -3527,6 +3336,137 @@
       ],
       "transformers": [
         "lowercase"
+      ]
+    },
+    {
+      "id": "dog-000-001",
+      "name": "Look for Cassandra injections",
+      "tags": {
+        "type": "nosql_injection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "regex": "\\ballow\\s+filtering\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeComments"
+      ]
+    },
+    {
+      "id": "dog-000-002",
+      "name": "OGNL - Look for formatting injection patterns",
+      "tags": {
+        "type": "java_code_injection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "[#%$]{[^}]+[^\\w\\s][^}]+}",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-000-003",
+      "name": "OGNL - Detect OGNL exploitation primitives",
+      "tags": {
+        "type": "java_code_injection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "[@#]ognl",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-000-004",
+      "name": "Spring4Shell - Attempts to exploit the Spring4shell vulnerability",
+      "tags": {
+        "type": "exploit_detection",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "regex": "^class\\.module\\.classLoader\\.",
+            "options": {
+              "case_sensitive": false
+            }
+          }
+        }
+      ],
+      "transformers": [
+        "keys_only"
       ]
     },
     {
@@ -4159,15 +4099,23 @@
           "parameters": {
             "inputs": [
               {
-                "address": "server.request.headers.no_cookies"
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
               }
             ],
-            "regex": "\\$(eq|ne|lte?|gte?|n?in)\\b"
+            "regex": "^\\$(eq|ne|(l|g)te?|n?in|not|(n|x|)or|and|regex|where|expr|exists)$"
           },
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "keys_only"
+      ]
     },
     {
       "id": "sqr-000-008",
@@ -4445,9 +4393,9 @@
     },
     {
       "id": "sqr-000-017",
-      "name": "JNDI: Attempt to exploit log4j CVE-2021-44228",
+      "name": "Log4shell: Attempt to exploit log4j CVE-2021-44228",
       "tags": {
-        "type": "java_code_injection",
+        "type": "exploit_detection",
         "category": "attack_attempt"
       },
       "conditions": [
@@ -5231,31 +5179,6 @@
       "transformers": []
     },
     {
-      "id": "ua0-600-41x",
-      "name": "Acunetix",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              }
-            ],
-            "regex": "md5\\(acunetix_wvs_security_test\\)"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "ua0-600-42x",
       "name": "OpenVAS",
       "tags": {
@@ -5507,7 +5430,7 @@
     },
     {
       "id": "ua0-600-52x",
-      "name": "Nuclei is a fast tool for configurable targeted scanning based on templates offering massive extensibility and ease of use",
+      "name": "Nuclei",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
@@ -5532,7 +5455,7 @@
     },
     {
       "id": "ua0-600-53x",
-      "name": "Tsunami is a general purpose network security scanner with an extensible plugin system for detecting high severity vulnerabilities with high confidence",
+      "name": "Tsunami",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
@@ -5557,7 +5480,7 @@
     },
     {
       "id": "ua0-600-54x",
-      "name": "Nimbostratus is a vulnerability scanner that scan websites unprompted",
+      "name": "Nimbostratus",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"
@@ -5596,6 +5519,12 @@
                 "key_path": [
                   "user-agent"
                 ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
               }
             ],
             "regex": "^dd-test-scanner-log$"
@@ -5607,7 +5536,7 @@
     },
     {
       "id": "ua0-600-5xx",
-      "name": "Blind Sql Injection Brute Forcer",
+      "name": "Blind SQL Injection Brute Forcer",
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt"

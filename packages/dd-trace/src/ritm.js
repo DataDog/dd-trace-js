@@ -10,9 +10,10 @@ const origRequire = Module.prototype.require
 
 module.exports = Hook
 
-Hook.reset = function () {
-  Module.prototype.require = origRequire
-}
+let moduleHooks = Object.create(null)
+let cache = Object.create(null)
+let patching = Object.create(null)
+let patchedRequire = null
 
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
@@ -25,35 +26,40 @@ function Hook (modules, options, onrequire) {
     options = {}
   }
 
+  modules = modules || []
   options = options || {}
 
-  this.cache = {}
-  this._unhooked = false
-  this._origRequire = Module.prototype.require
+  this.modules = modules
+  this.options = options
+  this.onrequire = onrequire
 
-  const self = this
-  const patching = {}
+  if (Array.isArray(modules)) {
+    for (const mod of modules) {
+      const hooks = moduleHooks[mod]
 
-  this._require = Module.prototype.require = function (request) {
-    if (self._unhooked) {
-      // if the patched require function could not be removed because
-      // someone else patched it after it was patched here, we just
-      // abort and pass the request onwards to the original require
-      return self._origRequire.apply(this, arguments)
+      if (hooks) {
+        hooks.push(onrequire)
+      } else {
+        moduleHooks[mod] = [onrequire]
+      }
     }
+  }
 
+  if (patchedRequire) return
+
+  patchedRequire = Module.prototype.require = function (request) {
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
-    let name, basedir
+    let name, basedir, hooks
 
     // return known patched modules immediately
-    if (self.cache.hasOwnProperty(filename)) {
+    if (cache[filename]) {
       // require.cache was potentially altered externally
-      if (require.cache[filename] && require.cache[filename].exports !== self.cache[filename].original) {
+      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
         return require.cache[filename].exports
       }
 
-      return self.cache[filename].exports
+      return cache[filename].exports
     }
 
     // Check if this module has a patcher in-progress already.
@@ -63,7 +69,7 @@ function Hook (modules, options, onrequire) {
       patching[filename] = true
     }
 
-    const exports = self._origRequire.apply(this, arguments)
+    const exports = origRequire.apply(this, arguments)
 
     // If it's already patched, just return it as-is.
     if (patched) return exports
@@ -73,7 +79,8 @@ function Hook (modules, options, onrequire) {
     delete patching[filename]
 
     if (core) {
-      if (modules && modules.indexOf(filename) === -1) return exports // abort if module name isn't on whitelist
+      hooks = moduleHooks[filename]
+      if (!hooks) return exports // abort if module name isn't on whitelist
       name = filename
     } else {
       const stat = parse(filename)
@@ -81,7 +88,8 @@ function Hook (modules, options, onrequire) {
       name = stat.name
       basedir = stat.basedir
 
-      if (modules && modules.indexOf(name) === -1) return exports // abort if module name isn't on whitelist
+      hooks = moduleHooks[name]
+      if (!hooks) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
       const paths = Module._resolveLookupPaths(name, this, true)
@@ -99,10 +107,37 @@ function Hook (modules, options, onrequire) {
 
     // ensure that the cache entry is assigned a value before calling
     // onrequire, in case calling onrequire requires the same module.
-    self.cache[filename] = { exports }
-    self.cache[filename].original = exports
-    self.cache[filename].exports = onrequire(exports, name, basedir)
+    cache[filename] = { exports }
+    cache[filename].original = exports
 
-    return self.cache[filename].exports
+    for (const hook of hooks) {
+      cache[filename].exports = hook(cache[filename].exports, name, basedir)
+    }
+
+    return cache[filename].exports
+  }
+}
+
+Hook.reset = function () {
+  Module.prototype.require = origRequire
+  patchedRequire = null
+  patching = Object.create(null)
+  cache = Object.create(null)
+  moduleHooks = Object.create(null)
+}
+
+Hook.prototype.unhook = function () {
+  for (const mod of this.modules) {
+    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
+
+    if (hooks.length > 0) {
+      moduleHooks[mod] = hooks
+    } else {
+      delete moduleHooks[mod]
+    }
+  }
+
+  if (Object.keys(moduleHooks).length === 0) {
+    Hook.reset()
   }
 }

@@ -1,43 +1,31 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-const OPERATION_NAME = 'pg.query'
+class PGPlugin extends Plugin {
+  static get name () {
+    return 'pg'
+  }
 
-function createWrapQuery (tracer, config) {
-  return function wrapQuery (query) {
-    return function queryWithTrace () {
-      const scope = tracer.scope()
-      const childOf = scope.active()
-      const params = this.connectionParameters
-      const service = getServiceName(tracer, config, params)
-      const span = tracer.startSpan(OPERATION_NAME, {
+  constructor (...args) {
+    super(...args)
+
+    this.addSub(`apm:pg:query:start`, ({ params, statement }) => {
+      const service = getServiceName(this.tracer, this.config, params)
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('pg.query', {
         childOf,
         tags: {
-          [Tags.SPAN_KIND]: Tags.SPAN_KIND_RPC_CLIENT,
           'service.name': service,
           'span.type': 'sql',
           'span.kind': 'client',
-          'db.type': 'postgres'
+          'db.type': 'postgres',
+          'resource.name': statement
         }
       })
-
-      analyticsSampler.sample(span, config.measured)
-
-      const retval = scope.bind(query, span).apply(this, arguments)
-      const queryQueue = this.queryQueue || this._queryQueue
-      const activeQuery = this.activeQuery || this._activeQuery
-      const pgQuery = queryQueue[queryQueue.length - 1] || activeQuery
-
-      if (!pgQuery) {
-        return retval
-      }
-
-      const originalCallback = pgQuery.callback
-      const statement = pgQuery.text
-
-      span.setTag('resource.name', statement)
 
       if (params) {
         span.addTags({
@@ -48,26 +36,23 @@ function createWrapQuery (tracer, config) {
         })
       }
 
-      const finish = (error) => {
-        span.setTag('error', error)
-        span.finish()
-      }
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
-      if (originalCallback) {
-        pgQuery.callback = scope.bind((err, res) => {
-          finish(err)
-          originalCallback(err, res)
-        }, childOf)
-      } else if (pgQuery.once) {
-        pgQuery
-          .once('error', finish)
-          .once('end', () => finish())
-      } else {
-        pgQuery.then(() => finish(), finish)
-      }
+    this.addSub(`apm:pg:query:end`, () => {
+      this.exit()
+    })
 
-      return retval
-    }
+    this.addSub(`apm:pg:query:error`, err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
+
+    this.addSub(`apm:pg:query:async-end`, () => {
+      const span = storage.getStore().span
+      span.finish()
+    })
   }
 }
 
@@ -81,26 +66,4 @@ function getServiceName (tracer, config, params) {
   }
 }
 
-module.exports = [
-  {
-    name: 'pg',
-    versions: ['>=4'],
-    patch (pg, tracer, config) {
-      this.wrap(pg.Client.prototype, 'query', createWrapQuery(tracer, config))
-    },
-    unpatch (pg) {
-      this.unwrap(pg.Client.prototype, 'query')
-    }
-  },
-  {
-    name: 'pg',
-    versions: ['>=4'],
-    file: 'lib/native/index.js',
-    patch (Client, tracer, config) {
-      this.wrap(Client.prototype, 'query', createWrapQuery(tracer, config))
-    },
-    unpatch (Client) {
-      this.unwrap(Client.prototype, 'query')
-    }
-  }
-]
+module.exports = PGPlugin

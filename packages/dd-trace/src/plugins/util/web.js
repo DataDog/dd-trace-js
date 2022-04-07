@@ -29,6 +29,9 @@ const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
 
+const contexts = new WeakMap()
+const ends = new WeakMap()
+
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
@@ -49,11 +52,36 @@ const web = {
     })
   },
 
+  startSpan (tracer, config, req, res, name) {
+    const context = this.patch(req)
+    context.config = config
+
+    let span
+
+    if (context.span) {
+      context.span.context()._name = name
+      span = context.span
+    } else {
+      span = web.startChildSpan(tracer, name, req.headers)
+    }
+
+    context.tracer = tracer
+    context.span = span
+    context.res = res
+
+    return span
+  },
+  wrap (req) {
+    const context = contexts.get(req)
+    if (!context.instrumented) {
+      this.wrapEnd(context)
+      this.wrapEvents(context)
+      context.instrumented = true
+    }
+  },
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
-    this.patch(req)
-
-    const span = startSpan(tracer, config, req, res, name)
+    const span = this.startSpan(tracer, config, req, res, name)
 
     if (!config.filter(req.url)) {
       span.setTag(MANUAL_DROP, true)
@@ -65,12 +93,7 @@ const web = {
 
     analyticsSampler.sample(span, config.measured, true)
 
-    if (!req._datadog.instrumented) {
-      wrapEnd(req)
-      wrapEvents(req)
-
-      req._datadog.instrumented = true
-    }
+    this.wrap(req)
 
     return callback && tracer.scope().activate(span, () => callback(span))
   },
@@ -83,22 +106,23 @@ const web = {
   // Add a route segment that will be used for the resource name.
   enterRoute (req, path) {
     if (typeof path === 'string') {
-      req._datadog.paths.push(path)
+      contexts.get(req).paths.push(path)
     }
   },
 
   // Remove the current route segment.
   exitRoute (req) {
-    req._datadog.paths.pop()
+    contexts.get(req).paths.pop()
   },
 
   // Start a new middleware span and activate a new scope with the span.
   wrapMiddleware (req, middleware, name, fn) {
     if (!this.active(req)) return fn()
 
-    const tracer = req._datadog.tracer
+    const context = contexts.get(req)
+    const tracer = context.tracer
     const childOf = this.active(req)
-    const config = req._datadog.config
+    const config = context.config
 
     if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
@@ -110,7 +134,7 @@ const web = {
       [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
     })
 
-    req._datadog.middleware.push(span)
+    context.middleware.push(span)
 
     return tracer.scope().activate(span, fn)
   },
@@ -129,7 +153,8 @@ const web = {
   finish (req, error) {
     if (!this.active(req)) return
 
-    const span = req._datadog.middleware.pop()
+    const context = contexts.get(req)
+    const span = context.middleware.pop()
 
     if (span) {
       if (error) {
@@ -146,43 +171,56 @@ const web = {
 
   // Register a callback to run before res.end() is called.
   beforeEnd (req, callback) {
-    req._datadog.beforeEnd.push(callback)
+    contexts.get(req).beforeEnd.push(callback)
   },
 
   // Prepare the request for instrumentation.
   patch (req) {
-    if (req._datadog) return
+    let context = contexts.get(req)
 
-    if (req.stream && req.stream._datadog) {
-      req._datadog = req.stream._datadog
-      return
+    if (context) return context
+
+    context = req.stream && contexts.get(req.stream)
+
+    if (context) {
+      contexts.set(req, context)
+      return context
     }
 
-    req._datadog = {
+    context = {
+      req,
       span: null,
       paths: [],
       middleware: [],
       beforeEnd: [],
       config: {}
     }
+
+    contexts.set(req, context)
+
+    return context
   },
 
   // Return the request root span.
   root (req) {
-    return req._datadog ? req._datadog.span : null
+    const context = contexts.get(req)
+    return context ? context.span : null
   },
 
   // Return the active span.
   active (req) {
-    if (!req._datadog) return null
-    if (req._datadog.middleware.length === 0) return req._datadog.span || null
+    const context = contexts.get(req)
 
-    return req._datadog.middleware.slice(-1)[0]
+    if (!context) return null
+    if (context.middleware.length === 0) return context.span || null
+
+    return context.middleware.slice(-1)[0]
   },
 
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
     const childOf = tracer.scope().active() || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
     const span = tracer.startSpan(name, { childOf })
 
     return span
@@ -190,10 +228,11 @@ const web = {
 
   // Validate a request's status code and then add error tags if necessary
   addStatusError (req, statusCode) {
-    const span = req._datadog.span
-    const error = req._datadog.error
+    const context = contexts.get(req)
+    const span = context.span
+    const error = context.error
 
-    if (!req._datadog.config.validateStatus(statusCode)) {
+    if (!context.config.validateStatus(statusCode)) {
       span.setTag(ERROR, error || true)
     }
   },
@@ -201,110 +240,101 @@ const web = {
   // Add an error to the request
   addError (req, error) {
     if (error instanceof Error) {
-      req._datadog.error = req._datadog.error || error
+      const context = contexts.get(req)
+      context.error = context.error || error
     }
-  }
-}
+  },
 
-function startSpan (tracer, config, req, res, name) {
-  req._datadog.config = config
+  finishMiddleware (context) {
+    if (context.finished) return
 
-  let span
+    let span
 
-  if (req._datadog.span) {
-    req._datadog.span.context()._name = name
-    span = req._datadog.span
-  } else {
-    span = web.startChildSpan(tracer, name, req.headers)
-  }
-
-  configureDatadogObject(tracer, span, req, res)
-
-  return span
-}
-
-function configureDatadogObject (tracer, span, req, res) {
-  const ddObj = req._datadog
-  ddObj.tracer = tracer
-  ddObj.span = span
-  ddObj.res = res
-}
-
-function finish (req, res) {
-  if (req._datadog.finished && !req.stream) return
-
-  addRequestTags(req)
-  addResponseTags(req)
-
-  req._datadog.config.hooks.request(req._datadog.span, req, res)
-  addResourceTag(req)
-
-  req._datadog.span.finish()
-  req._datadog.finished = true
-}
-
-function finishMiddleware (req, res) {
-  if (req._datadog.finished) return
-
-  let span
-
-  while ((span = req._datadog.middleware.pop())) {
-    span.finish()
-  }
-}
-
-function wrapEnd (req) {
-  const scope = req._datadog.tracer.scope()
-  const res = req._datadog.res
-  const end = res.end
-
-  res.writeHead = wrapWriteHead(req)
-
-  res._datadog_end = function () {
-    for (const beforeEnd of req._datadog.beforeEnd) {
-      beforeEnd()
+    while ((span = context.middleware.pop())) {
+      span.finish()
     }
+  },
 
-    finishMiddleware(req, res)
+  finishSpan (context) {
+    const { req, res } = context
 
-    if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.publish({ req, res })
+    if (context.finished && !req.stream) return
 
-    const returnValue = end.apply(res, arguments)
+    addRequestTags(context)
+    addResponseTags(context)
 
-    finish(req, res)
+    context.config.hooks.request(context.span, req, res)
+    addResourceTag(context)
 
-    return returnValue
-  }
+    context.span.finish()
+    context.finished = true
+  },
+  wrapWriteHead (context) {
+    const { req, res } = context
+    const writeHead = res.writeHead
 
-  Object.defineProperty(res, 'end', {
-    configurable: true,
-    get () {
-      return this._datadog_end
-    },
-    set (value) {
-      this._datadog_end = scope.bind(value, req._datadog.span)
+    return function (statusCode, statusMessage, headers) {
+      headers = typeof statusMessage === 'string' ? headers : statusMessage
+      headers = Object.assign(res.getHeaders(), headers)
+
+      if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
+        addAllowHeaders(req, res, headers)
+      }
+
+      return writeHead.apply(this, arguments)
     }
-  })
+  },
+  getContext (req) {
+    return contexts.get(req)
+  },
+  wrapRes (context, req, res, end) {
+    return function () {
+      for (const beforeEnd of context.beforeEnd) {
+        beforeEnd()
+      }
+
+      web.finishMiddleware(context)
+
+      if (incomingHttpRequestEnd.hasSubscribers) {
+        incomingHttpRequestEnd.publish({ req, res })
+      }
+
+      const returnValue = end.apply(res, arguments)
+
+      web.finishSpan(context)
+
+      return returnValue
+    }
+  },
+  wrapEnd (context) {
+    const scope = context.tracer.scope()
+    const req = context.req
+    const res = context.res
+    const end = res.end
+
+    res.writeHead = web.wrapWriteHead(context)
+
+    ends.set(res, this.wrapRes(context, req, res, end))
+
+    Object.defineProperty(res, 'end', {
+      configurable: true,
+      get () {
+        return ends.get(this)
+      },
+      set (value) {
+        ends.set(this, scope.bind(value, context.span))
+      }
+    })
+  },
+  wrapEvents (context) {
+    const scope = context.tracer.scope()
+    const res = context.res
+
+    scope.bind(res, context.span)
+  }
 }
 
-function wrapWriteHead (req) {
-  const res = req._datadog.res
-  const writeHead = res.writeHead
-
-  return function (statusCode, statusMessage, headers) {
-    headers = typeof statusMessage === 'string' ? headers : statusMessage
-    headers = Object.assign(res.getHeaders(), headers)
-
-    if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
-      addAllowHeaders(req, headers)
-    }
-
-    return writeHead.apply(this, arguments)
-  }
-}
-
-function addAllowHeaders (req, headers) {
-  const res = req._datadog.res
+function addAllowHeaders (req, res, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
@@ -337,22 +367,17 @@ function splitHeader (str) {
   return typeof str === 'string' ? str.split(/\s*,\s*/) : []
 }
 
-function wrapEvents (req) {
-  const scope = req._datadog.tracer.scope()
-  const res = req._datadog.res
-
-  scope.bind(res, req._datadog.span)
-}
-
 function reactivate (req, fn) {
-  return req._datadog
-    ? req._datadog.tracer.scope().activate(req._datadog.span, fn)
+  const context = contexts.get(req)
+
+  return context
+    ? context.tracer.scope().activate(context.span, fn)
     : fn()
 }
 
-function addRequestTags (req) {
+function addRequestTags (context) {
+  const { req, span } = context
   const url = extractURL(req)
-  const span = req._datadog.span
 
   span.addTags({
     [HTTP_URL]: url.split('?')[0],
@@ -361,15 +386,14 @@ function addRequestTags (req) {
     [SPAN_TYPE]: WEB
   })
 
-  addHeaders(req)
+  addHeaders(context)
 }
 
-function addResponseTags (req) {
-  const span = req._datadog.span
-  const res = req._datadog.res
+function addResponseTags (context) {
+  const { req, res, paths, span } = context
 
-  if (req._datadog.paths.length > 0) {
-    span.setTag(HTTP_ROUTE, req._datadog.paths.join(''))
+  if (paths.length > 0) {
+    span.setTag(HTTP_ROUTE, paths.join(''))
   }
 
   span.addTags({
@@ -379,8 +403,8 @@ function addResponseTags (req) {
   web.addStatusError(req, res.statusCode)
 }
 
-function addResourceTag (req) {
-  const span = req._datadog.span
+function addResourceTag (context) {
+  const { req, span } = context
   const tags = span.context()._tags
 
   if (tags['resource.name']) return
@@ -392,12 +416,12 @@ function addResourceTag (req) {
   span.setTag(RESOURCE_NAME, resource)
 }
 
-function addHeaders (req) {
-  const span = req._datadog.span
+function addHeaders (context) {
+  const { req, res, config, span } = context
 
-  req._datadog.config.headers.forEach(key => {
+  config.headers.forEach(key => {
     const reqHeader = req.headers[key]
-    const resHeader = req._datadog.res.getHeader(key)
+    const resHeader = res.getHeader(key)
 
     if (reqHeader) {
       span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)

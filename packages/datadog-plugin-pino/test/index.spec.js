@@ -2,7 +2,6 @@
 
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const semver = require('semver')
 
 describe('Plugin', () => {
@@ -12,14 +11,14 @@ describe('Plugin', () => {
   let span
 
   describe('pino', () => {
-    withVersions(plugin, 'pino', version => {
+    withVersions('pino', 'pino', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('pino')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
@@ -135,6 +134,17 @@ describe('Plugin', () => {
 
               expect(record).to.not.have.property('dd')
             })
+          })
+
+          it('should skip injection when there is no active span', () => {
+            logger.info('message')
+
+            expect(stream.write).to.have.been.called
+
+            const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+            expect(record).to.not.have.property('dd')
+            expect(record).to.have.deep.property('msg', 'message')
           })
 
           if (semver.intersects(version, '>=5.14.0')) {

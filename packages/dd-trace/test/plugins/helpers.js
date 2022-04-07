@@ -3,6 +3,7 @@
 const { Int64BE } = require('int64-buffer') // TODO remove dependency
 
 const { AssertionError } = require('assert')
+const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
 function expectSomeSpan (agent, expected, timeout) {
   return agent.use(traces => {
@@ -84,9 +85,33 @@ function withDefaults (defaults, obj) {
   return newObj
 }
 
+function breakThen (promise) {
+  const original = promise.then
+  const asyncResource = new AsyncResource('bound-asynchronous-fn')
+
+  promise.then = function (...args) {
+    for (let i = 0; i < args.length; i++) {
+      if (typeof args[i] !== 'function') continue
+      args[i] = asyncResource.bind(args[i], this)
+    }
+
+    return original.apply(this, args)
+  }
+
+  promise.then._dd_original = original
+}
+
+function unbreakThen (promise) {
+  if (promise.then._dd_original) {
+    promise.then = promise.then._dd_original
+  }
+}
+
 module.exports = {
+  breakThen,
   compare,
   deepInclude,
   expectSomeSpan,
+  unbreakThen,
   withDefaults
 }

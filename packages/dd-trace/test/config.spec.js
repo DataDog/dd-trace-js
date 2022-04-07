@@ -57,6 +57,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
+    expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -66,6 +67,7 @@ describe('Config', () => {
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.nested.property('experimental.b3', false)
+    expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
@@ -110,6 +112,7 @@ describe('Config', () => {
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
@@ -136,6 +139,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: '0.5', rateLimit: '-1' })
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.traceparent', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
@@ -203,12 +207,14 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
+      flushMinSpans: 500,
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
       logLevel: logLevel,
       experimental: {
         b3: true,
+        traceparent: true,
         runtimeId: true,
         exporter: 'log',
         enableGetRumData: true,
@@ -236,6 +242,7 @@ describe('Config', () => {
     expect(config.tags).to.have.property('version', '0.1.0')
     expect(config.tags).to.have.property('env', 'test')
     expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
@@ -245,6 +252,7 @@ describe('Config', () => {
     expect(config.tags).to.have.property('runtime-id')
     expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     expect(config).to.have.nested.property('experimental.b3', true)
+    expect(config).to.have.nested.property('experimental.traceparent', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
@@ -266,6 +274,7 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
+      flushMinSpans: 500,
       plugins: false
     })
 
@@ -279,6 +288,7 @@ describe('Config', () => {
     expect(config).to.have.property('logger', logger)
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('plugins', false)
   })
 
@@ -301,6 +311,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
@@ -310,6 +321,7 @@ describe('Config', () => {
     process.env.DD_APP_KEY = '456'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
@@ -329,6 +341,7 @@ describe('Config', () => {
       },
       runtimeMetrics: false,
       reportHostname: false,
+      flushMinSpans: 500,
       service: 'test',
       version: '1.0.0',
       env: 'development',
@@ -337,6 +350,7 @@ describe('Config', () => {
       },
       experimental: {
         b3: false,
+        traceparent: false,
         runtimeId: false,
         exporter: 'agent',
         enableGetRumData: false
@@ -357,12 +371,14 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
+    expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.nested.property('experimental.b3', false)
+    expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
@@ -530,7 +546,7 @@ describe('Config', () => {
         const config = new Config()
 
         expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
-        expect(config.url.toString()).to.equal('file:///var/run/datadog/apm.socket')
+        expect(config.url.toString()).to.equal('unix:///var/run/datadog/apm.socket')
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {

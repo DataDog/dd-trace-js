@@ -1,102 +1,54 @@
 'use strict'
 
-const Tags = require('../../../ext/tags')
-const Kinds = require('../../../ext/kinds')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const tx = require('../../dd-trace/src/plugins/util/tx')
 
-function createWrapMakeRequest (tracer, config) {
-  return function wrapMakeRequest (makeRequest) {
-    return function makeRequestWithTrace (request) {
-      const connectionConfig = this.config
-      const scope = tracer.scope()
-      const childOf = scope.active()
-      const queryOrProcedure = getQueryOrProcedure(request)
+class TediousPlugin extends Plugin {
+  static get name () {
+    return 'tedious'
+  }
 
-      if (!queryOrProcedure) {
-        return makeRequest.apply(this, arguments)
-      }
+  constructor (...args) {
+    super(...args)
 
-      const span = tracer.startSpan('tedious.request', {
+    this.addSub(`apm:tedious:request:start`, ({ queryOrProcedure, connectionConfig }) => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('tedious.request', {
         childOf,
         tags: {
-          [Tags.SPAN_KIND]: Kinds.CLIENT,
+          'span.kind': 'client',
           'db.type': 'mssql',
           'span.type': 'sql',
           'component': 'tedious',
-          'service.name': config.service || `${tracer._service}-mssql`,
-          'resource.name': queryOrProcedure
+          'service.name': this.config.service || `${this.tracer._service}-mssql`,
+          'resource.name': queryOrProcedure,
+          'out.host': connectionConfig.server,
+          'out.port': connectionConfig.options.port,
+          'db.user': connectionConfig.userName || connectionConfig.authentication.options.userName,
+          'db.name': connectionConfig.options.database,
+          'db.instance': connectionConfig.options.instanceName
         }
       })
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
-      addConnectionTags(span, connectionConfig)
-      addDatabaseTags(span, connectionConfig)
+    this.addSub(`apm:tedious:request:end`, () => {
+      this.exit()
+    })
 
-      analyticsSampler.sample(span, config.measured)
-      request.callback = tx.wrap(span, request.callback)
+    this.addSub(`apm:tedious:request:error`, err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
 
-      return scope.bind(makeRequest, span).apply(this, arguments)
-    }
+    this.addSub(`apm:tedious:request:async-end`, () => {
+      const span = storage.getStore().span
+      span.finish()
+    })
   }
 }
 
-function createWrapGetRowStream (tracer) {
-  return function wrapGetRowStream (getRowStream) {
-    return function getRowStreamWithTrace () {
-      const scope = tracer.scope()
-
-      const rowToPacketTransform = getRowStream.apply(this, arguments)
-      return scope.bind(rowToPacketTransform)
-    }
-  }
-}
-
-function getQueryOrProcedure (request) {
-  if (!request.parameters) return
-
-  const statement = request.parametersByName.statement || request.parametersByName.stmt
-
-  if (!statement) {
-    return request.sqlTextOrProcedure
-  }
-
-  return statement.value
-}
-
-function addConnectionTags (span, connectionConfig) {
-  span.setTag('out.host', connectionConfig.server)
-  span.setTag('out.port', connectionConfig.options.port)
-}
-
-function addDatabaseTags (span, connectionConfig) {
-  span.setTag('db.user', connectionConfig.userName || connectionConfig.authentication.options.userName)
-  span.setTag('db.name', connectionConfig.options.database)
-  span.setTag('db.instance', connectionConfig.options.instanceName)
-}
-
-module.exports = [
-  {
-    name: 'tedious',
-    versions: [ '>=1.0.0' ],
-    patch (tedious, tracer, config) {
-      this.wrap(tedious.Connection.prototype, 'makeRequest', createWrapMakeRequest(tracer, config))
-
-      if (tedious.BulkLoad && tedious.BulkLoad.prototype.getRowStream) {
-        this.wrap(tedious.BulkLoad.prototype, 'getRowStream', createWrapGetRowStream(tracer))
-      }
-
-      tracer.scope().bind(tedious.Request.prototype)
-      tracer.scope().bind(tedious.Connection.prototype)
-    },
-    unpatch (tedious, tracer) {
-      this.unwrap(tedious.Connection.prototype, 'makeRequest')
-
-      if (tedious.BulkLoad) {
-        this.unwrap(tedious.BulkLoad.prototype, 'getRowStream')
-      }
-
-      tracer.scope().unbind(tedious.Request.prototype)
-      tracer.scope().unbind(tedious.Connection.prototype)
-    }
-  }
-]
+module.exports = TediousPlugin

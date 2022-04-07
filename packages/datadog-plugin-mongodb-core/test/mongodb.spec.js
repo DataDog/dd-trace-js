@@ -2,10 +2,9 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const withTopologies = fn => {
-  withVersions(plugin, 'mongodb', (version, moduleName) => {
+  withVersions('mongodb-core', 'mongodb', (version, moduleName) => {
     describe('using the default topology', () => {
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
@@ -61,7 +60,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(async () => {
@@ -108,11 +107,16 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize the query', done => {
+          it('should sanitize the query', function (done) {
+            const queryObjectDepth = 200
+            const maxSupportedObjectDepth = 20
+
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const query = '{"foo":"?","bar":{"baz":"?"}}'
+                const query = (`{"foo":"?","bar":{"baz":"?"},"deep":${
+                  '{"x":'.repeat(maxSupportedObjectDepth) + '"?"' + '}'.repeat(maxSupportedObjectDepth)
+                }}`)
                 const resource = `find test.${collectionName} ${query}`
 
                 expect(span).to.have.property('resource', resource)
@@ -125,7 +129,10 @@ describe('Plugin', () => {
               foo: 1,
               bar: {
                 baz: [1, 2, 3]
-              }
+              },
+              deep: Array(queryObjectDepth).fill('x').reduce((acc) => {
+                return { x: acc }
+              }, 'sanitize me')
             }).toArray()
           })
 
@@ -195,7 +202,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(async () => {

@@ -65,8 +65,8 @@ describe('Sns', () => {
         Message: 'Here is my sns message',
         MessageAttributes: {
           '_datadog': {
-            'DataType': 'String',
-            'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
+            'DataType': 'Binary',
+            'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
           }
         },
         'TopicArn': 'some ARN'
@@ -97,8 +97,8 @@ describe('Sns', () => {
             Message: 'Here is my SNS message',
             MessageAttributes: {
               '_datadog': {
-                'DataType': 'String',
-                'StringValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1","x-datadog-tags":""}'
+                'DataType': 'Binary',
+                'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
               }
             }
           },

@@ -5,9 +5,10 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const web = require('../../dd-trace/src/plugins/util/web')
 
-// TODO: clean this up to not use web util internals
 // TODO: stop checking for fast star and fast slash
 
+const contexts = new WeakMap()
+const layerMatchers = new WeakMap()
 const regexpCache = Object.create(null)
 
 function createWrapHandle (tracer, config) {
@@ -15,17 +16,17 @@ function createWrapHandle (tracer, config) {
     return function handleWithTrace (req, res, done) {
       web.patch(req)
 
-      if (!req._datadog.router) {
+      if (!contexts.has(req)) {
         const context = {
           route: '',
           stack: []
         }
 
         web.beforeEnd(req, () => {
-          req._datadog.paths = [context.route]
+          web.enterRoute(req, context.route)
         })
 
-        req._datadog.router = context
+        contexts.set(req, context)
       }
 
       return handle.apply(this, arguments)
@@ -78,7 +79,7 @@ function wrapStack (stack, offset, matchers) {
       layer.handle = wrapLayerHandle(layer, layer.handle)
     }
 
-    layer._datadog_matchers = matchers
+    layerMatchers.set(layer, matchers)
 
     if (layer.route) {
       METHODS.forEach(method => {
@@ -96,10 +97,12 @@ function wrapNext (layer, req, next) {
   if (!next || !web.active(req)) return next
 
   const originalNext = next
+  const context = contexts.get(req)
+  const matchers = layerMatchers.get(layer)
 
   return function (error) {
-    if (layer.path && !isFastStar(layer) && !isFastSlash(layer)) {
-      req._datadog.router.stack.pop()
+    if (layer.path && !isFastStar(layer, matchers) && !isFastSlash(layer, matchers)) {
+      context.stack.pop()
     }
 
     web.finish(req, error)
@@ -109,13 +112,13 @@ function wrapNext (layer, req, next) {
 }
 
 function callHandle (layer, handle, req, args) {
-  const matchers = layer._datadog_matchers
+  const matchers = layerMatchers.get(layer)
 
   if (web.active(req) && matchers) {
     // Try to guess which path actually matched
     for (let i = 0; i < matchers.length; i++) {
       if (matchers[i].test(layer)) {
-        const context = req._datadog.router
+        const context = contexts.get(req)
 
         context.stack.push(matchers[i].path)
 
@@ -145,24 +148,30 @@ function extractMatchers (fn) {
 
   return arg.map(pattern => ({
     path: pattern instanceof RegExp ? `(${pattern})` : pattern,
-    test: layer => !isFastStar(layer) && !isFastSlash(layer) && cachedPathToRegExp(pattern).test(layer.path)
+    test: layer => {
+      const matchers = layerMatchers.get(layer)
+
+      return !isFastStar(layer, matchers) &&
+        !isFastSlash(layer, matchers) &&
+        cachedPathToRegExp(pattern).test(layer.path)
+    }
   }))
 }
 
-function isFastStar (layer) {
+function isFastStar (layer, matchers) {
   if (layer.regexp.fast_star !== undefined) {
     return layer.regexp.fast_star
   }
 
-  return layer._datadog_matchers.some(matcher => matcher.path === '*')
+  return matchers.some(matcher => matcher.path === '*')
 }
 
-function isFastSlash (layer) {
+function isFastSlash (layer, matchers) {
   if (layer.regexp.fast_slash !== undefined) {
     return layer.regexp.fast_slash
   }
 
-  return layer._datadog_matchers.some(matcher => matcher.path === '/')
+  return matchers.some(matcher => matcher.path === '/')
 }
 
 function flatten (arr) {

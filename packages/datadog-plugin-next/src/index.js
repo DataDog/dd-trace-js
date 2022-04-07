@@ -4,6 +4,8 @@
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+const contexts = new WeakMap()
+
 function createWrapHandleRequest (tracer, config) {
   return function wrapHandleRequest (handleRequest) {
     return function handleRequestWithTrace (req, res, pathname, query) {
@@ -18,15 +20,15 @@ function createWrapHandleApiRequest (tracer, config) {
       return trace(tracer, config, req, res, () => {
         const promise = handleApiRequest.apply(this, arguments)
 
-        promise.then(handled => {
-          if (!handled) return
+        return promise.then(handled => {
+          if (!handled) return handled
 
           const page = getPageFromPath(pathname, this.dynamicRoutes)
 
           addPage(req, page)
-        })
 
-        return promise
+          return handled
+        })
       })
     }
   }
@@ -92,8 +94,9 @@ function getPageFromPath (page, dynamicRoutes = []) {
 
 function trace (tracer, config, req, res, handler) {
   const scope = tracer.scope()
+  const context = contexts.get(req)
 
-  if (req._datadog_next) return scope.activate(req._datadog_next.span, handler)
+  if (context) return scope.activate(context.span, handler)
 
   const childOf = scope.active()
   const tags = {
@@ -107,7 +110,7 @@ function trace (tracer, config, req, res, handler) {
 
   analyticsSampler.sample(span, config.measured, true)
 
-  req._datadog_next = { span }
+  contexts.set(req, { span })
 
   const promise = scope.activate(span, handler)
 
@@ -115,30 +118,32 @@ function trace (tracer, config, req, res, handler) {
   // TODO: Use CLS when it will be available in core.
   span._nextReq = req
 
-  promise.then(
-    () => finish(span, config, req, res),
-    err => finish(span, config, req, res, err)
+  return promise.then(
+    result => finish(span, config, req, res, result),
+    err => finish(span, config, req, res, null, err)
   )
-
-  return promise
 }
 
 function addPage (req, page) {
-  if (!req || !req._datadog_next) return
+  const context = contexts.get(req)
 
-  req._datadog_next.span.addTags({
+  if (!context) return
+
+  context.span.addTags({
     'resource.name': `${req.method} ${page}`.trim(),
     'next.page': page
   })
 }
 
-function finish (span, config, req, res, err) {
+function finish (span, config, req, res, result, err) {
   span.setTag('error', err || !config.validateStatus(res.statusCode))
   span.addTags({
     'http.status_code': res.statusCode
   })
   config.hooks.request(span, req, res)
   span.finish()
+
+  return result || err
 }
 
 function normalizeConfig (config) {

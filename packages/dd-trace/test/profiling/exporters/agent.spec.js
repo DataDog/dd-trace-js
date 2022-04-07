@@ -109,7 +109,7 @@ describe('exporters/agent', () => {
       request: sinon.spy(request)
     }
     const agent = proxyquire('../../../src/profiling/exporters/agent', {
-      '../../exporters/agent/docker': docker,
+      '../../exporters/common/docker': docker,
       'http': http
     })
     AgentExporter = agent.AgentExporter

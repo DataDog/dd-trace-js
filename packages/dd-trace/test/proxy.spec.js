@@ -15,8 +15,10 @@ describe('TracerProxy', () => {
   let log
   let profiler
   let appsec
+  let telemetry
 
   beforeEach(() => {
+    process.env.DD_TRACE_MOCHA_ENABLED = false
     tracer = {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
@@ -77,6 +79,10 @@ describe('TracerProxy', () => {
       enable: sinon.spy()
     }
 
+    telemetry = {
+      start: sinon.spy()
+    }
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
@@ -85,7 +91,8 @@ describe('TracerProxy', () => {
       './instrumenter': Instrumenter,
       './log': log,
       './profiler': profiler,
-      './appsec': appsec
+      './appsec': appsec,
+      './telemetry': telemetry
     })
 
     proxy = new Proxy()
@@ -214,6 +221,12 @@ describe('TracerProxy', () => {
 
         const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
         sinon.assert.calledWith(log.error, sinon.match(expectedErr))
+      })
+
+      it('should start telemetry', () => {
+        proxy.init()
+
+        expect(telemetry.start).to.have.been.called
       })
     })
 

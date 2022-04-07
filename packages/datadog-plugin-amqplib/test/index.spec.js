@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -9,7 +8,7 @@ describe('Plugin', () => {
   let channel
 
   describe('amqplib', () => {
-    withVersions(plugin, 'amqplib', version => {
+    withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -19,29 +18,35 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('amqplib')
+        beforeEach(done => {
+          require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
+            .connect((err, conn) => {
+              connection = conn
+
+              if (err != null) {
+                return done(err)
+              }
+
+              conn.createChannel((err, ch) => {
+                channel = ch
+                done(err)
+              })
+            })
         })
 
-        after(() => {
-          return agent.close()
+        describe('without plugin', () => {
+          it('should run commands normally', done => {
+            channel.assertQueue('test', {}, () => { done() })
+          })
         })
 
         describe('when using a callback', () => {
-          beforeEach(done => {
-            require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
-              .connect((err, conn) => {
-                connection = conn
+          before(() => {
+            return agent.load('amqplib')
+          })
 
-                if (err != null) {
-                  return done(err)
-                }
-
-                conn.createChannel((err, ch) => {
-                  channel = ch
-                  done(err)
-                })
-              })
+          after(() => {
+            return agent.close({ ritmReset: false })
           })
 
           describe('when sending commands', () => {
@@ -49,7 +54,6 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-
                   expect(span).to.have.property('name', 'amqp.command')
                   expect(span).to.have.property('service', 'test-amqp')
                   expect(span).to.have.property('resource', 'queue.declare test')
@@ -160,7 +164,6 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-
                   expect(span).to.have.property('name', 'amqp.command')
                   expect(span).to.have.property('service', 'test-amqp')
                   expect(span).to.have.property('resource', `basic.deliver ${queue}`)
@@ -256,7 +259,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {

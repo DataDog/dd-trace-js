@@ -1,145 +1,89 @@
 'use strict'
 
-const tx = require('../../dd-trace/src/plugins/util/tx')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapConnect (tracer, config) {
-  return function wrapConnect (connect) {
-    return function connectWithTrace () {
+class NetPlugin extends Plugin {
+  static get name () {
+    return 'net'
+  }
+
+  constructor (...args) {
+    super(...args)
+
+    this.addSub(`apm:net:ipc:start`, ({ options }) => {
       const store = storage.getStore()
+      const childOf = store ? store.span : store
 
-      if (store && store.noop) return connect.apply(this, arguments)
-
-      const scope = tracer.scope()
-      const options = getOptions(arguments)
-      const lastIndex = arguments.length - 1
-      const callback = arguments[lastIndex]
-
-      if (!options) return connect.apply(this, arguments)
-
-      if (typeof callback === 'function') {
-        arguments[lastIndex] = scope.bind(callback)
-      }
-
-      const span = options.path
-        ? wrapIpc(tracer, config, this, options)
-        : wrapTcp(tracer, config, this, options)
-
-      analyticsSampler.sample(span, config.measured)
-
-      return scope.bind(connect, span).apply(this, arguments)
-    }
-  }
-}
-
-function wrapTcp (tracer, config, socket, options) {
-  const host = options.host || 'localhost'
-  const port = options.port || 0
-  const family = options.family || 4
-
-  const span = startSpan(tracer, config, 'tcp', {
-    'resource.name': [host, port].filter(val => val).join(':'),
-    'tcp.remote.host': host,
-    'tcp.remote.port': port,
-    'tcp.family': `IPv${family}`,
-    'out.host': host,
-    'out.port': port
-  })
-
-  setupListeners(socket, span, 'tcp')
-
-  return span
-}
-
-function wrapIpc (tracer, config, socket, options) {
-  const span = startSpan(tracer, config, 'ipc', {
-    'resource.name': options.path,
-    'ipc.path': options.path
-  })
-
-  setupListeners(socket, span, 'ipc')
-
-  return span
-}
-
-function startSpan (tracer, config, protocol, tags) {
-  const childOf = tracer.scope().active()
-  const span = tracer.startSpan(`${protocol}.connect`, {
-    childOf,
-    tags: Object.assign({
-      'span.kind': 'client',
-      'service.name': config.service || tracer._service
-    }, tags)
-  })
-
-  return span
-}
-
-function getOptions (args) {
-  if (!args[0]) return
-
-  switch (typeof args[0]) {
-    case 'object':
-      if (Array.isArray(args[0])) return getOptions(args[0])
-      return args[0]
-    case 'string':
-      if (isNaN(parseFloat(args[0]))) {
-        return {
-          path: args[0]
+      const span = this.tracer.startSpan('ipc.connect', {
+        childOf,
+        tags: {
+          'resource.name': options.path,
+          'ipc.path': options.path,
+          'span.kind': 'client',
+          'service.name': this.config.service || this.tracer._service
         }
-      }
-    case 'number': // eslint-disable-line no-fallthrough
-      return {
-        port: args[0],
-        host: typeof args[1] === 'string' ? args[1] : 'localhost'
-      }
-  }
-}
+      })
 
-function setupListeners (socket, span, protocol) {
-  const events = ['connect', 'error', 'close', 'timeout']
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
-  const wrapListener = tx.wrap(span)
+    this.addSub(`apm:net:ipc:end`, this.exit.bind(this))
 
-  const localListener = () => {
-    span.addTags({
-      'tcp.local.address': socket.localAddress,
-      'tcp.local.port': socket.localPort
+    this.addSub(`apm:net:ipc:error`, errorHandler)
+
+    this.addSub(`apm:net:ipc:async-end`, defaultAsyncEnd)
+
+    this.addSub(`apm:net:tcp:start`, ({ options }) => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+
+      const host = options.host || 'localhost'
+      const port = options.port || 0
+      const family = options.family || 4
+
+      const span = this.tracer.startSpan('tcp.connect', {
+        childOf,
+        tags: {
+          'resource.name': [host, port].filter(val => val).join(':'),
+          'tcp.remote.host': host,
+          'tcp.remote.port': port,
+          'tcp.family': `IPv${family}`,
+          'out.host': host,
+          'out.port': port,
+          'span.kind': 'client',
+          'service.name': this.config.service || this.tracer._service
+        }
+      })
+
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
+
+    this.addSub(`apm:net:tcp:end`, this.exit.bind(this))
+
+    this.addSub(`apm:net:tcp:error`, errorHandler)
+
+    this.addSub(`apm:net:tcp:async-end`, defaultAsyncEnd)
+
+    this.addSub(`apm:net:tcp:connection`, ({ socket }) => {
+      const span = storage.getStore().span
+      span.addTags({
+        'tcp.local.address': socket.localAddress,
+        'tcp.local.port': socket.localPort
+      })
     })
   }
-
-  const cleanupListener = () => {
-    socket.removeListener('connect', localListener)
-
-    events.forEach(event => {
-      socket.removeListener(event, wrapListener)
-      socket.removeListener(event, cleanupListener)
-    })
-  }
-
-  if (protocol === 'tcp') {
-    socket.once('connect', localListener)
-  }
-
-  events.forEach(event => {
-    socket.once(event, wrapListener)
-    socket.once(event, cleanupListener)
-  })
 }
 
-module.exports = {
-  name: 'net',
-  patch (net, tracer, config) {
-    require('dns') // net will otherwise get an unpatched version for DNS lookups
-
-    tracer.scope().bind(net.Socket.prototype)
-
-    this.wrap(net.Socket.prototype, 'connect', createWrapConnect(tracer, config))
-  },
-  unpatch (net, tracer) {
-    tracer.scope().unbind(net.Socket.prototype)
-
-    this.unwrap(net.Socket.prototype, 'connect')
-  }
+function defaultAsyncEnd () {
+  storage.getStore().span.finish()
 }
+
+function errorHandler (error) {
+  storage.getStore().span.setTag('error', error)
+}
+
+module.exports = NetPlugin
