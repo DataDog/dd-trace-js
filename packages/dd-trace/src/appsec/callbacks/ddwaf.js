@@ -70,7 +70,7 @@ class WAFCallback {
       }
     }
 
-    if (!wafContext) {
+    if (!wafContext || wafContext.disposed) {
       wafContext = this.ddwaf.createContext()
     }
 
@@ -87,6 +87,8 @@ class WAFCallback {
     } catch (err) {
       log.error('Error while running the AppSec WAF')
       log.error(err)
+    } finally {
+      wafContext.dispose()
     }
   }
 
