@@ -188,9 +188,13 @@ function getCodeOwnersForFilename (filename, entries) {
     return null
   }
   for (const entry of entries) {
-    const isResponsible = ignore().add(entry.pattern).ignores(filename)
-    if (isResponsible) {
-      return JSON.stringify(entry.owners)
+    try {
+      const isResponsible = ignore().add(entry.pattern).ignores(filename)
+      if (isResponsible) {
+        return JSON.stringify(entry.owners)
+      }
+    } catch (e) {
+      return null
     }
   }
   return null
