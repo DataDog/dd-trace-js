@@ -5,9 +5,12 @@ const {
   TEST_STATUS,
   TEST_FRAMEWORK_VERSION,
   TEST_IS_RUM_ACTIVE,
+  TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
   CI_APP_ORIGIN,
-  getTestParentSpan
+  getTestParentSpan,
+  getCodeOwnersFileEntries,
+  getCodeOwnersForFilename
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { SAMPLING_RULE_DECISION, ORIGIN_KEY } = require('../../dd-trace/src/constants')
@@ -39,6 +42,9 @@ function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
 module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
   const testEnvironmentMetadata = getTestEnvironmentMetadata('cypress')
+
+  const codeOwnersEntries = getCodeOwnersFileEntries()
+
   let activeSpan = null
   on('after:run', () => {
     return new Promise(resolve => {
@@ -54,6 +60,12 @@ module.exports = (on, config) => {
         resource,
         ...testSpanMetadata
       } = getTestSpanMetadata(tracer, testName, testSuite, config)
+
+      const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
+
+      if (codeOwners) {
+        testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
 
       if (!activeSpan) {
         activeSpan = tracer.startSpan('cypress.test', {

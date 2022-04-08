@@ -16,7 +16,8 @@ const {
   CI_APP_ORIGIN,
   ERROR_TYPE,
   ERROR_MESSAGE,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -68,7 +69,8 @@ describe('Plugin', () => {
               [TEST_SUITE]: 'cypress/integration/integration-test.js',
               [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [TEST_IS_RUM_ACTIVE]: 'true'
+              [TEST_IS_RUM_ACTIVE]: 'true',
+              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog'])
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
