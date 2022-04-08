@@ -90,6 +90,10 @@ class Config {
       process.env.DD_TRACE_STARTUP_LOGS,
       false
     )
+    const DD_TRACE_TELEMETRY_ENABLED = coalesce(
+      process.env.DD_TRACE_TELEMETRY_ENABLED,
+      true
+    )
     const DD_TRACE_DEBUG = coalesce(
       process.env.DD_TRACE_DEBUG,
       false
@@ -99,9 +103,19 @@ class Config {
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
       '0.4'
     )
+    const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
+      parseInt(options.flushMinSpans),
+      parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
+      1000
+    )
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+      false
+    )
+    const DD_TRACE_TRACEPARENT_ENABLED = coalesce(
+      options.experimental && options.experimental.traceparent,
+      process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED,
       false
     )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
@@ -166,6 +180,7 @@ class Config {
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
@@ -181,6 +196,7 @@ class Config {
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
     this.experimental = {
       b3: isTrue(DD_TRACE_B3_ENABLED),
+      traceparent: isTrue(DD_TRACE_TRACEPARENT_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
@@ -200,6 +216,7 @@ class Config {
     }
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
+    this.telemetryEnabled = isTrue(DD_TRACE_TELEMETRY_ENABLED)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),
@@ -229,7 +246,7 @@ function getAgentUrl (url, options) {
     !process.env.DD_TRACE_AGENT_PORT &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
-    return new URL('file:///var/run/datadog/apm.socket')
+    return new URL('unix:///var/run/datadog/apm.socket')
   }
 }
 

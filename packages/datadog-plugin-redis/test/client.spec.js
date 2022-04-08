@@ -1,21 +1,21 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 
 describe('Plugin', () => {
   let redis
   let client
 
   describe('redis', () => {
-    withVersions(plugin, '@node-redis/client', version => {
+    withVersions('redis', '@node-redis/client', version => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('redis')
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(async () => {
@@ -26,6 +26,7 @@ describe('Plugin', () => {
         })
 
         afterEach(async () => {
+          unbreakThen(Promise.prototype)
           await client.quit()
         })
 
@@ -63,6 +64,25 @@ describe('Plugin', () => {
 
           await promise
         })
+
+        it('should work with userland promises', async () => {
+          const promise = agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'redis.command')
+              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0]).to.have.property('type', 'redis')
+              expect(traces[0][0].meta).to.have.property('db.name', '0')
+              expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+            })
+
+          breakThen(Promise.prototype)
+
+          await client.get('foo')
+          await promise
+        })
       })
 
       describe('with configuration', () => {
@@ -74,7 +94,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(async () => {

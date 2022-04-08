@@ -98,7 +98,7 @@ describe('Tracer', () => {
 
     expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
-    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler)
+    expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler, config)
   })
 
   describe('startSpan', () => {

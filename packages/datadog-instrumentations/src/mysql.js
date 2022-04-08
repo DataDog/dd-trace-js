@@ -20,9 +20,9 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
     }
 
     const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
-    const startArgs = [sql, this.config]
+    const conf = this.config
 
-    startCh.publish(startArgs)
+    startCh.publish({ sql, conf })
 
     try {
       const res = query.apply(this, arguments)

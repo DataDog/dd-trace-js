@@ -2,6 +2,7 @@
 
 const os = require('os')
 const { execSync } = require('child_process')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('pkg', () => {
   let pkg
@@ -27,5 +28,15 @@ describe('pkg', () => {
 
   it('should load the version number from the main module', () => {
     expect(pkg.version).to.match(/^\d+.\d+.\d+/)
+  })
+})
+
+describe('load', () => {
+  it('should not break if path.parse returns undefined', () => {
+    const pathStub = { }
+    pathStub.parse = function () {
+      return undefined
+    }
+    proxyquire('../src/pkg', { 'path': pathStub })
   })
 })

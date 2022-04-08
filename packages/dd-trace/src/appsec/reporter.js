@@ -2,6 +2,7 @@
 
 const addresses = require('./addresses')
 const Limiter = require('../rate_limiter')
+const web = require('../plugins/util/web')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -83,7 +84,7 @@ function formatHeaderName (name) {
 
 function reportAttack (attackData, store) {
   const req = store && store.get('req')
-  const topSpan = req && req._datadog && req._datadog.span
+  const topSpan = web.root(req)
   if (!topSpan) return false
 
   const currentTags = topSpan.context()._tags
@@ -129,7 +130,7 @@ function reportAttack (attackData, store) {
 }
 
 function finishAttacks (req, context) {
-  const topSpan = req && req._datadog && req._datadog.span
+  const topSpan = web.root(req)
   if (!topSpan || !context || topSpan.context()._tags['appsec.event'] !== 'true') return false
 
   const resolvedResponse = resolveHTTPResponse(context)

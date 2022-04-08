@@ -4,6 +4,11 @@ const pick = require('lodash.pick')
 const log = require('../../dd-trace/src/log')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+const contexts = new WeakMap()
+const documentSources = new WeakMap()
+const patchedTypes = new WeakSet()
+const patchedResolvers = new WeakSet()
+
 let tools
 
 function createWrapExecute (tracer, config, defaultFieldResolver) {
@@ -12,11 +17,11 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       const args = normalizeArgs(arguments, tracer, config, defaultFieldResolver)
       const schema = args.schema
       const document = args.document
-      const source = document && document._datadog_source
+      const source = documentSources.get(document)
       const contextValue = args.contextValue
       const operation = getOperation(document, args.operationName)
 
-      if (contextValue._datadog_graphql) {
+      if (contexts.has(contextValue)) {
         return execute.apply(this, arguments)
       }
 
@@ -26,11 +31,12 @@ function createWrapExecute (tracer, config, defaultFieldResolver) {
       }
 
       const span = startExecutionSpan(tracer, config, operation, args)
+      const context = { source, span, fields: {} }
 
-      contextValue._datadog_graphql = { source, span, fields: {} }
+      contexts.set(contextValue, context)
 
       return call(execute, span, this, arguments, (err, res) => {
-        finishResolvers(contextValue, config)
+        finishResolvers(context)
 
         setError(span, err || (res && res.errors && res.errors[0]))
         config.hooks.execute(span, args, res)
@@ -55,7 +61,7 @@ function createWrapParse (tracer, config) {
         if (!operation) return document // skip schema parsing
 
         if (source) {
-          document._datadog_source = source.body || source
+          documentSources.set(document, source.body || source)
         }
 
         addDocumentTags(span, document, config)
@@ -103,11 +109,11 @@ function createWrapValidate (tracer, config) {
 }
 
 function wrapFields (type, tracer, config) {
-  if (!type || !type._fields || type._datadog_patched) {
+  if (!type || !type._fields || patchedTypes.has(type)) {
     return
   }
 
-  type._datadog_patched = true
+  patchedTypes.add(type)
 
   Object.keys(type._fields).forEach(key => {
     const field = type._fields[key]
@@ -136,14 +142,16 @@ function wrapFieldType (field, tracer, config) {
 }
 
 function wrapResolve (resolve, tracer, config) {
-  if (resolve._datadog_patched || typeof resolve !== 'function') return resolve
+  if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   const responsePathAsArray = config.collapse
     ? withCollapse(pathToArray)
     : pathToArray
 
   function resolveWithTrace (source, args, contextValue, info) {
-    if (!contextValue._datadog_graphql) return resolve.apply(this, arguments)
+    const context = contexts.get(contextValue)
+
+    if (!context) return resolve.apply(this, arguments)
 
     const path = responsePathAsArray(info && info.path)
 
@@ -151,18 +159,18 @@ function wrapResolve (resolve, tracer, config) {
       const depth = path.filter(item => typeof item === 'string').length
 
       if (config.depth < depth) {
-        const parent = getParentField(tracer, contextValue, path)
+        const parent = getParentField(tracer, context, path)
 
         return call(resolve, parent.span, this, arguments)
       }
     }
 
-    const field = assertField(tracer, config, contextValue, info, path)
+    const field = assertField(tracer, config, context, info, path)
 
     return call(resolve, field.span, this, arguments, err => updateField(field, err))
   }
 
-  resolveWithTrace._datadog_patched = true
+  patchedResolvers.add(resolveWithTrace)
 
   return resolveWithTrace
 }
@@ -191,9 +199,9 @@ function call (fn, span, thisArg, args, callback) {
   }
 }
 
-function getParentField (tracer, contextValue, path) {
+function getParentField (tracer, context, path) {
   for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(contextValue, path.slice(0, i))
+    const field = getField(context, path.slice(0, i))
 
     if (field) {
       return field
@@ -201,12 +209,12 @@ function getParentField (tracer, contextValue, path) {
   }
 
   return {
-    span: contextValue._datadog_graphql.span
+    span: context.span
   }
 }
 
-function getField (contextValue, path) {
-  return contextValue._datadog_graphql.fields[path.join('.')]
+function getField (context, path) {
+  return context.fields[path.join('.')]
 }
 
 function normalizeArgs (args, tracer, config, defaultFieldResolver) {
@@ -267,8 +275,8 @@ function addExecutionTags (span, config, operation, document, operationName) {
 function addDocumentTags (span, document, config) {
   const tags = {}
 
-  if (config.source && document && document._datadog_source) {
-    tags['graphql.source'] = document._datadog_source
+  if (config.source && document) {
+    tags['graphql.source'] = documentSources.get(document)
   }
 
   span.addTags(tags)
@@ -300,9 +308,9 @@ function startSpan (tracer, config, name, options) {
   })
 }
 
-function startResolveSpan (tracer, config, childOf, path, info, contextValue) {
+function startResolveSpan (tracer, config, childOf, path, info, { source }) {
   const span = startSpan(tracer, config, 'resolve', { childOf })
-  const document = contextValue._datadog_graphql.source
+  const document = source
   const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
 
   analyticsSampler.sample(span, config.measured)
@@ -345,9 +353,7 @@ function finish (span, finishTime) {
   span.finish(finishTime)
 }
 
-function finishResolvers (contextValue) {
-  const fields = contextValue._datadog_graphql.fields
-
+function finishResolvers ({ fields }) {
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
 
@@ -369,18 +375,18 @@ function withCollapse (responsePathAsArray) {
   }
 }
 
-function assertField (tracer, config, contextValue, info, path) {
+function assertField (tracer, config, context, info, path) {
   const pathString = path.join('.')
-  const fields = contextValue._datadog_graphql.fields
+  const fields = context.fields
 
   let field = fields[pathString]
 
   if (!field) {
-    const parent = getParentField(tracer, contextValue, path)
+    const parent = getParentField(tracer, context, path)
 
     field = fields[pathString] = {
       parent,
-      span: startResolveSpan(tracer, config, parent.span, path, info, contextValue),
+      span: startResolveSpan(tracer, config, parent.span, path, info, context),
       error: null
     }
   }

@@ -2,10 +2,13 @@
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+const connectionAttributes = new WeakMap()
+const poolAttributes = new WeakMap()
+
 function createWrapExecute (tracer, config) {
   return function wrapExecute (execute) {
     return function executeWithTrace (dbQuery, ...args) {
-      const connAttrs = this._dd_connAttrs
+      const connAttrs = connectionAttributes.get(this)
       const service = getServiceName(tracer, config, connAttrs)
       const connectStringObj = new URL('http://' + connAttrs.connectString)
       const tags = {
@@ -37,7 +40,7 @@ function createWrapGetConnection (tracer, config) {
       if (callback) {
         arguments[1] = (err, connection) => {
           if (connection) {
-            connection._dd_connAttrs = connAttrs
+            connectionAttributes.set(connection, connAttrs)
           }
           callback(err, connection)
         }
@@ -45,7 +48,7 @@ function createWrapGetConnection (tracer, config) {
         getConnection.apply(this, arguments)
       } else {
         return getConnection.apply(this, arguments).then((connection) => {
-          connection._dd_connAttrs = connAttrs
+          connectionAttributes.set(connection, connAttrs)
           return connection
         })
       }
@@ -59,7 +62,7 @@ function createWrapCreatePool (tracer, config) {
       if (callback) {
         arguments[1] = (err, pool) => {
           if (pool) {
-            pool._dd_poolAttrs = poolAttrs
+            poolAttributes.set(pool, poolAttrs)
           }
           callback(err, pool)
         }
@@ -67,7 +70,7 @@ function createWrapCreatePool (tracer, config) {
         createPool.apply(this, arguments)
       } else {
         return createPool.apply(this, arguments).then((pool) => {
-          pool._dd_poolAttrs = poolAttrs
+          poolAttributes.set(pool, poolAttrs)
           return pool
         })
       }
@@ -85,14 +88,14 @@ function createWrapPoolGetConnection (tracer, config) {
       if (callback) {
         arguments[arguments.length - 1] = (err, connection) => {
           if (connection) {
-            connection._dd_connAttrs = this._dd_poolAttrs
+            connectionAttributes.set(connection, poolAttributes.get(this))
           }
           callback(err, connection)
         }
         getConnection.apply(this, arguments)
       } else {
         return getConnection.apply(this, arguments).then((connection) => {
-          connection._dd_connAttrs = this._dd_poolAttrs
+          connectionAttributes.set(connection, poolAttributes.get(this))
           return connection
         })
       }

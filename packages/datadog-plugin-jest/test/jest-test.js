@@ -59,4 +59,11 @@ describe('jest-test-suite', () => {
   test.skip('skips with test too', () => {
     expect(100).toEqual(100)
   })
+  it('does not crash with missing stack', (done) => {
+    setTimeout(() => {
+      const error = new Error('fail')
+      delete error.stack
+      throw error
+    }, 100)
+  })
 })

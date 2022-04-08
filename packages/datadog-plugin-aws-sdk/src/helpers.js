@@ -10,7 +10,8 @@ const services = {
   s3: getService(require('./services/s3')),
   redshift: getService(require('./services/redshift')),
   sns: getService(require('./services/sns')),
-  sqs: getService(require('./services/sqs'))
+  sqs: getService(require('./services/sqs')),
+  eventbridge: getService(require('./services/eventbridge'))
 }
 
 function getService (Service) {
@@ -18,7 +19,7 @@ function getService (Service) {
 }
 
 const helpers = {
-  finish (span, err) {
+  finish (config, span, response, err) {
     if (err) {
       span.setTag('error', err)
 
@@ -26,6 +27,8 @@ const helpers = {
         span.addTags({ 'aws.response.request_id': err.requestId })
       }
     }
+
+    config.hooks.request(span, response)
 
     span.finish()
   },
@@ -42,14 +45,12 @@ const helpers = {
       : true
   },
 
-  addResponseTags (span, response, serviceName, config) {
+  addResponseTags (span, response, serviceName) {
     if (!span) return
 
     if (response.request) {
       this.addServicesTags(span, response, serviceName)
     }
-
-    config.hooks.request(span, response)
   },
 
   addServicesTags (span, response, serviceName) {
@@ -78,8 +79,8 @@ const helpers = {
   requestInject (span, request, serviceName, tracer) {
     if (!span) return
 
-    const inject = services[serviceName] && services[serviceName].requestInject
-    if (inject) inject(span, request, tracer)
+    const service = services[serviceName] && services[serviceName]
+    if (service && service.requestInject) service.requestInject(span, request, tracer)
   },
 
   wrapCb (cb, serviceName, tags, request, tracer, childOf) {

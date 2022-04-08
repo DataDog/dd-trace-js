@@ -10,6 +10,7 @@ const metrics = require('./metrics')
 const log = require('./log')
 const { isFalse } = require('./util')
 const { setStartupLogInstrumenter } = require('./startup-log')
+const telemetry = require('./telemetry')
 
 const noop = new NoopTracer()
 
@@ -63,6 +64,7 @@ class Tracer extends BaseTracer {
         this._instrumenter.enable(config)
         this._pluginManager.configure(config)
         setStartupLogInstrumenter(this._instrumenter)
+        telemetry.start(config, this._instrumenter, this._pluginManager)
       }
     } catch (e) {
       log.error(e)
@@ -140,6 +142,10 @@ class Tracer extends BaseTracer {
 
   getRumData () {
     return this._tracer.getRumData.apply(this._tracer, arguments)
+  }
+
+  setUser () {
+    return this._tracer.setUser.apply(this.tracer, arguments)
   }
 }
 

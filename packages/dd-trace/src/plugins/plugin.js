@@ -8,7 +8,6 @@ class Subscription {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
       const store = storage.getStore()
-
       if (!store || !store.noop) {
         handler(message, name)
       }
@@ -42,6 +41,13 @@ module.exports = class Plugin {
     storage.enterWith({ ...store, span })
   }
 
+  /** Prevents creation of spans here and for all async descendants. */
+  skip () {
+    const store = storage.getStore()
+    this._storeStack.push(store)
+    storage.enterWith({ noop: true })
+  }
+
   exit () {
     storage.enterWith(this._storeStack.pop())
   }
@@ -51,6 +57,9 @@ module.exports = class Plugin {
   }
 
   configure (config) {
+    if (typeof config === 'boolean') {
+      config = { enabled: config }
+    }
     this.config = config
     if (config.enabled && !this._enabled) {
       this._enabled = true

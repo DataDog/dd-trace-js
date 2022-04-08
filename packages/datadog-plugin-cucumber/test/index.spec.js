@@ -2,11 +2,13 @@
 const path = require('path')
 const { PassThrough } = require('stream')
 
+const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
-const plugin = require('../src')
+const { SAMPLING_PRIORITY } = require('../../../ext/tags')
+const { AUTO_KEEP } = require('../../../ext/priority')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -21,6 +23,7 @@ const {
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
+  const stderr = new PassThrough()
   const cwd = path.resolve(path.join(__dirname, `../../../versions/@cucumber/cucumber@${version}`))
   const cucumberJs = `${cwd}/node-modules/.bin/cucumber-js`
   const argv = [
@@ -35,21 +38,23 @@ const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const cli = new Cucumber.Cli({
     argv,
     cwd,
-    stdout
+    stdout,
+    stderr,
+    env: process.env
   })
 
   return cli.run()
 }
 
-describe('Plugin', () => {
+describe('Plugin', function () {
   let Cucumber
-
-  withVersions(plugin, '@cucumber/cucumber', version => {
+  this.timeout(10000)
+  withVersions('cucumber', '@cucumber/cucumber', version => {
     afterEach(() => {
       // > If you want to run tests multiple times, you may need to clear Node's require cache
       // before subsequent calls in whichever manner best suits your needs.
       delete require.cache[require.resolve(path.join(__dirname, 'features', 'simple.js'))]
-      return agent.close()
+      return agent.close({ ritmReset: false })
     })
     beforeEach(() => {
       // for http integration tests
@@ -58,7 +63,7 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       return agent.load(['cucumber', 'http']).then(() => {
-        Cucumber = require(`../../../versions/@cucumber/cucumber@${version}`).get()
+        Cucumber = proxyquire(`../../../versions/@cucumber/cucumber@${version}`, {}).get()
       })
     })
 
@@ -81,6 +86,9 @@ describe('Plugin', () => {
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
               [TEST_STATUS]: 'pass'
+            })
+            expect(testSpan.metrics).to.contain({
+              [SAMPLING_PRIORITY]: AUTO_KEEP
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
@@ -153,7 +161,7 @@ describe('Plugin', () => {
             { name: 'run', stepStatus: 'pass' },
             { name: 'fail', stepStatus: 'fail' }
           ]
-          const errors = [undefined, undefined, 'AssertionError', 'AssertionError']
+          const errors = ['AssertionError', undefined, undefined, 'AssertionError']
           const checkTraces = agent.use(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')

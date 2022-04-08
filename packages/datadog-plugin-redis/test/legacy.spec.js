@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let redis
@@ -11,7 +10,7 @@ describe('Plugin', () => {
   let sub
 
   describe('redis', () => {
-    withVersions(plugin, 'redis', version => {
+    withVersions('redis', 'redis', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -28,7 +27,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -40,7 +39,6 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation when using callbacks', done => {
           client.on('error', done)
-
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'redis.command')
@@ -131,7 +129,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -172,7 +170,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {

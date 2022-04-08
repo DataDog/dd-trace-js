@@ -102,7 +102,7 @@ node-bench-sirun-base: &node-bench-sirun-base
         command: apt-get update && apt-get install -y valgrind wget
     - run:
         name: Install sirun
-        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.7/sirun-v0.1.7-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.7-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
+        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.9/sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
     - run:
         name: Run sirun
         command: |
@@ -148,7 +148,7 @@ node-plugin-base: &node-plugin-base
     - run:
         name: Get plugin name
         command: |
-          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
+          node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace('-latest', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
     - run:
         name: Unit tests
         command: PLUGINS=$(cat /tmp/dd_plugins_var) yarn test:plugins:ci
@@ -169,7 +169,7 @@ node-upstream-base: &node-upstream-base
     - run:
         name: Library test suite
         command: |
-          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace(/-\d*$/, '')")
+          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace('-latest', '').replace(/-\d*$/, '')")
           node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
 
 jobs:
@@ -295,7 +295,7 @@ jobs:
       - run:
           name: Install dependencies
           command: |
-            export PLUGINS="bluebird|promise-js|promise|q|when"
+            export PLUGINS="bluebird|generic-pool|promise-js|promise|q|when"
             node ./scripts/install_plugin_modules
       - run:
           name: Unit tests
@@ -457,8 +457,6 @@ jobs:
         environment:
           - PLUGINS=fs
 
-  node-generic-pool: *node-plugin-base
-
   node-google-cloud-pubsub:
     <<: *node-plugin-base
     docker:
@@ -494,7 +492,23 @@ jobs:
 
   node-jest: *node-plugin-base
 
-  node-knex: *node-plugin-base
+  node-knex:
+    <<: *node-plugin-base
+    steps:
+      - run:
+          name: Install older python for sqlite, when needed
+          command: apt-get update && apt-get install -y python-is-python2 || exit 0
+      - checkout-and-yarn-install:
+          yarn-args: ""
+      - run:
+          name: Get plugin name
+          command: |
+            node -p "process.env.PLUGINS || process.env.CIRCLE_JOB.replace('node-', '').replace('-latest', '').replace(/-\d*$/, '')" > /tmp/dd_plugins_var
+      - run:
+          name: Unit tests
+          command: PLUGINS=knex yarn test:plugins:ci
+      - store-test-results-and-coverage
+
 
   node-koa: *node-plugin-base
 
@@ -571,7 +585,33 @@ jobs:
 
   node-net: *node-plugin-base
 
-  node-next: *node-plugin-base
+  node-next:
+    <<: *node-plugin-base
+    steps:
+      - checkout-and-yarn-install:
+          yarn-args: ""
+      - when:
+          condition:
+            not:
+              or:
+                - equal: [ "12", << parameters.node-version >> ]
+                - equal: [ "14", << parameters.node-version >> ]
+                - equal: [ "16", << parameters.node-version >> ]
+          steps:
+            - run:
+                name: Unit tests
+                command: PLUGINS=next NODE_OPTIONS=--openssl-legacy-provider yarn test:plugins:ci
+      - when:
+          condition:
+            or:
+              - equal: [ "12", << parameters.node-version >> ]
+              - equal: [ "14", << parameters.node-version >> ]
+              - equal: [ "16", << parameters.node-version >> ]
+          steps:
+            - run:
+                name: Unit tests
+                command: PLUGINS=next yarn test:plugins:ci
+      - store-test-results-and-coverage
 
   node-oracledb:
     <<: *node-plugin-base
@@ -773,7 +813,6 @@ workflows:
       - node-express: *matrix-supported-node-versions
       - node-fastify: *matrix-supported-node-versions
       - node-fs: *matrix-supported-node-versions
-      - node-generic-pool: *matrix-supported-node-versions
       - node-google-cloud-pubsub: *matrix-supported-node-versions
       - node-graphql: *matrix-supported-node-versions
       # The grpc version ranges we support only support up to Node 12. TODO fix this.
@@ -840,7 +879,6 @@ workflows:
             - node-express
             - node-fastify
             - node-fs
-            - node-generic-pool
             - node-google-cloud-pubsub
             - node-graphql
             - node-grpc

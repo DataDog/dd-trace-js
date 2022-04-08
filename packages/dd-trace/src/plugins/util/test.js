@@ -1,4 +1,7 @@
 const path = require('path')
+const fs = require('fs')
+
+const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
 const { getUserProviderGitMetadata } = require('./user-provided-git')
@@ -25,6 +28,7 @@ const TEST_STATUS = 'test.status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
+const TEST_CODE_OWNERS = 'test.codeowners'
 
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.msg'
@@ -35,6 +39,7 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
 module.exports = {
+  TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
@@ -53,7 +58,9 @@ module.exports = {
   getTestParametersString,
   finishAllTraceSpans,
   getTestParentSpan,
-  getTestSuitePath
+  getTestSuitePath,
+  getCodeOwnersFileEntries,
+  getCodeOwnersForFilename
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -139,4 +146,56 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replace(path.sep, '/')
+}
+
+const POSSIBLE_CODEOWNERS_LOCATIONS = [
+  'CODEOWNERS',
+  '.github/CODEOWNERS',
+  'docs/CODEOWNERS',
+  '.gitlab/CODEOWNERS'
+]
+
+function getCodeOwnersFileEntries (rootDir = process.cwd()) {
+  let codeOwnersContent
+
+  POSSIBLE_CODEOWNERS_LOCATIONS.forEach(location => {
+    try {
+      codeOwnersContent = fs.readFileSync(`${rootDir}/${location}`).toString()
+    } catch (e) {
+      // retry with next path
+    }
+  })
+  if (!codeOwnersContent) {
+    return null
+  }
+
+  const entries = []
+  const lines = codeOwnersContent.split('\n')
+
+  for (const line of lines) {
+    const [content] = line.split('#')
+    const trimmed = content.trim()
+    if (trimmed === '') continue
+    const [pattern, ...owners] = trimmed.split(/\s+/)
+    entries.push({ pattern, owners })
+  }
+  // Reverse because rules defined last take precedence
+  return entries.reverse()
+}
+
+function getCodeOwnersForFilename (filename, entries) {
+  if (!entries) {
+    return null
+  }
+  for (const entry of entries) {
+    try {
+      const isResponsible = ignore().add(entry.pattern).ignores(filename)
+      if (isResponsible) {
+        return JSON.stringify(entry.owners)
+      }
+    } catch (e) {
+      return null
+    }
+  }
+  return null
 }

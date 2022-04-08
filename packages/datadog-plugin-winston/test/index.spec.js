@@ -2,8 +2,9 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const http = require('http')
+const { expect } = require('chai')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 function createLogServer () {
   return new Promise((resolve, reject) => {
@@ -47,7 +48,7 @@ describe('Plugin', () => {
   async function setup (version, winstonConfiguration) {
     span = tracer.startSpan('test')
 
-    winston = require(`../../../versions/winston@${version}`).get()
+    winston = proxyquire(`../../../versions/winston@${version}`, {}).get()
 
     logServer = await createLogServer()
 
@@ -89,14 +90,14 @@ describe('Plugin', () => {
   }
 
   describe('winston', () => {
-    withVersions(plugin, 'winston', version => {
+    withVersions('winston', 'winston', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         return agent.load('winston')
       })
 
       afterEach(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
@@ -218,6 +219,31 @@ describe('Plugin', () => {
               expect(await logServer.logPromise).to.include(dd)
             })
           }
+
+          it('should overwrite any existing "dd" property', async () => {
+            const meta = {
+              dd: {
+                trace_id: span.context().toTraceId(),
+                span_id: span.context().toSpanId()
+              }
+            }
+
+            tracer.scope().activate(span, () => {
+              const logObj = {
+                some: 'data',
+                dd: 'something else'
+              }
+              winston.info(logObj)
+              expect(logObj.dd).to.equal('something else')
+
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
+            })
+            expect(await logServer.logPromise).to.include(meta.dd)
+          })
+
+          it('should skip injection without a store', async () => {
+            expect(() => winston.info('message')).to.not.throw()
+          })
         })
 
         describe('with splat formatting', () => {

@@ -1,11 +1,13 @@
-const { expect } = require('chai')
-const fs = require('fs')
+const http = require('http')
 
-describe('mocha-test-integration', () => {
-  it('can do integration tests', (done) => {
-    fs.readFile('./package.json', () => {
-      expect(true).to.equal(true)
-      done()
-    })
+describe('mocha-test-integration-http', () => {
+  it('can do integration http', (done) => {
+    setTimeout(() => {
+      const req = http.request('http://test:123', (res) => {
+        expect(res.statusCode).to.equal(200)
+        done()
+      })
+      req.end()
+    }, 100)
   })
 })

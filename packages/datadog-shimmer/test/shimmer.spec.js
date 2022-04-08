@@ -81,7 +81,25 @@ describe('shimmer', () => {
 
       const obj = { Counter }
 
-      expect(() => shimmer.wrap(obj, 'Counter', function () {})).to.throw()
+      expect(() => shimmer.wrap(obj, 'Counter', function () {})).to.throw(
+        'Target is a native class constructor and cannot be wrapped.'
+      )
+    })
+
+    it('should not wrap a class constructor with invalid toString()', () => {
+      class Counter {
+        constructor (start) {
+          this.value = start
+        }
+      }
+
+      Counter.toString = 'invalid'
+
+      const obj = { Counter }
+
+      expect(() => shimmer.wrap(obj, 'Counter', function () {})).to.throw(
+        'Target is a native class constructor and cannot be wrapped.'
+      )
     })
 
     it('should preserve property descriptors from the original', () => {
@@ -235,7 +253,23 @@ describe('shimmer', () => {
         }
       }
 
-      expect(() => shimmer.wrap(Counter, function () {})).to.throw()
+      expect(() => shimmer.wrap(Counter, function () {})).to.throw(
+        'Target is a native class constructor and cannot be wrapped.'
+      )
+    })
+
+    it('should not wrap the class constructor with invalid toString()', () => {
+      class Counter {
+        constructor (start) {
+          this.value = start
+        }
+      }
+
+      Counter.toString = 'invalid'
+
+      expect(() => shimmer.wrap(Counter, function () {})).to.throw(
+        'Target is a native class constructor and cannot be wrapped.'
+      )
     })
 
     it('should preserve property descriptors from the original', () => {

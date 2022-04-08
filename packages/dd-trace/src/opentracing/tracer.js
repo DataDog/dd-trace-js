@@ -35,7 +35,7 @@ class DatadogTracer extends Tracer {
     this._debug = config.debug
     this._prioritySampler = new PrioritySampler(config.env, config.experimental.sampler)
     this._exporter = new Exporter(config, this._prioritySampler)
-    this._processor = new SpanProcessor(this._exporter, this._prioritySampler)
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
     this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
     this._propagators = {

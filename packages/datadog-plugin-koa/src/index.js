@@ -2,6 +2,8 @@
 
 const web = require('../../dd-trace/src/plugins/util/web')
 
+const originals = new WeakMap()
+
 function createWrapCallback (tracer, config) {
   config = web.normalizeConfig(config)
 
@@ -83,7 +85,9 @@ function wrapStack (layer) {
   layer.stack = layer.stack.map(middleware => {
     if (typeof middleware !== 'function') return middleware
 
-    middleware = middleware._dd_original || middleware
+    const original = originals.get(middleware)
+
+    middleware = original || middleware
 
     const wrappedMiddleware = wrapMiddleware(middleware)
 
@@ -96,7 +100,7 @@ function wrapStack (layer) {
       return wrappedMiddleware.apply(this, arguments)
     }
 
-    handler._dd_original = middleware
+    originals.set(handler, middleware)
 
     return handler
   })

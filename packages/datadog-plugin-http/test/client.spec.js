@@ -42,7 +42,7 @@ describe('Plugin', () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
@@ -56,11 +56,9 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           const app = express()
-
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
-
           getPort().then(port => {
             agent
               .use(traces => {
@@ -111,9 +109,97 @@ describe('Plugin', () => {
           })
         })
 
+        it('should support CONNECT', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-http-client')
+                expect(traces[0][0]).to.have.property('type', 'http')
+                expect(traces[0][0]).to.have.property('resource', 'CONNECT')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                expect(traces[0][0].meta).to.have.property('http.method', 'CONNECT')
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              appListener.on('connect', (req, clientSocket, head) => {
+                clientSocket.write('HTTP/1.1 200 Connection Established\r\n' +
+                                  'Proxy-agent: Node.js-Proxy\r\n' +
+                                  '\r\n')
+                clientSocket.end()
+                appListener.close()
+              })
+
+              const req = http.request({
+                protocol: `${protocol}:`,
+                port,
+                method: 'CONNECT',
+                hostname: 'localhost',
+                path: '/user'
+              })
+
+              req.on('connect', (res, socket) => socket.end())
+              req.on('error', () => {})
+              req.end()
+            })
+          })
+        })
+
+        it('should support connection upgrades', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-http-client')
+                expect(traces[0][0]).to.have.property('type', 'http')
+                expect(traces[0][0]).to.have.property('resource', 'GET')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+                expect(traces[0][0].meta).to.have.property('http.status_code', '101')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              appListener.on('upgrade', (req, socket, head) => {
+                socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
+                             'Upgrade: WebSocket\r\n' +
+                             'Connection: Upgrade\r\n' +
+                             '\r\n')
+                socket.pipe(socket)
+              })
+
+              const req = http.request({
+                protocol: `${protocol}:`,
+                port,
+                hostname: 'localhost',
+                path: '/user',
+                headers: {
+                  'Connection': 'Upgrade',
+                  'Upgrade': 'websocket'
+                }
+              })
+
+              req.on('upgrade', (res, socket) => socket.end())
+              req.on('error', () => {})
+              req.end()
+            })
+          })
+        })
+
         it('should support configuration as an URL object', done => {
           const app = express()
-
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
@@ -459,7 +545,6 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {
             res.status(200).send('OK')
           })
-
           getPort().then(port => {
             appListener = server(app, port, () => {
               const req = http.request(`${protocol}://localhost:${port}/user`, res => {
@@ -489,6 +574,27 @@ describe('Plugin', () => {
                   expect(tracer.scope().active()).to.equal(span)
                   done()
                 })
+              })
+
+              req.end()
+            })
+          })
+        })
+
+        it('should run the response event in the request context', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send('OK')
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, () => {})
+
+              req.on('response', () => {
+                expect(tracer.scope().active()).to.not.be.null
+                done()
               })
 
               req.end()
@@ -750,6 +856,38 @@ describe('Plugin', () => {
           })
         })
 
+        it('should not update the span after the request is finished', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][1]).to.have.property('error', 0)
+                expect(traces[0][1].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][1].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              tracer.trace('test.request', (span, finish) => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => {})
+                  res.on('end', () => {
+                    setTimeout(finish)
+                  })
+                })
+
+                req.end()
+              })
+            })
+          })
+        })
+
         if (protocol === 'http') {
           it('should skip requests marked as noop', done => {
             const app = express()
@@ -771,7 +909,6 @@ describe('Plugin', () => {
                 const store = storage.getStore()
 
                 storage.enterWith({ noop: true })
-
                 const req = http.request(tracer._tracer._url.href)
 
                 req.on('error', () => {})

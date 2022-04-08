@@ -21,7 +21,7 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = Object.assign({}, {
+    options = Object.assign({
       childOf: this.scope().active()
     }, options)
 
@@ -121,6 +121,22 @@ class DatadogTracer extends Tracer {
     return `\
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
+  }
+
+  setUser (user) {
+    if (!user || !user.id) return this
+
+    const span = this.scope().active()
+    if (!span) return this
+
+    const rootSpan = span._spanContext._trace.started[0]
+    if (!rootSpan) return this
+
+    for (const k of Object.keys(user)) {
+      rootSpan.setTag(`usr.${k}`, '' + user[k])
+    }
+
+    return this
   }
 }
 

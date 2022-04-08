@@ -5,7 +5,7 @@ const { request } = require('http')
 const FormData = require('form-data')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
-const docker = require('../../exporters/agent/docker')
+const docker = require('../../exporters/common/docker')
 const version = require('../../../lib/version')
 
 const containerId = docker.id()

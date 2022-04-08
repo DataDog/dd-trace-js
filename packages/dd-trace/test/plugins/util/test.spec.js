@@ -1,4 +1,11 @@
-const { getTestParametersString, getTestSuitePath } = require('../../../src/plugins/util/test')
+const path = require('path')
+
+const {
+  getTestParametersString,
+  getTestSuitePath,
+  getCodeOwnersFileEntries,
+  getCodeOwnersForFilename
+} = require('../../../src/plugins/util/test')
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
@@ -41,5 +48,53 @@ describe('getTestSuitePath', () => {
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     expect(testSuitePath).to.equal(sourceRoot)
+  })
+})
+
+describe('getCodeOwnersFileEntries', () => {
+  it('returns code owners entries', () => {
+    const rootDir = path.join(__dirname, '__test__')
+    const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
+
+    expect(codeOwnersFileEntries[0]).to.eql({
+      pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
+      owners: ['@datadog-ci-app']
+    })
+    expect(codeOwnersFileEntries[1]).to.eql({
+      pattern: 'packages/dd-trace/test/plugins/util/*',
+      owners: ['@datadog-apm-js']
+    })
+  })
+  it('returns null if CODEOWNERS can not be found', () => {
+    const rootDir = path.join(__dirname, '__not_found__')
+    const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
+
+    expect(codeOwnersFileEntries).to.equal(null)
+  })
+})
+
+describe('getCodeOwnersForFilename', () => {
+  it('returns null if entries is empty', () => {
+    const codeOwners = getCodeOwnersForFilename('filename', undefined)
+
+    expect(codeOwners).to.equal(null)
+  })
+  it('returns the code owners for a given file path', () => {
+    const rootDir = path.join(__dirname, '__test__')
+    const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
+
+    const codeOwnersForGitSpec = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/git.spec.js',
+      codeOwnersFileEntries
+    )
+
+    expect(codeOwnersForGitSpec).to.equal(JSON.stringify(['@datadog-apm-js']))
+
+    const codeOwnersForTestSpec = getCodeOwnersForFilename(
+      'packages/dd-trace/test/plugins/util/test.spec.js',
+      codeOwnersFileEntries
+    )
+
+    expect(codeOwnersForTestSpec).to.equal(JSON.stringify(['@datadog-ci-app']))
   })
 })
