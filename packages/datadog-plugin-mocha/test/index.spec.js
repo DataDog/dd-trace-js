@@ -18,7 +18,8 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK,
   CI_APP_ORIGIN,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 
 const ASYNC_TESTS = [
@@ -113,6 +114,9 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+            expect(testSpan.meta[TEST_CODE_OWNERS]).to.equal(
+              JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
+            )
           })
         })
         Promise.all(assertionPromises)
