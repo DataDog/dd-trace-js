@@ -24,8 +24,25 @@ const specStatusToTestStatus = {
   'failed': 'fail'
 }
 
-function getWrappedEnvironment (NodeEnvironment) {
-  return class DatadogEnvironment extends NodeEnvironment {
+// based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
+function formatJestError (errors) {
+  let error
+  if (Array.isArray(errors)) {
+    const [originalError, asyncError] = errors
+    if (originalError === null || !originalError.stack) {
+      error = asyncError
+      error.message = originalError
+    } else {
+      error = originalError
+    }
+  } else {
+    error = errors
+  }
+  return error
+}
+
+function getWrappedEnvironment (BaseEnvironment) {
+  return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
       this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
@@ -79,7 +96,8 @@ function getWrappedEnvironment (NodeEnvironment) {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
-            testErrCh.publish(event.test.errors[0])
+            const formattedError = formatJestError(event.test.errors[0])
+            testErrCh.publish(formattedError)
           }
           testRunEndCh.publish(status)
           // restore in case it is retried
@@ -100,16 +118,12 @@ function getWrappedEnvironment (NodeEnvironment) {
 addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0']
-}, (NodeEnvironment) => {
-  return getWrappedEnvironment(NodeEnvironment)
-})
+}, getWrappedEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0']
-}, (JsdomEnvironment) => {
-  return getWrappedEnvironment(JsdomEnvironment)
-})
+}, getWrappedEnvironment)
 
 addHook({
   name: 'jest-jasmine2',
@@ -129,7 +143,8 @@ addHook({
         const spec = this
         const callback = asyncResource.bind(function () {
           if (spec.result.failedExpectations && spec.result.failedExpectations.length) {
-            testErrCh.publish(spec.result.failedExpectations[0].error)
+            const formattedError = formatJestError(spec.result.failedExpectations[0].error)
+            testErrCh.publish(formattedError)
           }
           testRunEndCh.publish(specStatusToTestStatus[spec.result.status])
           onComplete.apply(this, arguments)

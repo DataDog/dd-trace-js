@@ -1,8 +1,3 @@
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY, SPAN_TYPE } = require('../../../ext/tags')
-const { AUTO_KEEP } = require('../../../ext/priority')
-const { TEST_TYPE, TEST_STATUS, getTestParentSpan } = require('../../dd-trace/src/plugins/util/test')
-
 /**
  * There are two ways to call `test.each` in `jest`:
  * 1. With an array of arrays: https://jestjs.io/docs/api#1-testeachtablename-fn-timeout

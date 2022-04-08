@@ -23,7 +23,7 @@ describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
-  this.timeout(60000)
+  this.timeout(20000)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
