@@ -12,9 +12,12 @@ const {
   TEST_FRAMEWORK_VERSION,
   ERROR_MESSAGE,
   TEST_STATUS,
+  TEST_CODE_OWNERS,
   finishAllTraceSpans,
   getTestEnvironmentMetadata,
-  getTestSuitePath
+  getTestSuitePath,
+  getCodeOwnersFileEntries,
+  getCodeOwnersForFilename
 } = require('../../dd-trace/src/plugins/util/test')
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
@@ -30,26 +33,35 @@ class CucumberPlugin extends Plugin {
 
     const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber', this.config)
     const sourceRoot = process.cwd()
+    const codeOwnersEntries = getCodeOwnersFileEntries(sourceRoot)
 
     this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const testSuite = getTestSuitePath(pickleUri, sourceRoot)
 
+      const testSpanMetadata = {
+        [SPAN_TYPE]: 'test',
+        [RESOURCE_NAME]: pickleName,
+        [TEST_TYPE]: 'test',
+        [TEST_NAME]: pickleName,
+        [TEST_SUITE]: testSuite,
+        [SAMPLING_RULE_DECISION]: 1,
+        [SAMPLING_PRIORITY]: AUTO_KEEP,
+        [TEST_FRAMEWORK_VERSION]: this.tracer._version,
+        ...testEnvironmentMetadata
+      }
+
+      const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
+      if (codeOwners) {
+        testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      }
+
       const span = this.tracer.startSpan('cucumber.test', {
         childOf,
-        tags: {
-          [SPAN_TYPE]: 'test',
-          [RESOURCE_NAME]: pickleName,
-          [TEST_TYPE]: 'test',
-          [TEST_NAME]: pickleName,
-          [TEST_SUITE]: testSuite,
-          [SAMPLING_RULE_DECISION]: 1,
-          [SAMPLING_PRIORITY]: AUTO_KEEP,
-          [TEST_FRAMEWORK_VERSION]: this.tracer._version,
-          ...testEnvironmentMetadata
-        }
+        tags: testSpanMetadata
       })
+
       span.context()._trace.origin = CI_APP_ORIGIN
       this.enter(span, store)
     })
