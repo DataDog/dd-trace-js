@@ -3,7 +3,6 @@ const getPort = require('get-port')
 const { expect } = require('chai')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const appServer = require('./app/app-server')
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const {
@@ -24,7 +23,7 @@ describe('Plugin', () => {
   let cypressExecutable
   let appPort
   let agentListenPort
-  withVersions(plugin, ['cypress'], (version, moduleName) => {
+  withVersions('cypress', 'cypress', (version, moduleName) => {
     beforeEach(function () {
       this.timeout(10000)
       return agent.load().then(() => {
@@ -36,7 +35,7 @@ describe('Plugin', () => {
         })
       })
     })
-    afterEach(() => agent.close())
+    afterEach(() => agent.close({ ritmReset: false }))
     afterEach(done => appServer.close(done))
 
     describe('cypress', function () {
