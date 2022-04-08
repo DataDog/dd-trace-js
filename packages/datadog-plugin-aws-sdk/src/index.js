@@ -36,7 +36,7 @@ function createWrapRequest (tracer, config) {
         if (!span) return
 
         awsHelpers.addResponseTags(span, response, serviceIdentifier, config, tracer)
-        awsHelpers.finish(span, response.error)
+        awsHelpers.finish(config, span, response, response.error)
       })
 
       analyticsSampler.sample(span, config.measured)
