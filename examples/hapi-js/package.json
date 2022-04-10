@@ -1,0 +1,19 @@
+{
+  "name": "hapi-js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "DD_TRACE_DEBUG=true node ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hapi/hapi": "^20.2.1",
+    "hapi-pino": "^9.3.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^7.6.1"
+  }
+}

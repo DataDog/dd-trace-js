@@ -193,6 +193,17 @@ describe('Plugin', () => {
           .catch(done)
       })
 
+      it('should run server.ext(events) outside the request scope', done => {
+
+        server.ext('onPreStart', (request) => {
+          return tracer.scope().activate(null, reply(request, h))
+        })
+
+        axios
+          .post(`http://localhost:${port}`, {})
+          .catch(done)
+      })
+
       if (semver.intersects(version, '>=11')) {
         it('should run extension events in the request scope', done => {
           server.route({
