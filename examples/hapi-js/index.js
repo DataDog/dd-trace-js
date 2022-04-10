@@ -1,9 +1,9 @@
 'use strict'
-const tracer = require('../..');
+const tracer = require('../..')
 
 tracer.init({
-    logInjection: true
-}).use('hapi', {});
+  logInjection: true
+}).use('hapi', {})
 
 const Hapi = require('@hapi/hapi')
 // manage logs
@@ -51,27 +51,25 @@ async function start () {
           colorize: true,
           messageFormat: true,
           translateTime: true,
-          singleLine: false,
+          singleLine: false
         }
       }
     }
-  });
+  })
   await server.ext([
-      {
-          type: 'onPreStart',
-          method: (request) => {
-            const reviewScope = tracer.scope().active();
-            tracer.trace('onPreStart', {}, () => {});
-          }
+    {
+      type: 'onPreStart',
+      method: (request) => {
+        tracer.scope().activate(null, () => {})
       }
+    }
   ])
-  await server.start();
+  await server.start()
 
   server.log(['info'], `Items endPoint running: ${server.info.uri}/items`)
   return server
 }
 
-start().catch((err) => {
-  console.log(err)
+start().catch(() => {
   process.exit(1)
 })

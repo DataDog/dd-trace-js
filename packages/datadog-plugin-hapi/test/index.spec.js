@@ -194,9 +194,8 @@ describe('Plugin', () => {
       })
 
       it('should run server.ext(events) outside the request scope', done => {
-
         server.ext('onPreStart', (request) => {
-          return tracer.scope().activate(null, reply(request, h))
+          return tracer.scope().activate(null, () => {})
         })
 
         axios
