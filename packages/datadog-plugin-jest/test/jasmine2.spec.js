@@ -28,7 +28,6 @@ describe('Plugin', () => {
     reporters: [],
     testRunner: 'jest-jasmine2',
     silent: true,
-    testEnvironment: 'node',
     cache: false,
     maxWorkers: '50%'
   }
@@ -46,17 +45,19 @@ describe('Plugin', () => {
       nock('http://test:123')
         .get('/')
         .reply(200, 'OK')
+
       return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
         jestExecutable = require(`../../../versions/jest@${version}`).get()
       })
     })
     describe('jest with jasmine', function () {
       this.timeout(60000)
-      it('instruments async and sync tests', function (done) {
+      it('instruments async, sync and integration tests', function (done) {
         const tests = [
           { name: 'jest-test-suite done', status: 'pass' },
           { name: 'jest-test-suite done fail', status: 'fail' },
           { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+          { name: 'jest-test-suite can do integration http', status: 'pass' },
           { name: 'jest-test-suite promise passes', status: 'pass' },
           { name: 'jest-test-suite promise fails', status: 'fail' },
           { name: 'jest-test-suite timeout', status: 'fail' },
@@ -83,6 +84,12 @@ describe('Plugin', () => {
             })
             if (error) {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
+            }
+            if (name === 'jest-test-suite can do integration http') {
+              const httpSpan = trace[0].find(span => span.name === 'http.request')
+              expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+              expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
             }
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
@@ -178,36 +185,6 @@ describe('Plugin', () => {
         const options = {
           ...jestCommonOptions,
           testRegex: 'jest-focus.js'
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
-
-      it('should work with integrations', (done) => {
-        agent.use(trace => {
-          const httpSpan = trace[0].find(span => span.name === 'http.request')
-          const testSpan = trace[0].find(span => span.type === 'test')
-          expect(testSpan.parent_id.toString()).to.equal('0')
-          expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-          expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-          expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
-          expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
-          expect(testSpan.meta).to.contain({
-            language: 'javascript',
-            service: 'test',
-            [TEST_NAME]: 'jest-test-integration-http can do integration http',
-            [TEST_STATUS]: 'pass',
-            [TEST_FRAMEWORK]: 'jest',
-            [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-integration.js'
-          })
-        }).then(() => done()).catch(done)
-
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-integration.js'
         }
 
         jestExecutable.runCLI(

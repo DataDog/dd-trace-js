@@ -46,7 +46,6 @@ function getWrappedEnvironment (BaseEnvironment) {
     constructor (config, context) {
       super(config, context)
       this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
-      this.ar = new AsyncResource('bound-anonymous-fn')
       this.nameToParams = {}
     }
     async teardown () {
@@ -59,30 +58,34 @@ function getWrappedEnvironment (BaseEnvironment) {
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
       }
-      this.ar.runInAsyncScope(() => {
-        let context
-        if (this.getVmContext) {
-          context = this.getVmContext()
-        } else {
-          context = this.context
-        }
 
-        const setNameToParams = (name, params) => { this.nameToParams[name] = params }
+      let context
+      if (this.getVmContext) {
+        context = this.getVmContext()
+      } else {
+        context = this.context
+      }
 
-        if (event.name === 'setup') {
-          shimmer.wrap(this.global.test, 'each', each => function () {
-            const testParameters = getFormattedJestTestParameters(arguments)
-            const eachBind = each.apply(this, arguments)
-            return function () {
-              const [testName] = arguments
-              setNameToParams(testName, testParameters)
-              return eachBind.apply(this, arguments)
-            }
-          })
-        }
-        if (event.name === 'test_start') {
-          const testParameters = getTestParametersString(this.nameToParams, event.test.name)
+      const setNameToParams = (name, params) => { this.nameToParams[name] = params }
 
+      if (event.name === 'setup') {
+        shimmer.wrap(this.global.test, 'each', each => function () {
+          const testParameters = getFormattedJestTestParameters(arguments)
+          const eachBind = each.apply(this, arguments)
+          return function () {
+            const [testName] = arguments
+            setNameToParams(testName, testParameters)
+            return eachBind.apply(this, arguments)
+          }
+        })
+      }
+      if (event.name === 'test_start') {
+        const testParameters = getTestParametersString(this.nameToParams, event.test.name)
+
+        // Async resource for this test is created here
+        // It is used later on by the test_done handler
+        this.ar = new AsyncResource('bound-anonymous-fn')
+        this.ar.runInAsyncScope(() => {
           testStartCh.publish({
             name: context.expect.getState().currentTestName,
             suite: this.testSuite,
@@ -91,8 +94,10 @@ function getWrappedEnvironment (BaseEnvironment) {
           })
           this.originalTestFn = event.test.fn
           event.test.fn = this.ar.bind(event.test.fn)
-        }
-        if (event.name === 'test_done') {
+        })
+      }
+      if (event.name === 'test_done') {
+        this.ar.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
@@ -102,15 +107,15 @@ function getWrappedEnvironment (BaseEnvironment) {
           testRunEndCh.publish(status)
           // restore in case it is retried
           event.test.fn = this.originalTestFn
-        }
-        if (event.name === 'test_skip' || event.name === 'test_todo') {
-          testSkippedCh.publish({
-            name: context.expect.getState().currentTestName,
-            suite: this.testSuite,
-            runner: 'jest-circus'
-          })
-        }
-      })
+        })
+      }
+      if (event.name === 'test_skip' || event.name === 'test_todo') {
+        testSkippedCh.publish({
+          name: context.expect.getState().currentTestName,
+          suite: this.testSuite,
+          runner: 'jest-circus'
+        })
+      }
     }
   }
 }

@@ -25,7 +25,7 @@ describe('Plugin', function () {
 
   this.timeout(20000)
 
-  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
+  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version) => {
     afterEach(() => {
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
@@ -59,11 +59,22 @@ describe('Plugin', function () {
       })
     })
     describe('jest with jest-circus', () => {
-      it('should create test spans for sync and async tests', (done) => {
+      it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
         const tests = [
           { name: 'jest-test-suite done', status: 'pass' },
           { name: 'jest-test-suite done fail', status: 'fail' },
           { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+          { name: 'jest-test-suite can do integration http', status: 'pass' },
+          {
+            name: 'jest-test-suite can do parameterized test',
+            status: 'pass',
+            parameters: { arguments: [1, 2, 3], metadata: {} }
+          },
+          {
+            name: 'jest-test-suite can do parameterized test',
+            status: 'pass',
+            parameters: { arguments: [2, 3, 5], metadata: {} }
+          },
           { name: 'jest-test-suite promise passes', status: 'pass' },
           { name: 'jest-test-suite promise fails', status: 'fail' },
           { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
@@ -71,10 +82,13 @@ describe('Plugin', function () {
           { name: 'jest-test-suite fails', status: 'fail' },
           { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
           { name: 'jest-test-suite skips', status: 'skip' },
-          { name: 'jest-test-suite skips todo', status: 'skip' }
+          { name: 'jest-test-suite skips todo', status: 'skip' },
+          { name: 'jest-circus-test-retry can retry', status: 'fail' },
+          { name: 'jest-circus-test-retry can retry', status: 'fail' },
+          { name: 'jest-circus-test-retry can retry', status: 'pass' }
         ]
 
-        const assertionPromises = tests.map(({ name, status, error }) => {
+        const assertionPromises = tests.map(({ name, status, error, parameters }) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
@@ -91,6 +105,15 @@ describe('Plugin', function () {
             })
             if (error) {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
+            }
+            if (name === 'jest-test-suite can do integration http') {
+              const httpSpan = trace[0].find(span => span.name === 'http.request')
+              expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+              expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+            }
+            if (parameters) {
+              expect(testSpan.meta[TEST_PARAMETERS]).to.equal(JSON.stringify(parameters))
             }
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
@@ -112,49 +135,7 @@ describe('Plugin', function () {
           options.projects
         )
       })
-      it('should create test spans for retried tests', (done) => {
-        const tests = [
-          { status: 'fail' },
-          { status: 'fail' },
-          { status: 'pass' }
-        ]
-        const assertionPromises = tests.map(({ status }) => {
-          return agent.use(trace => {
-            const testSpan = trace[0][0]
-            expect(testSpan.parent_id.toString()).to.equal('0')
-            expect(testSpan.meta).to.contain({
-              language: 'javascript',
-              service: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [TEST_FRAMEWORK]: 'jest',
-              [TEST_NAME]: 'jest-circus-test-retry can retry',
-              [TEST_STATUS]: status,
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-circus-retry.js',
-              [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-circus'
-            })
-            expect(testSpan.type).to.equal('test')
-            expect(testSpan.name).to.equal('jest.test')
-            expect(testSpan.service).to.equal('test')
-            expect(testSpan.resource).to.equal(
-              'packages/datadog-plugin-jest/test/jest-circus-retry.js.jest-circus-test-retry can retry'
-            )
-            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          })
-        })
 
-        Promise.all(assertionPromises).then(() => done()).catch(done)
-
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-circus-retry.js'
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
       it('should detect an error in hooks', (done) => {
         const tests = [
           { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
@@ -199,42 +180,6 @@ describe('Plugin', function () {
         )
       })
 
-      it('should work with parameterized tests', (done) => {
-        const tests = [
-          { arguments: [1, 2, 3], metadata: {} },
-          { arguments: [2, 3, 5], metadata: {} }
-        ]
-
-        const assertionPromises = tests.map((parameters) => {
-          return agent.use(trace => {
-            const testSpan = trace[0].find(span => span.type === 'test')
-            expect(testSpan.parent_id.toString()).to.equal('0')
-            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-            expect(testSpan.meta).to.contain({
-              language: 'javascript',
-              service: 'test',
-              [TEST_NAME]: 'jest-test-parameterized can do parameterized test',
-              [TEST_STATUS]: 'pass',
-              [TEST_FRAMEWORK]: 'jest',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-parameterized.js'
-            })
-            expect(testSpan.meta[TEST_PARAMETERS]).to.equal(JSON.stringify(parameters))
-          })
-        })
-
-        Promise.all(assertionPromises).then(() => done()).catch(done)
-
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-parameterized.js'
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
-
       it('should work with focused tests', (done) => {
         const tests = [
           { name: 'jest-test-focused will be skipped', status: 'skip' },
@@ -263,36 +208,6 @@ describe('Plugin', function () {
         const options = {
           ...jestCommonOptions,
           testRegex: 'jest-focus.js'
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
-
-      it('should work with integrations', (done) => {
-        agent.use(trace => {
-          const httpSpan = trace[0].find(span => span.name === 'http.request')
-          const testSpan = trace[0].find(span => span.type === 'test')
-          expect(testSpan.parent_id.toString()).to.equal('0')
-          expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-          expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-          expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
-          expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
-          expect(testSpan.meta).to.contain({
-            language: 'javascript',
-            service: 'test',
-            [TEST_NAME]: 'jest-test-integration-http can do integration http',
-            [TEST_STATUS]: 'pass',
-            [TEST_FRAMEWORK]: 'jest',
-            [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-integration.js'
-          })
-        }).then(() => done()).catch(done)
-
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-integration.js'
         }
 
         jestExecutable.runCLI(
