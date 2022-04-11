@@ -502,8 +502,8 @@ More information on which hooks are supported for each integration can be found 
 
 <h3 id="set-user">User Identification</h3>
 
-The tracer provides a convenience function to link an actor to a trace. For example to correlate users to web requests.
-You have to pass an object with at least an `id` property.
+The tracer provides a convenient function to link an actor to a trace. For example to correlate users to web requests,
+you have to pass an object with at least an `id` property.
 
 For example:
 
