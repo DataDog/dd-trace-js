@@ -9,6 +9,7 @@ function createWrapProducer (tracer, config) {
       const producer = createProducer.apply(this, arguments)
 
       const send = producer.send
+      const originalSendBatch = producer.sendBatch
 
       const tags = {
         'service.name': serviceName,
@@ -34,6 +35,37 @@ function createWrapProducer (tracer, config) {
         }
 
         return send.apply(this, args)
+      })
+
+      producer.sendBatch = tracer.wrap('kafka.produce', { tags }, function (...args) {
+        const { topicMessages = [] } = args[0]
+        const currentSpan = tracer.scope().active()
+        const topics = new Set()
+        let batchSize = 0
+
+        analyticsSampler.sample(currentSpan, config.measured)
+
+        for (const { topic, messages = [] } of topicMessages) {
+          topics.add(topic)
+          batchSize += messages.length
+          for (const message of messages) {
+            message.headers = message.headers || {}
+            tracer.inject(currentSpan, 'text_map', message.headers)
+          }
+        }
+
+        const tags = {
+          'resource.name': 'sendBatch',
+          'kafka.batch_size': batchSize
+        }
+
+        Array.from(topics).forEach((topic, idx) => {
+          tags[`kafka.topics.${idx}`] = topic
+        })
+
+        currentSpan.addTags(tags)
+
+        return originalSendBatch.apply(this, args)
       })
 
       return producer
