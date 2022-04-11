@@ -3,36 +3,25 @@ const { storage } = require('../../datadog-core')
 
 const {
   CI_APP_ORIGIN,
-  TEST_TYPE,
-  TEST_NAME,
-  TEST_SUITE,
-  TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestEnvironmentMetadata,
   getTestParentSpan,
+  getTestCommonTags,
   TEST_PARAMETERS
 } = require('../../dd-trace/src/plugins/util/test')
-const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { AUTO_KEEP } = require('../../../ext/priority')
 
 function getTestSpanMetadata (tracer, test) {
   const childOf = getTestParentSpan(tracer)
 
   const { suite, name, runner, testParameters } = test
 
+  const commonTags = getTestCommonTags(name, suite, tracer._version)
+
   return {
     childOf,
-    [SPAN_TYPE]: 'test',
-    [TEST_TYPE]: 'test',
-    [TEST_NAME]: name,
-    [TEST_SUITE]: suite,
-    [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [TEST_FRAMEWORK_VERSION]: tracer._version,
-    [RESOURCE_NAME]: `${suite}.${name}`,
+    ...commonTags,
     [JEST_TEST_RUNNER]: runner,
     [TEST_PARAMETERS]: testParameters
   }

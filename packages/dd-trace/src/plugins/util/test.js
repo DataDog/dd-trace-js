@@ -19,6 +19,10 @@ const {
 } = require('./tags')
 const id = require('../../id')
 
+const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
+const { SAMPLING_RULE_DECISION } = require('../../constants')
+const { AUTO_KEEP } = require('../../../../../ext/priority')
+
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
 const TEST_TYPE = 'test.type'
@@ -60,7 +64,8 @@ module.exports = {
   getTestParentSpan,
   getTestSuitePath,
   getCodeOwnersFileEntries,
-  getCodeOwnersForFilename
+  getCodeOwnersForFilename,
+  getTestCommonTags
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -134,6 +139,20 @@ function getTestParentSpan (tracer) {
     'x-datadog-parent-id': '0000000000000000'
   })
 }
+
+function getTestCommonTags (name, suite, version) {
+  return {
+    [SPAN_TYPE]: 'test',
+    [TEST_TYPE]: 'test',
+    [SAMPLING_RULE_DECISION]: 1,
+    [SAMPLING_PRIORITY]: AUTO_KEEP,
+    [TEST_NAME]: name,
+    [TEST_SUITE]: suite,
+    [RESOURCE_NAME]: `${suite}.${name}`,
+    [TEST_FRAMEWORK_VERSION]: version
+  }
+}
+
 /**
  * We want to make sure that test suites are reported the same way for
  * every OS, so we replace `path.sep` by `/`

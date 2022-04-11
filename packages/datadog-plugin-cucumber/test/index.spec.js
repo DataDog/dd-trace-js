@@ -94,7 +94,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource).to.equal('pass scenario')
+            expect(testSpan.resource.endsWith('simple.feature.pass scenario')).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'pass scenario')
           expect(result.success).to.equal(true)
@@ -149,7 +149,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource).to.equal('fail scenario')
+            expect(testSpan.resource.endsWith('simple.feature.fail scenario')).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'fail scenario')
           expect(result.success).to.equal(false)
@@ -211,7 +211,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource).to.equal('skip scenario')
+            expect(testSpan.resource.endsWith('simple.feature.skip scenario')).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'skip scenario')
           expect(result.success).to.equal(true)
@@ -266,7 +266,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource).to.equal('skip scenario based on tag')
+            expect(testSpan.resource.endsWith('simple.feature.skip scenario based on tag')).to.equal(true)
           })
           const result = await runCucumber(
             version,
@@ -361,7 +361,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource).to.equal('integration scenario')
+            expect(testSpan.resource.endsWith('simple.feature.integration scenario')).to.equal(true)
             const httpSpan = testTrace.find(span => span.name === 'http.request')
             expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
             expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
@@ -421,7 +421,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource).to.equal('hooks fail')
+            expect(testSpan.resource.endsWith('simple.feature.hooks fail')).to.equal(true)
             expect(
               testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set property 'boom' of undefined`) ||
               testSpan.meta[ERROR_MESSAGE].startsWith(`TypeError: Cannot set properties of undefined (setting 'boom')`)
