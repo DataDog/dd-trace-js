@@ -156,7 +156,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       version: ENCODING_VERSION,
       metadata: {
         '*': {
-          'language': 'javascript'
+          'language': 'javascript',
+          'env': 'none'
         }
       },
       events: []
