@@ -6,8 +6,8 @@ const Scheduler = require('../../../exporters/scheduler')
 
 class AgentlessCiVisibilityExporter {
   constructor (config) {
-    const { flushInterval, tags, site, agentlessUrl } = config
-    this._url = new URL(agentlessUrl || `https://citestcycle-intake.${site}`)
+    const { flushInterval, tags, site, url } = config
+    this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
     if (flushInterval > 0) {

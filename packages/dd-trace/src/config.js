@@ -66,6 +66,7 @@ class Config {
       process.env.DD_TRACE_URL,
       null
     )
+    const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
@@ -175,8 +176,8 @@ class Config {
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
-    this.url = getAgentUrl(DD_TRACE_AGENT_URL, options)
-    this.agentlessUrl = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+      : getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
