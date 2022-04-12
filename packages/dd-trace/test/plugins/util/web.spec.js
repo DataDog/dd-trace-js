@@ -1,7 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
-const agent = require('../agent')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
