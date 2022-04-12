@@ -52,6 +52,29 @@ const web = {
     })
   },
 
+  setFramework (req, name, config) {
+    const context = this.patch(req)
+    const span = context.span
+
+    if (!span) return
+
+    context.config = config
+
+    span.context()._name = `${name}.request`
+
+    if (!config.filter(req.url)) {
+      span.setTag(MANUAL_DROP, true)
+    }
+
+    if (config.service) {
+      span.setTag(SERVICE_NAME, config.service)
+    }
+
+    if (config.measured !== undefined) {
+      analyticsSampler.sample(span, config.measured, true)
+    }
+  },
+
   startSpan (tracer, config, req, res, name) {
     const context = this.patch(req)
     context.config = config
@@ -108,6 +131,10 @@ const web = {
     if (typeof path === 'string') {
       contexts.get(req).paths.push(path)
     }
+  },
+
+  setRoute (req, path) {
+    contexts.get(req).paths = [path]
   },
 
   // Remove the current route segment.
