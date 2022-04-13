@@ -15,7 +15,8 @@ const {
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE
+  ERROR_MESSAGE,
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
@@ -80,7 +81,8 @@ describe('Plugin', () => {
               [TEST_STATUS]: status,
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-jasmine2'
+              [JEST_TEST_RUNNER]: 'jest-jasmine2',
+              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
             })
             if (error) {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
