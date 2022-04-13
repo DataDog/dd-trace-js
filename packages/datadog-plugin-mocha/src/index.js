@@ -6,10 +6,7 @@ const { storage } = require('../../datadog-core')
 const {
   CI_APP_ORIGIN,
   TEST_CODE_OWNERS,
-  TEST_TYPE,
-  TEST_NAME,
   TEST_SUITE,
-  TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
@@ -18,11 +15,9 @@ const {
   getTestParentSpan,
   getTestParametersString,
   getCodeOwnersFileEntries,
-  getCodeOwnersForFilename
+  getCodeOwnersForFilename,
+  getTestCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
-const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { AUTO_KEEP } = require('../../../ext/priority')
 
 const skippedTests = new WeakSet()
 
@@ -33,16 +28,11 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
   const fullTestName = test.fullTitle()
   const testSuite = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
 
+  const commonTags = getTestCommonTags(fullTestName, testSuite, tracer._version)
+
   return {
     childOf,
-    [SPAN_TYPE]: 'test',
-    [TEST_TYPE]: 'test',
-    [TEST_NAME]: fullTestName,
-    [TEST_SUITE]: testSuite,
-    [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [TEST_FRAMEWORK_VERSION]: tracer._version,
-    [RESOURCE_NAME]: `${testSuite}.${fullTestName}`
+    ...commonTags
   }
 }
 
