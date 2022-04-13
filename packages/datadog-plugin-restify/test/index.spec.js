@@ -27,9 +27,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        // We're loading the fastify plugin here because it includes `find-my-way` which is also
-        // used by restify.
-        before(() => agent.load(['restify', 'fastify', 'http'], [{}, {}, { client: false }]))
+        before(() => agent.load(['restify', 'find-my-way', 'http'], [{}, {}, { client: false }]))
         after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation', done => {
