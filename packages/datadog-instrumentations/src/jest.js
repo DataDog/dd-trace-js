@@ -24,6 +24,9 @@ const specStatusToTestStatus = {
   'failed': 'fail'
 }
 
+const asyncResources = new WeakMap()
+const originalTestFns = new WeakMap()
+
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
   let error
@@ -84,20 +87,22 @@ function getWrappedEnvironment (BaseEnvironment) {
 
         // Async resource for this test is created here
         // It is used later on by the test_done handler
-        event.test.ddAsyncResource = new AsyncResource('bound-anonymous-fn')
-        event.test.ddAsyncResource.runInAsyncScope(() => {
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+        asyncResources.set(event.test, asyncResource)
+        asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
             name: context.expect.getState().currentTestName,
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters
           })
-          event.test.originalTestFn = event.test.fn
-          event.test.fn = event.test.ddAsyncResource.bind(event.test.fn)
+          originalTestFns.set(event.test, event.test.fn)
+          event.test.fn = asyncResource.bind(event.test.fn)
         })
       }
       if (event.name === 'test_done') {
-        event.test.ddAsyncResource.runInAsyncScope(() => {
+        const asyncResource = asyncResources.get(event.test)
+        asyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
@@ -106,7 +111,7 @@ function getWrappedEnvironment (BaseEnvironment) {
           }
           testRunEndCh.publish(status)
           // restore in case it is retried
-          event.test.fn = event.test.originalTestFn
+          event.test.fn = originalTestFns.get(event.test)
         })
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
