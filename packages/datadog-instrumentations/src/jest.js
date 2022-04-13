@@ -72,6 +72,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       const setNameToParams = (name, params) => { this.nameToParams[name] = params }
 
       if (event.name === 'setup') {
+        this.global._ddtrace = global._ddtrace
         shimmer.wrap(this.global.test, 'each', each => function () {
           const testParameters = getFormattedJestTestParameters(arguments)
           const eachBind = each.apply(this, arguments)
@@ -102,6 +103,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       }
       if (event.name === 'test_done') {
         const asyncResource = asyncResources.get(event.test)
+        this.global._ddtrace = undefined;
         asyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
