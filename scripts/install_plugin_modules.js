@@ -186,6 +186,7 @@ const requirePackageJson = require('${requirePackageJsonPath}')
 
 module.exports = {
   get (id) { return require(id || '${name}') },
+  getPath (id) { return require.resolve(id || '${name}' ) },
   version () { return requirePackageJson('${name}', module).version }
 }
 `

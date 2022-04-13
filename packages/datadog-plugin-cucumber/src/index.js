@@ -5,11 +5,7 @@ const { storage } = require('../../datadog-core')
 
 const {
   CI_APP_ORIGIN,
-  TEST_TYPE,
-  TEST_NAME,
-  TEST_SUITE,
   TEST_SKIP_REASON,
-  TEST_FRAMEWORK_VERSION,
   ERROR_MESSAGE,
   TEST_STATUS,
   TEST_CODE_OWNERS,
@@ -17,11 +13,10 @@ const {
   getTestEnvironmentMetadata,
   getTestSuitePath,
   getCodeOwnersFileEntries,
-  getCodeOwnersForFilename
+  getCodeOwnersForFilename,
+  getTestCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
-const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../ext/tags')
-const { SAMPLING_RULE_DECISION } = require('../../dd-trace/src/constants')
-const { AUTO_KEEP } = require('../../../ext/priority')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 
 class CucumberPlugin extends Plugin {
   static get name () {
@@ -40,26 +35,19 @@ class CucumberPlugin extends Plugin {
       const childOf = store ? store.span : store
       const testSuite = getTestSuitePath(pickleUri, sourceRoot)
 
-      const testSpanMetadata = {
-        [SPAN_TYPE]: 'test',
-        [RESOURCE_NAME]: pickleName,
-        [TEST_TYPE]: 'test',
-        [TEST_NAME]: pickleName,
-        [TEST_SUITE]: testSuite,
-        [SAMPLING_RULE_DECISION]: 1,
-        [SAMPLING_PRIORITY]: AUTO_KEEP,
-        [TEST_FRAMEWORK_VERSION]: this.tracer._version,
-        ...testEnvironmentMetadata
-      }
+      const commonTags = getTestCommonTags(pickleName, testSuite, this.tracer._version)
 
       const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
       if (codeOwners) {
-        testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+        commonTags[TEST_CODE_OWNERS] = codeOwners
       }
 
       const span = this.tracer.startSpan('cucumber.test', {
         childOf,
-        tags: testSpanMetadata
+        tags: {
+          ...commonTags,
+          ...testEnvironmentMetadata
+        }
       })
 
       span.context()._trace.origin = CI_APP_ORIGIN

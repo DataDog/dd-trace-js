@@ -55,6 +55,10 @@
     {
       "name": "jest-environment-node",
       "versions": [">=24.8.0"]
+    },
+    {
+      "name": "jest-circus",
+      "versions": [">=24.8.0"]
     }
   ],
   "knex": [

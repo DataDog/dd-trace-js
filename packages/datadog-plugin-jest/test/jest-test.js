@@ -1,3 +1,5 @@
+const http = require('http')
+
 describe('jest-test-suite', () => {
   // eslint-disable-next-line
   jest.setTimeout(200)
@@ -23,6 +25,20 @@ describe('jest-test-suite', () => {
       done()
     }, 100)
   })
+  it('can do integration http', (done) => {
+    const req = http.request('http://test:123', (res) => {
+      expect(res.statusCode).toEqual(200)
+      done()
+    })
+    req.end()
+  })
+  // only run for jest-circus tests
+  // eslint-disable-next-line
+  if (jest.retryTimes) {
+    it.each([[1, 2, 3], [2, 3, 5]])('can do parameterized test', (a, b, expected) => {
+      expect(a + b).toEqual(expected)
+    })
+  }
   it('promise passes', () => {
     return new Promise((resolve) =>
       setTimeout(() => {
@@ -53,12 +69,6 @@ describe('jest-test-suite', () => {
   it('fails', () => {
     expect(true).toEqual(false)
   })
-  it.skip('skips', () => {
-    expect(100).toEqual(100)
-  })
-  test.skip('skips with test too', () => {
-    expect(100).toEqual(100)
-  })
   it('does not crash with missing stack', (done) => {
     setTimeout(() => {
       const error = new Error('fail')
@@ -66,4 +76,21 @@ describe('jest-test-suite', () => {
       throw error
     }, 100)
   })
+  it.skip('skips', () => {
+    expect(100).toEqual(100)
+  })
+  it.todo('skips todo')
 })
+
+// only run for jest-circus tests
+// eslint-disable-next-line
+if (jest.retryTimes) {
+  describe('jest-circus-test-retry', () => {
+    // eslint-disable-next-line
+    jest.retryTimes(2)
+    let retryAttempt = 0
+    it('can retry', () => {
+      expect(retryAttempt++).toEqual(2)
+    })
+  })
+}
