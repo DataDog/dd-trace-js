@@ -1,21 +1,16 @@
 const {
-  TEST_TYPE,
-  TEST_NAME,
-  TEST_SUITE,
   TEST_STATUS,
-  TEST_FRAMEWORK_VERSION,
   TEST_IS_RUM_ACTIVE,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
   CI_APP_ORIGIN,
   getTestParentSpan,
   getCodeOwnersFileEntries,
-  getCodeOwnersForFilename
+  getCodeOwnersForFilename,
+  getTestCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 
-const { SAMPLING_RULE_DECISION, ORIGIN_KEY } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY, SPAN_TYPE, RESOURCE_NAME } = require('../../../ext/tags')
-const { AUTO_KEEP } = require('../../../ext/priority')
+const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -27,15 +22,11 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   const childOf = getTestParentSpan(tracer)
 
+  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version)
+
   return {
     childOf,
-    resource: `${testSuite}.${testName}`,
-    [TEST_TYPE]: 'test',
-    [TEST_NAME]: testName,
-    [TEST_SUITE]: testSuite,
-    [SAMPLING_RULE_DECISION]: 1,
-    [SAMPLING_PRIORITY]: AUTO_KEEP,
-    [TEST_FRAMEWORK_VERSION]: cypressConfig.version
+    ...commonTags
   }
 }
 
@@ -71,8 +62,6 @@ module.exports = (on, config) => {
         activeSpan = tracer.startSpan('cypress.test', {
           childOf,
           tags: {
-            [SPAN_TYPE]: 'test',
-            [RESOURCE_NAME]: resource,
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             ...testSpanMetadata,
             ...testEnvironmentMetadata
