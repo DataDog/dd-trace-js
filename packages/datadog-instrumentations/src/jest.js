@@ -84,20 +84,20 @@ function getWrappedEnvironment (BaseEnvironment) {
 
         // Async resource for this test is created here
         // It is used later on by the test_done handler
-        this.ar = new AsyncResource('bound-anonymous-fn')
-        this.ar.runInAsyncScope(() => {
+        event.test.ddAsyncResource = new AsyncResource('bound-anonymous-fn')
+        event.test.ddAsyncResource.runInAsyncScope(() => {
           testStartCh.publish({
             name: context.expect.getState().currentTestName,
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters
           })
-          this.originalTestFn = event.test.fn
-          event.test.fn = this.ar.bind(event.test.fn)
+          event.test.originalTestFn = event.test.fn
+          event.test.fn = event.test.ddAsyncResource.bind(event.test.fn)
         })
       }
       if (event.name === 'test_done') {
-        this.ar.runInAsyncScope(() => {
+        event.test.ddAsyncResource.runInAsyncScope(() => {
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
@@ -106,7 +106,7 @@ function getWrappedEnvironment (BaseEnvironment) {
           }
           testRunEndCh.publish(status)
           // restore in case it is retried
-          event.test.fn = this.originalTestFn
+          event.test.fn = event.test.originalTestFn
         })
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
