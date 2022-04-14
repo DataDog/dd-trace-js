@@ -4,7 +4,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -12,7 +11,7 @@ describe('Plugin', () => {
   let app
 
   describe('fastify', () => {
-    withVersions(plugin, 'fastify', version => {
+    withVersions('fastify', 'fastify', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -24,11 +23,11 @@ describe('Plugin', () => {
       withExports('fastify', version, ['default', 'fastify'], '>=3', getExport => {
         describe('without configuration', () => {
           before(() => {
-            return agent.load('fastify')
+            return agent.load(['fastify', 'find-my-way', 'http'], [{}, {}, { client: false }])
           })
 
           after(() => {
-            return agent.close()
+            return agent.close({ ritmReset: false })
           })
 
           beforeEach(() => {
