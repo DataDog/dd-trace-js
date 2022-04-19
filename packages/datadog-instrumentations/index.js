@@ -12,7 +12,11 @@ require('./src/elasticsearch')
 require('./src/generic-pool')
 require('./src/http')
 require('./src/ioredis')
+<<<<<<< HEAD
 require('./src/jest')
+=======
+require('./src/kafkajs')
+>>>>>>> 245061db (migrate kafkajs to new plugin system)
 require('./src/memcached')
 require('./src/mongodb-core')
 require('./src/mongoose')

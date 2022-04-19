@@ -1,90 +1,86 @@
 'use strict'
 
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-function createWrapProducer (tracer, config) {
-  return function wrapProducer (createProducer) {
-    return function producerWithTrace () {
-      const serviceName = config.service || `${tracer._service}-kafka`
-      const producer = createProducer.apply(this, arguments)
+class KafkajsPlugin extends Plugin {
+  static get name () {
+    return 'kafkajs'
+  }
 
-      const send = producer.send
+  constructor (...args) {
+    super(...args)
 
-      const tags = {
-        'service.name': serviceName,
-        'span.kind': 'producer',
-        'component': 'kafkajs'
-      }
-
-      producer.send = tracer.wrap('kafka.produce', { tags }, function (...args) {
-        const { topic, messages = [] } = args[0]
-        const currentSpan = tracer.scope().active()
-
-        analyticsSampler.sample(currentSpan, config.measured)
-
-        currentSpan.addTags({
-          'resource.name': topic,
-          'kafka.topic': topic,
-          'kafka.batch_size': messages.length
-        })
-
-        for (const message of messages) {
-          message.headers = message.headers || {}
-          tracer.inject(currentSpan, 'text_map', message.headers)
+    this.addSub(`apm:kafkajs:produce:start`, () => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('kafka.produce', {
+        childOf,
+        tags: {
+          'service.name': this.config.service || `${this.tracer._service}-kafka`,
+          'span.kind': 'producer',
+          'component': 'kafkajs'
         }
-
-        return send.apply(this, args)
       })
 
-      return producer
-    }
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
+
+    this.addSub(`apm:kafkajs:produce:message`, ({ topic, messages }) => {
+      const span = storage.getStore().span
+      span.addTags({
+        'resource.name': topic,
+        'kafka.topic': topic,
+        'kafka.batch_size': messages.length
+      })
+      for (const message of messages) {
+        this.tracer.inject(span, 'text_map', message.headers)
+      }
+    })
+
+    this.addSub(`apm:kafkajs:consume:start`, ({ topic, partition, message }) => {
+      const store = storage.getStore()
+      const childOf = extract(this.tracer, message.headers)
+      const span = this.tracer.startSpan('kafka.consume', {
+        childOf,
+        tags: {
+          'service.name': this.config.service || `${this.tracer._service}-kafka`,
+          'span.kind': 'consumer',
+          'span.type': 'worker',
+          'component': 'kafkajs',
+          'resource.name': topic,
+          'kafka.topic': topic,
+          'kafka.partition': partition,
+          'kafka.message.offset': message.offset
+        }
+      })
+
+      analyticsSampler.sample(span, this.config.measured, true)
+      this.enter(span, store)
+    })
+
+    this.addSub(`apm:kafkajs:end`, () => {
+      this.exit()
+    })
+
+    this.addSub(`apm:kafkajs:consume:error`, errorHandler)
+
+    this.addSub(`apm:kafkajs:consume:finish`, finishHandler)
+
+    this.addSub(`apm:kafkajs:produce:error`, errorHandler)
+
+    this.addSub(`apm:kafkajs:produce:finish`, finishHandler)
   }
 }
 
-function createWrapConsumer (tracer, config) {
-  return function wrapConsumer (createConsumer) {
-    return function consumerWithTrace () {
-      const serviceName = config.service || `${tracer._service}-kafka`
-      const consumer = createConsumer.apply(this, arguments)
-      const run = consumer.run
+function finishHandler () {
+  storage.getStore().span.finish()
+}
 
-      const tags = {
-        'service.name': serviceName,
-        'span.kind': 'consumer',
-        'span.type': 'worker',
-        'component': 'kafkajs'
-      }
-
-      consumer.run = function ({ eachMessage, ...runArgs }) {
-        if (typeof eachMessage !== 'function') return run({ eachMessage, ...runArgs })
-
-        return run({
-          eachMessage: function (...eachMessageArgs) {
-            const { topic, partition, message } = eachMessageArgs[0]
-            const childOf = extract(tracer, message.headers)
-
-            return tracer.trace('kafka.consume', { childOf, tags }, () => {
-              const currentSpan = tracer.scope().active()
-
-              analyticsSampler.sample(currentSpan, config.measured, true)
-
-              currentSpan.addTags({
-                'resource.name': topic,
-                'kafka.topic': topic,
-                'kafka.partition': partition,
-                'kafka.message.offset': message.offset
-              })
-
-              return eachMessage.apply(this, eachMessageArgs)
-            })
-          },
-          ...runArgs
-        })
-      }
-
-      return consumer
-    }
-  }
+function errorHandler (error) {
+  storage.getStore().span.setTag('error', error)
 }
 
 function extract (tracer, bufferMap) {
@@ -99,25 +95,4 @@ function extract (tracer, bufferMap) {
   return tracer.extract('text_map', textMap)
 }
 
-module.exports = [
-  {
-    name: 'kafkajs',
-    versions: ['>=1.4'],
-    patch ({ Kafka }, tracer, config) {
-      this.wrap(
-        Kafka.prototype,
-        'producer',
-        createWrapProducer(tracer, config)
-      )
-      this.wrap(
-        Kafka.prototype,
-        'consumer',
-        createWrapConsumer(tracer, config)
-      )
-    },
-    unpatch ({ Kafka }) {
-      this.unwrap(Kafka.prototype, 'producer')
-      this.unwrap(Kafka.prototype, 'consumer')
-    }
-  }
-]
+module.exports = KafkajsPlugin
