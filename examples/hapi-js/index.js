@@ -1,9 +1,12 @@
 'use strict'
 const tracer = require('../..')
 
-tracer.init({
+console.log('index before.init');
+
+const myTracer = tracer.init({
   logInjection: true
-}).use('hapi', {})
+});
+console.log('index after tracer.init');
 
 const Hapi = require('@hapi/hapi')
 // manage logs
@@ -22,17 +25,32 @@ async function start () {
     debug: false // disable Hapi debug console logging
   })
 
+  console.log('index before server.ext') // #5
+  await server.ext([
+    {
+      type: 'onPreStart',
+      method: (server) => {
+        const reviewScope = myTracer.scope().active();
+        console.log('inside onPreStart');
+        myTracer.trace('onPreStart', {}, () => {});
+        return server;
+      }
+    },
+    {
+      type: 'onRequest',
+      method: (request, h) => {
+        const reviewScope = tracer.scope().active();
+        tracer.trace('onRequest', {}, () => {});
+        return h.continue;
+      }
+    }
+  ])
+
   // Add the route
   server.route({
     method: 'GET',
     path: '/items',
     handler: async function (request, h) {
-    // test sonicBoob library works
-    // const sonic = new SonicBoom({
-    //   dest: './pino-logs/node_trace.1.log',
-    //   append: true,
-    //   mkdir: true
-    // });
       return h.response(getResponse)
     }
   })
@@ -56,14 +74,7 @@ async function start () {
       }
     }
   })
-  await server.ext([
-    {
-      type: 'onPreStart',
-      method: (request) => {
-        tracer.scope().activate(null, () => {})
-      }
-    }
-  ])
+
   await server.start()
 
   server.log(['info'], `Items endPoint running: ${server.info.uri}/items`)

@@ -2,7 +2,10 @@
 
 const web = require('../../dd-trace/src/plugins/util/web')
 
-function createWrapDispatch (tracer, config) {
+console.log('outside all the server'); // start before all
+
+function createWrapDispatch (tracer, config) { // #1
+  console.log('server inside createWrapDispatch');
   config = web.normalizeConfig(config)
 
   return function wrapDispatch (dispatch) {
@@ -20,13 +23,15 @@ function createWrapDispatch (tracer, config) {
   }
 }
 
-function createWrapServer (tracer) {
+function createWrapServer (tracer) { // #2
+  console.log('server inside createWrapServer');
   return function wrapServer (server) {
     return function serverWithTrace (options) {
       const app = server.apply(this, arguments)
 
       if (!app) return app
-
+      // first start the server.ext events;
+      // const typOfApp = typeof app.start;
       if (typeof app.ext === 'function') {
         app.ext = createWrapExt(tracer)(app.ext)
       }
@@ -40,10 +45,12 @@ function createWrapServer (tracer) {
   }
 }
 
-function createWrapStart () {
+function createWrapStart () { // #4
+  console.log('server inside createWrapStart');
   return function wrapStart (start) {
     return function startWithTrace () {
       if (this && typeof this.ext === 'function') {
+        // this.ext('onPreStart', onPreStart)
         this.ext('onPreResponse', onPreResponse)
       }
 
@@ -52,10 +59,11 @@ function createWrapStart () {
   }
 }
 
-function createWrapExt () {
+function createWrapExt () { // #3
+  console.log('server inside createWrapExt');
   return function wrapExt (ext) {
     return function extWithTrace (events, method, options) {
-      if (typeof events === 'object') {
+      if (typeof events === 'object') { // #6 #12
         arguments[0] = wrapEvents(events)
       } else {
         arguments[1] = wrapExtension(method)
@@ -66,21 +74,39 @@ function createWrapExt () {
   }
 }
 
-function wrapExtension (method) {
-  return [].concat(method).map(wrapHandler)
+function wrapExtension (method, type) { // #8 #10 #13
+  console.log('server inside wrapExtension');
+  return [].concat(method).map((m) => {
+    if (type !== 'onPreStart') {
+      return wrapHandler(m);
+    } else {
+      return wrapServerEvents(method)
+    }
+  })
 }
 
-function wrapEvents (events) {
+function wrapEvents (events) { // #7
+  console.log('server inside wrapEvents');
   return [].concat(events).map(event => {
     if (!event || !event.method) return event
 
     return Object.assign({}, event, {
-      method: wrapExtension(event.method)
+      method: wrapExtension(event.method, event.type)
     })
   })
 }
+function wrapServerEvents (server) {
+  console.log('server inside wrapServerEvents');
+  if (!server) return server
 
+  return function (server) { // https://github.com/hapijs/hapi/blob/master/lib/server.js#L269-L272
+    if (!server) return server.apply(this, arguments) //OnPreStart Step 1
+    console.log('entra aca')
+    // return web.reactivate(request.raw.req, () => handler.apply(this, arguments)) //OnRequest Step 1
+  }
+}
 function wrapHandler (handler) {
+  console.log('server inside wrapHandler');
   if (typeof handler !== 'function') return handler
 
   return function (request, h) {
@@ -91,6 +117,7 @@ function wrapHandler (handler) {
 }
 
 function onPreResponse (request, h) {
+  console.log('server inside onPreResponse');
   if (!request || !request.raw) return reply(request, h)
 
   const req = request.raw.req
@@ -119,6 +146,7 @@ module.exports = [
     name: '@hapi/hapi',
     versions: ['>=17.9'],
     patch (hapi, tracer, config) {
+      console.log('server inside @hapi/hapi >=17.9 1');
       this.wrap(hapi, ['server', 'Server'], createWrapServer(tracer, config))
     },
     unpatch (hapi) {
@@ -129,6 +157,7 @@ module.exports = [
     name: 'hapi',
     versions: ['>=17'],
     patch (hapi, tracer, config) {
+      console.log('server inside @hapi/hapi >=17');
       this.wrap(hapi, ['server', 'Server'], createWrapServer(tracer, config))
     },
     unpatch (hapi) {
@@ -139,6 +168,7 @@ module.exports = [
     name: 'hapi',
     versions: ['2 - 7.1', '8 - 16'],
     patch (hapi, tracer, config) {
+      console.log('server inside @hapi/hapi 2 - 7.1');
       this.wrap(hapi.Server.prototype, 'start', createWrapStart(tracer, config))
       this.wrap(hapi.Server.prototype, 'ext', createWrapExt(tracer, config))
     },
@@ -151,6 +181,7 @@ module.exports = [
     name: 'hapi',
     versions: ['^7.2'],
     patch (hapi, tracer, config) {
+      console.log('server inside @hapi/hapi ^7.2');
       this.wrap(hapi, 'createServer', createWrapServer(tracer, config))
     },
     unpatch (hapi) {
@@ -162,7 +193,8 @@ module.exports = [
     versions: ['>=17.9'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
-      this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
+      console.log('server inside @hapi/hapi >=17.9 2');
+      this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config)) // #1
     },
     unpatch (Core) {
       this.unwrap(Core.prototype, '_dispatch')
@@ -173,6 +205,7 @@ module.exports = [
     versions: ['7.2 - 16'],
     file: 'lib/connection.js',
     patch (Connection, tracer, config) {
+      console.log('server inside @hapi/hapi 7.2 - 16');
       this.wrap(Connection.prototype, '_dispatch', createWrapDispatch(tracer, config))
     },
     unpatch (Connection) {
@@ -184,6 +217,7 @@ module.exports = [
     versions: ['>=17'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
+      console.log('server inside @hapi/hapi >=17');
       this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
     },
     unpatch (Core) {
@@ -195,6 +229,7 @@ module.exports = [
     versions: ['2 - 7.1'],
     file: 'lib/server.js',
     patch (Server, tracer, config) {
+      console.log('server inside @hapi/hapi 2 - 7.1');
       this.wrap(Server.prototype, '_dispatch', createWrapDispatch(tracer, config))
     },
     unpatch (Server) {
