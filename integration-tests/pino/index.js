@@ -6,24 +6,24 @@ if (process.env.AGENT_PORT) {
   options.port = process.env.AGENT_PORT
 }
 
-if (process.env.AGENT_URL) {
-  options.url = process.env.AGENT_URL
-}
 if (process.env.lOG_INJECTION) {
   options.logInjection = process.env.lOG_INJECTION
 }
 
-// eslint-disable-next-line import/no-extraneous-dependencies
-require('dd-trace').init(options)
+const tracer = require('dd-trace').init(options)
 
 const http = require('http')
-// eslint-disable-next-line import/no-extraneous-dependencies
-const pino = require('pino')
-const logger = pino()
+const logger = require('pino')()
 
 const server = http
   .createServer((req, res) => {
-    logger.info('Creating server')
+    const span = tracer.scope().active()
+    const contextTraceId = span.context().toTraceId()
+    const contextSpanId = span.context().toSpanId()
+    logger.info(
+      { custom: { trace_id: contextTraceId, span_id: contextSpanId } },
+      'Creating server'
+    )
     res.end('hello, world\n')
   })
   .listen(0, () => {

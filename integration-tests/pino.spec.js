@@ -9,6 +9,7 @@ const {
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
+const { once } = require('events')
 
 describe('pino test', () => {
   let agent
@@ -46,13 +47,15 @@ describe('pino test', () => {
         },
         stdio: 'pipe',
       })
-      return curlAndAssertMessage(agent, proc, () => {
-        proc.stdout.on('data', (data) => {
-          const stdoutData = JSON.parse(data.toString())
-          assert.containsAllKeys(stdoutData, ['dd'])
-          assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
-        })
-      })
+      const [data] = await Promise.all([
+        once(proc.stdout, 'data'),
+        curlAndAssertMessage(agent, proc, () => {}),
+      ])
+      const stdoutData = JSON.parse(data.toString())
+      assert.containsAllKeys(stdoutData, ['dd'])
+      assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
+      assert(stdoutData['dd']['trace_id'] === stdoutData['custom']['trace_id'])
+      assert(stdoutData['dd']['span_id'] === stdoutData['custom']['span_id'])
     })
 
     it('Log injection disabled', async () => {
@@ -63,12 +66,12 @@ describe('pino test', () => {
         },
         stdio: 'pipe',
       })
-      return curlAndAssertMessage(agent, proc, () => {
-        proc.stdout.on('data', (data) => {
-          const stdoutData = JSON.parse(data.toString())
-          assert.doesNotHaveAnyKeys(stdoutData, ['dd'])
-        })
-      })
+      const [data] = await Promise.all([
+        once(proc.stdout, 'data'),
+        curlAndAssertMessage(agent, proc, () => {}),
+      ])
+      const stdoutData = JSON.parse(data.toString())
+      assert.doesNotHaveAnyKeys(stdoutData, ['dd'])
     })
   })
 })
