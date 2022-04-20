@@ -1,12 +1,7 @@
 /* eslint-disable comma-dangle */
 'use strict'
 
-const {
-  FakeAgent,
-  spawnProc,
-  createSandbox,
-  curlAndAssertMessage,
-} = require('./helpers')
+const { FakeAgent, spawnProc, createSandbox, curl } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
 const { once } = require('events')
@@ -47,10 +42,7 @@ describe('pino test', () => {
         },
         stdio: 'pipe',
       })
-      const [data] = await Promise.all([
-        once(proc.stdout, 'data'),
-        curlAndAssertMessage(agent, proc, () => {}),
-      ])
+      const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
       assert.containsAllKeys(stdoutData, ['dd'])
       assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
@@ -66,10 +58,7 @@ describe('pino test', () => {
         },
         stdio: 'pipe',
       })
-      const [data] = await Promise.all([
-        once(proc.stdout, 'data'),
-        curlAndAssertMessage(agent, proc, () => {}),
-      ])
+      const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
       assert.doesNotHaveAnyKeys(stdoutData, ['dd'])
     })
