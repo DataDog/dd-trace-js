@@ -55,6 +55,11 @@ describe('Plugin', () => {
       this.timeout(60000)
       it('instruments async, sync and integration tests', function (done) {
         const tests = [
+          {
+            name: 'jest-test-suite tracer and active span are available',
+            status: 'pass',
+            extraTags: { 'test.add.stuff': 'stuff' }
+          },
           { name: 'jest-test-suite done', status: 'pass' },
           { name: 'jest-test-suite done fail', status: 'fail' },
           { name: 'jest-test-suite done fail uncaught', status: 'fail' },
@@ -68,7 +73,7 @@ describe('Plugin', () => {
           { name: 'jest-test-suite skips', status: 'skip' },
           { name: 'jest-test-suite skips todo', status: 'skip' }
         ]
-        const assertionPromises = tests.map(({ name, status, error }) => {
+        const assertionPromises = tests.map(({ name, status, error, extraTags }) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
@@ -84,6 +89,9 @@ describe('Plugin', () => {
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
             })
+            if (extraTags) {
+              expect(testSpan.meta).to.contain(extraTags)
+            }
             if (error) {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
             }

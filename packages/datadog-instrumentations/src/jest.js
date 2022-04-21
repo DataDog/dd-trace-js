@@ -50,6 +50,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       super(config, context)
       this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
       this.nameToParams = {}
+      this.global._ddtrace = global._ddtrace
     }
     async teardown () {
       super.teardown().finally(() => {
@@ -141,6 +142,7 @@ addHook({
   file: 'build/jasmineAsyncInstall.js'
 }, (jasmineAsyncInstallExport) => {
   return function (globalConfig, globalInput) {
+    globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       asyncResource.runInAsyncScope(() => {
