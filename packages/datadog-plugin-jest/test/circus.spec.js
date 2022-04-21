@@ -62,6 +62,11 @@ describe('Plugin', function () {
     describe('jest with jest-circus', () => {
       it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
         const tests = [
+          {
+            name: 'jest-test-suite tracer and active span are available',
+            status: 'pass',
+            extraTags: { 'test.add.stuff': 'stuff' }
+          },
           { name: 'jest-test-suite done', status: 'pass' },
           { name: 'jest-test-suite done fail', status: 'fail' },
           { name: 'jest-test-suite done fail uncaught', status: 'fail' },
@@ -89,7 +94,7 @@ describe('Plugin', function () {
           { name: 'jest-circus-test-retry can retry', status: 'pass' }
         ]
 
-        const assertionPromises = tests.map(({ name, status, error, parameters }) => {
+        const assertionPromises = tests.map(({ name, status, error, parameters, extraTags }) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
@@ -105,6 +110,9 @@ describe('Plugin', function () {
               [JEST_TEST_RUNNER]: 'jest-circus',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
             })
+            if (extraTags) {
+              expect(testSpan.meta).to.contain(extraTags)
+            }
             if (error) {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
             }
