@@ -60,6 +60,7 @@ function createWrapCreateReadStream (config, tracer) {
       const tags = makeFSFlagTags('ReadStream', path, options, 'r', config, tracer)
       return tracer.trace('fs.operation', { tags, orphanable }, (span, done) => {
         const stream = createReadStream.apply(this, arguments)
+        stream.once('close', done)
         stream.once('end', done)
         stream.once('error', done)
         return stream
@@ -74,6 +75,7 @@ function createWrapCreateWriteStream (config, tracer) {
       const tags = makeFSFlagTags('WriteStream', path, options, 'w', config, tracer)
       return tracer.trace('fs.operation', { tags, orphanable }, (span, done) => {
         const stream = createWriteStream.apply(this, arguments)
+        stream.once('close', done)
         stream.once('finish', done)
         stream.once('error', done)
         return stream
