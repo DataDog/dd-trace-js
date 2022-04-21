@@ -598,6 +598,17 @@ describe('Plugin', () => {
           fs.createReadStream(__filename).on('error', done).resume()
         })
 
+        it('should be instrumented when closed', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'ReadStream',
+            meta: {
+              'file.path': __filename,
+              'file.flag': 'r+'
+            }
+          })
+          fs.createReadStream(__filename, { flags: 'r+' }).on('error', done).destroy()
+        })
+
         it('should be instrumented with flags', (done) => {
           expectOneSpan(agent, done, {
             resource: 'ReadStream',
@@ -636,6 +647,18 @@ describe('Plugin', () => {
           })
 
           fs.createWriteStream(filename).on('error', done).end()
+        })
+
+        it('should be instrumented when closed', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'WriteStream',
+            meta: {
+              'file.path': filename,
+              'file.flag': 'w'
+            }
+          })
+
+          fs.createWriteStream(filename).on('error', done).destroy()
         })
 
         it('should be instrumented with flags', (done) => {
