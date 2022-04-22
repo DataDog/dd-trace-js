@@ -154,6 +154,25 @@ class Config {
       process.env.DD_APPSEC_TRACE_RATE_LIMIT,
       100
     )
+    const DD_APPSEC_WAF_TIMEOUT = coalesce(
+      appsec.wafTimeout,
+      process.env.DD_APPSEC_WAF_TIMEOUT,
+      5e3 // µs
+    )
+    const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
+      appsec.obfuscatorKeyRegex,
+      process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
+      `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|se\
+cret)|sign(?:ed|ature)|bearer|authorization`
+    )
+    const DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = coalesce(
+      appsec.obfuscatorValueRegex,
+      process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+      `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|to\
+ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
+\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
+|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
+    )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
@@ -223,7 +242,10 @@ class Config {
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),
       rules: DD_APPSEC_RULES,
-      rateLimit: DD_APPSEC_TRACE_RATE_LIMIT
+      rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
+      wafTimeout: DD_APPSEC_WAF_TIMEOUT,
+      obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
+      obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
     }
 
     tagger.add(this.tags, {
