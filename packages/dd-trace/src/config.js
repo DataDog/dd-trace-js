@@ -150,13 +150,13 @@ class Config {
       path.join(__dirname, 'appsec', 'recommended.json')
     )
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
-      appsec.rateLimit,
-      process.env.DD_APPSEC_TRACE_RATE_LIMIT,
+      parseInt(appsec.rateLimit),
+      parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),
       100
     )
     const DD_APPSEC_WAF_TIMEOUT = coalesce(
-      appsec.wafTimeout,
-      process.env.DD_APPSEC_WAF_TIMEOUT,
+      parseInt(appsec.wafTimeout),
+      parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),
       5e3 // µs
     )
     const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
