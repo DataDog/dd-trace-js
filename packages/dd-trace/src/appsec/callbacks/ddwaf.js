@@ -7,16 +7,14 @@ const Reporter = require('../reporter')
 
 const validAddressSet = new Set(Object.values(addresses))
 
-const DEFAULT_MAX_BUDGET = 5e3 // µs
-
 // TODO: put reusable code in a base class
 class WAFCallback {
-  static loadDDWAF (rules) {
+  static loadDDWAF (rules, config) {
     try {
       // require in `try/catch` because this can throw at require time
       const { DDWAF } = require('@datadog/native-appsec')
 
-      return new DDWAF(rules)
+      return new DDWAF(rules, config)
     } catch (err) {
       log.error('AppSec could not load native package. In-app WAF features will not be available.')
 
@@ -24,8 +22,11 @@ class WAFCallback {
     }
   }
 
-  constructor (rules) {
-    this.ddwaf = WAFCallback.loadDDWAF(rules)
+  constructor (rules, config) {
+    const { wafTimeout, obfuscatorKeyRegex, obfuscatorValueRegex } = config
+
+    this.ddwaf = WAFCallback.loadDDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
+
     this.wafContextCache = new WeakMap()
 
     // closures are faster than binds

@@ -16,7 +16,7 @@ function enable (config) {
     let rules = fs.readFileSync(config.appsec.rules)
     rules = JSON.parse(rules)
 
-    RuleManager.applyRules(rules)
+    RuleManager.applyRules(rules, config.appsec)
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
