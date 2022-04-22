@@ -27,6 +27,8 @@ class WAFCallback {
 
     this.ddwaf = WAFCallback.loadDDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
 
+    this.wafTimeout = wafTimeout
+
     this.wafContextCache = new WeakMap()
 
     // closures are faster than binds
@@ -82,7 +84,7 @@ class WAFCallback {
 
     try {
       // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
-      const result = wafContext.run(params, DEFAULT_MAX_BUDGET)
+      const result = wafContext.run(params, this.wafTimeout)
 
       return this.applyResult(result, store)
     } catch (err) {
