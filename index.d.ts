@@ -428,7 +428,25 @@ export declare interface TracerOptions {
      * Controls the maximum amount of traces sampled by AppSec attacks, per second.
      * @default 100
      */
-    rateLimit?: number
+    rateLimit?: number,
+
+    /**
+     * Controls the maximum amount of time in microseconds the WAF is allowed to run for.
+     * @default 5000
+     */
+    wafTimeout: number,
+
+    /**
+     * Specifies a regex that will redact values by their key in reported attacks.
+     * @default '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization'
+     */
+    obfuscatorKeyRegex?: string,
+
+    /**
+     * Specifies a regex that will redact values in reported attacks.
+     * @default '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\s*=[^;]|"\s*:\s*"[^"]+")|bearer\s+[a-z0-9\._\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\w=-]+\.ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}[^\-]+[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*[a-z0-9\/\.+]{100,}'
+     */
+    obfuscatorValueRegex?: string
   };
 }
 
