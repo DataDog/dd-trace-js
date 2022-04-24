@@ -98,6 +98,11 @@ const web = {
     return callback && tracer.scope().activate(span, () => callback(span))
   },
 
+  reactivateServerScope (fn) {
+    // Reactive the scope for the server events pending here
+    return fn;
+  },
+
   // Reactivate the request scope in case it was changed by a middleware.
   reactivate (req, fn) {
     return reactivate(req, fn)

@@ -50,7 +50,6 @@ function createWrapStart () { // #4
   return function wrapStart (start) {
     return function startWithTrace () {
       if (this && typeof this.ext === 'function') {
-        // this.ext('onPreStart', onPreStart)
         this.ext('onPreResponse', onPreResponse)
       }
 
@@ -80,7 +79,7 @@ function wrapExtension (method, type) { // #8 #10 #13
     if (type !== 'onPreStart') {
       return wrapHandler(m);
     } else {
-      return wrapServerEvents(method)
+      return wrapServerEvents(m)
     }
   })
 }
@@ -95,14 +94,14 @@ function wrapEvents (events) { // #7
     })
   })
 }
-function wrapServerEvents (server) {
+function wrapServerEvents (method) {
   console.log('server inside wrapServerEvents');
-  if (!server) return server
+  if (!method) return method
 
   return function (server) { // https://github.com/hapijs/hapi/blob/master/lib/server.js#L269-L272
-    if (!server) return server.apply(this, arguments) //OnPreStart Step 1
-    console.log('entra aca')
+    if (!server) return method.apply(this, arguments) //OnPreStart Step 1
     // return web.reactivate(request.raw.req, () => handler.apply(this, arguments)) //OnRequest Step 1
+    return web.reactivateServerScope(() => method.apply(this, arguments)  )
   }
 }
 function wrapHandler (handler) {

@@ -39,9 +39,8 @@ async function start () {
     {
       type: 'onRequest',
       method: (request, h) => {
-        const reviewScope = tracer.scope().active();
-        tracer.trace('onRequest', {}, () => {});
-        return h.continue;
+        const reviewScope = myTracer.scope().active();
+        return myTracer.trace('onRequest', {}, () => h.continue )
       }
     }
   ])
