@@ -100,7 +100,7 @@ const web = {
 
   reactivateServerScope (fn) {
     // Reactive the scope for the server events pending here
-    return fn;
+    return fn
   },
 
   // Reactivate the request scope in case it was changed by a middleware.

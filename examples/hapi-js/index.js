@@ -1,12 +1,12 @@
 'use strict'
 const tracer = require('../..')
 
-console.log('index before.init');
+console.log('index before.init')
 
 const myTracer = tracer.init({
   logInjection: true
-});
-console.log('index after tracer.init');
+})
+console.log('index after tracer.init')
 
 const Hapi = require('@hapi/hapi')
 // manage logs
@@ -30,17 +30,16 @@ async function start () {
     {
       type: 'onPreStart',
       method: (server) => {
-        const reviewScope = myTracer.scope().active();
-        console.log('inside onPreStart');
-        myTracer.trace('onPreStart', {}, () => {});
-        return server;
+        // const reviewScope = myTracer.scope().active()
+        console.log('inside onPreStart')
+        return myTracer.trace('onPreStart', {}, () => server)
       }
     },
     {
       type: 'onRequest',
       method: (request, h) => {
-        const reviewScope = myTracer.scope().active();
-        return myTracer.trace('onRequest', {}, () => h.continue )
+        // const reviewScope = myTracer.scope().active()
+        return myTracer.trace('onRequest', {}, () => h.continue)
       }
     }
   ])

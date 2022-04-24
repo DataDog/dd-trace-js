@@ -2,10 +2,10 @@
 
 const web = require('../../dd-trace/src/plugins/util/web')
 
-console.log('outside all the server'); // start before all
+console.log('outside all the server') // start before all
 
 function createWrapDispatch (tracer, config) { // #1
-  console.log('server inside createWrapDispatch');
+  console.log('server inside createWrapDispatch')
   config = web.normalizeConfig(config)
 
   return function wrapDispatch (dispatch) {
@@ -24,7 +24,7 @@ function createWrapDispatch (tracer, config) { // #1
 }
 
 function createWrapServer (tracer) { // #2
-  console.log('server inside createWrapServer');
+  console.log('server inside createWrapServer')
   return function wrapServer (server) {
     return function serverWithTrace (options) {
       const app = server.apply(this, arguments)
@@ -46,7 +46,7 @@ function createWrapServer (tracer) { // #2
 }
 
 function createWrapStart () { // #4
-  console.log('server inside createWrapStart');
+  console.log('server inside createWrapStart')
   return function wrapStart (start) {
     return function startWithTrace () {
       if (this && typeof this.ext === 'function') {
@@ -59,7 +59,7 @@ function createWrapStart () { // #4
 }
 
 function createWrapExt () { // #3
-  console.log('server inside createWrapExt');
+  console.log('server inside createWrapExt')
   return function wrapExt (ext) {
     return function extWithTrace (events, method, options) {
       if (typeof events === 'object') { // #6 #12
@@ -74,10 +74,10 @@ function createWrapExt () { // #3
 }
 
 function wrapExtension (method, type) { // #8 #10 #13
-  console.log('server inside wrapExtension');
+  console.log('server inside wrapExtension')
   return [].concat(method).map((m) => {
     if (type !== 'onPreStart') {
-      return wrapHandler(m);
+      return wrapHandler(m)
     } else {
       return wrapServerEvents(m)
     }
@@ -85,7 +85,7 @@ function wrapExtension (method, type) { // #8 #10 #13
 }
 
 function wrapEvents (events) { // #7
-  console.log('server inside wrapEvents');
+  console.log('server inside wrapEvents')
   return [].concat(events).map(event => {
     if (!event || !event.method) return event
 
@@ -95,17 +95,17 @@ function wrapEvents (events) { // #7
   })
 }
 function wrapServerEvents (method) {
-  console.log('server inside wrapServerEvents');
+  console.log('server inside wrapServerEvents')
   if (!method) return method
 
   return function (server) { // https://github.com/hapijs/hapi/blob/master/lib/server.js#L269-L272
-    if (!server) return method.apply(this, arguments) //OnPreStart Step 1
+    if (!server) return method.apply(this, arguments) // OnPreStart Step 1
     // return web.reactivate(request.raw.req, () => handler.apply(this, arguments)) //OnRequest Step 1
-    return web.reactivateServerScope(() => method.apply(this, arguments)  )
+    return web.reactivateServerScope(() => method.apply(this, arguments))
   }
 }
 function wrapHandler (handler) {
-  console.log('server inside wrapHandler');
+  console.log('server inside wrapHandler')
   if (typeof handler !== 'function') return handler
 
   return function (request, h) {
@@ -116,7 +116,7 @@ function wrapHandler (handler) {
 }
 
 function onPreResponse (request, h) {
-  console.log('server inside onPreResponse');
+  console.log('server inside onPreResponse')
   if (!request || !request.raw) return reply(request, h)
 
   const req = request.raw.req
@@ -145,7 +145,7 @@ module.exports = [
     name: '@hapi/hapi',
     versions: ['>=17.9'],
     patch (hapi, tracer, config) {
-      console.log('server inside @hapi/hapi >=17.9 1');
+      console.log('server inside @hapi/hapi >=17.9 1')
       this.wrap(hapi, ['server', 'Server'], createWrapServer(tracer, config))
     },
     unpatch (hapi) {
@@ -156,7 +156,7 @@ module.exports = [
     name: 'hapi',
     versions: ['>=17'],
     patch (hapi, tracer, config) {
-      console.log('server inside @hapi/hapi >=17');
+      console.log('server inside @hapi/hapi >=17')
       this.wrap(hapi, ['server', 'Server'], createWrapServer(tracer, config))
     },
     unpatch (hapi) {
@@ -167,7 +167,7 @@ module.exports = [
     name: 'hapi',
     versions: ['2 - 7.1', '8 - 16'],
     patch (hapi, tracer, config) {
-      console.log('server inside @hapi/hapi 2 - 7.1');
+      console.log('server inside @hapi/hapi 2 - 7.1')
       this.wrap(hapi.Server.prototype, 'start', createWrapStart(tracer, config))
       this.wrap(hapi.Server.prototype, 'ext', createWrapExt(tracer, config))
     },
@@ -180,7 +180,7 @@ module.exports = [
     name: 'hapi',
     versions: ['^7.2'],
     patch (hapi, tracer, config) {
-      console.log('server inside @hapi/hapi ^7.2');
+      console.log('server inside @hapi/hapi ^7.2')
       this.wrap(hapi, 'createServer', createWrapServer(tracer, config))
     },
     unpatch (hapi) {
@@ -192,7 +192,7 @@ module.exports = [
     versions: ['>=17.9'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
-      console.log('server inside @hapi/hapi >=17.9 2');
+      console.log('server inside @hapi/hapi >=17.9 2')
       this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config)) // #1
     },
     unpatch (Core) {
@@ -204,7 +204,7 @@ module.exports = [
     versions: ['7.2 - 16'],
     file: 'lib/connection.js',
     patch (Connection, tracer, config) {
-      console.log('server inside @hapi/hapi 7.2 - 16');
+      console.log('server inside @hapi/hapi 7.2 - 16')
       this.wrap(Connection.prototype, '_dispatch', createWrapDispatch(tracer, config))
     },
     unpatch (Connection) {
@@ -216,7 +216,7 @@ module.exports = [
     versions: ['>=17'],
     file: 'lib/core.js',
     patch (Core, tracer, config) {
-      console.log('server inside @hapi/hapi >=17');
+      console.log('server inside @hapi/hapi >=17')
       this.wrap(Core.prototype, '_dispatch', createWrapDispatch(tracer, config))
     },
     unpatch (Core) {
@@ -228,7 +228,7 @@ module.exports = [
     versions: ['2 - 7.1'],
     file: 'lib/server.js',
     patch (Server, tracer, config) {
-      console.log('server inside @hapi/hapi 2 - 7.1');
+      console.log('server inside @hapi/hapi 2 - 7.1')
       this.wrap(Server.prototype, '_dispatch', createWrapDispatch(tracer, config))
     },
     unpatch (Server) {
