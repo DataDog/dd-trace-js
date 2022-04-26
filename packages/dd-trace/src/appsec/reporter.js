@@ -35,7 +35,7 @@ const RESPONSE_HEADERS_PASSLIST = [
   'content-type'
 ]
 
-const metricsTags = new Map()
+const metricsQueue = new Map()
 
 function resolveHTTPRequest (context) {
   if (!context) return {}
@@ -131,7 +131,7 @@ function reportAttack (attackData, store) {
   topSpan.addTags(newTags)
 }
 
-function finishAttacks (req, context) {
+function finishRequest (req, context) {
   const topSpan = web.root(req)
   if (!topSpan || !context) return false
 
@@ -151,12 +151,12 @@ function setRateLimit (rateLimit) {
 }
 
 module.exports = {
-  metricsTags,
+  metricsQueue,
   resolveHTTPRequest,
   resolveHTTPResponse,
   filterHeaders,
   formatHeaderName,
   reportAttack,
-  finishAttacks,
+  finishRequest,
   setRateLimit
 }

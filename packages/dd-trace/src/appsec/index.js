@@ -103,7 +103,7 @@ function incomingHttpEndTranslator (data) {
 
   Gateway.propagate(payload, context)
 
-  Reporter.finishAttacks(data.req, context)
+  Reporter.finishRequest(data.req, context)
 }
 
 function disable () {

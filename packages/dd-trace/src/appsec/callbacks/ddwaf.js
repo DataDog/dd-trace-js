@@ -31,14 +31,14 @@ class WAFCallback {
 
     const version = this.ddwaf.constructor.version()
 
-    Reporter.metricsTags.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
+    Reporter.metricsQueue.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
 
     const { loaded, failed } = this.ddwaf.rulesInfo
 
-    Reporter.metricsTags.set('_dd.appsec.event_rules.loaded', loaded)
-    Reporter.metricsTags.set('_dd.appsec.event_rules.error_count', failed)
+    Reporter.metricsQueue.set('_dd.appsec.event_rules.loaded', loaded)
+    Reporter.metricsQueue.set('_dd.appsec.event_rules.error_count', failed)
 
-    Reporter.metricsTags.set('manual.keep', true)
+    Reporter.metricsQueue.set('manual.keep', true)
 
     this.wafContextCache = new WeakMap()
 
