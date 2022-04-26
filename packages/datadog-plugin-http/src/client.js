@@ -54,7 +54,47 @@ class HttpClientPlugin extends Plugin {
       this.enter(span, store)
     })
 
+    this.addSub('apm:fetch:start', ({ req }) => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const method = req.method
+      const uri = new URL(req.url)
+      uri.hash = ''
+      uri.search = ''
+      const span = this.tracer.startSpan('http.request', {
+        childOf,
+        tags: {
+          'span.kind': 'client',
+          'service.name': getServiceName(this.tracer, this.config, req),
+          'resource.name': method,
+          'span.type': 'http',
+          'http.method': method,
+          'http.url': uri.toString()
+        }
+      })
+      span.request = req
+
+      if (!(hasAmazonSignatureFetch(req) || !this.config.propagationFilter(uri))) {
+        const injected = {}
+        this.tracer.inject(span, HTTP_HEADERS, injected)
+        for (const key in injected) {
+          req.headers.append(key, injected[key])
+        }
+      }
+
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
+
     this.addSub('apm:http:client:request:end', this.exit.bind(this))
+
+    this.addSub('apm:fetch:end', ({ response }) => {
+      const store = storage.getStore()
+      response.then(r => {
+        store.response = r
+      })
+      this.exit()
+    })
 
     this.addSub('apm:http:client:request:async-end', ({ req, res }) => {
       const span = storage.getStore().span
@@ -73,6 +113,27 @@ class HttpClientPlugin extends Plugin {
       addRequestHeaders(req, span, this.config)
 
       this.config.hooks.request(span, req, res)
+      span.finish()
+    })
+
+    this.addSub('apm:fetch:async-end', () => {
+      const { span, response } = storage.getStore()
+      const request = span.request
+      if (span && request, response) {
+        span.setTag(HTTP_STATUS_CODE, response.status)
+
+        if (!this.config.validateStatus(response.status)) {
+          span.setTag('error', 1)
+        }
+
+        addResponseHeaders(response, span, this.config)
+      } else {
+        span.setTag('error', 1)
+      }
+
+      addRequestHeaders(request, span, this.config)
+
+      this.config.hooks.request(span, request, response)
       span.finish()
     })
 
@@ -106,6 +167,26 @@ function addResponseHeaders (res, span, config) {
 function addRequestHeaders (req, span, config) {
   config.headers.forEach(key => {
     const value = req.getHeader(key)
+
+    if (value) {
+      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
+    }
+  })
+}
+
+function addResponseHeadersFetch (res, span, config) {
+  config.headers.forEach(key => {
+    const value = res.headers.get(key)
+
+    if (value) {
+      span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
+    }
+  })
+}
+
+function addRequestHeadersFetch (req, span, config) {
+  config.headers.forEach(key => {
+    const value = req.headers.get(key)
 
     if (value) {
       span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
@@ -182,6 +263,26 @@ function hasAmazonSignature (options) {
   return options.path && options.path.toLowerCase().indexOf('x-amz-signature=') !== -1
 }
 
+function hasAmazonSignatureFetch (req) {
+  if (!req) {
+    return false
+  }
+
+  if (req.headers) {
+    if (req.headers.has('x-amz-signature')) {
+      return true
+    }
+
+    const auth = req.headers.get('authorization')
+    if (auth && auth.split(',').map(x => x.trimStart()).some(startsWith('AWS4-HMAC-SHA256'))) {
+      return true
+    }
+  }
+
+  const uri = url.parse(req.url)
+  return uri.path && uri.path.toLowerCase().indexOf('x-amz-signature=') !== -1
+}
+
 function getServiceName (tracer, config, options) {
   if (config.splitByDomain) {
     return getHost(options)
@@ -195,6 +296,9 @@ function getServiceName (tracer, config, options) {
 function getHost (options) {
   if (typeof options === 'string') {
     return url.parse(options).host
+  }
+  if (globalThis.Request && options instanceof globalThis.Request) {
+    return url.parse(options.url).host
   }
 
   const hostname = options.hostname || options.host || 'localhost'
