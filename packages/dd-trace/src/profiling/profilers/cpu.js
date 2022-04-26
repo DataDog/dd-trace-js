@@ -3,7 +3,7 @@
 class NativeCpuProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    this._samplingInterval = options.samplingInterval || 10 * 1000
+    this._samplingInterval = options.samplingInterval || 1e6 / 99 // 99hz
     this._mapper = undefined
     this._pprof = undefined
   }
