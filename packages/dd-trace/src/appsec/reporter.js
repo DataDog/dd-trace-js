@@ -89,12 +89,12 @@ function reportMetrics (metrics, store) {
   const topSpan = web.root(req)
   if (!topSpan) return false
 
-  if (metrics.rulesVersion) {
-    topSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
-  }
-
   if (metrics.duration) {
     topSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
+  }
+
+  if (metrics.rulesVersion) {
+    topSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
 }
 
