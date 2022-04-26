@@ -434,7 +434,7 @@ export declare interface TracerOptions {
      * Controls the maximum amount of time in microseconds the WAF is allowed to run for.
      * @default 5000
      */
-    wafTimeout: number,
+    wafTimeout?: number,
 
     /**
      * Specifies a regex that will redact values by their key in reported attacks.
