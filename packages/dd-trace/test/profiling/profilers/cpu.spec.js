@@ -43,7 +43,7 @@ describe('profilers/native/cpu', () => {
     process._stopProfilerIdleNotifier = stop
 
     sinon.assert.calledOnce(pprof.time.start)
-    sinon.assert.calledWith(pprof.time.start, 10000)
+    sinon.assert.calledWith(pprof.time.start, 1e6 / 99)
   })
 
   it('should use the provided configuration options', () => {
@@ -96,6 +96,6 @@ describe('profilers/native/cpu', () => {
 
     profiler.start({ mapper })
 
-    sinon.assert.calledWith(pprof.time.start, 10000, null, mapper, false)
+    sinon.assert.calledWith(pprof.time.start, 1e6 / 99, null, mapper, false)
   })
 })
