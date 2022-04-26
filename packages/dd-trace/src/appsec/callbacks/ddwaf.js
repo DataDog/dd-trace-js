@@ -107,13 +107,10 @@ class WAFCallback {
   }
 
   applyResult (result, store) {
-    if (this.ddwaf.rulesInfo.version) {
-      Reporter.metricsTags.set('_dd.appsec.event_rules.version', this.ddwaf.rulesInfo.version)
-    }
-
-    if (result.totalRuntime) {
-      Reporter.metricsTags.set('_dd.appsec.waf.duration', result.totalRuntime)
-    }
+    Reporter.reportMetrics({
+      duration: result.totalRuntime,
+      rulesVersion: this.ddwaf.rulesInfo.version
+    }, store)
 
     if (result.data && result.data !== '[]') {
       Reporter.reportAttack(result.data, store)

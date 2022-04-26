@@ -84,6 +84,20 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
+function reportMetrics (metrics, store) {
+  const req = store && store.get('req')
+  const topSpan = web.root(req)
+  if (!topSpan) return false
+
+  if (metrics.rulesVersion) {
+    topSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
+  }
+
+  if (metrics.duration) {
+    topSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
+  }
+}
+
 function reportAttack (attackData, store) {
   const req = store && store.get('req')
   const topSpan = web.root(req)
@@ -156,6 +170,7 @@ module.exports = {
   resolveHTTPResponse,
   filterHeaders,
   formatHeaderName,
+  reportMetrics,
   reportAttack,
   finishRequest,
   setRateLimit
