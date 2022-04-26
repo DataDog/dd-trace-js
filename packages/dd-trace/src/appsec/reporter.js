@@ -35,6 +35,8 @@ const RESPONSE_HEADERS_PASSLIST = [
   'content-type'
 ]
 
+const metricsTags = new Map()
+
 function resolveHTTPRequest (context) {
   if (!context) return {}
 
@@ -149,6 +151,7 @@ function setRateLimit (rateLimit) {
 }
 
 module.exports = {
+  metricsTags,
   resolveHTTPRequest,
   resolveHTTPResponse,
   filterHeaders,

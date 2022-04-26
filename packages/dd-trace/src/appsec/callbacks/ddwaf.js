@@ -29,6 +29,17 @@ class WAFCallback {
 
     this.wafTimeout = wafTimeout
 
+    const version = this.ddwaf.constructor.version()
+
+    Reporter.metricsTags.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
+
+    const { loaded, failed } = this.ddwaf.rulesInfo
+
+    Reporter.metricsTags.set('_dd.appsec.event_rules.loaded', loaded)
+    Reporter.metricsTags.set('_dd.appsec.event_rules.error_count', failed)
+
+    Reporter.metricsTags.set('manual.keep', true)
+
     this.wafContextCache = new WeakMap()
 
     // closures are faster than binds
@@ -96,13 +107,17 @@ class WAFCallback {
   }
 
   applyResult (result, store) {
+    if (this.ddwaf.rulesInfo.version) {
+      Reporter.metricsTags.set('_dd.appsec.event_rules.version', this.ddwaf.rulesInfo.version)
+    }
+
+    if (result.totalRuntime) {
+      Reporter.metricsTags.set('_dd.appsec.waf.duration', result.totalRuntime)
+    }
+
     if (result.data && result.data !== '[]') {
       Reporter.reportAttack(result.data, store)
     }
-
-    // TODO: use these values later for budget management
-    // result.perfData
-    // result.perfTotalRuntime
   }
 
   clear () {
