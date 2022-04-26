@@ -147,7 +147,15 @@ function reportAttack (attackData, store) {
 
 function finishRequest (req, context) {
   const topSpan = web.root(req)
-  if (!topSpan || !context) return false
+  if (!topSpan) return false
+
+  if (metricsQueue.size) {
+    topSpan.addTags(Object.fromEntries(metricsQueue))
+
+    metricsQueue.clear()
+  }
+
+  if (!context || !topSpan.context()._tags['appsec.event']) return false
 
   const resolvedResponse = resolveHTTPResponse(context)
 
