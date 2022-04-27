@@ -23,12 +23,14 @@ describe('AppSec Rule Manager', () => {
 
   describe('applyRules', () => {
     it('should apply a DDWAF rule only idempotently', () => {
-      applyRules(rules)
+      const config = {}
+
+      applyRules(rules, config)
 
       applyRules(rules)
 
       expect(callbacks.DDWAF).to.have.been.calledOnce
-      expect(FakeDDWAF).to.have.been.calledOnceWith(rules)
+      expect(FakeDDWAF).to.have.been.calledOnceWithExactly(rules, config)
     })
   })
 

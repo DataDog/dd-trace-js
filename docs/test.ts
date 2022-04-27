@@ -85,7 +85,10 @@ tracer.init({
   appsec: {
     enabled: true,
     rules: './rules.json',
-    rateLimit: 100
+    rateLimit: 100,
+    wafTimeout: 100e3,
+    obfuscatorKeyRegex: '.*',
+    obfuscatorValueRegex: '.*'
   }
 });
 
