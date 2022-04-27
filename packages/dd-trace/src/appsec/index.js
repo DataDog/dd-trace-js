@@ -16,7 +16,7 @@ function enable (config) {
     let rules = fs.readFileSync(config.appsec.rules)
     rules = JSON.parse(rules)
 
-    RuleManager.applyRules(rules)
+    RuleManager.applyRules(rules, config.appsec)
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
@@ -94,12 +94,16 @@ function incomingHttpEndTranslator (data) {
   }
 
   if (data.req.cookies && typeof data.req.cookies === 'object') {
-    payload[addresses.HTTP_INCOMING_COOKIES] = data.req.cookies
+    payload[addresses.HTTP_INCOMING_COOKIES] = {}
+
+    for (const k of Object.keys(data.req.cookies)) {
+      payload[addresses.HTTP_INCOMING_COOKIES][k] = [ data.req.cookies[k] ]
+    }
   }
 
   Gateway.propagate(payload, context)
 
-  Reporter.finishAttacks(data.req, context)
+  Reporter.finishRequest(data.req, context)
 }
 
 function disable () {
