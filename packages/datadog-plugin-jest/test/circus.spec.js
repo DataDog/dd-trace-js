@@ -26,7 +26,7 @@ describe('Plugin', function () {
 
   this.timeout(20000)
 
-  withVersions('jest', ['jest-environment-node'], (version) => {
+  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
@@ -43,6 +43,7 @@ describe('Plugin', function () {
         .reply(200, 'OK')
 
       return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
+        global.__libraryName__ = moduleName
         global.__libraryVersion__ = version
         jestExecutable = require(`../../../versions/jest@${version}`).get()
 

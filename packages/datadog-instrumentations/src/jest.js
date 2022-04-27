@@ -64,13 +64,7 @@ function getWrappedEnvironment (BaseEnvironment) {
         await super.handleTestEvent(event, state)
       }
 
-      let context
-      if (this.getVmContext) {
-        context = this.getVmContext()
-      } else {
-        context = this.context
-      }
-
+      const globalExpect = this.global.expect
       const setNameToParams = (name, params) => { this.nameToParams[name] = params }
 
       if (event.name === 'setup') {
@@ -93,7 +87,7 @@ function getWrappedEnvironment (BaseEnvironment) {
         asyncResources.set(event.test, asyncResource)
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: context.expect.getState().currentTestName,
+            name: globalExpect.getState().currentTestName,
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters
@@ -118,7 +112,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         testSkippedCh.publish({
-          name: context.expect.getState().currentTestName,
+          name: globalExpect.getState().currentTestName,
           suite: this.testSuite,
           runner: 'jest-circus'
         })
