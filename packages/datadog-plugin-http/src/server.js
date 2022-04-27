@@ -4,9 +4,6 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
-const tags = require('../../../ext/tags')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const SERVICE_NAME = tags.SERVICE_NAME
 
 class HttpServerPlugin extends Plugin {
   static get name () {
@@ -20,11 +17,6 @@ class HttpServerPlugin extends Plugin {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'http.request')
 
-      if (this.config.service) {
-        span.setTag(SERVICE_NAME, this.config.service)
-      }
-
-      analyticsSampler.sample(span, this.config.measured, true)
       this.enter(span, store)
 
       const context = web.getContext(req)
@@ -58,16 +50,6 @@ class HttpServerPlugin extends Plugin {
       if (!context) return // Not created by a http.Server instance.
 
       web.wrapRes(context, context.req, context.res, context.res.end)()
-    })
-
-    this.addSub('datadog:tracer:trace:finish', ({ spans }) => {
-      if (spans.length === 0 || spans[0].name !== 'http.request') {
-        return
-      }
-
-      if (!this.config.filter(new URL(spans[0].meta['http.url']).pathname)) {
-        spans.length = 0
-      }
     })
   }
 

@@ -135,7 +135,7 @@ describe('Plugin', () => {
 
     describe('with a blocklist configuration', () => {
       beforeEach(() => {
-        return agent.load('http', { blocklist: '/health' })
+        return agent.load('http', { client: false, blocklist: '/health' })
           .then(() => {
             http = require('http')
           })

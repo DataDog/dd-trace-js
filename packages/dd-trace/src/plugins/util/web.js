@@ -69,6 +69,17 @@ const web = {
     context.span = span
     context.res = res
 
+    if (!config.filter(req.url)) {
+      span.setTag(MANUAL_DROP, true)
+      span.context()._trace.isRecording = false
+    }
+
+    if (config.service) {
+      span.setTag(SERVICE_NAME, config.service)
+    }
+
+    analyticsSampler.sample(span, config.measured, true)
+
     return span
   },
   wrap (req) {
@@ -82,16 +93,6 @@ const web = {
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
     const span = this.startSpan(tracer, config, req, res, name)
-
-    if (!config.filter(req.url)) {
-      span.setTag(MANUAL_DROP, true)
-    }
-
-    if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
-    }
-
-    analyticsSampler.sample(span, config.measured, true)
 
     this.wrap(req)
 
