@@ -106,10 +106,7 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'file.flag': 'r',
-                'file.path': filename,
-                'error.msg': err.message,
-                'error.type': err.name,
-                'error.stack': err.stack
+                'file.path': filename
               }
             })
           })
@@ -162,10 +159,7 @@ describe('Plugin', () => {
                 error: 0,
                 meta: {
                   'file.flag': 'r',
-                  'file.path': filename,
-                  'error.msg': err.message,
-                  'error.type': err.name,
-                  'error.stack': err.stack
+                  'file.path': filename
                 }
               })
             })
@@ -216,10 +210,7 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'file.flag': 'r',
-                'file.path': filename,
-                'error.msg': err.message,
-                'error.type': err.name,
-                'error.stack': err.stack
+                'file.path': filename
               }
             })
           }
@@ -1827,12 +1818,7 @@ function testHandleErrors (fs, name, tested, args, agent) {
     tested(fs, args, null, err => {
       expectOneSpan(agent, done, {
         resource: name,
-        error: 0,
-        meta: {
-          'error.type': err.name,
-          'error.msg': err.message,
-          'error.stack': err.stack
-        }
+        error: 0
       })
     })
   })

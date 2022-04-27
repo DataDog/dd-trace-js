@@ -22,7 +22,6 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
-  extractError(formatted, span)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
@@ -74,8 +73,8 @@ function extractTags (trace, span) {
         addTag({}, trace.metrics, tag, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
       case 'error':
-        if (tags[tag] && (context._name !== 'fs.operation')) {
-          trace.error = 1
+        if (context._name !== 'fs.operation') {
+          extractError(trace, tags[tag])
         }
         break
       case 'error.type':
@@ -84,6 +83,8 @@ function extractTags (trace, span) {
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
           trace.error = 1
+        } else {
+          break
         }
       default: // eslint-disable-line no-fallthrough
         addTag(trace.meta, trace.metrics, tag, tags[tag])
@@ -122,8 +123,11 @@ function extractChunkTags (trace, span) {
   }
 }
 
-function extractError (trace, span) {
-  const error = span.context()._tags['error']
+function extractError (trace, error) {
+  if (!error) return
+
+  trace.error = 1
+
   if (isError(error)) {
     addTag(trace.meta, trace.metrics, 'error.msg', error.message)
     addTag(trace.meta, trace.metrics, 'error.type', error.name)
