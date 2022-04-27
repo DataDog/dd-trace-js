@@ -1,11 +1,11 @@
 name: Publish
+inputs:
+  args:
+    required: false
+    default: ''
+    type: string
 runs:
   using: composite
-  inputs:
-    args:
-      required: false
-      default: ''
-      type: string
   steps:
     - uses: actions/setup-node@v3
       with:
