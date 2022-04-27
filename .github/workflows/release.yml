@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - v[0-9]+.x
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  latest:
+    if: ${{ github.ref_name == 'v2.x' }}
+    runs-on: ubuntu-latest
+    environment: npm
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/publish
+
+  legacy:
+    if: ${{ github.ref_name == 'v0.x' }}
+    runs-on: ubuntu-latest
+    environment: npm
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/publish
+        with:
+          args: --tag latest-node8 --tag latest-node10
+
+  docs:
+    runs-on: ubuntu-latest
+    needs: ['latest']
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      - run: yarn
+      - name: Build
+        working-directory: docs
+        run: |
+          yarn
+          yarn build
+      - name: Deploy
+        working-directory: docs/out
+        run: |
+          git init -b main
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git remote add origin https://github.com/DataDog/dd-trace-js.git
+          git add -A
+          git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
+          git push -f origin main:gh-pages
