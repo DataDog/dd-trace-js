@@ -6,25 +6,27 @@ const Reporter = require('../../../src/appsec/reporter')
 const rules = require('../../../src/appsec/recommended.json')
 const log = require('../../../src/log')
 
-const DEFAULT_MAX_BUDGET = 5e3
+const config = { wafTimeout: 5e3, obfuscatorKeyRegex: '.*', obfuscatorValueRegex: '.*' }
 
 describe('WAFCallback', () => {
   afterEach(() => {
     sinon.restore()
+    Reporter.metricsQueue.clear()
   })
 
   describe('loadDDWAF', () => {
     it('should instanciate DDWAF', () => {
-      const result = WAFCallback.loadDDWAF(rules)
+      const result = WAFCallback.loadDDWAF(rules, config)
 
       expect(result).itself.to.respondTo('createContext')
       expect(result).itself.to.respondTo('dispose')
+      expect(result).to.have.property('rulesInfo')
     })
 
     it('should log exceptions', () => {
       sinon.spy(log, 'error')
 
-      const wafError = () => WAFCallback.loadDDWAF({})
+      const wafError = () => WAFCallback.loadDDWAF({}, {})
 
       expect(wafError).to.throw('Invalid rules')
 
@@ -75,7 +77,23 @@ describe('WAFCallback', () => {
         }]
       }
 
-      const ddwaf = {}
+      const ddwaf = {
+        constructor: {
+          version: sinon.stub().returns({ major: 1, minor: 2, patch: 3 })
+        },
+        rulesInfo: {
+          loaded: 3,
+          failed: 0
+        },
+        createContext: sinon.spy(() => ({
+          run: sinon.stub().returns({ action: 'monitor', data: '[]' }),
+          dispose: sinon.stub(),
+          get disposed () {
+            return this.dispose.called
+          }
+        })),
+        dispose: sinon.stub()
+      }
 
       sinon.stub(WAFCallback, 'loadDDWAF').returns(ddwaf)
 
@@ -83,9 +101,20 @@ describe('WAFCallback', () => {
 
       sinon.stub(Gateway.manager, 'addSubscription')
 
-      const waf = new WAFCallback(rules)
+      const waf = new WAFCallback(rules, config)
 
-      expect(WAFCallback.loadDDWAF).to.have.been.calledOnceWithExactly(rules)
+      expect(WAFCallback.loadDDWAF).to.have.been.calledOnceWithExactly(rules, {
+        obfuscatorKeyRegex: '.*',
+        obfuscatorValueRegex: '.*'
+      })
+      expect(waf.wafTimeout).to.equal(5e3)
+      expect(ddwaf.constructor.version).to.have.been.calledOnce
+      expect(Object.fromEntries(Reporter.metricsQueue)).to.deep.equal({
+        '_dd.appsec.waf.version': '1.2.3',
+        '_dd.appsec.event_rules.loaded': 3,
+        '_dd.appsec.event_rules.error_count': 0,
+        'manual.keep': true
+      })
       expect(waf.ddwaf).to.equal(ddwaf)
       expect(waf.wafContextCache).to.be.an.instanceOf(WeakMap)
 
@@ -122,6 +151,13 @@ describe('WAFCallback', () => {
 
     beforeEach(() => {
       sinon.stub(WAFCallback, 'loadDDWAF').returns({
+        constructor: {
+          version: sinon.stub().returns({ major: 1, minor: 2, patch: 3 })
+        },
+        rulesInfo: {
+          loaded: rules.rules.length,
+          failed: 0
+        },
         createContext: sinon.spy(() => ({
           run: sinon.stub().returns({ action: 'monitor', data: '[]' }),
           dispose: sinon.stub(),
@@ -132,7 +168,7 @@ describe('WAFCallback', () => {
         dispose: sinon.stub()
       })
 
-      waf = new WAFCallback(rules)
+      waf = new WAFCallback(rules, config)
     })
 
     describe('action', () => {
@@ -153,7 +189,7 @@ describe('WAFCallback', () => {
 
         waf.action({ a: 1, b: 2 }, store)
 
-        expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
+        expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
         expect(wafContext.dispose).to.have.been.calledOnce
       })
@@ -166,7 +202,7 @@ describe('WAFCallback', () => {
         const key = store.get('context')
         const wafContext = waf.wafContextCache.get(key)
 
-        expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
+        expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
         expect(wafContext.dispose).to.have.been.calledOnce
       })
@@ -219,7 +255,7 @@ describe('WAFCallback', () => {
         expect(wafContext.dispose).to.not.have.been.called
 
         const newWafContext = waf.ddwaf.createContext.firstCall.returnValue
-        expect(newWafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
+        expect(newWafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(newWafContext.dispose).to.have.been.calledOnce
 
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
@@ -248,7 +284,7 @@ describe('WAFCallback', () => {
             a: 1,
             b: '2'
           }
-        }, DEFAULT_MAX_BUDGET)
+        }, 5e3)
 
         expect(wafContext.dispose).to.have.been.calledOnce
       })
@@ -265,7 +301,7 @@ describe('WAFCallback', () => {
         waf.wafContextCache.set(store.get('context'), wafContext)
 
         expect(() => waf.action({ a: 1, b: 2 }, store)).to.not.throw()
-        expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, DEFAULT_MAX_BUDGET)
+        expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(waf.applyResult).to.not.have.been.called
         expect(log.error).to.have.been.calledTwice
         expect(log.error.firstCall).to.have.been.calledWithExactly('Error while running the AppSec WAF')
@@ -276,10 +312,11 @@ describe('WAFCallback', () => {
 
     describe('applyResult', () => {
       beforeEach(() => {
+        sinon.stub(Reporter, 'reportMetrics')
         sinon.stub(Reporter, 'reportAttack')
       })
 
-      it('should call reporter with unparsed attacks when passed data', () => {
+      it('should call reporter with metrics and unparsed attacks when passed data', () => {
         const data = JSON.stringify([{
           rule: {
             id: 'ruleId',
@@ -329,17 +366,36 @@ describe('WAFCallback', () => {
           }]
         }])
 
+        waf.ddwaf.rulesInfo.version = '1.2.3'
+
         const store = new Map()
 
-        waf.applyResult({ data }, store)
+        waf.applyResult({ data, totalRuntime: 1337 }, store)
 
+        expect(Reporter.reportMetrics).to.have.been.calledOnceWithExactly({
+          duration: 1337,
+          rulesVersion: '1.2.3'
+        }, store)
         expect(Reporter.reportAttack).to.have.been.calledOnceWithExactly(data, store)
       })
 
-      it('should do nothing when passed empty data', () => {
-        waf.applyResult({})
-        waf.applyResult({ data: '[]' })
+      it('should not report attack when passed empty data', () => {
+        waf.ddwaf.rulesInfo.version = '1.2.3'
 
+        const store = new Map()
+
+        waf.applyResult({ totalRuntime: 1337 }, store)
+        waf.applyResult({ data: '[]', totalRuntime: 1337 }, store)
+
+        expect(Reporter.reportMetrics).to.have.been.calledTwice
+        expect(Reporter.reportMetrics.firstCall).to.have.been.calledWithExactly({
+          duration: 1337,
+          rulesVersion: '1.2.3'
+        }, store)
+        expect(Reporter.reportMetrics.secondCall).to.have.been.calledWithExactly({
+          duration: 1337,
+          rulesVersion: '1.2.3'
+        }, store)
         expect(Reporter.reportAttack).to.not.have.been.called
       })
     })

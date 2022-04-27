@@ -75,6 +75,9 @@ describe('Config', () => {
     const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
     expect(config).to.have.nested.property('appsec.rules', rulePath)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
+    expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
+    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
+    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
   })
 
   it('should initialize from the default service', () => {
@@ -119,7 +122,10 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = './path/rules.json'
-    process.env.DD_APPSEC_TRACE_RATE_LIMIT = 42
+    process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
+    process.env.DD_APPSEC_WAF_TIMEOUT = '42'
+    process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
+    process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
 
     const config = new Config()
 
@@ -146,6 +152,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
+    expect(config).to.have.nested.property('appsec.wafTimeout', 42)
+    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
+    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -329,6 +338,9 @@ describe('Config', () => {
     process.env.DD_APPSEC_ENABLED = 'false'
     process.env.DD_APPSEC_RULES = 'something'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
+    process.env.DD_APPSEC_WAF_TIMEOUT = 11
+    process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
+    process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
 
     const config = new Config({
       protocolVersion: '0.5',
@@ -358,7 +370,10 @@ describe('Config', () => {
       appsec: {
         enabled: true,
         rules: './path/rules.json',
-        rateLimit: 42
+        rateLimit: 42,
+        wafTimeout: 42,
+        obfuscatorKeyRegex: '.*',
+        obfuscatorValueRegex: '.*'
       }
     })
 
@@ -385,6 +400,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
+    expect(config).to.have.nested.property('appsec.wafTimeout', 42)
+    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
+    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
   })
 
   it('should give priority to non-experimental options', () => {
@@ -396,7 +414,10 @@ describe('Config', () => {
       appsec: {
         enabled: true,
         rules: './path/rules.json',
-        rateLimit: 42
+        rateLimit: 42,
+        wafTimeout: 42,
+        obfuscatorKeyRegex: '.*',
+        obfuscatorValueRegex: '.*'
       },
       experimental: {
         sampler: {
@@ -406,7 +427,10 @@ describe('Config', () => {
         appsec: {
           enabled: false,
           rules: 'something',
-          rateLimit: 11
+          rateLimit: 11,
+          wafTimeout: 11,
+          obfuscatorKeyRegex: '^$',
+          obfuscatorValueRegex: '^$'
         }
       }
     })
@@ -417,7 +441,10 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
       rules: './path/rules.json',
-      rateLimit: 42
+      rateLimit: 42,
+      wafTimeout: 42,
+      obfuscatorKeyRegex: '.*',
+      obfuscatorValueRegex: '.*'
     })
   })
 

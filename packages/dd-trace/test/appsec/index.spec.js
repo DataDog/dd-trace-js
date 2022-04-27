@@ -19,7 +19,10 @@ describe('AppSec Index', () => {
       appsec: {
         enabled: true,
         rules: './path/rules.json',
-        rateLimit: 42
+        rateLimit: 42,
+        wafTimeout: 42,
+        obfuscatorKeyRegex: '.*',
+        obfuscatorValueRegex: '.*'
       }
     }
 
@@ -49,7 +52,7 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] })
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -166,13 +169,13 @@ describe('AppSec Index', () => {
       }
 
       sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishAttacks')
+      sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(Gateway.getContext).to.have.been.calledOnce
       expect(Gateway.propagate).to.not.have.been.called
-      expect(Reporter.finishAttacks).to.not.have.been.called
+      expect(Reporter.finishRequest).to.not.have.been.called
     })
 
     it('should propagate incoming http end data', () => {
@@ -202,7 +205,7 @@ describe('AppSec Index', () => {
       }
 
       sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishAttacks')
+      sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
@@ -222,7 +225,7 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }
       }, context)
-      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
@@ -257,7 +260,7 @@ describe('AppSec Index', () => {
       }
 
       sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishAttacks')
+      sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
@@ -277,7 +280,7 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }
       }, context)
-      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -310,7 +313,8 @@ describe('AppSec Index', () => {
           c: '3'
         },
         cookies: {
-          d: '4'
+          d: '4',
+          e: '5'
         }
       }
       const res = {
@@ -322,7 +326,7 @@ describe('AppSec Index', () => {
       }
 
       sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishAttacks')
+      sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
@@ -345,9 +349,9 @@ describe('AppSec Index', () => {
         'server.request.query': { b: '2' },
         'server.request.framework_endpoint': '/path/:c',
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: '4' }
+        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
       }, context)
-      expect(Reporter.finishAttacks).to.have.been.calledOnceWithExactly(req, context)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
     })
   })
 })
