@@ -2,14 +2,9 @@
 
 const log = require('./log')
 const format = require('./format')
-const {
-  channel
-} = require('../../datadog-instrumentations/src/helpers/instrument')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
-
-const finishCh = channel('datadog:tracer:trace:finish')
 
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
@@ -37,9 +32,7 @@ class SpanProcessor {
         }
       }
 
-      finishCh.publish({ spans: formatted })
-
-      if (formatted.length !== 0) {
+      if (formatted.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
       }
 
