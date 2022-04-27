@@ -1,11 +1,12 @@
 'use strict'
 
 const web = require('../../dd-trace/src/plugins/util/web')
-
+let _tracer
 console.log('outside all the server') // start before all
 
 function createWrapDispatch (tracer, config) { // #1
   console.log('server inside createWrapDispatch')
+  _tracer = tracer
   config = web.normalizeConfig(config)
 
   return function wrapDispatch (dispatch) {
@@ -50,6 +51,7 @@ function createWrapStart () { // #4
   return function wrapStart (start) {
     return function startWithTrace () {
       if (this && typeof this.ext === 'function') {
+        this.ext('onPreStart', onPreStart)
         this.ext('onPreResponse', onPreResponse)
       }
 
@@ -100,8 +102,8 @@ function wrapServerEvents (method) {
 
   return function (server) { // https://github.com/hapijs/hapi/blob/master/lib/server.js#L269-L272
     if (!server) return method.apply(this, arguments) // OnPreStart Step 1
-    // return web.reactivate(request.raw.req, () => handler.apply(this, arguments)) //OnRequest Step 1
-    return web.reactivateServerScope(() => method.apply(this, arguments))
+    const serverSpan = _tracer.startSpan('server.ext')
+    return web.reactivateServerScope(server, _tracer, serverSpan, {}, () => method.apply(this, arguments))
   }
 }
 function wrapHandler (handler) {
@@ -113,6 +115,17 @@ function wrapHandler (handler) {
 
     return web.reactivate(request.raw.req, () => handler.apply(this, arguments))
   }
+}
+
+function onPreStart (server) {
+  console.log('server inside onPreStart')
+  if (!server) return server
+
+  // web.addError()
+
+  web.enterServer(server)
+
+  return server
 }
 
 function onPreResponse (request, h) {

@@ -98,14 +98,26 @@ const web = {
     return callback && tracer.scope().activate(span, () => callback(span))
   },
 
-  reactivateServerScope (fn) {
+  reactivateServerScope (server, tracer, span, config, fn) {
+    // configure context
+    const context = this.patchServerEvents(server, span)
+    context.config = config
+
+    context.tracer = tracer
+
     // Reactive the scope for the server events pending here
-    return fn
+    return context
+      ? context.tracer.scope().activate(context.span, fn)
+      : fn()
   },
 
   // Reactivate the request scope in case it was changed by a middleware.
   reactivate (req, fn) {
     return reactivate(req, fn)
+  },
+
+  enterServer (server) {
+    contexts.get(server)
   },
 
   // Add a route segment that will be used for the resource name.
@@ -177,6 +189,31 @@ const web = {
   // Register a callback to run before res.end() is called.
   beforeEnd (req, callback) {
     contexts.get(req).beforeEnd.push(callback)
+  },
+
+  // prepare the path server for instrumentation
+  patchServerEvents (server, span) {
+    let context = contexts.get(server)
+
+    if (context) return context
+
+    context = contexts.get(server.info)
+
+    if (context) {
+      contexts.set(server, context)
+      return context
+    }
+
+    context = {
+      server: server.info,
+      span: span,
+      app: 'app-name',
+      config: {}
+    }
+
+    contexts.set(server, context)
+
+    return context
   },
 
   // Prepare the request for instrumentation.
