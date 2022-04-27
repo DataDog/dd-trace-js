@@ -59,6 +59,16 @@ class HttpServerPlugin extends Plugin {
 
       web.wrapRes(context, context.req, context.res, context.res.end)()
     })
+
+    this.addSub('datadog:tracer:trace:finish', ({ spans }) => {
+      if (spans.length === 0 || spans[0].name !== 'http.request') {
+        return
+      }
+
+      if (!this.config.filter(new URL(spans[0].meta['http.url']).pathname)) {
+        spans.length = 0
+      }
+    })
   }
 
   configure (config) {
