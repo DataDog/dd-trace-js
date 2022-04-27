@@ -442,7 +442,7 @@ export declare interface TracerOptions {
     obfuscatorKeyRegex?: string,
 
     /**
-     * Specifies a regex that will redact sensitive data in attack reports.
+     * Specifies a regex that will redact sensitive data by its value in attack reports.
      */
     obfuscatorValueRegex?: string
   };
