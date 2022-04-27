@@ -18,10 +18,7 @@ jobs:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-node@v3
-        with:
-          registry-url: 'https://registry.npmjs.org'
-      - run: npm publish
+      - uses: ./.github/actions/publish
 
   legacy:
     if: ${{ github.ref_name == 'v0.x' }}
@@ -31,10 +28,9 @@ jobs:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-node@v3
+      - uses: ./.github/actions/publish
         with:
-          registry-url: 'https://registry.npmjs.org'
-      - run: npm publish --tag latest-node8 --tag latest-node10
+          args: --tag latest-node8 --tag latest-node10
 
   docs:
     runs-on: ubuntu-latest
