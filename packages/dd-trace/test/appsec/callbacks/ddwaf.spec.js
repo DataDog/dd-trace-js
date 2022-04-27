@@ -312,10 +312,11 @@ describe('WAFCallback', () => {
 
     describe('applyResult', () => {
       beforeEach(() => {
+        sinon.stub(Reporter, 'reportMetrics')
         sinon.stub(Reporter, 'reportAttack')
       })
 
-      it('should call reporter with unparsed attacks when passed data', () => {
+      it('should call reporter with metrics and unparsed attacks when passed data', () => {
         const data = JSON.stringify([{
           rule: {
             id: 'ruleId',
@@ -365,17 +366,36 @@ describe('WAFCallback', () => {
           }]
         }])
 
+        waf.ddwaf.rulesInfo.version = '1.2.3'
+
         const store = new Map()
 
-        waf.applyResult({ data }, store)
+        waf.applyResult({ data, totalRuntime: 1337 }, store)
 
+        expect(Reporter.reportMetrics).to.have.been.calledOnceWithExactly({
+          duration: 1337,
+          rulesVersion: '1.2.3'
+        }, store)
         expect(Reporter.reportAttack).to.have.been.calledOnceWithExactly(data, store)
       })
 
-      it('should do nothing when passed empty data', () => {
-        waf.applyResult({})
-        waf.applyResult({ data: '[]' })
+      it('should not report attack when passed empty data', () => {
+        waf.ddwaf.rulesInfo.version = '1.2.3'
 
+        const store = new Map()
+
+        waf.applyResult({ totalRuntime: 1337 }, store)
+        waf.applyResult({ data: '[]', totalRuntime: 1337 }, store)
+
+        expect(Reporter.reportMetrics).to.have.been.calledTwice
+        expect(Reporter.reportMetrics.firstCall).to.have.been.calledWithExactly({
+          duration: 1337,
+          rulesVersion: '1.2.3'
+        }, store)
+        expect(Reporter.reportMetrics.secondCall).to.have.been.calledWithExactly({
+          duration: 1337,
+          rulesVersion: '1.2.3'
+        }, store)
         expect(Reporter.reportAttack).to.not.have.been.called
       })
     })
