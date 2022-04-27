@@ -26,7 +26,7 @@ describe('Plugin', function () {
 
   this.timeout(20000)
 
-  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version) => {
+  withVersions('jest', ['jest-environment-node'], (version) => {
     afterEach(() => {
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {

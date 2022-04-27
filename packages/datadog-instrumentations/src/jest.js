@@ -48,7 +48,8 @@ function getWrappedEnvironment (BaseEnvironment) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
-      this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
+      const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
+      this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
     }
@@ -129,12 +130,22 @@ function getWrappedEnvironment (BaseEnvironment) {
 addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0']
-}, getWrappedEnvironment)
+}, (pkg) => {
+  if (pkg.default) {
+    return getWrappedEnvironment(pkg.default)
+  }
+  return getWrappedEnvironment(pkg)
+})
 
 addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0']
-}, getWrappedEnvironment)
+}, (pkg) => {
+  if (pkg.default) {
+    return getWrappedEnvironment(pkg.default)
+  }
+  return getWrappedEnvironment(pkg)
+})
 
 addHook({
   name: 'jest-jasmine2',
