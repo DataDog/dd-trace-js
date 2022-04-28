@@ -108,7 +108,7 @@ class WAFCallback {
 
   applyResult (result, store) {
     Reporter.reportMetrics({
-      duration: result.totalRuntime,
+      duration: result.totalRuntime / 1e3,
       rulesVersion: this.ddwaf.rulesInfo.version
     }, store)
 
