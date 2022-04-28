@@ -32,7 +32,7 @@ async function start () {
       method: (server) => {
         // const reviewScope = myTracer.scope().active()
         console.log('inside onPreStart')
-        return myTracer.trace('onPreStart', {}, () => server)
+        return myTracer.trace('onPreStart', { tags: server.info }, () => server)
       }
     },
     {

@@ -107,7 +107,7 @@ const web = {
 
     // Reactive the scope for the server events pending here
     return context
-      ? context.tracer.scope().activate(context.span, fn)
+      ? context.tracer.scope().activate(context.span, fn) && context.span.finish()
       : fn()
   },
 
