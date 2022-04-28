@@ -124,7 +124,9 @@ function getWrappedEnvironment (BaseEnvironment) {
 function getTestEnvironment (pkg) {
   if (pkg.default) {
     const wrappedTestEnvironment = getWrappedEnvironment(pkg.default)
-    return { ...pkg, TestEnvironment: wrappedTestEnvironment, default: wrappedTestEnvironment }
+    pkg.default = wrappedTestEnvironment
+    pkg.TestEnvironment = wrappedTestEnvironment
+    return pkg
   }
   return getWrappedEnvironment(pkg)
 }
