@@ -121,25 +121,23 @@ function getWrappedEnvironment (BaseEnvironment) {
   }
 }
 
+function getTestEnvironment (pkg) {
+  if (pkg.default) {
+    const wrappedTestEnvironment = getWrappedEnvironment(pkg.default)
+    return { ...pkg, TestEnvironment: wrappedTestEnvironment, default: wrappedTestEnvironment }
+  }
+  return getWrappedEnvironment(pkg)
+}
+
 addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0']
-}, (pkg) => {
-  if (pkg.default) {
-    return getWrappedEnvironment(pkg.default)
-  }
-  return getWrappedEnvironment(pkg)
-})
+}, getTestEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0']
-}, (pkg) => {
-  if (pkg.default) {
-    return getWrappedEnvironment(pkg.default)
-  }
-  return getWrappedEnvironment(pkg)
-})
+}, getTestEnvironment)
 
 addHook({
   name: 'jest-jasmine2',
