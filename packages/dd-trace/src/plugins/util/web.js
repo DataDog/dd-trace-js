@@ -71,6 +71,14 @@ const web = {
 
     return span
   },
+  wrapServerEvents (server) {
+    const context = contexts.get(server)
+    if (!context.instrumented) {
+      this.wrapServerEventsEnd(context)
+      this.wrapServerEventsInfo(context)
+      context.instrumented = true
+    }
+  },
   wrap (req) {
     const context = contexts.get(req)
     if (!context.instrumented) {
@@ -105,9 +113,11 @@ const web = {
 
     context.tracer = tracer
 
+    this.wrapServerEvents(server)
+
     // Reactive the scope for the server events pending here
     return context
-      ? context.tracer.scope().activate(context.span, fn) && context.span.finish()
+      ? context.tracer.scope().activate(context.span, fn) && span.finish()
       : fn()
   },
 
@@ -348,6 +358,20 @@ const web = {
       return returnValue
     }
   },
+  wrapServerEventsEnd (context) {
+    const scope = context.tracer.scope()
+    const server = context.server
+
+    Object.defineProperty(server, 'end', {
+      configurable: true,
+      get () {
+        return ends.get(this)
+      },
+      set (value) {
+        ends.set(this, scope.bind(value, context.span))
+      }
+    })
+  },
   wrapEnd (context) {
     const scope = context.tracer.scope()
     const req = context.req
@@ -367,6 +391,12 @@ const web = {
         ends.set(this, scope.bind(value, context.span))
       }
     })
+  },
+  wrapServerEventsInfo (context) {
+    const scope = context.tracer.scope()
+    const server = context.server
+
+    scope.bind(server, context.span)
   },
   wrapEvents (context) {
     const scope = context.tracer.scope()

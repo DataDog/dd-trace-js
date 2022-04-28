@@ -194,19 +194,6 @@ describe('Plugin', () => {
       })
 
       if (semver.intersects(version, '>=11')) {
-        it('should run extension events in the server scope', done => {
-          server.ext({
-            type: 'onPreStart',
-            method: (server) => {
-              expect(tracer.scope().active()).to.not.be.null
-              done()
-              return server
-            }
-          })
-        })
-      }
-
-      if (semver.intersects(version, '>=11')) {
         it('should run extension events in the request scope', done => {
           server.route({
             method: 'POST',
