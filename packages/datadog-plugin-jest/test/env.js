@@ -1,5 +1,5 @@
 require('../../../ci/jest/env')
 
-const node = require(`../../../versions/jest-environment-node@${global.__libraryVersion__}`).get()
+const env = require(`../../../versions/${global.__libraryName__}@${global.__libraryVersion__}`).get()
 
-module.exports = node
+module.exports = env.default ? env.default : env
