@@ -26,7 +26,7 @@ describe('Plugin', () => {
             .then(() => {
               knex = require(`../../../versions/knex@${version}`).get()
               client = knex({
-                client: 'sqlite3',
+                client: 'pg',
                 connection: {
                   filename: ':memory:'
                 }
@@ -38,9 +38,10 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return client.raw('PRAGMA user_version')
-              .then(() => {
+              .finally(() => {
                 expect(tracer.scope().active()).to.equal(span)
               })
+              .catch(() => {})
           })
         })
       })
