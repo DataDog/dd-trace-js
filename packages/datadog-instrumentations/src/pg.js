@@ -12,12 +12,12 @@ const asyncEndCh = channel('apm:pg:query:async-end')
 const endCh = channel('apm:pg:query:end')
 const errorCh = channel('apm:pg:query:error')
 
-addHook({ name: 'pg', versions: ['>=4'] }, pg => {
+addHook({ name: 'pg', versions: ['>=4.5.5'] }, pg => {
   shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
   return pg
 })
 
-addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=4'] }, Client => {
+addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=4.5.5'] }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
 })
