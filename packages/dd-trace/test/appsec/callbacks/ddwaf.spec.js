@@ -179,6 +179,8 @@ describe('WAFCallback', () => {
 
         store.set('context', {})
 
+        sinon.stub(process.hrtime, 'bigint').onFirstCall().returns(10n).onSecondCall().returns(20n)
+
         sinon.stub(waf, 'applyResult')
       })
 
@@ -190,7 +192,7 @@ describe('WAFCallback', () => {
         waf.action({ a: 1, b: 2 }, store)
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
         expect(wafContext.dispose).to.have.been.calledOnce
       })
 
@@ -203,7 +205,7 @@ describe('WAFCallback', () => {
         const wafContext = waf.wafContextCache.get(key)
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
         expect(wafContext.dispose).to.have.been.calledOnce
       })
 
@@ -216,7 +218,7 @@ describe('WAFCallback', () => {
 
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
         expect(waf.ddwaf.createContext.firstCall.returnValue.dispose).to.have.been.calledOnce
       })
 
@@ -227,7 +229,7 @@ describe('WAFCallback', () => {
 
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, undefined)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, undefined)
         expect(waf.ddwaf.createContext.firstCall.returnValue.dispose).to.have.been.calledOnce
       })
 
@@ -258,7 +260,7 @@ describe('WAFCallback', () => {
         expect(newWafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(newWafContext.dispose).to.have.been.calledOnce
 
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]' }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
       })
 
       it('should cast status code into string', () => {
@@ -370,10 +372,11 @@ describe('WAFCallback', () => {
 
         const store = new Map()
 
-        waf.applyResult({ data, totalRuntime: 1337 }, store)
+        waf.applyResult({ data, totalRuntime: 1337, durationExt: 42e3 }, store)
 
         expect(Reporter.reportMetrics).to.have.been.calledOnceWithExactly({
           duration: 1337,
+          durationExt: 42,
           rulesVersion: '1.2.3'
         }, store)
         expect(Reporter.reportAttack).to.have.been.calledOnceWithExactly(data, store)
@@ -384,16 +387,18 @@ describe('WAFCallback', () => {
 
         const store = new Map()
 
-        waf.applyResult({ totalRuntime: 1337 }, store)
-        waf.applyResult({ data: '[]', totalRuntime: 1337 }, store)
+        waf.applyResult({ totalRuntime: 1337, durationExt: 42e3 }, store)
+        waf.applyResult({ data: '[]', totalRuntime: 1337, durationExt: 42e3 }, store)
 
         expect(Reporter.reportMetrics).to.have.been.calledTwice
         expect(Reporter.reportMetrics.firstCall).to.have.been.calledWithExactly({
           duration: 1337,
+          durationExt: 42,
           rulesVersion: '1.2.3'
         }, store)
         expect(Reporter.reportMetrics.secondCall).to.have.been.calledWithExactly({
           duration: 1337,
+          durationExt: 42,
           rulesVersion: '1.2.3'
         }, store)
         expect(Reporter.reportAttack).to.not.have.been.called
