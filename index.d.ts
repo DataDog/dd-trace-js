@@ -575,7 +575,6 @@ interface Plugins {
   "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
-  "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
   "mocha": plugins.mocha;
@@ -1158,12 +1157,6 @@ declare namespace plugins {
    * [kafkajs](https://kafka.js.org/) module.
    */
   interface kafkajs extends Instrumentation {}
-
-  /**
-   * This plugin automatically instruments the
-   * [limitd-client](https://github.com/limitd/node-client) module.
-   */
-  interface limitd_client extends Integration {}
 
   /**
    * This plugin automatically instruments the
