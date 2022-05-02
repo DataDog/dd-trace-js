@@ -192,7 +192,11 @@ describe('WAFCallback', () => {
         waf.action({ a: 1, b: 2 }, store)
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({
+          action: 'monitor',
+          data: '[]',
+          durationExt: 10
+        }, store)
         expect(wafContext.dispose).to.have.been.calledOnce
       })
 
@@ -205,7 +209,11 @@ describe('WAFCallback', () => {
         const wafContext = waf.wafContextCache.get(key)
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({
+          action: 'monitor',
+          data: '[]',
+          durationExt: 10
+        }, store)
         expect(wafContext.dispose).to.have.been.calledOnce
       })
 
@@ -218,7 +226,11 @@ describe('WAFCallback', () => {
 
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({
+          action: 'monitor',
+          data: '[]',
+          durationExt: 10
+        }, store)
         expect(waf.ddwaf.createContext.firstCall.returnValue.dispose).to.have.been.calledOnce
       })
 
@@ -229,7 +241,11 @@ describe('WAFCallback', () => {
 
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, undefined)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({
+          action: 'monitor',
+          data: '[]',
+          durationExt: 10
+        }, undefined)
         expect(waf.ddwaf.createContext.firstCall.returnValue.dispose).to.have.been.calledOnce
       })
 
@@ -260,7 +276,11 @@ describe('WAFCallback', () => {
         expect(newWafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(newWafContext.dispose).to.have.been.calledOnce
 
-        expect(waf.applyResult).to.have.been.calledOnceWithExactly({ action: 'monitor', data: '[]', durationExt: 10 }, store)
+        expect(waf.applyResult).to.have.been.calledOnceWithExactly({
+          action: 'monitor',
+          data: '[]',
+          durationExt: 10
+        }, store)
       })
 
       it('should cast status code into string', () => {
