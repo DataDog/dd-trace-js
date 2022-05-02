@@ -179,7 +179,7 @@ describe('WAFCallback', () => {
 
         store.set('context', {})
 
-        sinon.stub(process.hrtime, 'bigint').onFirstCall().returns(10n).onSecondCall().returns(20n)
+        sinon.stub(process.hrtime, 'bigint').onFirstCall().returns(BigInt(10)).onSecondCall().returns(BigInt(20))
 
         sinon.stub(waf, 'applyResult')
       })
