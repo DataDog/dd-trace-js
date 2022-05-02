@@ -1,6 +1,8 @@
 const RetryOperation = require('../operation')
 const oracledb = require('../../../../../versions/oracledb').get()
 
+const hostname = process.env.CI ? 'oracledb' : 'localhost'
+
 function waitForOracledb () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('oracledb')
@@ -9,7 +11,7 @@ function waitForOracledb () {
         .getConnection({
           user: 'sys',
           password: 'Oracle18',
-          connectString: 'localhost:1521/xepdb1',
+          connectString: `${hostname}:1521/xepdb1`,
           privilege: 2
         })
         .then(connection => {

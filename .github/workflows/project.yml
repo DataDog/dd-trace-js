@@ -1,0 +1,43 @@
+name: Project
+
+on:
+  push:
+  schedule:
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/12
+      - run: yarn test:integration
+      - uses: ./.github/actions/node/14
+      - run: yarn test:integration
+      - uses: ./.github/actions/node/16
+      - run: yarn test:integration
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:integration
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn lint
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn type:test
+      - run: yarn type:doc
