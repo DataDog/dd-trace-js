@@ -27,21 +27,22 @@ describe('Plugin', () => {
             brokers: ['localhost:9092']
           })
         })
-        describe('producer', () => {
+
+        describe('producer.send', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: 'kafka.produce',
               service: 'test-kafka',
               meta: {
                 'span.kind': 'producer',
-                'component': 'kafkajs'
+                'component': 'kafkajs',
+                'kafka.topic': testTopic
               },
               metrics: {
                 'kafka.batch_size': messages.length
               },
               resource: testTopic,
               error: 0
-
             })
 
             await sendMessages(kafka, testTopic, messages)
@@ -85,6 +86,86 @@ describe('Plugin', () => {
             }
           })
         })
+
+        describe('producer.sendBatch', () => {
+          it('should be instrumented', async () => {
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: 'kafka.produce',
+              service: 'test-kafka',
+              meta: {
+                'span.kind': 'producer',
+                'component': 'kafkajs',
+                'kafka.topics.0': testTopic
+              },
+              metrics: {
+                'kafka.batch_size': 3
+              },
+              resource: 'sendBatch',
+              error: 0
+            })
+
+            const topicMessages = [
+              {
+                topic: testTopic,
+                messages: [{ key: 'key', value: 'test a' }]
+              },
+              {
+                topic: testTopic,
+                messages: [
+                  { key: 'key', value: 'test b 1' },
+                  {
+                    key: 'key',
+                    value: 'test b 2',
+                    headers: { 'correlation-id': 'test' }
+                  }
+                ]
+              }
+            ]
+
+            await sendBatchMessages(kafka, topicMessages)
+
+            return expectedSpanPromise
+          })
+
+          it('should be instrumented w/ error', async () => {
+            let error
+
+            const expectedSpanPromise = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span).to.include({
+                name: 'kafka.produce',
+                service: 'test-kafka',
+                resource: 'sendBatch',
+                error: 1
+              })
+
+              expect(span.meta).to.include({
+                'error.type': error.name,
+                'error.msg': error.message,
+                'error.stack': error.stack
+              })
+            })
+
+            const topicMessages = [
+              {
+                topic: testTopic,
+                messages: [{ key: 'key', value: undefined }]
+              }
+            ]
+
+            const producer = kafka.producer()
+            try {
+              await producer.connect()
+              await producer.sendBatch({ topicMessages })
+            } catch (e) {
+              error = e
+              await producer.disconnect()
+              return expectedSpanPromise
+            }
+          })
+        })
+
         describe('consumer', () => {
           let consumer
           beforeEach(async () => {
@@ -228,5 +309,12 @@ async function sendMessages (kafka, topic, messages) {
     topic,
     messages
   })
+  await producer.disconnect()
+}
+
+async function sendBatchMessages (kafka, topicMessages) {
+  const producer = kafka.producer()
+  await producer.connect()
+  await producer.sendBatch({ topicMessages })
   await producer.disconnect()
 }
