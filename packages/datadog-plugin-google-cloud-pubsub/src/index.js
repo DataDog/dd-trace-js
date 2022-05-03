@@ -1,116 +1,98 @@
 'use strict'
 
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 const messageSpans = new WeakMap()
+class GoogleCloudPubsubPlugin extends Plugin {
+  static get name () {
+    return 'google-cloud-pubsub'
+  }
 
-function createWrapRequest (tracer, config) {
-  return function wrapRequest (request) {
-    return function requestWithTrace (cfg = { reqOpts: {} }, cb) {
+  constructor (...args) {
+    super(...args)
+
+    this.addSub(`apm:google-cloud-pubsub:request:start`, ({ cfg, projectId, messages }) => {
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
       const topic = getTopic(cfg)
       const tags = {
         component: '@google-cloud/pubsub',
         'resource.name': [cfg.method, topic].filter(x => x).join(' '),
-        'service.name': config.service || `${tracer._service}-pubsub`,
+        'service.name': this.config.service || `${this.tracer._service}-pubsub`,
         'span.kind': 'client',
         'pubsub.method': cfg.method,
-        'gcloud.project_id': this.projectId,
+        'gcloud.project_id': projectId,
         'pubsub.topic': topic
       }
       if (cfg.method === 'publish') {
         tags['span.kind'] = 'producer'
       }
-      cb = tracer.scope().bind(cb)
-      return tracer.trace('pubsub.request', { tags }, (span, done) => {
-        analyticsSampler.sample(span, config.measured)
-
-        if (cfg.reqOpts && cfg.method === 'publish') {
-          for (const msg of cfg.reqOpts.messages) {
-            if (!msg.attributes) {
-              msg.attributes = {}
-            }
-            tracer.inject(span, 'text_map', msg.attributes)
-          }
-        }
-
-        arguments[1] = function (err) {
-          done(err)
-          return cb.apply(this, arguments)
-        }
-
-        return request.apply(this, arguments)
+      const span = this.tracer.startSpan('pubsub.request', {
+        childOf,
+        tags
       })
-    }
-  }
-}
 
-function createWrapSubscriptionEmit (tracer, config) {
-  return function wrapSubscriptionEmit (emit) {
-    return function emitWithTrace (eventName, message) {
-      if (eventName !== 'message' || !message) return emit.apply(this, arguments)
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
 
-      const span = messageSpans.get(message)
-
-      if (!span) return emit.apply(this, arguments)
-
-      return tracer.scope().activate(span, () => {
-        try {
-          return emit.apply(this, arguments)
-        } catch (e) {
-          span.setTag('error', e)
-          throw e
+      for (const msg of messages) {
+        if (!msg.attributes) {
+          msg.attributes = {}
         }
-      })
-    }
-  }
-}
+        this.tracer.inject(span, 'text_map', msg.attributes)
+      }
+    })
 
-function createWrapLeaseDispense (tracer, config) {
-  return function wrapDispense (dispense) {
-    return function dispenseWithTrace (message) {
+    this.addSub(`apm:google-cloud-pubsub:receive:start`, ({ message }) => {
+      const store = storage.getStore()
       const subscription = message._subscriber._subscription
       const topic = subscription.metadata && subscription.metadata.topic
+      const childOf = this.tracer.extract('text_map', message.attributes)
       const tags = {
         component: '@google-cloud/pubsub',
         'resource.name': topic,
-        'service.name': config.service || tracer._service,
+        'service.name': this.config.service || this.tracer._service,
         'gcloud.project_id': subscription.pubsub.projectId,
         'pubsub.topic': topic,
         'span.kind': 'consumer',
         'span.type': 'worker'
       }
 
-      const childOf = tracer.extract('text_map', message.attributes)
-      const span = tracer.startSpan('pubsub.receive', { tags, childOf })
+      const span = this.tracer.startSpan('pubsub.receive', {
+        childOf,
+        tags
+      })
 
-      analyticsSampler.sample(span, config.measured, true)
+      analyticsSampler.sample(span, this.config.measured, true)
+      this.enter(span, store)
 
       messageSpans.set(message, span)
+    })
 
-      return dispense.apply(this, arguments)
-    }
-  }
-}
+    this.addSub(`apm:google-cloud-pubsub:request:error`, err => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
 
-function createWrapLeaseRemove (tracer, config) {
-  return function wrapRemove (remove) {
-    return function removeWithTrace (message) {
-      finish(message)
+    this.addSub(`apm:google-cloud-pubsub:request:finish`, () => {
+      const span = storage.getStore().span
+      span.finish()
+    })
 
-      return remove.apply(this, arguments)
-    }
-  }
-}
+    this.addSub(`apm:google-cloud-pubsub:receive:error`, ({ err, message }) => {
+      const span = messageSpans.get(message)
+      if (!span) return undefined
+      span.setTag('error', err)
+    })
 
-function createWrapLeaseClear (tracer, config) {
-  return function wrapClear (clear) {
-    return function clearWithTrace () {
-      for (const message of this._messages) {
-        finish(message)
-      }
-
-      return clear.apply(this, arguments)
-    }
+    this.addSub(`apm:google-cloud-pubsub:receive:finish`, ({ message }) => {
+      const span = messageSpans.get(message)
+      if (!span) return
+      span.setTag('pubsub.ack', message._handled ? 1 : 0)
+      span.finish()
+    })
   }
 }
 
@@ -120,41 +102,4 @@ function getTopic (cfg) {
   }
 }
 
-function finish (message) {
-  const span = messageSpans.get(message)
-
-  if (!span) return
-
-  span.setTag('pubsub.ack', message._handled ? 1 : 0)
-  span.finish()
-}
-
-module.exports = [
-  {
-    name: '@google-cloud/pubsub',
-    versions: ['>=1.2'],
-    patch ({ PubSub, Subscription }, tracer, config) {
-      this.wrap(PubSub.prototype, 'request', createWrapRequest(tracer, config))
-      this.wrap(Subscription.prototype, 'emit', createWrapSubscriptionEmit(tracer, config))
-    },
-    unpatch ({ PubSub, Subscription }) {
-      this.unwrap(PubSub.prototype, 'request')
-      this.unwrap(Subscription.prototype, 'emit')
-    }
-  },
-  {
-    name: '@google-cloud/pubsub',
-    versions: ['>=1.2'],
-    file: 'build/src/lease-manager.js',
-    patch ({ LeaseManager }, tracer, config) {
-      this.wrap(LeaseManager.prototype, '_dispense', createWrapLeaseDispense(tracer, config))
-      this.wrap(LeaseManager.prototype, 'remove', createWrapLeaseRemove(tracer, config))
-      this.wrap(LeaseManager.prototype, 'clear', createWrapLeaseClear(tracer, config))
-    },
-    unpatch ({ LeaseManager }) {
-      this.unwrap(LeaseManager.prototype, '_dispense')
-      this.unwrap(LeaseManager.prototype, 'remove')
-      this.unwrap(LeaseManager.prototype, 'clear')
-    }
-  }
-]
+module.exports = GoogleCloudPubsubPlugin
