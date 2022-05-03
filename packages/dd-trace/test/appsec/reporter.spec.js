@@ -161,6 +161,16 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration', 1337)
     })
 
+    it('should set ext duration metrics if set', () => {
+      const req = {}
+      const store = new Map([['req', req]])
+
+      Reporter.reportMetrics({ durationExt: 42 }, store)
+
+      expect(web.root).to.have.been.calledOnceWithExactly(req)
+      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration_ext', 42)
+    })
+
     it('should set rulesVersion if set', () => {
       const req = {}
       const store = new Map([['req', req]])
