@@ -9,7 +9,7 @@ const shimmer = require('../../../datadog-shimmer')
 const startServerCh = channel('apm:http:server:request:start')
 const endServerCh = channel('apm:http:server:request:end')
 const errorServerCh = channel('apm:http:server:request:error')
-const asyncEndServerCh = channel('apm:http:server:request:async-end')
+const asyncEndServerCh = channel('apm:http:server:request:finish')
 
 addHook({ name: 'https' }, http => {
   // http.ServerResponse not present on https

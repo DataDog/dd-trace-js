@@ -7,7 +7,6 @@ const http = require('http')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
-const plugin = require('../src')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -30,7 +29,7 @@ describe('Plugin', () => {
   }
 
   describe('router', () => {
-    withVersions(plugin, 'router', version => {
+    withVersions('router', 'router', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -45,7 +44,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
