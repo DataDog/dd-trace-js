@@ -56,6 +56,14 @@ module.exports = class Plugin {
     this._subscriptions.push(new Subscription(channelName, handler))
   }
 
+  addError (error) {
+    const store = storage.getStore()
+
+    if (!store || !store.span) return
+
+    store.span.setTag('error', error)
+  }
+
   configure (config) {
     if (typeof config === 'boolean') {
       config = { enabled: config }

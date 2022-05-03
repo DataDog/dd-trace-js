@@ -13,7 +13,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('express', () => {
-    withVersions(plugin, 'express', version => {
+    withVersions('express', 'express', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -25,11 +25,11 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load('express')
+          return agent.load(['express', 'http'], [{}, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -152,8 +152,6 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const spans = sort(traces[0])
-
-                expect(spans).to.have.length(7)
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
                 expect(spans[0]).to.have.property('name', 'express.request')
@@ -856,6 +854,36 @@ describe('Plugin', () => {
           const app = express()
           const error = new Error('boom')
 
+          app.use((req, res, next) => next(error))
+          app.use((error, req, res, next) => res.status(500).send())
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[3]).to.have.property('error', 1)
+                expect(spans[3].meta).to.have.property('error.type', error.name)
+                expect(spans[3].meta).to.have.property('error.msg', error.message)
+                expect(spans[3].meta).to.have.property('error.stack', error.stack)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`, {
+                  validateStatus: status => status === 500
+                })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle middleware exceptions', done => {
+          const app = express()
+          const error = new Error('boom')
+
           app.use((req, res) => { throw error })
           app.use((error, req, res, next) => res.status(500).send())
 
@@ -996,15 +1024,15 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('express', {
+          return agent.load(['express', 'http'], [{
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent']
-          })
+          }, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1093,13 +1121,13 @@ describe('Plugin', () => {
 
       describe('with configuration for middleware disabled', () => {
         before(() => {
-          return agent.load('express', {
+          return agent.load(['express', 'http'], [{
             middleware: false
-          })
+          }, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1242,9 +1270,6 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property('error.type', error.name)
-                expect(spans[0].meta).to.have.property('error.msg', error.message)
-                expect(spans[0].meta).to.have.property('error.stack', error.stack)
               })
               .then(done)
               .catch(done)

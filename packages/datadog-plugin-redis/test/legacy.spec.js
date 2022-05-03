@@ -103,10 +103,8 @@ describe('Plugin', () => {
 
           client.on('error', done)
 
-          agent.use(() => { // wait for initial info command
-            client.set('foo', 123, 'bar', (err, res) => {
-              error = err
-            })
+          client.set('foo', 123, 'bar', (err, res) => {
+            error = err
           })
 
           agent

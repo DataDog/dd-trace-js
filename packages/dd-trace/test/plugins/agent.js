@@ -8,6 +8,7 @@ const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
+const { storage } = require('../../../datadog-core')
 
 const handlers = new Set()
 let sockets = []
@@ -40,6 +41,12 @@ module.exports = {
     return getPort().then(port => {
       return new Promise((resolve, reject) => {
         const server = this.server = http.createServer(agent)
+        const emit = server.emit
+
+        server.emit = function () {
+          storage.enterWith({ noop: true })
+          return emit.apply(this, arguments)
+        }
 
         server.on('connection', socket => sockets.push(socket))
 
