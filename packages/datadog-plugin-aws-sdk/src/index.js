@@ -3,67 +3,100 @@
 const Tags = require('opentracing').Tags
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const awsHelpers = require('./helpers')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
+const { AsyncResource } = require('../../datadog-instrumentations/src/helpers/instrument')
 
-function createWrapRequest (tracer, config) {
-  config = normalizeConfig(config)
-  return function wrapRequest (send) {
-    return function requestWithTrace (cb) {
-      if (!this.service) return send.apply(this, arguments)
+const requestTags = new WeakMap()
 
-      const serviceIdentifier = this.service.serviceIdentifier
+class AwsSdkPlugin extends Plugin {
+  static get name () {
+    return 'aws-sdk'
+  }
 
-      if (!awsHelpers.isEnabled(serviceIdentifier, config[serviceIdentifier], this)) {
-        return send.apply(this, arguments)
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:aws:request:start', ({ request, serviceIdentifier, operation, awsRegion, awsService }) => {
+      if (!awsHelpers.isEnabled(serviceIdentifier, this.config[serviceIdentifier], request)) {
+        return
       }
-
-      const serviceName = getServiceName(serviceIdentifier, tracer, config)
-      const childOf = tracer.scope().active()
+      const serviceName = getServiceName(serviceIdentifier, this.tracer, this.config)
+      const childOf = this.tracer.scope().active()
       const tags = {
         [Tags.SPAN_KIND]: 'client',
         'service.name': serviceName,
-        'aws.operation': this.operation,
-        'aws.region': this.service.config && this.service.config.region,
-        'aws.service': this.service.api && this.service.api.className,
+        'aws.operation': operation,
+        'aws.region': awsRegion,
+        'aws.service': awsService,
         'component': 'aws-sdk'
       }
+      requestTags.set(request, tags)
 
-      const span = tracer.startSpan('aws.request', {
-        childOf,
-        tags
-      })
+      const span = this.tracer.startSpan('aws.request', { childOf, tags })
 
-      this.on('complete', response => {
-        if (!span) return
+      analyticsSampler.sample(span, this.config.measured)
 
-        awsHelpers.addResponseTags(span, response, serviceIdentifier, config, tracer)
-        awsHelpers.finish(config, span, response, response.error)
-      })
+      awsHelpers.requestInject(span, request, serviceIdentifier, this.tracer)
 
-      analyticsSampler.sample(span, config.measured)
+      const store = storage.getStore()
 
-      awsHelpers.requestInject(span, this, serviceIdentifier, tracer)
+      this.enter(span, store)
+    })
 
-      const request = this
+    this.addSub('apm:aws:request:complete', ({ response, serviceIdentifier }) => {
+      const store = storage.getStore()
+      if (!store) return
+      const { span } = store
+      if (!span) return
+      awsHelpers.addResponseTags(span, response, serviceIdentifier)
+      awsHelpers.finish(this.config, span, response, response.error)
+    })
 
-      return tracer.scope().activate(span, () => {
-        if (typeof cb === 'function') {
-          arguments[0] = awsHelpers.wrapCb(cb, serviceIdentifier, tags, request, tracer, childOf)
+    this.addSub('apm:aws:response', obj => {
+      const { request, response, serviceName } = obj
+      const store = storage.getStore()
+      const plugin = this
+      const maybeChildOf = awsHelpers.responseExtract(serviceName, request, response, this.tracer)
+      if (maybeChildOf) {
+        const options = {
+          childOf: maybeChildOf,
+          tags: Object.assign({}, requestTags.get(request) || {}, { [Tags.SPAN_KIND]: 'server' })
         }
-        return send.apply(this, arguments)
-      })
-    }
+        obj.ar = {
+          real: new AsyncResource('apm:aws:response'),
+          runInAsyncScope (fn) {
+            return this.real.runInAsyncScope(() => {
+              const span = plugin.tracer.startSpan('aws.response', options)
+              plugin.enter(span, store)
+              try {
+                let result = fn()
+                if (result && result.then) {
+                  result = result.then(x => {
+                    span.finish()
+                    return x
+                  }, e => {
+                    span.setTag(e)
+                    throw e
+                  })
+                } else {
+                  span.finish()
+                }
+                return result
+              } catch (e) {
+                span.setTag(e)
+                span.finish()
+              }
+            })
+          }
+        }
+      }
+    })
   }
-}
 
-function createWrapSetPromisesDependency (tracer, config, instrumenter, AWS) {
-  return function wrapSetPromisesDependency (setPromisesDependency) {
-    return function setPromisesDependencyWithTrace (dep) {
-      const result = setPromisesDependency.apply(this, arguments)
-
-      instrumenter.wrap(AWS.Request.prototype, 'promise', createWrapRequest(tracer, config))
-
-      return result
-    }
+  configure (config) {
+    Plugin.prototype.configure.call(this, config)
+    this.config = normalizeConfig(config)
   }
 }
 
@@ -90,29 +123,4 @@ function getServiceName (serviceIdentifier, tracer, config) {
     : `${tracer._service}-aws-${serviceIdentifier}`
 }
 
-// <2.1.35 has breaking changes for instrumentation
-// https://github.com/aws/aws-sdk-js/pull/629
-module.exports = [
-  {
-    name: 'aws-sdk',
-    versions: ['>=2.3.0'],
-    patch (AWS, tracer, config) {
-      this.wrap(AWS.Request.prototype, 'promise', createWrapRequest(tracer, config))
-      this.wrap(AWS.config, 'setPromisesDependency', createWrapSetPromisesDependency(tracer, config, this, AWS))
-    },
-    unpatch (AWS) {
-      this.unwrap(AWS.Request.prototype, 'promise')
-      this.unwrap(AWS.config, 'setPromisesDependency')
-    }
-  },
-  {
-    name: 'aws-sdk',
-    versions: ['>=2.1.35'],
-    patch (AWS, tracer, config) {
-      this.wrap(AWS.Request.prototype, 'send', createWrapRequest(tracer, config))
-    },
-    unpatch (AWS) {
-      this.unwrap(AWS.Request.prototype, 'send')
-    }
-  }
-]
+module.exports = AwsSdkPlugin

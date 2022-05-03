@@ -2,13 +2,12 @@
 'use strict'
 
 const EventBridge = require('../src/services/eventbridge')
-const plugin = require('../src')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
 describe('EventBridge', () => {
   let span
-  withVersions(plugin, 'aws-sdk', version => {
+  withVersions('aws-sdk', 'aws-sdk', version => {
     let traceId
     let parentId
     let spanId

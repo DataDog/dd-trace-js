@@ -2,12 +2,11 @@
 'use strict'
 
 const Sns = require('../src/services/sns')
-const plugin = require('../src')
 const tracer = require('../../dd-trace')
 
 describe('Sns', () => {
   let span
-  withVersions(plugin, 'aws-sdk', version => {
+  withVersions('aws-sdk', 'aws-sdk', version => {
     let traceId
     let parentId
     let spanId

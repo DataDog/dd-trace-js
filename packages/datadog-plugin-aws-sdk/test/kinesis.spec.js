@@ -2,14 +2,13 @@
 'use strict'
 
 const Kinesis = require('../src/services/kinesis')
-const plugin = require('../src')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 const { expect } = require('chai')
 
 describe('Kinesis', () => {
   let span
-  withVersions(plugin, 'aws-sdk', version => {
+  withVersions('aws-sdk', 'aws-sdk', version => {
     let traceId
     let parentId
     let spanId

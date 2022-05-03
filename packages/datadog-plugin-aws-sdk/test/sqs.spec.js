@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const { setup } = require('./spec_helpers')
 
 const queueOptions = {
@@ -15,7 +14,7 @@ describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
 
-    withVersions(plugin, 'aws-sdk', version => {
+    withVersions('aws-sdk', 'aws-sdk', version => {
       let AWS
       let sqs
       let QueueUrl
@@ -48,7 +47,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should propagate the tracing context from the producer to the consumer', (done) => {
@@ -144,7 +143,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should allow disabling a specific span kind of a service', (done) => {
