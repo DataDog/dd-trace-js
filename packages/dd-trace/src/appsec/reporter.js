@@ -93,6 +93,10 @@ function reportMetrics (metrics, store) {
     topSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
   }
 
+  if (metrics.durationExt) {
+    topSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+  }
+
   if (metrics.rulesVersion) {
     topSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
