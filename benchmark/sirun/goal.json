@@ -1030,7 +1030,7 @@
         }
       }
     },
-    "with-heap-profiler": {
+    "with-space-profiler": {
       "instructions": 336410425,
       "nodeVersion": "16.12.0",
       "summary": {

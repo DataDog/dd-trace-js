@@ -4,8 +4,8 @@ const { expect } = require('chai')
 const os = require('os')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
-const CpuProfiler = require('../../src/profiling/profilers/cpu')
-const HeapProfiler = require('../../src/profiling/profilers/heap')
+const WallProfiler = require('../../src/profiling/profilers/wall')
+const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 describe('config', () => {
@@ -31,8 +31,8 @@ describe('config', () => {
 
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.profilers[0]).to.be.an.instanceof(CpuProfiler)
-    expect(config.profilers[1]).to.be.an.instanceof(HeapProfiler)
+    expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
+    expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
   })
 
   it('should support configuration options', () => {
@@ -47,7 +47,7 @@ describe('config', () => {
         error () { }
       },
       exporters: 'agent,file',
-      profilers: 'cpu',
+      profilers: 'wall',
       url: 'http://localhost:1234/'
     }
 
@@ -69,7 +69,7 @@ describe('config', () => {
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(CpuProfiler)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
   })
 
   it('should filter out invalid profilers', () => {

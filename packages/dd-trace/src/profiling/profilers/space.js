@@ -1,6 +1,6 @@
 'use strict'
 
-class NativeHeapProfiler {
+class NativeSpaceProfiler {
   constructor (options = {}) {
     this.type = 'space'
     this._samplingInterval = options.samplingInterval || 512 * 1024
@@ -27,4 +27,4 @@ class NativeHeapProfiler {
   }
 }
 
-module.exports = NativeHeapProfiler
+module.exports = NativeSpaceProfiler

@@ -4,8 +4,8 @@ const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-describe('profilers/native/cpu', () => {
-  let NativeCpuProfiler
+describe('profilers/native/wall', () => {
+  let NativeWallProfiler
   let pprof
   let stop
 
@@ -18,13 +18,13 @@ describe('profilers/native/cpu', () => {
       }
     }
 
-    NativeCpuProfiler = proxyquire('../../../src/profiling/profilers/cpu', {
+    NativeWallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
       '@datadog/pprof': pprof
     })
   })
 
   it('should start the internal time profiler', () => {
-    const profiler = new NativeCpuProfiler()
+    const profiler = new NativeWallProfiler()
 
     // Verify start/stop profiler idle notifiers are created if not present.
     // These functions may not exist in worker threads.
@@ -48,7 +48,7 @@ describe('profilers/native/cpu', () => {
 
   it('should use the provided configuration options', () => {
     const samplingInterval = 500
-    const profiler = new NativeCpuProfiler({ samplingInterval })
+    const profiler = new NativeWallProfiler({ samplingInterval })
 
     profiler.start()
 
@@ -56,7 +56,7 @@ describe('profilers/native/cpu', () => {
   })
 
   it('should stop the internal time profiler', () => {
-    const profiler = new NativeCpuProfiler()
+    const profiler = new NativeWallProfiler()
 
     profiler.start()
     profiler.stop()
@@ -65,7 +65,7 @@ describe('profilers/native/cpu', () => {
   })
 
   it('should collect profiles from the internal time profiler', () => {
-    const profiler = new NativeCpuProfiler()
+    const profiler = new NativeWallProfiler()
 
     profiler.start()
 
@@ -78,7 +78,7 @@ describe('profilers/native/cpu', () => {
   })
 
   it('should encode profiles from the pprof time profiler', () => {
-    const profiler = new NativeCpuProfiler()
+    const profiler = new NativeWallProfiler()
 
     profiler.start()
 
@@ -90,7 +90,7 @@ describe('profilers/native/cpu', () => {
   })
 
   it('should use mapper if given', () => {
-    const profiler = new NativeCpuProfiler()
+    const profiler = new NativeWallProfiler()
 
     const mapper = {}
 
