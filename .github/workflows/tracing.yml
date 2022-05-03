@@ -1,0 +1,45 @@
+name: Tracing
+
+on:
+  push:
+  schedule:
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn test:trace:core:ci
+      - run: yarn codecov
+
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/12
+      - run: yarn test:trace:core:ci
+      - uses: ./.github/actions/node/14
+      - run: yarn test:trace:core:ci
+      - uses: ./.github/actions/node/16
+      - run: yarn test:trace:core:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:trace:core:ci
+      - run: yarn codecov
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn test:trace:core:ci
+      - run: yarn codecov

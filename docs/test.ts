@@ -85,7 +85,10 @@ tracer.init({
   appsec: {
     enabled: true,
     rules: './rules.json',
-    rateLimit: 100
+    rateLimit: 100,
+    wafTimeout: 100e3,
+    obfuscatorKeyRegex: '.*',
+    obfuscatorValueRegex: '.*'
   }
 });
 
@@ -232,7 +235,6 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
-tracer.use('limitd-client');
 tracer.use('memcached');
 tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');

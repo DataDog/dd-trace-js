@@ -9,7 +9,10 @@ const {
   getTestEnvironmentMetadata,
   getTestParentSpan,
   getTestCommonTags,
-  TEST_PARAMETERS
+  TEST_PARAMETERS,
+  getCodeOwnersFileEntries,
+  getCodeOwnersForFilename,
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 
 function getTestSpanMetadata (tracer, test) {
@@ -36,6 +39,7 @@ class JestPlugin extends Plugin {
     super(...args)
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
+    this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub('ci:jest:test:start', (test) => {
       const store = storage.getStore()
@@ -73,6 +77,12 @@ class JestPlugin extends Plugin {
 
   startTestSpan (test) {
     const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test)
+
+    const codeOwners = getCodeOwnersForFilename(test.suite, this.codeOwnersEntries)
+
+    if (codeOwners) {
+      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+    }
 
     const testSpan = this.tracer
       .startSpan('jest.test', {

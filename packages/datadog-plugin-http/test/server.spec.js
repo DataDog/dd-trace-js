@@ -31,6 +31,7 @@ describe('Plugin', () => {
 
     afterEach(() => {
       appListener && appListener.close()
+      app = null
       return agent.close({ ritmReset: false })
     })
 
@@ -129,6 +130,38 @@ describe('Plugin', () => {
         const res = new ServerResponse(req)
 
         expect(() => res.emit('finish')).to.not.throw()
+      })
+    })
+
+    describe('with a blocklist configuration', () => {
+      beforeEach(() => {
+        return agent.load('http', { client: false, blocklist: '/health' })
+          .then(() => {
+            http = require('http')
+          })
+      })
+
+      beforeEach(done => {
+        const server = new http.Server(listener)
+        appListener = server
+          .listen(port, 'localhost', () => done())
+      })
+
+      it('should drop traces for blocklist route', done => {
+        const spy = sinon.spy(() => {})
+
+        agent
+          .use((traces) => {
+            spy()
+          })
+          .catch(done)
+
+        setTimeout(() => {
+          expect(spy).to.not.have.been.called
+          done()
+        }, 100)
+
+        axios.get(`http://localhost:${port}/health`).catch(done)
       })
     })
   })

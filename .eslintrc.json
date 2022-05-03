@@ -1,6 +1,6 @@
 {
   "parserOptions": {
-    "ecmaVersion": 2018
+    "ecmaVersion": 2020
   },
   "extends": [
     "eslint:recommended",
@@ -16,6 +16,7 @@
     "prefer-const": 2,
     "object-curly-spacing": [2, "always"],
     "import/no-extraneous-dependencies": 2,
-    "standard/no-callback-literal": 0
+    "standard/no-callback-literal": 0,
+    "no-prototype-builtins": 0
   }
 }

@@ -428,7 +428,23 @@ export declare interface TracerOptions {
      * Controls the maximum amount of traces sampled by AppSec attacks, per second.
      * @default 100
      */
-    rateLimit?: number
+    rateLimit?: number,
+
+    /**
+     * Controls the maximum amount of time in microseconds the WAF is allowed to run synchronously for.
+     * @default 5000
+     */
+    wafTimeout?: number,
+
+    /**
+     * Specifies a regex that will redact sensitive data by its key in attack reports.
+     */
+    obfuscatorKeyRegex?: string,
+
+    /**
+     * Specifies a regex that will redact sensitive data by its value in attack reports.
+     */
+    obfuscatorValueRegex?: string
   };
 }
 
@@ -559,7 +575,6 @@ interface Plugins {
   "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
-  "limitd-client": plugins.limitd_client;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
   "mocha": plugins.mocha;
@@ -1142,12 +1157,6 @@ declare namespace plugins {
    * [kafkajs](https://kafka.js.org/) module.
    */
   interface kafkajs extends Instrumentation {}
-
-  /**
-   * This plugin automatically instruments the
-   * [limitd-client](https://github.com/limitd/node-client) module.
-   */
-  interface limitd_client extends Integration {}
 
   /**
    * This plugin automatically instruments the

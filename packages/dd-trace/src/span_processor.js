@@ -32,7 +32,10 @@ class SpanProcessor {
         }
       }
 
-      this._exporter.export(formatted)
+      if (formatted.length !== 0 && trace.isRecording !== false) {
+        this._exporter.export(formatted)
+      }
+
       this._erase(trace, active)
     }
   }

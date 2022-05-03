@@ -1,105 +1,54 @@
 'use strict'
 
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-const connectionAttributes = new WeakMap()
-const poolAttributes = new WeakMap()
+class OracledbPlugin extends Plugin {
+  static get name () {
+    return 'oracledb'
+  }
 
-function createWrapExecute (tracer, config) {
-  return function wrapExecute (execute) {
-    return function executeWithTrace (dbQuery, ...args) {
-      const connAttrs = connectionAttributes.get(this)
-      const service = getServiceName(tracer, config, connAttrs)
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:oracledb:execute:start', ({ query, connAttrs }) => {
+      const service = getServiceName(this.tracer, this.config, connAttrs)
       const connectStringObj = new URL('http://' + connAttrs.connectString)
       const tags = {
         'span.kind': 'client',
         'span.type': 'sql',
-        'sql.query': dbQuery,
+        'sql.query': query,
         'db.instance': connectStringObj.pathname.substring(1),
         'db.hostname': connectStringObj.hostname,
-        'db.user': config.user,
+        'db.user': this.config.user,
         'db.port': connectStringObj.port,
-        'resource.name': dbQuery,
+        'resource.name': query,
         'service.name': service
       }
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('oracle.query', {
+        childOf,
+        tags
+      })
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
-      return tracer.wrap('oracle.query', { tags }, function (...args) {
-        const span = tracer.scope().active()
-
-        analyticsSampler.sample(span, config.measured)
-
-        return execute.apply(this, args)
-      }).apply(this, arguments)
-    }
-  }
-}
-
-function createWrapGetConnection (tracer, config) {
-  return function wrapGetConnection (getConnection) {
-    return function getConnectionWithTrace (connAttrs, callback) {
-      if (callback) {
-        arguments[1] = (err, connection) => {
-          if (connection) {
-            connectionAttributes.set(connection, connAttrs)
-          }
-          callback(err, connection)
-        }
-
-        getConnection.apply(this, arguments)
-      } else {
-        return getConnection.apply(this, arguments).then((connection) => {
-          connectionAttributes.set(connection, connAttrs)
-          return connection
-        })
+    this.addSub('apm:oracledb:execute:error', err => {
+      const store = storage.getStore()
+      if (store && store.span) {
+        store.span.setTag('error', err)
       }
-    }
-  }
-}
+    })
 
-function createWrapCreatePool (tracer, config) {
-  return function wrapCreatePool (createPool) {
-    return function createPoolWithTrace (poolAttrs, callback) {
-      if (callback) {
-        arguments[1] = (err, pool) => {
-          if (pool) {
-            poolAttributes.set(pool, poolAttrs)
-          }
-          callback(err, pool)
-        }
-
-        createPool.apply(this, arguments)
-      } else {
-        return createPool.apply(this, arguments).then((pool) => {
-          poolAttributes.set(pool, poolAttrs)
-          return pool
-        })
+    this.addSub('apm:oracledb:execute:finish', () => {
+      const store = storage.getStore()
+      if (store && store.span) {
+        store.span.finish()
       }
-    }
-  }
-}
-
-function createWrapPoolGetConnection (tracer, config) {
-  return function wrapPoolGetConnection (getConnection) {
-    return function poolGetConnectionWithTrace () {
-      let callback
-      if (typeof arguments[arguments.length - 1] === 'function') {
-        callback = arguments[arguments.length - 1]
-      }
-      if (callback) {
-        arguments[arguments.length - 1] = (err, connection) => {
-          if (connection) {
-            connectionAttributes.set(connection, poolAttributes.get(this))
-          }
-          callback(err, connection)
-        }
-        getConnection.apply(this, arguments)
-      } else {
-        return getConnection.apply(this, arguments).then((connection) => {
-          connectionAttributes.set(connection, poolAttributes.get(this))
-          return connection
-        })
-      }
-    }
+    })
   }
 }
 
@@ -113,19 +62,4 @@ function getServiceName (tracer, config, connAttrs) {
   }
 }
 
-module.exports = {
-  name: 'oracledb',
-  versions: ['5'],
-  patch (oracledb, tracer, config) {
-    this.wrap(oracledb.Connection.prototype, 'execute', createWrapExecute(tracer, config))
-    this.wrap(oracledb, 'getConnection', createWrapGetConnection(tracer, config))
-    this.wrap(oracledb, 'createPool', createWrapCreatePool(tracer, config))
-    this.wrap(oracledb.Pool.prototype, 'getConnection', createWrapPoolGetConnection(tracer, config))
-  },
-  unpatch (oracledb) {
-    this.unwrap(oracledb.Connection.prototype, 'execute')
-    this.unwrap(oracledb, 'getConnection')
-    this.unwrap(oracledb, 'createPool')
-    this.unwrap(oracledb.Pool.prototype, 'getConnection')
-  }
-}
+module.exports = OracledbPlugin

@@ -52,6 +52,29 @@ const web = {
     })
   },
 
+  setFramework (req, name, config) {
+    const context = this.patch(req)
+    const span = context.span
+
+    if (!span) return
+
+    context.config = config
+
+    span.context()._name = `${name}.request`
+
+    if (!config.filter(req.url)) {
+      span.setTag(MANUAL_DROP, true)
+    }
+
+    if (config.service) {
+      span.setTag(SERVICE_NAME, config.service)
+    }
+
+    if (config.measured !== undefined) {
+      analyticsSampler.sample(span, config.measured, true)
+    }
+  },
+
   startSpan (tracer, config, req, res, name) {
     const context = this.patch(req)
     context.config = config
@@ -69,6 +92,17 @@ const web = {
     context.span = span
     context.res = res
 
+    if (!config.filter(req.url)) {
+      span.setTag(MANUAL_DROP, true)
+      span.context()._trace.isRecording = false
+    }
+
+    if (config.service) {
+      span.setTag(SERVICE_NAME, config.service)
+    }
+
+    analyticsSampler.sample(span, config.measured, true)
+
     return span
   },
   wrap (req) {
@@ -82,16 +116,6 @@ const web = {
   // Start a span and activate a scope for a request.
   instrument (tracer, config, req, res, name, callback) {
     const span = this.startSpan(tracer, config, req, res, name)
-
-    if (!config.filter(req.url)) {
-      span.setTag(MANUAL_DROP, true)
-    }
-
-    if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
-    }
-
-    analyticsSampler.sample(span, config.measured, true)
 
     this.wrap(req)
 
@@ -108,6 +132,10 @@ const web = {
     if (typeof path === 'string') {
       contexts.get(req).paths.push(path)
     }
+  },
+
+  setRoute (req, path) {
+    contexts.get(req).paths = [path]
   },
 
   // Remove the current route segment.

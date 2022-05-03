@@ -48,8 +48,10 @@ function getWrappedEnvironment (BaseEnvironment) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
       super(config, context)
-      this.testSuite = getTestSuitePath(context.testPath, config.rootDir)
+      const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
+      this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
+      this.global._ddtrace = global._ddtrace
     }
     async teardown () {
       super.teardown().finally(() => {
@@ -62,13 +64,7 @@ function getWrappedEnvironment (BaseEnvironment) {
         await super.handleTestEvent(event, state)
       }
 
-      let context
-      if (this.getVmContext) {
-        context = this.getVmContext()
-      } else {
-        context = this.context
-      }
-
+      const globalExpect = this.global.expect
       const setNameToParams = (name, params) => { this.nameToParams[name] = params }
 
       if (event.name === 'setup') {
@@ -91,7 +87,7 @@ function getWrappedEnvironment (BaseEnvironment) {
         asyncResources.set(event.test, asyncResource)
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: context.expect.getState().currentTestName,
+            name: globalExpect.getState().currentTestName,
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters
@@ -116,7 +112,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         testSkippedCh.publish({
-          name: context.expect.getState().currentTestName,
+          name: globalExpect.getState().currentTestName,
           suite: this.testSuite,
           runner: 'jest-circus'
         })
@@ -125,15 +121,25 @@ function getWrappedEnvironment (BaseEnvironment) {
   }
 }
 
+function getTestEnvironment (pkg) {
+  if (pkg.default) {
+    const wrappedTestEnvironment = getWrappedEnvironment(pkg.default)
+    pkg.default = wrappedTestEnvironment
+    pkg.TestEnvironment = wrappedTestEnvironment
+    return pkg
+  }
+  return getWrappedEnvironment(pkg)
+}
+
 addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0']
-}, getWrappedEnvironment)
+}, getTestEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0']
-}, getWrappedEnvironment)
+}, getTestEnvironment)
 
 addHook({
   name: 'jest-jasmine2',
@@ -141,6 +147,7 @@ addHook({
   file: 'build/jasmineAsyncInstall.js'
 }, (jasmineAsyncInstallExport) => {
   return function (globalConfig, globalInput) {
+    globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       asyncResource.runInAsyncScope(() => {

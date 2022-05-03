@@ -58,7 +58,6 @@ tracer.use('pg', {
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
-<h5 id="limitd-client"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
@@ -119,7 +118,6 @@ tracer.use('pg', {
 * [kafkajs](./interfaces/plugins.kafkajs.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
-* [limitd-client](./interfaces/plugins.limitd_client.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
 * [microgateway--core](./interfaces/plugins.microgateway_core.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)
@@ -449,8 +447,11 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | -               | `DD_TRACE_DISABLED_PLUGINS`        | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
 | logLevel        | `DD_TRACE_LOG_LEVEL`               | `debug`        | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
 | startupLogs     | `DD_TRACE_STARTUP_LOGS`            | `false`        | Enable tracer startup configuration and diagnostic log. |
-| appsec.enabled  | `DD_APPSEC_ENABLED`                | `false`        | Enable AppSec protection. |
-| appsec.rules    | `DD_APPSEC_RULES`                  | -              | A path to a custom AppSec rules file. |
+| appsec.enabled              | `DD_APPSEC_ENABLED`                            | `false` | Enable AppSec protection. |
+| appsec.rules                | `DD_APPSEC_RULES`                              | -       | A path to a custom AppSec rules file. |
+| appsec.wafTimeout           | `DD_APPSEC_WAF_TIMEOUT`                        | `5000`  | Limits the WAF synchronous execution time (in microseconds). |
+| appsec.obfuscatorKeyRegex   | `DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP`   | -       | A regex to redact sensitive data by its key in attack reports. |
+| appsec.obfuscatorValueRegex | `DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP` | -       | A regex to redact sensitive data by its value in attack reports. |
 
 <h3 id="custom-logging">Custom Logging</h3>
 

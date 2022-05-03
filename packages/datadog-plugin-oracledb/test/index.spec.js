@@ -1,12 +1,12 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
+const hostname = process.env.CI ? 'oracledb' : 'localhost'
 const config = {
   user: 'test',
   password: 'Oracle18',
-  connectString: 'localhost:1521/xepdb1'
+  connectString: `${hostname}:1521/xepdb1`
 }
 
 const dbQuery = 'select current_timestamp from dual'
@@ -18,7 +18,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('oracledb', () => {
-    withVersions(plugin, 'oracledb', version => {
+    withVersions('oracledb', 'oracledb', version => {
       describe('without configuration', () => {
         before(async () => {
           await agent.load('oracledb')
@@ -26,7 +26,7 @@ describe('Plugin', () => {
           tracer = require('../../dd-trace')
         })
         after(async () => {
-          await agent.close()
+          await agent.close({ ritmReset: false })
         })
 
         describe('with connection', () => {
@@ -46,10 +46,19 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
               expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', 'localhost')
+              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
               expect(traces[0][0].meta).to.have.property('db.port', '1521')
             }).then(done, done)
             connection.execute(dbQuery)
+          })
+
+          it('should restore the parent context in the promise callback', () => {
+            const span = {}
+            return tracer.scope().activate(span, () => {
+              return connection.execute(dbQuery).then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+              })
+            })
           })
 
           it('should be instrumented for callback API', done => {
@@ -61,7 +70,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
               expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', 'localhost')
+              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
               expect(traces[0][0].meta).to.have.property('db.port', '1521')
             }).then(done, done)
 
@@ -69,9 +78,16 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the callback', done => {
-            connection.execute(dbQuery, () => {
-              expect(tracer.scope().active()).to.be.null
-              done()
+            const span = {}
+            tracer.scope().activate(span, () => {
+              connection.execute(dbQuery, () => {
+                try {
+                  expect(tracer.scope().active()).to.equal(span)
+                } catch (e) {
+                  return done(e)
+                }
+                done()
+              })
             })
           })
 
@@ -86,7 +102,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
               expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', 'localhost')
+              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
               expect(traces[0][0].meta).to.have.property('db.port', '1521')
               expect(traces[0][0].meta).to.have.property('error.msg', error.message)
               expect(traces[0][0].meta).to.have.property('error.type', error.name)
@@ -118,7 +134,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
               expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', 'localhost')
+              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
               expect(traces[0][0].meta).to.have.property('db.port', '1521')
             }).then(done, done)
             connection.execute(dbQuery)
@@ -141,7 +157,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
               expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', 'localhost')
+              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
               expect(traces[0][0].meta).to.have.property('db.port', '1521')
               expect(traces[0][0].meta).to.have.property('error.msg', error.message)
               expect(traces[0][0].meta).to.have.property('error.type', error.name)

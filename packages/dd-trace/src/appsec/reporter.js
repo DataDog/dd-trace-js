@@ -35,6 +35,8 @@ const RESPONSE_HEADERS_PASSLIST = [
   'content-type'
 ]
 
+const metricsQueue = new Map()
+
 function resolveHTTPRequest (context) {
   if (!context) return {}
 
@@ -80,6 +82,24 @@ function formatHeaderName (name) {
     .slice(0, 200)
     .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
     .toLowerCase()
+}
+
+function reportMetrics (metrics, store) {
+  const req = store && store.get('req')
+  const topSpan = web.root(req)
+  if (!topSpan) return false
+
+  if (metrics.duration) {
+    topSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
+  }
+
+  if (metrics.durationExt) {
+    topSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+  }
+
+  if (metrics.rulesVersion) {
+    topSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
+  }
 }
 
 function reportAttack (attackData, store) {
@@ -129,9 +149,17 @@ function reportAttack (attackData, store) {
   topSpan.addTags(newTags)
 }
 
-function finishAttacks (req, context) {
+function finishRequest (req, context) {
   const topSpan = web.root(req)
-  if (!topSpan || !context) return false
+  if (!topSpan) return false
+
+  if (metricsQueue.size) {
+    topSpan.addTags(Object.fromEntries(metricsQueue))
+
+    metricsQueue.clear()
+  }
+
+  if (!context || !topSpan.context()._tags['appsec.event']) return false
 
   const resolvedResponse = resolveHTTPResponse(context)
 
@@ -149,11 +177,13 @@ function setRateLimit (rateLimit) {
 }
 
 module.exports = {
+  metricsQueue,
   resolveHTTPRequest,
   resolveHTTPResponse,
   filterHeaders,
   formatHeaderName,
+  reportMetrics,
   reportAttack,
-  finishAttacks,
+  finishRequest,
   setRateLimit
 }

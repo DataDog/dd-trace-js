@@ -86,7 +86,7 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
-              'tcp.local.address': '127.0.0.1',
+              'tcp.local.address': socket.localAddress,
               'out.host': 'localhost'
             },
             metrics: {
@@ -116,7 +116,7 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
-              'tcp.local.address': '127.0.0.1',
+              'tcp.local.address': socket.localAddress,
               'out.host': 'localhost'
             },
             metrics: {

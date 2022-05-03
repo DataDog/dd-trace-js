@@ -1,0 +1,23 @@
+name: Publish
+inputs:
+  args:
+    required: false
+    default: ''
+    type: string
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v3
+      with:
+        registry-url: 'https://registry.npmjs.org'
+    - run: npm publish ${{ inputs.args }}
+      shell: bash
+    - id: pkg
+      run: |
+        content=`cat ./package.json | tr '\n' ' '`
+        echo "::set-output name=json::$content"
+      shell: bash
+    - run: |
+        git tag v${{ fromJson(steps.pkg.outputs.json).version }}
+        git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+      shell: bash

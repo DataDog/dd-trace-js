@@ -7,16 +7,14 @@ const Reporter = require('../reporter')
 
 const validAddressSet = new Set(Object.values(addresses))
 
-const DEFAULT_MAX_BUDGET = 5e3 // µs
-
 // TODO: put reusable code in a base class
 class WAFCallback {
-  static loadDDWAF (rules) {
+  static loadDDWAF (rules, config) {
     try {
       // require in `try/catch` because this can throw at require time
       const { DDWAF } = require('@datadog/native-appsec')
 
-      return new DDWAF(rules)
+      return new DDWAF(rules, config)
     } catch (err) {
       log.error('AppSec could not load native package. In-app WAF features will not be available.')
 
@@ -24,8 +22,24 @@ class WAFCallback {
     }
   }
 
-  constructor (rules) {
-    this.ddwaf = WAFCallback.loadDDWAF(rules)
+  constructor (rules, config) {
+    const { wafTimeout, obfuscatorKeyRegex, obfuscatorValueRegex } = config
+
+    this.ddwaf = WAFCallback.loadDDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
+
+    this.wafTimeout = wafTimeout
+
+    const version = this.ddwaf.constructor.version()
+
+    Reporter.metricsQueue.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
+
+    const { loaded, failed } = this.ddwaf.rulesInfo
+
+    Reporter.metricsQueue.set('_dd.appsec.event_rules.loaded', loaded)
+    Reporter.metricsQueue.set('_dd.appsec.event_rules.error_count', failed)
+
+    Reporter.metricsQueue.set('manual.keep', true)
+
     this.wafContextCache = new WeakMap()
 
     // closures are faster than binds
@@ -81,7 +95,11 @@ class WAFCallback {
 
     try {
       // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
-      const result = wafContext.run(params, DEFAULT_MAX_BUDGET)
+      const start = process.hrtime.bigint()
+
+      const result = wafContext.run(params, this.wafTimeout)
+
+      result.durationExt = parseInt(process.hrtime.bigint() - start)
 
       return this.applyResult(result, store)
     } catch (err) {
@@ -93,13 +111,15 @@ class WAFCallback {
   }
 
   applyResult (result, store) {
+    Reporter.reportMetrics({
+      duration: result.totalRuntime / 1e3,
+      durationExt: result.durationExt / 1e3,
+      rulesVersion: this.ddwaf.rulesInfo.version
+    }, store)
+
     if (result.data && result.data !== '[]') {
       Reporter.reportAttack(result.data, store)
     }
-
-    // TODO: use these values later for budget management
-    // result.perfData
-    // result.perfTotalRuntime
   }
 
   clear () {
