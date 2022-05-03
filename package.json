@@ -6,7 +6,6 @@
   "typings": "index.d.ts",
   "scripts": {
     "preinstall": "node scripts/preinstall.js",
-    "postpublish": "node scripts/postpublish.js",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",
     "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
