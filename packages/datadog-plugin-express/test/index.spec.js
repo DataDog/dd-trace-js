@@ -1027,7 +1027,8 @@ describe('Plugin', () => {
           return agent.load(['express', 'http'], [{
             service: 'custom',
             validateStatus: code => code < 400,
-            headers: ['User-Agent']
+            headers: ['User-Agent'],
+            blocklist: ['/health']
           }, { client: false }])
         })
 
@@ -1113,6 +1114,37 @@ describe('Plugin', () => {
                 .get(`http://localhost:${port}/user`, {
                   headers: { 'User-Agent': 'test' }
                 })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should support URL filtering', done => {
+          const app = express()
+
+          app.get('/health', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            const spy = sinon.spy()
+
+            agent
+              .use(spy)
+              .catch(done)
+
+            setTimeout(() => {
+              try {
+                expect(spy).to.not.have.been.called
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }, 100)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/health`)
                 .catch(done)
             })
           })
