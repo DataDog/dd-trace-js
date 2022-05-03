@@ -95,7 +95,11 @@ class WAFCallback {
 
     try {
       // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
+      const start = process.hrtime.bigint()
+
       const result = wafContext.run(params, this.wafTimeout)
+
+      result.durationExt = parseInt(process.hrtime.bigint() - start)
 
       return this.applyResult(result, store)
     } catch (err) {
@@ -109,6 +113,7 @@ class WAFCallback {
   applyResult (result, store) {
     Reporter.reportMetrics({
       duration: result.totalRuntime,
+      durationExt: result.durationExt / 1e3,
       rulesVersion: this.ddwaf.rulesInfo.version
     }, store)
 
