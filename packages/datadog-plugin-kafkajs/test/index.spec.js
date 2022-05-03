@@ -3,14 +3,13 @@
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
     afterEach(() => {
-      return agent.close()
+      return agent.close({ ritmReset: false })
     })
-    withVersions(plugin, 'kafkajs', (version) => {
+    withVersions('kafkajs', 'kafkajs', (version) => {
       const testTopic = 'test-topic'
       let kafka
       let tracer
