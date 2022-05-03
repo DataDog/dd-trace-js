@@ -17,11 +17,11 @@ const mkdtemp = util.promisify(fs.mkdtemp)
 const ddTraceInit = path.resolve(__dirname, '../../../../init')
 
 const latestCache = []
-async function getLatest (withTracer, modName, repoUrl) {
+async function getLatest (modName, repoUrl) {
   if (latestCache[modName]) {
     return latestCache[modName]
   }
-  const { stdout } = await exec(withTracer, `npm view ${modName} dist-tags --json`)
+  const { stdout } = await exec(`npm view ${modName} dist-tags --json`)
   const { latest } = JSON.parse(stdout)
   const tags = await get(`https://api.github.com/repos/${repoUrl}/git/refs/tags`)
   for (const tag of tags) {
@@ -52,9 +52,15 @@ function get (theUrl) {
   })
 }
 
-function exec (withTracer, cmd, opts = {}) {
+function exec (cmd, opts = {}) {
+  const date = new Date()
+  const time = [
+    String(date.getHours()).padStart(2, 0),
+    String(date.getMinutes()).padStart(2, 0),
+    String(date.getSeconds()).padStart(2, 0)
+  ].join(':')
   // eslint-disable-next-line no-console
-  console.log(withTracer ? 'WITH TRACER' : '  NO TRACER', `-> (${new Date()}) running \`${cmd}\` ...`)
+  console.log(time, '❯', cmd)
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(cmd, Object.assign({
       shell: true
@@ -74,8 +80,8 @@ function exec (withTracer, cmd, opts = {}) {
   })
 }
 
-async function execOrError (withTracer, cmd, opts = {}) {
-  const result = await exec(withTracer, cmd, opts)
+async function execOrError (cmd, opts = {}) {
+  const result = await exec(cmd, opts)
   if (result.code !== 0) {
     const err = new Error(`command "${cmd}" exited with code ${result.code}`)
     err.result = result
@@ -89,37 +95,55 @@ function getTmpDir () {
   return mkdtemp(prefix)
 }
 
-async function runOne (modName, repoUrl, commitish, withTracer, testCmd) {
+async function setup (modName, repoName, commitish) {
   if (commitish === 'latest') {
-    commitish = await getLatest(withTracer, modName, repoUrl)
+    commitish = await getLatest(modName, repoName)
   }
+  const repoUrl = `https://github.com/${repoName}.git`
   const cwd = await getTmpDir()
-  await execOrError(withTracer, `git clone https://github.com/${repoUrl}.git ${cwd}`)
-  await execOrError(withTracer, `git checkout ${commitish}`, { cwd })
+  await execOrError(`git clone ${repoUrl} --branch ${commitish} --single-branch ${cwd}`)
+  await execOrError(`npm install --legacy-peer-deps`, { cwd })
+}
+
+async function cleanup () {
+  const cwd = await getTmpDir()
+  await execOrError(`rm -rf ${cwd}`)
+}
+
+async function runOne (withTracer, testCmd) {
+  const cwd = await getTmpDir()
   const env = Object.assign({}, process.env)
   if (withTracer) {
-    env.NODE_OPTIONS = `--require ${ddTraceInit}`
+    testCmd = `NODE_OPTIONS='-r ${ddTraceInit}' ${testCmd}`
   }
-  await execOrError(withTracer, `npm install --legacy-peer-deps`, { cwd })
-  const result = await exec(withTracer, testCmd, { cwd, env })
-  await execOrError(withTracer, `rm -rf ${cwd}`)
+  const result = await exec(testCmd, { cwd, env })
   return result
 }
 
 async function run (modName, repoUrl, commitish, testCmd, parallel) {
-  if (parallel) {
-    const [withoutTracer, withTracer] = await Promise.all([
-      runOne(modName, repoUrl, commitish, false, testCmd),
-      runOne(modName, repoUrl, commitish, true, testCmd)
-    ])
+  await setup(modName, repoUrl, commitish)
 
-    return { withoutTracer, withTracer }
-  } else {
-    const withoutTracer = await runOne(modName, repoUrl, commitish, false, testCmd)
-    const withTracer = await runOne(modName, repoUrl, commitish, true, testCmd)
+  const result = await parallel ? runParallel(testCmd) : runSequential(testCmd)
 
-    return { withoutTracer, withTracer }
-  }
+  await cleanup()
+
+  return result
+}
+
+async function runParallel (testCmd) {
+  const [withoutTracer, withTracer] = await Promise.all([
+    runOne(false, testCmd),
+    runOne(true, testCmd)
+  ])
+
+  return { withoutTracer, withTracer }
+}
+
+async function runSequential (testCmd) {
+  const withoutTracer = await runOne(false, testCmd)
+  const withTracer = await runOne(true, testCmd)
+
+  return { withoutTracer, withTracer }
 }
 
 function defaultRunner ({ withoutTracer, withTracer }) {
