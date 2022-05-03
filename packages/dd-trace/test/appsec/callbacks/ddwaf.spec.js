@@ -370,7 +370,7 @@ describe('WAFCallback', () => {
 
         const store = new Map()
 
-        waf.applyResult({ data, totalRuntime: 1337 }, store)
+        waf.applyResult({ data, totalRuntime: 1337e3 }, store)
 
         expect(Reporter.reportMetrics).to.have.been.calledOnceWithExactly({
           duration: 1337,
@@ -384,8 +384,8 @@ describe('WAFCallback', () => {
 
         const store = new Map()
 
-        waf.applyResult({ totalRuntime: 1337 }, store)
-        waf.applyResult({ data: '[]', totalRuntime: 1337 }, store)
+        waf.applyResult({ totalRuntime: 1337e3 }, store)
+        waf.applyResult({ data: '[]', totalRuntime: 1337e3 }, store)
 
         expect(Reporter.reportMetrics).to.have.been.calledTwice
         expect(Reporter.reportMetrics.firstCall).to.have.been.calledWithExactly({
