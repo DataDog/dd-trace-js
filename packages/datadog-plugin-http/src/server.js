@@ -44,7 +44,7 @@ class HttpServerPlugin extends Plugin {
       })
     })
 
-    this.addSub('apm:http:server:request:async-end', ({ req }) => {
+    this.addSub('apm:http:server:request:finish', ({ req }) => {
       const context = web.getContext(req)
 
       if (!context) return // Not created by a http.Server instance.
