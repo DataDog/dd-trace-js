@@ -219,16 +219,31 @@ describe('Plugin', () => {
               next()
             })
 
+            app.addHook('preHandler', (request, reply, next) => {
+              expect(tracer.scope().active()).to.not.be.null
+              next ? next() : reply()
+            })
+
             app.addHook('onResponse', (request, reply, next) => {
               expect(tracer.scope().active()).to.not.be.null
               next ? next() : reply()
             })
 
-            app.get('/user', (request, reply) => reply.send())
+            app.use((req, res, next) => {
+              next()
+            })
+
+            app.route({
+              method: 'POST',
+              url: '/user',
+              handler: (request, reply) => {
+                reply.send()
+              }
+            })
 
             getPort().then(port => {
               app.listen(port, 'localhost', () => {
-                axios.get(`http://localhost:${port}/user`)
+                axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
               })

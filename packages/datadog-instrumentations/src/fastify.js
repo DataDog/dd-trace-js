@@ -9,7 +9,7 @@ const handleChannel = channel('apm:fastify:request:handle')
 
 const requestResources = new WeakMap()
 
-function wrapFastify (fastify, contextTracking) {
+function wrapFastify (fastify) {
   if (typeof fastify !== 'function') return fastify
 
   return function fastifyWithTrace () {
@@ -18,26 +18,22 @@ function wrapFastify (fastify, contextTracking) {
     if (!app) return app
 
     if (typeof app.addHook === 'function') {
-      if (contextTracking) {
-        app.addHook('onRequest', trackContext)
-      }
-
       app.addHook('onRequest', onRequest)
+      app.addHook = wrapAddHook(app.addHook)
       app.addHook('preHandler', preHandler)
-      app.addHook = wrapAddHook(app.addHook, contextTracking)
     }
 
     methods.forEach(method => {
-      app[method] = wrapMethod(app[method], contextTracking)
+      app[method] = wrapMethod(app[method])
     })
 
-    app.route = wrapRoute(app.route, contextTracking)
+    app.route = wrapRoute(app.route)
 
     return app
   }
 }
 
-function wrapAddHook (addHook, contextTracking) {
+function wrapAddHook (addHook) {
   return function addHookWithTrace (name, fn) {
     fn = arguments[arguments.length - 1]
 
@@ -45,35 +41,40 @@ function wrapAddHook (addHook, contextTracking) {
 
     arguments[arguments.length - 1] = shimmer.wrap(fn, function (request, reply, done) {
       const req = getReq(request)
+      const requestResource = requestResources.get(req)
 
-      if (!req) return fn.apply(this, arguments)
+      if (!requestResource) return fn.apply(this, arguments)
 
-      done = AsyncResource.bind(arguments[arguments.length - 1])
+      requestResource.runInAsyncScope(() => {
+        const hookResource = new AsyncResource('bound-anonymous-fn')
 
-      try {
-        if (typeof done === 'function') {
-          arguments[arguments.length - 1] = function (err) {
-            errorChannel.publish(err)
-            return done.apply(this, arguments)
-          }
+        try {
+          if (typeof done === 'function') {
+            done = arguments[arguments.length - 1]
 
-          return AsyncResource.bind(fn).apply(this, arguments)
-        } else {
-          const promise = AsyncResource.bind(fn).apply(this, arguments)
-
-          if (promise && typeof promise.catch === 'function') {
-            return promise.catch(err => {
+            arguments[arguments.length - 1] = hookResource.bind(function (err) {
               errorChannel.publish(err)
-              throw err
+              return done.apply(this, arguments)
             })
-          }
 
-          return promise
+            return hookResource.bind(fn).apply(this, arguments)
+          } else {
+            const promise = hookResource.bind(fn).apply(this, arguments)
+
+            if (promise && typeof promise.catch === 'function') {
+              return promise.catch(err => {
+                errorChannel.publish(err)
+                throw err
+              })
+            }
+
+            return promise
+          }
+        } catch (e) {
+          errorChannel.publish(e)
+          throw e
         }
-      } catch (e) {
-        errorChannel.publish(e)
-        throw e
-      }
+      })
     })
 
     return addHook.apply(this, arguments)
@@ -86,6 +87,7 @@ function onRequest (request, reply, next) {
   const req = getReq(request)
   const res = getRes(reply)
 
+  requestResources.set(req, new AsyncResource('bound-anonymous-fn'))
   handleChannel.publish({ req, res })
 
   return next()
@@ -95,17 +97,11 @@ function preHandler (request, reply, next) {
   if (typeof next !== 'function') return
   if (!reply || typeof reply.send !== 'function') return next()
 
-  reply.send = wrapSend(reply.send)
-
-  next()
-}
-
-function trackContext (request, reply, next) {
   const req = getReq(request)
 
-  requestResources.set(req, new AsyncResource('bound-anonymous-fn'))
+  reply.send = requestResources.get(req).bind(wrapSend(reply.send))
 
-  return next()
+  next()
 }
 
 function wrapSend (send) {
@@ -128,7 +124,7 @@ function wrapRoute (route) {
   }
 }
 
-function wrapMethod (method, contextTracking) {
+function wrapMethod (method) {
   if (typeof method !== 'function') return method
 
   return function methodWithTrace (url, opts, handler) {
@@ -137,30 +133,26 @@ function wrapMethod (method, contextTracking) {
     handler = arguments[lastIndex]
 
     if (typeof handler === 'function') {
-      arguments[lastIndex] = wrapHandler(handler, contextTracking)
+      arguments[lastIndex] = wrapHandler(handler)
     } else if (handler) {
-      arguments[lastIndex].handler = wrapHandler(handler.handler, contextTracking)
+      arguments[lastIndex].handler = wrapHandler(handler.handler)
     }
 
     return method.apply(this, arguments)
   }
 }
 
-function wrapHandler (handler, contextTracking) {
+function wrapHandler (handler) {
   if (!handler || typeof handler !== 'function' || handler.name === 'handlerWithTrace') {
     return handler
   }
 
   return function handlerWithTrace (request, reply) {
-    if (contextTracking) {
-      const req = getReq(request)
+    const req = getReq(request)
 
-      return requestResources.get(req).runInAsyncScope(() => {
-        return handler.apply(this, arguments)
-      })
-    } else {
+    return requestResources.get(req).runInAsyncScope(() => {
       return handler.apply(this, arguments)
-    }
+    })
   }
 }
 
