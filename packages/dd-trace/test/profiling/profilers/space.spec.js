@@ -4,8 +4,8 @@ const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-describe('profilers/native/heap', () => {
-  let NativeHeapProfiler
+describe('profilers/native/space', () => {
+  let NativeSpaceProfiler
   let pprof
 
   beforeEach(() => {
@@ -18,13 +18,13 @@ describe('profilers/native/heap', () => {
       }
     }
 
-    NativeHeapProfiler = proxyquire('../../../src/profiling/profilers/heap', {
+    NativeSpaceProfiler = proxyquire('../../../src/profiling/profilers/space', {
       '@datadog/pprof': pprof
     })
   })
 
-  it('should start the internal heap profiler', () => {
-    const profiler = new NativeHeapProfiler()
+  it('should start the internal space profiler', () => {
+    const profiler = new NativeSpaceProfiler()
 
     profiler.start()
 
@@ -34,7 +34,7 @@ describe('profilers/native/heap', () => {
   it('should use the provided configuration options', () => {
     const samplingInterval = 1024
     const stackDepth = 10
-    const profiler = new NativeHeapProfiler({ samplingInterval, stackDepth })
+    const profiler = new NativeSpaceProfiler({ samplingInterval, stackDepth })
 
     profiler.start()
 
@@ -42,8 +42,8 @@ describe('profilers/native/heap', () => {
     sinon.assert.calledWith(pprof.heap.start, samplingInterval, stackDepth)
   })
 
-  it('should stop the internal heap profiler', () => {
-    const profiler = new NativeHeapProfiler()
+  it('should stop the internal space profiler', () => {
+    const profiler = new NativeSpaceProfiler()
 
     profiler.start()
     profiler.stop()
@@ -51,8 +51,8 @@ describe('profilers/native/heap', () => {
     sinon.assert.calledOnce(pprof.heap.stop)
   })
 
-  it('should collect profiles from the pprof heap profiler', () => {
-    const profiler = new NativeHeapProfiler()
+  it('should collect profiles from the pprof space profiler', () => {
+    const profiler = new NativeSpaceProfiler()
 
     profiler.start()
 
@@ -63,8 +63,8 @@ describe('profilers/native/heap', () => {
     expect(profile).to.equal('profile')
   })
 
-  it('should encode profiles from the pprof heap profiler', () => {
-    const profiler = new NativeHeapProfiler()
+  it('should encode profiles from the pprof space profiler', () => {
+    const profiler = new NativeSpaceProfiler()
 
     profiler.start()
     const profile = profiler.profile()
@@ -74,7 +74,7 @@ describe('profilers/native/heap', () => {
   })
 
   it('should use mapper if given', () => {
-    const profiler = new NativeHeapProfiler()
+    const profiler = new NativeSpaceProfiler()
 
     const mapper = {}
 
