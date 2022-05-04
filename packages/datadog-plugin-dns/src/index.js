@@ -44,7 +44,8 @@ class DNSPlugin extends Plugin {
       this.enter(span, store)
     }, (result) => {
       const { span } = storage.getStore()
-      span.setTag('dns.address', result)
+      const address = Array.isArray(result) ? result[0].address : result
+      span.setTag('dns.address', address)
       span.finish()
     })
 
