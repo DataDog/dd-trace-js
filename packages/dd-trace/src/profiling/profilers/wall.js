@@ -1,6 +1,6 @@
 'use strict'
 
-class NativeCpuProfiler {
+class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
     this._samplingInterval = options.samplingInterval || 1e6 / 99 // 99hz
@@ -43,4 +43,4 @@ class NativeCpuProfiler {
   }
 }
 
-module.exports = NativeCpuProfiler
+module.exports = NativeWallProfiler
