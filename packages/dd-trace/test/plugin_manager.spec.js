@@ -150,20 +150,18 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
-    afterEach(() => {
+    it('skips configuring plugins entirely when plugins is false', () => {
+      pm.configurePlugin = sinon.spy()
       pm.configure({ plugins: false })
+      expect(pm.configurePlugin).not.to.have.been.called
     })
-    it('configures plugins when plugins is false', () => {
-      pm.configure({ plugins: false })
-      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
-      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: false })
-    })
-    it('observes serviceMapping', () => {
+    it('observes configuration options', () => {
       pm.configure({
-        serviceMapping: { two: 'deux' }
+        serviceMapping: { two: 'deux' },
+        logInjection: true
       })
-      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true, service: 'deux' })
-      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: true })
+      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true, service: 'deux', logInjection: true })
+      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: true, logInjection: true })
     })
   })
 
