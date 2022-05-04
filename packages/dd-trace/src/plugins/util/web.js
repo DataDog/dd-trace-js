@@ -58,26 +58,31 @@ const web = {
 
     if (!span) return
 
-    context.config = config
-
     span.context()._name = `${name}.request`
+
+    web.setConfig(req, config)
+  },
+
+  setConfig (req, config) {
+    const context = contexts.get(req)
+    const span = context.span
+
+    context.config = config
 
     if (!config.filter(req.url)) {
       span.setTag(MANUAL_DROP, true)
+      span.context()._trace.isRecording = false
     }
 
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
     }
 
-    if (config.measured !== undefined) {
-      analyticsSampler.sample(span, config.measured, true)
-    }
+    analyticsSampler.sample(span, config.measured, true)
   },
 
   startSpan (tracer, config, req, res, name) {
     const context = this.patch(req)
-    context.config = config
 
     let span
 
@@ -92,16 +97,7 @@ const web = {
     context.span = span
     context.res = res
 
-    if (!config.filter(req.url)) {
-      span.setTag(MANUAL_DROP, true)
-      span.context()._trace.isRecording = false
-    }
-
-    if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
-    }
-
-    analyticsSampler.sample(span, config.measured, true)
+    this.setConfig(req, config)
 
     return span
   },
