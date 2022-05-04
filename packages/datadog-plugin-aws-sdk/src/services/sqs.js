@@ -1,9 +1,66 @@
 'use strict'
 
+const Tags = require('opentracing').Tags
 const log = require('../../../dd-trace/src/log')
+const BaseAwsSdkPlugin = require('../base')
+const { storage } = require('../../../datadog-core')
+const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
-class Sqs {
-  isEnabled (config, request) {
+class Sqs extends BaseAwsSdkPlugin {
+  constructor (...args) {
+    super(...args)
+
+    this.requestTags = new WeakMap()
+
+    this.addSub('apm:aws:response:sqs', obj => {
+      const { request, response } = obj
+      const store = storage.getStore()
+      const plugin = this
+      const maybeChildOf = this.responseExtract(request.params, request.operation, response)
+      if (maybeChildOf) {
+        const options = {
+          childOf: maybeChildOf,
+          tags: Object.assign(
+            {},
+            this.requestTags.get(request) || {},
+            { [Tags.SPAN_KIND]: 'server' }
+          )
+        }
+        obj.ar = {
+          real: new AsyncResource('apm:aws:response'),
+          runInAsyncScope (fn) {
+            return this.real.runInAsyncScope(() => {
+              const span = plugin.tracer.startSpan('aws.response', options)
+              plugin.enter(span, store)
+              try {
+                let result = fn()
+                if (result && result.then) {
+                  result = result.then(x => {
+                    plugin.finish(span)
+                    return x
+                  }, e => {
+                    plugin.finish(span, e)
+                    throw e
+                  })
+                } else {
+                  plugin.finish(span)
+                }
+                return result
+              } catch (e) {
+                plugin.finish(span, null, e)
+                throw e
+              }
+            })
+          }
+        }
+      }
+    })
+  }
+
+  isEnabled (request) {
+    if (!super.isEnabled(request)) return false
+    if (typeof this.config !== 'object') return true
+    const config = typeof this.config.sqs === 'object' ? this.config.sqs : this.config
     switch (request.operation) {
       case 'receiveMessage':
         return config.consumer !== false
@@ -39,7 +96,7 @@ class Sqs {
     return tags
   }
 
-  responseExtract (params, operation, response, tracer) {
+  responseExtract (params, operation, response) {
     if (operation === 'receiveMessage') {
       if (
         (!params.MaxNumberOfMessages || params.MaxNumberOfMessages === 1) &&
@@ -52,7 +109,7 @@ class Sqs {
       ) {
         const textMap = response.Messages[0].MessageAttributes._datadog.StringValue
         try {
-          return tracer.extract('text_map', JSON.parse(textMap))
+          return this.tracer.extract('text_map', JSON.parse(textMap))
         } catch (err) {
           log.error(err)
           return undefined
@@ -61,7 +118,7 @@ class Sqs {
     }
   }
 
-  requestInject (span, request, tracer) {
+  requestInject (span, request) {
     const operation = request.operation
     if (operation === 'sendMessage') {
       if (!request.params) {
@@ -74,7 +131,7 @@ class Sqs {
         return
       }
       const ddInfo = {}
-      tracer.inject(span, 'text_map', ddInfo)
+      this.tracer.inject(span, 'text_map', ddInfo)
       request.params.MessageAttributes._datadog = {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo)

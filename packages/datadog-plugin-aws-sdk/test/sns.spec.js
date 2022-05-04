@@ -46,7 +46,7 @@ describe('Sns', () => {
     })
 
     it('injects trace context to SNS publish', () => {
-      const sns = new Sns()
+      const sns = new Sns(tracer)
       const request = {
         params: {
           Message: 'Here is my sns message',
@@ -58,7 +58,7 @@ describe('Sns', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      sns.requestInject(span.context(), request, tracer)
+      sns.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal({
         Message: 'Here is my sns message',
@@ -73,7 +73,7 @@ describe('Sns', () => {
     })
 
     it('injects trace context to SNS publishBatch', () => {
-      const sns = new Sns()
+      const sns = new Sns(tracer)
       const request = {
         params: {
           PublishBatchRequestEntries: [
@@ -88,7 +88,7 @@ describe('Sns', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      sns.requestInject(span.context(), request, tracer)
+      sns.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal({
         PublishBatchRequestEntries: [
@@ -109,7 +109,7 @@ describe('Sns', () => {
       })
     })
     it('skips injecting trace context to SNS if message attributes are full', () => {
-      const sns = new Sns()
+      const sns = new Sns(tracer)
       const request = {
         params: {
           Message: 'Here is my sns message',
@@ -133,7 +133,7 @@ describe('Sns', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      sns.requestInject(span.context(), request, tracer)
+      sns.requestInject(span.context(), request)
       expect(request.params).to.deep.equal(request.params)
     })
 

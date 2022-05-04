@@ -47,7 +47,7 @@ describe('EventBridge', () => {
     })
 
     it('generates tags for an event', () => {
-      const eventbridge = new EventBridge()
+      const eventbridge = new EventBridge(tracer)
       const params = {
         source: 'my.event'
       }
@@ -57,7 +57,7 @@ describe('EventBridge', () => {
       })
     })
     it('won\'t create tags for a malformed event', () => {
-      const eventbridge = new EventBridge()
+      const eventbridge = new EventBridge(tracer)
       const params = {
         foo: 'bar'
       }
@@ -65,7 +65,7 @@ describe('EventBridge', () => {
     })
 
     it('injects trace context to Eventbridge putEvents', () => {
-      const eventbridge = new EventBridge()
+      const eventbridge = new EventBridge(tracer)
       const request = {
         params: {
           Entries: [
@@ -84,13 +84,13 @@ describe('EventBridge', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      eventbridge.requestInject(span.context(), request, tracer)
+      eventbridge.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal({ 'Entries': [{ 'Detail': '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' }] })
     })
 
     it('skips injecting trace context to Eventbridge if message is full', () => {
-      const eventbridge = new EventBridge()
+      const eventbridge = new EventBridge(tracer)
       const request = {
         params: {
           Entries: [
@@ -105,7 +105,7 @@ describe('EventBridge', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      eventbridge.requestInject(span.context(), request, tracer)
+      eventbridge.requestInject(span.context(), request)
       expect(request.params).to.deep.equal(request.params)
     })
   })

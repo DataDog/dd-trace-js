@@ -7,19 +7,18 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:aws:request:start')
-const responseCh = channel('apm:aws:response')
-const completeCh = channel('apm:aws:request:complete')
-
 function wrapRequest (send) {
   return function wrappedRequest (cb) {
     if (!this.service) return send.apply(this, arguments)
-    const outerAr = new AsyncResource('apm:aws:request:outer')
 
     const serviceIdentifier = this.service.serviceIdentifier
+    const channelSuffix = getChannelSuffix(serviceIdentifier)
+    const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
+    if (!startCh.hasSubscribers) return send.apply(this, arguments)
+    const outerAr = new AsyncResource('apm:aws:request:outer')
 
     this.on('complete', response => {
-      completeCh.publish({ response, serviceIdentifier })
+      channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response })
     })
 
     return new AsyncResource('apm:aws:request:inner').runInAsyncScope(() => {
@@ -32,7 +31,7 @@ function wrapRequest (send) {
       })
 
       if (typeof cb === 'function') {
-        arguments[0] = wrapCb(cb, serviceIdentifier, this, outerAr)
+        arguments[0] = wrapCb(cb, channelSuffix, this, outerAr)
       }
       return send.apply(this, arguments)
     })
@@ -41,12 +40,24 @@ function wrapRequest (send) {
 
 function wrapCb (cb, serviceName, request, ar) {
   return function wrappedCb (err, response) {
-    const obj = {
-      request, response, serviceName, ar
-    }
-    responseCh.publish(obj)
-    return obj.ar.runInAsyncScope(() => cb.apply(this, arguments))
+    const obj = { request, response }
+    channel(`apm:aws:response:${serviceName}`).publish(obj)
+    return (obj.ar || ar).runInAsyncScope(() => cb.apply(this, arguments))
   }
+}
+
+function getChannelSuffix (name) {
+  return [
+    'cloudwatchlogs',
+    'dynamodb',
+    'eventbridge',
+    'kinesis',
+    'lambda',
+    'redshift',
+    's3',
+    'sns',
+    'sqs'
+  ].includes(name) ? name : 'default'
 }
 
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {

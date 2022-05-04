@@ -1,6 +1,7 @@
 'use strict'
 const log = require('../../../dd-trace/src/log')
-class Kinesis {
+const BaseAwsSdkPlugin = require('../base')
+class Kinesis extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params || !params.StreamName) return {}
 
@@ -26,7 +27,7 @@ class Kinesis {
     }
   }
 
-  requestInject (span, request, tracer) {
+  requestInject (span, request) {
     const operation = request.operation
     if (operation === 'putRecord' || operation === 'putRecords') {
       if (!request.params) {
@@ -34,7 +35,7 @@ class Kinesis {
       }
 
       const traceData = {}
-      tracer.inject(span, 'text_map', traceData)
+      this.tracer.inject(span, 'text_map', traceData)
       let injectPath
       if (request.params.Records && request.params.Records.length > 0) {
         injectPath = request.params.Records[0]

@@ -1,6 +1,8 @@
 'use strict'
 const log = require('../../../dd-trace/src/log')
-class EventBridge {
+const BaseAwsSdkPlugin = require('../base')
+
+class EventBridge extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params || !params.source) return {}
 
@@ -14,14 +16,13 @@ class EventBridge {
    * requestInject
    * @param {*} span
    * @param {*} request
-   * @param {*} tracer
    *
    * Docs: https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEventsRequestEntry.html
    * We cannot use the traceHeader field as that's reserved for X-Ray.
    * Detail must be a valid JSON string
    * Max size per event is 256kb (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevent-size.html)
    */
-  requestInject (span, request, tracer) {
+  requestInject (span, request) {
     const operation = request.operation
     if (operation === 'putEvents' &&
       request.params &&
@@ -31,7 +32,7 @@ class EventBridge {
       try {
         const details = JSON.parse(request.params.Entries[0].Detail)
         details._datadog = {}
-        tracer.inject(span, 'text_map', details._datadog)
+        this.tracer.inject(span, 'text_map', details._datadog)
         const finalData = JSON.stringify(details)
         const byteSize = Buffer.byteLength(finalData)
         if (byteSize >= (1024 * 256)) {
