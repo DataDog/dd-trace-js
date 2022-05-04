@@ -6,6 +6,7 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
+    this.timeout(10000) // TODO: remove when new internal trace has landed
     afterEach(() => {
       return agent.close({ ritmReset: false })
     })
