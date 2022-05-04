@@ -41,6 +41,31 @@ describe('Plugin', () => {
       dns.lookup('localhost', 4, (err, address, family) => err && done(err))
     })
 
+    it('should instrument lookup with all addresses', done => {
+      const options = {
+        family: 4,
+        all: true
+      }
+
+      agent
+        .use(traces => {
+          expect(traces[0][0]).to.deep.include({
+            name: 'dns.lookup',
+            service: 'test',
+            resource: 'localhost'
+          })
+          expect(traces[0][0].meta).to.deep.include({
+            'span.kind': 'client',
+            'dns.hostname': 'localhost',
+            'dns.address': '127.0.0.1'
+          })
+        })
+        .then(done)
+        .catch(done)
+
+      dns.lookup('localhost', options, (err, address, family) => err && done(err))
+    })
+
     it('should instrument errors correctly', done => {
       agent
         .use(traces => {
