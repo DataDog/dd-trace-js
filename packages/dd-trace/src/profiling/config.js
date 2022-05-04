@@ -6,8 +6,8 @@ const { URL } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
-const CpuProfiler = require('./profilers/cpu')
-const HeapProfiler = require('./profilers/heap')
+const WallProfiler = require('./profilers/wall')
+const SpaceProfiler = require('./profilers/space')
 const { tagger } = require('./tagger')
 
 const {
@@ -64,8 +64,8 @@ class Config {
     ], this)
 
     const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
-      new CpuProfiler(),
-      new HeapProfiler()
+      new WallProfiler(),
+      new SpaceProfiler()
     ])
 
     this.profilers = ensureProfilers(profilers, this)
@@ -100,10 +100,10 @@ function ensureExporters (exporters, options) {
 
 function getProfiler (name, options) {
   switch (name) {
-    case 'cpu':
-      return new CpuProfiler(options)
-    case 'heap':
-      return new HeapProfiler(options)
+    case 'wall':
+      return new WallProfiler(options)
+    case 'space':
+      return new SpaceProfiler(options)
     default:
       options.logger.error(`Unknown profiler "${name}"`)
   }

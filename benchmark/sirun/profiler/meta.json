@@ -11,12 +11,12 @@
     },
     "with-cpu-profiler": {
       "env": {
-        "PROFILER": "cpu"
+        "PROFILER": "wall"
       }
     },
-    "with-heap-profiler": {
+    "with-space-profiler": {
       "env": {
-        "PROFILER": "heap"
+        "PROFILER": "space"
       }
     },
     "with-all-profilers": {

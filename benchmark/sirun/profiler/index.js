@@ -2,19 +2,19 @@
 
 const {
   profiler,
-  CpuProfiler,
-  HeapProfiler
+  WallProfiler,
+  SpaceProfiler
 } = require('../../../packages/dd-trace/src/profiling')
 
 const { PROFILER } = process.env
 
 const profilers = []
 
-if (PROFILER === 'cpu' || PROFILER === 'all') {
-  profilers.push(new CpuProfiler())
+if (PROFILER === 'wall' || PROFILER === 'all') {
+  profilers.push(new WallProfiler())
 }
-if (PROFILER === 'heap' || PROFILER === 'all') {
-  profilers.push(new HeapProfiler())
+if (PROFILER === 'space' || PROFILER === 'all') {
+  profilers.push(new SpaceProfiler())
 }
 
 const exporters = [{
