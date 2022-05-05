@@ -1,9 +1,48 @@
 'use strict'
 
+const Tags = require('opentracing').Tags
 const log = require('../../../dd-trace/src/log')
+const BaseAwsSdkPlugin = require('../base')
+const { storage } = require('../../../datadog-core')
 
-class Sqs {
-  isEnabled (config, request) {
+class Sqs extends BaseAwsSdkPlugin {
+  constructor (...args) {
+    super(...args)
+    //
+    // TODO(bengl) Find a way to create the response span tags without this WeakMap being populated
+    // in the base class
+    this.requestTags = new WeakMap()
+
+    this.addSub('apm:aws:response:start:sqs', obj => {
+      const { request, response } = obj
+      const store = storage.getStore()
+      const plugin = this
+      const maybeChildOf = this.responseExtract(request.params, request.operation, response)
+      if (maybeChildOf) {
+        obj.needsFinish = true
+        const options = {
+          childOf: maybeChildOf,
+          tags: Object.assign(
+            {},
+            this.requestTags.get(request) || {},
+            { [Tags.SPAN_KIND]: 'server' }
+          )
+        }
+        const span = plugin.tracer.startSpan('aws.response', options)
+        this.enter(span, store)
+      }
+    })
+
+    this.addSub('apm:aws:response:finish:sqs', err => {
+      const { span } = storage.getStore()
+      this.finish(span, null, err)
+    })
+  }
+
+  isEnabled (request) {
+    // TODO(bengl) Figure out a way to make separate plugins for consumer and producer so that
+    // config can be isolated to `.configure()` instead of this whole isEnabled() thing.
+    const config = this.config
     switch (request.operation) {
       case 'receiveMessage':
         return config.consumer !== false
@@ -39,7 +78,7 @@ class Sqs {
     return tags
   }
 
-  responseExtract (params, operation, response, tracer) {
+  responseExtract (params, operation, response) {
     if (operation === 'receiveMessage') {
       if (
         (!params.MaxNumberOfMessages || params.MaxNumberOfMessages === 1) &&
@@ -52,7 +91,7 @@ class Sqs {
       ) {
         const textMap = response.Messages[0].MessageAttributes._datadog.StringValue
         try {
-          return tracer.extract('text_map', JSON.parse(textMap))
+          return this.tracer.extract('text_map', JSON.parse(textMap))
         } catch (err) {
           log.error(err)
           return undefined
@@ -61,7 +100,7 @@ class Sqs {
     }
   }
 
-  requestInject (span, request, tracer) {
+  requestInject (span, request) {
     const operation = request.operation
     if (operation === 'sendMessage') {
       if (!request.params) {
@@ -74,7 +113,7 @@ class Sqs {
         return
       }
       const ddInfo = {}
-      tracer.inject(span, 'text_map', ddInfo)
+      this.tracer.inject(span, 'text_map', ddInfo)
       request.params.MessageAttributes._datadog = {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo)

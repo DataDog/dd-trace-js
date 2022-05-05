@@ -1,6 +1,8 @@
 'use strict'
 
-class S3 {
+const BaseAwsSdkPlugin = require('../base')
+
+class S3 extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     const tags = {}
 
