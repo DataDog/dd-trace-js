@@ -43,6 +43,7 @@ function wrapCb (cb, serviceName, request, ar) {
     const obj = { request, response }
     return ar.runInAsyncScope(() => {
       channel(`apm:aws:response:start:${serviceName}`).publish(obj)
+      // TODO(bengl) make this work without needing a needsFinish property added to the object
       if (!obj.needsFinish) {
         return cb.apply(this, arguments)
       }

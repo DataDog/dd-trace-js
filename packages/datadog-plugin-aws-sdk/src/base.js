@@ -6,19 +6,8 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 
 class BaseAwsSdkPlugin extends Plugin {
-  static get serviceIdentifier () {
-    const id = this.name.toLowerCase()
-    Object.defineProperty(this, 'serviceIdentifier', {
-      configurable: true,
-      writable: true,
-      enumerable: true,
-      value: id
-    })
-    return id
-  }
-
   get serviceIdentifier () {
-    const id = this.constructor.serviceIdentifier
+    const id = this.constructor.name.toLowerCase()
     Object.defineProperty(this, 'serviceIdentifier', {
       configurable: true,
       writable: true,
@@ -74,16 +63,11 @@ class BaseAwsSdkPlugin extends Plugin {
     })
   }
 
-  requestInject (/* sapn, request */) {
+  requestInject (span, request) {
     // implemented by subclasses, or not
   }
 
-  isEnabled (/* request */) {
-    if (typeof this.config === 'boolean') return this.config
-    if (typeof this.config === 'object' && typeof this.config[this.serviceIdentifier] === 'boolean') {
-      return this.config[this.serviceIdentifier]
-    }
-
+  isEnabled (request) {
     return true
   }
 
@@ -122,7 +106,7 @@ class BaseAwsSdkPlugin extends Plugin {
   }
 
   configure (config) {
-    super.configure(normalizeConfig(config))
+    super.configure(normalizeConfig(config, this.serviceIdentifier))
   }
 
   // TODO: test splitByAwsService when the test suite is fixed
@@ -133,10 +117,20 @@ class BaseAwsSdkPlugin extends Plugin {
   }
 }
 
-function normalizeConfig (config) {
+function normalizeConfig (config, serviceIdentifier) {
   const hooks = getHooks(config)
 
-  return Object.assign({}, config, {
+  let specificConfig = config[serviceIdentifier]
+  switch (typeof specificConfig) {
+    case 'undefined':
+      specificConfig = {}
+      break
+    case 'boolean':
+      specificConfig = { enabled: specificConfig }
+      break
+  }
+
+  return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
     hooks
   })

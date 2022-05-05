@@ -8,7 +8,9 @@ const { storage } = require('../../../datadog-core')
 class Sqs extends BaseAwsSdkPlugin {
   constructor (...args) {
     super(...args)
-
+    //
+    // TODO(bengl) Find a way to create the response span tags without this WeakMap being populated
+    // in the base class
     this.requestTags = new WeakMap()
 
     this.addSub('apm:aws:response:start:sqs', obj => {
@@ -38,9 +40,9 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   isEnabled (request) {
-    if (!super.isEnabled(request)) return false
-    if (typeof this.config !== 'object') return true
-    const config = typeof this.config.sqs === 'object' ? this.config.sqs : this.config
+    // TODO(bengl) Figure out a way to make separate plugins for consumer and producer so that
+    // config can be isolated to `.configure()` instead of this whole isEnabled() thing.
+    const config = this.config
     switch (request.operation) {
       case 'receiveMessage':
         return config.consumer !== false
