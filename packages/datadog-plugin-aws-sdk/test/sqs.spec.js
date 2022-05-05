@@ -110,6 +110,32 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should run the consumer in the context of its span, for async functions', (done) => {
+          sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
+
+            const beforeSpan = tracer.scope().active()
+
+            sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }, (err) => {
+              if (err) return done(err)
+
+              const span = tracer.scope().active()
+
+              expect(span).to.not.equal(beforeSpan)
+              return Promise.resolve().then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+            })
+          })
+        })
       })
 
       describe('with configuration', () => {
