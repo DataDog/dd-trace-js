@@ -131,7 +131,11 @@ const web = {
   },
 
   setRoute (req, path) {
-    contexts.get(req).paths = [path]
+    const context = contexts.get(req)
+
+    if (!context) return
+
+    context.paths = [path]
   },
 
   // Remove the current route segment.
