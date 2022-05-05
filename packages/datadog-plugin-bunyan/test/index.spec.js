@@ -26,7 +26,6 @@ describe('Plugin', () => {
     withVersions('bunyan', 'bunyan', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        return agent.load('bunyan')
       })
 
       afterEach(() => {
@@ -34,6 +33,10 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
+        beforeEach(() => {
+          return agent.load('bunyan')
+        })
+
         beforeEach(() => {
           setup(version)
         })
@@ -53,7 +56,10 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          tracer._tracer._logInjection = true
+          return agent.load('bunyan', { logInjection: true })
+        })
+
+        beforeEach(() => {
           setup(version)
         })
 
