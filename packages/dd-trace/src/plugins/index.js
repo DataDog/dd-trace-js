@@ -14,6 +14,7 @@ module.exports = {
   'elasticsearch': require('../../../datadog-plugin-elasticsearch/src'),
   'express': require('../../../datadog-plugin-express/src'),
   'fastify': require('../../../datadog-plugin-fastify/src'),
+  'find-my-way': require('../../../datadog-plugin-find-my-way/src'),
   'fs': require('../../../datadog-plugin-fs/src'),
   'google-cloud-pubsub': require('../../../datadog-plugin-google-cloud-pubsub/src'),
   'graphql': require('../../../datadog-plugin-graphql/src'),
