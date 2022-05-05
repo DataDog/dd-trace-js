@@ -4,7 +4,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -14,7 +13,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('koa', () => {
-    withVersions(plugin, 'koa', version => {
+    withVersions('koa', 'koa', version => {
       let port
 
       beforeEach(() => {
@@ -30,8 +29,8 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load('koa'))
-        after(() => agent.close())
+        before(() => agent.load(['koa', 'http'], [{}, { client: false }]))
+        after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation on 2.x middleware', done => {
           const app = new Koa()
@@ -90,7 +89,7 @@ describe('Plugin', () => {
 
               expect(spans[1]).to.have.property('name', 'koa.middleware')
               expect(spans[1]).to.have.property('service', 'test')
-              expect(spans[1]).to.have.property('resource', 'handle')
+              expect(spans[1]).to.have.property('resource', 'converted')
             })
             .then(done)
             .catch(done)
@@ -210,7 +209,7 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions(plugin, 'koa-route', routerVersion => {
+        withVersions('koa', 'koa-route', routerVersion => {
           let koaRouter
 
           beforeEach(() => {
@@ -245,7 +244,7 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions(plugin, ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
           let Router
 
           beforeEach(() => {
@@ -489,7 +488,7 @@ describe('Plugin', () => {
             })
           })
 
-          withVersions(plugin, 'koa-websocket', wsVersion => {
+          withVersions('koa', 'koa-websocket', wsVersion => {
             let WebSocket
             let websockify
             let ws
@@ -534,8 +533,8 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => agent.load('koa', { middleware: false }))
-        after(() => agent.close())
+        before(() => agent.load(['koa', 'http'], [{ middleware: false }, { client: false }]))
+        after(() => agent.close({ ritmReset: false }))
 
         describe('middleware set to false', () => {
           it('should not do automatic instrumentation on 2.x middleware', done => {
@@ -655,7 +654,7 @@ describe('Plugin', () => {
             })
           })
 
-          withVersions(plugin, ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
             let Router
 
             beforeEach(() => {
